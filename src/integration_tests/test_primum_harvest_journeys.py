@@ -15,7 +15,9 @@ from unittest.mock import patch
 
 from django.utils import timezone
 
+from actions.constants import ActionCategory
 from integration_tests.harness import JourneyCase
+from world.action_points.models import ActionPointPool
 from world.checks import services as check_services
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
@@ -26,6 +28,7 @@ from world.combat.factories import (
     CreatureTemplateFactory,
 )
 from world.combat.models import CombatOpponent
+from world.fatigue.services import get_or_create_fatigue_pool
 from world.items.factories import ItemTemplateFactory, QualityTierFactory
 from world.items.models import ItemInstance
 from world.locations.constants import StatKey
@@ -342,6 +345,56 @@ class WhenTheTuningIsIncomplete(_Lair):
         self.assertIn("You draw out no Primum.", failed)
         self.assertIn(EXTRACTED, retried)
         self.assertIsNotNone(self.harvested_at(foe))
+
+
+class EveryAttemptCostsTime(_Lair):
+    """Each attempt costs the config's action points (2 by default) and physical fatigue."""
+
+    def ap_of(self, who) -> int:
+        pool = ActionPointPool.get_or_create_for_character(who)
+        return ActionPointPool.objects.filter(pk=pool.pk).values_list("current", flat=True).get()
+
+    def fatigue_of(self, who) -> int:
+        pool = get_or_create_fatigue_pool(who.sheet_data)
+        pool.refresh_from_db()
+        return pool.get_current(ActionCategory.PHYSICAL)
+
+    def test_a_bad_roll_still_costs_ap_and_fatigue_and_leaves_lair_and_foe_as_they_were(
+        self,
+    ) -> None:
+        lair = self.stock(20)
+        foe = self.slain_elemental()
+        miss = CheckOutcomeFactory(name="Failure", success_level=-1)
+        HarvestOutcomeFactory(outcome_tier=miss, amount_taken=0, quantity=0)
+        listing = self.telnet(self.mira, "extract")
+        ap, fatigue = self.ap_of(self.mira), self.fatigue_of(self.mira)
+
+        from_lair = self.extract(self.mira, "extract fire", outcome=miss)
+        from_foe = self.extract(self.mira, "extract fire from elemental", outcome=miss)
+
+        self.assertIn("Each attempt costs 2 AP, whatever you roll.", listing)
+        self.assertIn("You draw out no Primum.", from_lair)
+        self.assertIn("You draw out no Primum.", from_foe)
+        self.assertEqual(self.ap_of(self.mira), ap - 4)
+        self.assertGreater(self.fatigue_of(self.mira), fatigue)
+        self.assertEqual(self.stored(lair), 20)
+        self.assertIsNone(self.harvested_at(foe))
+
+    def test_a_character_without_the_ap_is_refused_before_she_rolls(self) -> None:
+        lair = self.stock(20)
+        pool = ActionPointPool.get_or_create_for_character(self.mira)
+        pool.current = 1
+        pool.save(update_fields=["current"])
+        fatigue = self.fatigue_of(self.mira)
+
+        with patch("world.magic.services.harvest.perform_check_with_modifiers") as roll:
+            told = self.telnet(self.mira, "extract fire")
+
+        self.assertIn("You don't have the 2 action points it takes to extract Primum.", told)
+        roll.assert_not_called()
+        self.assertEqual(self.ap_of(self.mira), 1)
+        self.assertEqual(self.fatigue_of(self.mira), fatigue)
+        self.assertEqual(self.stored(lair), 20)
 
 
 class APrimumItemFromAMission(_Lair):

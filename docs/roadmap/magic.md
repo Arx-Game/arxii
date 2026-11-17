@@ -431,7 +431,8 @@ Design record #5121. Built in one PR, in this order:
    lists "You sense" and `look` ends with the sentence.
 4. **Calling up.** One step, one shared anima cost, one generated room line.
 5. **Harvesting.** Anyone with the new harvest skill rolls a check; a matching GIFT thread
-   adds `harvest_thread_bonus x thread_level_multiplier`. Only perceived Primum in a lair or on
+   adds `harvest_thread_bonus x thread_level_multiplier`; every attempt, good roll or bad, costs
+   `harvest_ap_cost` action points and `harvest_fatigue_cost` physical fatigue. Only perceived Primum in a lair or on
    a slain creature is offered, a slain creature once in total, a lair slowly or never. Web
    Harvest buttons and telnet `extract fire` / `extract fire from elemental`.
 6. **Items and crafting.** Harvested Primum is an item; an optional recipe ingredient makes the

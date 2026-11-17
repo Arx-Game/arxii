@@ -46,6 +46,9 @@ class HarvestOfferSerializer(serializers.Serializer):
     check_name = serializers.CharField(
         read_only=True, help_text="The harvest check she rolls; empty while none is set."
     )
+    ap_cost = serializers.IntegerField(
+        read_only=True, help_text="Action points one attempt costs, good roll or bad."
+    )
 
 
 class OpponentHarvestOfferSerializer(HarvestOfferSerializer):

@@ -17,6 +17,7 @@ const elemental: HarvestOffer = {
   opponent_name: 'Fire elemental',
   step_name: 'Rich',
   check_name: 'Harvesting',
+  ap_cost: 2,
   character_id: 9,
 };
 
@@ -43,6 +44,7 @@ describe('HarvestRow', () => {
 
     expect(screen.getByText('You sense fire Primum in its remains.')).toBeInTheDocument();
     expect(screen.getByText('Check: Harvesting')).toBeInTheDocument();
+    expect(screen.getByText('Costs 2 AP')).toBeInTheDocument();
     await userEvent.click(screen.getByRole('button', { name: 'Harvest' }));
 
     expect(mutateAsync).toHaveBeenCalledWith({

@@ -3681,6 +3681,8 @@ class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
         "harvest_check_type",
         "harvest_skill",
         "harvest_thread_bonus",
+        "harvest_ap_cost",
+        "harvest_fatigue_cost",
     )
 
     def get_fieldsets(self, request, obj=None):

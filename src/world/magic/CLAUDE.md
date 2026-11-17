@@ -385,7 +385,8 @@ Full reference: `docs/systems/magic.md` "Substances and Primum". `Substance` is 
   `effect_property_ids_by_technique`; never store it or offer a tick.
 - **Harvest writes under lock.** `harvest` takes from a source inside `select_for_update`, and a
   slain creature yields once in total (`CombatOpponent.primum_harvested_at`). Primum is only ever
-  harvested from a lair or a slain creature.
+  harvested from a lair or a slain creature. Every attempt, good roll or bad, spends
+  `harvest_ap_cost` and adds `harvest_fatigue_cost` physical fatigue before the roll.
 - **Transient rows go on the leave hook.** `clear_caster_substance` and `clear_sightings` run
   from `Character.at_post_move` and `_leave_the_grid`; a scene's marks clear in
   `Scene.finish_scene`.

@@ -35,6 +35,7 @@ export function HarvestPanel({
   const [picked, setPicked] = useState(0);
   const offer = offers[Math.min(picked, offers.length - 1)];
   const checkName = offers.find((row) => row.check_name)?.check_name;
+  const apCost = offers.find((row) => row.ap_cost > 0)?.ap_cost;
 
   return (
     <div className="space-y-2" data-testid="harvest-panel">
@@ -61,6 +62,7 @@ export function HarvestPanel({
             ))}
           </fieldset>
           {checkName && <p className="text-xs text-muted-foreground">Check: {checkName}</p>}
+          {apCost && <p className="text-xs text-muted-foreground">Costs {apCost} AP</p>}
         </>
       )}
       <div className="flex justify-end gap-2">

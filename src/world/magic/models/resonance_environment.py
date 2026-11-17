@@ -398,6 +398,22 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
             "her thread level."
         ),
     )
+    harvest_ap_cost = models.PositiveSmallIntegerField(
+        verbose_name="Action points one harvest attempt costs",
+        default=2,
+        help_text=(
+            "Action points every attempt to harvest Primum costs, good roll or bad. A character "
+            "without them is refused before she rolls. 0: free."
+        ),
+    )
+    harvest_fatigue_cost = models.PositiveSmallIntegerField(
+        verbose_name="Physical fatigue one harvest attempt costs",
+        default=2,
+        help_text=(
+            "Physical fatigue every attempt to harvest Primum adds, good roll or bad, after the "
+            "usual fatigue rules. 0: none."
+        ),
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(

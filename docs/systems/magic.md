@@ -5043,8 +5043,14 @@ some, a slain creature not yet harvested whose kind carries it), never an ordina
 condition or a call-up. `harvest(character, substance=, opponent=)` rolls
 `harvest_check_type` with the `harvest_skill` (a Magic-category skill any character may use on
 any substance) plus a thread bonus of `harvest_thread_bonus x thread_level_multiplier(...)` for
-her deepest GIFT thread on a gift of that substance (no separate curve table). The rolled
-outcome picks a `HarvestOutcome`; `_take_from_place` and `_take_from_creature` cap it by what the
+her deepest GIFT thread on a gift of that substance (no separate curve table). Every attempt
+costs time, good roll or bad: before the roll `_pay_for_attempt` spends `harvest_ap_cost`
+action points from her `ActionPointPool` (without them she is refused in plain words and
+nothing is rolled or charged) and adds `harvest_fatigue_cost` physical fatigue through
+`apply_fatigue`. Each offer carries `ap_cost`, shown as "Costs N AP" on the web Harvest panel
+and the slain-foe row and as one line under bare telnet `extract`. A rolled outcome with no
+`HarvestOutcome` row, or with a row that takes nothing, leaves a lair or a creature untouched
+alike. The rolled outcome picks a `HarvestOutcome`; `_take_from_place` and `_take_from_creature` cap it by what the
 source holds under `select_for_update`, and `mint_primum_items` gives her the items. A slain
 creature yields once in total (the opponent-level stamp, even when it carries two substances);
 two people pressing Extract at once yield one harvest. `HarvestPrimumAction` (key

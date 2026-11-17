@@ -72848,11 +72848,16 @@ components:
           type: string
           readOnly: true
           description: The harvest check she rolls; empty while none is set.
+        ap_cost:
+          type: integer
+          readOnly: true
+          description: Action points one attempt costs, good roll or bad.
         character_id:
           type: integer
           readOnly: true
           description: The played character this offer belongs to.
       required:
+      - ap_cost
       - character_id
       - check_name
       - opponent_id

@@ -162,6 +162,7 @@ describe('RoomPanel Primum', () => {
       opponent_name: '',
       step_name: 'Massive',
       check_name: 'Harvesting',
+      ap_cost: 2,
     };
     const primum = {
       sensed: [{ substance_id: 3, substance_name: 'fire', step_name: 'Massive' }],
@@ -193,6 +194,7 @@ describe('RoomPanel Primum', () => {
     expect(screen.getByText('Draw out')).toBeInTheDocument();
     expect(screen.getByLabelText('Fire Primum · Massive')).toBeChecked();
     expect(screen.getByText('Check: Harvesting')).toBeInTheDocument();
+    expect(screen.getByText('Costs 2 AP')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Harvest' }));
 
     expect(
@@ -216,6 +218,7 @@ describe('RoomPanel Primum', () => {
       opponent_name: '',
       step_name: 'Massive',
       check_name: 'Harvesting',
+      ap_cost: 2,
     };
     function Harness() {
       const [emptied, setEmptied] = useState(false);

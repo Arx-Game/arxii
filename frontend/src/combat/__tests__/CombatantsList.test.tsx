@@ -1098,6 +1098,7 @@ describe('ally taunt menu', () => {
       opponent_name: 'Mire Knight',
       step_name: 'Rich',
       check_name: 'Harvesting',
+      ap_cost: 2,
       character_id: 7,
     };
     const encounter = makeEncounter(
@@ -1110,6 +1111,7 @@ describe('ally taunt menu', () => {
     const row = within(screen.getByTestId('opponent-row-10'));
     expect(row.getByText('You sense fire Primum in its remains.')).toBeInTheDocument();
     expect(row.getByText('Check: Harvesting')).toBeInTheDocument();
+    expect(row.getByText('Costs 2 AP')).toBeInTheDocument();
     expect(within(screen.getByTestId('opponent-row-11')).queryByText('Harvest')).toBeNull();
     const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     await user.click(row.getByText('Harvest'));

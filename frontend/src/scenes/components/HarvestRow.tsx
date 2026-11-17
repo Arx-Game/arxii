@@ -26,6 +26,7 @@ export function HarvestRow({ offers, characterId, answer = null, onAnswer }: Har
   }
 
   const checkName = offers.find((offer) => offer.check_name)?.check_name;
+  const apCost = offers.find((offer) => offer.ap_cost > 0)?.ap_cost;
   const names = [...new Set(offers.map((offer) => offer.substance_name))];
 
   return (
@@ -36,6 +37,7 @@ export function HarvestRow({ offers, characterId, answer = null, onAnswer }: Har
         </p>
       ))}
       {checkName && <p className="text-xs text-muted-foreground">Check: {checkName}</p>}
+      {apCost && <p className="text-xs text-muted-foreground">Costs {apCost} AP</p>}
       {offers.map((offer) => (
         <Button
           key={offer.substance_id}

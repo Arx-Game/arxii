@@ -276,6 +276,8 @@ export interface HarvestOffer {
   step_name: string;
   /** The harvest check she rolls; empty while none is set. */
   check_name: string;
+  /** Action points one attempt costs, good roll or bad; 0 when free. */
+  ap_cost: number;
   /** The played character the offer belongs to; set on a slain foe's offers only. */
   character_id?: number;
 }

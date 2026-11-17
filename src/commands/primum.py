@@ -30,7 +30,8 @@ class CmdExtract(DispatchCommand):
         extract <substance> from <foe>  (for example: extract fire from elemental)
 
     You are offered only the Primum you perceive. A slain creature can be extracted once,
-    by one person; a lair gives up what it holds.
+    by one person; a lair gives up what it holds. Every attempt costs action points and
+    fatigue, whatever you roll.
     """
 
     key = "extract"
@@ -59,6 +60,8 @@ class CmdExtract(DispatchCommand):
                     f"You can extract {offer.substance_name} Primum{step} "
                     f"from {offer.opponent_name}."
                 )
+        if offers[0].ap_cost:
+            self.msg(f"Each attempt costs {offers[0].ap_cost} AP, whatever you roll.")
 
     def _split(self) -> tuple[str, str]:
         """The substance and the foe's name ("" when none) typed after the verb."""

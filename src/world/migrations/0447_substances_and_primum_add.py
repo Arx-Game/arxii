@@ -149,6 +149,24 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="resonanceenvironmentconfig",
+            name="harvest_ap_cost",
+            field=models.PositiveSmallIntegerField(
+                default=2,
+                help_text="Action points every attempt to harvest Primum costs, good roll or bad. A character without them is refused before she rolls. 0: free.",
+                verbose_name="Action points one harvest attempt costs",
+            ),
+        ),
+        migrations.AddField(
+            model_name="resonanceenvironmentconfig",
+            name="harvest_fatigue_cost",
+            field=models.PositiveSmallIntegerField(
+                default=2,
+                help_text="Physical fatigue every attempt to harvest Primum adds, good roll or bad, after the usual fatigue rules. 0: none.",
+                verbose_name="Physical fatigue one harvest attempt costs",
+            ),
+        ),
+        migrations.AddField(
+            model_name="resonanceenvironmentconfig",
             name="substance_call_up_anima",
             field=models.PositiveSmallIntegerField(
                 default=3,

@@ -42,7 +42,8 @@ class HarvestOffer:
     ``source`` is ``"place"`` (a lair's stock) or ``"creature"`` (a slain foe). A creature
     offer names the foe in ``opponent_id`` and ``opponent_name``; a place offer leaves them
     empty. ``step_name`` is the step the source reads at now. ``check_name`` is the name of
-    the harvest check she rolls ("" while none is set).
+    the harvest check she rolls ("" while none is set). ``ap_cost`` is the action points one
+    attempt costs her, good roll or bad.
     """
 
     substance_id: int
@@ -52,6 +53,7 @@ class HarvestOffer:
     opponent_name: str
     step_name: str
     check_name: str = ""
+    ap_cost: int = 0
 
 
 @dataclass(frozen=True)

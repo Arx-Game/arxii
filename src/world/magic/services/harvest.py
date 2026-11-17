@@ -8,8 +8,13 @@ whose substance this is adds a bonus. The rolled outcome picks what she takes an
 Primum items she receives (``HarvestOutcome``). A slain creature is harvested once, by one
 person; a lair gives up only what it holds, and refills slowly or never.
 
+Every attempt costs time, good roll or bad: ``harvest_ap_cost`` action points, spent before
+the roll (without them she is refused before she rolls), and ``harvest_fatigue_cost``
+physical fatigue through the usual fatigue rules (``apply_fatigue``).
+
 An unset check, skill or Primum item raises ``HarvestNotConfigured``; a rolled outcome with no
-``HarvestOutcome`` row takes nothing and leaves the source untouched, so she may try again.
+``HarvestOutcome`` row, or with a row that takes nothing, takes nothing and leaves the source
+untouched, lair or creature alike, so she may try again (and pay again).
 """
 
 from __future__ import annotations
@@ -55,6 +60,7 @@ SOURCE_PLACE = "place"
 SOURCE_CREATURE = "creature"
 NOTHING_LEFT_MESSAGE = "There is nothing left to extract."
 EMPTY_HANDED_MESSAGE = "You draw out no Primum."
+NO_AP_MESSAGE = "You don't have the {cost} action points it takes to extract Primum."
 _SKILL_WEIGHT = Decimal("1.00")
 
 
@@ -151,10 +157,11 @@ def harvest_offers(
         return []
     if steps is None:
         steps = primum_steps()
-    check = get_resonance_environment_config().harvest_check_type
+    config = get_resonance_environment_config()
+    check = config.harvest_check_type
     check_name = check.name if check is not None else ""
     return [
-        replace(offer, check_name=check_name)
+        replace(offer, check_name=check_name, ap_cost=config.harvest_ap_cost)
         for offer in _place_offers(profile, perceived, steps)
         + _creature_offers(room, perceived, steps)
     ]
@@ -215,7 +222,8 @@ def _take_from_place(
 ) -> tuple[int, int, int] | None:
     """Lock the lair's row, take what it holds up to the outcome, mint.
 
-    ``(taken, quantity, left)``, ``left`` being what the lair holds now.
+    ``(taken, quantity, left)``, ``left`` being what the lair holds now. A harvest restamps
+    ``stamped_at``, so the lair's refill count starts again from now.
 
     None when the lair holds nothing now (it was drained between the offer and the lock).
     """
@@ -268,14 +276,43 @@ def _take_from_creature(
             .first()
         ) or 0
         taken = min(outcome.amount_taken, held)
+        if taken <= 0:
+            # Nothing taken leaves the foe as it was, as a lair is left: she may try again.
+            return 0, 0, 0
         quantity = _scaled_quantity(outcome, taken)
-        if taken > 0:
-            # Mint first: a failed mint rolls back and leaves the cached row untouched.
-            mint_primum_items(sheet, substance, quantity, outcome.quality_tier)
+        # Mint first: a failed mint rolls back and leaves the cached row untouched.
+        mint_primum_items(sheet, substance, quantity, outcome.quality_tier)
         row = CombatOpponent.objects.get(pk=foe.pk)
         row.primum_harvested_at = timezone.now()
         row.save(update_fields=["primum_harvested_at"])
     return taken, quantity, 0
+
+
+def _pay_for_attempt(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - a character
+    sheet: CharacterSheet,
+    config: ResonanceEnvironmentConfig,
+) -> bool:
+    """Spend one attempt's action points and add its physical fatigue; False when she lacks
+    the action points (nothing is charged then).
+
+    The same pool spend and fatigue rules every other action that costs time uses
+    (``Action._charge_costs``, a rite's ``rite_services._charge_costs``).
+    """
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+    from world.fatigue.constants import EffortLevel  # noqa: PLC0415
+    from world.fatigue.services import apply_fatigue  # noqa: PLC0415
+
+    if config.harvest_ap_cost > 0:
+        pool = ActionPointPool.get_or_create_for_character(character)
+        if pool is None or not pool.spend(config.harvest_ap_cost):
+            return False
+    if config.harvest_fatigue_cost > 0:
+        apply_fatigue(
+            sheet, ActionCategory.PHYSICAL, config.harvest_fatigue_cost, EffortLevel.MEDIUM
+        )
+    return True
 
 
 def _failure(substance: Substance, message: str, outcome_name: str = "") -> HarvestResult:
@@ -314,13 +351,16 @@ def harvest(
 
     The substance must be among her ``harvest_offers``; otherwise nothing is left to extract
     (the same words whether the source is dry, harvested, absent or unperceived). Raises
-    ``HarvestNotConfigured`` for unset tuning.
+    ``HarvestNotConfigured`` for unset tuning. Every attempt that rolls costs its action
+    points and fatigue first; without the action points she is refused before the roll.
     """
     sheet = character.character_sheet
     if sheet is None or _find_offer(character, substance, opponent) is None:
         return _failure(substance, NOTHING_LEFT_MESSAGE)
     config = get_resonance_environment_config()
     skill_term = _require_configured(config, substance)
+    if not _pay_for_attempt(character, sheet, config):
+        return _failure(substance, NO_AP_MESSAGE.format(cost=config.harvest_ap_cost))
     check_result = perform_check_with_modifiers(
         character,
         config.harvest_check_type,
@@ -335,7 +375,7 @@ def harvest(
         if rolled is not None
         else None
     )
-    if outcome is None:
+    if outcome is None or outcome.amount_taken <= 0:
         return _failure(substance, EMPTY_HANDED_MESSAGE, outcome_name)
     if opponent is None:
         profile = character.location.room_profile
