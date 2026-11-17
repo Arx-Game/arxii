@@ -133,6 +133,29 @@ def test_deployment_gate_runs_before_database_migration():
     assert "app_safety_reload_stamp.stat.exists" in tasks[gate]["when"]
 
 
+def test_deployment_gate_refuses_only_when_enforcement_is_on():
+    """During alpha the check reports and the deploy carries on (#5183)."""
+    from pathlib import Path
+
+    import yaml
+
+    role = Path(__file__).resolve().parents[2] / "infra/ansible/roles/app_deploy"
+    tasks = yaml.safe_load((role / "tasks/main.yml").read_text())
+    defaults = yaml.safe_load((role / "defaults/main.yml").read_text())
+    names = [task.get("name") for task in tasks]
+    gate = tasks[names.index("Check pending migrations against the last running server")]
+    report = names.index("Report migrations the compatibility check flagged (not enforced)")
+    migration = names.index("Apply Django/Evennia DB migrations (idempotent on every deploy)")
+
+    assert defaults["app_release_safety_enforce"] is False
+    assert gate["failed_when"] == [
+        "app_release_safety_enforce | bool",
+        "app_release_safety.rc != 0",
+    ]
+    assert report < migration
+    assert "not (app_release_safety_enforce | bool)" in tasks[report]["when"]
+
+
 def test_nested_remove_field_cannot_be_declared_expand():
     pending = PendingMigration(
         migrations.SeparateDatabaseAndState(
