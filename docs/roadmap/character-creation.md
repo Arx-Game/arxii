@@ -1,5 +1,22 @@
 # Character Creation & Identity
 
+## Built (2026-11-17, #5178: one Background box on Final Touches)
+
+Character creation asks for the character's history once. The owner ruled that a text box
+for each stage of the life made creation overwhelming ("No separate fields per stage of
+life, I think it's just a bad design"), so the Background Notes box at the end of each life
+stage (#4872, #5160) and the Recent History box under the last stage (#4830) are gone from
+the life page. Final Touches has one Background box, after the enemy and before the faces'
+doors, with an italic placeholder saying the text is listed as the character's Background
+on the sheet. It saves as `draft_data.background` (4000 characters), the Review stage quotes
+it, and finalize writes it to `Profile.background` word for word. Nothing the game composes
+from the picks is added to it any more, so a player who writes nothing has an empty
+Background; the composed prose (`assemble_origin_prose`) is still what the Durance testament
+reads. A second face keeps its own Background box inside its door. The draft serializer
+refuses the retired `stage_descriptions` and `recent_history` keys and drops them from a
+saved draft on its next save; `CharacterOriginSlot.life_stage` is removed (migrations 0450
+and 0451). Decision record: ADR-5178.
+
 ## Built (2026-11-16, #5160: the life page opens expanded, and a stage ends on Background Notes)
 
 The life page opens with every life stage and every section in it expanded (owner ruling:
@@ -13,7 +30,8 @@ The box at the end of a stage is labelled "Background Notes" (it was "Descriptio
 the owner's sentence saying the text joins the Background on the character sheet. The box is
 taller at a phone's width so the whole sentence shows. The label and the placeholder are copy
 keys `life_stage_notes_label` and `life_stage_notes_placeholder`; `life_stage_description_label`
-is no longer read.
+is no longer read. (The Background Notes box itself was removed the next day by #5178; the
+expanded folds stand.)
 
 ## Built (2026-11-16, #5146: Restart: Clear All Choices, and Back matches Next)
 
@@ -178,7 +196,7 @@ one open at a time (since #5160 everything opens expanded and each fold moves by
 sections fold to their answers with signed points or the beat's prompt
 with the first name; Next walks down; Unknown is a mark on the stage; a secret pick opens the
 Cover story box with the no-cost card standing as the cover until another is chosen; a cover
-select on an any row; a figure's name on a person card; Description (Optional) per stage (Background Notes since #5160);
+select on an any row; a figure's name on a person card; Description (Optional) per stage (Background Notes since #5160, removed by #5178);
 group headings with counts; a bare signed price in each card's corner and none on a free
 card; every term on a mechanics line opens its definition (on hover since #5148); the ledger rail beside the life (since #5148 the life's choices under the shared "CG selections" panel)
 with the grids widening by container width; the life so far in one paragraph; the first name
@@ -190,7 +208,8 @@ What the approved accordion (demo https://claude.ai/artifact/D7gFL3Cm8wL52jK94SA
 under it, with the leaf itself the next slice: a heading per beat answer
 (`DistinctionOffer.group`, the paste's `beat:<stage>/<beat>/<group>`); one paragraph per stage
 (`draft_data.stage_descriptions`, a `CharacterOriginSlot` stage row, printed under the stage's
-name in the told background; a stage all of whose beats are unknown reads "<Stage>: unknown");
+name in the told background; removed by #5178; a stage all of whose beats are unknown reads
+"<Stage>: unknown" in the composed prose);
 a secret mark and a cover story on a beat's answer (`secret_offer_ids`, `cover_offer_id`; the
 secret pick is minted a Secret, the cover a held `CharacterDistinction.is_cover` row that grants
 nothing and that a stranger's sheet lists in the secret's place); a figure's name on a person

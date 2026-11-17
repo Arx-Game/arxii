@@ -1282,23 +1282,17 @@
   color: var(--cg-muted);
   font-style: italic;
 }
-/* Background Notes at the end of a stage (#5160): the placeholder is the box's only
-   explanation, so it is italic and in an ink that reads, not the browser's pale grey. */
-.interview .life .stage-description textarea::placeholder {
+/* The Background box on Final Touches (#5178): its placeholder is the box's only
+   explanation, so it is italic and in an ink that reads, not the browser's pale grey.
+   The box is tall because a Background runs to paragraphs, and a placeholder cannot
+   be scrolled, so at a phone's width it still shows the whole sentence. */
+.interview .field textarea.background-text {
+  min-height: 12rem;
+}
+.interview .field textarea.background-text::placeholder {
   font-style: italic;
   color: var(--cg-text-soft);
   opacity: 1;
-}
-/* At a phone's width the sentence runs to five or six lines, and a placeholder cannot
-   be scrolled: the box is tall enough to show all of it. */
-@media (max-width: 40rem) {
-  .interview .life .stage-description textarea {
-    min-height: 12rem;
-  }
-}
-/* The Recent History box (#4830) sits under the last stage, before the footer. */
-.interview .life .recent-history {
-  margin-top: 1.6rem;
 }
 .interview .life-foot {
   display: flex;
@@ -1402,7 +1396,6 @@
   max-width: 68ch;
 }
 .interview .life .beat-prompt,
-.interview .life .stage-description,
 .interview .life .cover-box,
 .interview .life .figure,
 .interview .life .testament {

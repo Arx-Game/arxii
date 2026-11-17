@@ -7,18 +7,16 @@ import { BEGINNING, CRADLE, DRAFT_ID, mockCg } from './fixtures/cgLineage';
  * Review evidence for #5160, on the production bundle with every `/api/**` call
  * answered by fixtures shaped like the serializers.
  *
- * The life page (Lineage) opens with every life stage and every section expanded, each
- * fold closes and opens by itself, and the box at the end of a stage is "Background
- * Notes" with a placeholder saying where the text goes. `EVIDENCE_OLD_BUILD=1` only
- * takes the pictures, for the build before #5160.
+ * The life page (Lineage) opens with every life stage and every section expanded, and
+ * each fold closes and opens by itself. The Background Notes box this walk also covered
+ * was removed by #5178 (one Background box on Final Touches; see
+ * `cg-background-5178.spec.ts`). `EVIDENCE_OLD_BUILD=1` only takes the pictures, for the
+ * build before #5160.
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const oldBuild = process.env.EVIDENCE_OLD_BUILD === '1';
 const shot = (name: string) =>
   path.join(here, '..', '..', 'test-results', 'cg-life-open-5160', (oldBuild ? 'old-' : '') + name);
-
-const PLACEHOLDER =
-  'You can write an optional description of what this stage of the character’s life was like, and it will be added to their listed Background on the character sheet.';
 
 const beat = (beatId: number, name: string, stage: string, offerIds: number[]) => ({
   beat_id: beatId,
@@ -120,7 +118,7 @@ const section = (page: Page, name: string) => page.getByRole('article', { name, 
 const heading = (page: Page, name: string) => stage(page, name).locator('.stage-sum');
 const line = (page: Page, beatId: number) => page.getByTestId(`sec-${beatId}`);
 
-test.describe('the life page opens expanded, and a stage ends on Background Notes (#5160)', () => {
+test.describe('the life page opens expanded (#5160)', () => {
   test('every stage and every section is open on arrival, with no click', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     const errors: string[] = [];
@@ -238,100 +236,4 @@ test.describe('the life page opens expanded, and a stage ends on Background Note
       sections: ['false', 'false', 'true', 'true', 'true'],
     });
   });
-
-  for (const at of [
-    { width: 1920, height: 1080 },
-    { width: 1366, height: 900 },
-    { width: 480, height: 844 },
-    { width: 390, height: 844 },
-    { width: 320, height: 640 },
-  ]) {
-    test(`Background Notes at ${at.width}px: the label, the whole placeholder in italics, and the text saved`, async ({
-      page,
-    }) => {
-      await page.setViewportSize(at);
-      const { saves } = await lifePage(page);
-      const old = page.locator('#stage-desc-childhood');
-      await old.scrollIntoViewIfNeeded();
-      await page.screenshot({ path: shot(`6-notes-box-at-${at.width}.png`) });
-      if (oldBuild) return;
-
-      // One box per stage, each labelled Background Notes; the old label is nowhere.
-      await expect(page.getByLabel('Background Notes')).toHaveCount(3);
-      await expect(page.getByText('Description (Optional)')).toHaveCount(0);
-      const box = stage(page, 'Childhood').getByLabel('Background Notes');
-      await expect(box).toHaveAttribute('placeholder', PLACEHOLDER);
-      await expect(box).toHaveValue('');
-
-      // How the placeholder is drawn, and whether all of it fits in the box: a
-      // placeholder cannot be scrolled, so a line that does not fit is a line unread.
-      const drawn = await box.evaluate((el) => {
-        const area = el as HTMLTextAreaElement;
-        const own = getComputedStyle(area);
-        const placeholder = getComputedStyle(area, '::placeholder');
-        const pad = (side: string) => parseFloat(own.getPropertyValue(`padding-${side}`));
-        const mirror = document.createElement('div');
-        mirror.textContent = area.placeholder;
-        Object.assign(mirror.style, {
-          position: 'absolute',
-          visibility: 'hidden',
-          boxSizing: 'content-box',
-          width: `${area.clientWidth - pad('left') - pad('right')}px`,
-          fontFamily: own.fontFamily,
-          fontSize: own.fontSize,
-          lineHeight: own.lineHeight,
-          letterSpacing: own.letterSpacing,
-          fontStyle: placeholder.fontStyle,
-          whiteSpace: 'pre-wrap',
-          overflowWrap: 'break-word',
-        });
-        document.body.appendChild(mirror);
-        const needed = mirror.getBoundingClientRect().height;
-        mirror.remove();
-        // The paper the box stands on: the nearest ancestor that paints a background.
-        let paper = 'rgba(0, 0, 0, 0)';
-        for (let node: Element | null = area; node; node = node.parentElement) {
-          const bg = getComputedStyle(node).backgroundColor;
-          if (bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent') {
-            paper = bg;
-            break;
-          }
-        }
-        return {
-          fontStyle: placeholder.fontStyle,
-          ink: placeholder.color,
-          opacity: placeholder.opacity,
-          paper,
-          needed,
-          room: area.clientHeight - pad('top') - pad('bottom'),
-        };
-      });
-      expect(drawn.fontStyle).toBe('italic');
-      expect(drawn.opacity).toBe('1');
-      expect(drawn.needed).toBeLessThanOrEqual(drawn.room);
-      // The ink reads against the paper: 4.5 to 1, the figure for body text.
-      const channels = (color: string) => (color.match(/[\d.]+/g) ?? []).slice(0, 3).map(Number);
-      const luminance = (color: string) => {
-        const [r, g, b] = channels(color).map((c) => {
-          const v = c / 255;
-          return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-        });
-        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      };
-      const [light, dark] = [luminance(drawn.ink), luminance(drawn.paper)].sort((a, b) => b - a);
-      expect((light + 0.05) / (dark + 0.05)).toBeGreaterThanOrEqual(4.5);
-
-      // Typing replaces the placeholder, and leaving the box saves that stage's text.
-      await box.fill('Soft hands, hard lessons.');
-      await page.screenshot({ path: shot(`7-notes-written-at-${at.width}.png`) });
-      await stage(page, 'Youth').getByLabel('Background Notes').focus();
-      await expect.poll(() => saves.length).toBe(1);
-      expect(saves[0]).toEqual({
-        draft_data: { stage_descriptions: { childhood: 'Soft hands, hard lessons.' } },
-      });
-      await expect(box).toHaveValue('Soft hands, hard lessons.');
-      // The other stages' boxes are still empty and still show the placeholder.
-      await expect(stage(page, 'Youth').getByLabel('Background Notes')).toHaveValue('');
-    });
-  }
 });

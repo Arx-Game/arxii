@@ -12,6 +12,8 @@ from rest_framework import serializers
 from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
     ALTER_EGO_KEY,
+    BACKGROUND_KEY,
+    BACKGROUND_MAX_LENGTH,
     BEAT_COVER_OFFER_ID,
     BEAT_FIGURES,
     BEAT_LINE_MAX_LENGTH,
@@ -29,16 +31,13 @@ from world.character_creation.constants import (
     PERSONALIZATION_COPY_KEYS,
     PRESTIGE_STORIES_KEY,
     PRESTIGE_STORY_MAX_LENGTH,
-    RECENT_HISTORY_MAX_LENGTH,
-    STAGE_DESCRIPTION_MAX_LENGTH,
-    STAGE_DESCRIPTIONS_KEY,
+    RETIRED_BACKGROUND_KEYS,
     TECHNIQUE_PERSONALIZATIONS_KEY,
     TIE_KIND,
     TIE_ORGANIZATION_ID,
     TIES_KEY,
     AnchorSource,
     FinalTouchesPrompt,
-    LifeStage,
     OfferChapter,
     QuestionKind,
     TieKind,
@@ -67,7 +66,6 @@ from world.character_creation.models import (
     TraditionStateLine,
 )
 from world.character_creation.offers import (
-    RECENT_HISTORY_KEY,
     age_pick_allowance,
     age_scaled_points_spent,
     schooling_training_points,
@@ -2088,7 +2086,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         incoming = validated_data.pop("draft_data", None)
         if incoming is not None:
-            validated_data["draft_data"] = {**instance.draft_data, **incoming}
+            merged = {**instance.draft_data, **incoming}
+            # A draft saved before #5178 may still hold the retired per-stage notes and
+            # Recent History; the first save after it drops them.
+            for retired in RETIRED_BACKGROUND_KEYS:
+                merged.pop(retired, None)
+            validated_data["draft_data"] = merged
         restyled = {"selected_tradition", "selected_combat_style"} & validated_data.keys()
         instance = super().update(instance, validated_data)
         if restyled:
@@ -2144,8 +2147,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
         self._validate_beats(value)
-        self._validate_stage_descriptions(value)
-        self._validate_recent_history(value)
+        self._validate_background(value)
         self._validate_parent_fates(value)
         self._validate_origin_anchors(value)
         self._validate_origin_figures(value)
@@ -2530,40 +2532,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 msg = f"a figure's name is text of at most {FIGURE_NAME_MAX_LENGTH} characters"
                 raise serializers.ValidationError({"beats": msg})
 
-    def _validate_stage_descriptions(self, data: dict) -> None:
-        """``stage_descriptions`` maps a life stage to the paragraph written for it
-        (#4872): text of at most ``STAGE_DESCRIPTION_MAX_LENGTH`` characters, written at
-        finalize as that stage's own paragraph of the told background."""
-        descriptions = data.get(STAGE_DESCRIPTIONS_KEY)
-        if descriptions is None:
+    @staticmethod
+    def _validate_background(data: dict) -> None:
+        """``background`` is the one free text of the character's Background (#5178): a
+        string of at most ``BACKGROUND_MAX_LENGTH`` characters, written at finalize as
+        ``Profile.background``. The per-stage notes and Recent History it replaced are
+        refused by name, so a client that still sends them is told."""
+        for retired in RETIRED_BACKGROUND_KEYS:
+            if retired in data:
+                msg = f"{retired} is retired; the Background is draft_data.{BACKGROUND_KEY}"
+                raise serializers.ValidationError({retired: msg})
+        if BACKGROUND_KEY not in data:
             return
-        if not isinstance(descriptions, dict):
-            msg = f"{STAGE_DESCRIPTIONS_KEY} must be a dictionary"
-            raise serializers.ValidationError({STAGE_DESCRIPTIONS_KEY: msg})
-        for stage, text in descriptions.items():
-            if stage not in LifeStage.values:
-                msg = f"{STAGE_DESCRIPTIONS_KEY} keys are life stages"
-                raise serializers.ValidationError({STAGE_DESCRIPTIONS_KEY: msg})
-            if not isinstance(text, str) or len(text) > STAGE_DESCRIPTION_MAX_LENGTH:
-                msg = (
-                    f"a stage's description is text of at most "
-                    f"{STAGE_DESCRIPTION_MAX_LENGTH} characters"
-                )
-                raise serializers.ValidationError({STAGE_DESCRIPTIONS_KEY: msg})
-
-    def _validate_recent_history(self, data: dict) -> None:
-        """``recent_history`` is the optional text a life ends on (#4830): a string of at
-        most ``RECENT_HISTORY_MAX_LENGTH`` characters, written at finalize as the lead-in
-        paragraph of the told background."""
-        if RECENT_HISTORY_KEY not in data:
-            return
-        text = data[RECENT_HISTORY_KEY]
+        text = data[BACKGROUND_KEY]
         if text is None:
-            data[RECENT_HISTORY_KEY] = ""
+            data[BACKGROUND_KEY] = ""
             return
-        if not isinstance(text, str) or len(text) > RECENT_HISTORY_MAX_LENGTH:
-            msg = f"recent_history is text of at most {RECENT_HISTORY_MAX_LENGTH} characters"
-            raise serializers.ValidationError({"recent_history": msg})
+        if not isinstance(text, str) or len(text) > BACKGROUND_MAX_LENGTH:
+            msg = f"background is text of at most {BACKGROUND_MAX_LENGTH} characters"
+            raise serializers.ValidationError({BACKGROUND_KEY: msg})
 
     @staticmethod
     def _validate_parent_fates(data: dict) -> None:

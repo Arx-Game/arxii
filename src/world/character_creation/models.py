@@ -1331,10 +1331,9 @@ class CharacterOriginSlot(RelatedCacheClearingMixin, SharedMemoryModel):
 
     Instance data — NOT a content model, never exported. Mirrors
     ``CharacterGlimpseTag`` (``glimpse.py:65-88``). A row names exactly one of
-    ``slot`` (an Upbringing prompt's answer), ``beat`` (a beat the character took,
-    #4124) or ``life_stage`` (the paragraph written for a whole stage, #4872); a beat
-    row may stand ``unknown`` (a Sleeper's blank, or a year nobody speaks of) until a
-    secret naming it (``Secret.resolves_beat``) is learned.
+    ``slot`` (an Upbringing prompt's answer) or ``beat`` (a beat the character took,
+    #4124); a beat row may stand ``unknown`` (a Sleeper's blank, or a year nobody
+    speaks of) until a secret naming it (``Secret.resolves_beat``) is learned.
     """
 
     #: Saving or deleting a row clears the sheet's cached rows
@@ -1368,16 +1367,6 @@ class CharacterOriginSlot(RelatedCacheClearingMixin, SharedMemoryModel):
         default=False,
         db_default=False,
         help_text="A beat the character does not remember (#4124); the sheet shows it blank.",
-    )
-    #: The third shape of a row (#4872): the one paragraph the player wrote for a whole
-    #: stage of the life, with no slot and no beat. ``value`` holds the paragraph;
-    #: ``assemble_origin_prose`` prints it under the stage's name, before its beats.
-    life_stage = models.CharField(
-        max_length=20,
-        choices=LifeStage.choices,
-        blank=True,
-        default="",
-        help_text="A stage description row: the stage it describes; blank on other rows.",
     )
     value = models.TextField(help_text="The player's authored answer.")
     choice = models.ForeignKey(
@@ -1420,20 +1409,14 @@ class CharacterOriginSlot(RelatedCacheClearingMixin, SharedMemoryModel):
                 condition=models.Q(beat__isnull=False),
                 name="characteroriginslot_sheet_beat_unique",
             ),
-            models.UniqueConstraint(
-                fields=["sheet", "life_stage"],
-                condition=~models.Q(life_stage=""),
-                name="characteroriginslot_sheet_stage_unique",
-            ),
-            # A row is exactly one of a slot answer, a beat, or a stage description
-            # (#4872); the blank ``life_stage`` default fills every older row.
+            # A row is exactly one of a slot answer or a beat. The third shape, a
+            # paragraph for a whole life stage (#4872), was retired by #5178.
             models.CheckConstraint(
                 condition=(
-                    models.Q(slot__isnull=False, beat__isnull=True, life_stage="")
-                    | models.Q(slot__isnull=True, beat__isnull=False, life_stage="")
-                    | (models.Q(slot__isnull=True, beat__isnull=True) & ~models.Q(life_stage=""))
+                    models.Q(slot__isnull=False, beat__isnull=True)
+                    | models.Q(slot__isnull=True, beat__isnull=False)
                 ),
-                name="characteroriginslot_exactly_one_of_slot_beat_or_stage",
+                name="characteroriginslot_exactly_one_of_slot_or_beat",
             ),
         ]
 

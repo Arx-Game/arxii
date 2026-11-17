@@ -447,6 +447,57 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
       })
     );
   });
+
+  it('has one Background box, saved with the stage as draft_data.background (#5178)', async () => {
+    const user = userEvent.setup();
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft()}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.getByRole('heading', { name: 'Background' })).toBeInTheDocument();
+    const box = screen.getByRole('textbox', { name: 'Background' });
+    expect(box).toHaveValue('');
+    expect(box).toHaveAttribute('maxlength', '4000');
+    expect(box).toHaveAttribute(
+      'placeholder',
+      'You can write an optional description of the character’s background, and it will be listed as their Background on the character sheet.'
+    );
+    expect(box).toHaveClass('background-text');
+    // The box comes before the doors and The Introductions, after the enemy.
+    const introductions = screen.getByRole('heading', { name: 'The Introductions' });
+    expect(
+      box.compareDocumentPosition(introductions) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    await user.type(box, 'Third daughter of a chandler.');
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          draft_data: expect.objectContaining({ background: 'Third daughter of a chandler.' }),
+        },
+      })
+    );
+  });
+
+  it('shows the Background the draft holds, and an unchanged one sends nothing (#5178)', async () => {
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({ draft_data: { background: 'Raised on the river.' } })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    expect(screen.getByRole('textbox', { name: 'Background' })).toHaveValue('Raised on the river.');
+    await leave!();
+    expect(mutateAsync).not.toHaveBeenCalled();
+  });
 });
 
 describe('FinalTouchesStage (the card-unlocked chapter, #4846)', () => {

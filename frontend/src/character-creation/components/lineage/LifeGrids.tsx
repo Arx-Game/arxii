@@ -21,9 +21,9 @@
  * is Amnesiac reads Unknown. A pick can be marked secret; on a one-of row a secret
  * pick opens the Cover story box and the next click on another card sets that card as
  * the cover (the public sheet shows it in the secret's place). A person card takes the
- * figure's name once picked. Every stage ends on Background Notes, one paragraph saved
- * to `draft_data.stage_descriptions`; its placeholder says the text joins the Background
- * on the character sheet (#5160, the owner's words).
+ * figure's name once picked. The page holds no free text about the life as a whole: the
+ * Background is one box on Final Touches (#5178, owner ruling 2026-11-17), which replaced
+ * the Background Notes each stage ended on and the Recent History box.
  *
  * The draft's state per beat lives at `draft_data.beats[<beat_id>]` (taken, unknown,
  * line, `secret_offer_ids`, `cover_offer_id`, `figures`); the whole map is sent on every
@@ -32,9 +32,10 @@
  * is local and never saved.
  *
  * The life's choices are listed in the chapter's right-hand panel, under the "CG
- * selections" every stage shows, each pick under its stage with its signed price (#5148). Every life ends on the Recent History box (#4830) and the life so far
- * in one paragraph. A beginning that strikes every stage (the Sleeper) has an empty pool;
- * its `struck_stages_text` stands where the stage rows would be, over that box.
+ * selections" every stage shows, each pick under its stage with its signed price (#5148).
+ * Every life ends on the life so far in one paragraph. A beginning that strikes every
+ * stage (the Sleeper) has an empty pool; its `struck_stages_text` stands where the stage
+ * rows would be, with nothing to fill in.
  */
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -53,8 +54,6 @@ import {
   FIGURE_NAME_MAX_LENGTH,
   LIFE_GRID_LABELS,
   LIFE_STAGE_ORDER,
-  RECENT_HISTORY_MAX_LENGTH,
-  STAGE_DESCRIPTION_MAX_LENGTH,
   type BeatPoolEntry,
   type CGExplanations,
   type CharacterDraft,
@@ -204,43 +203,14 @@ export function LifeGrids({ draft, copy }: Props) {
     beginning.strikes_adulthood;
   const struck = struckAll
     ? beginning.struck_stages_text.trim() ||
-      (copy?.life_struck_fallback ??
-        'Every stage of this life is struck. What there is to say begins below.')
+      (copy?.life_struck_fallback ?? 'Every stage of this life is struck.')
     : '';
-  const recentHistory = draft.draft_data.recent_history ?? '';
-  const saveRecentHistory = (value: string) => {
-    if (value === recentHistory) return;
-    void updateDraft.mutateAsync({
-      draftId: draft.id,
-      data: { draft_data: { recent_history: value } },
-    });
-  };
-  const recentHistoryBox = (
-    <div className="field recent-history">
-      <label htmlFor="recent-history">
-        {copy?.life_recent_history_label ?? 'Recent History (Optional)'}
-      </label>
-      <textarea
-        id="recent-history"
-        rows={3}
-        maxLength={RECENT_HISTORY_MAX_LENGTH}
-        defaultValue={recentHistory}
-        aria-describedby="recent-history-help"
-        onBlur={(e) => saveRecentHistory(e.target.value)}
-      />
-      <span id="recent-history-help" className="hint">
-        {copy?.life_recent_history_help ?? 'What you want a GM or another player to pick up.'}
-      </span>
-    </div>
-  );
-
   if (beats.length === 0) {
-    return (
+    return struck ? (
       <div className="life">
-        {struck && <p className="absent">{struck}</p>}
-        {recentHistoryBox}
+        <p className="absent">{struck}</p>
       </div>
-    );
+    ) : null;
   }
 
   const save = async (next: Record<string, DraftBeatState>) => {
@@ -327,15 +297,6 @@ export function LifeGrids({ draft, copy }: Props) {
     else delete figures[String(offerId)];
     patch(beat, { figures });
   };
-  const descriptions = draft.draft_data.stage_descriptions ?? {};
-  const saveDescription = (stage: string, value: string) => {
-    if ((descriptions[stage] ?? '') === value) return;
-    void updateDraft.mutateAsync({
-      draftId: draft.id,
-      data: { draft_data: { stage_descriptions: { ...descriptions, [stage]: value } } },
-    });
-  };
-
   const toggleStage = (stage: string) => setFoldedStages((folded) => flipped(folded, stage));
   const toggleSection = (beat: BeatPoolEntry) =>
     setFoldedBeats((folded) => flipped(folded, beat.beat_id));
@@ -580,29 +541,7 @@ export function LifeGrids({ draft, copy }: Props) {
             <span className="prog">{prog}</span>
           </button>
         </h3>
-        {open && (
-          <div className="stage-body">
-            {pool.map((beat) => renderSection(stage, beat))}
-            {!unknown && (
-              <div className="field stage-description">
-                <label htmlFor={`stage-desc-${stage}`}>
-                  {copy?.life_stage_notes_label ?? 'Background Notes'}
-                </label>
-                <textarea
-                  id={`stage-desc-${stage}`}
-                  rows={3}
-                  placeholder={
-                    copy?.life_stage_notes_placeholder ??
-                    'You can write an optional description of what this stage of the character’s life was like, and it will be added to their listed Background on the character sheet.'
-                  }
-                  maxLength={STAGE_DESCRIPTION_MAX_LENGTH}
-                  defaultValue={descriptions[stage] ?? ''}
-                  onBlur={(e) => saveDescription(stage, e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-        )}
+        {open && <div className="stage-body">{pool.map((beat) => renderSection(stage, beat))}</div>}
       </section>
     );
   };
@@ -665,7 +604,6 @@ export function LifeGrids({ draft, copy }: Props) {
           )}
         </p>
         {stages.map(renderStage)}
-        {recentHistoryBox}
         <div className="life-foot">
           <span>{foot}</span>
         </div>

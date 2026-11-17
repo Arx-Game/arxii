@@ -24,7 +24,6 @@ from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     LIFE_LOADED_FOR_KEY,
     MAGIC_TRAINING_POINTS_TARGET,
-    STAGE_DESCRIPTIONS_KEY,
     ActorSheetPrompt,
     BeatAudience,
     BeatSelection,
@@ -173,10 +172,6 @@ LIFE_STAGE_ORDER: dict[str, int] = {value: i for i, value in enumerate(LifeStage
 BEATS_KEY = "beats"
 
 
-#: The optional text a life ends on, under ``draft_data`` (#4830).
-RECENT_HISTORY_KEY = "recent_history"
-
-
 def beat_pool(draft: CharacterDraft) -> list[LifeBeat]:
     """Every active library beat this draft's Beginning offers, stage by stage (#4124).
 
@@ -303,18 +298,6 @@ def beat_marks(draft: CharacterDraft) -> BeatMarks:
                 if isinstance(name, str) and name.strip() and str(key).isdecimal()
             )
     return BeatMarks(secret=secret, cover=cover, figures=figures)
-
-
-def stage_descriptions(draft: CharacterDraft) -> dict[str, str]:
-    """Life stage value -> the paragraph the player wrote for it (#4872), blanks dropped."""
-    raw = draft.draft_data.get(STAGE_DESCRIPTIONS_KEY) or {}
-    if not isinstance(raw, dict):
-        return {}
-    return {
-        stage: text.strip()
-        for stage, text in raw.items()
-        if stage in LifeStage.values and isinstance(text, str) and text.strip()
-    }
 
 
 def beats_for(draft: CharacterDraft) -> list[BeatPoolEntry]:

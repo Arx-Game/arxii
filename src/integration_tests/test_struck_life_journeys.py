@@ -1,13 +1,13 @@
-"""Journeys: a struck life shows its text, and Recent History opens the background (#4830).
+"""Journeys: a struck life shows its text, and its Background is the one text written.
 
-Slice 4 of #4813, the backend half.
+Slice 4 of #4813, the backend half, re-ruled by #5178.
 
 Ysmay begins as a Sleeper: every stage of the life is struck, so the beginnings payload
 carries the text her life page shows in place of the stage rows and her beat pool is
-empty. She writes a Recent History, and after finalize her background opens with it.
-The expected shape comes from the parent spec and the rulings of 2026-10-30 and
-2026-10-31: the struck text is a field on the beginning, Recent History is the lead-in
-paragraph of ``Profile.background``, public.
+empty. She writes her Background at Final Touches, and after finalize it is her
+``Profile.background``, word for word. The expected shape comes from the parent spec
+(the struck text is a field on the beginning) and the owner's ruling of 2026-11-17: one
+Background box replaces Recent History, and a Sleeper writes only that.
 """
 
 from __future__ import annotations
@@ -20,7 +20,7 @@ from world.character_creation.tests.finalization_fixtures import FinalizationTes
 STRUCK = "As a Sleeper, your new life begins now without any memory of who you might have been."
 
 
-class AStruckLifeAndItsRecentHistory(FinalizationTestMixin, JourneyCase):
+class AStruckLifeAndItsBackground(FinalizationTestMixin, JourneyCase):
     def setUp(self) -> None:
         super().setUp()
         self._flush_common_caches()
@@ -37,7 +37,7 @@ class AStruckLifeAndItsRecentHistory(FinalizationTestMixin, JourneyCase):
         self.draft = self._create_base_draft(first_name="Ysmay")
         self.client = self.api(self.account)
 
-    def test_the_text_shows_the_pool_is_empty_and_the_history_opens_the_background(self):
+    def test_the_text_shows_the_pool_is_empty_and_the_background_is_what_she_wrote(self):
         res = self.client.get(
             f"/api/character-creation/beginnings/?starting_area={self.beginnings.starting_area.pk}"
         )
@@ -52,7 +52,7 @@ class AStruckLifeAndItsRecentHistory(FinalizationTestMixin, JourneyCase):
 
         patched = self.client.patch(
             f"/api/character-creation/drafts/{self.draft.id}/",
-            {"draft_data": {"recent_history": "I woke in a tomb that was not mine."}},
+            {"draft_data": {"background": "I woke in a tomb that was not mine."}},
             format="json",
         )
         self.assertEqual(patched.status_code, 200, patched.content)

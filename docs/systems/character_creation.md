@@ -76,7 +76,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CharacterDraft` | In-progress creation state | `account`, `current_stage`, `selected_area`, `selected_beginnings`, `selected_species`, `selected_gender`, `age`, `selected_origin_template` (FK `OriginTemplate`, the chosen Upbringing, #3617), `family_path` (`FamilyPath`: claimed/named/none, #3617), `family`, `selected_path`, `selected_tradition`, `height_band`, `height_inches`, `build`, `draft_data` (JSON) |
-| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt, a beat taken, or a stage's paragraph (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`, nullable), `beat` (FK `LifeBeat`, nullable, #4124) + `unknown`, `life_stage` (a stage description row, #4872; a row is exactly one of slot, beat or stage), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617), `organization` (FK `Organization`, nullable; a GROUP question's resolved anchor, or the group a PERSON's named figure belongs to, #3660), `figure_name` (the named person, #3660) |
+| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt, or a beat taken (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`, nullable), `beat` (FK `LifeBeat`, nullable, #4124) + `unknown` (a row is exactly one of slot or beat; the third shape, a paragraph for a whole life stage, was removed by #5178), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617), `organization` (FK `Organization`, nullable; a GROUP question's resolved anchor, or the group a PERSON's named figure belongs to, #3660), `figure_name` (the named person, #3660) |
 
 **Note:** Magic selections during CG (gift, techniques, gift resonance, Anima Check stat/skill, aura distribution) are stored in `draft_data` JSON, not in separate Draft* models. The old DraftGift, DraftTechnique, DraftMotif, DraftMotifResonance, DraftMotifResonanceAssociation, DraftAnimaRitual, TraditionTemplate, TraditionTemplateTechnique, and TraditionTemplateFacet models have been removed.
 
@@ -412,6 +412,16 @@ Chapter 10 (Final Touches) replaced the free-text personality field. Everything 
 is optional for an original character and nothing blocks finalize; a roster character
 arrives with all of it written by staff through the same leaf on the GM path. Empty items
 do not render on a viewed sheet.
+
+**The Background (#5178, ADR-5178).** One box under the heading "Background", after the
+enemy and before the faces' doors: the only free text about the character's history in
+creation. Copy keys `finaltouches_background_heading` and
+`finaltouches_background_placeholder` (the italic placeholder is the box's only
+explanation; in-code fallbacks stand until staff author the rows). Saved with the stage as
+`draft_data.background`, at most `BACKGROUND_MAX_LENGTH` (4000) characters; quoted on the
+Review stage under "Background"; written at finalize as `Profile.background` word for
+word. A second face (the Officially dead door, A second face) writes its own in its door,
+"The story the world knows", to that face's own `Profile`.
 
 **The three questions.** "What would you never do?", "What would you protect at all
 costs?", "What are you deathly afraid of?" (`ACTOR_SHEET_QUESTIONS`; wording and the
@@ -924,27 +934,30 @@ rank (`_create_distinctions`), so a rank-four career lands as rank four. Journey
 `integration_tests/test_career_points_journeys.py`. `Beginnings.beat_mode`
 has one value, `POOL`, since #4830: the one-kept mode (the Sleeper's one unexcluded beat
 as the whole stage) is retired, because the Sleeper strikes every stage and shows its
-`struck_stages_text` instead. **Recent History (#4830):** `draft_data["recent_history"]`,
-free text of at most `RECENT_HISTORY_MAX_LENGTH` (2000) characters, validated with the
-beats; at finalize it becomes the lead-in paragraph of `Profile.background`, a blank line,
-then the told prose (`assemble_origin_prose`), or the whole background when nothing else
-was told. Public by ruling (2026-10-30, 2026-10-31). Journeys:
-`integration_tests/test_struck_life_journeys.py`. **On the leaf (#4831):** `LifeGrids` ends
-every life on the Recent History box (a textarea under the last stage, before the footer;
-copy keys `life_recent_history_label` and `life_recent_history_help`; `maxLength` from the
-frontend's mirror of `RECENT_HISTORY_MAX_LENGTH`), saved on blur to
-`draft_data.recent_history` by itself. When the pool is empty and the draft's beginning
-strikes all three stages, the beginning's `struck_stages_text` stands where the stage rows
-would be (a `.absent` paragraph over the box; copy key `life_struck_fallback` stands in until
-the text is authored), with no pick lines and no footer; an empty pool on a beginning that
-keeps its stages shows the box alone. Apart from an age-scaled beat's allowance,
+`struck_stages_text` instead. **The Background (#5178, ADR-5178):** the character's
+Background is one free text, `draft_data["background"]` (`BACKGROUND_KEY`), of at most
+`BACKGROUND_MAX_LENGTH` (4000) characters, written in the one Background box on Final
+Touches and saved with that stage. At finalize `_set_descriptive_text` writes it to
+`Profile.background` word for word (stripped); a player who wrote nothing has an empty
+Background. Nothing the game composes is added to it. It replaced Recent History (#4830,
+`draft_data["recent_history"]`) and the paragraph each life stage ended on (#4872,
+`draft_data["stage_descriptions"]`): the draft serializer refuses both keys by name
+(`RETIRED_BACKGROUND_KEYS`) and drops them from a saved draft on its next save. Journeys:
+`integration_tests/test_struck_life_journeys.py`,
+`integration_tests/test_life_page_journeys.py`. **On the leaf:** `LifeGrids` holds no free
+text about the life. When the pool is empty and the draft's beginning strikes all three
+stages, the beginning's `struck_stages_text` stands where the stage rows would be (a
+`.absent` paragraph; copy key `life_struck_fallback` stands in until the text is authored),
+with no pick lines and no footer; an empty pool on a beginning that keeps its stages
+renders nothing. Apart from an age-scaled beat's allowance,
 nothing counts beats by age: the purse is the only governor.
 
 At finalize (`_finalize_beats`) each taken beat becomes a `CharacterOriginSlot` row with
 `beat` set (`slot` null; exactly one of the two), its `unknown` state and its line; the
 answers are ordinary `CharacterDistinction` rows whose source is the beat. The told
-background (`Profile.background`) is drafted from the Upbringing answers and the beats
-by stage (`assemble_origin_prose`) and is the player's to edit; the beats themselves are
+background (`Profile.background`) is the player's own text from Final Touches (#5178); the
+prose composed from the Upbringing answers and the beats by stage
+(`assemble_origin_prose`) is read only by the Durance testament. The beats themselves are
 the owner's and staff's (the sheet's private block, `character_sheets.md`). A `Secret`
 may name an unknown beat (`Secret.resolves_beat`); when the subject learns it the beat
 is no longer unknown. Age is experience through beats, not banked stat points:
@@ -956,14 +969,12 @@ life through `Species.cg_point_cost` on the purse's species line.
 (demo https://claude.ai/artifact/D7gFL3Cm8wL52jK94SAj28; the leaf is the next slice).
 *Grouped answers:* `DistinctionOffer.group` is the heading a beat's answer sits under
 ("Treatment"), serialized as `VisibleOffer.group`; the paste's beat token takes it as a third
-segment, `beat:<stage>/<beat name>/<group>`. *A paragraph per stage:*
-`draft_data.stage_descriptions` maps a `LifeStage` value to text of at most
-`STAGE_DESCRIPTION_MAX_LENGTH` (1000) characters (`_validate_stage_descriptions`);
-`_finalize_beats` writes each as a `CharacterOriginSlot` row with `life_stage` set and no
-slot or beat (a row is exactly one of the three, one stage row per sheet), and
-`assemble_origin_prose` prints the life by stage: the stage's name and paragraph, then its
-beats; a stage every one of whose beat rows is unknown reads "<Stage>: unknown" (the leaf
-marks Unknown per stage by setting every beat in it). *A secret with a cover:* the beat's
+segment, `beat:<stage>/<beat name>/<group>`. *The life by stage:* `assemble_origin_prose`
+prints each stage's known beats under the stage's name; a stage every one of whose beat
+rows is unknown reads "<Stage>: unknown" (the leaf marks Unknown per stage by setting
+every beat in it). The paragraph a stage once ended on (`draft_data.stage_descriptions`,
+a `CharacterOriginSlot` row with `life_stage` set) was removed by #5178; migrations 0450
+and 0451 delete those rows and drop the column. *A secret with a cover:* the beat's
 state at `draft_data.beats[<beat_id>]` also carries `secret_offer_ids` (the picks on the
 beat marked secret), `cover_offer_id` (the same row's answer shown in the secret's place;
 null means Unremarkable, the row's no-cost card) and `figures` (offer id to the figure's
@@ -1017,14 +1028,10 @@ one-of row a secret pick opens the Cover story box (`.cover-box`, copy `life_cov
 dashed, until the next click on another card sets it (`cover_offer_id`); clicking the real
 pick again drops the secret and the cover; on an any row the cover is a select with "Nothing
 shown" first. A picked card with `asks_figure_name` shows a name input (copy
-`life_figure_label`, `FIGURE_NAME_MAX_LENGTH`) saved into the beat's `figures`. Every
-open stage ends on Background Notes (#5160; copy `life_stage_notes_label`, and
-`life_stage_notes_placeholder` for the italic placeholder that says the text joins the
-Background on the character sheet, the owner's sentence; `STAGE_DESCRIPTION_MAX_LENGTH`),
-saved on blur to `draft_data.stage_descriptions` whole. The retired key
-`life_stage_description_label` ("Description (Optional)") is not read. The box is 12rem
-tall under 40rem of window, because a placeholder cannot be scrolled and the sentence
-runs to six lines on a phone.
+`life_figure_label`, `FIGURE_NAME_MAX_LENGTH`) saved into the beat's `figures`. A stage
+ends on its last section: the Background Notes box (#5160) was removed by #5178, and the
+copy keys `life_stage_notes_label`, `life_stage_notes_placeholder` and
+`life_stage_description_label` are not read.
 The per-beat line input is gone from the leaf (the model field stays for the sheet). The
 life block is `.leafwrap`: the life as a size container (the grids two across, three at
 46rem, four at 64rem, five at 82rem, six at 100rem by container query; prose at 68ch).
@@ -1049,7 +1056,7 @@ on the one element): as `.interview .popover` none of them applied, and from #48
 #5148 the box was a blank page-high sheet in the wrong place.
 "View in Codex" in the codex overlay (`codex/components/CodexModal.tsx`, opened only from
 character creation) opens the entry in a new tab and leaves the overlay open (#5148).
-The life ends on the Recent History box, the footer and the `.testament` paragraph (every
+The life ends on the footer and the `.testament` paragraph (every
 answered beat's answers in bold, "Nothing written yet."). The first name is asked on the
 Origin leaf (`OriginStage`, a `Field` saved on blur, listed first in the rail; copy
 `origin_first_name_label`/`origin_first_name_hint`) and `IdentityStage` shows the name as a
@@ -1203,7 +1210,8 @@ gang; the template's liege and served house do not apply). See societies.md.
 
 **Finalize order (`_finalize_origin_slots`, `_create_distinctions`,
 `_seed_connection_reputation`):** every visible answered prompt is upserted via
-`set_origin_slot` (assembling `Profile.background`). Bundled Distinctions no longer
+`set_origin_slot` (the rows `assemble_origin_prose` reads; `Profile.background` is the
+player's own text since #5178). Bundled Distinctions no longer
 have their own finalize hook (#3675); `reconcile_offer_picks` already folds every
 visible answer's bundled `DistinctionOffer` into `draft.draft_data["distinctions"]`
 at cost 0 whenever a Lineage answer changes, so `_create_distinctions`'s ordinary

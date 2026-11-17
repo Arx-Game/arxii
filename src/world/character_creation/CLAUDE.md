@@ -36,8 +36,11 @@ Character creation is a multi-stage process that guides players through creating
    bonuses) plus skill point allocation (moved in from Path, #2426 Task 9)
 8. **Appearance** - Height, build, form traits (hair/eye color, etc.); its offered
    distinctions in authored sections (`AppearanceSection`, #3709)
-9. **Identity** - Name, description, background
-10. **Final Touches** - The Actor's Sheet (#3621): three questions, each with the
+9. **Identity** - Name (shown; asked on Origin), concept, quote, worship
+10. **Final Touches** - The Background (#5178, ADR-5178: one free text,
+    `draft_data.background`, written to `Profile.background` word for word at finalize;
+    it replaced the per-stage notes and Recent History, whose keys the draft serializer
+    refuses) and the Actor's Sheet (#3621): three questions, each with the
     distinctions that answer it under it (#3709), numbered goals, one priced enemy whose
     why is picked from the authored `EnemyReason` list before the own words and whose
     reason and degree open offers, the Officially dead door (#4396, opened by a held
@@ -99,8 +102,9 @@ player's `draft_data.family_template_id` pick. Entry into a staff family is a
 and the Lineage step section for the family-block page order, pricing, and finalize
 order (`_materialize_named_family` -> `_bind_vacancy` -> `_bind_kinship_node`).
 `CharacterOriginSlot` is instance data (FK->`CharacterSheet`, FK->`OriginTemplateSlot`,
-nullable FK->`OriginTemplateSlotChoice`); at CG finalize its answers assemble into
-`Profile.background` prose via `assemble_origin_prose()` (pure concatenation, no LLM).
+nullable FK->`OriginTemplateSlotChoice`); `assemble_origin_prose()` composes its answers
+into prose (pure concatenation, no LLM) for the Durance testament. Since #5178 that prose
+is not written into `Profile.background`, which is the player's own Background text.
 Not required at CG submit (mirrors #2427 Glimpse); finish-later via
 `OriginStoryEditorDialog` (`set-origin-slot`/`clear-origin-slot` sheet API actions -
 `choice_id` there is staff-only, since a costed pick is set at character creation).

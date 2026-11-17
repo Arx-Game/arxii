@@ -2272,9 +2272,11 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   .frame`/`station` (read at the pick), `DistinctionOffer.beat` as the
   `OfferChapter.BACKGROUNDS` opener (every answer a priced `CHOICE`; a beat grants
   nothing free; open while the beat is pooled and not unknown, `open_beat_ids`),
-  `CharacterOriginSlot.beat` + `unknown` + `life_stage` (a row names a slot, a beat or a
-  stage; #4872: a stage row holds the paragraph the player wrote for that stage,
-  `draft_data["stage_descriptions"]`, `STAGE_DESCRIPTION_MAX_LENGTH`), the life page's marks
+  `CharacterOriginSlot.beat` + `unknown` (a row names a slot or a beat; the stage row and
+  `draft_data["stage_descriptions"]` of #4872 were removed by #5178), the Background
+  (#5178, ADR-5178: one free text, `draft_data["background"]`, `BACKGROUND_KEY`,
+  `BACKGROUND_MAX_LENGTH`, written at Final Touches and copied to `Profile.background` word
+  for word; `RETIRED_BACKGROUND_KEYS` are refused), the life page's marks
   on a beat (#4872: `secret_offer_ids`, `cover_offer_id`, `figures` under
   `draft_data["beats"]`, `offers.beat_marks -> BeatMarks`; a secret pick is minted a Secret
   and its cover a `CharacterDistinction.is_cover` row at finalize, `_write_cover_stories`;
@@ -2290,8 +2292,9 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   floor), `beat_pick_conflicts(offers, age=, ranks=) -> list[BeatConflict]` in the
   distinctions sync (ranks summed on a career-point beat), the named parents' fates
   (`ParentFate`; kin rows retired, ADR-5102-A),
-  `_finalize_beats`, the background drafted from answers and beats
-  (`assemble_origin_prose`), the sheet's private block (`_build_beats`, `BeatEntry`),
+  `_finalize_beats`, the prose composed from answers and beats for the Durance testament
+  (`assemble_origin_prose`; no longer written into `Profile.background`, #5178), the
+  sheet's private block (`_build_beats`, `BeatEntry`),
   `Secret.resolves_beat`, `CharacterSheet.maturation_floor` (milestones at or below the
   creation age never bank), `Species.cg_point_cost`. Admin: `LifeBeatAdmin` with its
   answers and exclusions inline; the Distinction Builder's offer row takes a beat.
