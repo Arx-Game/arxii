@@ -14,6 +14,7 @@ Both functions receive the crafter as two arguments: ``crafter_character`` (the
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from dataclasses import dataclass, field
 import math
 from typing import TYPE_CHECKING
@@ -61,6 +62,7 @@ def stage_and_assert_affordable(
     crafter_character: ObjectDB,
     crafter_character_sheet: CharacterSheet,
     cost_multiplier: int = 1,
+    optional_requirement_ids: Collection[int] = (),
 ) -> StagedCost:
     """Assert the crafter can afford ``recipe`` and return a ``StagedCost`` snapshot.
 
@@ -76,6 +78,12 @@ def stage_and_assert_affordable(
         recipe: The ``CraftingRecipe`` being attempted.
         crafter_character: The ``ObjectDB`` character (holds AP pool + Anima row).
         crafter_character_sheet: The ``CharacterSheet`` (holds inventory).
+        cost_multiplier: Accent ambition multiplier on AP and Anima (#2886).
+        optional_requirement_ids: Pks of the recipe's ``is_optional`` requirements the crafter
+            chose to bring (#5125). An optional requirement not named here is skipped entirely:
+            not staged, not consumed, not needed for affordability. A named one is staged like
+            any other and must be affordable. A pk that is not one of the recipe's optional
+            requirements has no effect.
 
     Returns:
         ``StagedCost`` snapshot — pass this to ``consume_cost``.
@@ -104,11 +112,14 @@ def stage_and_assert_affordable(
             raise CraftingCostUnaffordable(msg)
 
     # --- Material check ---
-    requirements = list(
-        recipe.material_requirements.all().select_related(
+    chosen_optional = set(optional_requirement_ids)
+    requirements = [
+        r
+        for r in recipe.material_requirements.all().select_related(
             "item_template", "min_quality_tier", "material_category"
         )
-    )
+        if not r.is_optional or r.pk in chosen_optional
+    ]
     # Split bulk value-requirements (Build 0b — spent from the crafter's common-gem
     # buckets) from instance-requirements (0a — counted/consumed from inventory).
     value_reqs = [r for r in requirements if r.required_value is not None]

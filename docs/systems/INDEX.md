@@ -7660,8 +7660,7 @@ holder is never notified a claim exists.
     materials (e.g. "Precious Gemstones"); `ItemTemplate.material_category` FK points into it
     (specific→general, ADR-0010). The *eligibility* axis only; value-denominated requirements
     ("N value of a tier") are Build 0b, gated on the gemstone-value ladder. Crafting
-    *execution* honors category requirements; the read-only quote preview raises
-    `CategoryRequirementsNotQuotable` until the quote surface lands.
+    *execution* and the read-only quote both honor category requirements (#5125).
   - **Gem value model** (`world.items.gems`, Build 0b slice 1) — gem *types* are ordinary
     `ItemTemplate` rows decorated by a `GemDetails` sidecar (`quality_level` 1–15; tier =
     `MaterialCategory`; motif reuses `tied_resonance`), so they stay requirable/consumable like

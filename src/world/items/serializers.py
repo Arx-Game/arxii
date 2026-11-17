@@ -154,12 +154,17 @@ class ItemFacetWriteSerializer(serializers.ModelSerializer):
     """Write serializer for ItemFacet (POST create) — input validation only.
 
     The viewset drives the crafting service directly; this serializer parses
-    and validates the ``item_instance`` and ``facet`` foreign keys.
+    and validates the ``item_instance`` and ``facet`` foreign keys, and the optional
+    ingredients (pks of the recipe's optional material requirements) the crafter brings.
     """
+
+    optional_requirements = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
 
     class Meta:
         model = ItemFacet
-        fields = ["item_instance", "facet"]
+        fields = ["item_instance", "facet", "optional_requirements"]
         # DRF auto-injects a UniqueTogetherValidator from
         # UniqueConstraint(item_instance, facet); suppress it so the
         # FacetAlreadyAttached exception in the service raises a user-message
@@ -205,12 +210,17 @@ class ItemStyleWriteSerializer(serializers.ModelSerializer):
     """Write serializer for ItemStyle (POST create) — input validation only.
 
     The viewset drives the crafting service directly; this serializer parses
-    and validates the ``item_instance`` and ``style`` foreign keys.
+    and validates the ``item_instance`` and ``style`` foreign keys, and the optional
+    ingredients (pks of the recipe's optional material requirements) the crafter brings.
     """
+
+    optional_requirements = serializers.ListField(
+        child=serializers.IntegerField(), required=False, default=list
+    )
 
     class Meta:
         model = ItemStyle
-        fields = ["item_instance", "style"]
+        fields = ["item_instance", "style", "optional_requirements"]
         # DRF auto-injects a UniqueTogetherValidator from
         # UniqueConstraint(item_instance, style); suppress it so the
         # StyleAlreadyAttached exception in the service raises a user-message
@@ -280,10 +290,13 @@ class GemCutQuoteSerializer(serializers.Serializer):
 class CraftingQuoteMaterialSerializer(serializers.Serializer):
     """One material requirement row within a crafting quote."""
 
-    item_template_id = serializers.IntegerField()
+    requirement_id = serializers.IntegerField()
+    material_category_id = serializers.IntegerField(allow_null=True)
+    item_template_id = serializers.IntegerField(allow_null=True)
     name = serializers.CharField()
     quantity_required = serializers.IntegerField()
     have = serializers.IntegerField()
+    is_optional = serializers.BooleanField()
 
 
 class CraftingQuoteCostSerializer(serializers.Serializer):
@@ -503,6 +516,8 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
     accents = serializers.SerializerMethodField()
     # #2907: the piece's form (crafter-picked or template default), null = formless.
     silhouette = serializers.SerializerMethodField()
+    # #5125: the substances the piece carries ("Carries fire"), public to everyone.
+    carries = serializers.SerializerMethodField()
 
     class Meta:
         model = ItemInstance
@@ -533,8 +548,13 @@ class ItemInstanceReadSerializer(serializers.ModelSerializer):
             "facet_workers",
             "accents",
             "silhouette",
+            "carries",
         ]
         read_only_fields = fields
+
+    def get_carries(self, obj: ItemInstance) -> list[str]:
+        """Names of the substances the piece carries (#5125); every viewer sees them."""
+        return [row.substance.name for row in obj.item_substances.all()]
 
     def get_designer_is_holder(self, obj: ItemInstance) -> bool:
         """Whether the holder wrote the piece's words (#4512)."""

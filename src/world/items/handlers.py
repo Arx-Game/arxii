@@ -276,6 +276,8 @@ class CharacterCarriedItemsHandler:
                         queryset=ItemLineage.objects.select_related("source_item"),
                         to_attr="cached_lineage",
                     ),
+                    # What the piece carries (#5125), read by the item API row.
+                    "item_substances__substance",  # noqa: PREFETCH_STRING - read through .all(), no to_attr
                     Prefetch(
                         "item_facets",
                         queryset=ItemFacet.attached().select_related(
