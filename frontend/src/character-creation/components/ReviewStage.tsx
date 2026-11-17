@@ -153,7 +153,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
       text: draftData.glimpse_story,
       stage: Stage.GIFT,
     },
-    { label: 'Background', text: draftData.background, stage: Stage.IDENTITY },
+    { label: 'Background', text: draftData.background, stage: Stage.FINAL_TOUCHES },
     { label: 'Description', text: draftData.description, stage: Stage.APPEARANCE },
     { label: 'Would never', text: draftData.never_do, stage: Stage.FINAL_TOUCHES },
     { label: 'Protects at all costs', text: draftData.protect, stage: Stage.FINAL_TOUCHES },

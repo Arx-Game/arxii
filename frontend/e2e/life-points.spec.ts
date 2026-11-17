@@ -176,10 +176,10 @@ test.describe('the CG points beside the life', () => {
     await expect(paying).toHaveAttribute('aria-pressed', 'false');
   });
 
-  test('the life opens with every fold open, and Background Notes are kept by the server (#5160)', async ({
+  test('the life opens with every fold open and holds no text box, and the Background written on Final Touches is kept by the server (#5160, #5178)', async ({
     page,
   }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(120_000);
     const seed = readSeed();
     await logIn(page);
     await page.goto('/characters/create');
@@ -195,42 +195,67 @@ test.describe('the CG points beside the life', () => {
     await expect(page.locator('.interview .sec')).toHaveCount(2);
     await expect(page.locator('.interview .sec[data-open="true"]')).toHaveCount(2);
 
-    // Each stage ends on Background Notes, with the placeholder saying where the text goes.
-    await expect(page.getByLabel('Background Notes')).toHaveCount(2);
-    await expect(page.getByText('Description (Optional)')).toHaveCount(0);
-    const childhood = page.locator('#stage-desc-childhood');
-    const youth = page.locator('#stage-desc-youth');
-    await expect(childhood).toHaveAttribute(
-      'placeholder',
-      /^You can write an optional description .* added to their listed Background on the character sheet\.$/
-    );
+    // The life page asks for no free text about the life (#5178): no box at the end of
+    // a stage and none under the last stage.
+    await expect(page.getByText('Background Notes')).toHaveCount(0);
+    await expect(page.getByText(/Recent History/)).toHaveCount(0);
+    await expect(page.locator('.interview .life textarea')).toHaveCount(0);
 
-    // Text typed in the box is sent when the box is left, and the server keeps it: the
-    // draft read straight from the server holds it, and so does the page after a reload.
+    // The Background is one box on Final Touches, with a placeholder saying where the
+    // text goes.
+    const stageLink = (name: string) =>
+      page.locator('.interview .toc-list a').filter({ hasText: name });
+    await stageLink('Final Touches').click();
+    const box = page.locator('#background');
+    await expect(box).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('heading', { name: 'Background', exact: true })).toBeVisible();
+    await expect(box).toHaveAttribute(
+      'placeholder',
+      /^You can write an optional description .* listed as their Background on the character sheet\.$/
+    );
+    await expect(box).toHaveAttribute('maxlength', '4000');
+
+    // Text typed in the box is sent when the stage is left, and the server keeps it: the
+    // draft read straight from the server holds it, the Review stage quotes it, and the
+    // box shows it after a reload.
     const draftUrl = `/api/character-creation/drafts/${seed.draft_id}/`;
-    const isDraftSave = (url: string, method: string) =>
-      new URL(url).pathname === draftUrl && method === 'PATCH';
-    const text = `Kept the ledgers for a season (${Date.now()}).`;
-    let saved = page.waitForResponse((r) => isDraftSave(r.url(), r.request().method()));
-    await childhood.fill(text);
-    await youth.focus();
+    const savesBackground = (url: string, method: string, body: string | null, value: string) => {
+      if (new URL(url).pathname !== draftUrl || method !== 'PATCH' || !body) return false;
+      const sent = JSON.parse(body) as { draft_data?: { background?: string } };
+      return sent.draft_data?.background === value;
+    };
+    const text = `Kept the ledgers for a season (${Date.now()}).\n\nThen the river took the shop.`;
+    let saved = page.waitForResponse((r) =>
+      savesBackground(r.url(), r.request().method(), r.request().postData(), text)
+    );
+    await box.fill(text);
+    await stageLink('Review').click();
     expect((await saved).status()).toBe(200);
     const held = await page.request.get(draftUrl);
     expect(held.ok(), await held.text()).toBe(true);
-    expect((await held.json()).draft_data.stage_descriptions).toMatchObject({ childhood: text });
+    expect((await held.json()).draft_data.background).toBe(text);
+    const quoted = page.locator('.interview .written').filter({ hasText: 'Background' });
+    await expect(quoted.locator('blockquote span')).toHaveText(text, {
+      timeout: 20000,
+      useInnerText: true,
+    });
 
     await page.reload();
-    await expect(page.locator('#stage-desc-childhood')).toHaveValue(text, { timeout: 20000 });
-    await expect(page.locator('#stage-desc-youth')).toHaveValue('');
-    // The reload starts expanded again: fold state is never saved.
-    await expect(page.locator('.interview .sec[data-open="true"]')).toHaveCount(2);
+    await stageLink('Final Touches').click();
+    await expect(page.locator('#background')).toHaveValue(text, { timeout: 20000 });
 
-    // A second run on the same database starts from the same place: the box emptied.
-    saved = page.waitForResponse((r) => isDraftSave(r.url(), r.request().method()));
-    await page.locator('#stage-desc-childhood').fill('');
-    await page.locator('#stage-desc-youth').focus();
+    // A second run on the same database starts from the same place: the box emptied and
+    // the draft back on the life page.
+    saved = page.waitForResponse((r) =>
+      savesBackground(r.url(), r.request().method(), r.request().postData(), '')
+    );
+    await page.locator('#background').fill('');
+    await stageLink('Lineage').click();
     expect((await saved).status()).toBe(200);
     const after = await page.request.get(draftUrl);
-    expect((await after.json()).draft_data.stage_descriptions).toMatchObject({ childhood: '' });
+    expect((await after.json()).draft_data.background).toBe('');
+    await expect(costly).toBeVisible({ timeout: 20000 });
+    // The life page starts expanded again: fold state is never saved.
+    await expect(page.locator('.interview .sec[data-open="true"]')).toHaveCount(2);
   });
 });
