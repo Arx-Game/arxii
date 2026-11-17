@@ -649,7 +649,7 @@ class DeedNamingTests(_Case):
         reflection = ReflectionFactory(
             character_sheet=self.sheet, grant=grant, resonance=None, choice="EMBRACE"
         )
-        line = _effect_line(reflection, None, {}, 50)
+        line = _effect_line(self.sheet, reflection, None, {}, 50)
         self.assertEqual(
             line,
             f"Your {self.resonance.name} from this mission is about people held captive "
