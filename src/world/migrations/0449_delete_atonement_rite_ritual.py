@@ -16,14 +16,17 @@ For each Ritual row with that service path:
   a pending ceremony effect) are deleted first, because they PROTECT the ritual and exist
   only while a ritual is under way.
 - Any other row that PROTECTs the ritual (an anima contribution, a class level advancement,
-  a technique grant, a room feature install rite, a relationship capstone) is history or
+  a technique grant, a room feature install rite, a relationship capstone, a sustained
+  action, or the drift correction config naming it as its rite) is history, play state or
   authored configuration. It is never deleted: the ritual is left in place and its id and
-  the blocking tables are printed, so a person decides.
+  the blocking tables are printed, so a person decides. A protecting relation this list
+  does not know is caught the same way, so the migration never fails on a protected row.
 
 Reversing does nothing: the row is not recreated.
 """
 
 from django.db import migrations
+from django.db.models import ProtectedError
 
 SERVICE_PATH = "world.magic.services.atonement.perform_atonement_rite"
 
@@ -37,6 +40,7 @@ PROTECTING_MODELS = (
     "TechniqueGrant",
     "RoomFeatureKindInstallRitual",
     "RelationshipCapstone",
+    "SustainedAction",
 )
 
 
@@ -48,6 +52,9 @@ def delete_atonement_ritual(apps, schema_editor):
             for name in PROTECTING_MODELS
             if apps.get_model("arxii", name).objects.filter(ritual=ritual).exists()
         ]
+        drift_config = apps.get_model("arxii", "DriftCorrectionConfig")
+        if drift_config.objects.filter(rite=ritual).exists():
+            blocking.append("DriftCorrectionConfig")
         if blocking:
             print(
                 f"\n  Ritual {ritual.pk} ({ritual.name!r}) kept: still protected by "
@@ -56,7 +63,13 @@ def delete_atonement_ritual(apps, schema_editor):
             continue
         for name in TRANSIENT_MODELS:
             apps.get_model("arxii", name).objects.filter(ritual=ritual).delete()
-        ritual.delete()
+        try:
+            ritual.delete()
+        except ProtectedError as error:
+            tables = sorted({type(row).__name__ for row in error.protected_objects})
+            print(
+                f"\n  Ritual {ritual.pk} ({ritual.name!r}) kept: protected by {', '.join(tables)}."
+            )
 
 
 class Migration(migrations.Migration):
