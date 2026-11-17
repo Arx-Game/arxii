@@ -10,6 +10,14 @@ Capstones)
 **Related:** `docs/roadmap/magic.md`, `src/world/magic/CLAUDE.md`,
 `docs/architecture/soulfray-recovery.md`
 
+> **Updated by #5177 (ADR-5177), 2026-11-17.** This document was written as a design and parts of it
+> described stage content the code never had. Read §2.4 and §6.2 for what the stages do in code:
+> thresholds, resist checks, warning events at stages 3 and 4, and the protagonism lock at stage 5.
+> The early stages now show as Intrusive Thoughts and Compulsion (§13). Corruption a character
+> carries now comes down through Sineating, and a Sineater carries it as the Mire (§13.1). The
+> Soul Tether redirect never passes overflow to a Sineater: what the Hollow cannot absorb accrues to
+> the Sinner (§11.1, §11.5).
+
 ---
 
 ## 1. Context & Design Intent
@@ -32,7 +40,7 @@ against.
 | Axis | Mechanic | Source | Recovery |
 |---|---|---|---|
 | Anima ↔ Soulfray | Magical exhaustion injury | Overburn during cast | Anima ritual, Treatment, decay (Scope 6) |
-| Resonance ↔ Corruption | Magical identity-twist drift | Casting Abyssal techniques over time (Primal casts stopped corrupting in #4751) | Soul Tether mediation (Spec B, a Sineater's rescue), daily decay. The Rite of Atonement was removed in #4751 (ADR-4751) |
+| Resonance ↔ Corruption | Magical identity-twist drift | Casting Abyssal techniques over time (Primal casts stopped corrupting in #4751); a Sineater's carried corruption (§13.1); giving in to a Compulsion (§13.2) | Sineating (a Sineater takes it on, §13.1), a Sineater's rescue, daily decay. The Rite of Atonement was removed in #4751 (ADR-4751) |
 
 These run in parallel. A character can carry Soulfray and Corruption simultaneously,
 recover from one without the other, and reach character-loss-class consequences
@@ -123,8 +131,9 @@ relationship to this resonance" gets both a current state and a lifetime audit.
 
 `corruption_lifetime` increments alongside `corruption_current` on every accrual
 and never decreases. Pure audit — used for achievement tracking ("first character
-to accrue 1000 Abyssal corruption" etc.). Recovery, decay, and Spec B's tether
-redirect do NOT touch this field.
+to accrue 1000 Abyssal corruption" etc.). Recovery and decay do NOT touch this field, and the
+Hollow's redirect only lowers an accrual before it is written. Corruption a Sineater takes on
+(§13.1) is an accrual on the Sineater's own row, so it raises their `corruption_lifetime` too.
 
 **Internal denormalization (acknowledged):** `ConditionInstance.severity` on the
 per-resonance Corruption condition mirrors `corruption_current` while the condition
@@ -184,6 +193,14 @@ deficit_multiplier       PositiveSmallIntegerField  default=20   (× 0.1 → 2.0
 mishap_multiplier        PositiveSmallIntegerField  default=15
 audere_multiplier        PositiveSmallIntegerField  default=15
 
+hasty_fall_multiplier / alternate_self_*   later additions to the accrual formula (§3.1)
+
+intrusive_thoughts_stage     PositiveSmallIntegerField  default=1   (#5177, §13)
+compulsion_stage             PositiveSmallIntegerField  default=2
+sineater_max_stage           PositiveSmallIntegerField  default=2   (a Sineater's Mire stops here)
+compulsion_condition         FK ConditionTemplate, null  (the Compulsion's condition)
+compulsion_indulge_corruption PositiveIntegerField      default=5
+
 updated_at               DateTimeField  auto_now=True
 updated_by               FK AccountDB   null=True, on_delete=SET_NULL
 ```
@@ -218,25 +235,29 @@ passive_decay_blocked_in_engagement True (mirrors Soulfray)
 passive_decay_max_severity          stage 2 threshold value (decay only at stages 1-2)
 ```
 
-**Five `ConditionStage` rows** per template, with severity_threshold values per
-the design intent (placeholder defaults; staff tune):
+**Five `ConditionStage` rows** per template. The names, thresholds and resist checks are staff-authored
+per resonance. What the code does with a stage is short; everything else is content a stage can carry:
 
-| Stage | Name | severity_threshold | Effects |
-|---|---|---|---|
-| 1 | Whispers | 50 | `on_entry_conditions`: minor cosmetic affliction (e.g., "Whispers Heard," fast-decaying, RP-flag only). No alteration queued. The cosmetic ConditionTemplate carries `parent_condition` pointing back at this Corruption template (Scope 6 aftermath pattern); the Corruption template itself has `parent_condition=null`. |
-| 2 | Manifestation | 200 | `on_entry_conditions`: queue first Corruption Twist alteration via the existing `MAGICAL_SCARS`-style effect handler with `kind=CORRUPTION_TWIST`. |
-| 3 | Erosion | 500 | Second Corruption Twist queued + `corruption_warning` reactive event with severity ADVISORY. |
-| 4 | Subsumption-Adjacent | 1000 | Third Corruption Twist queued + `corruption_warning` reactive event with severity URGENT ("character loss likely without intervention"). |
-| 5 | Subsumption | 1500 | No further Corruption Twist queued. The subsumption itself is the terminal effect — `protagonism_locked` event fires (§3.5). |
+| Stage | What the code does |
+|---|---|
+| Any | `severity_threshold` is when `advance_condition_severity` moves the condition to that stage. With `advancement_resist_failure_kind=HOLD_OVERFLOW` and a `resist_check_type`, crossing the next threshold rolls a resist check against `resist_difficulty` first (§2.6). Whatever the stage's `on_entry_conditions` name is applied on entering it by the generic `apply_stage_entry_aftermath`, so staff may attach any condition to a stage. |
+| 3 and 4 | Entering the stage emits `CORRUPTION_WARNING` (`ADVISORY` at stage 3, `URGENT` at stage 4), which authored content listens on (§3.5). |
+| 5 | Entering the stage emits `PROTAGONISM_LOCKED`, and `is_protagonism_locked` is true while any corruption condition is at stage 5 (§5). |
 
-Stage advancement-check parameters (per §2.6) are also authored per-stage.
+The design once sketched more than this: a stage-1 cosmetic "Whispers" condition, and a
+Corruption Twist alteration queued when stages 2, 3 and 4 were entered. The code never had either.
+No code queues a `CORRUPTION_TWIST` `MagicalAlterationTemplate` on a stage entry; the `kind`
+discriminator and the template rows exist (§2.2) and the test-fixture builder
+`author_reference_corruption_content()` authors some, but nothing reads them when a character
+advances. A stage-1 aftermath condition is content staff may attach through `on_entry_conditions`;
+none ships. The early stages are shown to the player as **Intrusive Thoughts** and **Compulsion**
+instead (§13): that is display by `CorruptionConfig`'s `intrusive_thoughts_stage` and
+`compulsion_stage`, not a rename of any template, and the Compulsion's penalty is a separate
+condition the config names.
 
-**`MagicalAlterationTemplate` rows with `kind=CORRUPTION_TWIST`** authored per
-(resonance, stage_threshold) pair. Library of personality/RP-flagged alterations.
-Player resolves via the existing `PendingAlteration` library-pick / scratch-author
-flow (Scope 5). Resonance-flavored — Web of Spiders templates are
-predatory-caretaker themes, Flames of the Defiant templates are burn-it-all-down
-rage themes.
+`MagicalAlterationTemplate` rows with `kind=CORRUPTION_TWIST` can still be authored per
+(resonance, stage_threshold) pair. Nothing in the engine creates a pending alteration from one
+when a stage is entered.
 
 **Coverage policy:** A Resonance with no authored Corruption ConditionTemplate is
 a no-op for accrual — `accrue_corruption` logs an audit event and returns without
@@ -585,9 +606,12 @@ def accrue_corruption(
       7. If stage transition resolves to stage 5, emit protagonism_locked
          event (§3.5).
 
-    redirect_origin is non-null when this call is the Sineater leg of
-    a Soul Tether redirect (Spec B sets this). Foundation passes it
-    through to the audit event payload; no foundation-side behavior.
+    redirect_origin is non-null when this call is an overflow re-call from the Soul
+    Tether redirect handler; it is a recursion guard, skipping the redirect and the
+    Sineater resistance. Nothing in the code sets it today (§11.1).
+
+    Before step 1 a Sineater's resistance softens the amount (§13.1), except for
+    source INDULGED, which adds exactly what staff configured.
     """
 ```
 
@@ -611,12 +635,12 @@ class CorruptionAccrualResult:
 
 **Pre-mutation event for Spec B interception:** Before step 1, foundation emits
 a `corruption_accruing` reactive event with the proposed accrual payload
-(character_sheet, resonance, amount). Spec B's Soul Tether redirect listens on
-this event and (when conditions match) calls `cancel_event` (Scope 5.5
-CANCEL_EVENT) and issues replacement `accrue_corruption` calls — a reduced
-amount to the original Abyssal target plus a small trace amount to the Sineater.
-Foundation does nothing tether-specific; the redirect is fully Spec B's
-authoring.
+(character_sheet, resonance, amount, source, redirect_origin; the amount is mutable).
+Spec B's Soul Tether redirect handler listens on this event and, when the Sinner has
+Hollow capacity in the resonance, lowers `payload.amount` by what the Hollow absorbs. A
+payload amount of 0 ends the accrual. The unabsorbed remainder accrues to the Sinner as
+this same accrual; nothing is passed to the Sineater. The handler skips sources
+`SINEATING_CARRIED` and `INDULGED`. Foundation does nothing tether-specific.
 
 ### 3.3 `reduce_corruption` — canonical recovery entry point
 
@@ -632,15 +656,23 @@ def reduce_corruption(
     amount: int,
     source: CorruptionRecoverySource,
     ritual: Ritual | None = None,
+    grant_resonance_back: bool = True,
+    shrink_holdings: bool = True,
 ) -> CorruptionRecoveryResult:
     """Reduce corruption_current on (sheet, resonance), sync the condition.
 
     Steps (atomic):
       1. Decrement CharacterResonance.corruption_current (clamp at 0).
+      1b. Keep a Sineater's Mire holdings within the corruption that is left (§13.1):
+          corruption that is not held for any Sinner comes off first, then the
+          holdings shrink in proportion. Skipped when shrink_holdings is False,
+          which only release_mire passes because it lowers one holding itself.
       2. corruption_lifetime UNCHANGED.
       3. If a ConditionInstance exists, call decay_condition_severity
          (Scope 6) which retreats stages and resolves the condition
          when severity drops below stage 1 threshold.
+      3b. Grant the resonance cleansing payout back, unless grant_resonance_back is
+          False (Sineating and settling the Mire pay by their own rules).
       4. Emit corruption_reduced event.
       5. If stage retreat crosses out of stage 5, emit protagonism_restored
          event (§3.5).
@@ -718,7 +750,8 @@ accrue_corruption_for_cast(...)    Per-cast orchestrator. Hook from techniques.p
 accrue_corruption(...)             Atomic single-resonance accrual + stage resolution.
                                    Spec B intercepts here.
 reduce_corruption(...)             Atomic single-resonance decrement + stage retreat.
-                                   Spec B + future Missions call.
+                                   Rescue, Sineating, settling the Mire, decay and staff
+                                   call it; future Missions will.
 get_corruption_config()            Lazy-create singleton (pk=1).
 ```
 
@@ -733,11 +766,13 @@ This section once described a self-targeted cleansing rite for stages 1 and 2 of
 corruption. It was built as a SERVICE ritual (`perform_atonement_rite`) rather than the FLOW shape
 sketched here, and it never ran: ritual dispatch called it with arguments it did not accept. #4751
 removed it with its Ritual row, its conversion rate and `CorruptionRecoverySource.ATONEMENT_RITE`
-(ADR-4751). Corruption a character carries now falls only by daily decay (Scope 6) and a Sineater's
-rescue (Spec B); stage 1 and 2 characters have only decay until the Sineating work lands. The
-settling rite (`docs/systems/magic.md`, "Drift correction") is the one rite for a changing aura and
-writes no corruption. "Atonement" survives only as the plain word for a settling-rite reflection that
-turns away from something.
+(ADR-4751). Corruption a character carries falls by daily decay (Scope 6), by a Sineater's rescue
+(Spec B), and, since #5177, by Sineating: a Sineater takes it on (§13.1). Stage 1 and 2 characters
+had only decay until then. The settling rite (`docs/systems/magic.md`, "Drift correction") is the
+one rite for a changing aura. It writes no corruption for a character's own resonances, and it
+settles the Mire a Sineater carries by lowering their corruption (`CorruptionRecoverySource.MIRE_SETTLED`,
+§13.1). "Atonement" survives only as the plain word for a settling-rite reflection that turns away
+from something.
 
 The foundation primitives (`reduce_corruption`, `get_corruption_stage`) are unchanged and are what
 Spec B's rescue rituals call.
@@ -847,7 +882,7 @@ playtest):
 | Knob | Default | Reasoning |
 |---|---|---|
 | `Affinity.corruption_coefficient` (Celestial) | 0 | Celestial never corrupts |
-| `Affinity.corruption_coefficient` (Primal) | 2 (× 0.1 → 0.2) | Primal accrues 1/5 the rate of Abyssal |
+| `Affinity.corruption_coefficient` (Primal) | 0 | Primal casts stopped corrupting in #4751 |
 | `Affinity.corruption_coefficient` (Abyssal) | 10 (× 0.1 → 1.0) | Abyssal at full rate |
 | `tier_1_coefficient` | 10 | Cantrip baseline |
 | `tier_2_coefficient` | 20 | Doubles per tier |
@@ -857,10 +892,14 @@ playtest):
 | `deficit_multiplier` | 20 (× 0.1 → 2.0) | Deficit casts 2× |
 | `mishap_multiplier` | 15 (× 0.1 → 1.5) | Mishap casts 1.5× |
 | `audere_multiplier` | 15 (× 0.1 → 1.5) | Audere 1.5× |
+| `intrusive_thoughts_stage` / `compulsion_stage` | 1 / 2 | The stages at which the impulse is shown and then becomes a Compulsion (§13) |
+| `sineater_max_stage` | 2 | The stage a Sineater's carried corruption stops at (§13.1) |
+| `compulsion_condition` | unset | The condition a Compulsion lays; the Required content page lists it while unset |
+| `compulsion_indulge_corruption` | 5 | Corruption added when a character gives in to a Compulsion (§13.2) |
 
 Target curve: a Prospect (level 1, tier 1 cantrips) casting Abyssal magic accrues
-~1 corruption per cast. Stage 1 threshold of 50 = 50 cantrip casts to trigger
-"Whispers." A level-3 caster running tier-3 techniques accrues
+~1 corruption per cast. Stage 1 threshold of 50 = 50 cantrip casts to enter
+stage 1. A level-3 caster running tier-3 techniques accrues
 ~10–20 per cast — stage 1 in a few sessions, stage 2 within the level.
 
 These curves are illustrative. Playtest will retune; the spec's intent is the
@@ -875,12 +914,9 @@ provides:
 
 - 5 ConditionStage rows with severity_threshold, resist_check_type,
   resist_difficulty, advancement_resist_failure_kind=HOLD_OVERFLOW
-- on_entry_conditions for stage 1 (cosmetic/RP flag), stages 2–4 (queue
-  Corruption Twist alterations), stage 5 (subsumption marker — typically empty
-  since `is_protagonism_locked` is derived)
-- 2–4 `MagicalAlterationTemplate` rows with `kind=CORRUPTION_TWIST`, per
-  (resonance, stage_threshold), populated as the library pool for stage 2/3/4
-  alteration application
+- optionally `on_entry_conditions` on any stage; nothing is required there, stage 5 needs none
+  because `is_protagonism_locked` is derived, and no code reads Corruption Twist alterations
+  when a stage is entered (§2.4)
 - `passive_decay_per_day=1`, `passive_decay_max_severity` set to stage 2's
   threshold, `passive_decay_blocked_in_engagement=True`
 
@@ -1087,8 +1123,8 @@ playtests may need additional tuning.
 
 ### 10.4 Per-resonance authoring overhead
 
-Each resonance requires authored Corruption ConditionTemplate + 5
-ConditionStages + 2–4 Corruption Twist alteration templates to be "live."
+Each resonance requires an authored Corruption ConditionTemplate + 5
+ConditionStages to be "live."
 Pre-alpha that's tractable for a curated set; scaling to all canonical
 resonances is content authoring, not architectural.
 
@@ -1124,48 +1160,47 @@ foundation code; it consumes the surfaces.
 
 Spec B's tether redirect listens on the `corruption_accruing` reactive event
 emitted by `accrue_corruption` before the field mutation. When the targeted
-character has an active Soul Tether and is in the Abyssal role for this
-resonance, Spec B cancels the original event (Scope 5.5 CANCEL_EVENT) and
-issues two replacement `accrue_corruption` calls:
-- A reduced amount to the original Abyssal target (the unredirected portion)
-- A small trace amount to the Sineater (one of their claimed Primal resonances —
-  selection logic is Spec B's authoring)
+character is a Sinner with Hollow capacity on an active tether in this resonance,
+the handler (`soul_tether_redirect_handler`) drains the Hollow and lowers
+`payload.amount` by what it absorbed. It does not cancel the event and it issues no
+replacement call: the remainder accrues to the Sinner as the same accrual, and a
+fully absorbed accrual ends at amount 0. **Nothing passes to the Sineater.** An earlier
+design sent a "trace amount" to the Sineater; Spec B diverged from it
+(`docs/architecture/soul-tether.md` §5.3), and corruption reaches a Sineater only when they
+take it on by Sineating (§13.1).
 
-Foundation does nothing tether-specific. The redirect is fully Spec B's
-authoring. The trace-to-Sineater portion uses the same `accrue_corruption`
-primitive, with stage-1 thresholds tuned high enough that trace ticks don't
-advance the Sineater under normal tether activity; passive decay keeps the
-Sineater's counter low.
+Foundation does nothing tether-specific. `accrue_corruption(redirect_origin=...)` and
+`CorruptionSource.SPEC_B_REDIRECT` remain in the code for the overflow-to-Sineater idea that
+Sineating superseded; the handler reads `redirect_origin` only as a recursion guard.
 
 ### 11.2 `reduce_corruption` primitive
 
 Spec B's tether-mediated rescue rituals (FLOW-dispatched `Ritual` rows
 authored in Spec B, with Soul Tether
 eligibility gates and stage 3+ effect ranges) call `reduce_corruption` as
-their effect step. Foundation primitive, Spec B content.
+their effect step. Sineating and settling the Mire call it too (§13.1). Foundation primitive, Spec B content.
 
 ### 11.3 Stage advancement check intervention
 
 Spec B's Soul Tether registers triggers that listen on
-`EventName.CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE` for the Abyssal partner. Triggers
-apply the Sineater's contribution to the resist roll — bonus, co-roll, or
-forced-pass depending on tether tier and Sineater affinity. Standard
-reactive-layer authoring.
+`EventName.CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE` for the Abyssal partner. A Sineater in the
+same room is prompted to commit Hollow capacity and take Tether Strain for a bonus to the
+Sinner's resist roll. Standard reactive-layer authoring.
 
 ### 11.4 Sineater minor temporary afflictions
 
-Spec B authors `ConditionTemplate` rows for Sineater-flavored afflictions
-("Heavy Soul," "Whispers Heard," etc.) — fast-decaying, non-staging, applied
-via the existing condition machinery. No foundation infrastructure beyond
-what Scope 6 already ships.
+The design planned authored `ConditionTemplate` rows for Sineater-flavored afflictions ("Heavy
+Soul," "Whispers Heard," etc.). They were not built. What a Sineater feels from carried
+corruption is the Intrusive Thoughts and Compulsion display of §13 and the Mire's own stage
+conditions, from the Sineater's own corruption.
 
-### 11.5 Trace resonance corruption to Sineater
+### 11.5 Carried corruption on the Sineater
 
-Per §11.1, Spec B's redirect calls `accrue_corruption` on the Sineater with a
-small trace amount. The Sineater's `corruption_current` and
-`corruption_lifetime` rise as if the Sineater had cast on that resonance
-themselves. Corruption the Sineater accumulates falls by daily decay and by another
-Sineater's rescue; the Rite of Atonement that once offered self-cleansing was removed in #4751.
+A Sineater's `corruption_current` and `corruption_lifetime` rise when they take on a Sinner's
+corruption by Sineating, as if they had cast on that resonance themselves, except that their
+resistance (§13.1) softens it. The corruption falls when they settle the Mire (§13.1), by daily
+decay, and by another Sineater's Sineating or rescue; the Rite of Atonement that once offered
+self-cleansing was removed in #4751.
 
 ---
 
@@ -1185,7 +1220,9 @@ For implementation reference, the names introduced or finalized:
   marker for Corruption-kind templates per §3.4)
 - `ConditionStage.advancement_resist_failure_kind` (TextChoices, default ADVANCE_AT_THRESHOLD)
 - `SeverityAdvanceResult.outcome` (new field on existing dataclass; AdvancementOutcome enum)
-- `CorruptionConfig` (singleton model, pk=1)
+- `CorruptionConfig` (singleton model, pk=1), with the impulse and Sineater-cap fields of #5177
+- `MireHolding` (#5177; `world/magic/models/soul_tether.py`) and `ImpulseShown` (#5177;
+  `world/magic/models/impulse.py`)
 
 *Existing — referenced but not added:*
 - `ConditionStage.resist_check_type` (FK CheckType, nullable; existed at Scope 3
@@ -1200,10 +1237,12 @@ For implementation reference, the names introduced or finalized:
 **Enums / TextChoices:**
 - `AlterationKind.MAGE_SCAR`, `AlterationKind.CORRUPTION_TWIST`
 - `CorruptionSource.TECHNIQUE_USE`, `CorruptionSource.SPEC_B_REDIRECT`,
-  `CorruptionSource.STAFF_GRANT`
+  `CorruptionSource.STAFF_GRANT`, `CorruptionSource.DEFILEMENT`, and, from #5177,
+  `CorruptionSource.SINEATING_CARRIED` and `CorruptionSource.INDULGED`
 - `CorruptionRecoverySource.SPEC_B_RESCUE`,
   `CorruptionRecoverySource.PASSIVE_DECAY`,
-  `CorruptionRecoverySource.STAFF_GRANT`
+  `CorruptionRecoverySource.STAFF_GRANT`, and, from #5177,
+  `CorruptionRecoverySource.SINEATING` and `CorruptionRecoverySource.MIRE_SETTLED`
 - `CorruptionCause.STAGE_5_SUBSUMPTION`, `CorruptionCause.STAGE_5_RECOVERED`
 - `AdvancementResistFailureKind.ADVANCE_AT_THRESHOLD`,
   `AdvancementResistFailureKind.HOLD_OVERFLOW` (TextChoices on
@@ -1240,7 +1279,83 @@ For implementation reference, the names introduced or finalized:
 - `CorruptionError` (base)
 - `ProtagonismLockedError`
 
-**Authored content shipped:**
-- 1–2 per-resonance Corruption ConditionTemplates per non-Celestial affinity
-  (with 5 ConditionStages + 2–4 CORRUPTION_TWIST MagicalAlterationTemplates each)
+**Authored content:**
+- Per-resonance Corruption ConditionTemplates with 5 ConditionStages each are content-repo rows; the
+  production seeder authors none. The test-fixture builder `author_reference_corruption_content()`
+  makes a reference set, with CORRUPTION_TWIST templates nothing reads at runtime (§2.4).
 - Soulfray ConditionStage retrofit (data migration only)
+- The Compulsion condition (named on `CorruptionConfig.compulsion_condition`), staff-authored with a
+  scene duration and a check modifier that scales with severity (§13.2)
+
+---
+
+## 13. Carried Corruption and Impulses (#5177)
+
+### 13.1 Corruption a Sineater carries: the Mire
+
+Corruption a character carries comes down only through a Sineater, apart from daily decay. A
+Sineater takes it on by Sineating (`docs/architecture/soul-tether.md` §7): `take_on_corruption` lowers
+the Sinner's corruption through `reduce_corruption` (source `SINEATING`, no resonance cleansing
+payout) and raises the Sineater's through `accrue_corruption` (source `SINEATING_CARRIED`). The
+corruption is the Sineater's own: it sits on their `CharacterResonance.corruption_current` for the
+Sinner's resonance, with that resonance's `ConditionInstance` and stages, so it climbs the same
+stages as a Sinner's own. **The Mire** is the name for exactly this corruption, and for nothing else.
+
+- **Whose it is.** `MireHolding` (per Sineater-side `CharacterRelationship` and resonance: `amount`,
+  `purified_since_payout`, `succumbed_since_fall`) partitions `corruption_current` by Sinner.
+  **Invariant: the holdings in a resonance never sum to more than the Sineater's corruption in it.**
+  Only `take_on_corruption` and `release_mire` (`world/magic/services/mire.py`) write `amount`. When
+  corruption falls for any other reason (daily decay, a rescue, staff), `reduce_corruption` takes
+  unheld corruption first and then shrinks the holdings in proportion (largest remainder, each at
+  most its own). Corruption a Sineater adds by giving in to a Compulsion (§13.2) is more of the
+  Mire: `add_to_largest_holding` assigns it to the Sinner with the most held.
+- **Resistance.** `_apply_sineater_corruption_resistance` shrinks what arrives, by `lifetime_helped`
+  in the resonance against `SoulTetherConfig.resistance_full_at`, capped at 90%, for a Sineater with
+  any live thread on a tether. It does not apply to `INDULGED`.
+- **The stage cap.** The Mire stops at the Compulsion stage: the ritual takes on only what fits below
+  the threshold of the stage after `CorruptionConfig.sineater_max_stage`, working backward through the
+  resistance (`corruption_that_can_move`), and refuses when nothing fits until the Sineater settles
+  some. A Sineater's own casting is not capped by it.
+- **Coming down.** The Sineater settles the Mire through the settling rite by Absolve, Condemn or
+  Succumb (`services/mire_settling.py`). Absolve and Condemn lower the corruption and the holding with
+  `release_mire`, which calls `reduce_corruption` with source `MIRE_SETTLED`, no cleansing payout and
+  no holding shrink (the holding is lowered itself). Succumb turns the Mire into resonance in the
+  Sineater's own aura. Details are in `docs/architecture/soul-tether.md` §7.5.
+- **A fallen Sineater** (aura predominantly Abyssal) serves no one: Sineating and the rescue refuse
+  (`SineaterFallenError`).
+
+### 13.2 Impulses: Intrusive Thoughts and Compulsion
+
+A character carrying corruption in a resonance, whether their own or a Sineater's Mire, feels that
+resonance pull. The same code serves a Sinner and a Sineater because it reads corruption, not the
+tether (`world/magic/services/impulses.py`).
+
+- **Display.** From the stage `CorruptionConfig.intrusive_thoughts_stage` (default 1) the corruption
+  condition is shown as "Intrusive Thoughts: <resonance>"; from `compulsion_stage` (default 2) as
+  "Compulsion: <resonance>". This is `corruption_display_name`, used by the condition serializers (the
+  owner's and the observers'), `mire_carried_by`, telnet `resonances` and the Soul Tether panel.
+  It is display only: no template is renamed, nothing in the database changes, and it is never a lookup
+  key.
+- **Intrusive Thoughts.** When something the resonance cares about is present in a scene (an authored
+  situation of that resonance holds: `kindled_for(...).fed_tier`), the character is sent
+  `Resonance.impulse_text` (or a plain line when staff wrote none), once per resonance per scene
+  (`ImpulseShown`). Nothing else happens, and the player always chooses what the character does.
+- **Compulsion.** At the Compulsion stage, when that is present and the character has not earned
+  the resonance by a deed since the scene began (`earned_in_scene`, any `DEED_GAIN_SOURCES` grant),
+  `CorruptionConfig.compulsion_condition` is laid on them at severity `stage - compulsion_stage + 1`.
+  Staff author that condition with a scene duration and a check modifier that scales with severity, so
+  the penalty rides their rolls for the rest of the scene. Unset, nothing is laid and the Required
+  content page lists it. The condition is named by `compulsion_condition`; it is a `ConditionTemplate`,
+  not the control-loss `Compulsion` model in `world/conditions/models.py`.
+- **Giving in.** When a deed grows the resonance in a live scene (`grant_resonance` calls
+  `give_in_to_compulsion`), the first such deed lifts the Compulsion for the scene, tells the
+  character, and adds `compulsion_indulge_corruption` of corruption in the resonance (source
+  `INDULGED`: exactly the configured amount, no resistance, and the Hollow absorbs none of it). A
+  Sineater's addition is carried for the Sinner with the largest holding. Succumbing to the Mire is a
+  settling, not a giving in, and never counts.
+- **Lifting.** Settling below the Compulsion stage, the situation passing, or giving in lifts the
+  condition the next time impulses are refreshed. `refresh_impulses` runs when a pose is posted (web and
+  telnet), before a cast's modifiers are gathered, and when the kindled resonances panel and telnet
+  `resonances` are shown; `impulses_now` only reads.
+- **Scars.** The conditions are built so that magical scars can reuse them later; nothing here
+  prevents it.
