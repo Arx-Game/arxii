@@ -12,11 +12,14 @@ condition it works through) is replaced by ``Substance`` (one shared row per sub
 * ``property`` and the staff credit (``written_by`` and the other credit columns) come from the
   first row in the group that has one.
 * A minor gift's row is skipped: a minor gift holds no substance. It is named in the summary.
-* A major gift with no row of its own that has an ancestor with one takes that ancestor's
-  substance, as the old lookup did.
+* A child gift with no row of its own is left NULL: read-time code resolves the ancestor's
+  substance through ``Gift.lineage``, so nothing is frozen onto the child here. Every major
+  gift that ends with no substance of its own and no ancestor with one is listed in the summary.
 * ``full_at``, ``opposed_by`` and ``arrival_line`` are deliberately discarded. The rulings of
   the spec replaced them (a place is rich in a substance by holding its Primum, an opposed
   substance is a relation row, and the call-up line is fixed), so there is nothing to carry.
+  The summary prints each old row's gift name and those three values, so the migrate log keeps
+  the staff-written arrival text after the table is dropped.
 * Call-up and scene-mark rows on the location cascade (source ``substance:<n>`` and
   ``scene_mark:<n>:<m>``) were transient and are deleted.
 * The starter Primum steps and power curve are written only where a table holds no row at all,
@@ -136,23 +139,24 @@ def _carry_groups(apps, groups, report):
                 report["gifts"] += 1
 
 
-def _carry_from_parents(apps, report):
-    """A major gift with no substance of its own takes its nearest ancestor's."""
+def _majors_without_substance(apps):
+    """Names of major gifts that end with no substance and no ancestor holding one."""
     Gift = apps.get_model("arxii", "Gift")
     by_pk = {gift.pk: gift for gift in Gift.objects.all()}
+    gaps = []
     for gift in by_pk.values():
-        if gift.kind != MAJOR_GIFT_KIND or gift.substance_id is not None:
+        if gift.kind != MAJOR_GIFT_KIND:
             continue
-        seen = {gift.pk}
-        parent = by_pk.get(gift.parent_id)
-        while parent is not None and parent.pk not in seen:
-            if parent.substance_id is not None:
-                gift.substance_id = parent.substance_id
-                gift.save(update_fields=["substance"])
-                report["inherited"].append(gift.name)
+        seen = set()
+        link = gift
+        while link is not None and link.pk not in seen:
+            if link.substance_id is not None:
                 break
-            seen.add(parent.pk)
-            parent = by_pk.get(parent.parent_id)
+            seen.add(link.pk)
+            link = by_pk.get(link.parent_id)
+        else:
+            gaps.append(gift.name)
+    return sorted(gaps)
 
 
 def _delete_transient_rows(apps):
@@ -185,22 +189,27 @@ def carry_gift_substances(apps, schema_editor) -> None:
     GiftSubstance = apps.get_model("arxii", "GiftSubstance")
     rows = list(GiftSubstance.objects.select_related("gift", "property").order_by("gift__name"))
     groups, skipped_minor = _group_rows(rows)
-    report = {"created": [], "merged": [], "properties": [], "inherited": [], "gifts": 0}
+    report = {"created": [], "merged": [], "properties": [], "gifts": 0}
     _carry_groups(apps, groups, report)
-    _carry_from_parents(apps, report)
+    gaps = _majors_without_substance(apps)
     deleted = _delete_transient_rows(apps)
     starter = _insert_starter_tuning(apps)
 
     lines = [
         f"substances carry: {len(rows)} gift rows, {len(report['created'])} substances created, "
-        f"{report['gifts']} gifts set, {len(report['inherited'])} gifts took a parent's, "
+        f"{report['gifts']} gifts set, "
         f"{deleted} transient call-up rows deleted, starter rows written: "
         f"{', '.join(starter) or 'none'}",
         f"  created: {report['created']}",
         f"  merged: {report['merged']}",
         f"  minor gifts skipped: {skipped_minor}",
         f"  differing properties: {report['properties']}",
-        f"  took a parent's substance: {report['inherited']}",
+        f"  major gifts with no substance and no ancestor with one: {gaps}",
+        "  discarded per old row (gift, full_at, opposed_by, arrival_line):",
+        *[
+            f"    {row.gift.name!r}, {row.full_at}, {str(row.opposed_by)!r}, {row.arrival_line!r}"
+            for row in rows
+        ],
     ]
     sys.stdout.write("\n".join(lines) + "\n")
 

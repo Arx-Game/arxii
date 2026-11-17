@@ -46,13 +46,9 @@ def _carry() -> str:
 
 
 def _legacy(gift, label="Water", stat_key=StatKey.WET, direction=SubstanceDirection.RISING, **kw):
+    kw.setdefault("arrival_line", "The room changes.")
     return GiftSubstance.objects.create(
-        gift=gift,
-        label=label,
-        stat_key=stat_key,
-        direction=direction,
-        arrival_line="The room changes.",
-        **kw,
+        gift=gift, label=label, stat_key=stat_key, direction=direction, **kw
     )
 
 
@@ -142,3 +138,21 @@ class CarryGiftSubstancesTests(TestCase):
             [("Whisper", 5, 1)],
         )
         self.assertEqual(list(SubstancePowerStep.objects.values_list("power", flat=True)), [9])
+
+
+class CarrySummaryTests(TestCase):
+    def test_child_left_null_gaps_listed_and_discarded_values_printed(self) -> None:
+        parent = GiftFactory(name="Parent Gift")
+        child = GiftFactory(name="Child Gift", parent=parent)
+        GiftFactory(name="Orphan Gift")
+        _legacy(parent, full_at=7, opposed_by=StatKey.DRY, arrival_line="The water rises, quiet.")
+
+        printed = _carry()
+
+        child.refresh_from_db()
+        self.assertIsNone(child.substance_id)
+        gap_line = next(ln for ln in printed.splitlines() if "no ancestor" in ln)
+        self.assertIn("Orphan Gift", gap_line)
+        self.assertNotIn("Child Gift", gap_line)
+        self.assertNotIn("Parent Gift", gap_line)
+        self.assertIn("'Parent Gift', 7, 'dry', 'The water rises, quiet.'", printed)
