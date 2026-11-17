@@ -52,8 +52,9 @@ queue.
    read from the panel every stage shows since #5148; then
    "Restart: Clear All Choices" asks first, leaves the server's life alone on Cancel and
    empties it on confirm, #5146; and the life opens with both stages and both sections
-   open, a stage's Background Notes are sent on leaving the box, held by the server and
-   shown again after a reload, #5160).
+   open and no text box, and the Background written on Final Touches is sent on leaving
+   the stage, held by the server, quoted on Review and shown again after a reload,
+   #5160 and #5178).
    Every other spec mocks the API and runs against `vite preview` under
    `frontend/playwright.config.ts`. A new spec that talks
    to :4001 must be added to the spec list in the workflow, and its rows to

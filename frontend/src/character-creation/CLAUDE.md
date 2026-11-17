@@ -90,10 +90,21 @@ character-creation/
     │                        #   column (forms.HeightBand, #3675 fix round 1) when staff
     │                        #   wrote one - e.g. what opens a band players cannot normally
     │                        #   take - never a name match against a literal band name.
-    ├── IdentityStage.tsx    # Stage 9: Identity (concept, quote, background, worship); the
-    │                        #   name is a read-only line since #4874, asked on Origin
+    ├── IdentityStage.tsx    # Stage 9: Identity (concept, quote, worship); the name is a
+    │                        #   read-only line since #4874, asked on Origin. The Background
+    │                        #   is Final Touches' (#5178); this stage neither reads nor
+    │                        #   saves it
     ├── FinalTouchesStage.tsx # Stage 10: the Actor's Sheet (#3621): three questions,
     │                        #   numbered goals by horizon, the priced enemy, The Introductions.
+    │                        #   After the enemy and before the faces' doors, the Background
+    │                        #   (#5178, owner ruling 2026-11-17: one box for the character's
+    │                        #   history, no text per life stage): an h2 "Background" and a
+    │                        #   `textarea.background-text` named by it, 4000 characters,
+    │                        #   an italic placeholder as its only explanation (copy
+    │                        #   `finaltouches_background_heading` /
+    │                        #   `finaltouches_background_placeholder`), saved in the
+    │                        #   stage's one PATCH as draft_data.background and quoted on
+    │                        #   Review. A second face writes its own in its door.
     │                        #   Directly under the three questions mounts this chapter's own
     │                        #   offered distinctions (ChapterOffers chapter="actors_sheet",
     │                        #   #3675 Task 15), the personality-flavored ones each prompt
@@ -193,12 +204,11 @@ character-creation/
         │                         #   the secret is marked, until a click on another card;
         │                         #   clicking the real pick drops both)
         │                         #   and a cover select on an any row; a figure's name input
-        │                         #   on a picked person card; Background Notes per stage
-        │                         #   (draft_data.stage_descriptions; copy
-        │                         #   `life_stage_notes_label` and the italic placeholder
-        │                         #   `life_stage_notes_placeholder`, the owner's sentence,
-        │                         #   #5160; the retired `life_stage_description_label` is
-        │                         #   not read); the list of choices,
+        │                         #   on a picked person card; no free-text box about the
+        │                         #   life (#5178: the Background Notes of #5160 and the
+        │                         #   Recent History box are removed, and their copy keys
+        │                         #   are not read; the Background is one box on Final
+        │                         #   Touches); the list of choices,
         │                         #   sent to the slot under the chapter's "CG selections"
         │                         #   (#5148); the testament paragraph.
         │                         #   Earlier shape, still true underneath: grids by stage
@@ -212,11 +222,9 @@ character-creation/
         │                         #   card shows pips, `ChapterOffers` `pointsPicks`), any),
         │                         #   a line of the player's own once a card
         │                         #   is picked; the footer counts the
-        │                         #   taken beats and the purse. Every life ends on the
-        │                         #   Recent History box (#4831), a textarea saved on blur
-        │                         #   to draft_data.recent_history; a beginning that
+        │                         #   taken beats and the purse. A beginning that
         │                         #   strikes every stage shows its struck_stages_text
-        │                         #   where the stages would be, over the box, with no
+        │                         #   where the stages would be and nothing else, with no
         │                         #   footer. Replaces BeatsBlock. The suggested life
         │                         #   (#4867, slice 7 of #4813): once the beats load, an
         │                         #   effect calls useLoadDefaultLife when the draft has a
