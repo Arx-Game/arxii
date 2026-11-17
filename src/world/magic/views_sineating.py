@@ -3,18 +3,24 @@
 ``GET /api/magic/sineating-options/?character_sheet=<id>`` lists what the character can attach
 to a pose now: a plea to make to each Sineater bonded to them who is here, and a plea to answer
 for each one waiting for them. Only a character the requester plays reads it, an NPC a GM runs
-included.
+included. ``POST /api/magic/soul-tether/sineating/decline/`` turns a waiting plea down.
 """
 
 from __future__ import annotations
 
 from django_filters import rest_framework as filters
-from rest_framework import mixins, viewsets
+from drf_spectacular.utils import extend_schema, inline_serializer
+from rest_framework import mixins, serializers, viewsets
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.request import Request
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.serializers_sineating import SineatingOptionSerializer
+from world.magic.serializers_sineating import (
+    SineatingDeclineSerializer,
+    SineatingOptionSerializer,
+)
 from world.magic.services.sineating import sineating_options_for
 from world.scenes.models import Persona
 from world.stories.pagination import StandardResultsSetPagination
@@ -58,3 +64,26 @@ class SineatingOptionViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         if page is not None:
             return self.get_paginated_response(SineatingOptionSerializer(page, many=True).data)
         return Response(SineatingOptionSerializer(rows, many=True).data)
+
+
+class SineatingDeclineView(APIView):
+    """POST /api/magic/soul-tether/sineating/decline/ turns a waiting plea down.
+
+    Accepts ``{actor_sheet_id, sinner_sheet_id}``; answers ``{"detail": <what the Sinner is
+    told the Sineater did>}``.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        request=SineatingDeclineSerializer,
+        responses={
+            200: inline_serializer(
+                name="SineatingDeclineResult", fields={"detail": serializers.CharField()}
+            )
+        },
+    )
+    def post(self, request: Request) -> Response:
+        serializer = SineatingDeclineSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        return Response({"detail": serializer.decline()})

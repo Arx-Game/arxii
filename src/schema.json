@@ -25137,6 +25137,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/RescueOutcome'
           description: ''
+  /api/magic/soul-tether/sineating/decline/:
+    post:
+      operationId: magic_soul_tether_sineating_decline_create
+      description: |-
+        POST /api/magic/soul-tether/sineating/decline/ turns a waiting plea down.
+
+        Accepts ``{actor_sheet_id, sinner_sheet_id}``; answers ``{"detail": <what the Sinner is
+        told the Sineater did>}``.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SineatingDeclineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SineatingDeclineResult'
+          description: ''
   /api/magic/soul-tether/sineating/pending/:
     get:
       operationId: magic_soul_tether_sineating_pending_list
@@ -92234,6 +92259,24 @@ components:
       - name
       - prose_noun
       - wear_family
+    SineatingDeclineRequest:
+      type: object
+      description: A Sineater turns down the plea a Sinner has waiting for them (#5177).
+      properties:
+        actor_sheet_id:
+          type: integer
+        sinner_sheet_id:
+          type: integer
+      required:
+      - actor_sheet_id
+      - sinner_sheet_id
+    SineatingDeclineResult:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
     SineatingOption:
       type: object
       description: One plea the character can make or answer, as the composer's picker

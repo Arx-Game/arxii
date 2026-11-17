@@ -16497,6 +16497,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/soul-tether/sineating/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/magic/soul-tether/sineating/decline/ turns a waiting plea down.
+     *
+     *     Accepts ``{actor_sheet_id, sinner_sheet_id}``; answers ``{"detail": <what the Sinner is
+     *     told the Sineater did>}``.
+     */
+    post: operations['magic_soul_tether_sineating_decline_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/soul-tether/sineating/pending/': {
     parameters: {
       query?: never;
@@ -51554,6 +51576,14 @@ export interface components {
       readonly prose_noun: string;
       readonly exposes_beneath: boolean;
     };
+    /** @description A Sineater turns down the plea a Sinner has waiting for them (#5177). */
+    SineatingDeclineRequest: {
+      actor_sheet_id: number;
+      sinner_sheet_id: number;
+    };
+    SineatingDeclineResult: {
+      detail: string;
+    };
     /** @description One plea the character can make or answer, as the composer's picker lists it. */
     SineatingOption: {
       role: components['schemas']['SineatingOptionRoleEnum'];
@@ -77884,6 +77914,29 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['RescueOutcome'];
+        };
+      };
+    };
+  };
+  magic_soul_tether_sineating_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SineatingDeclineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SineatingDeclineResult'];
         };
       };
     };

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from world.character_sheets.models import CharacterSheet
 from world.magic.constants import SineatingPoseRole
+
+_ERR_SHEET_NOT_PLAYED = "character_sheet_id does not belong to the requesting account."
+_ERR_SHEET_NOT_FOUND = "CharacterSheet not found."
 
 
 class SineatingOptionSerializer(serializers.Serializer):
@@ -34,3 +38,33 @@ class MireForSinnerSerializer(serializers.Serializer):
     sinner_name = serializers.CharField()
     rows = MireRowSerializer(many=True)
     total = serializers.IntegerField()
+
+
+class SineatingDeclineSerializer(serializers.Serializer):
+    """A Sineater turns down the plea a Sinner has waiting for them (#5177)."""
+
+    actor_sheet_id = serializers.IntegerField()
+    sinner_sheet_id = serializers.IntegerField()
+
+    def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
+        """The Sineater is a character the requester plays, an NPC a GM runs included."""
+        request = self.context["request"]
+        sheet = CharacterSheet.objects.filter(pk=value).first()
+        if sheet is None:
+            raise serializers.ValidationError(_ERR_SHEET_NOT_FOUND)
+        played = {entry.character_sheet_id for entry in request.user.cached_roster_entries}
+        if not request.user.is_staff and sheet.pk not in played:
+            raise serializers.ValidationError(_ERR_SHEET_NOT_PLAYED)
+        return sheet
+
+    def decline(self) -> str:
+        """Run ``DeclineSineatingAction``; its refusal is a 400 with the action's own words."""
+        from actions.definitions.sineating import DeclineSineatingAction  # noqa: PLC0415
+
+        sheet = self.validated_data["actor_sheet_id"]
+        result = DeclineSineatingAction().run(
+            actor=sheet.character, partner_sheet_id=self.validated_data["sinner_sheet_id"]
+        )
+        if not result.success:
+            raise serializers.ValidationError({"detail": result.message})
+        return result.message

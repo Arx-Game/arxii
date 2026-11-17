@@ -407,6 +407,7 @@ class SineatingPendingOfferViewSetTests(APITestCase):
         sinner_tenure_b, sineater_tenure_b, cls.resonance_b = _make_tethered_pair_with_tenures()
         cls.sinner_sheet_b = sinner_tenure_b.roster_entry.character_sheet
         cls.sineater_sheet_b = sineater_tenure_b.roster_entry.character_sheet
+        cls.sineater_account_b = sineater_tenure_b.player_data.account
         cls.scene = SceneFactory()
 
     def _seed(self, sinner, sineater, resonance) -> SineatingPendingOffer:
@@ -437,6 +438,30 @@ class SineatingPendingOfferViewSetTests(APITestCase):
     def test_unauthenticated_request_rejected(self) -> None:
         response = self.client.get("/api/magic/soul-tether/sineating/pending/")
         self.assertIn(response.status_code, (401, 403))
+
+    def test_a_sineater_declines_a_plea_and_only_a_character_they_play_can(self) -> None:
+        self._seed(self.sinner_sheet_a, self.sineater_sheet_a, self.resonance_a)
+        url = "/api/magic/soul-tether/sineating/decline/"
+        body = {
+            "actor_sheet_id": self.sineater_sheet_a.pk,
+            "sinner_sheet_id": self.sinner_sheet_a.pk,
+        }
+
+        self.client.force_authenticate(user=self.sineater_account_b)
+        refused = self.client.post(url, body, format="json")
+        self.assertEqual(refused.status_code, 400, refused.content)
+        self.assertTrue(SineatingPendingOffer.objects.exists())
+
+        self.client.force_authenticate(user=self.sineater_account_a)
+        declined = self.client.post(url, body, format="json")
+
+        self.assertEqual(declined.status_code, 200, declined.content)
+        self.assertEqual(
+            declined.data["detail"],
+            f"You decline {self.sinner_sheet_a.primary_persona.name}'s plea.",
+        )
+        self.assertFalse(SineatingPendingOffer.objects.exists())
+        self.assertEqual(Sineating.objects.get().units_accepted, 0)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)

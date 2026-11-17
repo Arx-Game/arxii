@@ -181,7 +181,10 @@ from world.magic.views_reflection import ReflectableViewSet  # noqa: E402
 router.register("reflectables", ReflectableViewSet, basename="reflectable")
 
 # #5177 - the Sineating row: the pleas a writer can make or answer with a pose
-from world.magic.views_sineating import SineatingOptionViewSet  # noqa: E402
+from world.magic.views_sineating import (  # noqa: E402
+    SineatingDeclineView,
+    SineatingOptionViewSet,
+)
 
 router.register("sineating-options", SineatingOptionViewSet, basename="sineating-option")
 
@@ -268,6 +271,11 @@ urlpatterns = [
         "soul-tether/sineating/pending/",
         SineatingPendingOfferViewSet.as_view({"get": "list"}),
         name="soul-tether-sineating-pending-list",
+    ),
+    path(
+        "soul-tether/sineating/decline/",
+        SineatingDeclineView.as_view(),
+        name="soul-tether-sineating-decline",
     ),
     path(
         "soul-tether/sineating/pending/<int:pk>/",
