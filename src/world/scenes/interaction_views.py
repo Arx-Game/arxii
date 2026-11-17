@@ -84,6 +84,15 @@ if TYPE_CHECKING:
     from world.magic.types.reflection import PendingReflection
 
 
+def _duplicate_entrance(pose_kind: str, scene: Scene | None, persona: Persona) -> bool:
+    """Only an entrance in a scene can duplicate an existing entrance."""
+    if pose_kind != PoseKind.ENTRY or scene is None:
+        return False
+    from world.scenes.participation import has_entered  # noqa: PLC0415
+
+    return has_entered(scene, persona.character_sheet_id)
+
+
 def _refusal_response(*, code: str, field: str, detail: str, hint: str | None) -> Response:
     """Shared 400 body shape for a typed submit-pose refusal.
 
@@ -632,14 +641,11 @@ class InteractionViewSet(
 
         # The entrance is the first line (#3867): the service marks it and opens its
         # window; a client asking for a second one is refused.
-        if pose_kind == PoseKind.ENTRY and scene is not None:
-            from world.scenes.participation import has_entered  # noqa: PLC0415
-
-            if has_entered(scene, persona.character_sheet_id):
-                return Response(
-                    {"detail": "You have already made your entrance in this scene."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if _duplicate_entrance(pose_kind, scene, persona):
+            return Response(
+                {"detail": "You have already made your entrance in this scene."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         def _on_created(created: Interaction) -> None:
             if action_link_ids is not None:

@@ -330,6 +330,12 @@ def plant_rung(  # noqa: PLR0913 - keyword-only; one arg per thing a rung is
         for rung_tier, area in zip(tiers, chain_areas, strict=True)
     ]
     top = titles[0]
+    _swear_planted_holder(top, held_by)
+    return top
+
+
+def _swear_planted_holder(top: Title, held_by: Organization | None) -> None:
+    """Swear a newly seated holder to its containment liege when permitted."""
     if held_by is not None:
         liege = liege_for_title(top)
         if (
@@ -338,7 +344,6 @@ def plant_rung(  # noqa: PLR0913 - keyword-only; one arg per thing a rung is
             and _may_swear_to_containment_liege(held_by, liege)
         ):
             swear_fealty(vassal=held_by, liege=liege)
-    return top
 
 
 @transaction.atomic

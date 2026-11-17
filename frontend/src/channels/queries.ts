@@ -202,8 +202,8 @@ export function useReorderSubscriptions() {
   return useMutation({
     mutationFn: async (ordered: ChannelSubscription[]) => {
       await Promise.all(
-        ordered.map((sub, index) =>
-          sub.sort_order === index ? null : updateSubscription(sub.id, { sort_order: index })
+        ordered.flatMap((sub, index) =>
+          sub.sort_order === index ? [] : [updateSubscription(sub.id, { sort_order: index })]
         )
       );
     },

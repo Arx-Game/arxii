@@ -302,7 +302,7 @@ def shared_feeling_evidence(
         harmful = {
             i.pk
             for i in _feeling_instances(
-                others, replace(params, condition_property=harm.harm_property, count_threshold=None)
+                others, SituationParams(condition_property=harm.harm_property)
             )
             if i.source_character_id == ctx.holder.pk
         }
