@@ -1121,7 +1121,7 @@ class GiftAdminForm(forms.ModelForm):
         help_texts = {
             "substance": (
                 "The one substance this Gift perceives and controls. Child Gifts inherit it "
-                "unless they name their own. Minor Gifts usually leave this blank."
+                "unless they name their own. Minor Gifts have no substance."
             ),
         }
 
