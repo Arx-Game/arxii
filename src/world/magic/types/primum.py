@@ -14,8 +14,10 @@ class SourcePoints:
     """One source of Primum and the signed points it is worth to this caster.
 
     ``kind`` is a ``PrimumLineKind`` value. ``label`` is already redacted for what the caster
-    has perceived (an opposing substance she has not sensed reads ``Something here works against
-    your ice``). ``points`` is negative when the source works against the caster's substance.
+    has perceived: a substance of another kind she has not sensed is never named, so an
+    opposed one reads ``Something here works against your ice`` and a related one reads
+    ``Something here strengthens your ice``. ``points`` is negative when the source works
+    against the caster's substance.
     ``item_id`` is set only for an item source. ``label`` is the power ledger's line;
     ``card_label`` is the cast card's line for the same source (the room and step, or the
     item), already redacted the same way. ``relation`` is a ``SubstanceRelationKind`` value, or

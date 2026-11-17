@@ -222,6 +222,9 @@
   - durance_training_sites <- progression.DuranceTrainingSite
   - resonance_grants <- magic.ResonanceGrant
   - portal_anchors <- magic.PortalAnchor
+  - primum <- magic.PlacePrimum
+  - primum_call_ups <- magic.PrimumCallUp
+  - primum_sightings <- magic.PrimumSighting
   - income_streams <- currency.OrgIncomeStream
   - dream_reflection <- dreams.DreamReflection
   - reflection_of <- dreams.DreamReflection
@@ -1827,6 +1830,8 @@
   - motif <- magic.Motif
   - prepared_crossing_texts <- magic.CharacterCrossingText
   - prepared_surge_text <- magic.CharacterSurgeText
+  - primum_call_ups <- magic.PrimumCallUp
+  - primum_sightings <- magic.PrimumSighting
   - settling_rites <- magic.SettlingRite
   - reflections <- magic.Reflection
   - reincarnations <- magic.Reincarnation
@@ -2204,6 +2209,7 @@
 - `is_botch_immune(character_sheet: 'CharacterSheet', check_type: 'CheckType') -> bool - Whether the character cannot botch at ``check_type`` (#4386).`
 - `level_opposition(check_type: 'CheckType', *, level: int, character: 'ObjectDB | None' = None) -> int - Difficulty an opposing NPC of *level* adds to *check_type* (#2707, #5093).`
 - `level_points(level: int, tables: world.checks.services.DifficultyTables | None = None, level_share: decimal.Decimal | None = None) -> int - The level term of a roll at ``level``: ``level_share`` of its baseline plus its tier jump.`
+- `level_strength(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - A level's strength in points: its CHECK baseline plus its tier jump (#5093).`
 - `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
 - `load_difficulty_tables() -> world.checks.services.DifficultyTables - Load the CHECK baselines and the level tiers, two queries.`
 - `load_taper_rules(lane: 'str' = ModifierLane.CHECK) -> 'dict[str, TaperRule]' - ``lane``'s taper rules by source kind, in one query. Empty means no taper.`
@@ -2775,6 +2781,7 @@
   - language -> species.Language [FK] (nullable)
 **Pointed to by:**
   - weakness_pool_entries <- covenants.WeaknessPoolEntry
+  - primum <- magic.CreaturePrimum
   - spawned_opponents <- combat.CombatOpponent
   - bossphase_set <- combat.BossPhase
   - creaturephasetemplate_set <- combat.CreaturePhaseTemplate
@@ -3484,6 +3491,7 @@
 - `caster_opposition(instance: world.conditions.models.ConditionInstance, check_type: world.checks.models.CheckType) -> int - What the caster adds to the difficulty of reading, rallying against or breaking a hold.`
 - `clear_all_conditions(target: 'ObjectDB', *, only_negative: bool = False, only_category: 'ConditionCategory | None' = None) -> int - Remove all conditions from a target.`
 - `compute_obstacle_rating(character: 'ObjectDB', check_type: 'CheckType', *, extra_modifiers: int = 0, level_override: int | None = None, stat_override: str | int | None = None) -> int - What a character who is the obstacle counts for on *check_type*, her full total (#5093).`
+- `concealed_from(actor_sheet: 'CharacterSheet', target_ids: collections.abc.Iterable[int]) -> frozenset[int] - The ids among ``target_ids`` that ``actor_sheet`` cannot perceive, in one query.`
 - `condition_capability_contributions(character_sheet: 'CharacterSheet') -> list[world.conditions.types.ConditionCapabilityContribution] - What each active condition adds to each capability, with its marks (#5066).`
 - `condition_contributions(character_sheet: 'CharacterSheet', check_type: world.checks.models.CheckType) -> list[world.checks.types.ModifierContribution] - Adapt get_check_modifier's breakdown into a list of ModifierContribution.`
 - `condition_modifier_totals_by_sheet(sheet_ids: collections.abc.Iterable[int], modifier_target: 'ModifierTarget') -> dict[int, int] - Batched ``get_condition_modifier_total`` across many sheets (#4090).`
@@ -5003,6 +5011,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -5266,6 +5275,7 @@
   - vault_holding <- items.VaultHolding
   - vault_transit <- items.VaultTransit
   - org_vault_events <- items.OrgVaultEvent
+  - item_substances <- items.ItemSubstance
   - trade_stakes <- items.TradeItemStake
   - reclamation_claims <- items.ReclamationClaim
   - crime_evidence <- justice.CrimeEvidence
@@ -5291,10 +5301,17 @@
   - item_instance -> items.ItemInstance [FK]
   - style -> items.Style [FK]
 
+### ItemSubstance
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK]
+  - substance -> magic.Substance [FK]
+  - step -> magic.PrimumStep [FK]
+
 ### ItemTemplate
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -5475,6 +5492,7 @@
 
 ### QualityTier
 **Pointed to by:**
+  - primum_step <- magic.PrimumStep
   - minimum_for_templates <- items.ItemTemplate
   - item_instances <- items.ItemInstance
   - itemfacet_attachments <- items.ItemFacet
@@ -5507,6 +5525,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -5648,6 +5667,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -5692,6 +5712,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - primum_substance -> magic.Substance [FK] (nullable)
   - material_category -> items.MaterialCategory [FK] (nullable)
   - on_use_pool -> actions.ConsequencePool [FK] (nullable)
   - on_use_check_type -> checks.CheckType [FK] (nullable)
@@ -6225,6 +6246,11 @@
 
 ### CovenantRoleBlendConfig
 
+### CreaturePrimum
+**Foreign Keys:**
+  - creature_template -> combat.CreatureTemplate [FK]
+  - substance -> magic.Substance [FK]
+
 ### CrossingChoice
 **Foreign Keys:**
   - thread -> magic.Thread [FK]
@@ -6392,13 +6418,13 @@
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - style -> magic.TechniqueStyle [FK] (nullable)
   - natural_weapon_template -> items.ItemTemplate [FK] (nullable)
+  - substance -> magic.Substance [FK] (nullable)
   - resonances -> magic.Resonance [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
   - effect_modifier_targets <- mechanics.ModifierTarget
   - organization_grants <- societies.OrganizationGiftGrant
   - children <- magic.Gift
-  - substance <- magic.GiftSubstance
   - character_grants <- magic.CharacterGift
   - techniques <- magic.Technique
   - major_gift_technique_requirements <- progression.MajorGiftTechniqueRequirement
@@ -6421,13 +6447,6 @@
 
 ### GiftAcquisitionConfig
 
-### GiftSubstance
-**Foreign Keys:**
-  - written_by -> contributors.ContentContributor [FK] (nullable)
-  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - gift -> magic.Gift [OneToOne]
-  - property -> mechanics.Property [FK] (nullable)
-
 ### GiftUnlock
 **Foreign Keys:**
   - gift -> magic.Gift [FK]
@@ -6444,6 +6463,11 @@
 **Pointed to by:**
   - distinction_offers <- character_creation.DistinctionOffer
   - character_rows <- magic.CharacterGlimpseTag
+
+### HarvestOutcome
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+  - quality_tier -> items.QualityTier [FK]
 
 ### ImbuingProseTemplate
 **Foreign Keys:**
@@ -6608,6 +6632,11 @@
   - scene -> scenes.Scene [FK]
   - resonance -> magic.Resonance [FK]
 
+### PlacePrimum
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - substance -> magic.Substance [FK]
+
 ### PortalAnchor
 **Foreign Keys:**
   - room_profile -> evennia_extensions.RoomProfile [FK]
@@ -6644,6 +6673,25 @@
   - restriction -> magic.Restriction [FK]
   - item_template -> items.ItemTemplate [FK]
   - min_quality_tier -> items.QualityTier [FK] (nullable)
+
+### PrimumCallUp
+**Foreign Keys:**
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - substance -> magic.Substance [FK]
+  - caster -> character_sheets.CharacterSheet [FK] (nullable)
+  - scene -> scenes.Scene [FK] (nullable)
+
+### PrimumSighting
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - room_profile -> evennia_extensions.RoomProfile [FK]
+  - substance -> magic.Substance [FK]
+
+### PrimumStep
+**Foreign Keys:**
+  - item_quality -> items.QualityTier [OneToOne] (nullable)
+**Pointed to by:**
+  - item_rows <- items.ItemSubstance
 
 ### RallyKindlingStrength
 **Foreign Keys:**
@@ -6741,6 +6789,8 @@
 
 ### ResonanceEnvironmentConfig
 **Foreign Keys:**
+  - harvest_check_type -> checks.CheckType [FK] (nullable)
+  - harvest_skill -> skills.Skill [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### ResonanceGainConfig
@@ -6765,7 +6815,6 @@
   - source_character_distinction -> distinctions.CharacterDistinction [FK] (nullable)
   - source_worship_rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
   - source_kindling_situation -> magic.KindlingSituation [FK] (nullable)
-  - deed_label: CharField (nullable; set only for KINDLED_DEED)
   - source_settling_rite -> magic.SettlingRite [FK] (nullable)
   - source_reflection -> magic.Reflection [FK] (nullable)
 **Pointed to by:**
@@ -6978,6 +7027,27 @@
   - resonance -> magic.Resonance [FK]
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+
+### Substance
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - property -> mechanics.Property [FK] (nullable)
+**Pointed to by:**
+  - gifts <- magic.Gift
+  - places <- magic.PlacePrimum
+  - creatures <- magic.CreaturePrimum
+  - call_ups <- magic.PrimumCallUp
+  - sightings <- magic.PrimumSighting
+  - primum_templates <- items.ItemTemplate
+  - item_rows <- items.ItemSubstance
+
+### SubstancePowerStep
+
+### SubstanceRelation
+**Foreign Keys:**
+  - substance_a -> magic.Substance [FK]
+  - substance_b -> magic.Substance [FK]
 
 ### Technique
 **Foreign Keys:**
@@ -7358,7 +7428,7 @@
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' - Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" - Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' - Total damage-type-specific resistance from gift threads (#1580).`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, from_mire: 'bool' = False, ledger_out: 'list[ResonanceGrant] | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, from_mire: 'bool' = False, deed_label: 'str | None' = None, ledger_out: 'list[ResonanceGrant] | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' - Check if this character has any unresolved Mage Scar that holds back advancement.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that any resonance the character holds can imbue (#5123).`
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
@@ -7608,9 +7678,9 @@
   - battle_weather_effects <- battles.WeatherTypePropertyEffect
   - feeling_of_resonances <- magic.Resonance
   - resonances <- magic.Resonance
-  - gift_substances <- magic.GiftSubstance
   - techniques <- magic.Technique
   - ritual_sites <- magic.Ritual
+  - substances <- magic.Substance
   - threat_pool_entries <- combat.ThreatPoolEntry
   - granted_by_companion_abilities <- companions.CompanionAbility
   - companion_abilities <- companions.CompanionAbility
@@ -8170,7 +8240,7 @@
 - `deliver_queued_messages(character_sheet: 'CharacterSheet') -> 'int' - Push all undelivered messages for this character and mark delivered.`
 - `emit_ambient_room_stir(room: 'ObjectDB', *, exclude: 'ObjectDB | None' = None) -> 'None' - Send a source-ambiguous ambient line to a room's bystanders (#885).`
 - `is_category_muted(*, account: 'AccountDB', category: 'str') -> 'bool' - Whether an account has muted a narrative category's live push.`
-- `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None) -> 'NarrativeMessage' - Create a NarrativeMessage and fan out deliveries to each recipient.`
+- `send_narrative_message(*, recipients: 'Iterable[CharacterSheet]', body: 'str', category: 'str', sender_account: 'AccountDB | None' = None, ooc_note: 'str' = '', related_story: 'Story | None' = None, related_beat_completion: 'BeatCompletion | None' = None, related_episode_resolution: 'EpisodeResolution | None' = None, frame_tags: 'Mapping[str, bool] | None' = None) -> 'NarrativeMessage' - Create a NarrativeMessage and fan out deliveries to each recipient.`
 - `send_story_ooc_message(*, story: 'Story', sender_account: 'AccountDB', body: 'str', ooc_note: 'str' = '') -> 'NarrativeMessage' - Lead GM or staff sends an OOC notice to all participants of a story.`
 - `set_category_mute(*, account: 'AccountDB', category: 'str', muted: 'bool') -> 'None' - Mute or unmute a narrative category's real-time push for an account (#1522).`
 
@@ -9887,6 +9957,7 @@
   - fall_redemption_records <- magic.FallRedemptionRecord
   - covenant_rite_instances <- covenants.CovenantRiteInstance
   - kindlings <- magic.Kindling
+  - primum_call_ups <- magic.PrimumCallUp
   - ritual_sessions <- magic.RitualSession
   - sineating_pending_offers <- magic.SineatingPendingOffer
   - pending_stage_advance_offers <- magic.PendingStageAdvanceOffer
@@ -11925,6 +11996,7 @@
   - arxii_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
   - arxii_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward
   - arxii_animaritualbudgetaward <- magic.AnimaRitualBudgetAward
+  - arxii_harvestoutcome <- magic.HarvestOutcome
   - arxii_trainingoutcomeaward <- magic.TrainingOutcomeAward
   - arxii_strainburnreach <- combat.StrainBurnReach
   - encounter_outcome_mappings <- combat.EncounterOutcomeMapping

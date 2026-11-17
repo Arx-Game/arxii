@@ -464,7 +464,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   capability row: `CapabilityType.traversal`, `reaction_reach` and `reaction_cost_kind` are
   dropped (migration 0388; disposition empty in production). A technique's effect properties
   are its own `Technique.properties`, never its gift's resonances (the clash opposition reads
-  them too); `GiftSubstance.property` only pre-ticks a new technique. So a `teleport` technique
+  them too); a major gift's `Substance.property` is also always carried by each of its techniques (#5125, derived on read, never ticked). So a `teleport` technique
   on any gift that grants `traversal` blinks and dodges by blinking, with no blink capability
   authored. Every use of a technique-granted movement power (each automatic dodge, a blink, a
   wall phased or climbed, a take-off) is a `use_technique` cast of that technique, in a fight
@@ -522,6 +522,18 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   .test_journey_authored_phases_and_break_bar_then_round_resolves`): spawn a template with
   authored phases + break bar via `action.run()` → cloned `BossPhase` rows + break-bar stamps
   on the opponent → a round resolves.
+- **Primum on creatures and a slain foe's Harvest (#5125, ADR-5125) [BUILT & WIRED].** A kind
+  of creature can carry Primum (`CreaturePrimum`, authored as an inline on `CreatureTemplate`),
+  and a slain `CombatOpponent` of that kind can be harvested once in total
+  (`CombatOpponent.primum_harvested_at` is the once-only stamp, written under lock so two
+  harvesters give one harvest, even when the creature carries two substances). The combat
+  opponent serializer carries `harvest_offers` (viewer-relative: only Primum the viewer's
+  characters perceive, one row per character who can take it, built once per request by
+  `CombatEncounterViewSet._harvest_offers_by_opponent`); the web combat opponent row shows a
+  Harvest button on a slain foe, and telnet reaches the same action as `extract fire from
+  elemental`. Several creatures of one substance in a room add up when a cast reads the room's
+  Primum; a lair against a creature takes the larger. Calling up in a fight is unchanged (an
+  immediate act once a round). Detail: `docs/systems/magic.md` "Substances and Primum".
 - **Combat offense standalone-cast flavor catalog (#1995).** A PHYSICAL technique's
   standalone cast (not a combat round) can pick a curated consequence-pool flavor
   ("Brutal"/"Precise") off the "Melee Attack" `ActionTemplate`, mirroring magic's

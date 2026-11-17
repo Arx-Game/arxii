@@ -4904,7 +4904,7 @@ shares alone. Journeys and tests:
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `AffinityInteraction` | 9 directed (caster, place) affinity pairing rows; tuning table | `source_affinity` FK, `environment_affinity` FK, `valence` (ALIGNED/OPPOSED), `kind` (AMPLIFY/REJECT/REPEL/CORRUPT), `severity`, `consequence_pool` FK (nullable — OPPOSED backfire pool) |
-| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty_level`, `backfire_difficulty_per_magnitude_tenths`, the six gift-substance numbers (#5018) |
+| `ResonanceEnvironmentConfig` | Singleton with scalar tuning coefficients | `backfire_base_difficulty_level`, `backfire_difficulty_per_magnitude_tenths`, the Primum and harvest tuning numbers (#5125, see "Substances and Primum") |
 | `ResonanceAlignmentBoonTier` | Authored: which buff `ConditionTemplate` an ALIGNED pairing grants at or above a magnitude band | `affinity_interaction` FK (must be ALIGNED diagonal row), `min_magnitude`, `condition_template` FK. `UniqueConstraint(affinity_interaction, min_magnitude)`. `clean()` validates ALIGNED valence. Tier selection is Python `max()` over `interaction.cached_alignment_boon_tiers` — no `Meta.ordering` |
 
 `AffinityInteraction.consequence_pool` (added migration `magic/0064`) is a nullable FK to
@@ -4923,75 +4923,147 @@ Cached accessors (never query directly):
 - `ConsequencePool.cached_consequences` — `cached_property` returning the resolved
   `Consequence` list; the OPPOSED service reads this, never `pool.entries.filter(...)`.
 
-### A gift's substance (#5018, ADR-5018) [BUILT & WIRED]
+### Substances and Primum (#5018, #5125, ADR-5018, ADR-5125) [BUILT & WIRED]
 
-A gift may name its substance: `GiftSubstance` (`models/gifts.py`, one-to-one on `Gift`,
-pk = the gift) maps it onto an existing room reading (`stat_key`, a `StatKey`), a
-`direction` (`SubstanceDirection`: shadow is lighting FALLING; water, wind, heat RISING),
-a `full_at` (steps from ordinary that make a full measure), an optional `opposed_by`
-reading (dry for water) and the staff-written `arrival_line` the room sees. A child gift
-with no row uses its parent's (`substance_for_gift`). Edited as the "Substance" inline on
-the Gift admin; `clean()` refuses a full measure under 1 or beyond what the reading can reach
-from ordinary, a reading opposing itself, and a falling substance on a reading that cannot go
-below ordinary. The admin speaks plain play terms, never "reading", "step" or "measure"
-(#5088): `stat_key` is "Which room condition feeds it", `direction` is "Stronger when it is"
-(Higher / Lower), `full_at` is "Full strength at", `opposed_by` is "Weakened by" and
-`property` is "Property new techniques start with". The same plain wording covers a
-technique restriction's Surroundings section (`surroundings_stat` is "Which room condition
-it needs") and the "Gift substance" tuning group on the resonance-environment config ("Power
-at full strength", "Anima to call it up to full strength", and so on). Exported with the catalog (`CONTENT_MODELS` `magic.giftsubstance`, natural key
-`gift`).
+A major Gift works one substance from a single staff-authored list. `Substance`
+(`models/substance.py`, natural key `name`) holds the name, an optional room condition it
+grows along (`stat_key` and `direction`, set together or both blank: shadow is LIGHTING
+falling, water and heat are RISING) and an optional `property` (FK `Property`). `Gift.substance`
+(FK, null) is the gift's pick; a database check makes it null on a minor gift, and a child gift
+with none reads its nearest ancestor's through `Gift.lineage` (`primum.gift_substance`). A minor
+gift never has one. `SubstanceRelation` is one row per pair (`substance_a.pk < substance_b.pk`,
+`kind` related or opposed), read from both sides by `substance_relations.relation_kinds_for` and
+never chained. Code compares only these rows and their relations, never a gift or substance by
+name. The admin speaks plain play terms: the Gift form has a `substance` autocomplete (major
+gifts only), `SubstanceAdmin` picks its related and opposed substances from both sides on one form, and the Power Builder shows the
+property as carried instead of offering a tick. Exported with the catalog (`CONTENT_MODELS`
+`magic.substance`, `magic.substancerelation`, `magic.creatureprimum`); `PlacePrimum` is play
+state on a room and the tuning rows are config, so neither is exported.
 
-Only a caster with a GIFT thread covering the gift is affected (`gift_thread_for`, via
-`gift_threads_for`). Everything reads one plan, `plan_substance_call_up(character=, gift=,
-room=, control_surplus=)` in `services/substance.py` (pure): how many steps the room needs
-to count as present (`substance_present_pct` of a measure, rounded up; an ordinary room
-lacks it), the row her call-up would set (computed from `felt_reading` without her own row,
-capped at the reading's span), the anima per measure and resonance per measure, the place
-factor (`evaluate_resonance_environment(technique=None)`: aligned cheaper, opposed dearer,
-up to `substance_place_cap_pct`), how much her spare control covers, and whether her
-gift-resonance balance can pay the rest. A fixed setting (sanctum override) or too little
-resonance means no call-up, never a refusal. `richness_after` is the room after any call-up.
+**Primum.** Primum is the typed essence of a substance, held by:
 
-- **Power** (`substance_power`): `richness_after × substance_power_at_full ×
-  thread_level_multiplier(thread_rung(level), floored at 1)`, one ENVIRONMENT line
-  "Surroundings: <label>" in `_derive_power` (`_add_environment_stage`), beside the
-  unchanged resonance-environment line.
-- **Cost**: `_calculate_technique_cost` builds the plan with `control_surplus =
-  max(best control − intensity − technique cost, 0)` and adds `plan.call_up_anima` to the
-  technique's cost before control is taken off; the card (`_cast_preview`,
-  `CastPreview.surroundings`, the castable list's `cast_preview`, the telnet `cast` list)
-  and the charge read the same function. The one `deduct_anima` charges it; nothing checks
-  her anima.
-- **Writes** (`apply_substance_plan`, from `_complete_technique_cast` after the deduct):
-  her resonance under lock, her room row `substance:<sheet pk>` via
-  `set_room_stat_modifier`, and `narrate_room_outcome(room, arrival_line)` (names no one).
-  `TechniqueUseResult.substance_call_up` carries what it took (result serializer
-  `substance_call_up`). Cleared by `clear_caster_substance` from `Character.at_post_move`
-  and `_leave_the_grid`.
+- `PlacePrimum` (a lair, on `RoomProfile`): `capacity`, `stored_amount`, `stamped_at`,
+  `refill_per_day`, `is_finite`. The current amount is derived at read time
+  (`min(capacity, stored + rate x days)`); a finite lair at 0 is dead. Edited as an inline on
+  the room profile admin; editing the stock or refill restarts the refill clock.
+- `CreaturePrimum` (a kind of creature, on `CreatureTemplate`): the `amount` a slain one
+  carries. `CombatOpponent.primum_harvested_at` stamps a slain creature once harvested.
+- `PrimumCallUp`: what a caster (or a scene's GM) called up. Transient.
+- `PrimumSighting`: what a character has sensed in a room. Transient.
+- `ItemSubstance` (`world/items/primum_models.py`): the substance an item carries and the step
+  it carries it at (see `docs/systems/items.md` "Crafting with Primum").
+
+Tuning is staff-owned. `PrimumStep` rows (`rank`, `name`, `starts_at`, `points`, optional
+`item_quality`; modelled on `KindledStrengthTier`; the starter names are Trace, Some, Rich,
+Massive) say how much Primum reads as which step. `SubstancePowerStep` rows
+(`points_reached`, `power`) are the curve that turns summed points into power.
+`HarvestOutcome` rows (one per rolled `CheckOutcome`) say what a harvest takes and yields.
+All three are inlines on the resonance-environment config admin. The migration inserted four
+starter steps and six curve points so no gift casts at zero before staff tune them
+(`STARTER_PRIMUM_STEPS`, `STARTER_POWER_CURVE`, `seed_primum_tuning`). Missing tuning never
+crashes a cast or a harvest: with no steps or curve a cast adds no power line, and an unset
+harvest check, skill or Primum item template answers in one plain sentence.
+
+**What a cast reads** (`services/primum.py`, all reads). `place_amount(room, substance)` is the
+place's authored stock plus call-ups, floored at the first step (Trace) when the room's ordinary
+condition leans the substance's way (`ordinary_leans`; a reading on the other side counts for
+nothing). `step_for(amount)` names the step. `cast_points(character, gift, room)` returns one
+`SourcePoints` per source: the place's substances that count (own in full, related at
+`substance_related_share_pct`, opposed negative, others none) and each equipped item (worn or
+held in hand; an item in a bag does not count). Several creatures of one substance in a room add
+up; a place against a creature takes the larger. `points_to_power(total, curve, cap=)`
+interpolates the curve, mirrors it for a negative total and caps at `substance_power_cap`. Only
+a caster with a GIFT thread covering the gift is affected (`gift_thread_for`). The bonus still
+grows with that thread: `substance_power` is `power_for_points(total) x
+thread_level_multiplier(max(thread_rung(level), 1))`. `apportion_power` splits the one total
+across the sources, so `_add_environment_stage` (`techniques.py`) writes one ENVIRONMENT ledger
+line per source, beside the unchanged resonance-environment line.
+
+**The card.** `surroundings_lines(plan)` gives the cast card, under its cost: an optional
+"Calls up fire" line, a "<Name> around you" heading, one line per source with its points, and
+one total power line. A source of another substance that the caster has not perceived is never
+named, on the card or on the ledger: an opposed one reads "Something here works against your
+ice" and a related one "Something here strengthens your ice" (`SourcePoints.hidden`). A caster
+always perceives her own gift's substance.
+
+**Calling up** (`services/substance.py`). `plan_substance_call_up(character=, gift=, room=,
+control_surplus=, to_trace_only=, with_lines=)` is the pure plan the card, the charge and the
+power lines read. A call-up raises the place by one `PrimumStep` for one shared anima cost
+(`substance_call_up_anima`, shifted by the place's affinity up to `substance_place_cap_pct`),
+with no resonance charge and no resonance refusal. A cast in a place with none of her substance
+calls it up automatically but only to Trace (`to_trace_only`); further steps come only from the
+call-up action. Her spare control covers that much of the anima, and nothing refuses or greys
+out a call-up for lack of anima: `deduct_anima` and the soulfray path take the overspend.
+`apply_substance_plan` (from `_complete_technique_cast`, after the deduct) writes a
+`PrimumCallUp` and sends one generated room line, "<name> begins to manifest fire in the area."
+(her presented name first). `clear_caster_substance` and `clear_sightings` run from
+`Character.at_post_move` and `_leave_the_grid`, so a call-up or sighting vanishes when she
+leaves, goes offline, or (for the GM mark) the scene ends.
+
 - **No technique** (`CallUpSubstanceAction`, key `call_up_substance`,
-  `actions/definitions/gift_substance.py`): priced by `get_runtime_caster_stats` (her own
-  identity, engagement and social-safety streams), offered by `call_up_offers` (the scene
-  panel's `GET /api/action-requests/call-up-offers/`, a combat participant's `call_up`,
-  telnet `callup`). In a fight it is an immediate act once a round
-  (`CharacterEngagement.last_called_up_round`, locked the way Dig deep's marker is),
-  never the round's declared action. Soulfray: the first press with a cost returns
-  `needs_soulfray_confirm`; `confirm_soulfray_risk` (telnet `callup/confirm`) goes ahead.
+  `actions/definitions/gift_substance.py`): priced by her own control alone, offered by
+  `call_up_offers` (the scene panel's `GET /api/action-requests/call-up-offers/`, a combat
+  participant's `call_up`, telnet `callup`). In a fight it is an immediate act once a round
+  (`CharacterEngagement.last_called_up_round`), never the round's declared action. Soulfray:
+  the first press with a cost returns `needs_soulfray_confirm`; `callup/confirm` goes ahead.
 - **GM mark** (`MarkSubstancePresentAction`, key `stage_substance`; telnet `stage
-  present|absent <substance>`; the Stage tab's "Present here"; list
-  `gm_list_substances`): gated by `_account_can_gm_room`; writes
-  `scene_mark:<scene>:<gift>` set to just what makes it present
-  (`mark_substance_present`); `Scene.finish_scene` calls `clear_scene_substance_marks`.
+  present|absent <substance>`; the Stage tab's "Present here"; list `gm_list_substances`):
+  gated by `_account_can_gm_room`; writes a scene `PrimumCallUp` that raises the place to at
+  least Trace (`mark_substance_present`); `Scene.finish_scene` calls
+  `clear_scene_substance_marks`.
 - **Surroundings restriction** (`Restriction.surroundings_stat/min/max`, DESIGN only, with
   check constraints; `services/surroundings.py`): unmet, the roll takes one SCENE line
   "Surroundings: <name> (here: <reading>)" worth `unmet_surroundings_penalty_pct` of
-  `level_baseline(level)`, at the scene cast, technique-enhanced action and combat roll
-  seams. Ignored on a technique whose own gift's substance is that reading.
+  `level_baseline(level)`. Ignored on a technique whose own gift's substance is that reading.
 
-Tuning lives on `ResonanceEnvironmentConfig`: `substance_power_at_full` (10),
-`substance_present_pct` (50), `substance_anima_per_measure` (5),
-`substance_resonance_per_measure` (2), `substance_place_cap_pct` (50),
-`unmet_surroundings_penalty_pct` (100).
+**Perceiving Primum** (`services/primum_perception.py`). A check reveals what a place or creature
+holds: `EffectType.REVEAL_PRIMUM` with a `primum_reveal` scope on `ConsequenceEffect`
+(`mechanics/effect_handlers.py` `_reveal_primum`, usually a perception technique of a minor
+gift). A plain success names the strongest substance (`PrimumRevealScope.STRONGEST`), a good
+success names every one (`ALL`), and she keeps sensing it until she leaves. `reveal` writes the
+`PrimumSighting` rows; `perceived_substance_ids(character, room)` is her sightings plus the
+substance of each gift she holds; `sensed_primum` and `sense_line` build what the web "You
+sense" block lists ("<Name> Primum: <Step>" per substance, the `primum` block of the
+`room_state` frame) and the sentence `look` ends with ("You sense fire Primum: Massive."). It
+never names a substance she has not perceived.
+
+**Harvesting Primum** (`services/harvest.py`). `harvest_offers(character)` lists what she can
+extract where she stands: only Primum she perceives, only real sources (a lair that still holds
+some, a slain creature not yet harvested whose kind carries it), never an ordinary room
+condition or a call-up. `harvest(character, substance=, opponent=)` rolls
+`harvest_check_type` with the `harvest_skill` (a Magic-category skill any character may use on
+any substance) plus a thread bonus of `harvest_thread_bonus x thread_level_multiplier(...)` for
+her deepest GIFT thread on a gift of that substance (no separate curve table). The rolled
+outcome picks a `HarvestOutcome`; `_take_from_place` and `_take_from_creature` cap it by what the
+source holds under `select_for_update`, and `mint_primum_items` gives her the items. A slain
+creature yields once in total (the opponent-level stamp, even when it carries two substances);
+two people pressing Extract at once yield one harvest. `HarvestPrimumAction` (key
+`harvest_primum`, `actions/definitions/primum.py`) is the one seam: the web Harvest buttons
+(room panel, slain-foe row) and the telnet `CmdExtract` (`extract fire` in a lair, `extract fire
+from elemental` on a slain foe; bare `extract` lists offers) both dispatch it. The field-food
+`harvest` command is a different command and is unchanged. The `primum` block of `room_state`
+and the combat opponent's `harvest_offers` carry the offers; the Harvest button appears only
+where the character perceives Primum.
+
+**Technique property.** `effect_property_ids_by_technique` (`services/technique_marks.py`)
+unions a technique's ticked marks with its gift lineage's `Substance.property`, so every
+technique of a major gift always carries it and staff cannot untick it. It is derived on read
+and stored nowhere. `Technique.has_property` and the clash seam read through it.
+
+**Spending Primum to raise a Gift thread or to call up a substance in a cast is [ABSENT]**
+(owner ruling 2026-11-16: not alpha). In alpha harvested Primum is a crafting material and a
+material for making facets.
+
+Tuning on `ResonanceEnvironmentConfig`: `substance_related_share_pct`, `substance_power_cap`,
+`substance_call_up_anima`, `substance_place_cap_pct`, `harvest_check_type`, `harvest_skill`,
+`harvest_thread_bonus`, `unmet_surroundings_penalty_pct`. The four #5018 columns (the present
+share, the anima and resonance per measure, and the power at full strength) are gone
+(migration 0450).
+
+Journeys: `test_gift_substance_journeys`, `test_primum_perception_journeys`,
+`test_primum_harvest_journeys`, `test_primum_payload_journeys` and `test_primum_craft_journeys`,
+plus the curve fuzz `integration_tests/fuzz/test_primum_curve_fuzz.py`; see
+`docs/testing/journeys.md`.
 
 ---
 

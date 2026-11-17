@@ -360,6 +360,35 @@ attachments (both the primary persona's authored identity tags and runtime
 `has_capability` DSL op (both in `flows/filters/evaluator.py` /
 `typeclasses/characters.py`).
 
+### Substances and Primum (#5018, #5125, ADR-5018, ADR-5125)
+
+Full reference: `docs/systems/magic.md` "Substances and Primum". `Substance` is one shared list
+(`models/substance.py`); a major gift points at one (`Gift.substance`, null on a minor gift,
+`primum.gift_substance` walks the lineage), and places (`PlacePrimum`), creature kinds
+(`CreaturePrimum`), call-ups (`PrimumCallUp`), sightings (`PrimumSighting`) and items
+(`ItemSubstance`, in `world/items/`) all name it. Rules for code in this area:
+
+- **Compare rows, never names.** A rule reads a substance row and its `SubstanceRelation` rows
+  (`relation_kinds_for`), never a gift or a substance by name, and relations never chain.
+- **Reads are `primum.py`, writes are not.** `cast_points` returns one `SourcePoints` per source,
+  `points_to_power` runs the staff curve, `plan_substance_call_up` is the one pure plan the card,
+  the charge and the ledger read. Missing tuning (no steps, no curve, no harvest check) adds no
+  line or answers in one plain sentence; it never raises out of a cast.
+- **Never name Primum the caster has not perceived.** A source of another substance that is not
+  in `perceived_substance_ids` reads "Something here works against your <own>" or "Something
+  here strengthens your <own>" on the card and the ledger (`SourcePoints.hidden`).
+- **Anima is never a refusal.** A call-up past her anima goes through `deduct_anima` and the
+  soulfray path; no resonance is read or written.
+- **A technique's substance property is derived on read** through
+  `effect_property_ids_by_technique`; never store it or offer a tick.
+- **Harvest writes under lock.** `harvest` takes from a source inside `select_for_update`, and a
+  slain creature yields once in total (`CombatOpponent.primum_harvested_at`). Primum is only ever
+  harvested from a lair or a slain creature.
+- **Transient rows go on the leave hook.** `clear_caster_substance` and `clear_sightings` run
+  from `Character.at_post_move` and `_leave_the_grid`; a scene's marks clear in
+  `Scene.finish_scene`.
+- **Spending Primum on a thread or a cast is `[ABSENT]` by decision** (not alpha).
+
 ### Magical skills (#4450, ADR-4450)
 
 Every magical roll adds skills staff chose in admin; no skill is named in code. Full reference:

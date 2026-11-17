@@ -182,7 +182,7 @@ class PowerCurveTests(TestCase):
         self.assertLessEqual(shares[1], 0)
 
 
-class GiftSubstanceReadAndCastPointsTests(TestCase):
+class SubstanceReadAndCastPointsTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         seed_primum_tuning()

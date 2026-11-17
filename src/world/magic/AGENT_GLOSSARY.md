@@ -612,14 +612,23 @@ _Avoid_: correction check, drift roll, purification, conversion rite (the old na
 Moving part of one of a thread's resonances to another of its resonances by performing the retune rite (the SERVICE ritual at `THREAD_RESONANCE_SERVICE_PATH`). It moves an amount between two `ThreadResonance` rows on the same thread: within the source resonance's affinity one for one; across affinities it is a Fall or a Redemption of that amount at the authored pair rate (floored at 1). The thread's level and `developed_points` do not change; the leading resonance follows the larger row. It changes no balance and no affinity, unlike a **Fall** or **Redemption** of the character, which converts every thread's rows in the affinity.
 _Avoid_: reweave (weaving makes a new thread), thread conversion (the full Fall re-anchors every thread), respec.
 
-**Gift substance**:
-What a gift works through, named once per gift as a room reading and a direction (`GiftSubstance`): shadow is the room's lighting falling, water its wet rising. Every cast of the gift needs it present; the room after any call-up adds or takes power by her gift thread's level (#5018, ADR-5018). A child gift with none uses its parent's. Its optional `property` (#5066) only pre-ticks that mark on a new technique of the gift; nothing reads it at play time. _Avoid_: element, medium, resonance (a resonance is identity and currency; a substance is a reading of the room).
+**Substance** (#5125, ADR-5125; was Gift substance, #5018):
+What a major gift works through and can perceive and control, as one entry in a single staff-authored list (`Substance`): fire, ice, shadow. A Gift points at one (`Gift.substance`, never on a minor gift; a child gift with none uses its parent's), and so do the Primum a place or creature holds, a Primum item template and an item that carries it. Ice and water are two substances: a gift's boundary is narrative, not scientific. It may name the room condition it grows along. Its optional `property` is carried by every technique of a major gift with it. Two substances may stand as related or opposed (`SubstanceRelation`, authored once, never chained). _Avoid_: element, medium, gift substance (the old per-gift mapping), resonance (a resonance is identity and currency; a substance is a thing the Gift works).
 
 **Technique marks** (#5066, ADR-5066):
 A technique's own `Technique.properties`: the properties that say how it works (a blink carries `teleport`, a smoke form `incorporeal`), ticked per technique by staff. They are the technique's effect properties for capability sources, applications and clash opposition (`effect_property_ids_by_technique`, `world/magic/services/technique_marks.py`). The gift's resonances never count. _Avoid_: technique tags, resonance properties (those belong to the resonance).
 
-**Calling up**:
-Making a gift's substance present in the room: automatically as part of a cast where it is missing, or with no technique (`call_up_substance`, telnet `callup`). Priced through the cast's anima formula, so control covers small amounts, with the uncovered share spending her gift resonance; it writes her own room row, lasting while she stays, and an unattributed room line. Never refused for anima. _Avoid_: summon, conjure, generate.
+**Primum** (#5125, ADR-5125):
+The magical essence of one substance, always typed: fire Primum, ice Primum, never an untyped Primum and never a number on a character sheet. A place or a creature holds some, in amounts that read as a **Primum step**. Primum can be harvested only from a lair or a slain creature, and harvested Primum is an item. _Avoid_: mana, essence (untyped), crystal, magic points.
+
+**Primum step** (#5125):
+One named band of how much Primum a place or creature holds (`PrimumStep`, ordered by `rank`; the starter names are Trace, Some, Rich and Massive), worth a number of power points to a caster whose gift matches. Staff own the rows; code compares only the rank. The lowest step, Trace, is what an ordinary room whose condition leans the substance's way reads. _Avoid_: level, tier (those name the Kindled and quality scales), measure.
+
+**Sighting** (#5125):
+A character's record that she has sensed one substance's Primum in one room (`PrimumSighting`), written by a perception check and ended when she leaves. A mage always perceives her own gift's substance without one. A source of another substance she has not perceived is never named to her. _Avoid_: scan, detection, discovery.
+
+**Calling up** (#5018; reshaped by #5125):
+Raising the Primum of a gift's substance in the place she stands by one step, for one shared anima amount set once for every substance, with no resonance charge. It happens automatically as part of a cast where the substance is missing (only up to Trace), or with no technique (`call_up_substance`, telnet `callup`). It writes a `PrimumCallUp` that lasts while she stays, and the room sees one line the game writes ("<name> begins to manifest fire in the area."). Never refused for anima. _Avoid_: summon, conjure, generate.
 
 **Present (substance)**:
-At least `substance_present_pct` of a full measure past the reading's ordinary value, in the substance's direction. An ordinary room lacks it. A scene's GM may mark it present for the scene (`stage_substance`). _Avoid_: available, active.
+A place that holds at least the first Primum step of a substance (Trace), whether from its ordinary condition, a call-up or a scene's GM mark (`stage_substance`). _Avoid_: available, active.
