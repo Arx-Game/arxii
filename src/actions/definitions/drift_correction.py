@@ -60,6 +60,7 @@ class PerformSettlingRiteAction(Action):
         from world.magic.services.drift_correction import (  # noqa: PLC0415
             perform_settling_rite,
         )
+        from world.magic.services.soul_tether import send_stored_notice  # noqa: PLC0415
 
         sheet = actor.character_sheet
         if sheet is None:
@@ -77,6 +78,6 @@ class PerformSettlingRiteAction(Action):
         except (DriftCorrectionError, RitualComponentError) as exc:
             return ActionResult(success=False, message=exc.user_message)
         for notice in result.notices:
-            notice.sheet.character.msg(notice.line)
+            send_stored_notice(notice.sheet, notice.line, ooc_note="Settling the Mire")
         message = "\n".join((f"{result.outcome_name}.", *result.lines))
         return ActionResult(success=True, message=message, data={"settling_rite_result": result})

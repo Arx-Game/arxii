@@ -47,6 +47,7 @@ from world.magic.services.soul_tether import (
     _refuse_fallen_sineater,
     ensure_sineater_thread,
     get_soul_tether_config,
+    send_stored_notice,
     shared_active_scene,
 )
 from world.magic.types.soul_tether import (
@@ -554,7 +555,9 @@ def record_pending_sineating(pending: PendingSineating) -> tuple[str, ...]:
     """Carry out a ``pending_sineating_from`` result once its pose is posted.
 
     Returns the lines the pose writer reads. The other party is told privately: the Sineater
-    that a plea waits, the Sinner what the ritual did. The room sees only the pose.
+    that a plea waits (a live line: the plea itself persists and shows in their picker and
+    ``sineater pleas``), the Sinner what the ritual did (a stored message, so they read it
+    whenever they next log in). The room sees only the pose.
 
     Raises:
         SoulTetherError: the plea or the ritual is refused after all (a race); the pose
@@ -570,7 +573,7 @@ def record_pending_sineating(pending: PendingSineating) -> tuple[str, ...]:
     result = perform_sineating(pending.sinner_sheet, pending.sineater_sheet, pending.units)
     lines = sineating_lines(result)
     for line in lines.sinner:
-        pending.sinner_sheet.character.msg(line)
+        send_stored_notice(pending.sinner_sheet, line, ooc_note="Sineating")
     return lines.sineater
 
 

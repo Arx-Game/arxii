@@ -18,7 +18,8 @@ Sinner:
 predominantly Abyssal, every Sinner they succumbed to since their last fall is paid, with extra
 for the one whose Mire they succumbed to last. Nothing here sends a message: the lines for the
 Sineater are returned for the rite's result, and the Sinners' are ``RiteNotice`` rows the action
-sends once the rite has committed. A share of 0 moves nothing and pays nothing.
+sends once the rite has committed, as stored narrative messages (so an offline Sinner reads
+them at login). A share of 0 moves nothing and pays nothing.
 """
 
 from __future__ import annotations

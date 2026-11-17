@@ -17,6 +17,7 @@ from decimal import Decimal
 
 from django.test import TestCase, override_settings
 
+from actions.definitions.drift_correction import PerformSettlingRiteAction
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
@@ -54,6 +55,7 @@ from world.magic.services.settling_preview import settling_rite_reading
 from world.magic.services.sineating import request_sineating
 from world.magic.services.soul_tether import accept_soul_tether
 from world.magic.types.soul_tether import SoulTetherRole
+from world.narrative.models import NarrativeMessageDelivery
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.relationships.models import CharacterRelationship
 from world.roster.factories import RosterTenureFactory
@@ -165,6 +167,36 @@ class MireSettlingCase(TestCase):
 
     def side(self) -> CharacterRelationship:
         return CharacterRelationship.objects.get(pk=self.ysmay_side.pk)
+
+
+class SinnerNoticesAreStored(MireSettlingCase):
+    """A Sinner paid at the rite may be offline: the notice is a stored message they read at
+    login, not a line sent to a session nobody holds."""
+
+    def test_an_offline_sinner_has_a_stored_delivery_for_the_succumb_payout(self) -> None:
+        self.carry(self.ysmay_side, 100)
+        self.reflect(self.ysmay_side, ReflectionChoice.SUCCUMB)
+        template = ItemTemplateFactory(
+            tied_resonance=self.tide, resonance_tier=ResonanceTierFactory()
+        )
+        offering = ItemInstanceFactory(template=template, holder_character_sheet=self.sineater)
+
+        with (
+            force_check_outcome(self.outcomes["Success"]),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            result = PerformSettlingRiteAction().run(
+                actor=self.sineater.character, components_provided=[offering]
+            )
+
+        self.assertTrue(result.success, result.message)
+        delivery = NarrativeMessageDelivery.objects.get(recipient_character_sheet=self.ysmay)
+        self.assertIsNone(delivery.delivered_at)
+        self.assertTrue(
+            delivery.message.body.startswith(
+                f"{_name(self.sineater)} has succumbed to what they carried for you."
+            )
+        )
 
 
 class AbsolvingAndCondemningTheMire(MireSettlingCase):

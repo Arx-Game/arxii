@@ -773,6 +773,29 @@ def _compute_hollow_max(sinner_thread: Thread) -> int:
     return max(0, _rung_baseline(sinner_thread, ModifierLane.HOLLOW_MAX))
 
 
+def send_stored_notice(sheet: CharacterSheet, line: str, *, ooc_note: str) -> None:
+    """Tell ``sheet`` a private line once the surrounding transaction commits, and keep it.
+
+    The line is a stored narrative message: a puppeted character gets it at once, and a
+    character who is offline (or whose web player reloads) gets it at their next login, the way
+    a kindled deed's "You earned" line does. Used for what a Sinner learns about a Sineater's
+    doing, which happens when they may not be there.
+    """
+
+    def _send() -> None:
+        from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+        from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+        send_narrative_message(
+            recipients=[sheet],
+            body=line,
+            category=NarrativeCategory.SYSTEM,
+            ooc_note=ooc_note,
+        )
+
+    transaction.on_commit(_send)
+
+
 def _increment_stat_safe(
     character_sheet: CharacterSheet,
     stat_key: str,
