@@ -80,6 +80,17 @@ def _guarding_admin_post() -> Iterator[CacheGuard]:
         _ADMIN_POST_GUARD.reset(token)
 
 
+def keep_for_this_admin_post(*rows: SharedMemoryModel | None) -> None:
+    """Keep shared rows an admin's own ``save_related`` writes with no form bound to them.
+
+    Call it before changing the rows: if the POST then raises, the guard puts them back as
+    they were. Outside an admin POST (a test calling the service) it does nothing.
+    """
+    guard = _ADMIN_POST_GUARD.get()
+    if guard is not None:
+        guard.keep(*rows)
+
+
 class _KeepsRowsBeforeValidating:
     """A changelist formset that keeps every row it edits before validating it."""
 

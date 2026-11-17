@@ -5,15 +5,15 @@ from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.admin.checks import InlineModelAdminChecks
 from django.contrib.admin.utils import flatten_fieldsets
-from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.core.exceptions import PermissionDenied, ValidationError
-from django.db.models import Count, Prefetch
+from django.db.models import Count, Prefetch, Q
 from django.forms.models import BaseInlineFormSet, BaseModelFormSet, modelformset_factory
 from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils.html import format_html
 
+from web.admin.authoring.identity_map import keep_for_this_admin_post
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
 from world.character_creation.constants import OfferChapter
@@ -22,6 +22,7 @@ from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import TraditionCodexGrant
 from world.conditions.inspection import inspect_condition_template
 from world.covenants.perks.constants import SITUATION_PARAM_SPECS, Situation
+from world.items.models import ItemTemplate
 from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariant,
@@ -132,6 +133,7 @@ from world.magic.models import (
     StyleCapabilityRequirement,
     Substance,
     SubstancePowerStep,
+    SubstanceRelation,
     Technique,
     TechniqueAppliedCondition,
     TechniqueBudgetConfig,
@@ -1118,8 +1120,8 @@ class GiftAdminForm(forms.ModelForm):
         ]
         help_texts = {
             "substance": (
-                "The one substance this gift works through, such as fire or shadow. Every "
-                "major gift has one and a minor gift has none."
+                "The one substance this Gift perceives and controls. Child Gifts inherit it "
+                "unless they name their own. Minor Gifts usually leave this blank."
             ),
         }
 
@@ -1185,33 +1187,84 @@ class GiftAdmin(admin.ModelAdmin):
         return "; ".join(parts) or "No authored grant sources found."
 
 
-class SubstanceAdminForm(forms.ModelForm):
-    """One substance, with its relationships picked from both sides (#5125).
+class SubstanceRelationRowForm(forms.Form):
+    """One relationship row on the substance page: the other substance and the kind (#5125)."""
 
-    A relation is stored once, lower substance id first, so a one-sided inline would show it
-    under the wrong substance. These two lists read the pair from whichever side it is stored
-    on, and ``SubstanceAdmin.save_related`` writes them through ``set_substance_relations``.
+    other = forms.ModelChoiceField(
+        queryset=Substance.objects.order_by("name"), label="Other substance"
+    )
+    kind = forms.ChoiceField(
+        choices=[("", "---------"), *SubstanceRelationKind.choices], label="Kind"
+    )
+
+    def __init__(self, *args, substance: Substance | None = None, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        if substance is not None and substance.pk:
+            self.fields["other"].queryset = Substance.objects.exclude(pk=substance.pk).order_by(
+                "name"
+            )
+
+
+class BaseSubstanceRelationFormSet(forms.BaseFormSet):
+    """The relationship rows, read from both sides of each stored pair (#5125).
+
+    A relation is stored once, lower substance id first, so a stock model inline would show it
+    under one substance only. This formset binds no model instance: its rows are built from
+    ``relation_kinds_for`` and ``SubstanceAdmin.save_related`` writes the whole set through
+    ``set_substance_relations``, so a refused save touches no shared row.
     """
 
-    related_to = forms.ModelMultipleChoiceField(
-        queryset=Substance.objects.all(),
+    def clean(self) -> None:
+        if any(self.errors):
+            return
+        seen: set[int] = set()
+        for form in self.forms:
+            if self._should_delete_form(form) or not form.cleaned_data:
+                continue
+            other = form.cleaned_data["other"]
+            if other.pk in seen:
+                msg = f"{other.name} is listed twice; keep one row for it."
+                raise ValidationError(msg)
+            seen.add(other.pk)
+
+    def related_and_opposed(self) -> tuple[list[Substance], list[Substance]]:
+        """The substances the kept rows name, split by kind."""
+        related: list[Substance] = []
+        opposed: list[Substance] = []
+        for form in self.forms:
+            if self._should_delete_form(form) or not form.cleaned_data:
+                continue
+            is_related = form.cleaned_data["kind"] == SubstanceRelationKind.RELATED
+            target = related if is_related else opposed
+            target.append(form.cleaned_data["other"])
+        return related, opposed
+
+
+SubstanceRelationFormSet = forms.formset_factory(
+    SubstanceRelationRowForm,
+    formset=BaseSubstanceRelationFormSet,
+    extra=1,
+    can_delete=True,
+)
+
+#: The relationship rows' formset prefix; the change-form template and tests post it.
+SUBSTANCE_RELATIONS_PREFIX = "relations"
+
+
+class SubstanceAdminForm(forms.ModelForm):
+    """One substance, its harvest item and its relationship rows (#5125).
+
+    ``harvest_item`` names the ``ItemTemplate`` whose ``primum_substance`` is this substance; the
+    data stays on the item template and ``SubstanceAdmin.save_related`` moves it. The
+    relationship rows are a plain formset (``relations``) drawn under the fields, as the
+    approved demo lays them out.
+    """
+
+    harvest_item = forms.ModelChoiceField(
+        queryset=ItemTemplate.objects.order_by("name"),
         required=False,
-        label="Related to",
-        widget=FilteredSelectMultiple("substances", is_stacked=False),
-        help_text=(
-            "A caster of one of these gets a share of this substance's benefit, and the other "
-            "way round. Relationships never chain: a substance related to a related one is not "
-            "related to this one."
-        ),
-    )
-    opposed_to = forms.ModelMultipleChoiceField(
-        queryset=Substance.objects.all(),
-        required=False,
-        label="Opposed to",
-        widget=FilteredSelectMultiple("substances", is_stacked=False),
-        help_text=(
-            "Each of these works against a caster of this substance, and the other way round."
-        ),
+        label="Item created by harvesting",
+        help_text="The item template a harvest of this substance makes.",
     )
 
     class Meta:
@@ -1244,24 +1297,38 @@ class SubstanceAdminForm(forms.ModelForm):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        initial_rows: list[dict[str, object]] = []
         if self.instance.pk:
-            others = Substance.objects.exclude(pk=self.instance.pk)
-            self.fields["related_to"].queryset = others
-            self.fields["opposed_to"].queryset = others
+            self.initial["harvest_item"] = (
+                ItemTemplate.objects.filter(primum_substance=self.instance)
+                .values_list("pk", flat=True)
+                .first()
+            )
             kinds = relation_kinds_for(self.instance)
-            self.initial["related_to"] = [
-                pk for pk, kind in kinds.items() if kind == SubstanceRelationKind.RELATED
-            ]
-            self.initial["opposed_to"] = [
-                pk for pk, kind in kinds.items() if kind == SubstanceRelationKind.OPPOSED
-            ]
+            others = Substance.objects.filter(pk__in=kinds).order_by("name")
+            initial_rows = [{"other": other.pk, "kind": kinds[other.pk]} for other in others]
+        self.relations = SubstanceRelationFormSet(
+            data=self.data if self.is_bound else None,
+            prefix=SUBSTANCE_RELATIONS_PREFIX,
+            initial=initial_rows,
+            form_kwargs={"substance": self.instance},
+        )
+
+    def clean_harvest_item(self) -> ItemTemplate | None:
+        template = self.cleaned_data.get("harvest_item")
+        if (
+            template is not None
+            and template.primum_substance_id is not None
+            and template.primum_substance_id != self.instance.pk
+        ):
+            msg = f"{template.name} is already the harvest item of {template.primum_substance}."
+            raise ValidationError(msg)
+        return template
 
     def clean(self) -> dict:
         cleaned = super().clean()
-        both = set(cleaned.get("related_to") or []) & set(cleaned.get("opposed_to") or [])
-        if both:
-            names = ", ".join(sorted(substance.name for substance in both))
-            self.add_error("opposed_to", f"Cannot be both related and opposed: {names}.")
+        if not self.relations.is_valid():
+            self.add_error(None, "Correct the relationships below.")
         return cleaned
 
 
@@ -1270,18 +1337,47 @@ class SubstanceAdmin(admin.ModelAdmin):
     """The shared list of substances a major gift can work through (#5125)."""
 
     form = SubstanceAdminForm
+    change_form_template = "admin/magic/substance/change_form.html"
     list_display = ["name", "stat_key", "direction", "property"]
     list_filter = ["stat_key"]
     search_fields = ["name"]
     autocomplete_fields = ["property"]
+    fields = [
+        "name",
+        "stat_key",
+        "direction",
+        "property",
+        "harvest_item",
+        "written_by",
+        "written_on",
+        "reviewed_by",
+        "reviewed_on",
+    ]
+
+    class Media:
+        js = ["admin/js/inlines.js"]
 
     def save_related(self, request, form, formsets, change) -> None:
         super().save_related(request, form, formsets, change)
-        set_substance_relations(
-            form.instance,
-            related=form.cleaned_data["related_to"],
-            opposed=form.cleaned_data["opposed_to"],
+        substance = form.instance
+        harvest_item = form.cleaned_data.get("harvest_item")
+        stale = [
+            template
+            for template in ItemTemplate.objects.filter(primum_substance=substance)
+            if template != harvest_item
+        ]
+        relation_rows = list(
+            SubstanceRelation.objects.filter(Q(substance_a=substance) | Q(substance_b=substance))
         )
+        keep_for_this_admin_post(*stale, *relation_rows, harvest_item)
+        for template in stale:
+            template.primum_substance = None
+            template.save(update_fields=["primum_substance"])
+        if harvest_item is not None and harvest_item.primum_substance_id != substance.pk:
+            harvest_item.primum_substance = substance
+            harvest_item.save(update_fields=["primum_substance"])
+        related, opposed = form.relations.related_and_opposed()
+        set_substance_relations(substance, related=related, opposed=opposed)
 
 
 @admin.register(CharacterGift)

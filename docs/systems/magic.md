@@ -5010,7 +5010,11 @@ gift never has one. `SubstanceRelation` is one row per pair (`substance_a.pk < s
 `kind` related or opposed), read from both sides by `substance_relations.relation_kinds_for` and
 never chained. Code compares only these rows and their relations, never a gift or substance by
 name. The admin speaks plain play terms: the Gift form has a `substance` autocomplete (major
-gifts only), `SubstanceAdmin` picks its related and opposed substances from both sides on one form, and the Power Builder shows the
+gifts only). `SubstanceAdmin` draws one row per relationship (other substance, kind, delete,
+add another) from both sides of each pair: a plain formset on its form
+(`SubstanceAdminForm.relations`), saved whole through `set_substance_relations`. Its "Item
+created by harvesting" pick moves `ItemTemplate.primum_substance` (the data stays on the item
+template, which keeps its own field too). The Power Builder shows the
 property as carried instead of offering a tick. Exported with the catalog (`CONTENT_MODELS`
 `magic.substance`, `magic.substancerelation`, `magic.creatureprimum`); `PlacePrimum` is play
 state on a room and the tuning rows are config, so neither is exported.

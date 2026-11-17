@@ -1,0 +1,51 @@
+{% extends "admin/change_form.html" %}
+{% comment %}
+Substance page (#5125, screen 1 of the approved demo): under the fields, one row per
+relationship (Other substance, Kind, Delete), read from both sides of each stored pair, with
+"add another". The rows are the form's own plain formset (SubstanceAdminForm.relations), not a
+model inline, because a pair is stored once and must show on both substances.
+{% endcomment %}
+{% load i18n %}
+{% block inline_field_sets %}
+{% with formset=adminform.form.relations %}
+<div class="js-inline-admin-formset inline-group" id="{{ formset.prefix }}-group"
+     data-inline-type="tabular"
+     data-inline-formset='{"name": "#{{ formset.prefix }}", "options": {"prefix": "{{ formset.prefix }}", "addText": "Add another relationship", "deleteText": "Remove"}}'>
+  <div class="tabular inline-related last-related">
+{{ formset.management_form }}
+<fieldset class="module" aria-labelledby="{{ formset.prefix }}-heading">
+  <h2 id="{{ formset.prefix }}-heading" class="inline-heading">Relationships</h2>
+  {{ formset.non_form_errors }}
+  <table>
+    <thead><tr>
+      <th class="column-other required">Other substance</th>
+      <th class="column-kind required">Kind</th>
+      <th>{% translate "Delete?" %}</th>
+    </tr></thead>
+    <tbody>
+    {% for form in formset.forms %}
+      {% if form.non_field_errors %}
+      <tr class="row-form-errors"><td colspan="3">{{ form.non_field_errors }}</td></tr>
+      {% endif %}
+      <tr class="form-row{% if forloop.counter0 < formset.initial_form_count %} has_original{% endif %}" id="{{ formset.prefix }}-{{ forloop.counter0 }}">
+        <td class="field-other">{{ form.other.errors.as_ul }}{{ form.other }}</td>
+        <td class="field-kind">{{ form.kind.errors.as_ul }}{{ form.kind }}</td>
+        <td class="delete">{% if forloop.counter0 < formset.initial_form_count %}{{ form.DELETE }}{% endif %}</td>
+      </tr>
+    {% endfor %}
+    {% with form=formset.empty_form %}
+      <tr class="form-row empty-form" id="{{ formset.prefix }}-empty">
+        <td class="field-other">{{ form.other }}</td>
+        <td class="field-kind">{{ form.kind }}</td>
+        <td class="delete"></td>
+      </tr>
+    {% endwith %}
+    </tbody>
+  </table>
+  <div class="help">Each relationship is authored once and shows on both substances. Relationships never chain: light being related to fire says nothing about what light is to ice.</div>
+</fieldset>
+  </div>
+</div>
+{% endwith %}
+{{ block.super }}
+{% endblock %}

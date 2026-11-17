@@ -6,6 +6,7 @@ from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
 from web.admin.tests.support import form_data
+from world.items.factories import ItemTemplateFactory
 from world.magic.constants import GiftKind, SubstanceRelationKind
 from world.magic.factories import GiftFactory, SubstanceFactory, SubstanceRelationFactory
 from world.magic.models import PrimumStep, SubstancePowerStep, SubstanceRelation
@@ -26,13 +27,28 @@ class SubstanceAdminTests(TestCase):
         cls.light = SubstanceFactory(name="light")
         cls.ice = SubstanceFactory(name="ice")
 
-    def test_substance_page_saves_related_and_opposed_from_both_sides(self) -> None:
+    def test_substance_page_saves_relationship_rows_and_harvest_item(self) -> None:
+        """Rows of other substance and kind save once and show on both substances (F1, F2)."""
+        coat_primum = ItemTemplateFactory(name="Fire Primum")
         self.client.force_login(self.staff)
         url = reverse("admin:arxii_substance_change", args=[self.fire.pk])
-        data = form_data(self.client.get(url))
-        data["related_to"] = [str(self.light.pk)]
-        data["opposed_to"] = [str(self.ice.pk)]
-        data["_save"] = "Save"
+        page = self.client.get(url)
+        self.assertContains(page, "Item created by harvesting")
+        self.assertContains(page, "Each relationship is authored once and shows on both")
+        self.assertContains(page, "admin/js/inlines.js")
+        data = form_data(page)
+        data.update(
+            {
+                "relations-TOTAL_FORMS": "3",
+                "relations-INITIAL_FORMS": "0",
+                "relations-0-other": str(self.light.pk),
+                "relations-0-kind": SubstanceRelationKind.RELATED,
+                "relations-1-other": str(self.ice.pk),
+                "relations-1-kind": SubstanceRelationKind.OPPOSED,
+                "harvest_item": str(coat_primum.pk),
+                "_save": "Save",
+            }
+        )
         self.assertEqual(self.client.post(url, data).status_code, 302)
         self.assertEqual(
             relation_kinds_for(self.fire),
@@ -41,11 +57,47 @@ class SubstanceAdminTests(TestCase):
                 self.ice.pk: SubstanceRelationKind.OPPOSED,
             },
         )
-        # The pair is stored once, so the other page shows fire from its own side.
-        other = self.client.get(reverse("admin:arxii_substance_change", args=[self.light.pk]))
-        form = other.context["adminform"].form
-        self.assertEqual(form.initial["related_to"], [self.fire.pk])
-        self.assertEqual(list(form.initial["opposed_to"]), [])
+        coat_primum.refresh_from_db()
+        self.assertEqual(coat_primum.primum_substance, self.fire)
+        # The pair is stored once (fire first), so light's page draws fire as its own row,
+        # and deleting that row there removes the pair for both.
+        light_url = reverse("admin:arxii_substance_change", args=[self.light.pk])
+        light_page = self.client.get(light_url)
+        rows = light_page.context["adminform"].form.relations.initial
+        self.assertEqual(rows, [{"other": self.fire.pk, "kind": SubstanceRelationKind.RELATED}])
+        data = form_data(light_page)
+        data.update(
+            {
+                "relations-TOTAL_FORMS": "1",
+                "relations-INITIAL_FORMS": "1",
+                "relations-0-other": str(self.fire.pk),
+                "relations-0-kind": SubstanceRelationKind.RELATED,
+                "relations-0-DELETE": "on",
+                "_save": "Save",
+            }
+        )
+        self.assertEqual(self.client.post(light_url, data).status_code, 302)
+        self.assertEqual(
+            relation_kinds_for(self.fire), {self.ice.pk: SubstanceRelationKind.OPPOSED}
+        )
+
+    def test_substance_page_refuses_a_harvest_item_another_substance_has(self) -> None:
+        taken = ItemTemplateFactory(name="Ice Primum", primum_substance=self.ice)
+        self.client.force_login(self.staff)
+        url = reverse("admin:arxii_substance_change", args=[self.fire.pk])
+        data = form_data(self.client.get(url))
+        data.update(
+            {
+                "relations-TOTAL_FORMS": "1",
+                "relations-INITIAL_FORMS": "0",
+                "harvest_item": str(taken.pk),
+                "_save": "Save",
+            }
+        )
+        response = self.client.post(url, data)
+        self.assertContains(response, "is already the harvest item of ice")
+        taken.refresh_from_db()
+        self.assertEqual(taken.primum_substance, self.ice)
 
     def test_gift_form_refuses_substance_on_minor_gift(self) -> None:
         gift = GiftFactory(kind=GiftKind.MAJOR, substance=self.fire)
