@@ -651,7 +651,8 @@ nothing, the roll runs without the added skill; there is no placeholder data.
 
 **Magic skills only (#4547).** These skills are bespoke Magic skills (trait category MAGIC) that
 staff make and point each roll at. They are never skills a character picks anywhere else, so a
-cast never counts one skill twice. The three pickers below share
+cast never counts one skill twice. The four pickers (activity, casting style, technique, the
+harvest roll's `ResonanceEnvironmentConfig.harvest_skill`) share
 `limit_choices_to=MAGIC_PICKER_SKILL_CHOICES` (`world/magic/skill_choices.py`): the admin form and
 its autocomplete offer only Magic skills that are no combat style's own skill (#4921: a style's
 skill is trained in creation and added by the style), and `full_clean()` refuses any other with
@@ -5128,7 +5129,8 @@ extract where she stands: only Primum she perceives, only real sources (a lair t
 some, a slain creature not yet harvested whose kind carries it), never an ordinary room
 condition or a call-up. `harvest(character, substance=, opponent=)` rolls
 `harvest_check_type` with the `harvest_skill` (a Magic-category skill any character may use on
-any substance) plus a thread bonus of `harvest_thread_bonus x thread_level_multiplier(...)` for
+any substance; left out of the roll's terms when the check type already weights it, so it
+counts once) plus a thread bonus of `harvest_thread_bonus x thread_level_multiplier(...)` for
 her deepest GIFT thread on a gift of that substance (no separate curve table). Every attempt
 costs time, good roll or bad: before the roll `_pay_for_attempt` spends `harvest_ap_cost`
 action points from her `ActionPointPool` (without them she is refused in plain words and

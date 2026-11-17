@@ -40,7 +40,7 @@ def magic_category_skills() -> QuerySet[Skill]:
     draft may not spend on them), the Anima Check filter, which excludes them so a
     skill is never counted twice in a magical roll (#4450, #4457), and the Required
     content dashboard. ``MAGIC_SKILL_CHOICES`` is its filter; this adds the active flag.
-    It holds every combat style's own skill too: the three magic skill pickers offer
+    It holds every combat style's own skill too: the four magic skill pickers offer
     ``MAGIC_PICKER_SKILL_CHOICES``, which leaves those out (#4547, #4921), and character
     creation trains only the chosen style's (``magic_training.training_skills``).
     """

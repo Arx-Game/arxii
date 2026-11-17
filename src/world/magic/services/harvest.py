@@ -245,14 +245,23 @@ def _thread_bonus(
     ]
 
 
-def _require_configured(config: ResonanceEnvironmentConfig, substance: Substance) -> ExtraTraitTerm:
-    """The harvest skill as a roll term; raises ``HarvestNotConfigured`` for unset tuning."""
+def _require_configured(
+    config: ResonanceEnvironmentConfig, substance: Substance
+) -> tuple[ExtraTraitTerm, ...]:
+    """The harvest skill as roll terms; raises ``HarvestNotConfigured`` for unset tuning.
+
+    Empty when the harvest check type already weights the skill itself: the roll counts the
+    skill once, never twice.
+    """
     skill = config.harvest_skill
-    if config.harvest_check_type is None or skill is None or not skill.is_active:
+    check_type = config.harvest_check_type
+    if check_type is None or skill is None or not skill.is_active:
         raise HarvestNotConfigured
     if not ItemTemplate.objects.filter(primum_substance=substance).exists():
         raise HarvestNotConfigured
-    return ExtraTraitTerm(trait=skill, weight=_SKILL_WEIGHT)
+    if check_type.traits.filter(trait_id=skill.pk).exists():
+        return ()
+    return (ExtraTraitTerm(trait=skill, weight=_SKILL_WEIGHT),)
 
 
 def _scaled_quantity(outcome: HarvestOutcome, taken: int) -> int:
@@ -405,7 +414,7 @@ def harvest(
     if sheet is None or _find_offer(character, substance, opponent) is None:
         return _failure(substance, NOTHING_LEFT_MESSAGE)
     config = get_resonance_environment_config()
-    skill_term = _require_configured(config, substance)
+    skill_terms = _require_configured(config, substance)
     if not _pay_for_attempt(character, sheet, config):
         return _failure(substance, NO_AP_MESSAGE.format(cost=config.harvest_ap_cost))
     check_result = perform_check_with_modifiers(
@@ -413,7 +422,7 @@ def harvest(
         config.harvest_check_type,
         target_difficulty=0,
         extra_contributions=_thread_bonus(character, substance, config),
-        extra_traits=[skill_term],
+        extra_traits=skill_terms,
     )
     rolled = check_result.outcome
     outcome_name = rolled.name if rolled is not None else ""
