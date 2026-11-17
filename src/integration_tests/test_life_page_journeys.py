@@ -181,6 +181,9 @@ class TheLifePage(FinalizationTestMixin, JourneyCase):
         stranger = self.api(AccountFactory())
         response = stranger.get(f"/api/character-sheets/{sheet.pk}/")
         self.assertEqual(response.status_code, 200, response.content)
+        # The Background a stranger reads on the sheet is the text written, and nothing
+        # composed from the sections taken (#5178).
+        self.assertEqual(response.data["story"]["background"], "Soft hands, hard lessons.")
         public = {d["name"]: d for d in response.data["distinctions"]}
         self.assertIn("Spoiled", public)
         self.assertNotIn("Hard scrabble", public)

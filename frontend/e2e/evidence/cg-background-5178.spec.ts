@@ -290,4 +290,22 @@ test.describe('one Background box on Final Touches replaces the life page’s te
       await page.screenshot({ path: shot(`review-${at.width}.png`) });
     });
   }
+
+  test('an Identity save carries no background, and the Background written on Final Touches stands', async ({
+    page,
+  }) => {
+    test.skip(oldBuild, 'main’s Identity stage still carries the value; nothing to picture');
+    await page.setViewportSize({ width: 1366, height: 768 });
+    const { saves } = await openStage(page, 9, { draftData: { background: WRITTEN } });
+    const concept = page.getByLabel(/character concept/i);
+    await expect(concept).toBeVisible({ timeout: 15000 });
+    await concept.fill('A river pilot');
+    await page.getByRole('button', { name: 'Next: Final Touches' }).click();
+    await expect.poll(() => saves.find((s) => 'draft_data' in s)?.draft_data).toBeTruthy();
+    const sent = saves.find((s) => 'draft_data' in s)!.draft_data as Record<string, unknown>;
+    expect(sent).toMatchObject({ concept: 'A river pilot' });
+    expect(sent).not.toHaveProperty('background');
+    // Final Touches still shows the Background the draft held before the Identity save.
+    await expect(page.locator('#background')).toHaveValue(WRITTEN, { timeout: 15000 });
+  });
 });
