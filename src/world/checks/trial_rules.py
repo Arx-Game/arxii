@@ -111,6 +111,13 @@ def _training_errors(effect: ConsequenceEffect, level: int | None) -> dict[str, 
     return errors
 
 
+def _primum_reveal_errors(effect: ConsequenceEffect) -> dict[str, str]:
+    """A Magesight effect is a perception reward: it names its scope and nothing else."""
+    if effect.primum_reveal and effect.effect_type != EffectType.REVEAL_PRIMUM:
+        return {"primum_reveal": "primum_reveal applies only to REVEAL_PRIMUM effects."}
+    return {}
+
+
 def effect_trial_errors(effect: ConsequenceEffect) -> dict[str, str]:
     """Field errors for one effect against its consequence's tier (#4501)."""
     level = _tier_level(effect)
@@ -118,11 +125,15 @@ def effect_trial_errors(effect: ConsequenceEffect) -> dict[str, str]:
         **_grants_known_errors(effect, level),
         **_cosmetic_scar_errors(effect, level),
         **_training_errors(effect, level),
+        **_primum_reveal_errors(effect),
     }
 
 
 def is_cost_effect(effect: ConsequenceEffect) -> bool:
-    """A real cost: a non-cosmetic Mage Scar or a condition, on the actor."""
+    """A real cost: a non-cosmetic Mage Scar or a condition, on the actor.
+
+    A REVEAL_PRIMUM effect (what a Magesight check lets the actor sense) is never a cost.
+    """
     if effect.target != EffectTarget.SELF:
         return False
     if effect.effect_type == EffectType.MAGICAL_SCARS:
@@ -131,7 +142,10 @@ def is_cost_effect(effect: ConsequenceEffect) -> bool:
 
 
 def is_opening_effect(effect: ConsequenceEffect) -> bool:
-    """Makes known an entry that gates a technique, or trains a technique."""
+    """Makes known an entry that gates a technique, or trains a technique.
+
+    A REVEAL_PRIMUM effect is never an opening: it grants no entry and no technique.
+    """
     if effect.effect_type == EffectType.TECHNIQUE_TRAINING:
         return True
     return bool(effect.grants_known) and effect_gates_technique(effect)

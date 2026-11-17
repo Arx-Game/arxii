@@ -150,6 +150,9 @@ _TRIAL_FIELDS = (
 )
 
 
+_PRIMUM_FIELDS = ("primum_reveal",)
+
+
 @admin.register(ConsequenceEffect)
 class ConsequenceEffectAdmin(admin.ModelAdmin):
     """One effect of a consequence, on its own page (#4473).
@@ -167,7 +170,7 @@ class ConsequenceEffectAdmin(admin.ModelAdmin):
 
     def get_fieldsets(self, request, obj=None):
         """The effect and its legend award first; every other effect's fields collapsed."""
-        named = {*_EFFECT_FIELDS, *_LEGEND_AWARD_FIELDS, *_TRIAL_FIELDS}
+        named = {*_EFFECT_FIELDS, *_LEGEND_AWARD_FIELDS, *_TRIAL_FIELDS, *_PRIMUM_FIELDS}
         others = [f for f in self.get_fields(request, obj) if f not in named]
         return (
             (None, {"fields": _EFFECT_FIELDS}),
@@ -180,6 +183,17 @@ class ConsequenceEffectAdmin(admin.ModelAdmin):
                         "grants_known makes a codex entry KNOWN (Success and above). "
                         "Technique training trains or grants a technique; the cosmetic scar "
                         "flag makes a reward scar that is never a cost."
+                    ),
+                },
+            ),
+            (
+                "Perceive Primum (#5125)",
+                {
+                    "fields": _PRIMUM_FIELDS,
+                    "description": (
+                        "Reveal Primum lets the actor sense the Primum where she stands: the "
+                        "strongest substance only (a plain success) or every substance (a "
+                        "good success). Put it on the matching outcome's consequence."
                     ),
                 },
             ),

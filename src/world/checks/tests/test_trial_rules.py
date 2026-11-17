@@ -5,9 +5,10 @@ from __future__ import annotations
 from django.core.exceptions import ValidationError
 from django.test import TestCase
 
-from world.checks.constants import EffectTarget, EffectType
+from world.checks.constants import EffectTarget, EffectType, PrimumRevealScope
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
 from world.checks.models import ConsequenceEffect
+from world.checks.trial_rules import is_cost_effect, is_opening_effect
 from world.codex.factories import CodexEntryFactory
 from world.conditions.factories import ConditionTemplateFactory
 from world.magic.factories import TechniqueFactory
@@ -250,3 +251,23 @@ class TrialRuleTests(TestCase):
             grants_known=True,
         )
         self.assertEqual(len(consequence.trial_rule_errors()), 1)
+
+    def test_a_primum_reveal_is_never_a_cost_or_an_opening(self) -> None:
+        consequence = ConsequenceFactory(outcome_tier=self.success)
+        reveal = self._effect(
+            self.success,
+            EffectType.REVEAL_PRIMUM,
+            consequence=consequence,
+            primum_reveal=PrimumRevealScope.ALL,
+        )
+        reveal.clean()
+        self.assertFalse(is_cost_effect(reveal))
+        self.assertFalse(is_opening_effect(reveal))
+        self.assertEqual(consequence.trial_rule_errors([reveal]), [])
+        stray = self._effect(
+            self.success,
+            EffectType.APPLY_CONDITION,
+            condition_template=self.condition,
+            primum_reveal=PrimumRevealScope.ALL,
+        )
+        self.assertRefused(stray, "primum_reveal")
