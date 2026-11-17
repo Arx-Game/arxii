@@ -28,6 +28,7 @@ from world.magic.constants import GainSource, RitualExecutionKind
 from world.magic.factories import (
     AnimaRitualResonanceAwardFactory,
     CharacterAnimaFactory,
+    CharacterResonanceFactory,
     ResonanceFactory,
     RitualCheckConfigFactory,
     RitualFactory,
@@ -102,6 +103,8 @@ class _RitualWithAPartner(JourneyCase):
         AnimaRitualBudgetAward.objects.create(outcome_tier=self.success, budget=6)
         SoulfrayConfigFactory(ritual_severity_cost_per_point=1)
         CharacterAnimaFactory(character=self.mara.sheet_data, current=2, maximum=10)
+        # The ritual's resonance earns only for a character who already holds it.
+        CharacterResonanceFactory(character_sheet=self.mara.sheet_data, resonance=self.resonance)
         self.check_type = CheckTypeFactory()
         self.ritual = RitualFactory(
             execution_kind=RitualExecutionKind.SCENE_ACTION,

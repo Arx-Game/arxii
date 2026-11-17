@@ -71,6 +71,29 @@ class ContributeToProgressTest(TestCase):
         self.pool.refresh_from_db()
         self.assertEqual(self.pool.current, 480)
 
+    def test_a_trial_award_is_never_scaled_down_to_nothing_by_a_slow_learn_rate(self):
+        from world.checks.constants import EffectType
+        from world.checks.factories import ConsequenceEffectFactory
+        from world.checks.types import ResolutionContext
+        from world.mechanics.effect_handlers import _technique_training
+
+        CharacterAuraFactory(character=self.sheet, celestial=0, primal=20, abyssal=80)
+        affinity = Affinity.objects.get(name="Abyssal")
+        affinity.learn_rate_percent = 50
+        affinity.save()
+        effect = ConsequenceEffectFactory(
+            effect_type=EffectType.TECHNIQUE_TRAINING,
+            technique=self.technique,
+            training_points=1,
+            training_meter_size=10,
+        )
+
+        _technique_training(effect, ResolutionContext(character=self.sheet.character))
+
+        # 1 point at 50% is 0 by integer arithmetic; the learner still gets 1.
+        self.progress.refresh_from_db()
+        self.assertEqual(self.progress.points_accumulated, 1)
+
     def test_contribution_spends_ap(self):
         contribute_to_technique_progress(self.sheet, self.progress, dev_points=20)
         self.pool.refresh_from_db()

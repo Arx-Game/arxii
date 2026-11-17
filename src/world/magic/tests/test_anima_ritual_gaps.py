@@ -24,6 +24,7 @@ from world.conditions.factories import SoulfrayTemplateFactory
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     CharacterAnimaFactory,
+    ResonanceFactory,
     RitualCheckConfigFactory,
     RitualFactory,
     SoulfrayConfigFactory,
@@ -384,6 +385,23 @@ class RitualViewSetPatchTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.json())
         self.scene_config.refresh_from_db()
         self.assertEqual(self.scene_config.target_difficulty_level, 2)
+
+    def test_patch_refuses_a_resonance_the_character_does_not_hold(self) -> None:
+        """The ritual's resonance is what it earns, so a player cannot name one they never held;
+        staff may."""
+        resonance = ResonanceFactory()
+        body = {"check_config": {"resonance_id": resonance.pk}}
+        self.client.force_authenticate(user=self.author_account)
+
+        refused = self.client.patch(self._patch_url(self.scene_ritual.pk), body, format="json")
+
+        self.assertEqual(refused.status_code, status.HTTP_400_BAD_REQUEST, refused.json())
+        self.assertIn("already holds", str(refused.json()))
+        self.scene_config.refresh_from_db()
+        self.assertIsNone(self.scene_config.resonance)
+        self.client.force_authenticate(user=self.staff_account)
+        allowed = self.client.patch(self._patch_url(self.scene_ritual.pk), body, format="json")
+        self.assertEqual(allowed.status_code, status.HTTP_200_OK, allowed.json())
 
     def test_patch_without_config_preserves_top_level_update(self) -> None:
         """A missing check config does not prevent the ritual update."""
