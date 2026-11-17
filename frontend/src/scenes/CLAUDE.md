@@ -55,7 +55,7 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   `page_size=100`. The battle map's feature layer and `GMFeatureControls` are described in
   `docs/systems/areas.md`, "Features and stunts".
 - **`ActionResult.tsx`**: Action result display
-- **`ConsentPrompt.tsx`**: Consent prompt for scene actions. An `anima_ritual` request reads "<Name> asks you to take part in their ritual." followed by the request's `ritual_partner_effect` (#5181). The persona menu's scene group offers "Anima ritual" against the chosen persona; the server refuses, with its own sentence, when the ritual was already performed in the scene or the character has none.
+- **`ConsentPrompt.tsx`**: Consent prompt for scene actions. An `anima_ritual` request reads "<Name> asks you to take part in their ritual." followed by the request's `ritual_partner_effect` (#5181). The persona menu's scene group offers "Anima ritual" against the chosen persona only when the menu payload's `anima_ritual_available` is true (the viewer has a ritual set up and has not performed it in the scene); a race still shows the server's own refusal sentence.
 - **`PersonaMenu.tsx`** (#4030): The one action menu for a persona — right-click
   (Radix `ContextMenu`) anywhere, plus an optional left-click `DropdownMenu`
   trigger (`leftClick` prop, today's name-click). Since #4128 `contextMenu={false}`
