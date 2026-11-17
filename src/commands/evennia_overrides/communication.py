@@ -397,12 +397,14 @@ class CmdPose(ArxCommand):
     Usage:
         pose <text>
         pose/reflect <deed number or resonance>=<embrace|disown> <text>
+        pose/reflect mire:<Sinner>=<absolve|condemn|succumb> <text>
         pose/entreat <sineater>=<units> <text>
         pose/sineat <sinner>=<units> <text>
 
     ``pose/reflect`` poses ``<text>`` and records that it reflects on a deed (the number
-    ``reflect`` lists) or on the resonance unsettling you (its name), embracing or
-    disowning it. The room sees only the pose.
+    ``reflect`` lists), on the resonance unsettling you (its name), embracing or disowning
+    it, or on the Mire you carry for a Sinner (``mire:`` and their name), absolving,
+    condemning or succumbing to it. The room sees only the pose.
 
     ``pose/entreat`` poses ``<text>`` and asks your Sineater to take on that many units of
     your sins. ``pose/sineat`` poses ``<text>`` and performs Sineating for the Sinner whose
@@ -447,7 +449,10 @@ class CmdPose(ArxCommand):
             return reflection_kwargs_and_rest(
                 self.caller.character_sheet,
                 args,
-                usage="Usage: pose/reflect <deed or resonance>=<embrace|disown> <text>",
+                usage=(
+                    "Usage: pose/reflect <deed or resonance>=<embrace|disown> <text> | "
+                    "pose/reflect mire:<Sinner>=<absolve|condemn|succumb> <text>"
+                ),
             )
         if len(switches) == 1 and switches[0] in SINEATING_SWITCHES:
             return sineating_kwargs_and_rest(
@@ -457,7 +462,7 @@ class CmdPose(ArxCommand):
                 usage=f"Usage: pose/{switches[0]} <name>=<units> <text>",
             )
         msg = (
-            "Usage: pose <text> | pose/reflect <deed or resonance>=<embrace|disown> <text> | "
+            "Usage: pose <text> | pose/reflect <deed, resonance or mire:Sinner>=<choice> <text> | "
             "pose/entreat <sineater>=<units> <text> | pose/sineat <sinner>=<units> <text>"
         )
         raise CommandError(msg)
