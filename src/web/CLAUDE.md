@@ -55,7 +55,11 @@ This is a common oversight - the app's `urls.py` may be complete but the endpoin
 
 ### `views.py`
 - General web interface view functions
-- `FrontendAppView` serves the React `index.html` and, via `link_previews.py`, writes the
+- `FrontendAppView` serves the React `index.html`. The build is made for the site root and
+  served from `/static/dist/`, so the view puts that prefix on every root `href` and `src`
+  in the page (scripts, the stylesheet, the favicon, any other public file); the built
+  scripts and stylesheets name each other relatively and need no rewrite. Via
+  `link_previews.py` it also writes the
   requested page's title and description meta tags into it (Discord and other unfurlers never
   run JavaScript). Realm pages and public Codex entries (`/codex?entry=<id>`) preview their
   first paragraph; everything else gets the default line. Only rows an anonymous visitor can
