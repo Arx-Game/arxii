@@ -189,6 +189,7 @@ def apply_anima_ritual_outcome(
     outcome: object,
     scene: Scene,
     character_sheet: CharacterSheet,
+    partner_sheet: CharacterSheet | None = None,
 ) -> RitualOutcome:
     """Apply a pre-computed check outcome to anima/soulfray + create audit row.
 
@@ -200,6 +201,8 @@ def apply_anima_ritual_outcome(
         outcome: The check outcome / result object (must have success_level).
         scene: The scene in which the ritual is performed.
         character_sheet: The character performing the ritual.
+        partner_sheet: The character who took part (#5181), recorded on the performance row;
+            None for the solo ritual.
 
     Returns:
         RitualOutcome describing what was recovered and reduced.
@@ -275,7 +278,7 @@ def apply_anima_ritual_outcome(
         anima_recovered=anima_recovered,
         outcome=outcome,
         severity_reduced=severity_reduced,
-        target_character=None,
+        target_character=partner_sheet,
     )
 
     return RitualOutcome(

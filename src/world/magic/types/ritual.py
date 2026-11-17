@@ -7,6 +7,7 @@ from django.db import models
 
 if TYPE_CHECKING:
     from world.conditions.models import ConditionStage, ConditionTemplate
+    from world.magic.models import Resonance
     from world.magic.models.anima import AnimaRitualPerformance
     from world.mechanics.models import Property
     from world.traits.models import CheckOutcome
@@ -31,6 +32,23 @@ class RitualOutcome:
     anima_recovered: int
     soulfray_stage_after: ConditionStage | None
     soulfray_resolved: bool
+
+
+@dataclass(frozen=True)
+class RitualBond:
+    """What an Anima ritual with a partner did beyond restoring anima (#5181).
+
+    ``resonance`` is the resonance the ritual names (None when it names none, and then nothing
+    else here is set). ``resonance_granted`` is what the ledger recorded after the earn rate
+    (0 when the roll earned nothing). ``partner_fatigue_setting`` is the sign of the affinity's
+    ``ritual_partner_fatigue`` (1 takes, -1 eases, 0 does nothing); ``fatigue_change`` is the
+    fatigue the partner actually gained (positive) or lost (negative).
+    """
+
+    resonance: Resonance | None = None
+    resonance_granted: int = 0
+    partner_fatigue_setting: int = 0
+    fatigue_change: int = 0
 
 
 @dataclass(frozen=True)

@@ -1001,6 +1001,12 @@ def _resolve_accepted_action_request(
     custom_resolver = CUSTOM_ACTION_RESOLVERS.get(action_request.action_key)
     if custom_resolver is not None:
         return custom_resolver(action_request)
+    if _is_ritual_with_own_check(action_request):
+        from world.magic.services.anima_ritual_action import (  # noqa: PLC0415
+            resolve_ritual_request,
+        )
+
+        return resolve_ritual_request(action_request)
     if action_request.is_standalone_cast:
         from world.scenes.cast_services import resolve_accepted_cast  # noqa: PLC0415
 
@@ -1872,7 +1878,18 @@ def _request_is_resolvable(action_request: SceneActionRequest) -> bool:
         action_request.action_key in CUSTOM_ACTION_RESOLVERS
         or action_request.is_standalone_cast
         or action_request.action_template is not None
+        or _is_ritual_with_own_check(action_request)
     )
+
+
+def _is_ritual_with_own_check(action_request: SceneActionRequest) -> bool:
+    """True for an Anima ritual request (#5181): it has no ActionTemplate and rolls the check
+    snapshotted from the ritual itself."""
+    from world.magic.services.anima_ritual_action import (  # noqa: PLC0415
+        is_templateless_ritual_request,
+    )
+
+    return is_templateless_ritual_request(action_request)
 
 
 def _auto_resolve_npc_targets(

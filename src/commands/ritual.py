@@ -190,6 +190,9 @@ class CmdRitual(ArxCommand):
             to another resonance (leave out ``resonance=`` to list where it can go)
         ``ritual anima`` - perform your personal anima ritual in the scene you
             are in (once per scene; it eases Soulfray, then restores anima)
+        ``ritual anima <partner>`` - ask someone in the scene to take part in it. They are
+            told what it will do to their fatigue and agree with ``accept``; it then earns
+            the resonance your ritual names (#5181)
 
     **Multi-participant session lifecycle:**
         ``ritual sessions``                              - list pending sessions
@@ -209,6 +212,8 @@ class CmdRitual(ArxCommand):
     def func(self) -> None:
         """Route session subcommands; fall through to single-actor action otherwise."""
         first = (self.args or "").strip().split()[0].lower() if (self.args or "").strip() else ""
+        if self._asked_for_a_partner(first):
+            return
         if first in _SESSION_SUBCMDS:
             rest = (self.args or "").strip()[len(first) :].strip()
             try:
@@ -228,6 +233,75 @@ class CmdRitual(ArxCommand):
                 self.caller.msg(str(err))
         else:
             super().func()
+
+    # ------------------------------------------------------------------
+    # The anima ritual with a partner (#5181)
+    # ------------------------------------------------------------------
+
+    def _asked_for_a_partner(self, first: str) -> bool:
+        """Handle ``ritual anima <partner>`` and return True; False for any other line
+        (a bare ``ritual anima`` is the solo ritual, and a name with ``key=value`` after it is
+        not a partner)."""
+        partner = (self.args or "").strip()[len(first) :].strip()
+        if first != _ANIMA_SHORTHAND or not partner or "=" in partner:
+            return False
+        try:
+            self._handle_anima_with_partner(partner)
+        except CommandError as err:
+            self.caller.msg(str(err))
+        return True
+
+    def _handle_anima_with_partner(self, partner_name: str) -> None:
+        """``ritual anima <partner>``: ask the partner to take part in your anima ritual.
+
+        Opens the same consent request the web scene-action menu opens, then tells the
+        partner what is asked, what it will do to their fatigue, and how to answer. A partner
+        who is an NPC answers at once, so is not asked.
+        """
+        from django.core.exceptions import (  # noqa: PLC0415
+            ObjectDoesNotExist,
+            ValidationError,
+        )
+
+        from world.magic.services.anima_ritual_action import (  # noqa: PLC0415
+            ritual_consent_sentence,
+            start_partner_ritual,
+        )
+        from world.scenes.action_constants import ActionRequestStatus  # noqa: PLC0415
+        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        scene = get_active_scene(self.caller.location)
+        if scene is None:
+            msg = "You are not in an active scene."
+            raise CommandError(msg)
+        partner = self.search_or_raise(partner_name)
+        sheets = (self.caller.character_sheet, partner.character_sheet)
+        if None in sheets:
+            msg = "You and your partner both need a character identity."
+            raise CommandError(msg)
+        try:
+            initiator_persona = active_persona_for_sheet(sheets[0])
+            target_persona = active_persona_for_sheet(sheets[1])
+        except ObjectDoesNotExist as err:
+            msg = "You and your partner both need a character identity."
+            raise CommandError(msg) from err
+        try:
+            request = start_partner_ritual(
+                scene=scene, initiator_persona=initiator_persona, target_persona=target_persona
+            )
+        except ValidationError as err:
+            raise CommandError("; ".join(err.messages)) from err
+        if request.status != ActionRequestStatus.PENDING:
+            return
+        self.caller.msg(
+            f"You ask {target_persona.name} to take part in your ritual. "
+            f"Awaiting their response (request #{request.pk})."
+        )
+        sentence = ritual_consent_sentence(request)
+        asked = f"{initiator_persona.name} asks you to take part in their ritual."
+        how = f"Type |waccept {request.pk}|n to agree or |wdeny {request.pk}|n to refuse."
+        partner.msg(" ".join(part for part in (asked, sentence, how) if part))
 
     # ------------------------------------------------------------------
     # Session handlers

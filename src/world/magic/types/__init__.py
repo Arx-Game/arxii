@@ -50,6 +50,7 @@ from world.magic.types.pull import (
 from world.magic.types.ritual import (
     AnimaRegenTickSummary,
     AnimaRitualCategory,
+    RitualBond,
     RitualOutcome,
     SoulfrayContent,
 )
@@ -106,6 +107,7 @@ __all__ = [
     "ResonanceInvolvement",
     "ResonancePullResult",
     "ResonanceWeeklySettlementSummary",
+    "RitualBond",
     "RitualOutcome",
     "RuntimeTechniqueStats",
     "SettlementResult",
