@@ -155,22 +155,20 @@ class SubstancePropertyPreTickTests(TestCase):
     def test_the_add_form_on_a_gift_ticks_its_substance_property(self):
         from world.locations.constants import StatKey
         from world.magic.constants import SubstanceDirection
-        from world.magic.factories import GiftFactory
-        from world.magic.models import GiftSubstance
+        from world.magic.factories import GiftFactory, SubstanceFactory
         from world.mechanics.factories import PropertyFactory
 
         staff = AccountDB.objects.create_superuser("pretick5066", "p@example.com", "pw-5066")
         self.client.force_login(staff)
-        gift = GiftFactory(name="Umbra")
         shadow = PropertyFactory(name="shadow-pretick")
         other = PropertyFactory(name="flame-pretick")
-        GiftSubstance.objects.create(
-            gift=gift,
-            label="shadow",
+        substance = SubstanceFactory(
+            name="shadow",
             stat_key=StatKey.LIGHTING,
             direction=SubstanceDirection.FALLING,
             property=shadow,
         )
+        gift = GiftFactory(name="Umbra", substance=substance)
 
         response = self.client.get(reverse("admin:arxii_technique_add"), {"gift": gift.pk})
 

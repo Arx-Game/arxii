@@ -98,19 +98,18 @@ class CreateTechniqueHelperTests(TestCase):
         """A new technique starts with its gift's substance mark ticked (#5066)."""
         from world.locations.constants import StatKey
         from world.magic.constants import SubstanceDirection
-        from world.magic.models import GiftSubstance
+        from world.magic.factories import SubstanceFactory
         from world.mechanics.factories import PropertyFactory
 
         sheet = CharacterSheetFactory()
-        gift = GiftFactory(creator=sheet)
         shadow = PropertyFactory(name="shadow-mark-test")
-        GiftSubstance.objects.create(
-            gift=gift,
-            label="shadow",
+        substance = SubstanceFactory(
+            name="shadow",
             stat_key=StatKey.LIGHTING,
             direction=SubstanceDirection.FALLING,
             property=shadow,
         )
+        gift = GiftFactory(creator=sheet, substance=substance)
         tech = create_technique(
             creator=sheet,
             name="Umbral Step",
