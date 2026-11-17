@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -322,40 +322,7 @@ class ResonanceEnvironmentConfig(SharedMemoryModel):
         ),
     )
 
-    # --- Gift substance (#5018): one place to tune every gift's substance ---
-    substance_power_at_full = models.PositiveSmallIntegerField(
-        verbose_name="Power at full strength",
-        default=10,
-        help_text=(
-            "Power a caster with a level-10 gift thread gains in a room full of her gift's "
-            "substance (and loses in one full of its opposite). Scaled by her thread level."
-        ),
-    )
-    substance_present_pct = models.PositiveSmallIntegerField(
-        verbose_name="Counts as present at (% of full strength)",
-        default=50,
-        validators=[MinValueValidator(1), MaxValueValidator(100)],
-        help_text=(
-            "How far toward the gift's full strength a room must be, as a percent, for its "
-            "substance to count as present. 1 to 100."
-        ),
-    )
-    substance_anima_per_measure = models.PositiveSmallIntegerField(
-        verbose_name="Anima to call it up to full strength",
-        default=5,
-        help_text=(
-            "Anima to call the substance up from an ordinary room to full strength, before "
-            "control; less for a smaller change. High control covers it."
-        ),
-    )
-    substance_resonance_per_measure = models.PositiveSmallIntegerField(
-        verbose_name="Resonance to call it up to full strength",
-        default=2,
-        help_text=(
-            "Resonance to call the substance up from an ordinary room to full strength. Spent "
-            "only on the share control does not cover."
-        ),
-    )
+    # --- Gift substance (#5018, #5125): place discount and unmet surroundings ---
     substance_place_cap_pct = models.PositiveSmallIntegerField(
         verbose_name="Largest place discount or surcharge (%)",
         default=50,

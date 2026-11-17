@@ -995,8 +995,18 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         return list(self.function_tags.all())
 
     def has_property(self, name: str) -> bool:
-        """Return True if this technique carries the named Property tag."""
-        return self.properties.filter(name=name).exists()
+        """Return True if this technique carries the named Property.
+
+        Reads its ticked marks and its gift substance's property through the one seam the
+        capability sources and clashes use (``effect_property_ids_by_technique``).
+        """
+        from world.magic.services.technique_marks import (  # noqa: PLC0415
+            effect_property_ids_by_technique,
+        )
+        from world.mechanics.models import Property  # noqa: PLC0415
+
+        ids = effect_property_ids_by_technique([self.pk])[self.pk]
+        return Property.objects.filter(pk__in=ids, name=name).exists()
 
     def __str__(self) -> str:
         return f"{self.name} ({self.gift})"

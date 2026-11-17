@@ -349,8 +349,9 @@ still-deferred general targeting model (AoE constraints, frontend target picker)
 properties that say how it works (a blink carries `teleport`, #5066, ADR-5066). They are its
 effect properties for capability sources, applications and clash opposition
 (`services/technique_marks.py`, `effect_property_ids_by_technique`); the gift's resonances
-never count, and `GiftSubstance.property` only pre-ticks one on a new technique
-(`tick_substance_mark`). `Technique.has_property(name)` reads them too; this is
+never count. A major gift's `Substance.property` is carried by every technique of the gift and
+its child gifts, read at call time by the same seam and stored nowhere, so staff cannot untick
+it (#5125). `Technique.has_property(name)` reads through the seam too; this is
 separate from `Character.has_property`, which checks a *character's* Property
 attachments (both the primary persona's authored identity tags and runtime
 `ObjectProperty` rows, #1793) and backs the `has_property` reactive-trigger DSL op.

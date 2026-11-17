@@ -228,12 +228,12 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
                 <td>{{ new.gift.errors }}
                   <select name="new-gift" id="id_new-gift">
                     <option value="">---------</option>
-                    {% for gift, label, substance in gift_options %}
-                    <option value="{{ gift.pk }}" data-substance="{{ substance.name|default:'' }}"
+                    {% for gift, label, carried in gift_options %}
+                    <option value="{{ gift.pk }}" data-carries="{{ carried.name|default:'' }}"
                       {% if new.gift.value|stringformat:"s" == gift.pk|stringformat:"s" %}selected{% endif %}>{{ label }}</option>
                     {% endfor %}
                   </select>
-                  <div class="help">Its substance property is ticked as well, if it has one; untick it below.</div></td></tr>
+                  <div class="help" data-carries-note hidden></div></td></tr>
               <tr><th scope="row"><label for="id_new-path_grant">Path</label></th>
                 <td>{{ new.path_grant.errors }}
                   <select name="new-path_grant" id="id_new-path_grant">
@@ -248,7 +248,6 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
               <tr><th scope="row">Properties</th>
                 <td>
                   {% if page.required %}<label class="pb-box" for="{{ new.with_app_property.id_for_label }}">{{ new.with_app_property }} {{ page.required.name }}</label><span class="pb-pre">from this application</span>{% endif %}
-                  <span data-substance-row><label class="pb-box" for="{{ new.with_substance.id_for_label }}">{{ new.with_substance }} <span data-substance-label>substance property</span></label><span class="pb-pre">gift's substance</span></span>
                 </td></tr>
               <tr><th scope="row">Grants {{ page.capability.name }}</th>
                 <td>{{ new.grant_base.errors }}{{ new.grant_per_power.errors }}
@@ -280,11 +279,10 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
   var gift = document.getElementById("id_new-gift");
   var path = document.getElementById("id_new-path_grant");
   if (!gift || !path) { return; }
-  var substanceRow = document.querySelector("[data-substance-row]");
-  var substanceLabel = document.querySelector("[data-substance-label]");
+  var carriesNote = document.querySelector("[data-carries-note]");
 
-  // Only the paths with a grant of the chosen gift are offered, and the substance
-  // tick names the chosen gift's substance property (hidden when it has none).
+  // Only the paths with a grant of the chosen gift are offered, and a note names the chosen
+  // gift's substance property, which its techniques carry (hidden when it has none).
   function refresh() {
     var chosen = gift.value;
     for (var option of path.options) {
@@ -295,9 +293,9 @@ extending `base_site.html` asks for it itself (#3667), and `widgets.css` with it
       if (!fits && option.selected) { path.value = ""; }
     }
     var picked = gift.options[gift.selectedIndex];
-    var substance = picked ? picked.dataset.substance : "";
-    substanceLabel.textContent = substance || "";
-    substanceRow.hidden = !substance;
+    var carries = picked ? picked.dataset.carries : "";
+    carriesNote.textContent = carries ? "Carries " + carries + " from its substance." : "";
+    carriesNote.hidden = !carries;
   }
   gift.addEventListener("change", refresh);
   refresh();

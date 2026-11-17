@@ -814,21 +814,6 @@ class TechniqueAdmin(admin.ModelAdmin):
         """The same plain-words line players read on every surface."""
         return obj.cached_effect_summary["summary"]
 
-    def get_changeform_initial_data(self, request):
-        """A new technique opened on a gift (``?gift=<pk>``) starts with that gift's
-        substance mark ticked (#5066); staff untick it where it does not belong."""
-        from world.magic.services.technique_marks import substance_mark_for  # noqa: PLC0415
-
-        initial = super().get_changeform_initial_data(request)
-        marks_field = "properties"  # noqa: STRING_LITERAL - the form field the marks fill
-        gift_pk = initial.get("gift")
-        if gift_pk and marks_field not in initial:
-            gift = Gift.objects.filter(pk=gift_pk).first()
-            mark = substance_mark_for(gift)
-            if mark is not None:
-                initial[marks_field] = [mark.pk]
-        return initial
-
     def save_related(self, request, form, formsets, change):
         """Rebuild the derived effect caches after an inline payload edit (#2898).
 
@@ -3685,10 +3670,6 @@ class ResonanceEnvironmentConfigAdmin(admin.ModelAdmin):
     inlines = [PrimumStepInline, SubstancePowerStepInline, HarvestOutcomeInline]
 
     _SUBSTANCE_FIELDS = (
-        "substance_power_at_full",
-        "substance_present_pct",
-        "substance_anima_per_measure",
-        "substance_resonance_per_measure",
         "substance_place_cap_pct",
         "unmet_surroundings_penalty_pct",
     )

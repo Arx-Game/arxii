@@ -148,11 +148,11 @@ class TechniqueCastTemplateActionTests(TestCase):
         invalidate.assert_called_once()
 
 
-class SubstancePropertyPreTickTests(TestCase):
-    """A new technique opened on a gift starts with the gift's substance property ticked
-    (#5066 decision 10); staff can untick it before saving."""
+class SubstancePropertyIsCarriedTests(TestCase):
+    """A gift's substance property is carried by its techniques, so the add form on a gift
+    ticks nothing (#5125); the box could not remove it anyway."""
 
-    def test_the_add_form_on_a_gift_ticks_its_substance_property(self):
+    def test_the_add_form_on_a_gift_ticks_nothing(self):
         from world.locations.constants import StatKey
         from world.magic.constants import SubstanceDirection
         from world.magic.factories import GiftFactory, SubstanceFactory
@@ -160,19 +160,15 @@ class SubstancePropertyPreTickTests(TestCase):
 
         staff = AccountDB.objects.create_superuser("pretick5066", "p@example.com", "pw-5066")
         self.client.force_login(staff)
-        shadow = PropertyFactory(name="shadow-pretick")
-        other = PropertyFactory(name="flame-pretick")
         substance = SubstanceFactory(
             name="shadow",
             stat_key=StatKey.LIGHTING,
             direction=SubstanceDirection.FALLING,
-            property=shadow,
+            property=PropertyFactory(name="shadow-pretick"),
         )
         gift = GiftFactory(name="Umbra", substance=substance)
 
         response = self.client.get(reverse("admin:arxii_technique_add"), {"gift": gift.pk})
 
         self.assertEqual(response.status_code, 200)
-        form = response.context["adminform"].form
-        self.assertEqual(list(form.initial["properties"]), [shadow.pk])
-        self.assertNotIn(other.pk, form.initial["properties"])
+        self.assertNotIn("properties", response.context["adminform"].form.initial)

@@ -56,10 +56,11 @@ from world.magic.constants import GiftKind, SubstanceDirection
 from world.magic.factories import (
     GiftFactory,
     PathGiftGrantFactory,
+    SubstanceFactory,
     TechniqueCapabilityGrantFactory,
     TechniqueFactory,
 )
-from world.magic.models import GiftSubstance, Technique, TechniqueCapabilityGrant
+from world.magic.models import Technique, TechniqueCapabilityGrant
 from world.mechanics.factories import (
     ModifierTargetFactory,
     MovementApplicationFactory,
@@ -193,13 +194,14 @@ class PowerBuilder(JourneyCase):
         self.shadow_gift = GiftFactory(name="Shadow")
         self.storm_gift = GiftFactory(name="Storm", kind=GiftKind.MINOR)
         self.flame_gift = GiftFactory(name="Flame")
-        GiftSubstance.objects.create(
-            gift=self.flame_gift,
-            label="flame",
+        flame_substance = SubstanceFactory(
+            name="flame",
             stat_key=StatKey.LIGHTING,
             direction=SubstanceDirection.FALLING,
             property=self.flame,
         )
+        self.flame_gift.substance = flame_substance
+        self.flame_gift.save(update_fields=["substance"])
         skirmisher = PathFactory(name="Skirmisher")
         self.shadow_path = PathGiftGrantFactory(path=skirmisher, gift=self.shadow_gift)
         self.flame_path = PathGiftGrantFactory(path=skirmisher, gift=self.flame_gift)
@@ -356,9 +358,9 @@ class PowerBuilder(JourneyCase):
 
         self.assertEqual(response.status_code, 302, response.content.decode()[:2000])
         added = Technique.objects.get(gift=self.flame_gift, name="Flame Step")
-        self.assertEqual(
-            set(added.properties.values_list("name", flat=True)), {"teleport", "flame"}
-        )
+        # The application's property is ticked; the gift's substance property is carried.
+        self.assertEqual(set(added.properties.values_list("name", flat=True)), {"teleport"})
+        self.assertTrue(added.has_property("flame"))
         grant = TechniqueCapabilityGrant.objects.get(technique=added)
         self.assertEqual((grant.capability_id, grant.base_value), (self.traversal.pk, 3))
         self.assertEqual(grant.intensity_multiplier, Decimal(1))

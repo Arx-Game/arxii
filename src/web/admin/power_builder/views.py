@@ -45,7 +45,6 @@ from world.contributors.models import ContentContributor, CreditedContent
 from world.magic.models import Gift, PathGiftGrant, Technique, TechniqueCapabilityGrant
 from world.magic.services.technique_builder import create_technique
 from world.magic.services.technique_effects import invalidate_technique_payload_caches
-from world.magic.services.technique_marks import substance_mark_for
 from world.mechanics.models import Application
 
 #: What a technique added here starts with; "edit all" changes any of them.
@@ -242,8 +241,10 @@ def _save_techniques(page: live.PowerPage, forms: _Forms) -> list[Technique]:
         form = forms.techniques[row.technique.pk]
         data = form.cleaned_data
         candidate_ids = {prop.pk for prop in row.candidates}
-        wanted = (row.property_ids - candidate_ids) | set(data["properties"])
-        changed = _set_properties(row.technique, row.property_ids, wanted)
+        # The gift's substance property is carried, never stored: it stays out of both sides.
+        stored = row.property_ids - row.carried_ids
+        wanted = ((stored - candidate_ids) | set(data["properties"])) - row.carried_ids
+        changed = _set_properties(row.technique, stored, wanted)
         grant = row.grant
         if grant is not None and data.get("remove_grant"):
             # The technique stops doing this capability; with the property it lists under
@@ -329,14 +330,6 @@ def _add_technique(app: Application, page: live.PowerPage, form: NewTechniqueFor
     required = app.required_effect_property
     if required is not None and data["with_app_property"]:
         technique.properties.add(required)
-    substance = substance_mark_for(gift)
-    keep_required = required is not None and data["with_app_property"]
-    if (
-        substance is not None
-        and not data["with_substance"]
-        and not (keep_required and substance.pk == required.pk)
-    ):
-        technique.properties.remove(substance)
     TechniqueCapabilityGrant.objects.create(
         technique=technique,
         capability=page.capability,

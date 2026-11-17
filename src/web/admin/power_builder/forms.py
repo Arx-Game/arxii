@@ -210,7 +210,6 @@ class NewTechniqueForm(forms.Form):
     )
     name = _model_field(Technique, "name", required=False)
     with_app_property = forms.BooleanField(required=False, initial=True)
-    with_substance = forms.BooleanField(required=False, initial=True)
 
     def __init__(self, *args: object, **kwargs: object) -> None:
         super().__init__(*args, **kwargs)
