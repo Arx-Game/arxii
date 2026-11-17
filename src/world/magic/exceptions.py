@@ -1063,3 +1063,9 @@ class ManifestChoiceError(MagicError):
         super().__init__(user_message)
         if user_message:
             self.user_message = user_message
+
+
+class HarvestNotConfigured(MagicError):
+    """Staff have not set up Primum harvesting: no check, no skill, or no Primum item (#5125)."""
+
+    user_message = "Primum cannot be extracted yet."

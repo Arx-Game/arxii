@@ -23,6 +23,7 @@ from evennia_extensions.models import (
     RoomSizeTier,
 )
 from world.admin_utils import OneRowPerFormSet
+from world.magic.models import PlacePrimum
 
 logger = logging.getLogger(__name__)
 
@@ -321,13 +322,34 @@ class RoomDescVariantInline(admin.TabularInline):
     fields: ClassVar[list[str]] = ["season", "phase", "description"]
 
 
+class PlacePrimumInline(admin.TabularInline):
+    """The Primum a lair holds, one row per substance (#5125)."""
+
+    model = PlacePrimum
+    formset = OneRowPerFormSet
+    extra = 0
+    verbose_name = "Primum held here"
+    verbose_name_plural = "Primum held here"
+    autocomplete_fields: ClassVar[list[str]] = ["substance"]
+    fields: ClassVar[list[str]] = [
+        "substance",
+        "capacity",
+        "stored_amount",
+        "refill_per_day",
+        "is_finite",
+    ]
+
+
 @admin.register(RoomProfile)
 class RoomProfileAdmin(admin.ModelAdmin):
     list_display: ClassVar[list[str]] = ["objectdb", "area", "size", "is_outdoor", "is_public"]
     list_filter: ClassVar[list[str]] = ["area__level", "is_outdoor", "is_public", "size"]
     search_fields: ClassVar[list[str]] = ["objectdb__db_key"]
     autocomplete_fields: ClassVar[list[str]] = ["area", "objectdb"]
-    inlines: ClassVar[list[type[admin.TabularInline]]] = [RoomDescVariantInline]
+    inlines: ClassVar[list[type[admin.TabularInline]]] = [
+        RoomDescVariantInline,
+        PlacePrimumInline,
+    ]
 
 
 @admin.register(RoomSizeTier)

@@ -24,3 +24,37 @@ class SourcePoints:
     points: int
     substance_id: int
     item_id: int | None = None
+
+
+@dataclass(frozen=True)
+class HarvestOffer:
+    """One Primum a character can extract where she stands.
+
+    ``source`` is ``"place"`` (a lair's stock) or ``"creature"`` (a slain foe). A creature
+    offer names the foe in ``opponent_id`` and ``opponent_name``; a place offer leaves them
+    empty. ``step_name`` is the step the source reads at now.
+    """
+
+    substance_id: int
+    substance_name: str
+    source: str
+    opponent_id: int | None
+    opponent_name: str
+    step_name: str
+
+
+@dataclass(frozen=True)
+class HarvestResult:
+    """What one extract attempt came to.
+
+    ``harvested`` is true when Primum was taken. ``amount_taken`` is the Primum that left the
+    source, ``quantity`` the items minted, ``outcome_name`` the rolled outcome ("" when no
+    roll was made), ``message`` the sentence the harvester reads.
+    """
+
+    harvested: bool
+    substance_name: str
+    amount_taken: int
+    quantity: int
+    outcome_name: str
+    message: str

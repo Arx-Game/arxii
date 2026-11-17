@@ -113,9 +113,12 @@ def reveal(sheet: CharacterSheet, room: ObjectDB, scope: str) -> list[Substance]
         )
     )
     PrimumSighting.objects.bulk_create(
-        PrimumSighting(character_sheet=sheet, room_profile=profile, substance=substance)
-        for substance in named
-        if substance.pk not in known
+        [
+            PrimumSighting(character_sheet=sheet, room_profile=profile, substance=substance)
+            for substance in named
+            if substance.pk not in known
+        ],
+        ignore_conflicts=True,
     )
     return named
 

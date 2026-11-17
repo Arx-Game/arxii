@@ -84,6 +84,16 @@ def step_for(amount: int) -> PrimumStep | None:
     return _step_in(_steps(), amount)
 
 
+def step_names_for(amounts: Sequence[int]) -> list[str]:
+    """The step name each amount reads as ("" below the first step), with one read of the steps."""
+    steps = _steps()
+    names = []
+    for amount in amounts:
+        step = _step_in(steps, amount)
+        names.append(step.name if step is not None else "")
+    return names
+
+
 def _profile(room: ObjectDB) -> RoomProfile | None:
     try:
         return room.room_profile

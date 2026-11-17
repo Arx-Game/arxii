@@ -89,18 +89,38 @@ class PlacePrimum(NaturalKeyMixin, SharedMemoryModel):
     def __str__(self) -> str:
         return f"{self.substance} in {self.room_profile_id}"
 
-    def current_amount(self, now: datetime | None = None) -> int:
-        """The Primum held at ``now`` (default: the present).
+    @staticmethod
+    def amount_at(  # noqa: PLR0913 - the six stored facts of one row, read as values under lock
+        *,
+        stored_amount: int,
+        stamped_at: datetime,
+        refill_per_day: int,
+        capacity: int,
+        is_finite: bool,
+        now: datetime | None = None,
+    ) -> int:
+        """The Primum a row with these stored facts holds at ``now`` (default: the present).
 
         A finite place answers ``stored_amount``. Any other place gains ``refill_per_day`` for
         every whole day since ``stamped_at`` and never holds more than ``capacity``. A clock
         reading earlier than ``stamped_at`` counts as no time passed.
         """
-        if self.is_finite:
-            return self.stored_amount
+        if is_finite:
+            return stored_amount
         moment = now if now is not None else timezone.now()
-        whole_days = max((moment - self.stamped_at).days, 0)
-        return min(self.capacity, self.stored_amount + self.refill_per_day * whole_days)
+        whole_days = max((moment - stamped_at).days, 0)
+        return min(capacity, stored_amount + refill_per_day * whole_days)
+
+    def current_amount(self, now: datetime | None = None) -> int:
+        """The Primum this place holds at ``now`` (default: the present)."""
+        return self.amount_at(
+            stored_amount=self.stored_amount,
+            stamped_at=self.stamped_at,
+            refill_per_day=self.refill_per_day,
+            capacity=self.capacity,
+            is_finite=self.is_finite,
+            now=now,
+        )
 
 
 class CreaturePrimumManager(NaturalKeyManager):
