@@ -2,7 +2,7 @@
  * MotifStylePanel tests (#2030) — player-facing Motif style-binding management.
  *
  * Mirrors SpellbookTab.test.tsx's renderWithProviders setup + the
- * mock-the-hook-module idiom used by SineatingRequestDialog.test.tsx (no msw).
+ * mock-the-hook-module idiom (no msw).
  */
 
 import { screen } from '@testing-library/react';

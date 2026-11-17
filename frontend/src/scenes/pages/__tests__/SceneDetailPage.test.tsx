@@ -1,8 +1,8 @@
 /**
  * SceneDetailPage smoke test
  *
- * Verifies that SineatingInbox and SoulTetherRescuePrompt are mounted on the
- * scene detail page alongside ConsentPrompt when a scene is active.
+ * Verifies that SoulTetherRescuePrompt is mounted on the scene detail page alongside
+ * ConsentPrompt when a scene is active.
  *
  * Heavily mocks scene queries, action queries, and magic queries so this test
  * doesn't require a live backend. The new components are self-fetching; when
@@ -267,12 +267,6 @@ vi.mock('../../hooks/usePendingUnlinkedActions', () => ({
 // Mock magic queries — both inbox components self-fetch with these hooks
 // ---------------------------------------------------------------------------
 
-const mockUsePendingSineatingOffers = vi.fn(() => ({
-  data: { count: 0, next: null, previous: null, results: [] },
-  isLoading: false,
-  isError: false,
-}));
-
 const mockUsePendingStageAdvanceOffers = vi.fn(() => ({
   data: { count: 0, next: null, previous: null, results: [] },
   isLoading: false,
@@ -281,9 +275,7 @@ const mockUsePendingStageAdvanceOffers = vi.fn(() => ({
 
 vi.mock('@/magic/queries', () => ({
   useKindledResonances: () => ({ data: [] }),
-  usePendingSineatingOffers: () => mockUsePendingSineatingOffers(),
   usePendingStageAdvanceOffers: () => mockUsePendingStageAdvanceOffers(),
-  useRespondToSineating: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   useRespondToStageAdvance: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   usePendingEntryFlourishOffers: () => ({ data: { results: [] } }),
   useRespondToEntryFlourish: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
@@ -335,7 +327,7 @@ vi.mock('@/store/hooks', () => ({
   })),
 }));
 
-// Mock react-redux useSelector used by SineatingInbox and SoulTetherRescuePrompt
+// Mock react-redux useSelector used by SoulTetherRescuePrompt
 vi.mock('react-redux', async (importOriginal) => {
   const actual = await importOriginal<typeof import('react-redux')>();
   return {
@@ -580,18 +572,6 @@ describe('SceneDetailPage', () => {
 
     expect(await screen.findByText('Cassia Vell')).toBeInTheDocument();
     expect(screen.getByText("This face isn't on the public roster.")).toBeInTheDocument();
-  });
-
-  it('queries pending sineating offers (SineatingInbox is mounted)', () => {
-    renderWithProviders(
-      <Routes>
-        <Route path="/scenes/:id" element={<SceneDetailPage />} />
-      </Routes>,
-      { initialEntries: ['/scenes/1'] }
-    );
-
-    // If the hook was called, the inbox component is mounted
-    expect(mockUsePendingSineatingOffers).toHaveBeenCalled();
   });
 
   it('queries pending stage-advance offers (SoulTetherRescuePrompt is mounted)', () => {

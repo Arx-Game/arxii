@@ -57,6 +57,7 @@ function makeTetherDetail(overrides: Partial<SoulTetherDetail> = {}): SoulTether
     sineater_lifetime_helped: 42,
     sinner_corruption_stage: 1,
     sineater_strain_stage: 0,
+    mire: [],
     ...overrides,
   };
 }

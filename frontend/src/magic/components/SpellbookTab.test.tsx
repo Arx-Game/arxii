@@ -23,7 +23,6 @@ import { fileURLToPath } from 'node:url';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { SpellbookTab } from './SpellbookTab';
-import { shareInWords } from '@/magic/aura';
 import type {
   CharacterSheetPayload,
   CharacterSheetMagic,
@@ -112,7 +111,7 @@ vi.mock('@/magic/queries', () => ({
   }),
 }));
 
-// Who the character is, unsettled or not, and the Mire's share come from the aura endpoint;
+// Who the character is and whether they are unsettled come from the aura endpoint;
 // the sheet payload carries the shares only.
 vi.mock('@/magic/auraQueries', () => ({
   useCharacterAuras: vi.fn(),
@@ -298,7 +297,6 @@ function makeOwnAura(overrides: Partial<CharacterAura> = {}): CharacterAura {
     unsettled: false,
     unsettled_line: '',
     unsettled_affinity_name: '',
-    mire_share_words: 'none',
     glimpse_state: 'COMPLETE',
     updated_at: '2026-11-14T00:00:00Z',
     ...overrides,
@@ -547,7 +545,7 @@ describe('SpellbookTab', () => {
     expect(screen.queryByTestId('aura-reflections')).not.toBeInTheDocument();
   });
 
-  it('draws the Mire apart from the Sineater own Abyssal (#5123)', () => {
+  it('draws only the character own shares, with no Mire band (#5177)', () => {
     mockPayload(
       makeMagic({
         aura: makeAura({
@@ -559,48 +557,14 @@ describe('SpellbookTab', () => {
         }),
       })
     );
-    mockOwnAuras([makeOwnAura({ mire_share_words: 'a third' })]);
+    mockOwnAuras([makeOwnAura()]);
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
 
-    expect(screen.getByTestId('aura-halo')).toHaveAttribute(
-      'data-affinities',
-      'celestial abyssal mire'
-    );
-    const key = screen.getByTestId('aura-halo-mire-key');
-    expect(key).toHaveTextContent('your own');
-    expect(key).toHaveTextContent('from the Mire');
-    // The sentence reads every share against the whole the halo draws, Mire included:
-    // 56 of 100 is half, not "nearly all", and the own Abyssal is a tenth, not a fifth.
-    const sentence = screen.getByTestId('aura-halo-sentence');
-    expect(sentence).toHaveTextContent(/^Half celestial, a tenth abyssal\./);
-    // The Mire's part is said apart, as its own sentence after the character's.
-    expect(screen.getByTestId('aura-halo-mire-line')).toHaveTextContent(
-      /^A third of what you have gained came from the Mire\.$/
-    );
-    expect(sentence).toContainElement(screen.getByTestId('aura-halo-mire-line'));
-  });
-
-  it('says a Sineater share in the same words the halo draws it (#5123)', () => {
-    // Celestial 56, Abyssal 44, a third of everything from the Mire: the halo draws the
-    // celestial stretch as 56% of the whole, so the first word is shareInWords(56, 100).
-    mockPayload(
-      makeMagic({
-        aura: makeAura({
-          shares: [
-            { affinity_id: 1, affinity_name: 'Celestial', percent: 56 },
-            { affinity_id: 3, affinity_name: 'Abyssal', percent: 44 },
-          ],
-          dominant_affinity: 'Celestial',
-        }),
-      })
-    );
-    mockOwnAuras([makeOwnAura({ mire_share_words: 'a third' })]);
-    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter />);
-
-    const lead = shareInWords(56, 100);
-    expect(lead).toBe('half');
-    expect(screen.getByTestId('aura-halo-sentence').textContent?.toLowerCase()).toMatch(
-      new RegExp(`^${lead} celestial`)
+    expect(screen.getByTestId('aura-halo')).toHaveAttribute('data-affinities', 'celestial abyssal');
+    expect(screen.queryByTestId('aura-halo-mire-key')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('aura-halo-mire-line')).not.toBeInTheDocument();
+    expect(screen.getByTestId('aura-halo-sentence')).toHaveTextContent(
+      /^Half celestial, half abyssal\.$/
     );
   });
 

@@ -856,8 +856,6 @@
   --aura-primal-glow: #7fd1b9;
   --aura-abyssal: #5b2a6f;
   --aura-abyssal-glow: #b0559a;
-  --aura-mire: #4b4a35;
-  --aura-mire-glow: #8a8660;
   --aura-other: #8a8a8a;
   --aura-warn: hsl(28 70% 36%);
 }
@@ -970,29 +968,6 @@
   font-size: 0.78rem;
   font-weight: 600;
 }
-.aura-halo-key {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-  font-family: var(--sheet-sans);
-  font-size: 0.78rem;
-  color: hsl(var(--muted-foreground));
-}
-.aura-halo-key i {
-  display: inline-block;
-  width: 0.65rem;
-  height: 0.65rem;
-  border-radius: 50%;
-  margin-right: 0.3rem;
-  vertical-align: -1px;
-}
-.aura-halo-swatch-own {
-  background: var(--aura-abyssal);
-}
-.aura-halo-swatch-mire {
-  background: var(--aura-mire);
-}
-
 /* The Settle your aura dialog and the Pull Threads dialog portal out of `.refsheet`, so the
    rust the sheet falls back on for a visitor with no realm (see the top of this file) does
    not reach them. Their buttons read `--primary` (Accept and Not now; the selected tier and

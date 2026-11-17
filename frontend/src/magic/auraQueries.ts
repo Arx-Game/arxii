@@ -2,7 +2,7 @@
  * The aura's own endpoint (#5123): reading a character's settled aura.
  *
  * The sheet payload carries the aura's shares only; who the character is (the settled
- * shares), whether they are unsettled and the Mire's share come from
+ * shares) and whether they are unsettled come from
  * `/api/magic/character-auras/`, which lists the auras of characters the caller plays.
  */
 

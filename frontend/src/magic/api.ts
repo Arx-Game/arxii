@@ -55,7 +55,6 @@ import type {
   PaginatedPendingAudereMajoraOfferList,
   PaginatedPendingEntryFlourishOfferList,
   PaginatedPendingStageAdvanceOfferList,
-  PaginatedSineatingPendingOfferList,
   PaginatedStyleList,
   PaginatedTeachingOfferList,
   PaginatedThreadList,
@@ -70,11 +69,6 @@ import type {
   RescueRequest,
   SetGlimpseProseRequest,
   SetGlimpseTagsRequest,
-  SineatingOffer,
-  SineatingPendingOffer,
-  SineatingRequest,
-  SineatingRespondRequest,
-  SineatingResult,
   SoulTetherDetail,
   StageAdvanceBonusResult,
   StageAdvanceRespondRequest,
@@ -144,17 +138,6 @@ export async function getSoulTetherDetail(relationshipId: number): Promise<SoulT
 }
 
 /**
- * GET /api/magic/soul-tether/sineating/pending/
- *
- * Sineater-facing inbox: pending Sineating offers addressed to the caller.
- */
-export async function getPendingSineatingOffers(): Promise<PaginatedSineatingPendingOfferList> {
-  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/pending/`);
-  if (!res.ok) throw new Error('Failed to load pending Sineating offers');
-  return res.json() as Promise<PaginatedSineatingPendingOfferList>;
-}
-
-/**
  * GET /api/magic/soul-tether/stage-advance/pending/
  *
  * Sineater-facing inbox: pending stage-advance bonus offers.
@@ -184,46 +167,6 @@ export async function dissolveSoulTether(body: DissolveRequest): Promise<void> {
   if (!res.ok) {
     await readErrorDetail(res, 'Failed to dissolve Soul Tether');
   }
-}
-
-/**
- * POST /api/magic/soul-tether/sineating/request/
- *
- * Sinner initiates a Sineating offer. Returns the SineatingOffer payload so the
- * Sineater can respond via /sineating/respond/.
- */
-export async function requestSineating(body: SineatingRequest): Promise<SineatingOffer> {
-  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/request/`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    await readErrorDetail(res, 'Failed to send Sineating request');
-  }
-
-  return res.json() as Promise<SineatingOffer>;
-}
-
-/**
- * POST /api/magic/soul-tether/sineating/respond/
- *
- * Sineater accepts or declines a pending Sineating offer (units_accepted=0 = decline).
- * Returns SineatingResult with the outcome.
- */
-export async function respondToSineating(body: SineatingRespondRequest): Promise<SineatingResult> {
-  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/respond/`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    await readErrorDetail(res, 'Failed to respond to Sineating offer');
-  }
-
-  return res.json() as Promise<SineatingResult>;
 }
 
 /**
@@ -329,15 +272,6 @@ export async function fetchCharacterGifts(characterId: number): Promise<Characte
 // ---------------------------------------------------------------------------
 // Pending offer detail reads (used for refresh after mutation)
 // ---------------------------------------------------------------------------
-
-/**
- * GET /api/magic/soul-tether/sineating/pending/{id}/
- */
-export async function getPendingSineatingOffer(id: number): Promise<SineatingPendingOffer> {
-  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/pending/${id}/`);
-  if (!res.ok) throw new Error(`Failed to load Sineating offer ${id}`);
-  return res.json() as Promise<SineatingPendingOffer>;
-}
 
 /**
  * GET /api/magic/soul-tether/stage-advance/pending/{id}/

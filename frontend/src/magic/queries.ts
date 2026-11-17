@@ -35,8 +35,6 @@ import type {
   RescueRequest,
   SetGlimpseProseRequest,
   SetGlimpseTagsRequest,
-  SineatingRequest,
-  SineatingRespondRequest,
   StageAdvanceRespondRequest,
   TechniqueDesignRequest,
   TrainTechniqueRequest,
@@ -54,9 +52,6 @@ export const magicKeys = {
   soulTether: () => [...magicKeys.all, 'soul-tether'] as const,
   soulTetherDetail: (relationshipId: number) =>
     [...magicKeys.soulTether(), 'detail', relationshipId] as const,
-
-  sineatingPending: () => [...magicKeys.soulTether(), 'sineating', 'pending'] as const,
-  sineatingPendingDetail: (id: number) => [...magicKeys.sineatingPending(), id] as const,
 
   stageAdvancePending: () => [...magicKeys.soulTether(), 'stage-advance', 'pending'] as const,
   stageAdvancePendingDetail: (id: number) => [...magicKeys.stageAdvancePending(), id] as const,
@@ -176,19 +171,6 @@ export function useMyTetherBonds(myCharacterSheetId: number | null) {
 }
 
 /**
- * Sineater inbox: paginated list of pending Sineating offers.
- * Polls every 5 seconds for new offers so the Sineater sees them without refreshing.
- */
-export function usePendingSineatingOffers() {
-  return useQuery({
-    queryKey: magicKeys.sineatingPending(),
-    queryFn: () => api.getPendingSineatingOffers(),
-    refetchInterval: 5_000,
-    throwOnError: true,
-  });
-}
-
-/**
  * Sineater inbox: paginated list of pending stage-advance bonus offers.
  * Polls every 5 seconds for new offers so the Sineater sees them without refreshing.
  */
@@ -281,39 +263,6 @@ export function useDissolveSoulTether() {
       qc.invalidateQueries({
         queryKey: magicKeys.soulTetherDetail(variables.relationship_id),
       }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.soulTether() }).catch(() => {});
-    },
-  });
-}
-
-/**
- * Sinner initiates a Sineating request.
- *
- * Returns the SineatingOffer payload. Invalidates the pending sineating list
- * so the Sineater's inbox refreshes.
- */
-export function useRequestSineating() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: SineatingRequest) => api.requestSineating(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.sineatingPending() }).catch(() => {});
-    },
-  });
-}
-
-/**
- * Sineater accepts or declines a pending Sineating offer.
- *
- * units_accepted=0 is a decline. Invalidates the pending list and the
- * soul-tether detail so Hollow state updates.
- */
-export function useRespondToSineating() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: SineatingRespondRequest) => api.respondToSineating(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.sineatingPending() }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.soulTether() }).catch(() => {});
     },
   });

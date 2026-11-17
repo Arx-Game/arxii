@@ -18,7 +18,6 @@ import { HighlightReel } from '../components/HighlightReel';
 import { ConsentPrompt } from '../components/ConsentPrompt';
 import { PrecapturePanel } from '../components/PrecapturePanel';
 import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVeilsCard';
-import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
 import { KindledResonancesPanel } from '@/magic/components/KindledResonancesPanel';
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
@@ -452,12 +451,11 @@ export function SceneDetailPage() {
             {scene && <RitualProposedChip sceneId={scene.id} />}
             {scene?.is_owner && <PrecapturePanel sceneId={id} />}
             {isActive && <ConsentPrompt sceneId={id} />}
-            {isActive && <SineatingInbox />}
             {isActive && <SoulTetherRescuePrompt />}
             {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
             {isActive && <WitnessReactionOfferGate personaId={personaId} />}
             {/* #3557 combat layout. Everything above this line either needs an
-            answer (consent, sineating, soul-tether, flourish, witness) or is the scene's
+            answer (consent, soul-tether, flourish, witness) or is the scene's
             identity; it stays inline in both shapes. Below: while an encounter
             is active the header map yields to the rail's map (one map, with
             bystanders), the pending check-call prompt stays inline, and the

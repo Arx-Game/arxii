@@ -47,7 +47,6 @@ import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
 import { AuraHalo } from './AuraHalo';
 import { AuraReflections } from './AuraReflections';
 import { useCharacterAuras } from '@/magic/auraQueries';
-import { wordsToPart } from '@/magic/aura';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
@@ -189,8 +188,8 @@ function glimpseStateLine(state: CharacterSheetAura['glimpse_state']): string {
 export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props) {
   const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
   const [glimpseDialogOpen, setGlimpseDialogOpen] = useState(false);
-  // Who the character is, whether they are unsettled and the Mire's share are the
-  // owner's to see; the sheet payload carries the shares only.
+  // Who the character is and whether they are unsettled are the owner's to see; the
+  // sheet payload carries the shares only.
   const { data: ownAuras } = useCharacterAuras(characterId, isMyCharacter);
   const ownAura = ownAuras?.find((row) => row.character === characterId) ?? null;
   const staffEditing = useStaffEditing();
@@ -366,11 +365,6 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
                 percent: share.percent,
               }))}
               settled={ownAura?.shares.some((share) => Number(share.settled_percent) > 0) ?? false}
-              mire={
-                ownAura
-                  ? { words: ownAura.mire_share_words, part: wordsToPart(ownAura.mire_share_words) }
-                  : null
-              }
               unsettled={ownAura?.unsettled ?? false}
               unsettledLine={ownAura?.unsettled_line ?? ''}
               unsettledAffinity={ownAura?.unsettled_affinity_name ?? ''}
