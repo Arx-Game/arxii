@@ -350,6 +350,7 @@ def surroundings_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
     one line per source with its points, and one total line with the power. A lone source she
     has not perceived (opposed or related) shows its power directly under "Around you", with no
     total. A substance she has not perceived is never named: its line reads "Something here ...".
+    Hint lines under the total explain it (``_hint_texts``).
     """
     if plan.is_empty:
         return []
@@ -397,7 +398,36 @@ def _source_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
         for source in sources
     )
     lines.append(SurroundingsLine(kind=SurroundingsKind.POWER, text=total_text, amount=power))
+    lines.extend(
+        SurroundingsLine(kind=SurroundingsKind.HINT, text=text) for text in _hint_texts(plan)
+    )
     return lines
+
+
+def _hint_texts(plan: SubstancePlan) -> list[str]:
+    """The plain sentences under the total that explain it (the approved demo's hints).
+
+    Two or more sources adding to the total: each extra source adds less. A perceived related
+    substance among the sources, with nothing opposed or hidden: she draws strength from it but
+    cannot move it. The related hint ignores her own substance's lines, since a cast with none
+    of it here calls it up to the first step on its own.
+    """
+    sources = plan.lines
+    texts: list[str] = []
+    if sum(1 for source in sources if source.points > 0) >= 2:  # noqa: PLR2004 - two sources
+        texts.append(f"The more {plan.label} around you, the less each extra source adds.")
+    related = [s for s in sources if s.relation == SubstanceRelationKind.RELATED and not s.hidden]
+    nothing_against = all(
+        source.relation in ("", SubstanceRelationKind.RELATED) and not source.hidden
+        for source in sources
+    )
+    if related and nothing_against:
+        other = Substance.objects.get(pk=related[0].substance_id).name
+        texts.append(
+            f"You can draw strength for your {plan.label} from the {other} here. "
+            f"You cannot move the {other}."
+        )
+    return texts
 
 
 def _call_up_text(plan: SubstancePlan) -> str:

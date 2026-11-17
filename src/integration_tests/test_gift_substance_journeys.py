@@ -321,6 +321,7 @@ class AnOpposedSubstanceWorksAgainstHer(_IceField):
                 ("source", "The Long Hall · Trace", 2),
                 ("source", "Something here strengthens your ice", 2),
                 ("power", "Around you adds", 4),
+                ("hint", "The more ice around you, the less each extra source adds.", 0),
             ],
         )
 
@@ -335,6 +336,13 @@ class AnOpposedSubstanceWorksAgainstHer(_IceField):
                 ("source", "The Long Hall · Trace", 2),
                 ("source", "The Long Hall · Some steam, related to ice", 2),
                 ("power", "Around you adds", 4),
+                ("hint", "The more ice around you, the less each extra source adds.", 0),
+                (
+                    "hint",
+                    "You can draw strength for your ice from the steam here. "
+                    "You cannot move the steam.",
+                    0,
+                ),
             ],
         )
         self.assertEqual([offer["label"] for offer in self.offers()], ["ice"])

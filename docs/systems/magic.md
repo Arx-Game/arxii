@@ -5066,7 +5066,12 @@ line per source, beside the unchanged resonance-environment line.
 
 **The card.** `surroundings_lines(plan)` gives the cast card, under its cost: an optional
 "Calls up fire" line, a "<Name> around you" heading, one line per source with its points, and
-one total power line. A source of another substance that the caster has not perceived is never
+one total power line, then hint lines (`SurroundingsKind.HINT`): "The more fire around you,
+the less each extra source adds." when two or more sources add to the total, and "You can draw
+strength for your ice from the water here. You cannot move the water." when a perceived related
+substance is among the sources and nothing opposed or unperceived is (her own substance's lines
+do not count against it, since a cast calls her substance up to Trace). A source of another
+substance that the caster has not perceived is never
 named, on the card or on the ledger: an opposed one reads "Something here works against your
 ice" and a related one "Something here strengthens your ice" (`SourcePoints.hidden`). A caster
 always perceives her own gift's substance.

@@ -38,6 +38,8 @@ class SurroundingsKind:
     CALL_UP = "call_up"
     BLOCKED = "blocked"
     NEEDS = "needs"
+    #: A plain sentence under the total that explains it (text only).
+    HINT = "hint"
 
 
 class MarkOutcome:
