@@ -1526,17 +1526,18 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
         """A ritual can only name a resonance its owner holds (#5181).
 
         The ritual's resonance is what an Anima ritual with a partner earns, so naming one the
-        character never held would earn it from nothing. Staff may set any resonance.
+        character never held would earn it from nothing. The ritual belongs to the account that
+        authored it (the ritual being patched, ``self.parent.instance``), so the check asks
+        whether that account plays a character who holds the resonance, never which character
+        the requester has selected. Staff may set any resonance.
         """
-        from world.magic.services.ritual_bond import performer_holds  # noqa: PLC0415
-        from world.roster.services.selection import character_for_request  # noqa: PLC0415
+        from world.magic.services.ritual_bond import account_plays_holder  # noqa: PLC0415
 
         request = self.context.get("request")
         if resonance is None or request is None or request.user.is_staff:
             return
-        puppet = character_for_request(request, entry_id=None)
-        sheet = puppet.sheet_data if puppet is not None else None
-        if sheet is None or not performer_holds(sheet, resonance):
+        author_id = self.parent.instance.author_account_id
+        if author_id is None or not account_plays_holder(author_id, resonance):
             msg = "You can only name a resonance your character already holds."
             raise serializers.ValidationError({"resonance_id": msg})
 

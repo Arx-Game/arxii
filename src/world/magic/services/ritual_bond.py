@@ -50,6 +50,20 @@ def performer_holds(performer_sheet: CharacterSheet, resonance: Resonance | None
     ).exists()
 
 
+def account_plays_holder(account_id: int, resonance: Resonance) -> bool:
+    """True when ``account_id`` now plays a character who holds ``resonance`` (#5181).
+
+    A player-authored ritual belongs to its author's account and is performed by whichever of
+    that account's characters is playing, so which character holds the resonance is the
+    account's, never the one selected at the moment of the request.
+    """
+    return CharacterResonance.objects.filter(
+        resonance=resonance,
+        character_sheet__roster_entry__tenures__player_data__account_id=account_id,
+        character_sheet__roster_entry__tenures__end_date__isnull=True,
+    ).exists()
+
+
 def ritual_partner_effect_sentence(resonance: Resonance | None) -> str:
     """The sentence a partner reads before agreeing: what the ritual will do to their fatigue.
 

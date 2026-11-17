@@ -24,6 +24,7 @@ from world.conditions.factories import SoulfrayTemplateFactory
 from world.magic.constants import RitualExecutionKind
 from world.magic.factories import (
     CharacterAnimaFactory,
+    CharacterResonanceFactory,
     ResonanceFactory,
     RitualCheckConfigFactory,
     RitualFactory,
@@ -31,6 +32,8 @@ from world.magic.factories import (
 )
 from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.serializers import RitualSerializer
+from world.roster.factories import PlayerDataFactory, RosterTenureFactory
+from world.roster.services.selection import set_selected_entry
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_serializers import EnhancedSceneActionResultSerializer
 from world.scenes.action_services import respond_to_action_request
@@ -402,6 +405,32 @@ class RitualViewSetPatchTests(APITestCase):
         self.client.force_authenticate(user=self.staff_account)
         allowed = self.client.patch(self._patch_url(self.scene_ritual.pk), body, format="json")
         self.assertEqual(allowed.status_code, status.HTTP_200_OK, allowed.json())
+
+    def test_patch_checks_the_resonance_against_the_account_not_the_selected_character(
+        self,
+    ) -> None:
+        """An account plays two characters: the one holding the resonance is not the one selected
+        last, and naming it still works."""
+        player_data = PlayerDataFactory(account=self.author_account)
+        holder = RosterTenureFactory(player_data=player_data, end_date=None).roster_entry
+        selected = RosterTenureFactory(player_data=player_data, end_date=None).roster_entry
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=holder.character_sheet, resonance=resonance)
+        set_selected_entry(player_data, selected)
+        # The selected character has no magical profile, which would hide a non-hedge ritual.
+        self.scene_ritual.hedge_accessible = True
+        self.scene_ritual.save()
+        self.client.force_authenticate(user=self.author_account)
+
+        resp = self.client.patch(
+            self._patch_url(self.scene_ritual.pk),
+            {"check_config": {"resonance_id": resonance.pk}},
+            format="json",
+        )
+
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.json())
+        self.scene_config.refresh_from_db()
+        self.assertEqual(self.scene_config.resonance, resonance)
 
     def test_patch_without_config_preserves_top_level_update(self) -> None:
         """A missing check config does not prevent the ritual update."""
