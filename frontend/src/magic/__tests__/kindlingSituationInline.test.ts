@@ -6,7 +6,8 @@ const template = readFileSync(
   resolve(process.cwd(), '../src/web/templates/admin/magic/kindling_situation_inline.html'),
   'utf8'
 );
-const script = template.match(/<script>([\s\S]*?)<\/script>/)?.[1];
+const parsed = new DOMParser().parseFromString(template, 'text/html');
+const script = parsed.querySelector('script')?.textContent;
 if (!script) throw new Error('Kindling inline script missing');
 
 function row(): HTMLTableRowElement {
