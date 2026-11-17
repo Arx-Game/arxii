@@ -16,6 +16,7 @@ from decimal import Decimal
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.magic.constants import GainSource, TargetKind
@@ -25,6 +26,7 @@ from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterThreadWeavingUnlockFactory,
+    MireHoldingFactory,
     ResonanceFactory,
     SineatingOutcomeAwardFactory,
     ThreadWeavingUnlockFactory,
@@ -300,6 +302,26 @@ class SineatingRitualTests(SineatingCase):
         result = self.perform(2, "Success")
 
         self.assertEqual((self.corruption(self.sinner), result.corruption_left_sinner), (0, 70))
+
+    def test_a_sinner_who_is_also_a_sineater_sheds_only_their_own_corruption(self) -> None:
+        # The Sinner is a Sineater for a third person too: of the 70 they carry in this
+        # resonance, 50 is held for them and only 20 is the Sinner's own.
+        third = CharacterSheetFactory()
+        side = CharacterRelationshipFactory(source=self.sinner, target=third)
+        held = MireHoldingFactory(relationship=side, resonance=self.resonance, amount=50)
+        row = CharacterResonance.objects.get(character_sheet=self.sinner, resonance=self.resonance)
+        row.corruption_current = 70
+        row.save(update_fields=["corruption_current"])
+        request_sineating(self.sinner, self.sineater, 2)
+
+        result = self.perform(2, "Success")
+
+        # Two units ask for 120; the 20 that is theirs moves and the 50 held for the third stays.
+        self.assertEqual(result.corruption_left_sinner, 20)
+        self.assertEqual(self.corruption(self.sinner), 50)
+        held.refresh_from_db()
+        self.assertEqual(held.amount, 50)
+        self.assertEqual(MireHolding.objects.get(relationship__source=self.sineater).amount, 20)
 
     def test_every_refusal_comes_before_anything_is_written(self) -> None:
         def assert_untouched(refusal: str) -> None:

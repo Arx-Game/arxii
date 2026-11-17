@@ -8,7 +8,7 @@ for any other reason, ``reduce_corruption`` keeps the holdings within it.
 from __future__ import annotations
 
 from django.db import transaction
-from django.db.models import OuterRef, Subquery
+from django.db.models import OuterRef, Subquery, Sum
 
 from world.character_sheets.models import CharacterSheet
 from world.conditions.models import ConditionInstance
@@ -74,14 +74,23 @@ def corruption_that_can_move(
     """What ``take_on_corruption`` would shed for ``amount``, without writing anything.
 
     Returns ``(carried, fits)``: ``carried`` is the most the Sinner could shed (``amount``
-    capped at what they carry), and ``fits`` is how much of that the Sineater can take on
-    before their corruption in ``resonance`` reaches the stage after ``max_stage``. ``fits``
-    is below ``carried`` exactly when the cap cuts the move.
+    capped at the corruption that is their own: what they carry less what they hold in this
+    resonance as a Sineater for someone else, which they cannot pass on). ``fits`` is how much
+    of that the Sineater can take on before their corruption in ``resonance`` reaches the
+    stage after ``max_stage``. ``fits`` is below ``carried`` exactly when the cap cuts the
+    move.
     """
     sinner_row = CharacterResonance.objects.filter(
         character_sheet=sinner_sheet, resonance=resonance
     ).first()
-    carried = min(amount, sinner_row.corruption_current if sinner_row is not None else 0)
+    held_for_others = (
+        MireHolding.objects.filter(
+            relationship__source=sinner_sheet, resonance=resonance
+        ).aggregate(total=Sum("amount"))["total"]
+        or 0
+    )
+    own = max(0, (sinner_row.corruption_current if sinner_row is not None else 0) - held_for_others)
+    carried = min(amount, own)
     ceiling = corruption_ceiling(resonance, max_stage)
     if ceiling is None or carried <= 0:
         return carried, carried
@@ -109,9 +118,10 @@ def take_on_corruption(
     it on through ``accrue_corruption`` (source SINEATING_CARRIED), so their resistance
     softens it, and the holding for this Sinner grows by what arrived.
 
-    The Sinner never sheds more than they carry. ``max_stage`` caps the Sineater: their
-    corruption in the resonance never reaches the threshold of the stage after it, and the
-    Sinner sheds only what the Sineater can take. None means no cap.
+    The Sinner never sheds more than their own corruption: what they hold for another Sinner
+    as a Sineater stays with them, and its holding is untouched. ``max_stage`` caps the
+    Sineater: their corruption in the resonance never reaches the threshold of the stage
+    after it, and the Sinner sheds only what the Sineater can take. None means no cap.
 
     Raises:
         CharacterRelationship.DoesNotExist: the Sineater has no side toward this Sinner.
@@ -138,6 +148,7 @@ def take_on_corruption(
         amount=shed,
         source=CorruptionRecoverySource.SINEATING,
         grant_resonance_back=False,
+        shrink_holdings=False,
     )
     arrived = accrue_corruption(
         character_sheet=sineater_sheet,
