@@ -1,3 +1,0 @@
-RESULT stored marks on Kindle (database rows): ['smoky']
-RESULT has_property(fiery): True
-RESULT has_property(smoky): True
