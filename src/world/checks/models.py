@@ -14,6 +14,7 @@ from world.checks.constants import (
     EffectTarget,
     EffectType,
     PositionDestination,
+    PrimumRevealScope,
 )
 
 # Modifier value table, level baselines and tapers (#4594).
@@ -658,6 +659,18 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    # REVEAL_PRIMUM (#5125): how much of the Primum in the room the character perceives.
+    primum_reveal = models.CharField(
+        max_length=12,
+        choices=PrimumRevealScope.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "REVEAL_PRIMUM: how much of the Primum in the place the character perceives. "
+            "The strongest substance only, or every substance."
+        ),
+    )
+
     # Positioning / reshaping effects (#1018). Resolved contextually within the
     # actor's room at apply time; no FK to a per-room runtime Position.
     position_name = models.CharField(max_length=50, blank=True, default="")
@@ -729,6 +742,7 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         EffectType.RESTORE_ANIMA: [("anima_amount", "anima_amount")],
         EffectType.INTOXICATE: [("intoxication_potency", "intoxication_potency")],
         EffectType.TECHNIQUE_TRAINING: [("technique", "technique_id")],
+        EffectType.REVEAL_PRIMUM: [("primum_reveal", "primum_reveal")],
     }
 
     def clean(self) -> None:

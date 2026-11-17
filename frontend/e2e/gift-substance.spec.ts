@@ -1,16 +1,18 @@
 import { test, expect, type Page } from '@playwright/test';
 
 /**
- * A gift's substance (#5018), against a live server (no mocked /api/**).
+ * A gift's substance and Primum (#5018, #5125), against a live server (no mocked /api/**).
  *
  * Needs the rows `integration_tests.live_seeds.seed_gift_substance_spec` writes for
- * e2e_test_account: "Vesper Shade", a level-10 shadow caster in an ordinary-lit hall, with
- * the scene "Shadows in the Hall" running there and the account as its GM. Runs with
- * `--config e2e.backend.config.ts`.
+ * e2e_test_account: a shadow caster in an ordinary-lit hall, with the scene "Shadows in the
+ * Hall" running there and the account as its GM. Runs with `--config e2e.backend.config.ts`.
  *
- * Each step reads back what the server kept: the card's cost comes from the server, and
- * the call-up and the GM's mark are read again after a fresh load.
+ * Calling shadow up costs one shared amount of anima and no resonance. Each step reads back
+ * what the server kept: the card's cost comes from the server, and the call-up and the GM's
+ * mark are read again after a fresh load.
  */
+
+const COST = /free, your control covers it|\d+ anima/;
 
 const SCENE_NAME = 'Shadows in the Hall';
 const TECHNIQUE = 'Veil of Dusk';
@@ -42,16 +44,16 @@ async function openCast(page: Page, id: number) {
 test.describe.configure({ mode: 'serial' });
 
 test.describe('a gift substance in a social scene', () => {
-  test('the card shows the free call-up and the power it brings', async ({ page }) => {
+  test('the card shows the call-up and the power it brings', async ({ page }) => {
     await logIn(page);
     const id = await sceneId(page);
     await openCast(page, id);
 
     const row = page.getByTestId('gift-call-up-row');
     await expect(row.getByRole('button', { name: 'Call up shadow' })).toBeEnabled();
-    await expect(row).toContainText('free, your control covers it');
-    // Free: her anima after equals her anima now.
-    await expect(row).toContainText(/Anima: (\d+) · after: \1 /);
+    await expect(row).toContainText(COST);
+    await expect(row).toContainText(/Anima: \d+ · after: \d+/);
+    await expect(row).not.toContainText(/resonance/i);
 
     // Scoped to the cast list: the scene log may hold a line with the same name.
     await page
@@ -61,9 +63,11 @@ test.describe('a gift substance in a social scene', () => {
       .click();
     const lines = page.getByTestId('surroundings-lines').last();
     await expect(lines).toContainText('Calls up shadow', { timeout: 15000 });
-    await expect(lines).toContainText('free, your control covers it');
-    await expect(lines).toContainText('Shadow here after the call-up');
-    await expect(lines).toContainText('+5 power');
+    await expect(lines).toContainText(COST);
+    await expect(lines).toContainText('Shadow around you');
+    await expect(lines).toContainText('Shadow adds');
+    await expect(lines).toContainText(/\+\d+ power/);
+    await expect(lines).not.toContainText(/resonance/i);
     await page.screenshot({
       path: test.info().outputPath('01-cast-card-free-call-up.png'),
       fullPage: true,
@@ -99,7 +103,9 @@ test.describe('a gift substance in a social scene', () => {
     await expect(present.getByText('Marked in this scene')).toHaveCount(0);
   });
 
-  test('calling it up with no technique is free and the room keeps it', async ({ page }) => {
+  test('calling it up with no technique raises the place and the room keeps it', async ({
+    page,
+  }) => {
     await logIn(page);
     const id = await sceneId(page);
     await openCast(page, id);
@@ -110,16 +116,24 @@ test.describe('a gift substance in a social scene', () => {
     await page.getByRole('button', { name: 'Call up shadow' }).click();
     const response = await called;
     expect(response.status()).toBe(200);
-    expect(((await response.json()) as { message: string }).message).toBe(
-      'You call up shadow. Cost: free.'
+    expect(((await response.json()) as { message: string }).message).toMatch(
+      /^You call up shadow\. Cost: (free|\d+ anima)\.$/
     );
     await page.screenshot({
-      path: test.info().outputPath('03-called-up-free.png'),
+      path: test.info().outputPath('03-called-up.png'),
       fullPage: true,
     });
 
-    // Read it back from the server: shadow is now here, nothing more to call up.
+    // Read it back from the server: the place now holds shadow, so a cast calls up nothing
+    // and its card lists the place as a source of power.
     await openCast(page, id);
-    await expect(page.getByTestId('gift-call-up-row')).toContainText('shadow is already here');
+    await page
+      .locator('#cast-section')
+      .getByRole('button', { name: new RegExp(TECHNIQUE) })
+      .first()
+      .click();
+    const lines = page.getByTestId('surroundings-lines').last();
+    await expect(lines).toContainText('Shadow around you', { timeout: 15000 });
+    await expect(lines).not.toContainText('Calls up shadow');
   });
 });

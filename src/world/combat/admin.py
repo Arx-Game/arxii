@@ -55,6 +55,7 @@ from world.combat.models import (
     ThreatRecord,
 )
 from world.combat.surge_bands import validate_surge_bands
+from world.magic.models import CreaturePrimum
 
 
 class CombatOpponentInline(admin.TabularInline):
@@ -532,6 +533,18 @@ class CreaturePhaseTemplateInline(admin.TabularInline):
     inlines = [BreakBarConfigInline]
 
 
+class CreaturePrimumInline(admin.TabularInline):
+    """The Primum a slain creature of this kind holds, one row per substance (#5125)."""
+
+    model = CreaturePrimum
+    formset = OneRowPerFormSet
+    extra = 0
+    verbose_name = "Primum it carries"
+    verbose_name_plural = "Primum it carries"
+    autocomplete_fields = ["substance"]
+    fields = ["substance", "amount"]
+
+
 @admin.register(CreatureTemplate)
 class CreatureTemplateAdmin(admin.ModelAdmin):
     list_display = ("name", "tier", "threat_pool", "tactics", "speed_hops", "traversal")
@@ -539,7 +552,7 @@ class CreatureTemplateAdmin(admin.ModelAdmin):
     search_fields = ("name",)
     # Drives, cause and faction rules are authored on the Standoff Profile Builder
     # (#4354), opened from this page's "Open the Standoff Profile Builder" tool.
-    inlines = [CreaturePhaseTemplateInline]
+    inlines = [CreaturePhaseTemplateInline, CreaturePrimumInline]
 
 
 @admin.register(CreaturePhaseTemplate)

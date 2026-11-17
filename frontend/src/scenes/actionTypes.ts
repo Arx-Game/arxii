@@ -214,13 +214,12 @@ export interface CastPreview {
 
 /** One line a cast card shows about where she stands (#5018). */
 export interface SurroundingsLine {
-  /** power | call_up | blocked | needs */
+  /** heading | source | power | call_up | blocked | needs | hint */
   kind: string;
   text: string;
-  /** Signed power for a power line, the penalty for a needs line. */
+  /** Signed points (source), signed power (power), or the penalty (needs). */
   amount: number;
   anima: number;
-  resonance: number;
   /** A call-up line's right-hand cost; empty for the other kinds. */
   detail: string;
 }
@@ -230,11 +229,10 @@ export interface CallUpOffer {
   gift_id: number;
   label: string;
   effective_cost: number;
-  resonance_cost: number;
   already_present: boolean;
   can_call_up: boolean;
   cost_line: string;
-  /** "Anima: 18 · after: 18 · Umbral resonance after: unchanged". */
+  /** "Anima: 18 · after: 15". */
   balance_line: string;
 }
 
@@ -424,9 +422,7 @@ export interface TechniqueResultData {
 export interface SubstanceCallUpData {
   label: string;
   anima: number;
-  resonance: number;
-  resonance_name: string;
-  /** Why nothing was called up: too_little_resonance, held_fixed, or empty. */
+  /** Why nothing was called up: no_place, or empty. */
   blocked: string;
 }
 

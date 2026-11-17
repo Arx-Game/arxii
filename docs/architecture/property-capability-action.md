@@ -401,9 +401,11 @@ outcome.
    carries `fire`, `concussive`, `light`). These are the Technique's own
    `Technique.properties`, ticked per technique by staff (#5066). The Gift's
    resonances never count: resonance is how she feels when she casts, not
-   what the magic does. A Gift's substance (`GiftSubstance.property`) only
-   pre-ticks one property on a new Technique of that Gift, as an authoring
-   convenience (`world/magic/services/technique_marks.py`).
+   what the magic does. A major Gift's substance (`Substance.property`, #5125)
+   is the one exception: every Technique of that Gift (and of its child
+   Gifts) always carries it, derived on read by
+   `effect_property_ids_by_technique` and stored nowhere, so staff cannot
+   untick it (`world/magic/services/technique_marks.py`).
 3. **Check type** — how the Technique resolves when used as a mechanism
    (this may come from the Technique's existing fields like style or
    effect_type rather than a new field)
@@ -899,7 +901,7 @@ Key points relevant to this architecture:
 | System | How It Connects |
 |--------|----------------|
 | Combat | Properties on attacks and targets drive situational interactions; boss defenses are obstacle-like; structured combos are a separate system informed by Properties |
-| Magic | Techniques grant Capabilities with optional constraints; a Technique's effect Properties are its own `Technique.properties`; a Gift's substance only pre-ticks one on a new Technique (#5066) |
+| Magic | Techniques grant Capabilities with optional constraints; a Technique's effect Properties are its own `Technique.properties`; a major Gift's substance property is always carried by every Technique of that Gift, derived on read (#5066, #5125) |
 | Items & Equipment | Items have Properties (metallic, enchanted); equipped items contribute Capabilities |
 | Character Progression | Higher path levels unlock Techniques with higher Capability values |
 | Relationships | Relationship states can modify Capability values; narrative events spike intensity |

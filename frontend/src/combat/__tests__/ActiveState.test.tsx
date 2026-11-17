@@ -77,6 +77,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
         thumbnail_media_url: null,
         current_square: null,
         current_position: null,
+        harvest_offers: [],
         mirrors_participant_id: null,
       },
     ],

@@ -1,27 +1,21 @@
-"""Journeys for a gift's substance (#5018).
+"""Journeys for a gift's substance and the Primum it draws on (#5018, #5125).
 
-Mira works a shadow gift: staff gave it a substance, the room's lighting falling, with a full
-measure of 2 steps and the line "The shadows in the room deepen.". Her GIFT thread on it is
-at level 10 and she holds 10 abyssal resonance. Her shadow technique costs 4 anima at
-intensity 6 and control 6; outside a fight the social-scene control bonus of 10 applies.
-With the default tuning (+10 power at a full measure, present at half a measure, 5 anima and
-2 resonance a measure, a 50% place cap) the spec's numbers follow:
+Mira works a fire gift: staff gave it the substance fire, which grows with rising heat. Her
+GIFT thread on it is at level 100 (rung 10, full strength), and her technique costs 4 anima
+at intensity 6 and control 6; outside a fight the social-scene control bonus applies. The
+tuning is the starter rows (``seed_primum_tuning``): Trace from 1 Primum (2 points), Some from
+10 (4), Rich from 30 (7), Massive from 100 (10); the power curve gives 2 at 2 points, 4 at 4,
+6 at 7, 8 at 10, 10 at 15, 11 at 20; a call-up costs 3 anima, related substances count half.
 
-- pitch dark (-2): "+10", nothing called up;
-- ordinary light (0), a social scene: one step called up, covered by her control: cost 0;
-- the same in a fight: 3 anima and 1 resonance on top of the cast's own 4;
-- blinding with no resonance left: no call-up and "-10", never a refusal.
-
-Tomas stands in the room to see the room line, which never names her. Names are invented.
+Tomas stands in the room to see the room line. Names are invented.
 """
 
 from __future__ import annotations
 
-from decimal import Decimal
 from unittest.mock import patch
 
-from django.core.exceptions import ValidationError
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 
 from evennia_extensions.constants import RoomEnclosure
@@ -31,46 +25,51 @@ from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.checks import services as check_services
 from world.classes.factories import CharacterClassLevelFactory
-from world.combat.constants import ParticipantStatus, RiskLevel
-from world.combat.factories import (
-    CombatEncounterFactory,
-    CombatParticipantFactory,
-    CombatRoundActionFactory,
-)
-from world.combat.models import CombatRoundAction
+from world.combat.factories import CombatEncounterFactory
 from world.events.constants import EventStatus
 from world.events.factories import EventFactory
 from world.events.services import complete_event
+from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemSubstanceFactory
+from world.items.models import EquippedItem
 from world.locations.constants import StatKey
-from world.locations.models import LocationValueModifier
-from world.locations.services import felt_exposure, set_room_stat_modifier
+from world.locations.services import (
+    felt_exposure,
+    felt_reading,
+    felt_readings,
+    set_room_stat_modifier,
+)
 from world.magic.constants import (
-    AffinityInteractionKind,
-    ResonanceValence,
     RestrictionKind,
     SubstanceDirection,
+    SubstanceRelationKind,
     TargetKind,
 )
 from world.magic.factories import (
-    AffinityInteractionFactory,
     CharacterAnimaFactory,
-    CharacterAuraFactory,
     CharacterResonanceFactory,
     GiftFactory,
+    PlacePrimumFactory,
+    PrimumSightingFactory,
     ResonanceFactory,
     RestrictionFactory,
+    SubstanceFactory,
+    SubstanceRelationFactory,
     ThreadFactory,
     ensure_canonical_affinities,
+    seed_primum_tuning,
 )
 from world.magic.models import (
     Affinity,
-    AffinityInteraction,
     CharacterAnima,
     CharacterResonance,
-    GiftSubstance,
+    PrimumCallUp,
+    PrimumStep,
+    SubstancePowerStep,
     Thread,
 )
-from world.magic.services.gain import tag_room_resonance
+from world.magic.services.primum import power_for_points
+from world.magic.services.resonance_environment import get_resonance_environment_config
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
 from world.mechanics.constants import EngagementType
 from world.mechanics.services import begin_engagement
@@ -82,16 +81,18 @@ from world.vitals.models import CharacterVitals
 from world.weather.factories import WeatherTypeExposureFactory, WeatherTypeFactory
 from world.weather.services import roll_region_weather
 
-ARRIVAL = "The shadows in the room deepen."
-SURROUNDINGS = "Surroundings: shadow"
+MANIFEST = "Mira begins to manifest fire in the area."
 
 
 def _lighting(room) -> int:
     return felt_exposure(room, stat_key=StatKey.LIGHTING)
 
 
-class _ShadowField(ResonanceCacheIsolationMixin, JourneyCase):
-    """Mira, a level-10 shadow caster, and Tomas, in a hall with a scene running."""
+class _FireField(ResonanceCacheIsolationMixin, JourneyCase):
+    """Mira, a level-100 fire caster, and Tomas, in a hall with a scene running."""
+
+    SUBSTANCE = "fire"
+    STAT = StatKey.HEAT
 
     def setUp(self) -> None:
         super().setUp()
@@ -103,9 +104,11 @@ class _ShadowField(ResonanceCacheIsolationMixin, JourneyCase):
         accrue.start()
         self.addCleanup(accrue.stop)
         Affinity.objects.clear_cache()
-        _celestial, _primal, abyssal = ensure_canonical_affinities()
+        _celestial, primal, _abyssal = ensure_canonical_affinities()
+        seed_primum_tuning()
 
         self.room = self.make_room("The Long Hall")
+        self.profile = self.room.room_profile
         self.mira = self.make_player("Mira", room=self.room)
         self.tomas = self.make_player("Tomas", room=self.room)
         self.sheet = self.mira.sheet_data
@@ -115,30 +118,25 @@ class _ShadowField(ResonanceCacheIsolationMixin, JourneyCase):
         )
         self.scene = SceneFactory(room=self.room)
 
-        self.abyssal = ResonanceFactory(name="Umbral", affinity=abyssal)
-        self.gift = GiftFactory(name="Shadowcraft")
-        self.gift.resonances.add(self.abyssal)
-        self.substance = GiftSubstance.objects.create(
-            gift=self.gift,
-            label="shadow",
-            stat_key=StatKey.LIGHTING,
-            direction=SubstanceDirection.FALLING,
-            full_at=2,
-            arrival_line=ARRIVAL,
+        self.ember = ResonanceFactory(name="Ember", affinity=primal)
+        self.substance = SubstanceFactory(
+            name=self.SUBSTANCE, stat_key=self.STAT, direction=SubstanceDirection.RISING
         )
+        self.gift = GiftFactory(name="Pyrecraft", substance=self.substance)
+        self.gift.resonances.add(self.ember)
         ThreadFactory(
             owner=self.sheet,
             target_kind=TargetKind.GIFT,
             target_trait=None,
             target_gift=self.gift,
-            resonance=self.abyssal,
+            resonance=self.ember,
             level=100,
         )
         self.balance = CharacterResonanceFactory(
-            character_sheet=self.sheet, resonance=self.abyssal, balance=10, lifetime_earned=10
+            character_sheet=self.sheet, resonance=self.ember, balance=10, lifetime_earned=10
         )
         self.technique = make_benign_castable_technique()
-        self.technique.name = "Veil of Night"
+        self.technique.name = "Kindle"
         self.technique.gift = self.gift
         self.technique.anima_cost = 4
         self.technique.intensity = 6
@@ -148,14 +146,16 @@ class _ShadowField(ResonanceCacheIsolationMixin, JourneyCase):
         self.mira.threads.invalidate()
         self.watch(self.mira, self.tomas)
 
-    # -- the room ---------------------------------------------------------------
+    # -- the place ---------------------------------------------------------------
 
-    def set_lighting(self, value: int, *, room=None) -> None:
-        """The builder sets the room's own lighting reading."""
-        room = room or self.room
-        set_room_stat_modifier(room.room_profile, StatKey.LIGHTING, source="builder", value=value)
-
-    # -- what Mira holds ----------------------------------------------------------
+    def stock(self, substance, amount: int) -> None:
+        """A lair's Primum of ``substance`` in the hall."""
+        PlacePrimumFactory(
+            room_profile=self.profile,
+            substance=substance,
+            capacity=max(amount, 1),
+            stored_amount=amount,
+        )
 
     def anima(self) -> int:
         return CharacterAnima.objects.get(character=self.sheet).current
@@ -163,10 +163,15 @@ class _ShadowField(ResonanceCacheIsolationMixin, JourneyCase):
     def resonance(self) -> int:
         return CharacterResonance.objects.get(pk=self.balance.pk).balance
 
+    def called_up(self) -> list[int]:
+        return list(
+            PrimumCallUp.objects.filter(caster=self.sheet).values_list("amount_added", flat=True)
+        )
+
     # -- seams ----------------------------------------------------------------------
 
     def cast(self) -> dict:
-        """Mira casts Veil of Night through the scene's web cast endpoint."""
+        """Mira casts Kindle through the scene's web cast endpoint."""
         response = self.api(self.account_of(self.mira)).post(
             reverse("sceneactionrequest-cast"),
             {
@@ -180,7 +185,7 @@ class _ShadowField(ResonanceCacheIsolationMixin, JourneyCase):
         return response.json()["result"]
 
     def card(self) -> dict:
-        """The scene panel's card for Veil of Night: its ``cast_preview``."""
+        """The scene panel's card for Kindle: its ``cast_preview``."""
         response = self.api(self.account_of(self.mira)).get(
             reverse("sceneactionrequest-castable-techniques"),
             {"initiator_persona": self.sheet.primary_persona.pk},
@@ -189,124 +194,13 @@ class _ShadowField(ResonanceCacheIsolationMixin, JourneyCase):
         (row,) = [r for r in response.json() if r["id"] == self.technique.pk]
         return row["cast_preview"]
 
-    @staticmethod
-    def surroundings_line(result: dict) -> int | None:
-        for entry in result["power_ledger"]["entries"]:
-            if entry["source_label"] == SURROUNDINGS:
-                return entry["amount"]
-        return None
+    def card_rows(self) -> list[tuple[str, str, int]]:
+        return [
+            (line["kind"], line["text"], line["amount"]) for line in self.card()["surroundings"]
+        ]
 
-
-class ACasterIsStrongerInTheDarkAndWeakerInTheLight(_ShadowField):
-    def test_pitch_dark_gives_ten_and_calls_nothing_up(self) -> None:
-        self.set_lighting(-2)
-
-        self.assertEqual(self.card()["effective_anima_cost"], 0)
-        result = self.cast()
-
-        self.assertEqual(self.surroundings_line(result), 10)
-        self.assertIsNone(result["technique_result"]["substance_call_up"])
-        self.assertNotTold(self.tomas, ARRIVAL)
-
-    def test_a_blinding_room_with_no_resonance_left_costs_power_and_never_refuses(self) -> None:
-        self.set_lighting(2)
-        self.balance.balance = 0
-        self.balance.save(update_fields=["balance"])
-
-        lines = {line["kind"]: line["text"] for line in self.card()["surroundings"]}
-        result = self.cast()
-
-        self.assertEqual(lines["blocked"], "Too little resonance to call up shadow")
-        self.assertEqual(self.surroundings_line(result), -10)
-        self.assertEqual(_lighting(self.room), 2)
-
-
-class HerCastCallsUpItsSubstance(_ShadowField):
-    def test_in_a_social_scene_her_control_covers_it_and_the_room_darkens(self) -> None:
-        preview = self.card()
-        result = self.cast()
-
-        self.assertEqual(preview["effective_anima_cost"], 0)
-        self.assertIn(
-            {
-                "kind": "call_up",
-                "text": "Calls up shadow",
-                "amount": 0,
-                "anima": 0,
-                "resonance": 0,
-                "detail": "free, your control covers it",
-            },
-            preview["surroundings"],
-        )
-        self.assertEqual(result["technique_result"]["anima_spent"], 0)
-        self.assertEqual((self.anima(), self.resonance()), (30, 10))
-        self.assertEqual(self.surroundings_line(result), 5)
-        self.assertEqual(_lighting(self.room), -1)
-        self.assertTold(self.tomas, ARRIVAL)
-        (arrival,) = [line for line in self.said(self.tomas).splitlines() if ARRIVAL in line]
-        self.assertNotIn("Mira", arrival)
-        # Her substance is not the place's resonance (found by real testing, #5018).
-        self.assertNotTold(self.tomas, "the place's resonance swells")
-
-    def test_leaving_the_room_takes_her_shadow_with_her(self) -> None:
-        self.cast()
-        self.assertEqual(self.card()["surroundings"][0]["text"], "Shadow here")
-
-        self.mira.move_to(self.make_room("The Yard"), quiet=True)
-
-        self.assertEqual(_lighting(self.room), 0)
-        self.assertFalse(LocationValueModifier.objects.filter(source__startswith="substance:"))
-        self.mira.move_to(self.room, quiet=True)
-        self.assertEqual(self.card()["surroundings"][0]["text"], "Calls up shadow")
-
-    def test_in_a_fight_it_costs_anima_and_resonance_on_top_of_the_cast(self) -> None:
-        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, room=self.room)
-        begin_engagement(self.mira, EngagementType.COMBAT, source=encounter)
-
-        preview = self.card()
-
-        self.assertEqual(preview["effective_anima_cost"], 7)
-        self.assertIn(
-            ("Calls up shadow", "3 anima, 1 Umbral resonance"),
-            [(line["text"], line["detail"]) for line in preview["surroundings"]],
-        )
-        # She casts as the card said: 7 anima, 1 resonance, the room dims, "+5".
-        result = self.cast()
-        self.assertEqual(result["technique_result"]["anima_spent"], 7)
-        self.assertEqual(
-            result["technique_result"]["substance_call_up"],
-            {
-                "label": "shadow",
-                "anima": 3,
-                "resonance": 1,
-                "resonance_name": "Umbral",
-                "blocked": "",
-            },
-        )
-        self.assertEqual((self.anima(), self.resonance()), (23, 9))
-        self.assertEqual(_lighting(self.room), -1)
-        self.assertEqual(self.surroundings_line(result), 5)
-
-
-class CallingUpWithNoTechnique(_ShadowField):
-    def test_in_a_social_scene_it_is_free_and_the_room_sees_it(self) -> None:
-        self.assertIn(
-            "Your gift: shadow (free, your control covers it here)",
-            self.telnet(self.mira, "callup"),
-        )
-
-        told = self.telnet(self.mira, "callup shadow")
-
-        self.assertIn("You call up shadow. Cost: free.", told)
-        self.assertEqual((self.anima(), self.resonance()), (30, 10))
-        self.assertEqual(_lighting(self.room), -1)
-        self.assertTold(self.tomas, ARRIVAL)
-        self.assertIn(
-            "Shadow is already here. Nothing to call up.", self.telnet(self.mira, "callup shadow")
-        )
-
-    def test_the_scene_panel_lists_it_and_the_web_button_calls_it_up(self) -> None:
-        offers = (
+    def offers(self) -> list[dict]:
+        return (
             self.api(self.account_of(self.mira))
             .get(
                 reverse("sceneactionrequest-call-up-offers"),
@@ -315,70 +209,252 @@ class CallingUpWithNoTechnique(_ShadowField):
             .json()
         )
 
-        self.assertEqual(offers[0]["label"], "shadow")
-        self.assertEqual(offers[0]["cost_line"], "free, your control covers it")
-        self.assertEqual(
-            offers[0]["balance_line"], "Anima: 30 · after: 30 · Umbral resonance after: unchanged"
-        )
-        result = self.web(self.mira, "call_up_substance", gift_id=offers[0]["gift_id"])
-        self.assertTrue(result.detail.success, result.detail.message)
-        self.assertEqual(result.detail.message, "You call up shadow. Cost: free.")
-        self.assertEqual(_lighting(self.room), -1)
+    @staticmethod
+    def primum_lines(result: dict) -> dict[str, int]:
+        """The cast's ENVIRONMENT ledger lines from Primum, by label."""
+        return {
+            entry["source_label"]: entry["amount"]
+            for entry in result["power_ledger"]["entries"]
+            if entry["source_label"] != "resonance environment" and entry["stage"] == "environment"
+        }
 
-    def test_in_a_fight_it_is_once_a_round_and_not_her_action(self) -> None:
-        encounter = CombatEncounterFactory(
-            status=RoundStatus.DECLARING, round_number=1, room=self.room
+
+class TheBonusGrowsWithThePrimumHere(_FireField):
+    def test_fire_mage_in_a_forge_gets_trace_benefit(self) -> None:
+        set_room_stat_modifier(self.profile, StatKey.HEAT, source="builder", value=5)
+
+        result = self.cast()
+
+        self.assertEqual(self.primum_lines(result), {"Surroundings: fire": 2})
+        self.assertIsNone(result["technique_result"]["substance_call_up"])
+        self.assertEqual(self.called_up(), [])
+
+    def test_enchanted_lair_gives_a_large_bonus(self) -> None:
+        self.stock(self.substance, 100)  # Massive
+
+        lines = self.primum_lines(self.cast())
+
+        self.assertEqual(lines, {"Surroundings: fire": power_for_points(10)})
+        self.assertEqual(lines["Surroundings: fire"], 8)
+        self.assertGreater(lines["Surroundings: fire"], 2)
+
+    def test_two_sources_taper_and_cap(self) -> None:
+        self.stock(self.substance, 10)  # Some: 4 points
+        some = PrimumStep.objects.get(rank=2)
+        held = ItemSubstanceFactory(
+            item_instance=ItemInstanceFactory(custom_name="Ash brand"),
+            substance=self.substance,
+            step=some,
         )
-        seat = CombatParticipantFactory(
-            encounter=encounter, character_sheet=self.sheet, status=ParticipantStatus.ACTIVE
-        )
-        begin_engagement(self.mira, EngagementType.COMBAT, source=encounter)
-        declared = CombatRoundActionFactory(
-            participant=seat, round_number=1, focused_action=self.technique
+        EquippedItemFactory(
+            character=self.sheet,
+            item_instance=held.item_instance,
+            body_region=BodyRegion.RIGHT_HAND,
+            equipment_layer=EquipmentLayer.OVER,
         )
 
-        told = self.telnet(self.mira, "callup shadow")
+        lines = self.primum_lines(self.cast())
 
-        self.assertIn("You call up shadow. Cost: 3 anima, 1 Umbral resonance.", told)
-        self.assertEqual((self.anima(), self.resonance()), (27, 9))
-        # Her declared action for the round is the one she had: still there, unchanged.
-        self.assertEqual(
-            list(CombatRoundAction.objects.filter(participant=seat).values_list("pk", flat=True)),
-            [declared.pk],
-        )
-        self.assertEqual(
-            CombatRoundAction.objects.get(pk=declared.pk).focused_action, self.technique
-        )
-        self.set_lighting(2)  # a light caster brightens the room again
+        # 8 points reach 6 on the curve, less than twice the 4 that one source gives.
+        self.assertEqual(lines, {"Surroundings: fire": 3, "Ash brand (fire)": 3})
+        self.assertEqual(sum(lines.values()), power_for_points(8))
+        # The taper bites here (8 points give 6), so the card says each extra source adds less.
         self.assertIn(
-            "You have already called up your gift this round.",
-            self.telnet(self.mira, "callup shadow"),
+            ("hint", "The more fire around you, the less each extra source adds.", 0),
+            self.card_rows(),
         )
-        self.assertEqual(self.anima(), 27)
+        # An item in a hand slot is held; the same item on the torso is worn.
+        texts = [line["text"] for line in self.card()["surroundings"]]
+        self.assertIn("Ash brand, held · carries fire", texts)
+        slot = EquippedItem.objects.get(item_instance=held.item_instance)
+        slot.body_region = BodyRegion.TORSO
+        slot.save(update_fields=["body_region"])
+        texts = [line["text"] for line in self.card()["surroundings"]]
+        self.assertIn("Ash brand, worn · carries fire", texts)
+        slot.body_region = BodyRegion.RIGHT_HAND
+        slot.save(update_fields=["body_region"])
 
-    def test_with_too_little_anima_in_a_lethal_fight_it_still_goes(self) -> None:
-        encounter = CombatEncounterFactory(
-            status=RoundStatus.DECLARING,
-            round_number=1,
-            room=self.room,
-            risk_level=RiskLevel.LETHAL,
+        massive = PrimumStep.objects.get(rank=4)
+        held.step = massive
+        held.save(update_fields=["step"])
+        PrimumCallUp.objects.create(
+            room_profile=self.profile, substance=self.substance, caster=self.sheet, amount_added=90
         )
-        CombatParticipantFactory(
-            encounter=encounter, character_sheet=self.sheet, status=ParticipantStatus.ACTIVE
+        config = get_resonance_environment_config()
+        config.substance_power_cap = 9
+        config.save(update_fields=["substance_power_cap"])
+
+        lines = self.primum_lines(self.cast())
+
+        self.assertEqual(sum(lines.values()), 9, lines)
+
+
+class _IceField(_FireField):
+    """Mira works ice instead; a lair of fire works against her."""
+
+    SUBSTANCE = "ice"
+    STAT = StatKey.COLD
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.fire = SubstanceFactory(
+            name="fire", stat_key=StatKey.HEAT, direction=SubstanceDirection.RISING
         )
+        SubstanceRelationFactory(
+            substance_a=self.substance, substance_b=self.fire, kind=SubstanceRelationKind.OPPOSED
+        )
+
+
+class AnOpposedSubstanceWorksAgainstHer(_IceField):
+    def test_ice_mage_hindered_and_unrelated_unchanged(self) -> None:
+        self.stock(self.fire, 10)  # Some fire: 4 points against her
+        self.stock(SubstanceFactory(name="stone"), 100)  # unrelated: nothing
+
+        lines = self.primum_lines(self.cast())
+
+        # Her cast called ice up to Trace (+2); the fire takes 4 away; together -2.
+        self.assertEqual(
+            lines, {"Surroundings: ice": 2, "Something here works against your ice": -4}
+        )
+
+        PrimumCallUp.objects.filter(caster=self.sheet).delete()
+        self.profile.primum.filter(substance=self.fire).delete()
+        steam = SubstanceFactory(name="steam")
+        SubstanceRelationFactory(
+            substance_a=self.substance, substance_b=steam, kind=SubstanceRelationKind.RELATED
+        )
+        self.stock(steam, 10)  # Some steam: half of 4 points
+
+        lines = self.primum_lines(self.cast())
+
+        # Steam is not hers and she has not sensed it, so it is never named.
+        self.assertEqual(lines["Something here strengthens your ice"], 2)
+        self.assertFalse(any("steam" in label for label in lines))
+        self.assertEqual(
+            self.card_rows(),
+            [
+                ("heading", "Ice around you", 0),
+                ("source", "The Long Hall · Trace", 2),
+                ("source", "Something here strengthens your ice", 2),
+                ("power", "Around you adds", 4),
+            ],
+        )
+
+        PrimumSightingFactory(
+            character_sheet=self.sheet, room_profile=self.profile, substance=steam
+        )
+
+        self.assertEqual(
+            self.card_rows(),
+            [
+                ("heading", "Ice around you", 0),
+                ("source", "The Long Hall · Trace", 2),
+                ("source", "The Long Hall · Some steam, related to ice", 2),
+                ("power", "Around you adds", 4),
+                (
+                    "hint",
+                    "You can draw strength for your ice from the steam here. "
+                    "You cannot move the steam.",
+                    0,
+                ),
+            ],
+        )
+        self.assertEqual([offer["label"] for offer in self.offers()], ["ice"])
+        refused = self.telnet(self.mira, "callup steam")
+        self.assertIn("Which gift's substance?", refused)
+
+    def test_unperceived_opposed_substance_is_never_named(self) -> None:
+        self.stock(self.fire, 30)  # Rich fire
+
+        texts = [line["text"] for line in self.card()["surroundings"]]
+        lines = self.primum_lines(self.cast())
+
+        self.assertIn("Something here works against your ice", texts)
+        self.assertIn("Something here works against your ice", lines)
+        self.assertFalse(any("fire" in text.lower() for text in [*texts, *lines]))
+
+        PrimumSightingFactory(
+            character_sheet=self.sheet, room_profile=self.profile, substance=self.fire
+        )
+
+        texts = [line["text"] for line in self.card()["surroundings"]]
+        self.assertIn("Ice around you", texts)
+        self.assertTrue(any(text.endswith("Rich fire, opposed to ice") for text in texts), texts)
+        self.assertIn("Around you adds", texts)
+
+
+class CallingUp(_FireField):
+    def test_call_up_raises_one_step_for_one_anima_amount_no_resonance(self) -> None:
+        told = self.telnet(self.mira, "callup fire")
+
+        self.assertIn("You call up fire. Cost: free.", told)
+        self.assertEqual(self.called_up(), [1])  # nothing to Trace
+        self.assertTold(self.tomas, MANIFEST)
+
+        seen_by_telnet = self.said(self.tomas).count(MANIFEST)
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, room=self.room)
+        begin_engagement(self.mira, EngagementType.COMBAT, source=encounter)
+        result = self.web(self.mira, "call_up_substance", gift_id=self.gift.pk)
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, "You call up fire. Cost: 3 anima.")
+        self.assertGreater(self.said(self.tomas).count(MANIFEST), seen_by_telnet)
+        self.assertEqual(self.called_up(), [10])  # Trace to Some
+        self.assertEqual((self.anima(), self.resonance()), (27, 10))
+
+        self.web(self.mira, "call_up_substance", gift_id=self.gift.pk)  # Rich
+        self.web(self.mira, "call_up_substance", gift_id=self.gift.pk)  # Massive
+        self.assertEqual(self.called_up(), [100])
+        at_top = self.web(self.mira, "call_up_substance", gift_id=self.gift.pk)
+        self.assertEqual(at_top.detail.message, "No more fire can be called up here.")
+        self.assertEqual(self.called_up(), [100])
+        self.assertEqual(self.resonance(), 10)
+
+    def test_call_up_in_a_room_that_already_leans_lands_on_the_next_step_start(self) -> None:
+        set_room_stat_modifier(self.profile, StatKey.HEAT, source="builder", value=5)
+
+        told = self.telnet(self.mira, "callup fire")
+
+        self.assertIn("You call up fire.", told)
+        some = PrimumStep.objects.get(rank=2)
+        # Held Primum, not the lean's Trace floor, is what the step is measured from.
+        self.assertEqual(self.called_up(), [some.starts_at])
+
+    def test_cast_calls_up_only_to_trace(self) -> None:
+        result = self.cast()
+
+        self.assertEqual(
+            result["technique_result"]["substance_call_up"],
+            {"label": "fire", "anima": 0, "blocked": ""},
+        )
+        self.assertEqual(self.primum_lines(result), {"Surroundings: fire": 2})
+        self.assertEqual(self.called_up(), [1])
+        self.assertTold(self.tomas, MANIFEST)
+
+        again = self.cast()
+
+        self.assertIsNone(again["technique_result"]["substance_call_up"])
+        self.assertEqual(self.called_up(), [1])
+
+        self.mira.move_to(self.make_room("The Yard"), quiet=True)
+        self.assertEqual(self.called_up(), [])
+
+    def test_a_cast_past_anima_is_never_refused(self) -> None:
+        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, room=self.room)
         begin_engagement(self.mira, EngagementType.COMBAT, source=encounter)
         anima = CharacterAnima.objects.get(character=self.sheet)
         anima.current = 1
         anima.save(update_fields=["current"])
 
-        told = self.telnet(self.mira, "callup shadow")
+        self.assertGreater(self.card()["effective_anima_cost"], 0)
+        result = self.cast()
 
-        self.assertIn("You call up shadow. Cost: 3 anima", told)
+        self.assertEqual(result["technique_result"]["anima_spent"], 1)
         self.assertEqual(self.anima(), 0)
-        self.assertEqual(_lighting(self.room), -1)
+        self.assertEqual(self.called_up(), [1])
 
 
-class TheGMMarksItPresent(_ShadowField):
+class TheGMMarksItPresent(_FireField):
     def setUp(self) -> None:
         super().setUp()
         self.gm = self.make_player("Garrow", room=self.room)
@@ -386,29 +462,82 @@ class TheGMMarksItPresent(_ShadowField):
             scene=self.scene, account=self.account_of(self.gm), is_gm=True, is_owner=True
         )
 
-    def test_the_gm_marks_shadow_and_the_scene_ending_clears_it(self) -> None:
-        self.assertIn(
-            "Shadow is now present here for this scene.",
-            self.telnet(self.gm, "stage present shadow"),
+    def scene_marks(self) -> list[int]:
+        return list(
+            PrimumCallUp.objects.filter(scene=self.scene).values_list("amount_added", flat=True)
         )
-        self.assertEqual(_lighting(self.room), -1)
-        self.assertEqual(self.card()["effective_anima_cost"], 0)
-        self.assertEqual(self.card()["surroundings"][0]["text"], "Shadow here")
+
+    def test_gm_mark_raises_place_to_trace_until_scene_ends(self) -> None:
+        self.assertIn(
+            "Fire is now present here for this scene.",
+            self.telnet(self.gm, "stage present fire"),
+        )
+        self.assertEqual(self.scene_marks(), [1])
+        card = self.card()
+        self.assertEqual(
+            [(line["kind"], line["text"], line["amount"]) for line in card["surroundings"]],
+            [
+                ("heading", "Fire around you", 0),
+                ("source", "The Long Hall · Trace", 2),
+                ("power", "Fire adds", 2),
+            ],
+        )
 
         self.scene.finish_scene()
 
-        self.assertEqual(_lighting(self.room), 0)
-        self.assertFalse(LocationValueModifier.objects.filter(source__startswith="scene_mark:"))
+        self.assertEqual(self.scene_marks(), [])
 
     def test_the_gm_removes_it_and_a_player_may_not_mark_it(self) -> None:
-        self.web(self.gm, "stage_substance", substance="shadow", present=True)
-        self.assertIn("The mark on shadow is removed.", self.telnet(self.gm, "stage absent shadow"))
-        self.assertEqual(_lighting(self.room), 0)
+        self.web(self.gm, "stage_substance", substance="fire", present=True)
+        self.assertIn("The mark on fire is removed.", self.telnet(self.gm, "stage absent fire"))
+        self.assertEqual(self.scene_marks(), [])
 
-        refused = self.web(self.tomas, "stage_substance", substance="shadow")
+        refused = self.web(self.tomas, "stage_substance", substance="fire")
 
         self.assertIn("Only the scene's GM, owner, or staff may", refused.detail.message)
-        self.assertEqual(_lighting(self.room), 0)
+        self.assertEqual(self.scene_marks(), [])
+
+    def test_completing_the_event_clears_the_mark(self) -> None:
+        event = EventFactory(location=self.profile, status=EventStatus.ACTIVE)
+        self.scene.event = event
+        self.scene.save()
+        self.telnet(self.gm, "stage present fire")
+        self.assertEqual(self.scene_marks(), [1])
+
+        complete_event(event)
+
+        self.assertEqual(self.scene_marks(), [])
+
+
+class NothingToReadAddsNoLine(_FireField):
+    def test_cast_with_no_tuning_rows_adds_no_line(self) -> None:
+        self.stock(self.substance, 100)
+        PrimumStep.objects.all().delete()
+        SubstancePowerStep.objects.all().delete()
+
+        self.assertEqual(self.card()["surroundings"], [])
+        result = self.cast()
+
+        self.assertEqual(self.primum_lines(result), {})
+        self.assertIsNone(result["technique_result"]["substance_call_up"])
+        self.assertEqual(self.called_up(), [])
+
+    def test_no_thread_or_no_substance_gift_gets_no_line(self) -> None:
+        self.stock(self.substance, 100)
+        self.gift.substance = None
+        self.gift.save(update_fields=["substance"])
+
+        self.assertEqual(self.primum_lines(self.cast()), {})
+
+        self.gift.substance = self.substance
+        self.gift.save(update_fields=["substance"])
+        thread = Thread.objects.get(owner=self.sheet, target_gift=self.gift)
+        thread.retired_at = timezone.now()
+        thread.save(update_fields=["retired_at"])
+        self.mira.threads.invalidate()
+
+        self.assertEqual(self.primum_lines(self.cast()), {})
+        self.assertEqual(self.called_up(), [])
 
 
 class WallsAndRoofsKeepTheWeatherOut(JourneyCase):
@@ -416,7 +545,7 @@ class WallsAndRoofsKeepTheWeatherOut(JourneyCase):
 
     Kept as a unit of the felt reading (U-keep): it walks the enclosure by source table
     (weather row, the room's own row, open air, roof, walls) that no single player surface
-    enumerates; the caster journeys above read the same reading through the cast card.
+    enumerates.
     """
 
     def setUp(self) -> None:
@@ -450,14 +579,19 @@ class WallsAndRoofsKeepTheWeatherOut(JourneyCase):
         set_room_stat_modifier(self.cellar.room_profile, StatKey.WET, source="builder", value=30)
         self.assertEqual(felt_exposure(self.cellar, stat_key=StatKey.WET), 30)
         self.assertEqual(_lighting(self.cellar), -2)  # a roof alone lets the night in
+        # The many-axis read a room's substances use gives what one-axis reads give.
+        axes = [StatKey.WET, StatKey.LIGHTING, StatKey.HEAT]
+        for room in (self.street, self.hall, self.cellar):
+            self.assertEqual(
+                felt_readings(room, axes), {key: felt_reading(room, stat_key=key) for key in axes}
+            )
 
 
-class ATechniqueThatNeedsOtherSurroundings(_ShadowField):
+class ATechniqueThatNeedsOtherSurroundings(_FireField):
     """A storm technique of her gift that needs wet air, cast in a dry room."""
 
     def setUp(self) -> None:
         super().setUp()
-        self.set_lighting(-2)
         self.needs_wet = RestrictionFactory(
             name="Needs wet air",
             kind=RestrictionKind.DESIGN,
@@ -499,36 +633,12 @@ class ATechniqueThatNeedsOtherSurroundings(_ShadowField):
         self.assertNotIn("Surroundings: Needs wet air (here: dry)", self.labels())
 
 
-class AuthoringShapes(JourneyCase):
-    """U-keep: the validation branches staff meet in admin (the live admin pass is in the
-    PR's real-testing report); no player journey reaches them."""
-
-    def test_a_substance_must_fit_its_reading(self) -> None:
-        falling_wet = GiftSubstance(
-            gift=GiftFactory(),
-            label="water",
-            stat_key=StatKey.WET,
-            direction=SubstanceDirection.FALLING,
-            full_at=2,
-            arrival_line="Mist gathers.",
-        )
-        with self.assertRaises(ValidationError) as raised:
-            falling_wet.full_clean()
-        self.assertIn("below an ordinary room", raised.exception.message_dict["direction"][0])
-
-        too_far = GiftSubstance(
-            gift=GiftFactory(),
-            label="shadow",
-            stat_key=StatKey.LIGHTING,
-            direction=SubstanceDirection.FALLING,
-            full_at=5,
-            arrival_line="The shadows deepen.",
-        )
-        with self.assertRaises(ValidationError) as raised:
-            too_far.full_clean()
-        self.assertIn("only goes 2 from an", raised.exception.message_dict["full_at"][0])
+class SurroundingsRestrictionShape(JourneyCase):
+    """U-keep: the validation branch staff meet in admin; no player journey reaches it."""
 
     def test_a_surroundings_restriction_needs_sane_bounds(self) -> None:
+        from django.core.exceptions import ValidationError
+
         restriction = RestrictionFactory(name="Needs dark", kind=RestrictionKind.DESIGN)
         restriction.surroundings_stat = StatKey.LIGHTING
         restriction.surroundings_min = 3
@@ -543,251 +653,3 @@ class AuthoringShapes(JourneyCase):
             raised.exception.message_dict["surroundings_max"],
             ["'At most' cannot be below 'at least'."],
         )
-
-
-class TheThreadLevelScalesIt(_ShadowField):
-    """A novice: her gift thread at level 1 feels a tenth of what a level-10 caster does."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        thread = Thread.objects.get(owner=self.sheet, target_gift=self.gift)
-        thread.level = 10
-        thread.save(update_fields=["level"])
-        self.mira.threads.invalidate()
-
-    def test_pitch_dark_gives_one_and_blinding_takes_one(self) -> None:
-        self.set_lighting(-2)
-        self.assertEqual(self.surroundings_line(self.cast()), 1)
-
-    def test_blinding_with_no_resonance_takes_one(self) -> None:
-        self.set_lighting(2)
-        self.balance.balance = 0
-        self.balance.save(update_fields=["balance"])
-        self.assertEqual(self.surroundings_line(self.cast()), -1)
-
-
-class ASecondCasterAndLeaving(_ShadowField):
-    """Tomas is a shadow caster too; what Mira calls up is his to use while she stays."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        tomas_sheet = self.tomas.sheet_data
-        CharacterAnimaFactory(character=tomas_sheet, current=30, maximum=30)
-        ThreadFactory(
-            owner=tomas_sheet,
-            target_kind=TargetKind.GIFT,
-            target_trait=None,
-            target_gift=self.gift,
-            resonance=self.abyssal,
-            level=100,
-        )
-        self.tomas.threads.invalidate()
-
-    def tomas_offer(self) -> dict:
-        return (
-            self.api(self.account_of(self.tomas))
-            .get(
-                reverse("sceneactionrequest-call-up-offers"),
-                {"initiator_persona": self.tomas.sheet_data.primary_persona.pk},
-            )
-            .json()[0]
-        )
-
-    def test_he_finds_it_already_there_until_she_logs_out(self) -> None:
-        self.cast()
-        self.assertTrue(self.tomas_offer()["already_present"])
-
-        self.mira._leave_the_grid()  # her last session leaves
-
-        self.assertEqual(_lighting(self.room), 0)
-        self.assertEqual(self.tomas_offer()["cost_line"], "free, your control covers it")
-
-
-class ThePlaceMovesTheCost(_ShadowField):
-    """A place of abyssal magic makes calling up shadow cheaper; a celestial one dearer."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        AffinityInteraction.objects.clear_cache()
-        CharacterAuraFactory(
-            character=self.sheet,
-            celestial=Decimal("0.00"),
-            primal=Decimal("0.00"),
-            abyssal=Decimal("100.00"),
-        )
-        self.set_lighting(2)
-        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, room=self.room)
-        begin_engagement(self.mira, EngagementType.COMBAT, source=encounter)
-
-    def place(self, affinity, valence, kind) -> None:
-        resonance = ResonanceFactory(affinity=affinity)
-        mod = tag_room_resonance(self.room.room_profile, resonance)
-        mod.value = 200
-        mod.save(update_fields=["value"])
-        AffinityInteractionFactory(
-            source_affinity=self.abyssal.affinity,
-            environment_affinity=affinity,
-            valence=valence,
-            kind=kind,
-            severity_multiplier=Decimal("1.00"),
-        )
-        AffinityInteraction.objects.clear_cache()
-
-    def call_up_line(self) -> tuple[int, str, str]:
-        preview = self.card()
-        (line,) = [x for x in preview["surroundings"] if x["kind"] == "call_up"]
-        return preview["effective_anima_cost"], line["text"], line["detail"]
-
-    def test_against_the_light_with_no_place_magic(self) -> None:
-        self.assertEqual(
-            self.call_up_line(),
-            (12, "Calls up shadow against the light", "8 anima, 3 Umbral resonance"),
-        )
-
-    def test_a_place_of_abyssal_magic_halves_it(self) -> None:
-        self.place(self.abyssal.affinity, ResonanceValence.ALIGNED, AffinityInteractionKind.AMPLIFY)
-        self.assertEqual(
-            self.call_up_line(),
-            (8, "Calls up shadow, the place makes it cheaper", "4 anima, 2 Umbral resonance"),
-        )
-
-    def test_a_place_of_celestial_magic_raises_it(self) -> None:
-        celestial = Affinity.objects.get(name="Celestial")
-        self.place(celestial, ResonanceValence.OPPOSED, AffinityInteractionKind.REJECT)
-        self.assertEqual(
-            self.call_up_line(),
-            (16, "Calls up shadow, the place makes it dearer", "12 anima, 5 Umbral resonance"),
-        )
-
-
-class PastHerAnima(_ShadowField):
-    """Never refused for anima. In a lethal fight her card shows the whole cost; a scene
-    cast is never lethal, so its card and its charge both stop at what she has."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        self.set_lighting(2)
-        anima = CharacterAnima.objects.get(character=self.sheet)
-        anima.current = 5
-        anima.save(update_fields=["current"])
-
-    def test_in_a_lethal_fight_the_card_shows_twelve_and_offers_it(self) -> None:
-        encounter = CombatEncounterFactory(
-            status=RoundStatus.DECLARING, room=self.room, risk_level=RiskLevel.LETHAL
-        )
-        CombatParticipantFactory(
-            encounter=encounter, character_sheet=self.sheet, status=ParticipantStatus.ACTIVE
-        )
-        begin_engagement(self.mira, EngagementType.COMBAT, source=encounter)
-
-        response = self.api(self.account_of(self.mira)).get(
-            f"/api/actions/characters/{self.mira.pk}/available/", {"page_size": 100}
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
-        (card,) = [
-            row["cast_preview"]
-            for row in response.json()["results"]
-            if row.get("ref", {}).get("technique_id") == self.technique.pk
-            and row.get("cast_preview")
-        ]
-        self.assertEqual(card["effective_anima_cost"], 12)
-
-    def test_a_scene_cast_with_five_left_is_offered_and_charges_five(self) -> None:
-        encounter = CombatEncounterFactory(status=RoundStatus.DECLARING, room=self.room)
-        begin_engagement(self.mira, EngagementType.COMBAT, source=encounter)
-        self.assertEqual(self.card()["effective_anima_cost"], 5)
-        result = self.cast()
-
-        self.assertEqual(result["technique_result"]["anima_spent"], 5)
-        self.assertEqual(self.anima(), 0)
-        self.assertEqual(_lighting(self.room), -1)
-
-
-class AnEventEndingClearsTheMark(_ShadowField):
-    """A scene that ends because its event completes clears the GM's mark too."""
-
-    def test_completing_the_event_clears_the_mark(self) -> None:
-        gm = self.make_player("Garrow", room=self.room)
-        SceneParticipationFactory(scene=self.scene, account=self.account_of(gm), is_gm=True)
-        event = EventFactory(location=self.room.room_profile, status=EventStatus.ACTIVE)
-        self.scene.event = event
-        self.scene.save()
-        self.telnet(gm, "stage present shadow")
-        self.assertEqual(_lighting(self.room), -1)
-
-        complete_event(event)
-
-        self.assertEqual(_lighting(self.room), 0)
-
-
-class AWaterCasterIndoors(JourneyCase):
-    """A water caster in a roofed cellar: her called-up water counts under the roof."""
-
-    def test_her_water_counts_under_a_roof(self) -> None:
-        CheckSystemSetupFactory.create()
-        from world.magic.factories import _make_resist_corruption_check_type
-
-        _make_resist_corruption_check_type()
-        accrue = patch("world.scenes.action_services.accrue")
-        accrue.start()
-        self.addCleanup(accrue.stop)
-        Affinity.objects.clear_cache()
-        _c, primal, _a = ensure_canonical_affinities()
-        cellar = self.make_room("The Cellar")
-        profile = cellar.room_profile
-        profile.enclosure = RoomEnclosure.ROOFED
-        profile.save()
-        nerys = self.make_player("Nerys", room=cellar)
-        sheet = nerys.sheet_data
-        CharacterAnimaFactory(character=sheet, current=30, maximum=30)
-        CharacterVitals.objects.create(
-            character_sheet=sheet, health=50, max_health=50, base_max_health=50
-        )
-        scene = SceneFactory(room=cellar)
-        tide = ResonanceFactory(name="Tide", affinity=primal)
-        gift = GiftFactory(name="Tidecraft")
-        gift.resonances.add(tide)
-        GiftSubstance.objects.create(
-            gift=gift,
-            label="water",
-            stat_key=StatKey.WET,
-            direction=SubstanceDirection.RISING,
-            full_at=20,
-            opposed_by=StatKey.DRY,
-            arrival_line="Water beads on the walls.",
-        )
-        ThreadFactory(
-            owner=sheet,
-            target_kind=TargetKind.GIFT,
-            target_trait=None,
-            target_gift=gift,
-            resonance=tide,
-            level=100,
-        )
-        CharacterResonanceFactory(character_sheet=sheet, resonance=tide, balance=10)
-        technique = make_benign_castable_technique()
-        technique.gift = gift
-        technique.anima_cost = 4
-        technique.intensity = 6
-        technique.control = 6
-        technique.save()
-        grant_technique(sheet.primary_persona, technique)
-        nerys.threads.invalidate()
-
-        response = self.api(self.account_of(nerys)).post(
-            reverse("sceneactionrequest-cast"),
-            {
-                "scene": scene.pk,
-                "initiator_persona": sheet.primary_persona.pk,
-                "technique_id": technique.pk,
-            },
-            format="json",
-        )
-
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
-        entries = response.json()["result"]["power_ledger"]["entries"]
-        self.assertIn(
-            ("Surroundings: water", 5), [(e["source_label"], e["amount"]) for e in entries]
-        )
-        self.assertEqual(felt_exposure(cellar, stat_key=StatKey.WET), 10)

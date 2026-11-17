@@ -837,6 +837,8 @@ class ActionRegistryTests(TestCase):
             "entreat_sineating",
             "perform_sineating",
             "decline_sineating",
+            # #5125 - harvesting Primum from a lair or a slain creature.
+            "harvest_primum",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

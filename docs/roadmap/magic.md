@@ -381,18 +381,18 @@ them, so no facet-gated flourish could ever qualify. Built:
   it yours", and finalize ties the facets before signing the flourish.
 - Detail: `docs/systems/magic.md` "Player-facing facet binding (#5021)".
 
-## Where you stand matters: a gift's substance (#5018, ADR-5018, BUILT 2026-11-09)
+## Where you stand matters: a gift's substance (#5018, ADR-5018, BUILT 2026-11-09; reshaped by #5125)
 
-What was built, in one PR (seven parts):
+What #5018 built, in one PR (seven parts). Parts 1 and 2 were reshaped by #5125 (ADR-5125,
+next section): a substance is now one shared `Substance` row, not a per-gift mapping, and a
+call-up is priced as one step for one shared anima cost with no resonance charge.
 
-1. **Stronger and weaker.** Staff name a gift's substance once (`GiftSubstance`, the Gift
-   admin's Substance inline); every cast of that gift by a caster with a GIFT thread on it
-   gains or loses up to 10 power ("Surroundings: shadow"), scaled by her thread level.
-2. **Her cast calls it up.** Where the substance is missing (an ordinary room counts), the
-   cast calls it up: its anima rides the cast's own cost before control, so social-scene
-   casts usually stay free; the uncovered share spends gift resonance; a matching place is
-   cheaper, a hostile one dearer. The room changes for everyone while she stays, and sees
-   an unattributed Narrator line. Never refused for anima.
+1. **Stronger and weaker.** Every cast of a gift by a caster with a GIFT thread on it gains or
+   loses power from the substance in the place, scaled by her thread level ("Shadow around
+   you", then one line per source and "Shadow adds").
+2. **Her cast calls it up.** Where the substance is missing, the cast calls it up (now only
+   to Trace): its anima rides the cast's own cost before control, so social-scene casts usually
+   stay free. The room changes for everyone while she stays. Never refused for anima.
 3. **No technique.** "Your gift" on the scene panel, Call up beside Dig deep in a fight
    (once a round, not her action), telnet `callup`.
 4. **Other surroundings.** A DESIGN restriction may need a reading its gift does not make;
@@ -404,7 +404,46 @@ What was built, in one PR (seven parts):
    weather's wet and wind; a room's own rows count.
 
 Remains for staff: authoring substances on real gifts, dark weather types and styles, and
-tuning the six numbers on Resonance environment settings.
+tuning the numbers on Resonance environment settings.
+
+## Substances and Primum (#5125, ADR-5125, BUILT 2026-11-17)
+
+Design record #5121. Built in one PR, in this order:
+
+1. **One shared list.** `Substance`, `SubstanceRelation` (related or opposed, one row per pair,
+   never chained) and `Gift.substance` (major gifts only, a database check) replace
+   the old per-gift mapping. Migration 0461 carried every old row into the new list (merging
+   gifts that described the same substance, printing every discarded per-gift value so staff
+   can re-author the relations) and 0462 dropped the old table and four config columns
+   (ADR-0237: restructure; the per-gift full-strength number, weakened-by reading and arrival
+   line are a deliberate discard).
+2. **Primum in places and creatures.** `PlacePrimum` (a lair: capacity, stock, slow refill,
+   finite), `CreaturePrimum`, and staff-edited `PrimumStep`, `SubstancePowerStep` rows. A room
+   whose ordinary condition leans a substance's way reads Trace; lairs and creatures hold the
+   large amounts. A cast draws on the place and her equipped items, never on creatures: a
+   creature's Primum matters only for sensing and harvesting. Matching gives full benefit, related `substance_related_share_pct`, opposed
+   works against the caster; sources add with a taper up to `substance_power_cap`; the bonus
+   still grows with her GIFT thread.
+3. **Perceiving it.** `EffectType.REVEAL_PRIMUM` (a perception technique's check): a plain
+   success names the strongest substance, a good success all of them, until she leaves. A
+   substance she has not perceived reads "Something here works against your ice" or "Something
+   here strengthens your ice". Her own gift's substance is always perceived. The room panel
+   lists "You sense" and `look` ends with the sentence.
+4. **Calling up.** One step, one shared anima cost, one generated room line.
+5. **Harvesting.** Anyone with the new harvest skill rolls a check; a matching GIFT thread
+   adds `harvest_thread_bonus x thread_level_multiplier`; every attempt, good roll or bad, costs
+   `harvest_ap_cost` action points and `harvest_fatigue_cost` physical fatigue. Only perceived Primum in a lair or on
+   a slain creature is offered, a slain creature once in total, a lair slowly or never. Web
+   Harvest buttons and telnet `extract fire` / `extract fire from elemental`.
+6. **Items and crafting.** Harvested Primum is an item; an optional recipe ingredient makes the
+   crafted piece carry the substance ("Carries fire", public); only equipped gear counts toward
+   a cast (see `docs/systems/items.md` "Crafting with Primum").
+7. **Every technique of a major gift always carries its substance's property**, derived on read.
+
+`[ABSENT]` by decision (not alpha): spending Primum to raise a Gift thread or to call up a
+substance in a cast. Remains for staff: authoring the substances, relations, lairs, creature
+Primum, the harvest check, skill and outcome rows, and tuning the starter steps and curve.
+Detail: `docs/systems/magic.md` "Substances and Primum"; journeys in `docs/testing/journeys.md`.
 
 ## Tradition sponsorship, Academy training, and the in-play loop (#2428/#2440/#2441/#2442 — BUILT)
 
@@ -1292,8 +1331,8 @@ A mixed character is the normal case. Built, as one PR:
 - **Journeys and fuzz:** `integration_tests/test_several_resonances_journeys.py` and the unsettled
   fuzz invariants (`integration_tests/fuzz/test_unsettled_invariants.py`).
 
-Not built here: what causes a resonance gain (#5124) and substances and Primum (#5125). Staff
-still author the per-resonance pull perks and the `DriftConfig` numbers in admin.
+#5123 did not build what causes a resonance gain (#5124 built that later) or substances and
+Primum (#5125 built those later; see "Substances and Primum" above). Staff still author the per-resonance pull perks and the `DriftConfig` numbers in admin.
 
 ## Kindled resonances, reflections and the rite of settling (#5124, ADR-5124, BUILT 2026-11-15)
 

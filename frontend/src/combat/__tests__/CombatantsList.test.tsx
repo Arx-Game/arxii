@@ -12,6 +12,7 @@ import type { ReactNode } from 'react';
 
 import { deepLinkModalSlice } from '@/store/deepLinkModalSlice';
 import type { components } from '@/generated/api';
+import { combatKeys } from '../queries';
 
 type ConditionInstance = components['schemas']['ConditionInstance'];
 
@@ -44,12 +45,16 @@ vi.mock('../queries', async (importOriginal) => {
   return {
     ...actual,
     useRegistryDispatch: (...args: unknown[]) => mockUseRegistryDispatch(...args),
+    useDispatchPlayerAction: () => ({ mutateAsync: mockHarvestMutateAsync, isPending: false }),
   };
 });
 
+// #5125 — Harvest on a slain foe.
+const mockHarvestMutateAsync = vi.fn();
+
 const toastErrorMock = vi.fn();
 vi.mock('sonner', () => ({
-  toast: { error: (...args: unknown[]) => toastErrorMock(...args) },
+  toast: { error: (...args: unknown[]) => toastErrorMock(...args), success: vi.fn() },
 }));
 
 import { CombatantsList } from '../sections/CombatantsList';
@@ -147,6 +152,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     thumbnail_media_url: null,
     current_square: null,
     current_position: null,
+    harvest_offers: [],
     mirrors_participant_id: null,
     ...overrides,
   };
@@ -1075,5 +1081,48 @@ describe('ally taunt menu', () => {
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith('Cannot taunt yourself.');
     });
+  });
+
+  it('offers Harvest on a slain foe the viewer perceives Primum on', async () => {
+    const user = userEvent.setup();
+    mockHarvestMutateAsync.mockResolvedValue({
+      success: true,
+      message: 'Success. You draw out 1 Fire Primum (Common).',
+      data: { remaining_line: 'Nothing more can be drawn from Mire Knight.' },
+    });
+    const offer = {
+      substance_id: 3,
+      substance_name: 'fire',
+      source: 'creature',
+      opponent_id: 10,
+      opponent_name: 'Mire Knight',
+      step_name: 'Rich',
+      check_name: 'Harvesting',
+      ap_cost: 2,
+      thread_bonus: 0,
+      thread_gift_name: '',
+      character_id: 7,
+    };
+    const encounter = makeEncounter(
+      [],
+      [makeOpponent({ id: 10, harvest_offers: [offer] }), makeOpponent({ id: 11 })]
+    );
+
+    render(<CombatantsList encounter={encounter} characterId={7} />, { wrapper: createWrapper() });
+
+    const row = within(screen.getByTestId('opponent-row-10'));
+    expect(row.getByText('You sense fire Primum in its remains.')).toBeInTheDocument();
+    expect(row.getByText('Check: Harvesting')).toBeInTheDocument();
+    expect(row.getByText('Costs 2 AP')).toBeInTheDocument();
+    expect(within(screen.getByTestId('opponent-row-11')).queryByText('Harvest')).toBeNull();
+    const invalidate = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    await user.click(row.getByText('Harvest'));
+
+    expect(
+      await row.findByText('Success. You draw out 1 Fire Primum (Common).')
+    ).toBeInTheDocument();
+    expect(row.getByText('Nothing more can be drawn from Mire Knight.')).toBeInTheDocument();
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: combatKeys.encounter(1) });
+    invalidate.mockRestore();
   });
 });

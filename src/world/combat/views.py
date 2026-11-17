@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import asdict
 from http import HTTPMethod
 import logging
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from django.db.models import Prefetch, Q, QuerySet
 from django.shortcuts import get_object_or_404
@@ -31,6 +32,7 @@ from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     DuelChallengeStatus,
     EncounterType,
+    OpponentStatus,
     OpponentTier,
     ParticipantStatus,
 )
@@ -66,6 +68,7 @@ from world.combat.permissions import (
 )
 from world.combat.serializers import (
     ACTIVE_CONDITIONS_CONTEXT_KEY,
+    HARVEST_OFFERS_CONTEXT_KEY,
     AddOpponentSerializer,
     AddParticipantSerializer,
     ConsiderReadingSerializer,
@@ -110,6 +113,7 @@ from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
 from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
+from world.magic.services.harvest import harvest_offers
 from world.mechanics.models import Property
 from world.scenes.constants import RoundStatus
 from world.scenes.models import Persona, Scene
@@ -487,6 +491,7 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter = self.get_object()
         context = self.get_serializer_context()
         context[ACTIVE_CONDITIONS_CONTEXT_KEY] = self._active_conditions_by_object_id(encounter)
+        context[HARVEST_OFFERS_CONTEXT_KEY] = self._harvest_offers_by_opponent(request, encounter)
         return Response(self.get_serializer_class()(encounter, context=context).data)
 
     def get_permissions(self) -> list:
@@ -1560,8 +1565,36 @@ class CombatEncounterViewSet(ModelViewSet):
             is_gm = encounter.scene.is_gm(request.user)
         context["is_gm"] = bool(request.user.is_authenticated and request.user.is_staff) or is_gm
         context[ACTIVE_CONDITIONS_CONTEXT_KEY] = self._active_conditions_by_object_id(encounter)
+        context[HARVEST_OFFERS_CONTEXT_KEY] = self._harvest_offers_by_opponent(request, encounter)
 
         return context
+
+    def _harvest_offers_by_opponent(
+        self, request: Request, encounter: CombatEncounter
+    ) -> dict[int, list[dict[str, Any]]]:
+        """Slain opponent pk to the Primum offers the viewer's characters have on it (#5125).
+
+        The offers of every character the account plays that stands in this encounter's room,
+        the way this viewset identifies the viewer everywhere else (``_viewer_character_ids``),
+        each carrying the character who can take it. A character who perceives no Primum adds
+        none. A fight with nothing slain costs no query.
+        """
+        if not any(
+            opponent.status == OpponentStatus.DEFEATED for opponent in encounter.opponents_cached
+        ):
+            return {}
+        # A CharacterSheet shares its pk with its character's ObjectDB.
+        characters = ObjectDB.objects.filter(
+            pk__in=self._viewer_character_ids(request), db_location_id=encounter.room_id
+        ).order_by("pk")
+        by_opponent: dict[int, list[dict[str, Any]]] = {}
+        for character in characters:
+            for offer in harvest_offers(character):
+                if offer.opponent_id is not None:
+                    by_opponent.setdefault(offer.opponent_id, []).append(
+                        {**asdict(offer), "character_id": character.pk}
+                    )
+        return by_opponent
 
     def _current_round_action(
         self,

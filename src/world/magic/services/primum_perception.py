@@ -1,0 +1,214 @@
+"""What a character perceives of Primum (#5125).
+
+A caster always knows the substance she works herself, and knows another substance in a place
+only once she has sensed it there (a ``PrimumSighting``). The read is what the cast card uses
+to decide whether it may name a substance that works against her. A ``REVEAL_PRIMUM`` effect
+(a Magesight check) writes the sightings: ``reveal`` names the strongest substance in the place,
+or all of them, and ``clear_sightings`` takes them back when she leaves.
+"""
+
+from __future__ import annotations
+
+from collections import defaultdict
+import contextlib
+from typing import TYPE_CHECKING
+
+from django.db.models import Q
+
+from evennia_extensions.models import RoomProfile
+from world.character_sheets.models import CharacterSheet
+from world.checks.constants import PrimumRevealScope
+from world.combat.constants import OpponentStatus
+from world.combat.models import CombatOpponent
+from world.magic.models import CharacterGift, CreaturePrimum, PrimumSighting, Substance
+from world.magic.services.primum import (
+    gift_substance,
+    primum_steps,
+    room_substance_amounts,
+    step_names_for,
+)
+from world.magic.types.primum import PrimumSense
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from evennia.objects.models import ObjectDB
+
+    from world.magic.models import PrimumStep
+
+
+def perceived_substance_ids(character: ObjectDB, room: ObjectDB | None) -> frozenset[int]:
+    """The substances ``character`` perceives in ``room``.
+
+    The caster's sightings for that room, plus the substance of each gift she holds (resolved
+    through the gift's lineage). A character with no sheet perceives nothing.
+    """
+    try:
+        sheet = character.sheet_data
+    except CharacterSheet.DoesNotExist:
+        return frozenset()
+    perceived = set(_gift_substance_ids(sheet))
+    if room is not None:
+        try:
+            profile = room.room_profile
+        except RoomProfile.DoesNotExist:
+            return frozenset(perceived)
+        perceived.update(
+            PrimumSighting.objects.filter(character_sheet=sheet, room_profile=profile).values_list(
+                "substance_id", flat=True
+            )
+        )
+    return frozenset(perceived)
+
+
+def _gift_substance_ids(sheet: CharacterSheet) -> frozenset[int]:
+    """The substance of each gift ``sheet`` holds, through the gift's lineage."""
+    found: set[int] = set()
+    for held in CharacterGift.objects.filter(character=sheet).select_related("gift"):
+        substance = gift_substance(held.gift)
+        if substance is not None:
+            found.add(substance.pk)
+    return frozenset(found)
+
+
+def creature_substance_amounts(room: ObjectDB) -> dict[int, int]:
+    """Substance pk to the Primum the creatures in ``room`` carry.
+
+    Counts each opponent of a fight in this room that is still standing, or was slain and has
+    not been harvested, at the Primum its kind of creature carries. Creatures add up.
+    """
+    standing = (
+        CombatOpponent.objects.filter(encounter__room=room, creature_template__isnull=False)
+        .filter(
+            Q(status=OpponentStatus.ACTIVE)
+            | Q(status=OpponentStatus.DEFEATED, primum_harvested_at__isnull=True)
+        )
+        .values_list("creature_template_id", flat=True)
+    )
+    head_count: dict[int, int] = defaultdict(int)
+    for template_id in standing:
+        head_count[template_id] += 1
+    if not head_count:
+        return {}
+    amounts: dict[int, int] = defaultdict(int)
+    for row in CreaturePrimum.objects.filter(creature_template_id__in=head_count):
+        amounts[row.substance_id] += row.amount * head_count[row.creature_template_id]
+    return {pk: amount for pk, amount in amounts.items() if amount > 0}
+
+
+def candidate_substances(
+    room: ObjectDB, *, steps: Sequence[PrimumStep] | None = None
+) -> dict[int, int]:
+    """Substance pk to the Primum a Magesight check could name in ``room``.
+
+    The place's amounts and the creatures' amounts, the larger of the two for each substance.
+    """
+    amounts = room_substance_amounts(room, steps=steps)
+    for pk, amount in creature_substance_amounts(room).items():
+        amounts[pk] = max(amounts.get(pk, 0), amount)
+    return amounts
+
+
+def sensed_primum(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - a character
+    room: ObjectDB,
+    *,
+    perceived: frozenset[int] | None = None,
+    steps: Sequence[PrimumStep] | None = None,
+) -> list[PrimumSense]:
+    """What ``character`` senses in ``room``: each substance she perceives that reaches a step.
+
+    ``perceived`` and ``steps`` are reads the caller already made (``perceived_substance_ids``,
+    ``primum_steps``); omitted, they are read here.
+
+    Never a substance she has not perceived. A perceived substance the place holds none of, or
+    less than the first step, is left out; so is any substance when no steps are authored.
+    Ordered strongest first, then by substance name. A row is ``from_sighting`` when she senses
+    it only through a sighting here, not through a gift of her own: she loses it when she
+    leaves.
+    """
+    if perceived is None:
+        perceived = perceived_substance_ids(character, room)
+    if not perceived:
+        return []
+    if steps is None:
+        steps = primum_steps()
+    amounts = {
+        pk: amount
+        for pk, amount in candidate_substances(room, steps=steps).items()
+        if pk in perceived
+    }
+    if not amounts:
+        return []
+    substances = sorted(
+        Substance.objects.filter(pk__in=amounts),
+        key=lambda substance: (-amounts[substance.pk], substance.name),
+    )
+    names = step_names_for([amounts[substance.pk] for substance in substances], steps=steps)
+    try:
+        own = _gift_substance_ids(character.sheet_data)
+    except CharacterSheet.DoesNotExist:
+        own = frozenset()
+    return [
+        PrimumSense(
+            substance_id=substance.pk,
+            substance_name=substance.name,
+            step_name=name,
+            from_sighting=substance.pk not in own,
+        )
+        for substance, name in zip(substances, names, strict=True)
+        if name
+    ]
+
+
+def sense_line(senses: list[PrimumSense]) -> str:
+    """The sentence a ``look`` ends with: ``You sense fire Primum: Massive.`` per substance.
+
+    Joined with spaces, in the order ``sensed_primum`` gives (strongest first); empty when she
+    senses nothing.
+    """
+    return " ".join(
+        f"You sense {sense.substance_name} Primum: {sense.step_name}." for sense in senses
+    )
+
+
+def reveal(sheet: CharacterSheet, room: ObjectDB, scope: str) -> list[Substance]:
+    """Let ``sheet`` perceive the Primum in ``room``; returns the substances now named.
+
+    ``STRONGEST`` names the one with the most Primum (ties go to the first name in order);
+    ``ALL`` names every one. A substance she already senses here stays named once.
+    """
+    try:
+        profile = room.room_profile
+    except RoomProfile.DoesNotExist:
+        return []
+    amounts = candidate_substances(room)
+    if not amounts:
+        return []
+    named = list(Substance.objects.filter(pk__in=amounts).order_by("name"))
+    if scope == PrimumRevealScope.STRONGEST:
+        named = [max(named, key=lambda substance: amounts[substance.pk])]
+    known = set(
+        PrimumSighting.objects.filter(character_sheet=sheet, room_profile=profile).values_list(
+            "substance_id", flat=True
+        )
+    )
+    PrimumSighting.objects.bulk_create(
+        [
+            PrimumSighting(character_sheet=sheet, room_profile=profile, substance=substance)
+            for substance in named
+            if substance.pk not in known
+        ],
+        ignore_conflicts=True,
+    )
+    return named
+
+
+def clear_sightings(sheet: CharacterSheet, *, keep_room: ObjectDB | None = None) -> int:
+    """Forget what ``sheet`` sensed, everywhere but ``keep_room`` (she left, or went offline)."""
+    rows = PrimumSighting.objects.filter(character_sheet=sheet)
+    if keep_room is not None:
+        with contextlib.suppress(RoomProfile.DoesNotExist):
+            rows = rows.exclude(room_profile=keep_room.room_profile)
+    deleted, _ = rows.delete()
+    return deleted

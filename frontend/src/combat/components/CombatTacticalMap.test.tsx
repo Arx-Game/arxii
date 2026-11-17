@@ -319,6 +319,7 @@ describe('CombatTacticalMap', () => {
             thumbnail_media_url: null,
             current_square: null,
             current_position: { id: 101, name: 'North Wall' },
+            harvest_offers: [],
             mirrors_participant_id: null,
           },
         ],
@@ -459,6 +460,7 @@ describe('CombatTacticalMap', () => {
       thumbnail_media_url: null,
       current_square: null,
       current_position: { id: 102, name: 'Center' },
+      harvest_offers: [],
       mirrors_participant_id: null,
     },
   ];
@@ -1233,6 +1235,7 @@ describe('CombatTacticalMap', () => {
             thumbnail_media_url: null,
             current_square: null,
             current_position: { id: 101, name: 'North Wall' },
+            harvest_offers: [],
             mirrors_participant_id: null,
           },
         ],

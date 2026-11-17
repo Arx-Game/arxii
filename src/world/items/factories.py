@@ -20,6 +20,7 @@ from world.items.models import (
     ItemFacet,
     ItemInstance,
     ItemStyle,
+    ItemSubstance,
     ItemTemplate,
     ItemTemplateProperty,
     Keepsake,
@@ -700,3 +701,14 @@ class DistinctionItemGrantFactory(factory.django.DjangoModelFactory):
 
     distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
     item_template = factory.SubFactory(ItemTemplateFactory)
+
+
+class ItemSubstanceFactory(factory.django.DjangoModelFactory):
+    """An item carrying a substance at a Primum step (#5125)."""
+
+    class Meta:
+        model = ItemSubstance
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    substance = factory.SubFactory("world.magic.factories.SubstanceFactory")
+    step = factory.SubFactory("world.magic.factories.PrimumStepFactory")

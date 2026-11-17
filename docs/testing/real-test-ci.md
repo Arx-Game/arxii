@@ -42,7 +42,7 @@ queue.
 5. Runs the Playwright specs that need a live server, with one worker, using
    `frontend/e2e.backend.config.ts`: `e2e/account-settings.spec.ts`,
    `e2e/user-journey.spec.ts`, `e2e/motif-facets.spec.ts` (the Spellbook Facets
-   panel and the creation facet field, #5021), `e2e/gift-substance.spec.ts` (#5018),
+   panel and the creation facet field, #5021), `e2e/gift-substance.spec.ts` (#5018, #5125),
    `e2e/thrown-and-enchanted-strike.spec.ts` (#5026), `e2e/channels.spec.ts`
    (#3299), `e2e/missives.spec.ts` (#3289), `e2e/one-scale.spec.ts` (#5091), and `e2e/family-seats.spec.ts` (the seat picker
    in character creation, #5130; and the house card's "House page" link opening the

@@ -234,7 +234,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.faceteffectbonus",  # a facet's bonus to a maneuver effect (#4815)
         "magic.gift",
         "magic.giftunlock",
-        "magic.giftsubstance",  # what a gift is made of (#5018)
         "magic.glimpsetag",
         "magic.intensitytier",
         # #3034: the row-level "authored_by IS NULL" split lives in
@@ -249,6 +248,13 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.resonanceconversion",
         "magic.ritual",
         "magic.stylecapabilityrequirement",
+        # #5125: what a gift works through, how two substances stand, and the Primum a kind
+        # of creature carries. PlacePrimum is left out: it is play state on a RoomProfile (a
+        # lair's stock), not authored content. PrimumStep, SubstancePowerStep and
+        # HarvestOutcome are tuning config, which never belongs here.
+        "magic.substance",
+        "magic.substancerelation",
+        "magic.creatureprimum",
         "magic.technique",
         "magic.techniqueappliedcondition",
         "magic.techniquecapabilitygrant",

@@ -50819,9 +50819,6 @@ components:
         effective_cost:
           type: integer
           readOnly: true
-        resonance_cost:
-          type: integer
-          readOnly: true
         already_present:
           type: boolean
           readOnly: true
@@ -50842,7 +50839,6 @@ components:
       - effective_cost
       - gift_id
       - label
-      - resonance_cost
     CanHonor:
       type: object
       description: |-
@@ -55761,8 +55757,12 @@ components:
           allOf:
           - $ref: '#/components/schemas/StationStatus'
           nullable: true
+        check_name:
+          type: string
+          description: The recipe's check, such as Tailoring; empty when it has none.
       required:
       - affordable
+      - check_name
       - costs
       - failure_risk
       - max_quality_tier
@@ -55793,19 +55793,34 @@ components:
       type: object
       description: One material requirement row within a crafting quote.
       properties:
+        requirement_id:
+          type: integer
+        material_category_id:
+          type: integer
+          nullable: true
         item_template_id:
           type: integer
+          nullable: true
         name:
           type: string
         quantity_required:
           type: integer
         have:
           type: integer
+        is_optional:
+          type: boolean
+        min_quality_name:
+          type: string
+          description: The lowest quality that counts, such as Common; empty for any.
       required:
       - have
+      - is_optional
       - item_template_id
+      - material_category_id
+      - min_quality_name
       - name
       - quantity_required
+      - requirement_id
     CraftingQuoteRisk:
       type: object
       description: A single failure-risk row within a crafting quote.
@@ -66334,12 +66349,17 @@ components:
         Write serializer for ItemFacet (POST create) — input validation only.
 
         The viewset drives the crafting service directly; this serializer parses
-        and validates the ``item_instance`` and ``facet`` foreign keys.
+        and validates the ``item_instance`` and ``facet`` foreign keys, and the optional
+        ingredients (pks of the recipe's optional material requirements) the crafter brings.
       properties:
         item_instance:
           type: integer
         facet:
           type: integer
+        optional_requirements:
+          type: array
+          items:
+            type: integer
       required:
       - facet
       - item_instance
@@ -66475,10 +66495,18 @@ components:
           - $ref: '#/components/schemas/SilhouetteRead'
           nullable: true
           readOnly: true
+        carries:
+          type: array
+          items:
+            type: string
+          description: Names of the substances the piece carries (#5125); every viewer
+            sees them.
+          readOnly: true
       required:
       - accents
       - access_policy
       - can_steal
+      - carries
       - charges
       - contained_in
       - crafted_provenance
@@ -66577,12 +66605,17 @@ components:
         Write serializer for ItemStyle (POST create) — input validation only.
 
         The viewset drives the crafting service directly; this serializer parses
-        and validates the ``item_instance`` and ``style`` foreign keys.
+        and validates the ``item_instance`` and ``style`` foreign keys, and the optional
+        ingredients (pks of the recipe's optional material requirements) the crafter brings.
       properties:
         item_instance:
           type: integer
         style:
           type: integer
+        optional_requirements:
+          type: array
+          items:
+            type: integer
       required:
       - item_instance
       - style
@@ -72752,6 +72785,11 @@ components:
             For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
             own ``portrait`` FK via ``fallback_media``.
           readOnly: true
+        harvest_offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OpponentHarvestOffer'
+          readOnly: true
         current_position:
           allOf:
           - $ref: '#/components/schemas/PositionSummary'
@@ -72773,6 +72811,7 @@ components:
       - current_position
       - current_square
       - damage_multiplier
+      - harvest_offers
       - health
       - id
       - is_enraged
@@ -72839,6 +72878,64 @@ components:
       - stakes_message
       - stakes_ok
       - swarm_count
+    OpponentHarvestOffer:
+      type: object
+      description: 'A slain foe''s offer to one character: which character presses
+        Harvest.'
+      properties:
+        substance_id:
+          type: integer
+          readOnly: true
+        substance_name:
+          type: string
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+          description: place | creature.
+        opponent_id:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The slain foe's pk; null for a lair.
+        opponent_name:
+          type: string
+          readOnly: true
+        step_name:
+          type: string
+          readOnly: true
+        check_name:
+          type: string
+          readOnly: true
+          description: The harvest check she rolls; empty while none is set.
+        ap_cost:
+          type: integer
+          readOnly: true
+          description: Action points one attempt costs, good roll or bad.
+        thread_bonus:
+          type: integer
+          readOnly: true
+          description: What her thread on a Gift of this substance adds; 0 if none.
+        thread_gift_name:
+          type: string
+          readOnly: true
+          description: The Gift whose thread adds the bonus; empty if none.
+        character_id:
+          type: integer
+          readOnly: true
+          description: The played character this offer belongs to.
+      required:
+      - ap_cost
+      - character_id
+      - check_name
+      - opponent_id
+      - opponent_name
+      - source
+      - step_name
+      - substance_id
+      - substance_name
+      - thread_bonus
+      - thread_gift_name
     OpponentLineDrive:
       type: object
       description: 'One drive edit on a placement: a strength, or null to remove the
@@ -97035,18 +97132,17 @@ components:
         kind:
           type: string
           readOnly: true
-          description: power | call_up | blocked | needs (an unmet restriction).
+          description: heading | source | power | call_up | blocked | needs (an unmet
+            restriction).
         text:
           type: string
           readOnly: true
         amount:
           type: integer
           readOnly: true
-          description: Signed power, or the penalty.
+          description: Signed points for a source line, signed power for a power line,
+            or the penalty.
         anima:
-          type: integer
-          readOnly: true
-        resonance:
           type: integer
           readOnly: true
         detail:
@@ -97058,7 +97154,6 @@ components:
       - anima
       - detail
       - kind
-      - resonance
       - text
     SustainedAction:
       type: object

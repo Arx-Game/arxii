@@ -108,6 +108,8 @@ class RoomStatePayload:
     objects: list[RoomStateObject] = field(default_factory=list)
     exits: list[RoomStateObject] = field(default_factory=list)
     scene: Optional["SceneSummary"] = None
+    # #5125: what this viewer senses here and can extract; see ``PrimumBlockSerializer``.
+    primum: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass

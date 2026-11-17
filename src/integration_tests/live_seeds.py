@@ -398,7 +398,7 @@ def _thrown_seed_for(entry: object, staff_password: str) -> ThrownStrikeSeed:
 
 
 @dataclass(frozen=True)
-class GiftSubstanceSeed:
+class SubstanceSpecSeed:
     """What `frontend/e2e/gift-substance.spec.ts` reads back (#5018)."""
 
     scene_id: int
@@ -412,10 +412,10 @@ SUBSTANCE_SPEC_ROOM = "The Lamplit Hall"
 SUBSTANCE_SPEC_TECHNIQUE = "Veil of Dusk"
 
 
-def seed_gift_substance_spec(*, username: str) -> GiftSubstanceSeed:  # noqa: PLR0915
+def seed_gift_substance_spec(*, username: str) -> SubstanceSpecSeed:  # noqa: PLR0915
     """A level-10 shadow caster of *username*'s, in an ordinary-lit room, scene running.
 
-    Her gift's substance is shadow (lighting falling, full at 2 steps); she holds 10 of its
+    Her gift's substance is shadow (the room's lighting falling); she holds 10 of its
     resonance and 30 anima; her technique costs 4 at intensity 6 and control 6, so outside
     a fight her control covers a one-step call-up. The account is also the scene's GM, so
     the Stage tab offers "Present here".
@@ -436,8 +436,9 @@ def seed_gift_substance_spec(*, username: str) -> GiftSubstanceSeed:  # noqa: PL
         ResonanceFactory,
         ThreadFactory,
         ensure_canonical_affinities,
+        seed_primum_tuning,
     )
-    from world.magic.models import GiftSubstance, Technique  # noqa: PLC0415
+    from world.magic.models import Substance, Technique  # noqa: PLC0415
     from world.roster.factories import (  # noqa: PLC0415
         RosterEntryFactory,
         RosterTenureFactory,
@@ -463,6 +464,7 @@ def seed_gift_substance_spec(*, username: str) -> GiftSubstanceSeed:  # noqa: PL
         account = AccountDB.objects.get(username=username)
         player_data, _ = PlayerData.objects.get_or_create(account=account)
         _celestial, _primal, abyssal = ensure_canonical_affinities()
+        seed_primum_tuning()
 
         entry = RosterEntry.objects.filter(
             character_sheet__character__db_key=SUBSTANCE_SPEC_CHARACTER
@@ -480,18 +482,15 @@ def seed_gift_substance_spec(*, username: str) -> GiftSubstanceSeed:  # noqa: PL
                 character_sheet=sheet, health=50, max_health=50, base_max_health=50
             )
             umbral = ResonanceFactory(name="Gloaming", affinity=abyssal)
-            gift = GiftFactory(name="Gloamcraft")
-            gift.resonances.add(umbral)
-            GiftSubstance.objects.get_or_create(
-                gift=gift,
+            shadow, _ = Substance.objects.get_or_create(
+                name="shadow",
                 defaults={
-                    "label": "shadow",
                     "stat_key": StatKey.LIGHTING,
                     "direction": SubstanceDirection.FALLING,
-                    "full_at": 2,
-                    "arrival_line": "The shadows in the room deepen.",
                 },
             )
+            gift = GiftFactory(name="Gloamcraft", substance=shadow)
+            gift.resonances.add(umbral)
             ThreadFactory(
                 owner=sheet,
                 target_kind=TargetKind.GIFT,
@@ -519,7 +518,7 @@ def seed_gift_substance_spec(*, username: str) -> GiftSubstanceSeed:  # noqa: PL
             location_id=character.db_location_id, is_active=True
         ).first() or (Scene.objects.filter(participations__account=account).order_by("-pk").first())
         technique = Technique.objects.filter(name=SUBSTANCE_SPEC_TECHNIQUE).first()
-    return GiftSubstanceSeed(
+    return SubstanceSpecSeed(
         scene_id=scene.pk, character_id=character.pk, technique_name=technique.name
     )
 

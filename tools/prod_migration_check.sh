@@ -302,11 +302,17 @@ USED_DB="$(evennia_scratch shell -c "from django.db import connection; print('DB
   || { cat "${WORK}/shell.err" >&2; fail "Django would use '${USED_DB:-nothing}', not ${SCRATCH_DB}; not migrating"; }
 
 # Run one migrate step, check the recorded tip afterwards (the launcher exits 0
-# when settings fail to import), print the Applying/Unapplying lines.
+# when settings fail to import), print the Applying/Unapplying lines and every line a
+# migration prints of its own between its Applying line and its OK (a data migration's
+# summary of what it carried and discarded, #5125), indented under it.
 migrate_step() {
   local label="$1" expect="$2" logf="${WORK}/migrate-$1.log"; shift 2
   evennia_scratch migrate --noinput "$@" >"${logf}" 2>&1 || { tail -30 "${logf}" >&2; fail "migrate (${label}) failed"; }
-  grep -E '^  (Applying|Unapplying) ' "${logf}" | sed 's/^ */  /' || true
+  awk '
+    /^  (Applying|Unapplying) / { sub(/^ */, "  "); print; open = ($0 !~ / OK$/); next }
+    open && /^ OK$/ { open = 0; next }
+    open { print "      | " $0; if ($0 ~ / OK$/) open = 0 }
+  ' "${logf}" || true
   [[ "$(applied_tip)" == "${expect}" ]] \
     || { tail -30 "${logf}" >&2; fail "after '${label}' the recorded tip is '$(applied_tip)', expected '${expect}'"; }
 }

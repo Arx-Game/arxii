@@ -14,6 +14,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 from django.contrib import admin
+from django.db.models import Model
 from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
@@ -148,33 +149,87 @@ class TechniqueCastTemplateActionTests(TestCase):
         invalidate.assert_called_once()
 
 
-class SubstancePropertyPreTickTests(TestCase):
-    """A new technique opened on a gift starts with the gift's substance property ticked
-    (#5066 decision 10); staff can untick it before saving."""
+class SubstancePropertyIsCarriedTests(TestCase):
+    """A gift's substance property is carried by its techniques, so the add form on a gift
+    ticks nothing (#5125); the box could not remove it anyway."""
 
-    def test_the_add_form_on_a_gift_ticks_its_substance_property(self):
+    def test_the_add_form_on_a_gift_ticks_nothing(self):
         from world.locations.constants import StatKey
         from world.magic.constants import SubstanceDirection
-        from world.magic.factories import GiftFactory
-        from world.magic.models import GiftSubstance
+        from world.magic.factories import GiftFactory, SubstanceFactory
         from world.mechanics.factories import PropertyFactory
 
         staff = AccountDB.objects.create_superuser("pretick5066", "p@example.com", "pw-5066")
         self.client.force_login(staff)
-        gift = GiftFactory(name="Umbra")
-        shadow = PropertyFactory(name="shadow-pretick")
-        other = PropertyFactory(name="flame-pretick")
-        GiftSubstance.objects.create(
-            gift=gift,
-            label="shadow",
+        substance = SubstanceFactory(
+            name="shadow",
             stat_key=StatKey.LIGHTING,
             direction=SubstanceDirection.FALLING,
-            property=shadow,
+            property=PropertyFactory(name="shadow-pretick"),
         )
+        gift = GiftFactory(name="Umbra", substance=substance)
 
         response = self.client.get(reverse("admin:arxii_technique_add"), {"gift": gift.pk})
 
         self.assertEqual(response.status_code, 200)
-        form = response.context["adminform"].form
-        self.assertEqual(list(form.initial["properties"]), [shadow.pk])
-        self.assertNotIn(other.pk, form.initial["properties"])
+        self.assertNotIn("properties", response.context["adminform"].form.initial)
+
+
+class CarriedPropertyOnTechniqueAdminTests(TestCase):
+    """The Technique page shows the property its gift's substance gives, which cannot be
+    unticked (#5125)."""
+
+    def test_page_shows_the_carried_property_and_unticking_stored_marks_leaves_it(self):
+        from world.locations.constants import StatKey
+        from world.magic.constants import SubstanceDirection
+        from world.magic.factories import GiftFactory, SubstanceFactory
+        from world.mechanics.factories import PropertyFactory
+
+        staff = AccountDB.objects.create_superuser("carried5125", "c@example.com", "pw-5125")
+        self.client.force_login(staff)
+        fiery = PropertyFactory(name="fiery-carried")
+        substance = SubstanceFactory(
+            name="fire-carried",
+            stat_key=StatKey.LIGHTING,
+            direction=SubstanceDirection.RISING,
+            property=fiery,
+        )
+        technique = TechniqueFactory(gift=GiftFactory(name="Pyro carried", substance=substance))
+        technique.properties.add(fiery)
+        minor = TechniqueFactory(gift=GiftFactory(name="Minor carried", kind="minor"))
+        url = reverse("admin:arxii_technique_change", args=[technique.pk])
+
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode()
+        self.assertIn("Property carried from its gift&#x27;s substance", body)
+        self.assertIn("fiery-carried", body)
+        self.assertIn("It is not stored here and cannot be unticked.", body)
+        minor_body = self.client.get(
+            reverse("admin:arxii_technique_change", args=[minor.pk])
+        ).content.decode()
+        self.assertIn("Property carried from its gift&#x27;s substance", minor_body)
+        self.assertIn('<div class="readonly">None<div', minor_body)
+
+        # Save the page as the form posts it, with the stored mark unticked.
+        post = {}
+        for key, value in response.context["adminform"].form.initial.items():
+            if value is None or key == "properties":
+                continue
+            if isinstance(value, (list, tuple, set)):
+                post[key] = [v.pk if isinstance(v, Model) else v for v in value]
+            else:
+                post[key] = value.pk if isinstance(value, Model) else value
+        for formset in response.context["inline_admin_formsets"]:
+            prefix = formset.formset.prefix
+            post[f"{prefix}-TOTAL_FORMS"] = 0
+            post[f"{prefix}-INITIAL_FORMS"] = 0
+            post[f"{prefix}-MIN_NUM_FORMS"] = 0
+            post[f"{prefix}-MAX_NUM_FORMS"] = 1000
+        save = self.client.post(url, post)
+        self.assertEqual(save.status_code, 302)
+
+        technique.refresh_from_db()
+        self.assertEqual(list(technique.properties.all()), [])
+        self.assertTrue(technique.has_property("fiery-carried"))

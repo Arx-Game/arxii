@@ -45,6 +45,9 @@
  * it moves when they mark someone else). The badge renders on every row, GM and
  * observer included; only the kebab menu's "Mark" item is gated by `canDeclareManeuvers`.
  *
+ * Harvest (#5125): a slain opponent row carries the Primum the viewer's characters perceive on
+ * it (`opponent.harvest_offers`, each naming the character who takes it) and offers Harvest.
+ *
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
 
@@ -55,8 +58,12 @@ import {
   type Compulsion,
 } from '@/combat/components/CompulsionBanner';
 import { MoraleStateChip } from '@/combat/standoff/MoraleStateChip';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { MoreVertical } from 'lucide-react';
 import { toast } from 'sonner';
+import { HarvestRow } from '@/scenes/components/HarvestRow';
+import type { HarvestAnswer } from '@/scenes/harvestAnswer';
 import { cn } from '@/lib/utils';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import {
@@ -66,7 +73,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ConditionBadge } from '../components/ConditionBadge';
-import { useRegistryDispatch } from '../queries';
+import { combatKeys, useRegistryDispatch } from '../queries';
 import { isDispatchFailure } from '../types';
 import type { EncounterDetail, Participant, Opponent } from '../types';
 import type { components } from '@/generated/api';
@@ -370,6 +377,18 @@ function OpponentRow({
 }: OpponentRowProps) {
   const showMenu = canDeclareManeuvers && characterId != null;
   const { mutateAsync, isPending } = useRegistryDispatch(encounterId, characterId ?? 0);
+  // The answer is held here so it stays once the foe is no longer offered (#5125).
+  const [harvestAnswer, setHarvestAnswer] = useState<HarvestAnswer | null>(null);
+  const queryClient = useQueryClient();
+  // Offers come one row per character who can take them; this viewer's own when she can.
+  const actingCharacterId =
+    opponent.harvest_offers.find((offer) => offer.character_id === characterId)?.character_id ??
+    opponent.harvest_offers[0]?.character_id ??
+    characterId ??
+    0;
+  const harvestOffers = opponent.harvest_offers.filter(
+    (offer) => offer.character_id === actingCharacterId
+  );
 
   async function handleManeuver(registryKey: string, label: string) {
     try {
@@ -478,6 +497,19 @@ function OpponentRow({
         <HpBar health={opponent.health} maxHealth={opponent.max_health} className="mt-0.5" />
         {/* Condition badges — deep-link to the condition-detail modal on click. */}
         <ConditionRow conditions={opponent.active_conditions} />
+        {(harvestOffers.length > 0 || harvestAnswer) && (
+          <div className="mt-1">
+            <HarvestRow
+              offers={harvestOffers}
+              characterId={actingCharacterId}
+              answer={harvestAnswer}
+              onAnswer={(answer) => {
+                setHarvestAnswer(answer);
+                void queryClient.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) });
+              }}
+            />
+          </div>
+        )}
         {/* GM boss-state chips (#3552) - the server sends every GM field together,
          * so `morale != null` alone gates the row. Hidden entirely for players. */}
         {opponent.morale != null && (

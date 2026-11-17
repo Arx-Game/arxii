@@ -494,6 +494,7 @@ from actions.definitions.positioning import (
     TakeFlightAction,
     TakePositionAction,
 )
+from actions.definitions.primum import HarvestPrimumAction
 from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
 from actions.definitions.progression_rewards import (
     ClaimKudosAction,
@@ -990,6 +991,7 @@ _ALL_ACTIONS: list[Action] = [
     KindleResonanceAction(),
     GMListKindlingAction(),
     CallUpSubstanceAction(),
+    HarvestPrimumAction(),
     CompleteStoryAction(),
     ResolveEpisodeAction(),
     PromoteEpisodeAction(),

@@ -130,6 +130,7 @@ function makeItem(id: number, name: string, overrides: Partial<ItemInstance> = {
     // pk (#1909).
     game_object_id: id + 1000,
     access_policy: 'open',
+    carries: [],
     is_currency_instrument: false,
     suggested_value: 0,
     can_steal: false,

@@ -1,8 +1,9 @@
-"""Calling up a gift's substance with no technique (#5018).
+"""Calling up a gift's substance with no technique (#5018, #5125).
 
-A shadow caster lets the room dim around her as a small touch of play: no roll, no power,
-only the room reading (for everyone, while she stays) and an unattributed room line. It is
-priced by her own control alone, so outside a fight it is usually free.
+A fire caster raises the place's Primum of fire by one step: no roll, no power of its own,
+only the place's Primum (for everyone, while she stays) and a room line naming her. It costs
+one shared anima amount, priced by her own control alone, so outside a fight it is usually
+free. At the top step nothing more can be called up.
 
 In a fight it is an immediate act, once a round, never the round's declared action: the
 shape of Dig deep (``DigDeepAction``), with its own once-a-round marker
@@ -24,6 +25,7 @@ from django.db import transaction
 from actions.base import Action
 from actions.kwarg_parsing import truthy_kwarg
 from actions.types import ActionResult, TargetType
+from world.magic.types.substance import SubstanceBlock
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -129,24 +131,18 @@ def _charge_and_apply(
                 check_result=None,
                 lethal=lethal,
             )
-        done = apply_substance_plan(offer.plan, sheet=sheet)
-    resonance = done.resonance if done is not None else 0
-    if offer.effective_cost == 0 and resonance == 0:
-        cost_text = "free"
-    else:
-        cost_text = f"{offer.effective_cost} anima"
-        if resonance and done is not None:
-            cost_text += f", {resonance} {done.resonance_name} resonance"
+        apply_substance_plan(offer.plan, sheet=sheet)
+    cost_text = "free" if offer.effective_cost == 0 else f"{offer.effective_cost} anima"
     return ActionResult(
         success=True,
         message=f"You call up {offer.plan.label}. Cost: {cost_text}.",
-        data={"cost": offer.effective_cost, "resonance": resonance, "gift_id": offer.gift_id},
+        data={"cost": offer.effective_cost, "gift_id": offer.gift_id},
     )
 
 
 @dataclass
 class CallUpSubstanceAction(Action):
-    """Call up her gift's substance with no technique: the room dims around her (#5018)."""
+    """Call up her gift's substance with no technique: the place's Primum rises a step."""
 
     key: str = "call_up_substance"
     name: str = "Call up your gift"
@@ -178,11 +174,9 @@ class CallUpSubstanceAction(Action):
         if offer is None:
             return ActionResult(success=False, message=WHICH_GIFT_MESSAGE)
         label = offer.plan.label
-        if offer.plan.already_present:
+        if offer.plan.blocked == SubstanceBlock.AT_TOP:
             return ActionResult(
-                success=True,
-                message=f"{label.capitalize()} is already here. Nothing to call up.",
-                data={"cost": 0, "resonance": 0, "already_present": True},
+                success=False, message=f"No more {label} can be called up here.", data={"cost": 0}
             )
         if not offer.plan.calls_up:
             return ActionResult(

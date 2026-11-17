@@ -345,6 +345,17 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Inactive templates cannot be used to create new items.",
     )
+    primum_substance = models.ForeignKey(
+        "arxii.Substance",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="primum_templates",
+        help_text=(
+            "The substance this template is the Primum item of (#5125). One template per "
+            "substance. Blank for every other item."
+        ),
+    )
     material_category = models.ForeignKey(
         "arxii.MaterialCategory",
         on_delete=models.PROTECT,
@@ -704,6 +715,11 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     )
                 ),
                 name="itemtemplate_resonance_tier_together",
+            ),
+            models.UniqueConstraint(
+                fields=["primum_substance"],
+                condition=models.Q(primum_substance__isnull=False),
+                name="itemtemplate_primum_substance_unique",
             ),
         ]
 
@@ -3048,6 +3064,11 @@ from world.items.org_vault_models import (  # noqa: E402,F401
     VaultHolding,
     VaultTransit,
 )
+
+# ---------------------------------------------------------------------------
+# Primum (#5125): the substance an item carries
+# ---------------------------------------------------------------------------
+from world.items.primum_models import ItemSubstance  # noqa: E402,F401
 
 # ---------------------------------------------------------------------------
 # Trade submodule (#2990) — two-sided negotiated exchange session

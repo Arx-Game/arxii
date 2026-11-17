@@ -1545,9 +1545,11 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def clean(self) -> None:
         """A style's skill is no magic skill picker's skill (#4921, #4844 decision 16).
 
-        The three magic skill pickers refuse a style's skill; this refuses the other way round, so a
+        The four magic skill pickers refuse a style's skill; this refuses the other way round, so a
         skill a magical roll already adds never becomes a style's too.
         """
+        from world.magic.models import ResonanceEnvironmentConfig  # noqa: PLC0415
+
         super().clean()
         skill = self.skill
         if skill is None:
@@ -1556,12 +1558,13 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             skill.technique_styles.exists()
             or skill.override_techniques.exists()
             or skill.magic_activity_rows.exists()
+            or ResonanceEnvironmentConfig.objects.filter(harvest_skill=skill).exists()
         ):
             raise ValidationError(
                 {
                     "skill": (
-                        "A casting style, technique or magical activity already adds this "
-                        "skill. Give the style a skill of its own."
+                        "A casting style, technique, magical activity or the harvest roll "
+                        "already adds this skill. Give the style a skill of its own."
                     )
                 }
             )

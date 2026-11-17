@@ -28,6 +28,7 @@ function makeWardrobe(id: number, name: string): ItemInstance {
     id,
     game_object_id: id + 10000,
     access_policy: 'open',
+    carries: [],
     is_currency_instrument: false,
     suggested_value: 0,
     can_steal: false,

@@ -571,14 +571,18 @@ def npc_round_contribution(*, clash: Clash, round_number: int) -> int:  # noqa: 
 
 
 def _technique_effect_property_ids(technique: Technique) -> frozenset[int]:
-    """The effect Property pks a Technique carries: its own marks (#5066).
+    """The effect Property pks a Technique carries: its ticked marks and its gift's substance.
 
     A clash opposes substance against substance, so it reads what each technique is
-    (``Technique.properties``, ticked per technique by staff), never its gift's
-    resonances. Used by ``_detect_clash_flavor`` for the opposition surface; the
+    (``Technique.properties`` plus the property of its gift's substance, #5125), never its
+    gift's resonances. Used by ``_detect_clash_flavor`` for the opposition surface; the
     per-character ``CharacterTechniqueHandler`` is the cached path for inventory walks.
     """
-    return frozenset(prop.pk for prop in technique.properties.all())
+    from world.magic.services.technique_marks import (  # noqa: PLC0415
+        effect_property_ids_by_technique,
+    )
+
+    return effect_property_ids_by_technique([technique.pk])[technique.pk]
 
 
 def _get_technique_affinity(
