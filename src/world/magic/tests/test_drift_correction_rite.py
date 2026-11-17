@@ -28,6 +28,7 @@ from world.magic.factories import (
     DriftCorrectionRiteFactory,
     FacetFactory,
     ReflectionFactory,
+    ResonanceGrantFactory,
     ResonanceTierFactory,
     SettlingRiteFactory,
     ThreadFactory,
@@ -43,13 +44,14 @@ from world.magic.models import (
 )
 from world.magic.services.drift import get_drift_correction_config
 from world.magic.services.drift_correction import (
+    embraced_amount,
     focus_bonus,
     max_yield_per_earned_point,
     perform_settling_rite,
 )
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.settling_preview import settling_rite_reading
-from world.magic.tests.test_drift_offer import DriftOfferTestBase, _hold
+from world.magic.tests.test_drift_offer import DriftOfferTestBase, _author_pair, _hold
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.services import equipment_walk_total
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -199,6 +201,58 @@ class PerformRiteTests(DriftRiteTestBase):
         self.assertEqual(_balance(self.sheet, self.dawnlight), 6)
         self.assertIsNone(self.cap_value())
         self.assertIsNotNone(Reflection.objects.get(pk=reflection.pk).rite)
+
+
+class EmbraceDirectionRateTests(DriftRiteTestBase):
+    """Embracing a deed pays at the direction rate for the pair, in the rite and its preview."""
+
+    def reflect_embrace(self, resonance, amount=20) -> Reflection:
+        grant = ResonanceGrantFactory(
+            character_sheet=self.sheet, resonance=resonance, amount=amount
+        )
+        return ReflectionFactory(
+            character_sheet=self.sheet,
+            grant=grant,
+            resonance=None,
+            choice=ReflectionChoice.EMBRACE,
+        )
+
+    def test_a_fall_pays_more_and_a_climb_pays_less_and_the_preview_shows_the_same(self) -> None:
+        self.set_shares(Success="0.75")
+        self.component = _tied_item(self.dread)
+        self.reflect_embrace(self.dread)
+
+        reading = settling_rite_reading(self.sheet, [self.component])
+        # The main affinity is Celestial: Celestial to Abyssal is 1.50, so 20 x 1.50 at most.
+        self.assertIn("grows, up to 30.", reading.reflections[0].effect_line)
+
+        result = self.perform(components=[self.component])
+
+        # 20 x 0.75 share x 1.50 rate = 22.5, rounded down.
+        self.assertIn("your Drift Dread grows by 22.", result.lines[0])
+        embraced = ResonanceGrant.objects.get(source=GainSource.EMBRACED_DEED)
+        self.assertEqual(embraced.amount, 22)
+
+    def test_a_deed_of_the_main_affinity_is_embraced_at_the_deed_amount_times_the_share(
+        self,
+    ) -> None:
+        self.set_shares(Success="0.75")
+        self.reflect_embrace(self.dawnlight)
+
+        reading = settling_rite_reading(self.sheet, [self.component])
+        self.assertIn("grows, up to 20.", reading.reflections[0].effect_line)
+
+        result = self.perform()
+
+        self.assertIn("your Drift Dawnlight grows by 15.", result.lines[0])
+
+    def test_a_pair_with_no_authored_rate_embraces_at_the_deed_amount_times_the_share(
+        self,
+    ) -> None:
+        _author_pair(self.celestial, self.abyssal, None, "")
+        grant = ResonanceGrantFactory(character_sheet=self.sheet, resonance=self.dread, amount=20)
+
+        self.assertEqual(embraced_amount(self.sheet, grant, Decimal("0.75")), 15)
 
 
 class FallbackConversionTargetTests(DriftRiteTestBase):

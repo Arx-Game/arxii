@@ -7,7 +7,8 @@ from the rolled tier's ``DriftCorrectionOutcomeShare`` and applies that share to
 reflection:
 
 | Reflection                     | Effect at share s                                        |
-| Embrace a deed                 | grant ``deed amount x s`` of its resonance (EMBRACED_DEED) |
+| Embrace a deed                 | grant ``deed amount x s x direction rate`` of its        |
+|                                | resonance (EMBRACED_DEED); see ``embraced_amount``       |
 | Disown a deed                  | convert ``amount x disown_deed_percent x s`` toward the  |
 |                                | main affinity; needs no open chance to atone             |
 | Embrace the unsettling         | ``accept_aura_change(fraction=s)``                       |
@@ -22,6 +23,7 @@ rite, even at a share of 0.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from contextlib import suppress
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -77,6 +79,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
     from world.magic.models.affinity import Resonance
+    from world.magic.models.grant import ResonanceGrant
     from world.scenes.models import Scene
 
 
@@ -417,12 +420,29 @@ def _disown_unsettling(
     return f"You disown your {source.name}: {_turned_line(source, target, moved, granted)}"
 
 
+def embraced_amount(sheet: CharacterSheet, grant: ResonanceGrant, share: Decimal) -> int:
+    """What embracing ``grant`` at ``share`` grants, rounded down (#4751).
+
+    The deed's amount times the share. When the deed is of an affinity other than the
+    character's main one, also times the direction rate authored for converting the main
+    affinity into the deed's: a fall toward the Abyss pays more than the deed was worth and
+    a climb pays less, as disowning already does. No main affinity, the same affinity or no
+    authored pair leaves the rate at 1. The rite and its preview both call this.
+    """
+    rate = Decimal(1)
+    main = own_affinity(sheet)
+    if main is not None and main.pk != grant.resonance.affinity_id:
+        with suppress(ConversionMappingError):
+            rate = conversion_pair(main, grant.resonance.affinity).conversion_multiplier
+    return int(Decimal(grant.amount) * share * rate)
+
+
 def _embrace_deed(
     sheet: CharacterSheet, reflection: Reflection, rite: SettlingRite, share: Decimal
 ) -> str:
     grant = reflection.grant
     what = deed_what(grant) or f"your {grant.resonance.name}"
-    amount = int(Decimal(grant.amount) * share)
+    amount = embraced_amount(sheet, grant, share)
     if amount <= 0:
         return f"You embrace {what}, but the rite carries none of it through."
     grant_resonance(
