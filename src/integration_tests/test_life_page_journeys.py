@@ -125,7 +125,7 @@ class TheLifePage(FinalizationTestMixin, JourneyCase):
         self.assertEqual(terms["martial"]["definition"], "The fighting arts.")
         self.assertEqual(terms["allure"]["definition"], "How much people want to be near you.")
 
-    def test_a_paragraph_an_unknown_stage_a_secret_with_a_cover_and_a_figure_reach_the_sheet(
+    def test_the_background_an_unknown_stage_a_secret_with_a_cover_and_a_figure_reach_the_sheet(
         self,
     ) -> None:
         draft = self._create_base_draft()
@@ -142,7 +142,7 @@ class TheLifePage(FinalizationTestMixin, JourneyCase):
                     str(self.youth.pk): {"figures": {str(self.rival.pk): "Ser Gaston"}},
                     str(self.known_for.pk): {"unknown": True},
                 },
-                "stage_descriptions": {"childhood": "Soft hands, hard lessons."},
+                "background": "Soft hands, hard lessons.",
             },
         )
         self.assertEqual(response.status_code, 200, response.content)
@@ -150,11 +150,9 @@ class TheLifePage(FinalizationTestMixin, JourneyCase):
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
 
-        background = sheet.true_profile.background
-        self.assertIn("Childhood\nSoft hands, hard lessons.", background)
-        self.assertIn("Childhood: Early Upbringing", background)
-        self.assertIn("Before the Glimpse: unknown", background)
-        self.assertNotIn("What you were known for", background)
+        # The Background is the one text the player wrote, word for word (#5178):
+        # nothing is composed into it from the sections taken or the cards picked.
+        self.assertEqual(sheet.true_profile.background, "Soft hands, hard lessons.")
 
         hard = CharacterDistinction.objects.get(character=sheet, distinction=self.hard.distinction)
         self.assertIsNotNone(hard.secret)
@@ -236,11 +234,39 @@ class TheLifePage(FinalizationTestMixin, JourneyCase):
             {"beats": {str(self.household.pk): {"cover_offer_id": "Spoiled"}}},
             {"beats": {str(self.household.pk): {"figures": {"Rival": "Ser Gaston"}}}},
             {"beats": {str(self.household.pk): {"figures": {"1": "x" * 61}}}},
-            {"stage_descriptions": {"midlife": "No such stage."}},
-            {"stage_descriptions": {"childhood": "x" * 1001}},
+            {"background": "x" * 4001},
+            {"background": ["a list"]},
+            # The per-stage notes and Recent History are retired (#5178).
+            {"stage_descriptions": {"childhood": "Soft hands."}},
+            {"recent_history": "Last winter."},
         ):
             response = self._patch(draft, bad)
             self.assertEqual(response.status_code, 400, (bad, response.content))
+
+    def test_a_life_with_no_background_written_has_an_empty_background(self) -> None:
+        draft = self._create_base_draft()
+        response = self._sync(draft, [self.hard])
+        self.assertEqual(response.status_code, 200, response.content)
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        self.assertEqual(character.sheet_data.true_profile.background, "")
+
+    def test_a_draft_saved_before_the_change_drops_its_retired_notes_on_the_next_save(
+        self,
+    ) -> None:
+        draft = self._create_base_draft()
+        draft.draft_data["stage_descriptions"] = {"childhood": "An old note."}
+        draft.draft_data["recent_history"] = "An old history."
+        draft.save(update_fields=["draft_data"])
+
+        response = self._patch(draft, {"background": "The one text."})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        held = response.json()["draft_data"]
+        self.assertEqual(held["background"], "The one text.")
+        self.assertNotIn("stage_descriptions", held)
+        self.assertNotIn("recent_history", held)
 
     def test_the_first_name_is_asked_on_the_origin_stage(self) -> None:
         draft = self._create_base_draft(first_name="")

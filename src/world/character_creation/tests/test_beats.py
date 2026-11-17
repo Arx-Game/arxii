@@ -13,7 +13,7 @@ from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.constants import (
-    RECENT_HISTORY_MAX_LENGTH,
+    BACKGROUND_MAX_LENGTH,
     BeatAudience,
     BeatSelection,
     LifeStage,
@@ -41,7 +41,7 @@ from world.character_creation.offers import (
     youngest_age_for_points,
 )
 from world.character_creation.serializers import CharacterDraftSerializer
-from world.character_creation.services import finalize_character
+from world.character_creation.services import assemble_origin_prose, finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import DistinctionFactory
@@ -455,29 +455,35 @@ class BeatsEndpointTests(TestCase):
         twelve = save(cards)
         self.assertEqual(two, twelve)
 
-    def test_recent_history_is_text_of_a_bounded_length(self):
-        """The optional text a life ends on (#4830): up to the limit saves, over it is
-        refused naming the limit, and null clears it."""
+    def test_the_background_is_text_of_a_bounded_length(self):
+        """The one Background text (#5178): up to the limit saves, over it is refused
+        naming the limit, null clears it, and the two keys it replaced are refused."""
         url = f"/api/character-creation/drafts/{self.draft.id}/"
         resp = self.client.patch(
             url,
-            {"draft_data": {"recent_history": "A ship went down with my name on it."}},
+            {"draft_data": {"background": "A ship went down with my name on it."}},
             format="json",
         )
         self.assertEqual(resp.status_code, 200, resp.content)
         self.assertEqual(
-            resp.json()["draft_data"]["recent_history"], "A ship went down with my name on it."
+            resp.json()["draft_data"]["background"], "A ship went down with my name on it."
         )
         resp = self.client.patch(
             url,
-            {"draft_data": {"recent_history": "x" * (RECENT_HISTORY_MAX_LENGTH + 1)}},
+            {"draft_data": {"background": "x" * (BACKGROUND_MAX_LENGTH + 1)}},
             format="json",
         )
         self.assertEqual(resp.status_code, 400, resp.content)
-        self.assertIn(str(RECENT_HISTORY_MAX_LENGTH), str(resp.json()))
-        resp = self.client.patch(url, {"draft_data": {"recent_history": None}}, format="json")
+        self.assertIn(str(BACKGROUND_MAX_LENGTH), str(resp.json()))
+        resp = self.client.patch(url, {"draft_data": {"background": None}}, format="json")
         self.assertEqual(resp.status_code, 200, resp.content)
-        self.assertEqual(resp.json()["draft_data"]["recent_history"], "")
+        self.assertEqual(resp.json()["draft_data"]["background"], "")
+        for retired in (
+            {"recent_history": "Last winter."},
+            {"stage_descriptions": {"childhood": "Soft hands."}},
+        ):
+            resp = self.client.patch(url, {"draft_data": retired}, format="json")
+            self.assertEqual(resp.status_code, 400, (retired, resp.content))
 
     def test_ranks_spend_career_points_and_the_age_cannot_drop_under_them(self):
         """At fifty (seven points) Sailor at four and Soldier at three fit and a fourth
@@ -557,7 +563,7 @@ class FinalizeBeatsTest(FinalizationTestMixin, TestCase):
         )
         self.youth = LifeBeatFactory(name="The first rule", life_stage=LifeStage.YOUTH)
 
-    def test_taken_beats_become_rows_and_draft_the_background(self) -> None:
+    def test_taken_beats_become_rows_and_write_nothing_into_the_background(self) -> None:
         draft = self._create_base_draft()
         draft.draft_data["beats"] = {
             str(self.household.pk): {"taken": True, "line": "A line about the house."},
@@ -589,32 +595,31 @@ class FinalizeBeatsTest(FinalizationTestMixin, TestCase):
             character=sheet, distinction=self.patient.distinction
         )
         self.assertEqual(held.source_description, "The household")
-        background = sheet.true_profile.background
-        self.assertIn("Childhood: The household", background)
-        self.assertIn("A line about the house.", background)
-        self.assertNotIn("The first rule", background)
+        # The Background is the player's own text (#5178); none was written here.
+        self.assertEqual(sheet.true_profile.background, "")
+        # The composed lines are still what the Durance testament reads.
+        told = assemble_origin_prose(sheet)
+        self.assertIn("Childhood: The household", told)
+        self.assertIn("A line about the house.", told)
+        self.assertNotIn("The first rule", told)
         # Age is experience through beats, not banked points (#4124).
         self.assertEqual(sheet.maturation_floor, 25)
         self.assertEqual(available_points(sheet), 0)
 
-    def test_recent_history_opens_the_told_background(self) -> None:
-        """Recent History is the lead-in paragraph of the background (#4830, ruled
-        2026-10-31), before the told stages; alone, it is the whole background."""
+    def test_the_background_is_the_text_written_and_nothing_else(self) -> None:
+        """The Background is the one text the player wrote, word for word (#5178, ruled
+        2026-11-17): the sections taken add nothing to it."""
         draft = self._create_base_draft()
         draft.draft_data["beats"] = {str(self.household.pk): {"taken": True, "line": "A line."}}
-        draft.draft_data["recent_history"] = "Last winter I came back from the dead."
+        draft.draft_data["background"] = (
+            "  Last winter I came back from the dead.\n\nNobody asked.  "
+        )
         draft.save()
         character = finalize_character(draft, add_to_roster=True)
-        background = character.sheet_data.true_profile.background
-        self.assertTrue(background.startswith("Last winter I came back from the dead.\n\n"))
-        self.assertIn("Childhood: The household", background)
-
-        alone = self._create_base_draft(first_name="Alone")
-        alone.account = AccountDB.objects.create(username="beats_finalize_alone")
-        alone.draft_data["recent_history"] = "Only this."
-        alone.save()
-        lonely = finalize_character(alone, add_to_roster=True)
-        self.assertEqual(lonely.sheet_data.true_profile.background, "Only this.")
+        self.assertEqual(
+            character.sheet_data.true_profile.background,
+            "Last winter I came back from the dead.\n\nNobody asked.",
+        )
 
     def test_an_untaken_pool_writes_nothing(self) -> None:
         draft = self._create_base_draft()

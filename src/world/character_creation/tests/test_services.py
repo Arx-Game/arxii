@@ -16,6 +16,7 @@ from world.character_creation.factories import single_resonance_weights
 from world.character_creation.models import CharacterDraft, StartingArea
 from world.character_creation.services import (
     DraftIncompleteError,
+    assemble_origin_prose,
     can_create_character,
     finalize_character,
     get_accessible_starting_areas,
@@ -213,7 +214,8 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         assert willpower_value.value == 20
 
     def test_finalize_origin_story_from_slots(self) -> None:
-        """Finalize assembles Profile.background from origin slots (#2478)."""
+        """Finalize writes the origin answers as rows the composed prose reads (#2478);
+        the Background stays the player's own text (#5178)."""
         from world.character_creation.models import (
             CharacterOriginSlot,
             OriginTemplate,
@@ -242,8 +244,10 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
 
-        assert "escape from Salvation" in sheet.background
-        assert "Mira cut the lock" in sheet.background
+        told = assemble_origin_prose(sheet)
+        assert "escape from Salvation" in told
+        assert "Mira cut the lock" in told
+        assert sheet.background == ""
         assert CharacterOriginSlot.objects.filter(sheet=sheet).count() == 1
 
     def test_finalize_converts_unspent_cg_points_to_xp(self):
