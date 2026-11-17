@@ -874,7 +874,7 @@ handler — no schema change required.
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CraftingRecipe` | Top-level recipe; one per `kind` (unique) | `name`, `kind` (unique FK), `check_type` (FK; null = disabled), `base_difficulty`, `success_level_step`, `min_success_level`, `skill_trait` (FK to Trait, nullable), `action_point_cost`, `anima_cost`, `default_cost_consumption` |
-| `CraftingMaterialRequirement` | Ingredient rows for a recipe | `recipe` (FK), `item_template` (FK), `quantity`, `min_quality_tier` (FK, nullable) |
+| `CraftingMaterialRequirement` | Ingredient rows for a recipe | `recipe` (FK), `item_template` (FK) or `material_category` (FK), `quantity`, `min_quality_tier` (FK, nullable), `required_value` (bulk mode), `is_optional` (#5125) |
 | `CraftingSkillCap` | Maps a skill-rank band to a quality ceiling | `recipe` (FK), `min_skill_value`, `max_quality_tier` (FK); unique on (recipe, min_skill_value) |
 | `CraftingRecipeConsequence` | Weighted consequence pool entry per recipe | `recipe` (FK), `consequence` (FK), `weight_override` (nullable), `cost_consumption`; unique on (recipe, consequence) |
 
@@ -942,6 +942,23 @@ personal-resonance act. Proven end-to-end by
 into a production path — `CONFIG_PREREQUISITES["crafting"]` calls it against the
 seeded FACET_ATTACH default row (#3006 Task 2, see "Production data path" above) —
 rather than the test-only call site this note originally described.
+
+### Crafting with Primum (#5125) [BUILT & WIRED]
+
+A recipe row with `is_optional` is an ingredient the crafter brings by choice. The craft,
+the facet and the style endpoints and actions take `optional_requirements` (a list of
+requirement pks); `run_crafting_recipe(optional_requirement_ids=...)` forwards it to
+`stage_and_assert_affordable`, which stages and consumes an optional row only when its pk is
+named, and ignores an unnamed one (it never holds affordability back). When a staged item is a
+Primum item (its template's `primum_substance` is set), `primum_items.stamp_primum_substances`
+writes an `ItemSubstance` on the made item, or on the item a facet or style is worked into: the
+step is the highest `PrimumStep` whose `item_quality` is the quality of a Primum item used,
+and a missing or unmapped quality counts as the lowest step. A craft whose consumption policy is
+`NONE` stamps nothing. `ItemInstanceReadSerializer.carries` lists the substance names, public to
+everyone. A worn or held item adds to a cast only for a caster whose gift works that substance
+(`item_substance_rows`). `build_crafting_quote` quotes template, category and bulk-value rows
+(`requirement_id`, `material_category_id`, `item_template_id`, `name`, `quantity_required`,
+`have`, `is_optional`).
 
 ### Handler Registry (`crafting/registry.py`, `crafting/handlers.py`)
 
