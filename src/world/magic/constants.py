@@ -902,6 +902,7 @@ class MagicActivity(models.TextChoices):
     DREAM_PERIL = "dream_peril", "Dream peril"
     PUSHING_HARD = "pushing_hard", "Pushing hard by burning resonance"
     KEEPING_FOCUS = "keeping_focus", "Keeping focus against carried drift"
+    SINEATING = "sineating", "Performing Sineating"
 
 
 # Names of the three canonical Affinity rows. Looked up by the

@@ -1,9 +1,11 @@
 """SoulTetherConfig — singleton tuning surface for the Soul Tether bond mechanic (Spec B)."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.checks.models import OutcomeTierAward
 
 
 class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
@@ -13,9 +15,12 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     to avoid float precision. Access via ``get_soul_tether_config()`` — singleton-by-
     convention, no DB-level uniqueness constraint.
 
-    Sineating fields:
-    - ``anima_cost_per_unit``: Sineater anima cost per unit eaten (default 2).
-    - ``fatigue_cost_per_unit``: Sineater fatigue cost per unit eaten (default 1).
+    Sineating fields (#5177):
+    - ``sineating_check_type`` / ``sineating_difficulty_level``: the check the Sineater rolls to
+      perform the ritual, and its difficulty as a level. Unset means the ritual refuses.
+    - ``corruption_per_unit``: corruption one unit moves from the Sinner to the Sineater.
+    - ``resonance_per_unit``: resonance one unit earns each of them at a full share. The
+      ``SineatingOutcomeAward`` row for the rolled tier scales it.
     - ``per_scene_cap_hard_max``: Hard ceiling on units accepted per scene (default 20).
     - ``per_scene_cap_base``: Base per-scene cap before level scaling (default 5).
 
@@ -49,8 +54,35 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
     objects = NaturalKeyManager()
 
     # --- Sineating ---
-    anima_cost_per_unit = models.PositiveSmallIntegerField(default=2)
-    fatigue_cost_per_unit = models.PositiveSmallIntegerField(default=1)
+    sineating_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The check a Sineater rolls to perform Sineating. Until it is set, Sineating "
+            "says it has not been set up yet."
+        ),
+    )
+    sineating_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Difficulty of the Sineating check. Authored as a level (0 = no difficulty): "
+            "the roll meets that level's baseline."
+        ),
+    )
+    corruption_per_unit = models.PositiveIntegerField(
+        default=60,
+        help_text="Corruption one unit of Sineating moves from the Sinner to the Sineater.",
+    )
+    resonance_per_unit = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Resonance one unit of Sineating earns the Sinner and the Sineater each, when the "
+            "roll's outcome pays a full share."
+        ),
+    )
     per_scene_cap_hard_max = models.PositiveSmallIntegerField(default=20)
     per_scene_cap_base = models.PositiveSmallIntegerField(default=5)
 
@@ -101,3 +133,50 @@ class SoulTetherConfig(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"SoulTetherConfig(pk={self.pk})"
+
+
+class SineatingOutcomeAward(OutcomeTierAward):
+    """Share of full resonance a Sineating earns each party, per outcome tier of its roll (#5177).
+
+    Each of the Sinner and the Sineater earns
+    ``floor(units x SoulTetherConfig.resonance_per_unit x earned_share)`` of the resonance of
+    their own half of the bond. 1.00 is a full share, 0.00 earns nothing, and a share above
+    1.00 lets staff reward a critical. The corruption moves whatever the roll. A tier with no
+    row makes Sineating refuse before anything is written.
+
+    A better outcome never earns a smaller share than a worse one; ``clean`` enforces it.
+    """
+
+    earned_share = models.DecimalField(
+        max_digits=4,
+        decimal_places=2,
+        help_text=(
+            "Fraction of full resonance each of them earns, from 0.00 up to 9.99. "
+            "1.00 is a full share."
+        ),
+    )
+
+    class Meta(OutcomeTierAward.Meta):
+        verbose_name = "Sineating outcome award"
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier_id}: {self.earned_share}"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.earned_share is None or self.outcome_tier_id is None:
+            return
+        if self.earned_share < 0:
+            raise ValidationError({"earned_share": "A share cannot be negative."})
+        siblings = type(self).objects.exclude(pk=self.pk)
+        level = self.outcome_tier.success_level
+        worse_above = siblings.filter(
+            outcome_tier__success_level__lt=level, earned_share__gt=self.earned_share
+        ).exists()
+        better_below = siblings.filter(
+            outcome_tier__success_level__gt=level, earned_share__lt=self.earned_share
+        ).exists()
+        if worse_above or better_below:
+            raise ValidationError(
+                {"earned_share": "A better outcome must earn at least as much as a worse one."}
+            )

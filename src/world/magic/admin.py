@@ -123,6 +123,7 @@ from world.magic.models import (
     SignatureMotifBonus,
     SignatureMotifBonusAppliedCondition,
     SignatureMotifBonusDamageProfile,
+    SineatingOutcomeAward,
     SoulfrayConfig,
     SoulTetherConfig,
     StandingCapBand,
@@ -2280,12 +2281,14 @@ class RelationshipBondPullTuningAdmin(admin.ModelAdmin):
 class SoulTetherConfigAdmin(admin.ModelAdmin):
     """Singleton tuning config for the Soul Tether bond mechanic — one row per environment."""
 
-    autocomplete_fields = ["updated_by"]
+    autocomplete_fields = ["updated_by", "sineating_check_type"]
 
     list_display = (
         "pk",
-        "anima_cost_per_unit",
-        "fatigue_cost_per_unit",
+        "sineating_check_type",
+        "sineating_difficulty_level",
+        "corruption_per_unit",
+        "resonance_per_unit",
         "per_scene_cap_hard_max",
         "resistance_full_at",
         "rescue_strain_stage3",
@@ -2299,6 +2302,15 @@ class SoulTetherConfigAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+@admin.register(SineatingOutcomeAward)
+class SineatingOutcomeAwardAdmin(admin.ModelAdmin):
+    """Share of full resonance a Sineating earns each party, per outcome tier (#5177)."""
+
+    list_display = ("outcome_tier", "earned_share")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
 
 
 @admin.register(MireHolding)

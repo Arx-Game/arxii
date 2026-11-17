@@ -17,13 +17,13 @@ class SineatingPendingOffer(SharedMemoryModel):
     """Pending Sineating offer awaiting Sineater response (Task 1.6).
 
     Persisted so the frontend inbox UI can poll a real endpoint. The row is
-    created by ``request_sineating`` and consumed (then deleted) by
-    ``resolve_sineating_from_db``.
+    created by ``request_sineating`` (the Sinner's plea, attached to a pose) and consumed
+    (then deleted) by ``perform_sineating`` or ``decline_sineating``.
 
-    Co-location is re-validated at accept time — either character may have left
-    the scene since the offer was created. ``resolve_sineating_from_db`` raises
-    ``SineatingValidationError`` and deletes the row when either character is no
-    longer a participant of ``scene``.
+    Co-location is re-validated when the ritual is performed: either character may have left
+    the scene since the plea was made. ``perform_sineating`` raises
+    ``SineatingValidationError`` and deletes the row when they no longer share an active
+    scene.
 
     The unique constraint on ``(sinner_sheet, sineater_sheet)`` ensures at most
     one pending offer per pair. ``request_sineating`` uses ``update_or_create``
@@ -57,8 +57,6 @@ class SineatingPendingOffer(SharedMemoryModel):
         related_name="sineating_pending_offers",
     )
     units_offered = models.PositiveSmallIntegerField()
-    anima_cost_per_unit = models.PositiveSmallIntegerField()
-    fatigue_cost_per_unit = models.PositiveSmallIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -191,8 +189,30 @@ class Sineating(SharedMemoryModel):
     units_accepted = models.PositiveIntegerField(
         help_text="0 = declined; 1..N = accepted that many units.",
     )
-    anima_cost = models.PositiveIntegerField(default=0)
-    fatigue_cost = models.PositiveIntegerField(default=0)
+    corruption_moved = models.PositiveIntegerField(
+        default=0,
+        help_text="Corruption that left the Sinner.",
+    )
+    corruption_taken = models.PositiveIntegerField(
+        default=0,
+        help_text="Corruption that arrived on the Sineater, after their resistance.",
+    )
+    outcome = models.ForeignKey(
+        "arxii.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The outcome of the Sineater's roll. Empty for a declined plea.",
+    )
+    sinner_resonance_earned = models.PositiveIntegerField(
+        default=0,
+        help_text="Resonance the Sinner earned in their thread's resonance.",
+    )
+    sineater_resonance_earned = models.PositiveIntegerField(
+        default=0,
+        help_text="Resonance the Sineater earned in their thread's resonance.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -204,8 +224,8 @@ class Sineating(SharedMemoryModel):
 
     def __str__(self) -> str:
         return (
-            f"Sineating({self.sineater_sheet} ate {self.units_accepted}/"
-            f"{self.units_offered} from {self.sinner_sheet})"
+            f"Sineating({self.sineater_sheet} took on {self.units_accepted}/"
+            f"{self.units_offered} units for {self.sinner_sheet})"
         )
 
 

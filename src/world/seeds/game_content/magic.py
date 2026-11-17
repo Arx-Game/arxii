@@ -1823,6 +1823,7 @@ def seed_magic_config() -> MagicConfigResult:
     - IntensityTier rows: Minor (threshold=5), Moderate (threshold=10), Major (threshold=15)
     - AudereThreshold (minimum_intensity_tier=Major, minimum_warp_stage=Soulfray "Ripping")
     - MishapPoolTier (min_deficit=1, max_deficit=None) backed by a minimal ConsequencePool
+    - SineatingOutcomeAward: one row per canonical CheckOutcome tier (#5177).
     - AnimaRitualBudgetAward / SanctumHomecomingGainAward / SanctumPurgingRetentionAward /
       SanctumDissolutionRecoveryAward: one row per canonical CheckOutcome tier for each of
       the 4 outcome-tier award tables (#1207). Without these, the corresponding
@@ -1847,6 +1848,7 @@ def seed_magic_config() -> MagicConfigResult:
         SanctumHomecomingGainAward,
         SanctumPurgingRetentionAward,
     )
+    from world.magic.models.soul_tether_config import SineatingOutcomeAward  # noqa: PLC0415
     from world.magic.models.soulfray import AnimaRitualBudgetAward  # noqa: PLC0415
 
     # --- AnimaConfig (has its own get_or_create helper) ---
@@ -1951,6 +1953,19 @@ def seed_magic_config() -> MagicConfigResult:
         SanctumDissolutionRecoveryAward.objects.get_or_create(
             outcome_tier=CheckOutcome.objects.get(name=name),
             defaults={"recovery_fraction": recovery_fraction},
+        )
+
+    # --- SineatingOutcomeAward: the share of full resonance each party earns (#5177) ---
+    for name, earned_share in (
+        (_CRITICAL_SUCCESS, Decimal("1.50")),
+        ("Success", Decimal("1.00")),
+        (_PARTIAL_SUCCESS, Decimal("0.50")),
+        ("Failure", Decimal("0.25")),
+        (_CRITICAL_FAILURE, Decimal("0.00")),
+    ):
+        SineatingOutcomeAward.objects.get_or_create(
+            outcome_tier=CheckOutcome.objects.get(name=name),
+            defaults={"earned_share": earned_share},
         )
 
     # --- ResonanceGainConfig (pk=1) ---

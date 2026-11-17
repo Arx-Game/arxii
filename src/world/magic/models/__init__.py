@@ -230,7 +230,7 @@ from world.magic.models.soul_tether import (
     SineatingPendingOffer,
     SoulTetherRescue,
 )
-from world.magic.models.soul_tether_config import SoulTetherConfig
+from world.magic.models.soul_tether_config import SineatingOutcomeAward, SoulTetherConfig
 from world.magic.models.soulfray import AnimaRitualBudgetAward, MishapPoolTier, SoulfrayConfig
 from world.magic.models.teaching import TraditionTeachingConfig
 from world.magic.models.technique_builder import (
@@ -497,6 +497,7 @@ __all__ = [
     "SignatureMotifBonusDamageProfile",
     # soul tether (Spec B §14.1, §15.1)
     "Sineating",
+    "SineatingOutcomeAward",
     "SineatingPendingOffer",
     "SoulTetherConfig",
     "SoulTetherRescue",
