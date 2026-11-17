@@ -19,7 +19,7 @@ from actions.persona_menu import (
     build_persona_menu,
 )
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
-from world.checks.factories import CheckOutcomeFactory, CheckTypeFactory
+from world.checks.factories import CheckTypeFactory
 from world.conditions.constants import Allegiance
 from world.conditions.factories import (
     ConditionCategoryFactory,
@@ -33,6 +33,7 @@ from world.magic.services.anima import anima_ritual_open_in_scene
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.services import create_mask
+from world.traits.factories import CheckOutcomeFactory
 
 
 class PersonaMenuServiceTests(django.test.TestCase):
