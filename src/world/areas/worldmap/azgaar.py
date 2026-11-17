@@ -468,6 +468,12 @@ def _gap(pip: Pip, chain: list[Pip]) -> int:
     return min(max(abs(pip[0] - x), abs(pip[1] - y)) for x, y in chain)
 
 
+def _nearest_index(chain: list[Pip], pip: Pip) -> int:
+    """The index of the pip of ``chain`` nearest ``pip``, diagonals as one; the first on a tie."""
+    gaps = [max(abs(x - pip[0]), abs(y - pip[1])) for x, y in chain]
+    return gaps.index(min(gaps))
+
+
 def capital_river_chains(  # noqa: PLR0913 - a raster's geometry plus the capitals
     gmap: GeneratorMap,
     scale: float,
@@ -501,12 +507,7 @@ def capital_river_chains(  # noqa: PLR0913 - a raster's geometry plus the capita
                 break
             seen.add(river.river_id)
             downstream = chains[river.river_id]
-            meeting = min(
-                range(len(downstream)),
-                key=lambda i: max(
-                    abs(downstream[i][0] - mouth[0]), abs(downstream[i][1] - mouth[1])
-                ),
-            )
+            meeting = _nearest_index(downstream, mouth)
             course.extend(downstream[meeting:])
         courses.append(course)
     return courses
