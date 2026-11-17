@@ -356,6 +356,9 @@ class CharacterSheetOutfitsHandler:
                             "item_instance__template",
                             "item_instance__quality_tier",
                             "item_instance__currency_instrument",
+                        ).prefetch_related(
+                            # What each piece carries (#5125), read by the item row.
+                            "item_instance__item_substances__substance",  # noqa: PREFETCH_STRING - read through .all(), no to_attr
                         ),
                         to_attr="cached_outfit_slots",
                     ),

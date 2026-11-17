@@ -176,6 +176,30 @@ class CraftingWithPrimum(_PrimumCraft):
         self.assertFalse(ItemSubstance.objects.filter(item_instance=coat).exists())
         self.assertEqual(self.inventory_row(coat)["carries"], [])
 
+    def test_naming_another_recipes_or_a_required_ingredient_changes_nothing(self) -> None:
+        other_req = CraftingMaterialRequirementFactory(
+            recipe=self.facet_recipe,
+            item_template=self.primum_template,
+            quantity=1,
+            is_optional=True,
+        )
+        thread_template = ItemTemplateFactory(name="Linen Thread", is_stackable=True)
+        required = CraftingMaterialRequirementFactory(
+            recipe=self.coat_recipe, item_template=thread_template, quantity=1
+        )
+        thread = ItemInstanceFactory(
+            template=thread_template, quantity=2, holder_character_sheet=self.sheet
+        )
+        self.give_primum(self.master)
+
+        result = self.craft_coat(optional=[other_req.pk, required.pk, 999999])
+
+        self.assertTrue(result.detail.success, result.detail.message)
+        thread.refresh_from_db()
+        self.assertEqual(thread.quantity, 1)  # the required thread is used as it always is
+        self.assertEqual(self.primum_held(), 1)  # the Primum was never named, so it is kept
+        self.assertFalse(ItemSubstance.objects.exists())
+
     def test_facet_attach_with_primum_stamps_the_item(self) -> None:
         facet_req = CraftingMaterialRequirementFactory(
             recipe=self.facet_recipe,
