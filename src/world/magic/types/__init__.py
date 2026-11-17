@@ -30,7 +30,14 @@ from world.magic.types.gain import (
     ResonanceWeeklySettlementSummary,
     SettlementResult,
 )
-from world.magic.types.kindling import KindledResonance, KindlingAct, KindlingEvidence
+from world.magic.types.kindling import (
+    ClaimedResonance,
+    KindledResonance,
+    KindlingAct,
+    KindlingEvidence,
+    PendingClaim,
+    WaitingResonance,
+)
 from world.magic.types.magic_skills import CastCheck
 from world.magic.types.pull import (
     PayerOption,
@@ -82,6 +89,7 @@ __all__ = [
     "AuraDrift",
     "AuraPercentages",
     "CastCheck",
+    "ClaimedResonance",
     "KindledResonance",
     "KindlingAct",
     "KindlingEvidence",
@@ -89,6 +97,7 @@ __all__ = [
     "PayerOption",
     "PendingAlterationResult",
     "PendingAlterationTierReduction",
+    "PendingClaim",
     "PullActionContext",
     "PullPreviewResult",
     "QualifyingComponent",
@@ -114,4 +123,5 @@ __all__ = [
     "UltimateReveal",
     "UltimateRevealCard",
     "UltimateRevealGroup",
+    "WaitingResonance",
 ]

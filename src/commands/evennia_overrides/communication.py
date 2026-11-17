@@ -400,6 +400,8 @@ class CmdPose(ArxCommand):
         pose/reflect mire:<Sinner>=<absolve|condemn|succumb> <text>
         pose/entreat <sineater>=<units> <text>
         pose/sineat <sinner>=<units> <text>
+        pose/claim <text>
+        pose/claim <resonance>[,<resonance>...]=<text>
 
     ``pose/reflect`` poses ``<text>`` and records that it reflects on a deed (the number
     ``reflect`` lists), on the resonance unsettling you (its name), embracing or disowning
@@ -410,6 +412,11 @@ class CmdPose(ArxCommand):
     your sins. ``pose/sineat`` poses ``<text>`` and performs Sineating for the Sinner whose
     plea waits (``sineater pleas``), taking on that many of the units offered, and rolls for
     it. A pose carries one of these, and the room sees only the pose.
+
+    ``pose/claim`` poses ``<text>`` and collects the resonance your kindled deeds set aside:
+    everything waiting, or only the resonances named before the ``=``. Only you read what you
+    gained. It combines with the others as ``pose/claim/reflect``, ``pose/claim/entreat`` and
+    ``pose/claim/sineat``, where it claims everything waiting.
     """
 
     key = "pose"
@@ -436,13 +443,29 @@ class CmdPose(ArxCommand):
         return result
 
     def _attachment_and_rest(self, args: str) -> tuple[dict[str, Any], str]:
+        """What the switches attach (a claim, and a reflection or Sineating), and the rest of
+        the line."""
+        from commands.claim import SWITCH_CLAIM, claim_kwargs_and_rest  # noqa: PLC0415
+
+        switches = list(self.switches)
+        if SWITCH_CLAIM not in switches:
+            return self._reflection_or_sineating_and_rest(switches, args)
+        others = [switch for switch in switches if switch != SWITCH_CLAIM]
+        claim, rest = claim_kwargs_and_rest(self, args, names_allowed=not others)
+        if not others:
+            return claim, rest
+        other, rest = self._reflection_or_sineating_and_rest(others, rest)
+        return {**claim, **other}, rest
+
+    def _reflection_or_sineating_and_rest(
+        self, switches: list[str], args: str
+    ) -> tuple[dict[str, Any], str]:
         """The reflection or Sineating the one switch names, and the rest of the line."""
         from commands.sineating import (  # noqa: PLC0415
             SINEATING_SWITCHES,
             sineating_kwargs_and_rest,
         )
 
-        switches = list(self.switches)
         if switches == [_SWITCH_REFLECT]:
             from commands.reflection import reflection_kwargs_and_rest  # noqa: PLC0415
 
@@ -463,7 +486,8 @@ class CmdPose(ArxCommand):
             )
         msg = (
             "Usage: pose <text> | pose/reflect <deed, resonance or mire:Sinner>=<choice> <text> | "
-            "pose/entreat <sineater>=<units> <text> | pose/sineat <sinner>=<units> <text>"
+            "pose/entreat <sineater>=<units> <text> | pose/sineat <sinner>=<units> <text> | "
+            "pose/claim [<resonance>,...=]<text>"
         )
         raise CommandError(msg)
 
