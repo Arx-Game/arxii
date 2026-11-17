@@ -759,16 +759,13 @@ class PoseAction(Action):
         told: list[tuple[str, bool]] = []
         sineated: list[tuple[str, bool]] = []
 
+        first_pose: list[bool] = []
+
         def _reflect(interaction: Interaction | None) -> None:
-            _carry_attachments(actor, pending, sineating, interaction, told, sineated)
-            # #5177: a pose in a scene is when what the character carries pulls at them.
             # Both ways of posting (with and without a request id) end here, once, and a
             # replayed request never gets here.
-            from world.magic.services.impulses import (  # noqa: PLC0415
-                refresh_impulses_for_character,
-            )
-
-            refresh_impulses_for_character(actor)
+            _carry_attachments(actor, pending, sineating, interaction, told, sineated)
+            first_pose.append(True)
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
@@ -797,6 +794,14 @@ class PoseAction(Action):
             _reflect(interaction)
         if targets:
             _flag_blocked_contact_for_targets(actor, targets, scene=_active_scene_for(actor))
+        if first_pose:
+            # #5177: a pose in a scene is when what the character carries pulls at them. Last,
+            # and failure-safe, so it can never skip the attachments or the contact flag above.
+            from world.magic.services.impulses import (  # noqa: PLC0415
+                safe_refresh_impulses_for_character,
+            )
+
+            safe_refresh_impulses_for_character(actor)
         return _pose_result(told, sineated)
 
 

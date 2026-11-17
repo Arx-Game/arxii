@@ -34,6 +34,9 @@ from world.magic.exceptions import SineatingValidationError
 from world.magic.factories import (
     KindlingSituationFactory,
     MireHoldingFactory,
+    PoseEndorsementFactory,
+    ReflectionFactory,
+    SettlingRiteFactory,
     author_compulsion_condition,
 )
 from world.magic.models import ImpulseShown, MireHolding
@@ -103,7 +106,10 @@ class _ImpulseCase(SineatingCase):
 
     def refresh(self):
         """Refresh the bearer's impulses; returns the result and the lines they were sent."""
-        with patch.object(self.bearer.character, "msg") as msg:
+        with (
+            patch.object(self.bearer.character, "msg") as msg,
+            patch("world.magic.services.impulses.session_count", return_value=1),
+        ):
             result = refresh_impulses(self.bearer, self.scene)
         return result, [call.args[0] for call in msg.call_args_list]
 
@@ -115,7 +121,10 @@ class _ImpulseCase(SineatingCase):
 
     def deed(self):
         """A deed of the resonance: the kindled-deed grant a situation's act earns."""
-        with patch.object(self.bearer.character, "msg") as msg:
+        with (
+            patch.object(self.bearer.character, "msg") as msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
             grant_resonance(
                 self.bearer,
                 self.resonance,
@@ -124,6 +133,30 @@ class _ImpulseCase(SineatingCase):
                 kindling_situation=self.situation,
                 deed_label="Fed the hunger",
             )
+        return [call.args[0] for call in msg.call_args_list]
+
+    def grant_not_made_by_the_character(self, source: str) -> list[str]:
+        """A grant of the compelled resonance that is not a deed of the bearer's own."""
+        if source == GainSource.POSE_ENDORSEMENT:
+            kwargs = {
+                "pose_endorsement": PoseEndorsementFactory(
+                    endorser_sheet=self.sineater if self.bears_own else self.sinner,
+                    endorsee_sheet=self.bearer,
+                    resonance=self.resonance,
+                )
+            }
+        else:
+            kwargs = {
+                "settling_rite": SettlingRiteFactory(character_sheet=self.bearer),
+                "reflection": ReflectionFactory(
+                    character_sheet=self.bearer, resonance=self.resonance
+                ),
+            }
+        with (
+            patch.object(self.bearer.character, "msg") as msg,
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            grant_resonance(self.bearer, self.resonance, 10, source=source, **kwargs)
         return [call.args[0] for call in msg.call_args_list]
 
 
@@ -157,6 +190,22 @@ class _IntrusiveThoughts:
         self.assertEqual(
             ImpulseShown.objects.filter(kind=ImpulseKind.INTRUSIVE, scene=self.scene).count(), 1
         )
+
+    def test_a_character_with_no_session_is_not_told_and_nothing_is_spent(self) -> None:
+        self.carry(1)
+        self.hold_situation()
+
+        with (
+            patch.object(self.bearer.character, "msg") as msg,
+            patch("world.magic.services.impulses.session_count", return_value=0),
+        ):
+            result = refresh_impulses(self.bearer, self.scene)
+
+        self.assertEqual(result.told, ())
+        msg.assert_not_called()
+        self.assertFalse(ImpulseShown.objects.filter(scene=self.scene).exists())
+        # Once they are back at a session, the line is still theirs to be sent.
+        self.assertEqual(self.refresh()[1], [IMPULSE_TEXT])
 
     def test_blank_words_fall_back_to_a_plain_line(self) -> None:
         self.resonance.impulse_text = ""
@@ -213,6 +262,34 @@ class _Compulsion:
         self.assertIsNone(self.compulsion_instance())
         self.deed()
         self.assertEqual(self._corruption(), corruption_before + 5)
+
+    def test_only_a_deed_the_character_did_gives_in(self) -> None:
+        self.carry(2)
+        self.hold_situation()
+        self.refresh()
+        corruption_before = self._corruption()
+        holding = self._holding()
+
+        # A peer's endorsement and succumbing to the Mire grow the resonance, but the
+        # character did not give in: the Compulsion stays, no corruption is added, no line is sent.
+        for source in (GainSource.POSE_ENDORSEMENT, GainSource.SUCCUMBED):
+            lines = self.grant_not_made_by_the_character(source)
+            self.assertFalse([line for line in lines if line.startswith("You give in")], source)
+            self.assertIsNotNone(self.compulsion_instance(), source)
+            self.assertEqual(self._corruption(), corruption_before, source)
+        # The next refresh still finds the resonance unearned and the Compulsion applies.
+        result, _ = self.refresh()
+        self.assertFalse(result.compulsion_lifted)
+        self.assertEqual(self.penalty(), -3)
+        if holding is not None:
+            holding.refresh_from_db()
+            self.assertEqual(holding.amount, 120)
+
+        # A kindled deed still lifts it, adds the corruption and sends the line.
+        lines = self.deed()
+        self.assertIsNone(self.compulsion_instance())
+        self.assertEqual(self._corruption(), corruption_before + 5)
+        self.assertTrue([line for line in lines if line.startswith("You give in")])
 
     def test_a_deeper_stage_costs_more_and_settling_below_it_lifts_it(self) -> None:
         self.carry(2)

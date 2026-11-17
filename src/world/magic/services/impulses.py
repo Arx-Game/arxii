@@ -20,19 +20,24 @@ a pose is posted, before a cast's modifiers are gathered, and when the kindled p
 from __future__ import annotations
 
 from dataclasses import dataclass
+import logging
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.db.models import Q
 
 from world.conditions.models import ConditionInstance
-from world.magic.constants import DEED_GAIN_SOURCES, GainSource, ImpulseKind
+from world.magic.constants import COMPULSION_INDULGING_SOURCES, ImpulseKind
 from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.models.grant import ResonanceGrant
 from world.magic.models.impulse import ImpulseShown
 from world.magic.services.corruption import accrue_corruption, get_corruption_config
 from world.magic.types.corruption import CorruptionSource
+from world.roster.services.presence import session_count
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
@@ -40,6 +45,8 @@ if TYPE_CHECKING:
     from world.magic.models.affinity import Resonance
     from world.magic.models.aura import CharacterResonance
     from world.scenes.models import Scene
+
+logger = logging.getLogger(__name__)
 
 _INTRUSIVE_PREFIX = "Intrusive Thoughts"
 _COMPULSION_PREFIX = "Compulsion"
@@ -210,14 +217,15 @@ def earned_in_scene(
 ) -> bool:
     """Whether the character has earned ``resonance`` by a deed since ``scene`` began.
 
-    A deed is a grant whose source is in ``DEED_GAIN_SOURCES``. Grants carry no scene of
-    their own, so "in this scene" is a grant made since the scene started. ``excluding`` leaves
-    out the grant a caller is in the middle of recording.
+    Only a grant whose source is in ``COMPULSION_INDULGING_SOURCES`` counts: a deed the character
+    did themselves, never a grant that landed from another player, a GM or a cron. Grants carry
+    no scene of their own, so "in this scene" is a grant made since the scene started.
+    ``excluding`` leaves out the grant a caller is in the middle of recording.
     """
     grants = ResonanceGrant.objects.filter(
         character_sheet=sheet,
         resonance=resonance,
-        source__in=DEED_GAIN_SOURCES,
+        source__in=COMPULSION_INDULGING_SOURCES,
         granted_at__gte=scene.date_started,
     )
     if excluding is not None:
@@ -239,11 +247,17 @@ def _live(scene: Scene | None) -> Scene | None:
 def _tell_once(
     sheet: CharacterSheet, resonance: Resonance, scene: Scene, kind: str, line: str
 ) -> str | None:
-    """Send ``line`` to the character once per (resonance, scene, kind); return it if sent."""
+    """Send ``line`` to the character once per (resonance, scene, kind); return it if sent.
+
+    A character with no live session cannot hear it: nothing is recorded and nothing is sent,
+    so the once-per-scene line is not spent on nobody.
+    """
+    if sheet.character is None or not session_count(sheet.character):
+        return None
     _, created = ImpulseShown.objects.get_or_create(
         character_sheet=sheet, resonance=resonance, scene=scene, kind=kind
     )
-    if not created or sheet.character is None:
+    if not created:
         return None
     sheet.character.msg(line)
     return line
@@ -360,12 +374,57 @@ def refresh_impulses_for_character(
     return refresh_impulses(sheet, get_active_scene(character.location))
 
 
+def _isolated[T](call: Callable[[], T], failure: str) -> T | None:
+    """Run ``call`` in its own savepoint; log ``failure`` and return None when it raises.
+
+    Impulses are a side effect of a pose, a cast, a panel and a grant. A failure here forfeits
+    only the impulse, never the act it rides on, and a database error does not poison an
+    enclosing transaction.
+    """
+    try:
+        with transaction.atomic():
+            return call()
+    except Exception:
+        logger.exception(failure)
+        return None
+
+
+def safe_refresh_impulses(sheet: CharacterSheet, scene: Scene | None) -> ImpulseRefresh | None:
+    """``refresh_impulses`` that can never fail its caller; None when it raised."""
+    return _isolated(
+        lambda: refresh_impulses(sheet, scene),
+        f"Refreshing impulses failed for character sheet #{sheet.pk}",
+    )
+
+
+def safe_refresh_impulses_for_character(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - a pose and a cast hold the character
+) -> ImpulseRefresh | None:
+    """``refresh_impulses_for_character`` that can never fail its caller; None when it raised."""
+    return _isolated(
+        lambda: refresh_impulses_for_character(character),
+        f"Refreshing impulses failed for character #{character.pk}",
+    )
+
+
 # =============================================================================
 # Giving in
 # =============================================================================
 
 
 def give_in_to_compulsion(grant: ResonanceGrant, row: CharacterResonance) -> None:
+    """Give in to a Compulsion a deed grew a resonance under; never fails the grant.
+
+    A failure in the work is logged and forfeits only the giving in, so ``grant_resonance``'s
+    transaction is never rolled back by it.
+    """
+    _isolated(
+        lambda: _give_in(grant, row),
+        f"Giving in to a Compulsion failed for grant #{grant.pk}; the resonance grant stands",
+    )
+
+
+def _give_in(grant: ResonanceGrant, row: CharacterResonance) -> None:
     """A deed grew a resonance the character is compelled by: they give in to it.
 
     ``grant_resonance`` calls this once the grant is recorded, with the resonance row it holds.
@@ -374,12 +433,14 @@ def give_in_to_compulsion(grant: ResonanceGrant, row: CharacterResonance) -> Non
     (unless another resonance still compels the character), adds
     ``compulsion_indulge_corruption`` to the character's corruption in the resonance, and tells
     them. A Sineater carrying that resonance for a Sinner carries the addition for the Sinner
-    with the largest holding. Succumbing to the Mire is a settling, not a giving in, and never
-    counts.
+    with the largest holding. Only a source in ``COMPULSION_INDULGING_SOURCES`` counts: a grant
+    from another player, a GM or a cron, and succumbing to the Mire, are not giving in.
+
+    The line goes out after the surrounding transaction commits.
     """
     if row.corruption_current <= 0:
         return
-    if grant.source not in DEED_GAIN_SOURCES or grant.source == GainSource.SUCCUMBED:
+    if grant.source not in COMPULSION_INDULGING_SOURCES:
         return
     sheet = grant.character_sheet
     character = sheet.character
@@ -426,7 +487,8 @@ def give_in_to_compulsion(grant: ResonanceGrant, row: CharacterResonance) -> Non
         from world.magic.services.mire import add_to_largest_holding  # noqa: PLC0415
 
         add_to_largest_holding(sheet, grant.resonance, added)
-    character.msg(
+    line = (
         f"You give in to your {grant.resonance.name}. It loosens its hold for now, "
         "and a little more of it stays with you."
     )
+    transaction.on_commit(lambda: character.msg(line))

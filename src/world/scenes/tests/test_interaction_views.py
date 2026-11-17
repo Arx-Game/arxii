@@ -438,6 +438,28 @@ class PoseSubmitViewTests(APITestCase):
         )
         assert linked_action_ids == {action_a.pk, action_b.pk}
 
+    def test_a_failing_impulse_refresh_does_not_fail_the_pose(self) -> None:
+        """The refresh is a side effect (#5177): a failure in it is logged and the pose posts."""
+        with (
+            patch(
+                "world.magic.services.impulses.refresh_impulses_for_character",
+                side_effect=RuntimeError("boom"),
+            ),
+            self.assertLogs("world.magic.services.impulses", level="ERROR"),
+        ):
+            response = self.client.post(
+                self.url,
+                {
+                    "client_request_id": str(uuid.uuid4()),
+                    "persona_id": self.persona.pk,
+                    "content": "A pose.",
+                },
+                format="json",
+            )
+
+        assert response.status_code == status.HTTP_201_CREATED
+        assert Interaction.objects.filter(pk=response.data["id"]).exists()
+
     def test_submit_pose_with_explicit_action_link_ids_skips_auto_link(self) -> None:
         """When action_link_ids is provided, only those links are created (no auto-link)."""
         action_a = self._make_action(offset_seconds=1)

@@ -442,6 +442,13 @@ DEED_GAIN_SOURCES: frozenset[str] = frozenset(
     }
 )
 
+# #5177: the grants that count as a character INDULGING a Compulsion. A Compulsion lifts for the
+# scene once the character EARNS the compelled resonance there by a deed they did themselves: a
+# kindled deed. A grant that lands from another player (a pose endorsement settled weekly, a scene
+# entry), a GM, a mission or a cron is not the character giving in, and neither is succumbing to
+# the Mire. The pose that claims a resonance (a later issue) adds its own source to this set.
+COMPULSION_INDULGING_SOURCES: frozenset[str] = frozenset({GainSource.KINDLED_DEED})
+
 NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
     {
         GainSource.ROOM_RESIDENCE,

@@ -61,7 +61,7 @@ class CmdKindledResonances(ArxCommand):
 
     def func(self) -> None:
         from world.magic.services.impulses import (  # noqa: PLC0415
-            refresh_impulses_for_character,
+            safe_refresh_impulses_for_character,
         )
         from world.magic.services.kindling import kindled_resonances_now  # noqa: PLC0415
 
@@ -70,7 +70,7 @@ class CmdKindledResonances(ArxCommand):
             self.msg(NO_SHEET)
             return
         rows = kindled_resonances_now(sheet)
-        refreshed = refresh_impulses_for_character(self.caller)
+        refreshed = safe_refresh_impulses_for_character(self.caller)
         impulses = list(refreshed.impulses) if refreshed is not None else []
         if not rows and not impulses:
             self.msg(NO_RESONANCES)

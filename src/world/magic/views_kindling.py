@@ -15,7 +15,7 @@ from rest_framework.response import Response
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.serializers_kindling import ImpulseSerializer, KindledResonanceSerializer
-from world.magic.services.impulses import impulses_now, refresh_impulses_for_character
+from world.magic.services.impulses import impulses_now, safe_refresh_impulses_for_character
 from world.magic.services.kindling import kindled_resonances_now
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
@@ -95,7 +95,7 @@ class KindledResonanceViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
             return []
         own = RosterEntry.objects.for_account(self.request.user).filter(character_sheet_id=sheet.pk)
         if own.exists():
-            refreshed = refresh_impulses_for_character(sheet.character)
+            refreshed = safe_refresh_impulses_for_character(sheet.character)
             return list(refreshed.impulses) if refreshed is not None else []
         return impulses_now(sheet)
 
