@@ -288,7 +288,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `grant_materials` | `actions.definitions.domains.GrantMaterialAction` | domains / self | `src/actions/tests/test_base.py` |
 | `grant_scene_gm` | `actions.definitions.scenes.GrantSceneGMAction` | scenes / area | `frontend/src/scenes/components/SceneHeader.test.tsx`, `src/actions/tests/test_base.py` |
 | `grant_story_room` | `actions.definitions.story_builder.GrantStoryRoomAccessAction` | story_builder / self | `frontend/src/story-builder/components/RoomAccessPanel.test.tsx`, `frontend/src/story-builder/queries.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_story_builder_actions.py` (+2) |
-| `harvest_primum` | `actions.definitions.primum.HarvestPrimumAction` | magic / self | `frontend/src/combat/__tests__/CombatantsList.test.tsx`, `frontend/src/game/components/RoomPanel.test.tsx`, `frontend/src/scenes/components/__tests__/HarvestRow.test.tsx`, `src/integration_tests/test_primum_harvest_journeys.py` |
+| `harvest_primum` | `actions.definitions.primum.HarvestPrimumAction` | magic / self | `frontend/src/scenes/components/__tests__/HarvestRow.test.tsx`, `src/integration_tests/test_primum_harvest_journeys.py` |
 | `hazard_endure` | `actions.definitions.hazards.HazardEndureAction` | hazard / self | `src/actions/tests/test_base.py` |
 | `hazard_retreat` | `actions.definitions.hazards.HazardRetreatAction` | hazard / self | `src/actions/tests/test_base.py` |
 | `home` | `actions.definitions.movement.HomeAction` | movement / self | `frontend/src/buildings/components/TenantSection.test.tsx`, `frontend/src/evennia_replacements/LoginPage.test.tsx`, `src/actions/tests/test_base.py`, `src/actions/tests/test_fatigue_action.py` (+5) |
@@ -329,7 +329,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `list_servant_assignments` | `actions.definitions.npc_assignments.ListServantAssignmentsAction` | npc_services / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_npc_assignment_actions.py` |
 | `lock_exit` | `actions.definitions.doors.LockAction` | locations / self | `src/actions/tests/test_base.py`, `src/integration_tests/test_keeping_a_house_journeys.py` |
 | `log_goal_progress` | `actions.definitions.goals.LogGoalProgressAction` | goals / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_goals_actions.py`, `src/actions/tests/test_offscreen_gate.py` |
-| `look` | `actions.definitions.perception.LookAction` | perception / single | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/composer-escapes.spec.ts`, `frontend/e2e/feed-chips.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts` (+65) |
+| `look` | `actions.definitions.perception.LookAction` | perception / single | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/composer-escapes.spec.ts`, `frontend/e2e/feed-chips.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts` (+66) |
 | `look_at_item` | `actions.definitions.perception.LookAtItemAction` | perception / single | `frontend/e2e/target-menu-approved-states.spec.ts`, `frontend/e2e/target-menu-worn-row.spec.ts`, `src/actions/tests/test_base.py`, `src/actions/tests/test_container_target_contexts.py` (+5) |
 | `manage_training` | `actions.definitions.progression.ManageTrainingAction` | progression / self | `src/actions/tests/test_base.py`, `src/actions/tests/test_progression.py` |
 | `manifest_set` | `actions.definitions.manifest.ManifestSetAction` | magic / self | `src/actions/tests/test_base.py`, `src/integration_tests/test_manifest_picker_journeys.py` |
@@ -760,7 +760,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `event` | events | `commands.events.CmdEvent` | `src/actions/tests/test_fashion_actions.py`, `src/flows/tests/test_evil_tag_flow.py`, `src/integration_tests/test_gatherings_coffers_and_wares_journeys.py`, `src/integration_tests/test_npc_lending_journeys.py` (+9) |
 | `evidence` |  | `commands.social.evidence.CmdEvidence` | `src/integration_tests/test_minding_your_own_affairs_journeys.py`, `src/world/justice/tests/test_frame_jobs.py`, `src/world/progression/tests/test_random_scene_views.py` |
 | `expel` |  | `commands.expulsion.CmdExpel` | `src/integration_tests/pipeline/test_organization_telnet_e2e.py` |
-| `extract` |  | `commands.primum.CmdExtract` | `src/integration_tests/test_primum_harvest_journeys.py`, `src/integration_tests/test_primum_payload_journeys.py` |
+| `extract` |  | `commands.primum.CmdExtract` | `src/integration_tests/test_magic_skill_pickers_journeys.py`, `src/integration_tests/test_primum_harvest_journeys.py`, `src/integration_tests/test_primum_payload_journeys.py` |
 | `feed` |  | `commands.consent.CmdFeed` | `frontend/e2e/feed-chips.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts`, `frontend/e2e/feed-wrap.spec.ts`, `frontend/src/game/GamePage.test.tsx` (+1) |
 | `feel` |  | `commands.mood.CmdFeel` | `src/integration_tests/test_voice_and_feeling_journeys.py` |
 | `flirt` |  | `commands.consent.CmdFlirt` | `src/actions/tests/test_base.py`, `src/actions/tests/test_social_dispatch.py`, `src/actions/tests/test_unified_player_actions.py`, `src/commands/tests/test_consent_commands.py` (+12) |
@@ -802,7 +802,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `leaveroom` |  | `commands.story_rooms.CmdLeaveRoom` | `src/integration_tests/test_running_a_story_journeys.py` |
 | `line` |  | `commands.speaker_queue.CmdLine` | `frontend/e2e/evidence/house-page-codex-prose-5090.spec.ts`, `frontend/src/almanach/__tests__/LayOutDialog.test.tsx`, `frontend/src/channels/__tests__/ChannelsPanel.test.tsx`, `frontend/src/channels/__tests__/feedLines.test.tsx` (+18) |
 | `lock` |  | `commands.door.CmdLock` | `src/actions/tests/test_base.py`, `src/integration_tests/test_keeping_a_house_journeys.py`, `src/world/gm/tests/test_prompt_routing.py` |
-| `look` | glance, l, ls | `commands.evennia_overrides.perception.CmdLook` | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/feed-chips.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts`, `frontend/e2e/feed-notes.spec.ts` (+36) |
+| `look` | glance, l, ls | `commands.evennia_overrides.perception.CmdLook` | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/feed-chips.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts`, `frontend/e2e/feed-notes.spec.ts` (+37) |
 | `magescar` |  | `commands.alterations.CmdMageScar` | `src/commands/tests/test_magescar_command.py` |
 | `makeshade` |  | `commands.species_gm.CmdMakeShade` | none |
 | `manifest` |  | `commands.manifest.CmdManifest` | `src/integration_tests/test_manifest_picker_journeys.py`, `src/integration_tests/test_pacts_with_beings_journeys.py` |
@@ -926,7 +926,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `channel` | chan, channels | `commands.channels.CmdChannel` | `frontend/e2e/channels.spec.ts`, `frontend/src/game/components/PlaySidebar.test.tsx`, `src/integration_tests/test_channels_journeys.py`, `src/world/channels/tests/test_views.py` (+1) |
 | `color` |  | `evennia.commands.default.account.CmdColorTest` | `frontend/src/magic/__tests__/HollowBar.test.tsx` |
 | `conversion` |  | `commands.conversion.CmdConversion` | `src/integration_tests/test_keeping_the_faith_journeys.py` |
-| `look` | l, ls | `evennia.commands.default.account.CmdOOCLook` | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/feed-chips.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts`, `frontend/e2e/feed-notes.spec.ts` (+34) |
+| `look` | l, ls | `evennia.commands.default.account.CmdOOCLook` | `frontend/e2e/composer-commands.spec.ts`, `frontend/e2e/feed-chips.spec.ts`, `frontend/e2e/feed-notes-display-settings.spec.ts`, `frontend/e2e/feed-notes.spec.ts` (+35) |
 | `option` | options | `evennia.commands.default.account.CmdOption` | `frontend/src/missions/__tests__/computeLayout.test.ts`, `frontend/src/stories/__tests__/BeatFormDialog.test.tsx`, `src/integration_tests/pipeline/test_missions_telnet_e2e.py`, `src/integration_tests/test_mission_studio_authoring_journeys.py` (+14) |
 | `page` |  | `commands.evennia_overrides.communication.CmdPage` | `frontend/e2e/bulletin.spec.ts`, `frontend/e2e/era-admin.spec.ts`, `frontend/e2e/stories-author.spec.ts`, `frontend/e2e/stories-gm.spec.ts` (+7) |
 | `password` |  | `evennia.commands.default.account.CmdPassword` | `frontend/e2e/liveness-soak.spec.ts`, `frontend/e2e/smoke.spec.ts`, `frontend/e2e/user-journey.spec.ts`, `frontend/src/account/__tests__/AccountSettingsPage.test.tsx` (+10) |
@@ -1447,7 +1447,7 @@ surface that is dead, and the ledger (`tools/test_ledger.py`) decides which.
 | `api/play/read/` | `PlayReadView` | `world.scenes.urls` | `src/world/scenes/tests/test_play_views.py` |
 | `api/play/submissions/<uuid:client_request_id>/` | `PoseSubmissionDetailView` | `world.scenes.urls` | none |
 | `known/` | `KnownSecretViewSet` | `world.secrets.urls` | `frontend/e2e/almanach-founder.spec.ts`, `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/combat-movement-panel.spec.ts` (+758) |
-| `authored/` | `AuthoredSecretViewSet` | `world.secrets.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+595) |
+| `authored/` | `AuthoredSecretViewSet` | `world.secrets.urls` | `frontend/e2e/atlas-one-way.spec.ts`, `frontend/e2e/atlas-region-map-4242.spec.ts`, `frontend/e2e/evidence/atlas-place-area-4084.spec.ts`, `frontend/e2e/evidence/backgrounds-beats-4124.spec.ts` (+596) |
 | `grievance-options/` | `GrievanceOptionListView` | `world.secrets.urls` | `src/world/secrets/tests/test_grievance.py` |
 | `grievance/` | `SecretGrievanceView` | `world.secrets.urls` | `frontend/src/game/composerLine.test.ts`, `frontend/src/secrets/__tests__/SecretsTab.test.tsx`, `src/integration_tests/test_granting_and_staging_journeys.py`, `src/world/relationships/tests/test_grievance.py` (+1) |
 | `gossip/` | `GossipListView` | `world.secrets.urls` | `frontend/src/secrets/__tests__/GossipPanel.test.tsx`, `src/actions/tests/test_smear_action.py`, `src/integration_tests/pipeline/test_gossip_telnet_e2e.py`, `src/integration_tests/pipeline/test_tutorial_chain_e2e.py` (+12) |
