@@ -93,6 +93,12 @@ Describes the player's current location. The payload includes the room, nearby o
 
 Clients should display placeholder icons when `thumbnail_url` is null.
 
+The payload also carries a viewer-relative `primum` block (#5125):
+`{"sensed": [{"substance_id", "substance_name", "step_name"}], "line": "You sense fire Primum: Massive.",
+"harvestable": [{"substance_id", "substance_name", "source", "opponent_id", "opponent_name",
+"step_name"}]}`. It lists only Primum this viewer has perceived, so two viewers of one room
+receive different blocks; `line` is empty when nothing is sensed.
+
 
 ## Same-connection room-state recovery
 
