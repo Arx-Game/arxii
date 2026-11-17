@@ -59,6 +59,11 @@ function ResonanceRow({ row }: { row: KindledResonance }) {
           {stateLabel(row)}
         </span>
       </div>
+      {row.unclaimed > 0 && (
+        <p className="text-xs font-medium" data-testid={`kindled-resonance-waiting-${row.id}`}>
+          {row.unclaimed} waiting
+        </p>
+      )}
       {row.reasons.map((reason) => (
         <p key={reason} className="text-xs text-muted-foreground">
           {reason}

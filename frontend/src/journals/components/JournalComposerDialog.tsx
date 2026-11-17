@@ -28,6 +28,9 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
+import { claimFields } from '@/magic/claiming';
+import { useRefreshClaims, useWaitingClaims } from '@/magic/queries';
 import { reflectionFields } from '@/magic/reflection';
 
 import type { CreateJournalEntryRequest } from '../api';
@@ -54,6 +57,8 @@ interface JournalComposerDialogProps {
 export function JournalComposerDialog({ open, onClose, initialTags }: JournalComposerDialogProps) {
   const [value, setValue] = useState<JournalEntryFieldsValue>(EMPTY_ENTRY_FIELDS);
   const createEntry = useCreateJournalEntry();
+  const waitingClaims = useWaitingClaims(useActiveCharacterId());
+  const refreshClaims = useRefreshClaims();
 
   // Reset (and re-seed tags) only on the closed->open transition, not on every
   // render while the dialog stays open — otherwise a parent passing a fresh
@@ -75,6 +80,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
       tags: value.tags,
       about: value.about?.id ?? null,
       ...reflectionFields(value.reflection),
+      ...claimFields(value.claim, waitingClaims),
     };
     // Omit the field entirely at the INHERIT default — never send a no-op override.
     if (value.posthumousOverride !== 'inherit') {
@@ -84,6 +90,8 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
       onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
         if (entry.reflection_line) toast.success(entry.reflection_line);
+        for (const line of entry.claim_lines ?? []) toast.success(line);
+        refreshClaims();
         onClose();
       },
       onError: (err: Error) => toast.error(err.message),

@@ -81,6 +81,9 @@ export function useAvailableActionsQuery(
 /** The treat-condition action key — a backend registry key, not a UI string. */
 export const TREAT_CONDITION_ACTION_KEY = 'treat_condition';
 
+/** The Anima ritual with a partner (#5181) — a backend registry key, not a UI string. */
+export const ANIMA_RITUAL_ACTION_KEY = 'anima_ritual';
+
 /**
  * Copy a scalar field onto the request body only when it is defined.
  * Used by {@link createActionRequest} to map optional body fields onto the

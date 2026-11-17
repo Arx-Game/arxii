@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import {
+  ANIMA_RITUAL_ACTION_KEY,
   fetchPendingRequests,
   fetchPendingTargets,
   respondToRequest,
@@ -49,6 +50,8 @@ interface ConsentCardProps {
   initiatorName: string;
   actionKey: string;
   techniqueName?: string | null;
+  /** What an Anima ritual will do to your fatigue; blank when it does nothing (#5181). */
+  ritualPartnerEffect?: string;
   strainCommitment: number;
   combatRiskLevel?: string | null;
   combatStakes?: StakesSummary[] | null;
@@ -69,6 +72,7 @@ function ConsentCard({
   initiatorName,
   actionKey,
   techniqueName,
+  ritualPartnerEffect,
   strainCommitment,
   combatRiskLevel,
   combatStakes,
@@ -134,14 +138,22 @@ function ConsentCard({
     <div className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30">
       <ShieldAlert className="h-5 w-5 shrink-0 text-amber-600" />
       <div className="min-w-0 flex-1 basis-56">
-        <p className="text-sm font-medium">
-          <span className="font-semibold">{initiatorName}</span> wants to use{' '}
-          <span className="font-semibold">
-            {actionKey}
-            {techniqueName ? ` (${techniqueName})` : ''}
-          </span>{' '}
-          on your character.
-        </p>
+        {actionKey === ANIMA_RITUAL_ACTION_KEY ? (
+          <p className="text-sm font-medium">
+            <span className="font-semibold">{initiatorName}</span> asks you to take part in their
+            ritual.
+            {ritualPartnerEffect ? ` ${ritualPartnerEffect}` : ''}
+          </p>
+        ) : (
+          <p className="text-sm font-medium">
+            <span className="font-semibold">{initiatorName}</span> wants to use{' '}
+            <span className="font-semibold">
+              {actionKey}
+              {techniqueName ? ` (${techniqueName})` : ''}
+            </span>{' '}
+            on your character.
+          </p>
+        )}
         {boon && (
           <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-300">
             {boon.kind === 'money' && `They ask for ${sumTierPrefix}${boon.amount} coppers.`}
@@ -322,6 +334,7 @@ export function ConsentPrompt({ sceneId }: Props) {
             initiatorName={req.initiator_name}
             actionKey={req.action_key}
             techniqueName={req.technique_name}
+            ritualPartnerEffect={req.ritual_partner_effect}
             strainCommitment={req.strain_commitment}
             combatRiskLevel={req.combat_risk_level}
             combatStakes={req.combat_stakes}
@@ -356,6 +369,7 @@ export function ConsentPrompt({ sceneId }: Props) {
             initiatorName={t.initiator_name}
             actionKey={t.action_key}
             techniqueName={t.technique_name}
+            ritualPartnerEffect={t.ritual_partner_effect}
             strainCommitment={t.strain_commitment}
             combatRiskLevel={t.combat_risk_level}
             combatStakes={t.combat_stakes}

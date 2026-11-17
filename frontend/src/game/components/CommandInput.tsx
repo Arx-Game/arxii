@@ -29,9 +29,16 @@ import {
 import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { addFeedNote } from '@/store/gameSlice';
+import { ClaimRow } from '@/magic/components/ClaimRow';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
 import { SineatingRow } from '@/magic/components/SineatingRow';
-import { useRefreshReflectionOptions, useRefreshSineating } from '@/magic/queries';
+import {
+  useRefreshClaims,
+  useRefreshReflectionOptions,
+  useRefreshSineating,
+  useWaitingClaims,
+} from '@/magic/queries';
+import { claimFields, NO_CLAIM, type ClaimDraft } from '@/magic/claiming';
 import { SettleAuraDialog } from '@/magic/components/SettleAuraDialog';
 import { useSettleAuraRequests } from '@/magic/settleAuraRequest';
 import {
@@ -325,6 +332,11 @@ export function CommandInput({
   // a Sineating, never both: picking one clears the other. Cleared once the pose lands.
   const [sineating, setSineating] = useState<SineatingDraft>(NO_SINEATING);
   const refreshSineating = useRefreshSineating(characterSheetId);
+  // #5181 — a claim of what kindled deeds set aside. It rides with a reflection or a Sineating,
+  // so picking either leaves it alone. Cleared once the pose lands.
+  const [claim, setClaim] = useState<ClaimDraft>(NO_CLAIM);
+  const waitingClaims = useWaitingClaims(characterSheetId ?? null);
+  const refreshClaims = useRefreshClaims();
   const changeReflection = useCallback((next: ReflectionDraft) => {
     setReflection(next);
     if (next.option !== null || next.choice !== null) setSineating(NO_SINEATING);
@@ -379,6 +391,22 @@ export function CommandInput({
     },
     [dispatch, character]
   );
+  // The writer's own lines after a claim: what each resonance grew by. Nobody else is told.
+  const showClaimLines = useCallback(
+    (lines: string[]) => {
+      for (const line of lines) {
+        dispatch(
+          addFeedNote({
+            character,
+            note: { kind: 'system', content: line, timestamp: new Date().toISOString() },
+          })
+        );
+      }
+    },
+    [dispatch, character]
+  );
+  // The `client_request_id` of a socket-sent pose that carries a claim, until its ack.
+  const claimedSendRef = useRef<string | null>(null);
   const submittingRef = useRef(false);
   const { send, sendConsole, executeAction } = useGameSocket();
   const isCommandsMode = composerMode?.command === COMMANDS_MODE;
@@ -562,13 +590,27 @@ export function CommandInput({
       if (payload.client_request_id !== pending.clientRequestId) return;
       pendingSpeechRef.current = null;
       if (payload.success) {
+        // A claim's lines ride in the same message as a reflection's line; they are told apart.
+        const claimLines = Array.isArray(payload.data?.claim_lines)
+          ? (payload.data.claim_lines as string[])
+          : [];
         if (reflectedSendRef.current === pending.clientRequestId) {
           reflectedSendRef.current = null;
           setReflection(NO_REFLECTION);
           refreshReflectionOptions();
-          if (payload.message) {
-            showReflectionLine(payload.message, payload.data?.reflection_recorded !== false);
+          const reflectionLine = (payload.message ?? '')
+            .split('\n')
+            .filter((line) => !claimLines.includes(line))
+            .join('\n');
+          if (reflectionLine) {
+            showReflectionLine(reflectionLine, payload.data?.reflection_recorded !== false);
           }
+        }
+        if (claimedSendRef.current === pending.clientRequestId) {
+          claimedSendRef.current = null;
+          setClaim(NO_CLAIM);
+          showClaimLines(claimLines);
+          refreshClaims();
         }
         acknowledge(pending.clientRequestId);
         // Recorded unconditionally: this text demonstrably went out, so
@@ -583,7 +625,14 @@ export function CommandInput({
         toast.error(payload.message ?? 'Failed to send.');
       }
     },
-    [acknowledge, rejectDraft, refreshReflectionOptions, showReflectionLine]
+    [
+      acknowledge,
+      rejectDraft,
+      refreshReflectionOptions,
+      showReflectionLine,
+      showClaimLines,
+      refreshClaims,
+    ]
   );
   useActionResult(handleActionResult);
 
@@ -1012,6 +1061,7 @@ export function CommandInput({
       const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
+      const claimRequest = claimFields(claim, waitingClaims);
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
@@ -1035,8 +1085,14 @@ export function CommandInput({
           : {}),
         ...reflectionFields(reflection),
         ...sineatingFields(sineating),
+        ...claimRequest,
       })
         .then((response) => {
+          if (claimRequest.claim) {
+            showClaimLines(response?.claim_lines ?? []);
+            setClaim(NO_CLAIM);
+            refreshClaims();
+          }
           if (isSineating(sineating)) {
             if (response?.sineating_line) {
               showSineatingLine(response.sineating_line, response.sineating_recorded !== false);
@@ -1109,10 +1165,12 @@ export function CommandInput({
       // A pose that reflects on something outside a scene (#5124) is a structured send like
       // `tt`: the registry `pose` action takes the reflection, and the draft and the pick clear
       // together on the matching ack (`handleActionResult`).
-      if (isPose && isReflecting(reflection)) {
+      const claimRequest = claimFields(claim, waitingClaims);
+      if (isPose && (isReflecting(reflection) || claimRequest.claim)) {
         const clientRequestId = beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
-        reflectedSendRef.current = clientRequestId;
+        if (isReflecting(reflection)) reflectedSendRef.current = clientRequestId;
+        if (claimRequest.claim) claimedSendRef.current = clientRequestId;
         // The typed "@Name" targets travel by name, as on the scene pose, and stay in the text.
         const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
         executeAction(character, 'pose', {
@@ -1120,6 +1178,7 @@ export function CommandInput({
           client_request_id: clientRequestId,
           ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
           ...reflectionFields(reflection),
+          ...claimRequest,
         });
         submittingRef.current = false;
         return true;
@@ -1193,6 +1252,10 @@ export function CommandInput({
     sineating,
     refreshSineating,
     showSineatingLine,
+    claim,
+    waitingClaims,
+    showClaimLines,
+    refreshClaims,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1525,6 +1588,12 @@ export function CommandInput({
                 characterSheetId={characterSheetId}
                 value={reflection}
                 onChange={changeReflection}
+                className="m-2"
+              />
+              <ClaimRow
+                characterSheetId={characterSheetId ?? null}
+                value={claim}
+                onChange={setClaim}
                 className="m-2"
               />
             </>

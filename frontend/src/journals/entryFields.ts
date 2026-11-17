@@ -5,6 +5,7 @@
  * desk and the composer dialog own one of these in state and hand it to the
  * fields, so neither has to import a component to know what it is holding.
  */
+import { NO_CLAIM, type ClaimDraft } from '@/magic/claiming';
 import { isReflectionIncomplete, NO_REFLECTION, type ReflectionDraft } from '@/magic/reflection';
 import type { PosthumousOverride } from './api';
 
@@ -31,6 +32,8 @@ export interface JournalEntryFieldsValue {
   posthumousOverride: PosthumousOverride;
   /** What the entry reflects on (#5124); idle when it reflects on nothing. */
   reflection: ReflectionDraft;
+  /** Whether the entry claims what a kindled deed set aside, and what it leaves (#5181). */
+  claim: ClaimDraft;
 }
 
 /**
@@ -46,6 +49,7 @@ export const EMPTY_ENTRY_FIELDS: JournalEntryFieldsValue = {
   tags: [],
   posthumousOverride: 'inherit',
   reflection: NO_REFLECTION,
+  claim: NO_CLAIM,
 };
 
 /**

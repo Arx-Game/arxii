@@ -9,7 +9,9 @@
  */
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useMemo } from 'react';
 import * as api from './api';
+import { waitingClaims } from './claiming';
 import { performRitual } from '@/rituals/api';
 import type { PerformRitualRequest } from '@/rituals/types';
 import { useAppSelector } from '@/store/hooks';
@@ -1170,6 +1172,25 @@ export function useSetManifestChoice(characterSheetId: number) {
 
 /** How often the panel re-reads what is kindled; it changes as a scene or a fight moves. */
 const KINDLED_RESONANCES_REFETCH_MS = 30_000;
+
+/** Every character's kindled-resonances reading, re-read (a deed was earned or a claim was made). */
+export function refreshKindledResonances(queryClient: QueryClient): void {
+  queryClient
+    .invalidateQueries({ queryKey: [...magicKeys.all, 'kindled-resonances'] })
+    .catch(() => {});
+}
+
+/** The resonances with something waiting to be claimed (#5181); empty until the reading loads. */
+export function useWaitingClaims(characterSheetId: number | null) {
+  const { data } = useKindledResonances(characterSheetId ?? 0);
+  return useMemo(() => waitingClaims(data?.results), [data]);
+}
+
+/** Re-read what is waiting, once a pose or journal entry has claimed some. */
+export function useRefreshClaims() {
+  const queryClient = useQueryClient();
+  return () => refreshKindledResonances(queryClient);
+}
 
 /**
  * What the character can reflect on now (#5124): the resonance unsettling them, then each

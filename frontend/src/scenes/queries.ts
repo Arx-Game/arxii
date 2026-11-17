@@ -10,6 +10,7 @@ import type {
   SceneScenarioPayload,
   SceneStakesSummary,
 } from './types';
+import type { ClaimFields } from '@/magic/claiming';
 import type { ReflectionFields } from '@/magic/reflection';
 import type { SineatingFields } from '@/magic/sineating';
 import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
@@ -239,7 +240,7 @@ export async function fetchPendingUnlinkedActions(
   return data.results;
 }
 
-export interface SubmitPoseBody extends ReflectionFields, SineatingFields {
+export interface SubmitPoseBody extends ReflectionFields, SineatingFields, ClaimFields {
   persona_id: number;
   scene_id?: number;
   content: string;
@@ -293,6 +294,8 @@ export interface SubmitPoseResult {
   sineating_line?: string;
   /** False when the pose posted but the Sineating was not recorded; the line says why. */
   sineating_recorded?: boolean;
+  /** Told to the writer alone when the pose carried a claim: one line per resonance (#5181). */
+  claim_lines?: string[];
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult> {
