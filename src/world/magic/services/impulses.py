@@ -374,14 +374,19 @@ def refresh_impulses_for_character(
     return refresh_impulses(sheet, get_active_scene(character.location))
 
 
-def _isolated[T](call: Callable[[], T], failure: str) -> T | None:
+def _isolated[T](
+    call: Callable[[], T], failure: str, *, gate: Callable[[], bool] | None = None
+) -> T | None:
     """Run ``call`` in its own savepoint; log ``failure`` and return None when it raises.
 
     Impulses are a side effect of a pose, a cast, a panel and a grant. A failure here forfeits
     only the impulse, never the act it rides on, and a database error does not poison an
-    enclosing transaction.
+    enclosing transaction. ``gate`` is asked first, outside the savepoint: when it answers
+    False there is nothing to do and no savepoint is opened.
     """
     try:
+        if gate is not None and not gate():
+            return None
         with transaction.atomic():
             return call()
     except Exception:
@@ -400,10 +405,25 @@ def safe_refresh_impulses(sheet: CharacterSheet, scene: Scene | None) -> Impulse
 def safe_refresh_impulses_for_character(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM - a pose and a cast hold the character
 ) -> ImpulseRefresh | None:
-    """``refresh_impulses_for_character`` that can never fail its caller; None when it raised."""
+    """``refresh_impulses_for_character`` that can never fail its caller; None when it raised.
+
+    A character whose cached conditions hold no corruption and no Compulsion has nothing to
+    refresh, so the common case of a pose or a cast costs no query and opens no savepoint.
+    """
+
+    def may_have_impulses() -> bool:
+        # The handler caches the character's active conditions after its first use.
+        compulsion_id = get_corruption_config().compulsion_condition_id
+        return any(
+            instance.condition.corruption_resonance_id is not None
+            or (compulsion_id is not None and instance.condition_id == compulsion_id)
+            for instance in character.conditions.active()
+        )
+
     return _isolated(
         lambda: refresh_impulses_for_character(character),
         f"Refreshing impulses failed for character #{character.pk}",
+        gate=may_have_impulses,
     )
 
 

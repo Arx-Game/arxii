@@ -435,12 +435,18 @@ def _lazy_create_condition_instance(
     stage_1_threshold = stage_1.severity_threshold if stage_1 else None
     if stage_1_threshold is None or char_resonance.corruption_current < stage_1_threshold:
         return None
-    return ConditionInstance.objects.create(
+    from world.conditions.services import _invalidate_condition_handler  # noqa: PLC0415
+
+    instance = ConditionInstance.objects.create(
         target=character,
         condition=template,
         current_stage=stage_1,
         severity=char_resonance.corruption_current,
     )
+    # The character's cached condition list must see the new corruption condition: the
+    # impulse refresh reads that list to decide whether there is anything to refresh.
+    _invalidate_condition_handler(character)
+    return instance
 
 
 def _advance_condition_instance(

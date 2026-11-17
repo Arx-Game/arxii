@@ -441,8 +441,10 @@ class PoseSubmitViewTests(APITestCase):
     def test_a_failing_impulse_refresh_does_not_fail_the_pose(self) -> None:
         """The refresh is a side effect (#5177): a failure in it is logged and the pose posts."""
         with (
+            # The config read is the first thing the refresh does for any poser, before it
+            # decides whether this character carries anything to refresh.
             patch(
-                "world.magic.services.impulses.refresh_impulses_for_character",
+                "world.magic.services.impulses.get_corruption_config",
                 side_effect=RuntimeError("boom"),
             ),
             self.assertLogs("world.magic.services.impulses", level="ERROR"),
