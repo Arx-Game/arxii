@@ -6,7 +6,13 @@ import { toast } from 'sonner';
 import { startScene, finishScene } from '@/scenes/queries';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setSessionScene, type RoomStateResyncStatus } from '@/store/gameSlice';
-import type { HubTidings, NpcGiver, RoomStateObject, SceneSummary } from '@/hooks/types';
+import type {
+  HubTidings,
+  NpcGiver,
+  PrimumBlock,
+  RoomStateObject,
+  SceneSummary,
+} from '@/hooks/types';
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -34,6 +40,7 @@ import { BoardPanel } from '@/boards/components/BoardPanel';
 import { useBoardForRoomQuery } from '@/boards/queries';
 import { RoomAuraPicker } from './room-panel/RoomAuraPicker';
 import { SceneHighlightsPanel } from './room-panel/SceneHighlightsPanel';
+import { PrimumPanel } from './room-panel/PrimumPanel';
 
 /** Resolves the room's LOCATION board and renders it once loaded (#3286). */
 function RoomBoardPanel({
@@ -65,6 +72,8 @@ export interface RoomData {
   npc_givers?: NpcGiver[];
   /** #3288 — true when ANY occupant is concealed. Identity-free OOC disclosure. */
   has_unseen_presence?: boolean;
+  /** What the viewer senses here and can extract (#5125). */
+  primum?: PrimumBlock;
 }
 
 interface RoomPanelProps {
@@ -380,6 +389,8 @@ export function RoomPanel({
       )}
 
       {scene && <SceneHighlightsPanel sceneId={scene.id} />}
+
+      {room.primum && <PrimumPanel primum={room.primum} characterId={characterId ?? null} />}
 
       <CharactersList
         characters={room.characters}

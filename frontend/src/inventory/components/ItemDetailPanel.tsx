@@ -343,6 +343,14 @@ function ItemContent({
 
         <StatsGrid item={item} />
 
+        {item.carries.length > 0 && (
+          <div className="flex flex-col gap-0.5 text-sm font-medium" data-testid="item-carries">
+            {item.carries.map((name) => (
+              <p key={name}>Carries {name}</p>
+            ))}
+          </div>
+        )}
+
         {liveFacets.length > 0 && (
           <div className="flex flex-col gap-2">
             <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">

@@ -11,6 +11,7 @@ import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
 
 import { deepLinkModalSlice } from '@/store/deepLinkModalSlice';
+import { gameSlice, setSessionRoom, startSession } from '@/store/gameSlice';
 import type { components } from '@/generated/api';
 
 type ConditionInstance = components['schemas']['ConditionInstance'];
@@ -44,12 +45,20 @@ vi.mock('../queries', async (importOriginal) => {
   return {
     ...actual,
     useRegistryDispatch: (...args: unknown[]) => mockUseRegistryDispatch(...args),
+    useDispatchPlayerAction: () => ({ mutateAsync: mockHarvestMutateAsync, isPending: false }),
   };
 });
 
+// #5125 — Harvest on a slain foe: the room's offers name the substance.
+const mockHarvestMutateAsync = vi.fn();
+const mockRequestRoomState = vi.fn();
+vi.mock('@/hooks/useGameSocket', () => ({
+  useGameSocket: () => ({ requestRoomState: mockRequestRoomState }),
+}));
+
 const toastErrorMock = vi.fn();
 vi.mock('sonner', () => ({
-  toast: { error: (...args: unknown[]) => toastErrorMock(...args) },
+  toast: { error: (...args: unknown[]) => toastErrorMock(...args), success: vi.fn() },
 }));
 
 import { CombatantsList } from '../sections/CombatantsList';
@@ -147,6 +156,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
     thumbnail_media_url: null,
     current_square: null,
     current_position: null,
+    harvestable: false,
     mirrors_participant_id: null,
     ...overrides,
   };
@@ -1074,6 +1084,63 @@ describe('ally taunt menu', () => {
 
     await waitFor(() => {
       expect(toastErrorMock).toHaveBeenCalledWith('Cannot taunt yourself.');
+    });
+  });
+
+  it('offers Harvest on a slain foe the viewer perceives Primum on', async () => {
+    const user = userEvent.setup();
+    mockHarvestMutateAsync.mockResolvedValue({ success: true, message: 'You draw out 1.' });
+    const store = configureStore({
+      reducer: { deepLinkModal: deepLinkModalSlice.reducer, game: gameSlice.reducer },
+    });
+    store.dispatch(startSession('Aria'));
+    store.dispatch(
+      setSessionRoom({
+        character: 'Aria',
+        room: {
+          id: 1,
+          name: 'Caldera',
+          description: '',
+          thumbnail_url: null,
+          characters: [],
+          objects: [],
+          exits: [],
+          is_owner: false,
+          is_public: true,
+          hub: null,
+          viewer_place_id: null,
+          primum: {
+            sensed: [],
+            line: '',
+            harvestable: [
+              {
+                substance_id: 3,
+                substance_name: 'fire',
+                source: 'creature',
+                opponent_id: 10,
+                opponent_name: 'Mire Knight',
+                step_name: 'Rich',
+              },
+            ],
+          },
+        },
+      })
+    );
+    const encounter = makeEncounter(
+      [],
+      [makeOpponent({ id: 10, harvestable: true }), makeOpponent({ id: 11 })]
+    );
+
+    render(<CombatantsList encounter={encounter} characterId={7} />, {
+      wrapper: createWrapper(store as unknown as ReturnType<typeof makeStore>),
+    });
+
+    expect(within(screen.getByTestId('opponent-row-11')).queryByText('Harvest')).toBeNull();
+    await user.click(within(screen.getByTestId('opponent-row-10')).getByText('Harvest'));
+
+    expect(mockHarvestMutateAsync).toHaveBeenCalledWith({
+      ref: { backend: 'registry', registry_key: 'harvest_primum' },
+      kwargs: { substance: 3, opponent_id: 10 },
     });
   });
 });

@@ -18,10 +18,10 @@ function toneFor(line: SurroundingsLine): string {
   if (line.kind === 'power') {
     return line.amount >= 0
       ? 'text-emerald-600 dark:text-emerald-400'
-      : 'text-red-600 dark:text-red-400';
+      : 'text-amber-700 dark:text-amber-400';
   }
   if (line.kind === 'call_up') {
-    return line.anima === 0 && line.resonance === 0
+    return line.anima === 0
       ? 'text-sky-600 dark:text-sky-400'
       : 'text-amber-700 dark:text-amber-400';
   }

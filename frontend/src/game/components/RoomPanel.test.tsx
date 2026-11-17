@@ -87,3 +87,56 @@ describe('RoomPanel location recovery', () => {
     expect(screen.getByRole('link', { name: 'Return to Hall' })).toBeInTheDocument();
   });
 });
+
+describe('RoomPanel Primum', () => {
+  const room = {
+    id: 1,
+    name: 'The Ashmouth Caldera',
+    description: 'A cauldron of cooling rock.',
+    thumbnail_url: null,
+    characters: [],
+    objects: [],
+    exits: [],
+    is_owner: false,
+    is_public: true,
+    hub: null,
+  };
+
+  afterEach(() => {
+    act(() => {
+      store.dispatch(resetGame());
+    });
+  });
+
+  it('lists what the viewer senses under "You sense"', () => {
+    renderWithProviders(
+      <RoomPanel
+        character="Aria"
+        room={{
+          ...room,
+          primum: {
+            sensed: [{ substance_id: 3, substance_name: 'fire', step_name: 'Massive' }],
+            line: 'You sense fire Primum: Massive.',
+            harvestable: [],
+          },
+        }}
+        scene={null}
+      />
+    );
+
+    expect(screen.getByText('You sense')).toBeInTheDocument();
+    expect(screen.getByText('Fire Primum: Massive')).toBeInTheDocument();
+  });
+
+  it('shows nothing about Primum the viewer does not sense', () => {
+    renderWithProviders(
+      <RoomPanel
+        character="Aria"
+        room={{ ...room, primum: { sensed: [], line: '', harvestable: [] } }}
+        scene={null}
+      />
+    );
+
+    expect(screen.queryByText('You sense')).not.toBeInTheDocument();
+  });
+});

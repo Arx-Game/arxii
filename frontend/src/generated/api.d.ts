@@ -30673,7 +30673,6 @@ export interface components {
       readonly gift_id: number;
       readonly label: string;
       readonly effective_cost: number;
-      readonly resonance_cost: number;
       readonly already_present: boolean;
       readonly can_call_up: boolean;
       readonly cost_line: string;
@@ -32877,10 +32876,13 @@ export interface components {
     };
     /** @description One material requirement row within a crafting quote. */
     CraftingQuoteMaterial: {
-      item_template_id: number;
+      requirement_id: number;
+      material_category_id: number | null;
+      item_template_id: number | null;
       name: string;
       quantity_required: number;
       have: number;
+      is_optional: boolean;
     };
     /** @description A single failure-risk row within a crafting quote. */
     CraftingQuoteRisk: {
@@ -37854,11 +37856,13 @@ export interface components {
      * @description Write serializer for ItemFacet (POST create) — input validation only.
      *
      *     The viewset drives the crafting service directly; this serializer parses
-     *     and validates the ``item_instance`` and ``facet`` foreign keys.
+     *     and validates the ``item_instance`` and ``facet`` foreign keys, and the optional
+     *     ingredients (pks of the recipe's optional material requirements) the crafter brings.
      */
     ItemFacetWriteRequest: {
       item_instance: number;
       facet: number;
+      optional_requirements?: number[];
     };
     /**
      * @description Read serializer for ItemInstance — used by the inventory listing.
@@ -37926,6 +37930,8 @@ export interface components {
       readonly facet_workers: string[];
       readonly accents: components['schemas']['ItemAccentRead'][];
       readonly silhouette: components['schemas']['SilhouetteRead'] | null;
+      /** @description Names of the substances the piece carries (#5125); every viewer sees them. */
+      readonly carries: string[];
     };
     /**
      * @description What an item means to the character holding it: its signals and their sum. Shown to
@@ -37956,11 +37962,13 @@ export interface components {
      * @description Write serializer for ItemStyle (POST create) — input validation only.
      *
      *     The viewset drives the crafting service directly; this serializer parses
-     *     and validates the ``item_instance`` and ``style`` foreign keys.
+     *     and validates the ``item_instance`` and ``style`` foreign keys, and the optional
+     *     ingredients (pks of the recipe's optional material requirements) the crafter brings.
      */
     ItemStyleWriteRequest: {
       item_instance: number;
       style: number;
+      optional_requirements?: number[];
     };
     /** @description Detail serializer for ItemTemplate with slots and interactions. */
     ItemTemplateDetail: {
@@ -41021,6 +41029,8 @@ export interface components {
        *     own ``portrait`` FK via ``fallback_media``.
        */
       readonly thumbnail_media_url: string | null;
+      /** @description Whether the viewer can extract Primum from this slain foe (#5125). */
+      readonly harvestable: boolean;
       readonly current_position: components['schemas']['PositionSummary'] | null;
       readonly current_square: components['schemas']['Square'] | null;
       readonly mirrors_participant_id: number | null;
@@ -53730,7 +53740,6 @@ export interface components {
       /** @description Signed power, or the penalty. */
       readonly amount: number;
       readonly anima: number;
-      readonly resonance: number;
       /** @description A call-up line's right-hand cost; blank otherwise. */
       readonly detail: string;
     };

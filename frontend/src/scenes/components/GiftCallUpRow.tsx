@@ -64,7 +64,7 @@ export function GiftCallUpRow({ characterId, initiatorPersonaId }: GiftCallUpRow
             </Button>
             <span
               className={
-                offer.effective_cost === 0 && offer.resonance_cost === 0
+                offer.effective_cost === 0
                   ? 'text-sky-600 dark:text-sky-400'
                   : 'text-amber-700 dark:text-amber-400'
               }

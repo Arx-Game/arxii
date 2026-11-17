@@ -306,6 +306,8 @@ export async function listItemFacets(itemInstanceId: number): Promise<ItemFacetR
 export async function craftAttachFacet(payload: {
   item_instance: number;
   facet: number;
+  /** Pks of the recipe's optional materials the crafter brings (#5125). */
+  optional_requirements?: number[];
 }): Promise<FacetCraftResult> {
   const res = await apiFetch(`${BASE_URL}/item-facets/`, {
     method: 'POST',
@@ -371,6 +373,8 @@ export async function craftCreateItem(payload: {
   made_for?: number;
   /** A held item to use up and record as the piece's lineage (#4512). */
   worked_from?: number;
+  /** Pks of the recipe's optional materials the crafter brings (#5125). */
+  optional_requirements?: number[];
 }): Promise<CreateItemResult> {
   const res = await apiFetch(`${BASE_URL}/crafting/create/`, {
     method: 'POST',

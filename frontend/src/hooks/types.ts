@@ -257,6 +257,33 @@ export interface HubTidings {
   items: HubTidingsItem[];
 }
 
+/** One substance the viewer senses in a place, and the step it reads at (#5125). */
+export interface PrimumSense {
+  substance_id: number;
+  substance_name: string;
+  step_name: string;
+}
+
+/** One Primum the viewer can extract: from the lair, or from a slain creature (#5125). */
+export interface HarvestOffer {
+  substance_id: number;
+  substance_name: string;
+  /** place | creature */
+  source: string;
+  /** The slain foe's pk; null for a lair. */
+  opponent_id: number | null;
+  opponent_name: string;
+  step_name: string;
+}
+
+/** The `primum` block of a `room_state` frame, written for one viewer (#5125). */
+export interface PrimumBlock {
+  sensed: PrimumSense[];
+  /** The look sentence; empty when nothing is sensed. */
+  line: string;
+  harvestable: HarvestOffer[];
+}
+
 export interface RoomStatePayload {
   room: RoomStateObject;
   /** Server revision used to reject stale same-socket snapshots. */
@@ -283,6 +310,8 @@ export interface RoomStatePayload {
    * so it works with or without an active scene.
    */
   has_unseen_presence?: boolean;
+  /** What the viewer senses here and can extract (#5125). */
+  primum?: PrimumBlock;
 }
 
 export interface SceneSummary {

@@ -50798,9 +50798,6 @@ components:
         effective_cost:
           type: integer
           readOnly: true
-        resonance_cost:
-          type: integer
-          readOnly: true
         already_present:
           type: boolean
           readOnly: true
@@ -50821,7 +50818,6 @@ components:
       - effective_cost
       - gift_id
       - label
-      - resonance_cost
     CanHonor:
       type: object
       description: |-
@@ -55777,19 +55773,30 @@ components:
       type: object
       description: One material requirement row within a crafting quote.
       properties:
+        requirement_id:
+          type: integer
+        material_category_id:
+          type: integer
+          nullable: true
         item_template_id:
           type: integer
+          nullable: true
         name:
           type: string
         quantity_required:
           type: integer
         have:
           type: integer
+        is_optional:
+          type: boolean
       required:
       - have
+      - is_optional
       - item_template_id
+      - material_category_id
       - name
       - quantity_required
+      - requirement_id
     CraftingQuoteRisk:
       type: object
       description: A single failure-risk row within a crafting quote.
@@ -66318,12 +66325,17 @@ components:
         Write serializer for ItemFacet (POST create) — input validation only.
 
         The viewset drives the crafting service directly; this serializer parses
-        and validates the ``item_instance`` and ``facet`` foreign keys.
+        and validates the ``item_instance`` and ``facet`` foreign keys, and the optional
+        ingredients (pks of the recipe's optional material requirements) the crafter brings.
       properties:
         item_instance:
           type: integer
         facet:
           type: integer
+        optional_requirements:
+          type: array
+          items:
+            type: integer
       required:
       - facet
       - item_instance
@@ -66459,10 +66471,18 @@ components:
           - $ref: '#/components/schemas/SilhouetteRead'
           nullable: true
           readOnly: true
+        carries:
+          type: array
+          items:
+            type: string
+          description: Names of the substances the piece carries (#5125); every viewer
+            sees them.
+          readOnly: true
       required:
       - accents
       - access_policy
       - can_steal
+      - carries
       - charges
       - contained_in
       - crafted_provenance
@@ -66561,12 +66581,17 @@ components:
         Write serializer for ItemStyle (POST create) — input validation only.
 
         The viewset drives the crafting service directly; this serializer parses
-        and validates the ``item_instance`` and ``style`` foreign keys.
+        and validates the ``item_instance`` and ``style`` foreign keys, and the optional
+        ingredients (pks of the recipe's optional material requirements) the crafter brings.
       properties:
         item_instance:
           type: integer
         style:
           type: integer
+        optional_requirements:
+          type: array
+          items:
+            type: integer
       required:
       - item_instance
       - style
@@ -72700,6 +72725,10 @@ components:
             For persona-less (generic/ephemeral) NPCs, falls back to the opponent's
             own ``portrait`` FK via ``fallback_media``.
           readOnly: true
+        harvestable:
+          type: boolean
+          description: Whether the viewer can extract Primum from this slain foe (#5125).
+          readOnly: true
         current_position:
           allOf:
           - $ref: '#/components/schemas/PositionSummary'
@@ -72721,6 +72750,7 @@ components:
       - current_position
       - current_square
       - damage_multiplier
+      - harvestable
       - health
       - id
       - is_enraged
@@ -96987,9 +97017,6 @@ components:
         anima:
           type: integer
           readOnly: true
-        resonance:
-          type: integer
-          readOnly: true
         detail:
           type: string
           readOnly: true
@@ -96999,7 +97026,6 @@ components:
       - anima
       - detail
       - kind
-      - resonance
       - text
     SustainedAction:
       type: object

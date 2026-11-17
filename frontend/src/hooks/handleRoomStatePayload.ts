@@ -63,6 +63,7 @@ export function handleRoomStatePayload(
         hub: payload.hub ?? null,
         npc_givers: payload.npc_givers ?? [],
         has_unseen_presence: payload.has_unseen_presence ?? false,
+        primum: payload.primum,
         viewer_place_id: payload.viewer_place_id ?? null,
       },
       ...(revision ? { revision, scene: payload.scene ?? null } : {}),

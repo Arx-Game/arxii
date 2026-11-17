@@ -19,12 +19,18 @@ interface CraftingQuotePanelProps {
   quote: CraftingQuote | undefined;
   /** Forwarded to `LabStationStatusCard` — invalidate the caller's quote cache on repair. */
   onStationRepaired?: () => void;
+  /** Pks of the optional materials the crafter has ticked (#5125). */
+  chosenOptional?: number[];
+  /** Present when the dialog lets the crafter bring optional materials. */
+  onChosenOptionalChange?: (next: number[]) => void;
 }
 
 export function CraftingQuotePanel({
   isLoading,
   quote,
   onStationRepaired,
+  chosenOptional = [],
+  onChosenOptionalChange,
 }: CraftingQuotePanelProps) {
   if (isLoading) {
     return <p className="text-xs text-muted-foreground">Loading cost estimate…</p>;
@@ -40,7 +46,8 @@ export function CraftingQuotePanel({
   if (costs.anima > 0) {
     costParts.push(`${costs.anima_have}/${costs.anima} Anima`);
   }
-  for (const mat of costs.materials) {
+  const optionalMaterials = costs.materials.filter((mat) => mat.is_optional);
+  for (const mat of costs.materials.filter((m) => !m.is_optional)) {
     costParts.push(`${mat.have}/${mat.quantity_required} ${mat.name}`);
   }
 
@@ -54,6 +61,35 @@ export function CraftingQuotePanel({
           <span className="font-medium">Costs:</span>{' '}
           <span className={affordable ? '' : 'text-destructive'}>{costParts.join(' · ')}</span>
         </p>
+      )}
+      {optionalMaterials.length > 0 && onChosenOptionalChange && (
+        <ul className="space-y-1" data-testid="optional-materials">
+          {optionalMaterials.map((mat) => {
+            const checked = chosenOptional.includes(mat.requirement_id);
+            return (
+              <li key={mat.requirement_id}>
+                <label className="flex items-center justify-between gap-2">
+                  <span className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={mat.have < mat.quantity_required}
+                      onChange={() =>
+                        onChosenOptionalChange(
+                          checked
+                            ? chosenOptional.filter((id) => id !== mat.requirement_id)
+                            : [...chosenOptional, mat.requirement_id]
+                        )
+                      }
+                    />
+                    {mat.name} · {mat.quantity_required} (optional)
+                  </span>
+                  <span className="text-muted-foreground">have {mat.have}</span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
       )}
       {max_quality_tier != null ? (
         <p>

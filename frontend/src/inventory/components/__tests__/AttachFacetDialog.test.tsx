@@ -396,6 +396,65 @@ describe('AttachFacetDialog', () => {
     expect(panel).toHaveTextContent('Excellent');
   });
 
+  it('sends the optional Primum the crafter ticks', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const mutate = makeCraftMock();
+    makeRemoveMock();
+
+    vi.mocked(itemFacetsHooks.useCraftingQuote).mockReturnValue({
+      data: {
+        affordable: true,
+        costs: {
+          action_points: 0,
+          action_points_have: 5,
+          anima: 0,
+          anima_have: 8,
+          materials: [
+            {
+              requirement_id: 11,
+              material_category_id: null,
+              item_template_id: 1,
+              name: 'Spider Silk',
+              quantity_required: 3,
+              have: 5,
+              is_optional: false,
+            },
+            {
+              requirement_id: 12,
+              material_category_id: null,
+              item_template_id: 2,
+              name: 'Fire Primum',
+              quantity_required: 1,
+              have: 2,
+              is_optional: true,
+            },
+          ],
+        },
+        max_quality_tier: null,
+        failure_risk: [],
+      },
+      isLoading: false,
+      isError: false,
+      error: null,
+    } as unknown as ReturnType<typeof itemFacetsHooks.useCraftingQuote>);
+
+    renderWithProviders(
+      <AttachFacetDialog open={true} onOpenChange={vi.fn()} itemInstanceId={ITEM_INSTANCE_ID} />
+    );
+
+    await user.click(screen.getByRole('button', { name: '+ Choose a facet' }));
+    await user.click(await screen.findByText('Spider'));
+
+    expect(screen.getByTestId('crafting-quote-panel')).not.toHaveTextContent('2/1 Fire Primum');
+    await user.click(screen.getByRole('checkbox', { name: /Fire Primum/ }));
+    await user.click(screen.getByRole('button', { name: /attach/i }));
+
+    expect(mutate).toHaveBeenCalledWith(
+      { item_instance: ITEM_INSTANCE_ID, facet: 7, optional_requirements: [12] },
+      expect.any(Object)
+    );
+  });
+
   it('renders cost/cap/risk panel after facet selection', async () => {
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     makeCraftMock();
