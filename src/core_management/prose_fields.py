@@ -39,6 +39,8 @@ PROSE_FIELD_NAMES = frozenset(
         "arrival_verb",
         "authored_ic_framing",
         "cast_narration",
+        # #5181: the verb in a claiming line ("You gloat. Your Ruin grows by 6.").
+        "claim_verb",
         "custom_description",
         "default_description_template",
         "departure_verb",
