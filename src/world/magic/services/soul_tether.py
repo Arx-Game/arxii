@@ -3,8 +3,7 @@
 Public functions:
 - accept_soul_tether: formation Ritual Capstone (§12).
 - dissolve_soul_tether: stub dissolution (§13).
-- request_sineating: Sinner asks (§7).
-- resolve_sineating: Sineater @reply resolution (§7).
+- (Sineating itself lives in ``services/sineating.py``, #5177.)
 - perform_soul_tether_rescue: stage-3+ rescue ritual (§9).
 
 Reactive subscribers (registered as TriggerDefinition rows backed by
@@ -36,24 +35,25 @@ from world.magic.exceptions import (
     AffinityGateError,
     NoSoulTetherUnlockError,
     RescueValidationError,
-    SineatingValidationError,
+    SineaterFallenError,
     SoulTetherFormationError,
     StageAdvanceBonusError,
 )
 from world.magic.models import CharacterThreadWeavingUnlock, Ritual
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.soul_tether_config import SoulTetherConfig
-from world.magic.services.threads import thread_rung, weave_thread
+from world.magic.services.aura import ensure_aura
+from world.magic.services.threads import thread_rung, weave_tether_bond_thread, weave_thread
+from world.magic.types.corruption import CorruptionSource
 from world.magic.types.soul_tether import (
     RescueOutcome,
-    SineatingOffer,
-    SineatingResult,
     SoulTetherDissolvedPayload,
     SoulTetherRole as SoulTetherRoleEnum,
     StageAdvanceBonusOffer,
     StageAdvanceBonusResult,
 )
 from world.relationships.models import CharacterRelationship, RelationshipCapstone
+from world.roster.services.npc_lending import played_by_one_account
 
 if TYPE_CHECKING:
     from world.magic.models import Thread
@@ -82,6 +82,7 @@ _MSG_SINEATER_GATE = "Sineater must be Celestial- or Primal-affinity primary."
 _MSG_SINNER_GATE = "Sinner cannot be Celestial-affinity primary."
 _MSG_DUPLICATE_TETHER = "An active Soul Tether already exists between these characters."
 _MSG_NO_ACTIVE_TETHER = "No active Soul Tether exists between these characters."
+_MSG_ONE_PLAYER_TETHER = "You cannot form a Soul Tether between two characters you play."
 _MSG_NOT_IN_SAME_SCENE = "Both characters must be in the same scene to perform Sineating."
 _MSG_RESONANCE_NOT_ACCRUED = "Resonance specified is not one the Sinner accrues."
 _MSG_PER_SCENE_CAP_REACHED = "Per-scene Sineating cap reached for this bond."
@@ -121,6 +122,24 @@ def _validate_affinity_gates(sinner_sheet: CharacterSheet, sineater_sheet: Chara
         Affinity.objects.get_celestial_affinity().pk
     ):
         raise AffinityGateError(_MSG_SINNER_GATE)
+
+
+def sineater_has_fallen(sineater_sheet: CharacterSheet) -> bool:
+    """True when the Sineater's aura is predominantly Abyssal (#5177).
+
+    A fallen Sineater can carry no one's sins until they are predominantly something else.
+    A sheet with no aura, or an aura with no shares yet, has not fallen.
+    """
+    aura = sineater_sheet.aura_or_none
+    if aura is None or not aura.cached_shares:
+        return False
+    return aura.dominant_affinity.pk == Affinity.objects.get_abyssal_affinity().pk
+
+
+def _refuse_fallen_sineater(sineater_sheet: CharacterSheet) -> None:
+    """Raise ``SineaterFallenError`` when the Sineater has fallen."""
+    if sineater_has_fallen(sineater_sheet):
+        raise SineaterFallenError(sineater_sheet.primary_persona.name)
 
 
 def _validate_unlock(sinner_sheet: CharacterSheet) -> None:
@@ -163,12 +182,13 @@ def _get_or_create_relationship(
 # =============================================================================
 
 
-def accept_soul_tether(
+def accept_soul_tether(  # noqa: PLR0913 - the pair, the role, two resonances and components
     initiator_sheet: CharacterSheet,
     partner_sheet: CharacterSheet,
     sinner_role: SoulTetherRoleEnum,
     resonance: Resonance,
     ritual_components: list[Any],  # noqa: ARG001
+    sineater_resonance: Resonance | None = None,
 ) -> RelationshipCapstone:
     """Form a Soul Tether bond (Spec B §12.4).
 
@@ -183,9 +203,13 @@ def accept_soul_tether(
             Sinner. If SINEATER, initiator is the Sineater (partner is Sinner).
         resonance: The Resonance the Sinner's Thread will channel.
         ritual_components: Items consumed by the ritual (validated by caller).
+        sineater_resonance: The Resonance the Sineater's own Thread will channel (#5177).
+            Defaults to the Sineater's strongest resonance of their main affinity (see
+            ``default_sineater_resonance``); when they hold none the thread is left unwoven.
 
     Returns:
-        The RelationshipCapstone created for this ritual formation event.
+        The RelationshipCapstone created for this ritual formation event (the Sinner's
+        side; the Sineater's thread sits on a capstone of their own side).
 
     Raises:
         AffinityGateError: Sineater is Abyssal-primary or Sinner is Celestial-primary.
@@ -198,7 +222,14 @@ def accept_soul_tether(
     else:
         sinner_sheet, sineater_sheet = partner_sheet, initiator_sheet
 
-    # 2. Validate affinity gates (§3).
+    # 1b. One person on both sides could ask as one and perform as the other.
+    if played_by_one_account(sinner_sheet, sineater_sheet):
+        raise SoulTetherFormationError(_MSG_ONE_PLAYER_TETHER)
+
+    # 2. Validate affinity gates (§3). A sheet with no aura (a minted story NPC) gets an
+    #    empty one first; an aura with no shares passes both gates.
+    ensure_aura(sinner_sheet)
+    ensure_aura(sineater_sheet)
     _validate_affinity_gates(sinner_sheet, sineater_sheet)
 
     # 3. Validate Sinner has a RELATIONSHIP_TRACK ThreadWeavingUnlock (§12.4).
@@ -252,9 +283,19 @@ def accept_soul_tether(
             resonance=resonance,
             name="Soul Tether Hollow",
             description=(
-                f"The hollow woven between {sinner_sheet} and {sineater_sheet}. "
+                f"The hollow woven between {sinner_sheet.primary_persona.name} and "
+                f"{sineater_sheet.primary_persona.name}. "
                 "Absorbs corruption before it reaches the Sinner's soul."
             ),
+        )
+
+        # 9b. Weave the Sineater's half of the bond (#5177). It sits on a ritual capstone of
+        #     the Sineater's own side, the only anchor their weave can own.
+        _weave_sineater_thread(
+            rel_incoming,
+            resonance=sineater_resonance or default_sineater_resonance(sineater_sheet),
+            ritual=ritual,
+            fresh_capstone=True,
         )
 
         # 10. Install the SoulTetherActive ConditionInstance on the Sinner if absent.
@@ -280,6 +321,119 @@ def accept_soul_tether(
         _increment_stat_safe(sinner_sheet, "tether.formed", 1)
 
     return capstone
+
+
+def default_sineater_resonance(sineater_sheet: CharacterSheet) -> Resonance | None:
+    """The resonance a Sineater's thread channels when they name none (#5177).
+
+    Their strongest resonance of their main affinity (the most lifetime earned), else the
+    strongest they hold of any affinity, else None. A resonance is never invented.
+    """
+    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
+    from world.magic.services.drift_correction import main_affinity_rows  # noqa: PLC0415
+
+    main_rows = main_affinity_rows(sineater_sheet)
+    if main_rows:
+        return main_rows[0].resonance
+    row = (
+        CharacterResonance.objects.filter(character_sheet=sineater_sheet)
+        .select_related("resonance")
+        .order_by("-lifetime_earned", "resonance_id")
+        .first()
+    )
+    return row.resonance if row is not None else None
+
+
+def _live_sineater_thread(rel_incoming: CharacterRelationship) -> Thread | None:
+    """The Sineater's live RELATIONSHIP_CAPSTONE thread on their own side of a tether."""
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    return Thread.objects.filter(
+        owner_id=rel_incoming.source_id,
+        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+        target_capstone__relationship=rel_incoming,
+        target_capstone__is_ritual_capstone=True,
+        retired_at__isnull=True,
+    ).first()
+
+
+def _weave_sineater_thread(
+    rel_incoming: CharacterRelationship,
+    *,
+    resonance: Resonance | None,
+    ritual: Ritual | None,
+    fresh_capstone: bool,
+) -> Thread | None:
+    """Weave the Sineater's thread on a ritual capstone of their own side.
+
+    A formation passes ``fresh_capstone=True``: every formation is its own event, so it gets a
+    capstone of its own, as the Sinner's side does (the capstone lookups read the newest). The
+    backfill for a tether that has none passes False and reuses a capstone already there.
+    None when there is no resonance to channel.
+    """
+    if resonance is None:
+        return None
+    capstone = (
+        None if fresh_capstone else rel_incoming.capstones.filter(is_ritual_capstone=True).first()
+    )
+    if capstone is None:
+        capstone = RelationshipCapstone.objects.create(
+            relationship=rel_incoming,
+            tier_claimed=rel_incoming.tier,
+            xp_spent=0,
+            is_ritual_capstone=True,
+            ritual=ritual,
+        )
+    return weave_tether_bond_thread(
+        rel_incoming.source,
+        capstone,
+        resonance,
+        name="Soul Tether Burden",
+        description=(
+            f"The burden {rel_incoming.source.primary_persona.name} carries for "
+            f"{rel_incoming.target.primary_persona.name}. "
+            "Softens the corruption a Sineater takes on."
+        ),
+    )
+
+
+def ensure_sineater_thread(
+    sineater_sheet: CharacterSheet,
+    sinner_sheet: CharacterSheet,
+    resonance: Resonance | None = None,
+) -> Thread | None:
+    """The Sineater's live thread on their tether with this Sinner, weaving it when absent.
+
+    Tethers formed before #5177 have none. The thread channels ``resonance`` when given,
+    else ``default_sineater_resonance``; with neither (the Sineater holds no resonance)
+    nothing is woven and None comes back. An existing thread is returned as it is.
+
+    Raises:
+        SoulTetherFormationError: no active tether runs from this Sineater to this Sinner.
+    """
+    with transaction.atomic():
+        rel_incoming = (
+            CharacterRelationship.objects.select_for_update()
+            .select_related("source", "target")
+            .filter(
+                source=sineater_sheet,
+                target=sinner_sheet,
+                is_soul_tether=True,
+                soul_tether_role=SoulTetherRole.SINEATER,
+            )
+            .first()
+        )
+        if rel_incoming is None:
+            raise SoulTetherFormationError(_MSG_NO_ACTIVE_TETHER)
+        existing = _live_sineater_thread(rel_incoming)
+        if existing is not None:
+            return existing
+        return _weave_sineater_thread(
+            rel_incoming,
+            resonance=resonance or default_sineater_resonance(sineater_sheet),
+            ritual=Ritual.objects.filter(name="accept_soul_tether").first(),
+            fresh_capstone=False,
+        )
 
 
 def _install_soul_tether_triggers(
@@ -525,6 +679,50 @@ def _get_sinner_tether_thread(
     ).first()
 
 
+def sineater_thread_resonance(sineater_side: CharacterRelationship) -> Resonance | None:
+    """The resonance the Sineater's thread on this tether channels (#5177), or None.
+
+    ``sineater_side`` is the Sineater's own side toward the Sinner. It is the resonance of their
+    live thread when they have one, else the one ``ensure_sineater_thread`` would weave
+    (``default_sineater_resonance``). None when the tether is dissolved or the Sineater holds no
+    resonance. Reads only; nothing is woven.
+    """
+    if not sineater_side.is_soul_tether:
+        return None
+    thread = _live_sineater_thread(sineater_side)
+    if thread is not None:
+        return thread.resonance
+    return default_sineater_resonance(sineater_side.source)
+
+
+def sinner_thread_resonance(sineater_side: CharacterRelationship) -> Resonance | None:
+    """The resonance of the Sinner's live thread on this tether (#5177), or None.
+
+    ``sineater_side`` is the Sineater's own side toward the Sinner; the Sinner's side is the
+    row pointing back. None when the tether is dissolved or the Sinner's thread is gone.
+    """
+    from world.magic.models import Thread  # noqa: PLC0415
+
+    sinner_side = CharacterRelationship.objects.filter(
+        source=sineater_side.target, target=sineater_side.source, is_soul_tether=True
+    ).first()
+    if sinner_side is None:
+        return None
+    thread = (
+        Thread.objects.filter(
+            owner_id=sinner_side.source_id,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            target_capstone__relationship=sinner_side,
+            target_capstone__is_ritual_capstone=True,
+            retired_at__isnull=True,
+        )
+        .select_related("resonance")
+        .order_by("pk")
+        .first()
+    )
+    return thread.resonance if thread is not None else None
+
+
 def _compute_per_scene_sineating_cap(
     sinner_thread: Thread | None,
     relationship: CharacterRelationship,  # noqa: ARG001
@@ -585,6 +783,29 @@ def _compute_hollow_max(sinner_thread: Thread) -> int:
     return max(0, _rung_baseline(sinner_thread, ModifierLane.HOLLOW_MAX))
 
 
+def send_stored_notice(sheet: CharacterSheet, line: str, *, ooc_note: str) -> None:
+    """Tell ``sheet`` a private line once the surrounding transaction commits, and keep it.
+
+    The line is a stored narrative message: a puppeted character gets it at once, and a
+    character who is offline (or whose web player reloads) gets it at their next login, the way
+    a kindled deed's "You earned" line does. Used for what a Sinner learns about a Sineater's
+    doing, which happens when they may not be there.
+    """
+
+    def _send() -> None:
+        from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+        from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+        send_narrative_message(
+            recipients=[sheet],
+            body=line,
+            category=NarrativeCategory.SYSTEM,
+            ooc_note=ooc_note,
+        )
+
+    transaction.on_commit(_send)
+
+
 def _increment_stat_safe(
     character_sheet: CharacterSheet,
     stat_key: str,
@@ -612,470 +833,51 @@ def _increment_stat_safe(
     increment_stat(character_sheet, stat_def, amount)
 
 
-# =============================================================================
-# Public service: request_sineating
-# =============================================================================
-
-
-def request_sineating(
-    sinner_sheet: CharacterSheet,
-    sineater_sheet: CharacterSheet,
-    resonance: Resonance,
-    max_units: int,
-    scene: Any,
-) -> SineatingOffer:
-    """Sinner-initiated Sineating request — validates gates and returns the offer (Spec B §7.2).
-
-    Implementation note (Option B — synchronous path):
-        The Spec describes firing a PROMPT_PLAYER Twisted Deferred to the
-        Sineater. That mechanism is in-memory and process-local (see
-        ``flows.execution.prompts``), which cannot survive service-layer unit
-        tests without a running Twisted reactor. Phase 7 will wire the actual
-        PROMPT_PLAYER step when the stage-advance handler is also being built.
-        For now this function validates all prerequisites and returns the
-        ``SineatingOffer`` payload directly. The caller (web API or @reply
-        command) passes the offer to ``resolve_sineating``.
-
-    Args:
-        sinner_sheet: The character initiating the request (the Sinner).
-        sineater_sheet: The character being asked to eat sins (the Sineater).
-        resonance: The resonance to Sineat in. Must match a CharacterResonance
-            row for the Sinner.
-        max_units: How many units the Sinner is asking to have eaten.
-        scene: The active Scene both characters are participating in. Pass
-            ``None`` to represent "not in any scene" — the function will raise
-            ``SineatingValidationError``.
-
-    Returns:
-        A frozen ``SineatingOffer`` dataclass describing the offer.
-
-    Raises:
-        SineatingValidationError: If any validation gate fails.
-    """
-    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
-
-    # 1. Verify active tether between sinner and sineater (Sinner → Sineater direction).
-    relationship: CharacterRelationship | None = CharacterRelationship.objects.filter(
-        source=sinner_sheet,
-        target=sineater_sheet,
-        is_soul_tether=True,
-    ).first()
-    if relationship is None:
-        raise SineatingValidationError(_MSG_NO_ACTIVE_TETHER)
-
-    # 2. Both characters must be in the same scene.
-    #    Scene is optional in the data model (audit row allows null) but mandatory
-    #    for the Sineating action itself. ``None`` means "no active scene".
-    if scene is None:
-        raise SineatingValidationError(_MSG_NOT_IN_SAME_SCENE)
-    # Both must have a SceneParticipation row in the same scene.
-    if not _both_in_scene(sinner_sheet, sineater_sheet, scene):
-        raise SineatingValidationError(_MSG_NOT_IN_SAME_SCENE)
-
-    # 3. Resonance must be one the Sinner has a CharacterResonance row for.
-    #    The Sinner can only be Sineated in resonances they actively accrue.
-    sinner_has_resonance = CharacterResonance.objects.filter(
-        character_sheet=sinner_sheet,
-        resonance=resonance,
-    ).exists()
-    if not sinner_has_resonance:
-        raise SineatingValidationError(_MSG_RESONANCE_NOT_ACCRUED)
-
-    # 4. Look up the Sinner's RELATIONSHIP_CAPSTONE Thread for this bond + resonance.
-    sinner_thread = _get_sinner_tether_thread(sinner_sheet, relationship, resonance)
-
-    # 5. Compute per-scene cap.
-    per_scene_cap = _compute_per_scene_sineating_cap(sinner_thread, relationship)
-    if per_scene_cap == 0:
-        raise SineatingValidationError(_MSG_PER_SCENE_CAP_REACHED)
-
-    # 6. Clamp max_units to per-scene cap.
-    max_units_offered = min(max_units, per_scene_cap)
-
-    # 7. Compute current Hollow state.
-    current_hollow = sinner_thread.hollow_current if sinner_thread is not None else 0
-    hollow_max = _compute_hollow_max(sinner_thread) if sinner_thread is not None else 0
-
-    # 8. Persist the pending offer so the Sineater inbox UI can poll it (Task 1.6).
-    #    update_or_create replaces any stale row for this (sinner, sineater) pair
-    #    rather than raising an integrity error on repeat requests.
-    from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
-
-    cfg = get_soul_tether_config()
-    SineatingPendingOffer.objects.update_or_create(
-        sinner_sheet=sinner_sheet,
-        sineater_sheet=sineater_sheet,
-        defaults={
-            "relationship": relationship,
-            "scene": scene,
-            "resonance": resonance,
-            "units_offered": max_units_offered,
-            "anima_cost_per_unit": cfg.anima_cost_per_unit,
-            "fatigue_cost_per_unit": cfg.fatigue_cost_per_unit,
-        },
-    )
-
-    # 9. Fire stat increment for "requests made" (no-op if StatDefinition not seeded).
-    _increment_stat_safe(sinner_sheet, "sineating.requests_made", 1)
-
-    return SineatingOffer(
-        sinner_sheet=sinner_sheet,
-        sineater_sheet=sineater_sheet,
-        relationship=relationship,
-        resonance=resonance,
-        max_units_offered=max_units_offered,
-        anima_cost_per_unit=cfg.anima_cost_per_unit,
-        fatigue_cost_per_unit=cfg.fatigue_cost_per_unit,
-        current_hollow=current_hollow,
-        hollow_max=hollow_max,
-        sineater_current_strain_stage=sineater_sheet.get_tether_strain_stage(),
-        scene=scene,
-    )
-
-
-def _both_in_scene(
-    sinner_sheet: CharacterSheet,
-    sineater_sheet: CharacterSheet,
-    scene: Any,
-) -> bool:
-    """Return True when both character sheets have active SceneParticipation rows in *scene*.
-
-    Bridges CharacterSheet → RosterEntry → current RosterTenure → PlayerData → AccountDB.
-    Returns False if either sheet has no active roster tenure (e.g., NPC without account).
-    """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-    from world.scenes.models import SceneParticipation  # noqa: PLC0415
-
-    def _account_id_for_sheet(sheet: CharacterSheet) -> int | None:
-        try:
-            entry = RosterEntry.objects.get(character_sheet_id=sheet.pk)
-        except RosterEntry.DoesNotExist:
-            return None
-        tenure = entry.tenures.filter(end_date__isnull=True).first()
-        if tenure is None:
-            return None
-        return tenure.player_data.account_id
-
-    sinner_account_id = _account_id_for_sheet(sinner_sheet)
-    sineater_account_id = _account_id_for_sheet(sineater_sheet)
-    if sinner_account_id is None or sineater_account_id is None:
-        return False
-    # Both accounts must have a participation row — count equals the number of
-    # participants we are checking (2 characters = 2 expected rows).
-    _expected_participants = 2
-    return (
-        SceneParticipation.objects.filter(
-            scene=scene, account_id__in=[sinner_account_id, sineater_account_id]
-        ).count()
-        == _expected_participants
-    )
-
-
-def _find_shared_active_scene(
-    sinner_sheet: CharacterSheet,
-    sineater_sheet: CharacterSheet,
+def shared_active_scene(
+    first_sheet: CharacterSheet,
+    second_sheet: CharacterSheet,
 ) -> Any | None:
-    """Return the active Scene both characters currently participate in, or None.
+    """The active scene two characters are both in, or None (#5177).
 
-    Used by ``soul_tether_stage_advance_prompt`` to record a Scene FK on the
-    pending offer row without requiring the subscriber to receive a scene arg.
-    Returns None when either character has no active tenure or when there is no
-    shared active scene.
+    Answers by character, not by pairing the players' accounts: both characters stand in the
+    same place and that place has a live scene. A character with no player tenure (an NPC a
+    GM runs under their own account) therefore takes part when it is physically there.
 
-    Args:
-        sinner_sheet: The Sinner's CharacterSheet.
-        sineater_sheet: The Sineater's CharacterSheet.
-
-    Returns:
-        A Scene instance or None.
+    Used by Sineating, the rescue and the stage-advance offer.
     """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-    from world.scenes.models import SceneParticipation  # noqa: PLC0415
-
-    def _account_id(sheet: CharacterSheet) -> int | None:
-        try:
-            entry = RosterEntry.objects.get(character_sheet_id=sheet.pk)
-        except RosterEntry.DoesNotExist:
-            return None
-        tenure = entry.tenures.filter(end_date__isnull=True).first()
-        if tenure is None:
-            return None
-        return tenure.player_data.account_id
-
-    sinner_account_id = _account_id(sinner_sheet)
-    sineater_account_id = _account_id(sineater_sheet)
-    if sinner_account_id is None or sineater_account_id is None:
+    first_location = first_sheet.character.location
+    second_location = second_sheet.character.location
+    if first_location is None or second_location is None:
         return None
-
-    # Find scene IDs where the sinner has active participation.
-    sinner_scene_ids = set(
-        SceneParticipation.objects.filter(account_id=sinner_account_id).values_list(
-            "scene_id", flat=True
-        )
-    )
-    if not sinner_scene_ids:
+    if first_location.pk != second_location.pk:
         return None
-
-    # Find a scene where the sineater also participates, that is active.
-    shared = (
-        SceneParticipation.objects.filter(
-            account_id=sineater_account_id,
-            scene_id__in=sinner_scene_ids,
-            scene__is_active=True,
-        )
-        .select_related("scene")
-        .first()
-    )
-    if shared is None:
-        return None
-    return shared.scene
+    return live_scene_at(first_location)
 
 
-# =============================================================================
-# Public service: resolve_sineating
-# =============================================================================
+def live_scene_at(location: Any) -> Any | None:
+    """The live scene at ``location``, or None: a scene that is active and not finished (#5177).
 
-
-def _grant_sineating_resonance(offer: SineatingOffer, units: int) -> None:
-    """Grant the resonance the Sinner loses and the Sineater takes from the Mire."""
-    from world.magic.constants import GainSource  # noqa: PLC0415
-    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
-
-    grant_resonance(offer.sinner_sheet, offer.resonance, units, source=GainSource.SINEATING)
-    # The Sinner's gain is their own; the Sineater's is the Mire's, read apart (#5123).
-    grant_resonance(
-        offer.sineater_sheet,
-        offer.resonance,
-        units,
-        source=GainSource.SINEATING,
-        from_mire=True,
-    )
-
-
-def resolve_sineating(
-    offer: SineatingOffer,
-    units_accepted: int,
-) -> SineatingResult:
-    """Resolve a Sineating offer with the Sineater's chosen amount (Spec B §7.2).
-
-    Implementation note (Option B — synchronous path):
-        The signature differs from the spec stub (``prompt_id: str``) because
-        this function accepts the ``SineatingOffer`` directly. Phase 7 will
-        add a PROMPT_PLAYER wrapper that looks up the offer from the in-memory
-        prompt registry and calls this function. The synchronous path is fully
-        testable and represents the correct business logic regardless.
-
-    Args:
-        offer: The ``SineatingOffer`` returned by ``request_sineating``.
-        units_accepted: How many units the Sineater accepts (0 = decline,
-            positive = accept that many). Clamped to [0, max_units_offered].
-
-    Returns:
-        A frozen ``SineatingResult`` dataclass.
+    The one rule for "a scene Sineating can happen in". ``shared_active_scene`` and the pose
+    picker both read it, so they cannot disagree about what is live.
     """
-    from world.magic.models import Thread  # noqa: PLC0415
-    from world.magic.models.aura import CharacterResonance  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
-    # Clamp to valid range.
-    units = max(0, min(units_accepted, offer.max_units_offered))
-    declined = units == 0
-
-    with transaction.atomic():
-        anima_deducted = 0
-        fatigue_deducted = 0
-        new_hollow_current = offer.current_hollow
-        new_lifetime_helped = 0
-
-        if not declined:
-            # 1. Deduct anima from Sineater.
-            from world.magic.models import CharacterAnima  # noqa: PLC0415
-
-            anima_cost = units * offer.anima_cost_per_unit
-            try:
-                anima_row = CharacterAnima.objects.select_for_update().get(
-                    character=offer.sineater_sheet
-                )
-                anima_row.current = max(0, anima_row.current - anima_cost)
-                anima_row.save(update_fields=["current"])
-                anima_deducted = anima_cost
-            except CharacterAnima.DoesNotExist:
-                # Defensive guard: CharacterAnima is seeded at CG completion via
-                # finalize_magic_data; this branch is unreachable for post-CG characters
-                # but protects against environments where CG seeding was not run.
-                pass
-
-            # 2. Deduct social fatigue from Sineater.
-            #    Sineating is a social/spiritual burden — social fatigue category.
-            #    We add fatigue directly to the pool (fixed cost, no effort multiplier).
-            from world.fatigue.models import FatiguePool  # noqa: PLC0415
-
-            fatigue_cost = units * offer.fatigue_cost_per_unit
-            try:
-                pool = FatiguePool.objects.select_for_update().get(
-                    character_sheet=offer.sineater_sheet
-                )
-                current_social = pool.get_current("social")
-                pool.set_current("social", current_social + fatigue_cost)
-                pool.save(update_fields=["social_current"])
-                fatigue_deducted = fatigue_cost
-            except FatiguePool.DoesNotExist:
-                # Defensive guard: FatiguePool is seeded at CG completion via
-                # get_or_create_fatigue_pool; this branch is unreachable for post-CG
-                # characters but protects against environments where CG seeding was not run.
-                pass
-
-            # 3. Increment Sinner's Thread.hollow_current (clamp to hollow_max).
-            sinner_thread = _get_sinner_tether_thread(
-                offer.sinner_sheet, offer.relationship, offer.resonance
-            )
-            if sinner_thread is not None:
-                hollow_max = _compute_hollow_max(sinner_thread)
-                sinner_thread_locked = Thread.objects.select_for_update().get(pk=sinner_thread.pk)
-                sinner_thread_locked.hollow_current = min(
-                    hollow_max, sinner_thread_locked.hollow_current + units
-                )
-                sinner_thread_locked.save(update_fields=["hollow_current"])
-                new_hollow_current = sinner_thread_locked.hollow_current
-
-            # 4. Increment Sineater's CharacterResonance.lifetime_helped.
-            #    Lazy-create the CharacterResonance row if absent.
-            cr, _ = CharacterResonance.objects.select_for_update().get_or_create(
-                character_sheet=offer.sineater_sheet,
-                resonance=offer.resonance,
-            )
-            cr.lifetime_helped = cr.lifetime_helped + units
-            cr.save(update_fields=["lifetime_helped"])
-            new_lifetime_helped = cr.lifetime_helped
-            _grant_sineating_resonance(offer, units)
-
-        # 5. Write Sineating audit row (always — including declines).
-        from world.magic.models import Sineating  # noqa: PLC0415
-
-        audit_row = Sineating.objects.create(
-            sinner_sheet=offer.sinner_sheet,
-            sineater_sheet=offer.sineater_sheet,
-            relationship=offer.relationship,
-            scene=offer.scene,
-            resonance=offer.resonance,
-            units_offered=offer.max_units_offered,
-            units_accepted=units,
-            anima_cost=anima_deducted,
-            fatigue_cost=fatigue_deducted,
-        )
-
-    # 6. Fire stat increments (outside transaction — safe to no-op if rows absent).
-    if not declined:
-        _increment_stat_safe(offer.sineater_sheet, "sineating.units_accepted", units)
-    else:
-        _increment_stat_safe(offer.sineater_sheet, "sineating.units_declined", 1)
-
-    return SineatingResult(
-        audit_row=audit_row,
-        units_accepted=units,
-        declined=declined,
-        new_hollow_current=new_hollow_current,
-        new_lifetime_helped=new_lifetime_helped,
-    )
+    scene = get_active_scene(location)
+    if scene is None or not scene.is_active or scene.is_finished:
+        return None
+    return scene
 
 
-# =============================================================================
-# Public service: resolve_sineating_from_db (Task 1.6)
-# =============================================================================
-
-_MSG_NO_PENDING_OFFER = "No pending Sineating offer found."
-_MSG_OFFER_STALE = "This offer expired because you are no longer in the same scene."
-
-
-def resolve_sineating_from_db(
-    sinner_sheet: CharacterSheet,
-    sineater_sheet: CharacterSheet,
-    units_accepted: int,
-) -> SineatingResult:
-    """Resolve a Sineating offer fetched from the database (Task 1.6).
-
-    Wraps ``resolve_sineating`` with persistent-offer lookup, row locking, and
-    co-location staleness validation. The caller supplies only the pair identity
-    and the Sineater's chosen units; the rest of the offer state is loaded from
-    the ``SineatingPendingOffer`` row written by ``request_sineating``.
-
-    Co-location check: if either character is no longer a SceneParticipation
-    member of the offer's scene, the pending row is deleted (cleanup) and
-    ``SineatingValidationError`` is raised so the inbox UI surfaces the staleness.
-
-    Args:
-        sinner_sheet: The Sinner's CharacterSheet.
-        sineater_sheet: The Sineater's CharacterSheet (the caller / responder).
-        units_accepted: How many units the Sineater accepts (0 = decline).
-
-    Returns:
-        A frozen ``SineatingResult`` dataclass (delegated from ``resolve_sineating``).
-
-    Raises:
-        SineatingValidationError: If no pending offer exists, or the offer is
-            stale (either character has left the scene).
-    """
-    from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
-
-    # Step 1: Plain lookup in autocommit mode. select_for_update() is illegal
-    # outside a transaction block (Django raises TransactionManagementError in
-    # non-ATOMIC_REQUESTS mode); locking comes in Step 4 once we are inside
-    # transaction.atomic().
-    try:
-        pending = SineatingPendingOffer.objects.select_related(
-            "sinner_sheet", "sineater_sheet", "relationship", "resonance", "scene"
-        ).get(
-            sinner_sheet=sinner_sheet,
-            sineater_sheet=sineater_sheet,
-        )
-    except SineatingPendingOffer.DoesNotExist as exc:
-        raise SineatingValidationError(_MSG_NO_PENDING_OFFER) from exc
-
-    # Step 2: Co-location staleness check. If stale, delete the row in
-    # autocommit mode (filter().delete() issues an immediate DELETE that
-    # commits without needing a wrapping transaction), then raise.
-    # We must NOT do this inside transaction.atomic() because the exception
-    # would roll back the DELETE, leaving a ghost row in the inbox.
-    if not _both_in_scene(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
-        SineatingPendingOffer.objects.filter(pk=pending.pk).delete()
-        raise SineatingValidationError(_MSG_OFFER_STALE)
-
-    # Step 3: Reconstruct a SineatingOffer from the persisted fields.
-    #    We compute hollow state from the current Thread rather than storing it
-    #    in the pending row (Thread.hollow_current may have changed since request).
-    sinner_thread = _get_sinner_tether_thread(
-        pending.sinner_sheet, pending.relationship, pending.resonance
-    )
-    current_hollow = sinner_thread.hollow_current if sinner_thread is not None else 0
-    hollow_max = _compute_hollow_max(sinner_thread) if sinner_thread is not None else 0
-
-    offer = SineatingOffer(
-        sinner_sheet=pending.sinner_sheet,
-        sineater_sheet=pending.sineater_sheet,
-        relationship=pending.relationship,
-        resonance=pending.resonance,
-        max_units_offered=pending.units_offered,
-        anima_cost_per_unit=pending.anima_cost_per_unit,
-        fatigue_cost_per_unit=pending.fatigue_cost_per_unit,
-        current_hollow=current_hollow,
-        hollow_max=hollow_max,
-        sineater_current_strain_stage=pending.sineater_sheet.get_tether_strain_stage(),
-        scene=pending.scene,
-    )
-
-    # Step 4: Re-fetch with lock inside transaction.atomic(), then resolve.
-    # The re-fetch guards against a concurrent caller who raced between our
-    # plain get() above and this point.
-    with transaction.atomic():
-        try:
-            locked_pending = SineatingPendingOffer.objects.select_for_update().get(pk=pending.pk)
-        except SineatingPendingOffer.DoesNotExist as exc:
-            # Another caller resolved (and deleted) the offer between our check and lock.
-            raise SineatingValidationError(_MSG_NO_PENDING_OFFER) from exc
-
-        result = resolve_sineating(offer, units_accepted)
-        locked_pending.delete()
-
-    return result
+def _in_scene_together(
+    first_sheet: CharacterSheet,
+    second_sheet: CharacterSheet,
+    scene: Any | None,
+) -> bool:
+    """True when ``scene`` is given and is the active scene both characters are in."""
+    if scene is None:
+        return False
+    shared = shared_active_scene(first_sheet, second_sheet)
+    return shared is not None and shared.pk == scene.pk
 
 
 def perform_soul_tether_rescue(
@@ -1159,12 +961,12 @@ def perform_soul_tether_rescue(
             msg = "No active Soul Tether exists between these characters."
             raise RescueValidationError(msg)
 
-        # 3. Gate: Both characters must be in the same scene.
-        #    ``_both_in_scene`` returns False when scene is None or either character
-        #    has no active roster tenure — both cases produce the same user message.
-        if not _both_in_scene(sinner_sheet, sineater_sheet, scene):
-            msg = "Both characters must be in the same scene for the rescue ritual."
-            raise RescueValidationError(msg)
+        # 2b. Gate: a fallen Sineater carries no one's sins (#5177).
+        _refuse_fallen_sineater(sineater_sheet)
+
+        # 3. Gate: Both characters must be in the same active scene, found by the
+        #    characters themselves (an NPC a GM runs counts) (#5177).
+        scene = _rescue_scene(sinner_sheet, sineater_sheet, scene)
 
         # 4. Gate: Sineater must not be in active engagement.
         if CharacterEngagement.objects.filter(character=sineater_sheet).exists():
@@ -1199,7 +1001,7 @@ def perform_soul_tether_rescue(
 
         # 9. Compute budget from check outcome + sinner stage.
         # TODO: Phase 14: surface tuning knobs via SoulTetherConfig singleton.
-        thread_level = _get_sineater_thread_level(sineater_sheet, relationship, resonance)
+        thread_level = _get_sineater_thread_level(sineater_sheet, relationship)
         budget = _compute_rescue_budget(
             check_result.success_level, sinner_stage_at_start, thread_level
         )
@@ -1280,6 +1082,22 @@ _RESCUE_TERMINAL_STAGE: int = 5
 _RESCUE_CRIT_SUCCESS_LEVEL = 2
 _RESCUE_SUCCESS_LEVEL = 1
 _RESCUE_PARTIAL_LEVEL = 0
+
+
+def _rescue_scene(
+    sinner_sheet: CharacterSheet,
+    sineater_sheet: CharacterSheet,
+    scene: Any | None,
+) -> Any:
+    """The active scene the rescue happens in, or ``RescueValidationError``.
+
+    A scene passed in must be the one both characters are in; none passed means that one.
+    """
+    shared = shared_active_scene(sinner_sheet, sineater_sheet)
+    if shared is None or (scene is not None and scene.pk != shared.pk):
+        msg = "Both characters must be in the same scene for the rescue ritual."
+        raise RescueValidationError(msg)
+    return shared
 
 
 def _compute_strain_cost(sinner_stage: int) -> int:
@@ -1373,30 +1191,21 @@ def _compute_rescue_budget(
 def _get_sineater_thread_level(
     sineater_sheet: CharacterSheet,
     relationship: CharacterRelationship,
-    resonance: Resonance,
 ) -> int:
-    """Return the Sineater's RELATIONSHIP_CAPSTONE Thread level for this bond + resonance.
+    """Return the level of the Sineater's thread on this bond, or 0 when they have none.
 
-    The Sineater's Thread (if they bought one) is optional per §1.3.2 XP-anti-pattern.
-    Returns 0 if no Sineater-side Thread exists.
+    The Sineater's thread channels the Sineater's own resonance, which is rarely the
+    resonance being rescued, so the lookup goes by the bond and not by resonance (#5177).
 
     Args:
         sineater_sheet: The Sineater's CharacterSheet.
-        relationship: The Sineater→Sinner CharacterRelationship row.
-        resonance: The Resonance to filter on.
-
-    Returns:
-        Thread.level (int) or 0 if no matching Thread exists.
+        relationship: The Sineater's own CharacterRelationship side toward the Sinner.
     """
     from world.magic.models import Thread  # noqa: PLC0415
 
-    # The Sineater's capstone is on the Sineater→Sinner relationship direction.
-    # We look for a RELATIONSHIP_CAPSTONE Thread owned by the Sineater pointing
-    # to a capstone whose relationship == the Sineater→Sinner relationship row.
     thread = Thread.objects.filter(
         owner=sineater_sheet,
         target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
-        resonance=resonance,
         retired_at__isnull=True,
         target_capstone__relationship=relationship,
     ).first()
@@ -1500,6 +1309,12 @@ def soul_tether_redirect_handler(*, payload: Any) -> None:
 
     # Recursion guard: overflow accrual from this handler must not re-enter.
     if payload.redirect_origin is not None:
+        return
+
+    # Corruption a Sineater carries for a Sinner arrives whole, and so does what a character
+    # adds by giving in to a Compulsion; the carrier's own Hollow (if they are a Sinner too)
+    # absorbs neither (#5177).
+    if payload.source in (CorruptionSource.SINEATING_CARRIED, CorruptionSource.INDULGED):
         return
 
     sinner_sheet: CharacterSheet = payload.character_sheet
@@ -1766,7 +1581,7 @@ def soul_tether_stage_advance_prompt(*, payload: Any) -> None:
     from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
 
     relationship = tethers[0]  # First active tether (matches _find_sineater_in_location logic).
-    shared_scene = _find_shared_active_scene(sinner_sheet, sineater_sheet)
+    shared_scene = shared_active_scene(sinner_sheet, sineater_sheet)
     if shared_scene is not None:
         current_stage_obj = instance.current_stage
         current_stage_number = current_stage_obj.stage_order if current_stage_obj is not None else 0
@@ -1902,7 +1717,7 @@ def resolve_stage_advance_prompt_from_db(
 ) -> StageAdvanceBonusResult:
     """Resolve a stage-advance bonus offer fetched from the database (Task 1.7).
 
-    Parallel to ``resolve_sineating_from_db``. Looks up the ``PendingStageAdvanceOffer``
+    Parallel to ``perform_sineating``. Looks up the ``PendingStageAdvanceOffer``
     row, validates TTL and co-location, then delegates to ``resolve_stage_advance_prompt``.
 
     TTL check: If ``expires_at < now()``, the offer is stale — delete the row and raise.
@@ -1947,9 +1762,9 @@ def resolve_stage_advance_prompt_from_db(
         raise StageAdvanceBonusError(_MSG_STAGE_ADVANCE_OFFER_EXPIRED)
 
     # Step 3: Co-location check (autocommit). Scene is guaranteed non-null on persisted rows
-    # (soul_tether_stage_advance_prompt only writes a row when _find_shared_active_scene
+    # (soul_tether_stage_advance_prompt only writes a row when shared_active_scene
     # returned a valid scene), so no null-check is needed here.
-    if not _both_in_scene(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
+    if not _in_scene_together(pending.sinner_sheet, pending.sineater_sheet, pending.scene):
         PendingStageAdvanceOffer.objects.filter(pk=pending.pk).delete()
         raise StageAdvanceBonusError(_MSG_STAGE_ADVANCE_OFFER_STALE)
 
@@ -2015,6 +1830,9 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
             or invalid.
         "ritual_components" (list): Component items (validated by caller).
             Optional; defaults to [].
+        "sineater_resonance_id" (int): PK of the Resonance the Sineater's own Thread
+            will channel (#5177). Optional; defaults to the Sineater's strongest
+            resonance of their main affinity.
 
     NOTE (Slice B scope): resonance comes from session_kwargs as a scalar ID
     value. The frontend draft dialog (Phase 9) will populate it via the session
@@ -2063,6 +1881,15 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
 
     ritual_components: list[Any] = session.session_kwargs.get("ritual_components", [])
 
+    # The Sineater's own thread resonance is optional; absent falls back to their default.
+    sineater_resonance: Resonance | None = None
+    sineater_resonance_id: int | None = session.session_kwargs.get("sineater_resonance_id")
+    if sineater_resonance_id is not None:
+        try:
+            sineater_resonance = Resonance.objects.get(pk=sineater_resonance_id)
+        except Resonance.DoesNotExist as exc:
+            raise RequiredReferenceMissingError from exc
+
     # 4. Build the accept_soul_tether call using its initiator/partner + sinner_role shape.
     #    We treat the sinner as the "initiator" (arbitrary — the function uses sinner_role
     #    to resolve which sheet is which, not the argument name).
@@ -2072,4 +1899,5 @@ def accept_soul_tether_via_session(*, session: Any) -> Any:
         sinner_role=SoulTetherRoleEnum.SINNER,
         resonance=resonance,
         ritual_components=ritual_components,
+        sineater_resonance=sineater_resonance,
     )

@@ -102,7 +102,13 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
     ]
     raw_id_fields = ["source", "target", "target_companion"]
     filter_horizontal = ["conditions"]
-    readonly_fields = ["created_at", "updated_at"]
+    # The Mire counters are written only by the settling rite (``services/mire_settling.py``).
+    readonly_fields = [
+        "created_at",
+        "updated_at",
+        "mire_purified_since_payout",
+        "mire_succumbed_since_fall",
+    ]
     inlines = [RelationshipLabelInline]
 
     @admin.display(description="Source")

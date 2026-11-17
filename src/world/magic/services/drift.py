@@ -2,11 +2,10 @@
 
 A character is unsettled (#5123) when an affinity other than their main one has grown
 past who they are: its share of their aura (their lifetime resonance) stands over its
-settled share by more than the tolerance. A Sineater's Mire burden is read apart and has
-its own allowance. ``drift_for`` is that reading, on the true aura; ``check_resonance_focus``
-runs once per cast, before the cast's modifiers are gathered, and on a failed focus roll
-applies (or deepens) the authored conflict condition, whose own check modifier then reaches
-the same cast's roll. Its numbers live in ``DriftConfig``.
+settled share by more than the tolerance. ``drift_for`` is that reading, on the true aura;
+``check_resonance_focus`` runs once per cast, before the cast's modifiers are gathered, and
+on a failed focus roll applies (or deepens) the authored conflict condition, whose own
+check modifier then reaches the same cast's roll. Its numbers live in ``DriftConfig``.
 
 Atoning (#4733, #5123) is read on lifetime, so it works even when the excess was already
 spent: ``drift_holdings`` is resonance held in a non-main affinity that has grown past who
@@ -116,15 +115,13 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
     """Whether ``sheet``'s character is unsettled, and by how much (#5123).
 
     Read on the true aura: a worn alternate self does not change who the character is.
-    An affinity's own share is its lifetime resonance less the part taken from the Mire,
-    as a percent of all the character's own lifetime resonance; its Mire share is the
-    Mire part as a percent of all lifetime resonance. For every affinity other than the
-    main one (the largest settled share), the excess is how far its own share stands past
-    its settled share plus the range before Unsettled, plus how far its Mire share
-    stands past ``mire_allowance_percent``. ``steps_past`` is the total excess in bands of
-    the step, rounded up. The range and the step are the main affinity's own
-    ``unsettled_tolerance_percent`` and ``unsettled_step_percent`` when set, else the
-    general values on ``DriftConfig`` (``_unsettled_numbers``).
+    An affinity's share is its lifetime resonance as a percent of all the character's
+    lifetime resonance. For every affinity other than the main one (the largest settled
+    share), the excess is how far its share stands past its settled share plus the range
+    before Unsettled. ``steps_past`` is the total excess in bands of the step, rounded up.
+    The range and the step are the main affinity's own ``unsettled_tolerance_percent`` and
+    ``unsettled_step_percent`` when set, else the general values on ``DriftConfig``
+    (``_unsettled_numbers``).
 
     A character with no aura, or an aura with nothing settled yet, reads zero.
     """
@@ -136,8 +133,7 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
             main_affinity=None,
             leading_excess_resonance=None,
             excess_percent=Decimal(0),
-            mire_share_percent=Decimal(0),
-            own_shares={},
+            shares={},
             settled_shares={},
         )
 
@@ -150,41 +146,29 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         )
     )
     total_lifetime = sum(row.lifetime_earned for row in rows)
-    total_own = total_lifetime - sum(row.mire_lifetime for row in rows)
-    own_lifetime: dict[int, int] = {}
-    mire_lifetime: dict[int, int] = {}
+    lifetime_by_affinity: dict[int, int] = {}
     for row in rows:
         affinity_id = row.resonance.affinity_id
-        own_lifetime[affinity_id] = own_lifetime.get(affinity_id, 0) + (
-            row.lifetime_earned - row.mire_lifetime
+        lifetime_by_affinity[affinity_id] = (
+            lifetime_by_affinity.get(affinity_id, 0) + row.lifetime_earned
         )
-        mire_lifetime[affinity_id] = mire_lifetime.get(affinity_id, 0) + row.mire_lifetime
-    own_shares = {aff: _share_of(life, total_own) for aff, life in own_lifetime.items()}
+    shares = {aff: _share_of(life, total_lifetime) for aff, life in lifetime_by_affinity.items()}
 
     excess_by_affinity: dict[int, Decimal] = {}
-    own_excess_points: dict[int, int] = {}
-    mire_excess_points: dict[int, int] = {}
-    for affinity_id in own_shares.keys() | mire_lifetime.keys() | settled_shares.keys():
+    excess_points: dict[int, int] = {}
+    for affinity_id in shares.keys() | settled_shares.keys():
         if affinity_id == main.pk:
             continue
         past_settled = (
-            own_shares.get(affinity_id, Decimal(0))
+            shares.get(affinity_id, Decimal(0))
             - settled_shares.get(affinity_id, Decimal(0))
             - tolerance_percent
         )
-        past_allowance = (
-            _share_of(mire_lifetime.get(affinity_id, 0), total_lifetime)
-            - cfg.mire_allowance_percent
-        )
-        excess = max(Decimal(0), past_settled) + max(Decimal(0), past_allowance)
-        if excess > 0:
-            excess_by_affinity[affinity_id] = excess
-        # The same excess as lifetime points, rounded up so a sliver past the line can
-        # still be atoned for: what the rite may convert away from this affinity.
         if past_settled > 0:
-            own_excess_points[affinity_id] = ceil(past_settled * total_own / _ONE_HUNDRED)
-        if past_allowance > 0:
-            mire_excess_points[affinity_id] = ceil(past_allowance * total_lifetime / _ONE_HUNDRED)
+            excess_by_affinity[affinity_id] = past_settled
+            # The same excess as lifetime points, rounded up so a sliver past the line can
+            # still be atoned for: what the rite may convert away from this affinity.
+            excess_points[affinity_id] = ceil(past_settled * total_lifetime / _ONE_HUNDRED)
 
     excess_total = sum(excess_by_affinity.values(), Decimal(0))
     leading: Resonance | None = None
@@ -197,11 +181,9 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         main_affinity=main,
         leading_excess_resonance=leading,
         excess_percent=excess_total,
-        mire_share_percent=_share_of(sum(mire_lifetime.values()), total_lifetime),
-        own_shares=own_shares,
+        shares=shares,
         settled_shares=settled_shares,
-        own_excess_points=own_excess_points,
-        mire_excess_points=mire_excess_points,
+        excess_points=excess_points,
     )
 
 
@@ -332,7 +314,7 @@ def drift_holdings(sheet: CharacterSheet) -> list[CharacterResonance]:
 
     Read on lifetime, not balance, so a streak whose points were already spent still
     counts (#5123): every resonance of a non-main affinity with lifetime earned, in an
-    affinity whose excess (own, or the Mire's past its allowance) is above zero. Largest
+    affinity whose excess is above zero. Largest
     lifetime first. Empty when the character is settled or has no main affinity.
     """
     own = own_affinity(sheet)
@@ -345,7 +327,7 @@ def drift_holdings(sheet: CharacterSheet) -> list[CharacterResonance]:
         .select_related("resonance__affinity")
         .order_by("-lifetime_earned", "resonance_id")
     )
-    return [row for row in rows if reading.convertible_points(row.resonance.affinity_id) > 0]
+    return [row for row in rows if reading.excess_points.get(row.resonance.affinity_id, 0) > 0]
 
 
 @transaction.atomic
@@ -395,13 +377,12 @@ def accept_aura_change(sheet: CharacterSheet, fraction: Decimal = Decimal(1)) ->
 
     The rite of settling's step for a reflection that embraces the unsettling resonance
     (#5124); nothing else calls it. ``fraction`` is the rite's share: 1 settles in full,
-    a smaller share moves each settled share, and the Sineater's Mire part, that share of
-    the way toward where it is going, and 0 moves nothing.
+    a smaller share moves each settled share that part of the way toward where it is
+    going, and 0 moves nothing.
 
-    In full, a Sineater's Mire lifetime becomes their own (``mire_lifetime`` is set to 0 on
-    every row), then each ``settled_percent`` is set to the resulting own share, so
-    ``steps_past`` is 0 afterwards and the main affinity is the largest share. Writes no
-    corruption: Abyssal resonance brings corruption the usual way (#5123, rulings 8 and 28).
+    In full, each ``settled_percent`` is set to the aura's own share, so ``steps_past`` is
+    0 afterwards and the main affinity is the largest share. Writes no corruption: Abyssal
+    resonance brings corruption the usual way (#5123, rulings 8 and 28).
 
     Raises:
         NotUnsettledError: The character is not unsettled.
@@ -417,26 +398,14 @@ def accept_aura_change(sheet: CharacterSheet, fraction: Decimal = Decimal(1)) ->
             for share in (sheet.aura_or_none.cached_shares if sheet.aura_or_none else [])
         }
         return AcceptAuraResult(
-            mire_moved=0,
             main_affinity=_main_affinity(sheet.aura_or_none),
             grown_affinity=grown,
             settled_shares=settled,
         )
-    mire_moved = 0
-    for row in CharacterResonance.objects.select_for_update().filter(
-        character_sheet=sheet, mire_lifetime__gt=0
-    ):
-        moved = row.mire_lifetime if fraction >= 1 else int(row.mire_lifetime * fraction)
-        if moved <= 0:
-            continue
-        mire_moved += moved
-        row.mire_lifetime -= moved
-        row.save(update_fields=["mire_lifetime"])
     settled = settle_shares(sheet, fraction=fraction)
     aura = sheet.aura_or_none
     close_spent_conversion_offers(sheet)
     return AcceptAuraResult(
-        mire_moved=mire_moved,
         main_affinity=_main_affinity(aura),
         grown_affinity=grown,
         settled_shares=settled,

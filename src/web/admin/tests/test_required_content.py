@@ -1855,6 +1855,50 @@ class TestDriftConfigProbes(TestCase):
         self.assertTrue(self._present()["drift-conflict-condition-check-modifier"])
 
 
+class TestCompulsionConditionProbes(TestCase):
+    """The corruption configuration's Compulsion condition and its shape (#5177).
+
+    U-keep: the dashboard probe has no player path.
+    """
+
+    _KEYS = (
+        "compulsion-condition",
+        "compulsion-condition-scene-duration",
+        "compulsion-condition-check-modifier",
+    )
+
+    def _present(self) -> dict[str, bool]:
+        return {key: _probe_for(key).resolve(None).present for key in self._KEYS}
+
+    def test_an_unset_condition_is_reported_once_and_its_shape_is_checked_when_set(self) -> None:
+        from world.conditions.constants import DurationType
+        from world.magic.services.corruption import get_corruption_config
+
+        # Unset: only the field probe reports; the shape probes leave that gap to it.
+        config = get_corruption_config()
+        self.assertEqual(
+            self._present(),
+            {
+                "compulsion-condition": False,
+                "compulsion-condition-scene-duration": True,
+                "compulsion-condition-check-modifier": True,
+            },
+        )
+
+        condition = ConditionTemplateFactory(default_duration_type=DurationType.ROUNDS)
+        config.compulsion_condition = condition
+        config.save()
+        present = self._present()
+        self.assertTrue(present["compulsion-condition"])
+        self.assertFalse(present["compulsion-condition-scene-duration"])
+        self.assertFalse(present["compulsion-condition-check-modifier"])
+
+        condition.default_duration_type = DurationType.SCENE
+        condition.save()
+        ConditionCheckModifierFactory(condition=condition)
+        self.assertEqual(self._present(), dict.fromkeys(self._KEYS, True))
+
+
 class TestDriftCorrectionConfigProbe(TestCase):
     """`drift-correction-config` needs the rite, the check type and a share per tier (#4733)."""
 
@@ -1941,6 +1985,38 @@ class TestDriftCorrectionConfigProbe(TestCase):
         result = _probe_for("drift-correction-config").resolve(None)
         self.assertTrue(result.present)
         self.assertEqual(result.missing, ())
+
+
+class TestSineatingConfigProbe(TestCase):
+    """Sineating refuses until a check type is set and every outcome tier has an award (#5177)."""
+
+    def test_names_what_is_missing_then_clears_when_authored(self) -> None:
+        from world.checks.factories import CheckTypeFactory
+        from world.magic.factories import SineatingOutcomeAwardFactory
+        from world.magic.models import SineatingOutcomeAward
+        from world.magic.services.soul_tether import get_soul_tether_config
+        from world.traits.models import CheckOutcome
+
+        result = _probe_for("sineating-config").resolve(None)
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("the check type",))
+
+        config = get_soul_tether_config()
+        config.sineating_check_type = CheckTypeFactory(name="RC Sineating Check")
+        config.save()
+        covered = CheckOutcome.objects.create(name="RC Sineat Covered", success_level=1)
+        CheckOutcome.objects.create(name="RC Sineat Uncovered", success_level=2)
+        SineatingOutcomeAwardFactory(outcome_tier=covered)
+        result = _probe_for("sineating-config").resolve(None)
+        self.assertFalse(result.present)
+        self.assertIn("RC Sineat Uncovered", result.missing)
+        self.assertNotIn("RC Sineat Covered", result.missing)
+
+        for outcome in CheckOutcome.objects.all():
+            SineatingOutcomeAward.objects.get_or_create(
+                outcome_tier=outcome, defaults={"earned_share": 1}
+            )
+        self.assertTrue(_probe_for("sineating-config").resolve(None).present)
 
 
 class TestFuryTradeProbes(TestCase):

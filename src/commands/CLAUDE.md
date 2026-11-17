@@ -474,7 +474,9 @@ actions, backends, and service functions.
   - `ritual sessions` — list pending sessions
   - `ritual draft <name> invite=<char>[,<char>] [<extra k=v ...>]`
     — draft a session; extra kwargs are adapter-specific (see `ritual_adapters.py`):
-    - soul-tether BILATERAL: `role=sinner|sineater resonance=<name>`
+    - soul-tether BILATERAL: `role=sinner|sineater resonance=<name> [sineater_resonance=<name>]`
+      (`sineater_resonance` names the resonance the Sineater's own thread channels, #5177; blank uses
+      the Sineater's strongest resonance of their main affinity)
     - covenant induction: `covenant=<name>` (the covenant to induct into)
     - banner-call rise: `covenant=<name>` (the dormant STANDING covenant to rise)
     - organization induction: `organization=<name>` (the non-Covenant organization to induct into)
@@ -902,15 +904,38 @@ actions, backends, and service functions.
   ground). A new `room` switch gets its lines in that journey module.
 - **`kindled_resonances.py`** (#5124): `CmdKindledResonances` (`resonances`, separate from the
   bare `resonance` balances command) prints each held resonance with its affinity and "Kindled,
-  blazing" or "Not kindled", then the reasons, from `kindled_resonances_now`. Never a number.
-- **`reflection.py`** (#5124): `CmdReflect` (`reflect`) lists what a character can reflect on, the
-  unsettling resonance by name and each unreflected kindled deed by the number shown; `pose/reflect
-  <deed number or resonance>=<embrace|disown> <text>` and `journal/reflect <target>=<embrace|disown>
-  title=<text> body=<text> [public] [tags=] [about=]` take the reflection with the writing
+  blazing" or "Not kindled", then the reasons, from `kindled_resonances_now`. Never a number. Since
+  #5177 it also refreshes the character's impulses (`refresh_impulses_for_character`) and lists them
+  after a blank line ("Intrusive Thoughts: Ruin - here now", the reasons, the resonance's impulse words).
+- **`reflection.py`** (#5124, #5177): `CmdReflect` (`reflect`) lists what a character can reflect on, the
+  unsettling resonance by name, each unreflected deed by the number shown (a kindled deed or a
+  succumbing), and the Mire they carry for each Sinner (`mire:<Sinner>`, with what it takes); `pose/reflect
+  <deed number, resonance or mire:Sinner>=<choice> <text>` and `journal/reflect <target>=<choice>
+  title=<text> body=<text> [public] [tags=] [about=]` take the reflection with the writing, where the
+  choice is `embrace` or `disown` for a deed or a resonance and `absolve`, `condemn` or `succumb` for a
+  burden (the other kind's choice is refused before the pose posts)
   (`CmdPose` and `CmdJournal` are `takes_switches`; an unknown switch prints usage).
   `reflection_kwargs_and_rest` turns the target and choice into the action's `reflect_*` kwargs;
   the service resolves the name and refuses. Thin. Typed in
-  `integration_tests/test_reflection_journeys.py`.
+  `integration_tests/test_reflection_journeys.py` and, for burdens,
+  `integration_tests/test_mire_settling_journeys.py`.
+- **Sineating** (#5177; `sineating.py`, `social/soul_tether.py`, `evennia_overrides/communication.py`).
+  Sineating is a pose: `pose/entreat <sineater>=<units> <text>` is the Sinner's plea and `pose/sineat
+  <sinner>=<units> <text>` is the Sineater's ritual. `CmdPose` is `takes_switches`; `_attachment_and_rest`
+  sends `entreat` and `sineat` to `sineating_kwargs_and_rest` (`commands/sineating.py`, which names the
+  partner by search, requires a sheet and a positive number of units, and returns the pose action's
+  `sineating_role`, `sineating_partner_id` and `sineating_units` kwargs). A pose carries one reflection
+  or one Sineating, not both. No game logic lives in the command: `PoseAction` checks the plea or the
+  ritual before the pose posts (`pending_sineating_from`) and carries it out after
+  (`run_pose_sineating`, which runs `EntreatSineatingAction` or `PerformSineatingAction`), so a refusal
+  posts no pose. `CmdSineater` (`sineater`): `sineater pleas` lists the pleas waiting and what the
+  Sineater carries per Sinner (`mire_carried_by`); `sineater decline <sinner>` runs
+  `DeclineSineatingAction`; `sineater brace <sinner> [sins=<n>]` answers a stage-advance bonus offer
+  (it was `sineater mire` and its messages no longer say Mire; `sins=0` declines); `sineater rescue
+  <sinner>` performs the rescue. `CmdTether` (`tether`): `tether burden|bear <partner> resonance=<name>`
+  forms the bond and `tether dissolve` ends it. `tether entreat` and `sineater consume` are gone. Typed in
+  `integration_tests/test_sineating_journeys.py`; formation, brace, rescue and dissolve by hand in
+  `commands/tests/test_soul_tether_e2e.py`.
 - **Combat and the GM** (#5124): `combat digdeep [<resonance>]` and `combat rally <ally>[=<resonance>]`
   (`combat_maneuvers.py`) name the resonance; `stage kindle <character>=<resonance>[:<strength>]`
   (`gm_props.py`, action `stage_kindle`) kindles a resonance for the scene, gated like the other
@@ -1681,7 +1706,7 @@ actions, backends, and service functions.
 - **`drift_correction.py`** (#4733, #5123, #5124): `CmdAura` (`aura`), which replaced `drift` with no
   alias. Bare `aura` shows the aura in words (each affinity's share as "nearly all", "a tenth";
   never a number), the unsettled line ("Your Ruin has grown strong enough to make you
-  unsettled." from `drift_for` / `unsettled_line`), the Mire's share in words, then the
+  unsettled." from `drift_for` / `unsettled_line`), then the
   waiting reflections (each as "<title> (<writing>). <what the rite will do>"), the offerings
   carried that count, the deeds not yet reflected on (by number, as `reflect` lists them) and the
   open chance to atone ("A chance to atone is open: up to 3 toward Fury."), or "You have no

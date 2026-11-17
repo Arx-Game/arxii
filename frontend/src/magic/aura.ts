@@ -21,7 +21,6 @@ export function affinitySlug(name: string): string {
 /**
  * A share of a whole, in words. The thresholds are the backend's `share_in_words`
  * (`src/world/magic/services/drift.py`), so the aura reads the same on every surface.
- * Where the API already sends the word (the Mire's share), use that instead.
  */
 export function shareInWords(share: number, total: number): string {
   const part = total > 0 ? share / total : 0;
@@ -33,26 +32,6 @@ export function shareInWords(share: number, total: number): string {
   if (part < 0.58) return 'half';
   if (part < 0.8) return 'most';
   return 'nearly all';
-}
-
-/** The middle of the band each word covers, as a part of the whole (0 to 1). */
-const WORD_MIDPOINTS: Record<string, number> = {
-  none: 0,
-  'a trace': 0.04,
-  'a tenth': 0.13,
-  'a fifth': 0.23,
-  'a third': 0.34,
-  half: 0.49,
-  most: 0.69,
-  'nearly all': 0.9,
-};
-
-/**
- * How much of the whole a word from `shareInWords` stands for, near enough to size a
- * segment of the halo. Used only where the API sends a word and no figure.
- */
-export function wordsToPart(words: string): number {
-  return WORD_MIDPOINTS[words] ?? 0;
 }
 
 function capitalise(text: string): string {
@@ -68,19 +47,16 @@ function phrase(words: string, name: string, leading: boolean): string {
 
 /**
  * The aura's split as one sentence, largest share first: "Mostly primal, a third
- * abyssal." Silent when the aura is unformed and every share is zero. `whole` is what the
- * shares are read against when it is more than their own sum (a halo that draws a Mire
- * stretch beside the character's own shares), so the words agree with the drawing.
+ * abyssal." Silent when the aura is unformed and every share is zero.
  */
-export function auraSentence(shares: AuraShareInput[], whole?: number): string {
+export function auraSentence(shares: AuraShareInput[]): string {
   const held = shares
     .filter((row) => row.percent > 0)
     .map((row) => ({ name: row.name.toLowerCase(), percent: row.percent }))
     .sort((a, b) => b.percent - a.percent);
   if (held.length === 0) return '';
-  const heldTotal = held.reduce((sum, row) => sum + row.percent, 0);
-  const total = Math.max(whole ?? heldTotal, heldTotal);
-  if (held.length === 1 && total <= heldTotal) return `All of it ${held[0].name}.`;
+  const total = held.reduce((sum, row) => sum + row.percent, 0);
+  if (held.length === 1) return `All of it ${held[0].name}.`;
 
   const parts = held.map((row, index) =>
     phrase(shareInWords(row.percent, total), row.name, index === 0)
@@ -90,7 +66,7 @@ export function auraSentence(shares: AuraShareInput[], whole?: number): string {
 
 /** One coloured stretch of a halo, in the order drawn. */
 export interface HaloSegment {
-  /** The affinity's slug (`affinitySlug`), or `mire`. */
+  /** The affinity's slug (`affinitySlug`). */
   slug: string;
   percent: number;
 }

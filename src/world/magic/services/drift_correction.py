@@ -13,6 +13,8 @@ reflection:
 |                                | main affinity; needs no open chance to atone             |
 | Embrace the unsettling         | ``accept_aura_change(fraction=s)``                       |
 | Disown the unsettling          | convert up to the open cap x s toward the main affinity  |
+| Absolve/Condemn/Succumb the    | settle the Mire a Sineater carries for one Sinner at s;  |
+| Mire (a burden, #5177)         | see ``services/mire_settling.py``                        |
 
 Everything runs in one transaction. A refusal (no waiting reflection, an unset rite, no
 qualifying offering) writes nothing and leaves every reflection waiting. Once the roll
@@ -51,6 +53,7 @@ from world.magic.models.drift import (
 )
 from world.magic.models.reflection import Reflection, SettlingRite
 from world.magic.models.resonance_environment import AffinityInteraction
+from world.magic.models.soul_tether import MireHolding
 from world.magic.services.conversion import conversion_pair, convert_resonance_amount
 from world.magic.services.drift import (
     accept_aura_change,
@@ -60,16 +63,19 @@ from world.magic.services.drift import (
     own_affinity,
     qualifying_components_by_target,
 )
-from world.magic.services.reflection import deed_what
+from world.magic.services.mire_settling import apply_burden, apply_fall
+from world.magic.services.reflection import SUCCUMBED_WHAT_RELATED, deed_what
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.ritual_components import (
     resolve_ritual_components,
     target_resonance_meaning_bar,
 )
+from world.magic.services.soul_tether import sineater_thread_resonance
 from world.magic.services.touchstone import touchstone_cast_bonus
 from world.magic.types.drift import (
     QualifyingComponent,
     ReflectionEffect,
+    RiteNotice,
     RiteOffering,
     SettlingRiteResult,
 )
@@ -157,7 +163,10 @@ def waiting_reflections(sheet: CharacterSheet) -> list[Reflection]:
         Reflection.objects.filter(character_sheet=sheet, rite__isnull=True).select_related(
             "grant__resonance__affinity",
             "grant__source_kindling_situation",
+            *(f"grant__{related}" for related in SUCCUMBED_WHAT_RELATED),
             "resonance__affinity",
+            "tether__source",
+            "tether__target",
             "interaction",
             "journal_entry",
         )
@@ -165,10 +174,29 @@ def waiting_reflections(sheet: CharacterSheet) -> list[Reflection]:
 
 
 def reflected_resonance(reflection: Reflection) -> Resonance:
-    """The resonance a reflection is about: the deed's, or the unsettling one."""
+    """The resonance a deed or unsettling-resonance reflection is about. A burden spans
+    every resonance its Mire is held in: see ``reflected_resonances``."""
     if reflection.grant is not None:
         return reflection.grant.resonance
     return reflection.resonance
+
+
+def burden_holdings(reflection: Reflection) -> list[MireHolding]:
+    """The Mire held on a burden reflection's tether, one row per resonance (nothing held is
+    left out), in resonance order."""
+    return list(
+        MireHolding.objects.filter(relationship=reflection.tether, amount__gt=0)
+        .select_related("resonance__affinity")
+        .order_by("resonance_id")
+    )
+
+
+def reflected_resonances(reflection: Reflection) -> list[Resonance]:
+    """Every resonance a reflection is about: the deed's or the unsettling one, or for a burden
+    the resonance of each holding the rite would settle."""
+    if reflection.tether_id is not None:
+        return [holding.resonance for holding in burden_holdings(reflection)]
+    return [reflected_resonance(reflection)]
 
 
 def main_affinity_rows(sheet: CharacterSheet) -> list[CharacterResonance]:
@@ -186,17 +214,24 @@ def main_affinity_rows(sheet: CharacterSheet) -> list[CharacterResonance]:
 def rite_resonances(sheet: CharacterSheet, reflections: Iterable[Reflection]) -> list[Resonance]:
     """The resonances the rite moves, which an offering may be tied to.
 
-    Each reflection's own resonance, then (when any reflection disowns, so something converts)
-    the character's main-affinity resonances, which conversions turn toward. In that order,
-    each once.
+    Each reflection's own resonance (a burden's holdings, then the Sineater's own thread's
+    resonance, which they earn their reward in), then (when any reflection disowns, so
+    something converts, or settles a burden, so a Sineater who holds none of the Sinner's
+    resonance can still make an offering) the character's main-affinity resonances, which
+    conversions turn toward. In that order, each once.
     """
     moved: dict[int, Resonance] = {}
-    disowns = False
+    needs_main = False
     for reflection in reflections:
-        resonance = reflected_resonance(reflection)
-        moved.setdefault(resonance.pk, resonance)
-        disowns = disowns or reflection.choice == ReflectionChoice.DISOWN
-    if disowns:
+        for resonance in reflected_resonances(reflection):
+            moved.setdefault(resonance.pk, resonance)
+        if reflection.tether_id is not None:
+            own = sineater_thread_resonance(reflection.tether)
+            if own is not None:
+                moved.setdefault(own.pk, own)
+        needs_main = needs_main or reflection.choice == ReflectionChoice.DISOWN
+        needs_main = needs_main or reflection.tether_id is not None
+    if needs_main:
         for row in main_affinity_rows(sheet):
             moved.setdefault(row.resonance_id, row.resonance)
     return list(moved.values())
@@ -280,8 +315,11 @@ def open_caps(sheet: CharacterSheet) -> dict[int, int]:
 
 
 def disowns_unsettling(reflections: Iterable[Reflection]) -> bool:
-    """Whether any reflection disowns the unsettling resonance itself (not a deed)."""
-    return any(r.grant_id is None and r.choice == ReflectionChoice.DISOWN for r in reflections)
+    """Whether any reflection disowns the unsettling resonance itself (not a deed or a burden)."""
+    return any(
+        r.grant_id is None and r.tether_id is None and r.choice == ReflectionChoice.DISOWN
+        for r in reflections
+    )
 
 
 def fallback_conversion_target(
@@ -354,7 +392,7 @@ def _convert(
     Never raises for what it cannot do: no target, no authored pair or nothing held converts
     nothing, and a missing pair is named on the result so the caller can say so. The amount
     is at most the source's lifetime, and, with ``limit_to_excess``, what its affinity stands
-    past who the character is. The Mire's excess converts first.
+    past who the character is.
     """
     if wanted <= 0 or target is None or source.pk == target.pk:
         return _Conversion()
@@ -364,14 +402,12 @@ def _convert(
         return _Conversion(missing_pair=(source.affinity, target.affinity))
     rows = CharacterResonance.objects.filter(character_sheet=sheet, resonance=source)
     list(rows.select_for_update())
-    lifetime, row_mire = rows.values_list("lifetime_earned", "mire_lifetime").first() or (0, 0)
-    reading = drift_for(sheet)
+    lifetime = rows.values_list("lifetime_earned", flat=True).first() or 0
     amount = min(wanted, lifetime)
     if limit_to_excess:
-        amount = min(amount, reading.convertible_points(source.affinity_id, row_mire))
+        amount = min(amount, drift_for(sheet).excess_points.get(source.affinity_id, 0))
     if amount <= 0:
         return _Conversion()
-    mire_part = min(amount, reading.mire_excess_points.get(source.affinity_id, 0))
     granted, _ = convert_resonance_amount(
         sheet,
         source_resonance=source,
@@ -379,7 +415,6 @@ def _convert(
         amount=amount,
         multiplier=pair.conversion_multiplier,
         gain_source=GainSource.DRIFT_CORRECTION,
-        mire_amount=mire_part,
     )
     return _Conversion(moved=amount, granted=granted)
 
@@ -512,17 +547,24 @@ def _apply_reflections(  # noqa: PLR0913 - the rite's inputs, handed on as they 
     share: Decimal,
     target: Resonance | None,
     disown_deed_percent: int,
-) -> list[ReflectionEffect]:
+) -> tuple[list[ReflectionEffect], list[RiteNotice]]:
     """Apply ``share`` to each reflection: disowned deeds, the disowned unsettling resonance,
-    embraced deeds, then accepting last so it settles on everything the rite has done."""
+    burdens (the Mire a Sineater carries), embraced deeds, then accepting last so it settles on
+    everything the rite has done. Returns the lines for the performer and the notices for others.
+
+    Every reflection is applied by exactly one pass; one that no pass took raises, rolling the
+    rite back, rather than being silently skipped and marked taken.
+    """
     effects: list[ReflectionEffect] = []
+    applied: dict[int, int] = {}
 
     def run(*, deed: bool, choice: str, apply: Callable[[Reflection], str]) -> None:
-        effects.extend(
-            ReflectionEffect(reflection.pk, apply(reflection))
-            for reflection in reflections
-            if (reflection.grant_id is not None) is deed and reflection.choice == choice
-        )
+        for reflection in reflections:
+            if reflection.tether_id is None and (
+                (reflection.grant_id is not None) is deed and reflection.choice == choice
+            ):
+                applied[reflection.pk] = applied.get(reflection.pk, 0) + 1
+                effects.append(ReflectionEffect(reflection.pk, apply(reflection)))
 
     run(
         deed=True,
@@ -534,6 +576,7 @@ def _apply_reflections(  # noqa: PLR0913 - the rite's inputs, handed on as they 
         choice=ReflectionChoice.DISOWN,
         apply=lambda r: _disown_unsettling(sheet, r, share, target),
     )
+    notices, fall_after = _apply_burdens(sheet, reflections, rite, share, effects, applied)
     run(
         deed=True,
         choice=ReflectionChoice.EMBRACE,
@@ -544,7 +587,57 @@ def _apply_reflections(  # noqa: PLR0913 - the rite's inputs, handed on as they 
         choice=ReflectionChoice.EMBRACE,
         apply=lambda _r: _embrace_unsettling(sheet, share),
     )
-    return effects
+    notices.extend(_apply_fall(sheet, fall_after, effects))
+    unapplied = [r.pk for r in reflections if applied.get(r.pk, 0) != 1]
+    if unapplied:
+        msg = f"Reflections {unapplied} were not applied by exactly one pass of the rite."
+        raise RuntimeError(msg)
+    return effects, notices
+
+
+def _apply_burdens(  # noqa: PLR0913 - the rite's inputs and its two running tallies
+    sheet: CharacterSheet,
+    reflections: list[Reflection],
+    rite: SettlingRite,
+    share: Decimal,
+    effects: list[ReflectionEffect],
+    applied: dict[int, int],
+) -> tuple[list[RiteNotice], tuple[Reflection, int] | None]:
+    """Apply each burden reflection (#5177). Returns the notices for the Sinners, and the last
+    burden that took any Mire by succumbing with the index of its effect line, which is what a
+    fall caused by this rite is attributed to (None when nothing was succumbed to)."""
+    notices: list[RiteNotice] = []
+    last_succumbed: tuple[Reflection, int] | None = None
+    for reflection in reflections:
+        if reflection.tether_id is None:
+            continue
+        applied[reflection.pk] = applied.get(reflection.pk, 0) + 1
+        outcome = apply_burden(sheet, reflection, rite, share)
+        effects.append(ReflectionEffect(reflection.pk, outcome.line))
+        notices.extend(outcome.notices)
+        if outcome.succumbed > 0:
+            last_succumbed = (reflection, len(effects) - 1)
+    return notices, last_succumbed
+
+
+def _apply_fall(
+    sheet: CharacterSheet,
+    last_succumbed: tuple[Reflection, int] | None,
+    effects: list[ReflectionEffect],
+) -> list[RiteNotice]:
+    """Pay the Sinners when this rite's succumbing left the Sineater fallen (checked once the
+    whole rite has run, so the aura is the one they end with), and add the fall to the line of
+    the Mire succumbed to last."""
+    if last_succumbed is None:
+        return []
+    reflection, index = last_succumbed
+    outcome = apply_fall(sheet, reflection.tether)
+    if outcome is None:
+        return []
+    effects[index] = ReflectionEffect(
+        effects[index].reflection_id, f"{effects[index].line} {outcome.line}"
+    )
+    return list(outcome.notices)
 
 
 @transaction.atomic
@@ -558,7 +651,8 @@ def perform_settling_rite(
     moves. Then it rolls the configured check with ``focus_bonus`` toward the resonance the
     offering is tied to, writes a ``SettlingRite`` holding the outcome and the share, spends
     the offering, and applies the share to each reflection: disowned deeds first, then the
-    disowned unsettling resonance (up to the open cap), then embraced deeds, then accepting
+    disowned unsettling resonance (up to the open cap), then burdens (the Mire a Sineater
+    carries: Absolve, Condemn or Succumb, #5177), then embraced deeds, then accepting
     last so it settles on everything the rite has done. Every reflection then takes the rite,
     even at a share of 0.
 
@@ -617,7 +711,7 @@ def perform_settling_rite(
         main_affinity_rows(sheet),
         open_caps(sheet) if disowns_unsettling(reflections) else None,
     )
-    effects = _apply_reflections(
+    effects, notices = _apply_reflections(
         sheet, reflections, rite, share, target, config.disown_deed_percent
     )
 
@@ -632,4 +726,5 @@ def perform_settling_rite(
         share=share,
         focus_bonus=bonus,
         effects=tuple(effects),
+        notices=tuple(notices),
     )

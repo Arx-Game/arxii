@@ -190,6 +190,14 @@ class Resonance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="feeling_of_resonances",
         help_text=("Conditions carrying this property count as this resonance's feeling."),
     )
+    impulse_text = models.TextField(
+        blank=True,
+        help_text=(
+            "The words a character carrying corruption in this resonance is sent, once per "
+            "scene, when something this resonance cares about is present. Written in second "
+            "person. Blank uses a plain default line."
+        ),
+    )
     objects = ResonanceManager()
 
     @cached_property

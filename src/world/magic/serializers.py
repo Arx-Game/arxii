@@ -86,6 +86,7 @@ from world.magic.models.dramatic_moment import (
 from world.magic.models.fall_redemption import ConversionType
 from world.magic.models.sessions import RitualSession
 from world.magic.models.techniques import ConditionTargetKind
+from world.magic.serializers_sineating import MireForSinnerSerializer
 from world.roster.models import RosterEntry
 from world.vitals.constants import NEVER_TO_FULL_FRACTION
 
@@ -605,12 +606,10 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
     shares = CharacterAuraShareSerializer(source="cached_shares", many=True, read_only=True)
     dominant_affinity = serializers.SerializerMethodField()
     dominant_affinity_display = serializers.SerializerMethodField()
-    # #5123: whether the character is unsettled, the sentence naming what made them so, and
-    # the Mire's share of all their resonance in words (never a number).
+    # #5123: whether the character is unsettled and the sentence naming what made them so.
     unsettled = serializers.SerializerMethodField()
     unsettled_line = serializers.SerializerMethodField()
     unsettled_affinity_name = serializers.SerializerMethodField()
-    mire_share_words = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterAura
@@ -623,7 +622,6 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "unsettled",
             "unsettled_line",
             "unsettled_affinity_name",
-            "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
@@ -635,7 +633,6 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "unsettled",
             "unsettled_line",
             "unsettled_affinity_name",
-            "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
@@ -671,12 +668,6 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
         if reading.steps_past <= 0 or leading is None:
             return ""
         return leading.affinity.name
-
-    def get_mire_share_words(self, obj: CharacterAura) -> str:
-        """The Mire's share of everything they have gained, in words."""
-        from world.magic.services.drift import share_in_words  # noqa: PLC0415
-
-        return share_in_words(self._reading(obj).mire_share_percent)
 
     def get_dominant_affinity(self, obj: CharacterAura) -> str:
         """The dominant affinity's name, blank before the aura holds any share."""
@@ -2220,12 +2211,15 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
     ``partner_sheet_id`` identifies the partner's character sheet.
     ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
     ``resonance_id`` selects the resonance for the Sinner's Thread.
+    ``sineater_resonance_id`` optionally selects the resonance for the Sineater's own Thread
+    (#5177); without it the Sineater's strongest resonance of their main affinity is used.
     """
 
     actor_sheet_id = serializers.IntegerField()
     partner_sheet_id = serializers.IntegerField()
     sinner_role = serializers.ChoiceField(choices=["SINNER", "SINEATER"])
     resonance_id = serializers.IntegerField()
+    sineater_resonance_id = serializers.IntegerField(required=False)
 
     def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
         """Resolve actor sheet with ownership check."""
@@ -2238,6 +2232,10 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
 
     def validate_resonance_id(self, value: int) -> "Resonance":
         """Resolve resonance by PK."""
+        return _resolve_resonance_pk(value)
+
+    def validate_sineater_resonance_id(self, value: int) -> "Resonance":
+        """Resolve the Sineater's resonance by PK."""
         return _resolve_resonance_pk(value)
 
     def validate(self, attrs: dict) -> dict:
@@ -2265,6 +2263,7 @@ class AcceptSoulTetherSerializer(serializers.Serializer):
                 sinner_role=sinner_role,
                 resonance=resonance,
                 ritual_components=[],
+                sineater_resonance=validated_data.get("sineater_resonance_id"),
             )
         except SoulTetherError as exc:
             raise serializers.ValidationError(exc.user_message) from exc
@@ -2289,6 +2288,7 @@ class SoulTetherDetailSerializer(serializers.Serializer):
     sineater_lifetime_helped = serializers.SerializerMethodField()
     sinner_corruption_stage = serializers.SerializerMethodField()
     sineater_strain_stage = serializers.SerializerMethodField()
+    mire = serializers.SerializerMethodField()
 
     def _resolve_directions(self, obj: object) -> tuple[object, object]:
         """Return (sinner_relationship, sineater_relationship) for this tether.
@@ -2417,134 +2417,29 @@ class SoulTetherDetailSerializer(serializers.Serializer):
         ).first()
         return strain.severity if strain is not None else 0
 
+    @extend_schema_field(MireForSinnerSerializer(many=True))
+    def get_mire(self, obj: object) -> list[dict]:
+        """The Mire the viewing Sineater carries for this bond's Sinner (#5177).
 
-class SineatingRequestSerializer(serializers.Serializer):
-    """Write serializer for Sinner-initiated Sineating request (Spec B §7).
-
-    Returns a ``SineatingOffer`` that the Sineater can accept or decline via
-    the respond endpoint.
-    """
-
-    actor_sheet_id = serializers.IntegerField()
-    sineater_sheet_id = serializers.IntegerField()
-    resonance_id = serializers.IntegerField()
-    max_units = serializers.IntegerField(min_value=1)
-    scene_id = serializers.IntegerField()
-
-    def validate_actor_sheet_id(self, value: int) -> CharacterSheet:
-        """Resolve Sinner sheet with ownership check."""
-        request = self.context.get("request")
-        return _resolve_account_sheet(value, request)
-
-    def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
-        """Resolve Sineater sheet."""
-        return _resolve_sheet_pk(value)
-
-    def validate_resonance_id(self, value: int) -> "Resonance":
-        """Resolve resonance by PK."""
-        return _resolve_resonance_pk(value)
-
-    def validate_scene_id(self, value: int) -> object:
-        """Resolve scene by PK."""
-        return _resolve_scene_pk(value)
-
-    def create(self, validated_data: dict) -> object:
-        """Delegate to request_sineating; surface typed errors as 400."""
-        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
-        from world.magic.services.soul_tether import request_sineating  # noqa: PLC0415
-
-        try:
-            return request_sineating(
-                sinner_sheet=validated_data["actor_sheet_id"],
-                sineater_sheet=validated_data["sineater_sheet_id"],
-                resonance=validated_data["resonance_id"],
-                max_units=validated_data["max_units"],
-                scene=validated_data["scene_id"],
-            )
-        except SoulTetherError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-
-
-class SineatingOfferSerializer(serializers.Serializer):
-    """Read serializer for SineatingOffer payloads returned by the request endpoint."""
-
-    sinner_sheet_id = serializers.SerializerMethodField()
-    sineater_sheet_id = serializers.SerializerMethodField()
-    resonance_id = serializers.SerializerMethodField()
-    max_units_offered = serializers.IntegerField()
-    anima_cost_per_unit = serializers.IntegerField()
-    fatigue_cost_per_unit = serializers.IntegerField()
-    current_hollow = serializers.IntegerField()
-    hollow_max = serializers.IntegerField()
-    sineater_current_strain_stage = serializers.IntegerField()
-
-    def get_sinner_sheet_id(self, obj: object) -> int:
-        """Return sinner_sheet PK."""
-        return obj.sinner_sheet.pk  # type: ignore[union-attr]
-
-    def get_sineater_sheet_id(self, obj: object) -> int:
-        """Return sineater_sheet PK."""
-        return obj.sineater_sheet.pk  # type: ignore[union-attr]
-
-    def get_resonance_id(self, obj: object) -> int:
-        """Return resonance PK."""
-        return obj.resonance.pk  # type: ignore[union-attr]
-
-
-class SineatingRespondSerializer(serializers.Serializer):
-    """Write serializer for the Sineater's response to a Sineating request (Spec B §7).
-
-    The pending offer row is the canonical source of truth for scene, resonance,
-    and units cap — the caller only needs to identify the pair and supply their choice.
-    ``units_accepted=0`` means decline.
-    """
-
-    sinner_sheet_id = serializers.IntegerField()
-    sineater_sheet_id = serializers.IntegerField()
-    units_accepted = serializers.IntegerField(min_value=0)
-
-    def validate_sineater_sheet_id(self, value: int) -> CharacterSheet:
-        """Resolve + ownership-check: caller must be the Sineater."""
-        request = self.context.get("request")
-        return _resolve_account_sheet(value, request)
-
-    def validate_sinner_sheet_id(self, value: int) -> CharacterSheet:
-        """Resolve sinner sheet."""
-        return _resolve_sheet_pk(value)
-
-    def create(self, validated_data: dict) -> object:
-        """Resolve Sineating from the persisted pending offer; surface typed errors as 400.
-
-        Delegates to ``resolve_sineating_from_db`` which looks up the pending
-        offer row, validates co-location, executes resolution, and deletes the row.
-        The serializer no longer re-runs ``request_sineating`` — the pending row
-        is the canonical offer state.
+        Empty unless the requester plays the Sineater: the Sinner is never told how much their
+        Sineater carries for them. At most one entry, the bond's own Sinner.
         """
-        from world.magic.exceptions import SoulTetherError  # noqa: PLC0415
-        from world.magic.services.soul_tether import resolve_sineating_from_db  # noqa: PLC0415
+        from world.magic.services.mire import mire_for_sinner  # noqa: PLC0415
 
-        try:
-            return resolve_sineating_from_db(
-                sinner_sheet=validated_data["sinner_sheet_id"],
-                sineater_sheet=validated_data["sineater_sheet_id"],
-                units_accepted=validated_data["units_accepted"],
-            )
-        except SoulTetherError as exc:
-            raise serializers.ValidationError(exc.user_message) from exc
-
-
-class SineatingResultSerializer(serializers.Serializer):
-    """Read serializer for SineatingResult payloads."""
-
-    units_accepted = serializers.IntegerField()
-    declined = serializers.BooleanField()
-    new_hollow_current = serializers.IntegerField()
-    new_lifetime_helped = serializers.IntegerField()
-    audit_row_id = serializers.SerializerMethodField()
-
-    def get_audit_row_id(self, obj: object) -> int:
-        """Return the audit Sineating row PK."""
-        return obj.audit_row.pk  # type: ignore[union-attr]
+        outgoing, _ = self._resolve_directions(obj)
+        request = self.context.get("request")
+        if outgoing is None or request is None:
+            return []
+        plays_sineater = any(
+            entry.character_sheet_id == outgoing.target_id
+            for entry in request.user.cached_roster_entries
+        )
+        if not plays_sineater:
+            return []
+        carried = mire_for_sinner(outgoing.target, outgoing.source_id)
+        if carried is None:
+            return []
+        return MireForSinnerSerializer([carried], many=True).data
 
 
 class SoulTetherRescueSerializer(serializers.Serializer):
@@ -2665,6 +2560,7 @@ class SineatingPendingOfferSerializer(serializers.ModelSerializer):
     sinner_sheet_id = serializers.IntegerField(read_only=True)
     scene_name = serializers.CharField(source="scene.name", read_only=True)
     resonance_id = serializers.IntegerField(read_only=True)
+    resonance_name = serializers.CharField(source="resonance.name", read_only=True)
 
     class Meta:
         from world.magic.models.soul_tether import (  # noqa: PLC0415
@@ -2679,9 +2575,8 @@ class SineatingPendingOfferSerializer(serializers.ModelSerializer):
             "scene_id",
             "scene_name",
             "resonance_id",
+            "resonance_name",
             "units_offered",
-            "anima_cost_per_unit",
-            "fatigue_cost_per_unit",
             "created_at",
         ]
         read_only_fields = fields

@@ -1,18 +1,22 @@
 """Telnet commands for the Soul Tether bond lifecycle (#1343).
 
-Direct-service seam: CmdTether and CmdSineater call the same six service
-functions as the 8 web APIViews. All validation lives in the service layer;
-these commands only parse telnet text and surface user_message errors.
+Direct-service seam: CmdTether and CmdSineater call the same service functions as the
+web APIViews. All validation lives in the service layer; these commands only parse telnet
+text and surface user_message errors.
+
+Sineating itself is a pose (``pose/entreat``, ``pose/sineat``, #5177), handled by the pose
+command and the Sineating actions, not here.
 
 Convergence:
   Telnet  CmdTether/CmdSineater  →  world.magic.services.soul_tether.*
-  Web     SoulTetherAcceptView / SineatingRequestView / etc.  →  same services
+  Web     SoulTetherAcceptView / etc.  →  same services
 """
 
 from __future__ import annotations
 
 from typing import Any
 
+from actions.definitions.sineating import DeclineSineatingAction
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
 from world.magic.constants import SoulTetherRole as _SoulTetherRoleDB, TargetKind
@@ -20,12 +24,11 @@ from world.magic.exceptions import SoulTetherError
 from world.magic.models import Thread
 from world.magic.models.affinity import Resonance
 from world.magic.models.soul_tether import PendingStageAdvanceOffer, SineatingPendingOffer
+from world.magic.services.mire import mire_carried_by
 from world.magic.services.soul_tether import (
     accept_soul_tether,
     dissolve_soul_tether,
     perform_soul_tether_rescue,
-    request_sineating,
-    resolve_sineating_from_db,
     resolve_stage_advance_prompt_from_db,
 )
 from world.magic.types.soul_tether import SoulTetherRole as _SoulTetherRoleEnum
@@ -33,6 +36,7 @@ from world.relationships.models import CharacterRelationship
 from world.scenes.interaction_services import get_active_scene
 
 _RESONANCE_KWARG = "resonance"
+_SINEATER_RESONANCE_KWARG = "sineater_resonance"
 _SINS_KWARG = "sins"
 
 
@@ -114,12 +118,13 @@ class CmdTether(ArxCommand):
         tether burden <partner> resonance=<name>
         tether bear <partner> resonance=<name>
         tether dissolve [<partner>]
-        tether entreat <sineater> sins=<n>
 
     ``burden`` - you are the Sinner; your partner becomes the Sineater.
     ``bear``    - you are the Sineater; your partner is the Sinner.
     ``dissolve``- sever the bond (specify partner if you have more than one).
-    ``entreat`` - request your Sineater consume sins from your Hollow.
+
+    To ask your Sineater to take on your sins, pose it: ``pose/entreat <sineater>=<units>
+    <text>``.
     """
 
     key = "tether"
@@ -129,7 +134,7 @@ class CmdTether(ArxCommand):
     def func(self) -> None:
         tokens = (self.args or "").split(None, 1)
         if not tokens:
-            self.msg("Usage: tether burden|bear|dissolve|entreat ...")
+            self.msg("Usage: tether burden|bear|dissolve ...")
             return
         subcommand = tokens[0].lower()
         rest = tokens[1] if len(tokens) > 1 else ""
@@ -138,13 +143,10 @@ class CmdTether(ArxCommand):
             "burden": self._do_burden,
             "bear": self._do_bear,
             "dissolve": self._do_dissolve,
-            "entreat": self._do_entreat,
         }
         handler = dispatch.get(subcommand)
         if handler is None:
-            self.msg(
-                f"Unknown tether subcommand '{subcommand}'. Use: burden, bear, dissolve, entreat."
-            )
+            self.msg(f"Unknown tether subcommand '{subcommand}'. Use: burden, bear, dissolve.")
             return
         try:
             handler(rest)
@@ -160,7 +162,7 @@ class CmdTether(ArxCommand):
         self._form_tether(
             args,
             verb="burden",
-            usage="  tether burden <partner> resonance=<name>",
+            usage="  tether burden <partner> resonance=<name> [sineater_resonance=<name>]",
             sinner_role=_SoulTetherRoleEnum.SINNER,
             success_fmt="The burden is bound. A Soul Tether forms between you and {partner}.",
         )
@@ -170,7 +172,7 @@ class CmdTether(ArxCommand):
         self._form_tether(
             args,
             verb="bear",
-            usage="  tether bear <partner> resonance=<name>",
+            usage="  tether bear <partner> resonance=<name> [sineater_resonance=<name>]",
             sinner_role=_SoulTetherRoleEnum.SINEATER,
             success_fmt="You bear the burden. A Soul Tether forms between you and {partner}.",
         )
@@ -205,6 +207,16 @@ class CmdTether(ArxCommand):
             msg = f"No resonance named '{resonance_name}'."
             raise CommandError(msg)
 
+        sineater_resonance = None
+        sineater_resonance_name = kwargs.get(_SINEATER_RESONANCE_KWARG, "").strip()
+        if sineater_resonance_name:
+            sineater_resonance = Resonance.objects.filter(
+                name__iexact=sineater_resonance_name
+            ).first()
+            if sineater_resonance is None:
+                msg = f"No resonance named '{sineater_resonance_name}'."
+                raise CommandError(msg)
+
         try:
             accept_soul_tether(
                 initiator_sheet=caller_sheet,
@@ -212,6 +224,7 @@ class CmdTether(ArxCommand):
                 sinner_role=sinner_role,
                 resonance=resonance,
                 ritual_components=[],
+                sineater_resonance=sineater_resonance,
             )
         except SoulTetherError as exc:
             raise CommandError(exc.user_message) from exc
@@ -263,49 +276,6 @@ class CmdTether(ArxCommand):
 
         self.msg("The tether dissolves. The bond is severed.")
 
-    def _do_entreat(self, args: str) -> None:
-        """Request your Sineater consume sins from your Hollow."""
-        if not args.strip():
-            msg = (
-                "Entreat your Sineater to consume your sins.\n  tether entreat <sineater> sins=<n>"
-            )
-            raise CommandError(msg)
-        sineater_name, rest = _split_first(args)
-        kwargs = _parse_kwargs(rest)
-
-        sins_str = kwargs.get(_SINS_KWARG, "").strip()
-        if not sins_str or not sins_str.isdigit():
-            msg = "Specify how many sins to offer: sins=<n>."
-            raise CommandError(msg)
-        max_units = int(sins_str)
-
-        sineater_char = self.search_or_raise(sineater_name)
-        sineater_sheet = _get_sheet(sineater_char)
-        caller_sheet = _get_sheet(self.caller)
-
-        scene = get_active_scene(self.caller.location)
-        if scene is None:
-            msg = "You are not in an active scene."
-            raise CommandError(msg)
-
-        resonance = _resolve_tether_resonance(caller_sheet, sineater_sheet)
-
-        try:
-            offer = request_sineating(
-                sinner_sheet=caller_sheet,
-                sineater_sheet=sineater_sheet,
-                resonance=resonance,
-                max_units=max_units,
-                scene=scene,
-            )
-        except SoulTetherError as exc:
-            raise CommandError(exc.user_message) from exc
-
-        self.msg(
-            f"You entreat {sineater_char} to consume your sins. "
-            f"{offer.max_units_offered} sins await their answer."
-        )
-
 
 # ---------------------------------------------------------------------------
 # CmdSineater — Sineater-side response commands
@@ -316,15 +286,17 @@ class CmdSineater(ArxCommand):
     """Soul Tether Sineater commands.
 
     Usage:
-        sineater consume <sinner> [sins=<n>]
-        sineater mire <sinner> [sins=<n>]
-        sineater rescue <sinner>
         sineater pleas
+        sineater decline <sinner>
+        sineater brace <sinner> [sins=<n>]
+        sineater rescue <sinner>
 
-    ``consume`` - accept/decline a pending sineat plea (sins=0 to decline).
-    ``mire``    - pledge against a Sinner's stage-advance darkening (sins=0 to decline).
+    ``pleas``   - list the pleas awaiting your answer, and what you carry for each Sinner.
+    ``decline`` - turn a Sinner's plea down.
+    ``brace``   - pledge against a Sinner's stage-advance darkening (sins=0 to decline).
     ``rescue``  - perform the stage-3+ corruption rescue ritual.
-    ``pleas``   - list pending sineat pleas awaiting your response.
+
+    To answer a plea, pose it: ``pose/sineat <sinner>=<units> <text>``.
     """
 
     key = "sineater"
@@ -334,21 +306,21 @@ class CmdSineater(ArxCommand):
     def func(self) -> None:
         tokens = (self.args or "").split(None, 1)
         if not tokens:
-            self.msg("Usage: sineater consume|mire|rescue|pleas ...")
+            self.msg("Usage: sineater pleas|decline|brace|rescue ...")
             return
         subcommand = tokens[0].lower()
         rest = tokens[1] if len(tokens) > 1 else ""
 
         dispatch = {
-            "consume": self._do_consume,
-            "mire": self._do_mire,
+            "decline": self._do_decline,
+            "brace": self._do_brace,
             "rescue": self._do_rescue,
             "pleas": self._do_pleas,
         }
         handler = dispatch.get(subcommand)
         if handler is None:
             self.msg(
-                f"Unknown sineater subcommand '{subcommand}'. Use: consume, mire, rescue, pleas."
+                f"Unknown sineater subcommand '{subcommand}'. Use: pleas, decline, brace, rescue."
             )
             return
         try:
@@ -360,54 +332,26 @@ class CmdSineater(ArxCommand):
     # Subcommand handlers
     # ------------------------------------------------------------------
 
-    def _do_consume(self, args: str) -> None:
-        """Accept or decline a pending sineat plea."""
+    def _do_decline(self, args: str) -> None:
+        """Turn down a pending sineat plea."""
         if not args.strip():
-            msg = "Consume whose sins?\n  sineater consume <sinner> [sins=<n>]  (sins=0 to decline)"
+            msg = "Decline whose plea?\n  sineater decline <sinner>"
             raise CommandError(msg)
-        sinner_name, rest = _split_first(args)
-        kwargs = _parse_kwargs(rest)
+        sinner_char = self.search_or_raise(args.strip())
+        result = DeclineSineatingAction().run(
+            self.caller, partner_sheet_id=_get_sheet(sinner_char).pk
+        )
+        message = result.message or ""
+        if not result.success:
+            raise CommandError(message)
+        self.msg(message)
 
-        sinner_char = self.search_or_raise(sinner_name)
-        sinner_sheet = _get_sheet(sinner_char)
-        caller_sheet = _get_sheet(self.caller)
-
-        sins_str = kwargs.get(_SINS_KWARG, "").strip()
-        if sins_str:
-            if not sins_str.isdigit():
-                msg = "sins= must be a number (sins=0 to decline)."
-                raise CommandError(msg)
-            units_accepted = int(sins_str)
-        else:
-            pending = SineatingPendingOffer.objects.filter(
-                sinner_sheet=sinner_sheet,
-                sineater_sheet=caller_sheet,
-            ).first()
-            if pending is None:
-                msg = f"No pending plea from {sinner_char}."
-                raise CommandError(msg)
-            units_accepted = pending.units_offered
-
-        try:
-            result = resolve_sineating_from_db(
-                sinner_sheet=sinner_sheet,
-                sineater_sheet=caller_sheet,
-                units_accepted=units_accepted,
-            )
-        except SoulTetherError as exc:
-            raise CommandError(exc.user_message) from exc
-
-        if result.declined:
-            self.msg(f"You decline {sinner_char}'s plea.")
-        else:
-            self.msg(f"You consume {result.units_accepted} sins from {sinner_char}.")
-
-    def _do_mire(self, args: str) -> None:
+    def _do_brace(self, args: str) -> None:
         """Respond to a stage-advance bonus offer."""
         if not args.strip():
             msg = (
                 "Pledge against whose darkening?\n"
-                "  sineater mire <sinner> [sins=<n>]  (sins=0 to decline)"
+                "  sineater brace <sinner> [sins=<n>]  (sins=0 to decline)"
             )
             raise CommandError(msg)
         sinner_name, rest = _split_first(args)
@@ -454,7 +398,7 @@ class CmdSineater(ArxCommand):
     def _do_rescue(self, args: str) -> None:
         """Perform the stage-3+ corruption rescue ritual."""
         if not args.strip():
-            msg = "Rescue whom from the Mire?\n  sineater rescue <sinner>"
+            msg = "Rescue whom?\n  sineater rescue <sinner>"
             raise CommandError(msg)
         sinner_char = self.search_or_raise(args.strip())
         sinner_sheet = _get_sheet(sinner_char)
@@ -481,24 +425,31 @@ class CmdSineater(ArxCommand):
         self.msg(
             f"You pull {sinner_char} back from the edge. "
             f"Corruption severity reduced by {result.severity_reduced}. "
-            f"The Mire claims {result.sineater_strain_taken} of your resolve."
+            f"The strain on the tether takes {result.sineater_strain_taken} of your resolve."
         )
 
     def _do_pleas(self, args: str) -> None:
-        """List pending sineat pleas awaiting your response."""
+        """List the pleas awaiting your answer and what you carry for each Sinner."""
         _ = args  # unused; subcommand takes no arguments
         caller_sheet = _get_sheet(self.caller)
         offers = SineatingPendingOffer.objects.filter(
             sineater_sheet=caller_sheet,
         ).select_related("sinner_sheet__character", "resonance")
+        carried = mire_carried_by(caller_sheet)
 
-        if not offers.exists():
-            self.msg("No pending pleas await you.")
-            return
-
-        lines = ["Pending pleas:"]
-        lines.extend(
-            f"  {offer.sinner_sheet} — {offer.units_offered} sins in {offer.resonance.name}."
-            for offer in offers
-        )
-        self.msg("\n".join(lines))
+        lines = []
+        if offers:
+            lines.append("Pending pleas (answer with pose/sineat <name>=<units> <text>):")
+            lines.extend(
+                f"  {offer.sinner_sheet.character.key} - {offer.units_offered} sins in "
+                f"{offer.resonance.name}."
+                for offer in offers
+            )
+        if carried:
+            lines.append("You carry:")
+            lines.extend(
+                f"  {row.amount} of {row.sinner_name}'s corruption in {row.resonance_name} "
+                f"({row.label})."
+                for row in carried
+            )
+        self.msg("\n".join(lines) if lines else "No pleas await you, and you carry nothing.")

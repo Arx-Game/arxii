@@ -89,6 +89,7 @@ from world.magic.models import (
     LevelPowerConfig,
     MagicActivitySkill,
     MagicProgressionMilestone,
+    MireHolding,
     MishapPoolTier,
     Motif,
     MotifResonance,
@@ -122,6 +123,7 @@ from world.magic.models import (
     SignatureMotifBonus,
     SignatureMotifBonusAppliedCondition,
     SignatureMotifBonusDamageProfile,
+    SineatingOutcomeAward,
     SoulfrayConfig,
     SoulTetherConfig,
     StandingCapBand,
@@ -2279,13 +2281,16 @@ class RelationshipBondPullTuningAdmin(admin.ModelAdmin):
 class SoulTetherConfigAdmin(admin.ModelAdmin):
     """Singleton tuning config for the Soul Tether bond mechanic — one row per environment."""
 
-    autocomplete_fields = ["updated_by"]
+    autocomplete_fields = ["updated_by", "sineating_check_type"]
 
     list_display = (
         "pk",
-        "anima_cost_per_unit",
-        "fatigue_cost_per_unit",
+        "sineating_check_type",
+        "sineating_difficulty_level",
+        "corruption_per_unit",
+        "resonance_per_unit",
         "per_scene_cap_hard_max",
+        "resistance_full_at",
         "rescue_strain_stage3",
         "rescue_strain_stage4",
         "rescue_strain_stage5",
@@ -2296,6 +2301,36 @@ class SoulTetherConfigAdmin(admin.ModelAdmin):
         return not SoulTetherConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(SineatingOutcomeAward)
+class SineatingOutcomeAwardAdmin(admin.ModelAdmin):
+    """Share of full resonance a Sineating earns each party, per outcome tier (#5177)."""
+
+    list_display = ("outcome_tier", "earned_share")
+    list_select_related = ("outcome_tier",)
+    ordering = ("outcome_tier__success_level",)
+
+
+@admin.register(MireHolding)
+class MireHoldingAdmin(admin.ModelAdmin):
+    """What each Sineater carries for each Sinner. Written only by the Sineating services."""
+
+    list_display = ("relationship", "resonance", "amount")
+    list_select_related = ("relationship__source", "relationship__target", "resonance")
+    list_filter = ("resonance",)
+    search_fields = (
+        "relationship__source__character__db_key",
+        "relationship__target__character__db_key",
+    )
+    readonly_fields = (
+        "relationship",
+        "resonance",
+        "amount",
+    )
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return False
 
 
@@ -2986,10 +3021,16 @@ class CorruptionConfigAdmin(admin.ModelAdmin):
         "tier_4_coefficient",
         "tier_5_coefficient",
         "hasty_fall_multiplier",
+        "intrusive_thoughts_stage",
+        "compulsion_stage",
+        "sineater_max_stage",
+        "compulsion_condition",
         "updated_at",
     ]
+    list_select_related = ["compulsion_condition"]
     readonly_fields = ["updated_at"]
     raw_id_fields = ["updated_by"]
+    autocomplete_fields = ["compulsion_condition"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""
@@ -3235,7 +3276,6 @@ class DriftConfigAdmin(admin.ModelAdmin):
         "unsettled_tolerance_percent",
         "unsettled_step_percent",
         "creation_points",
-        "mire_allowance_percent",
         "focus_check_type",
         "conflict_condition",
         "updated_at",
@@ -3546,7 +3586,7 @@ class KindlingAdmin(PlayRowAdmin):
 
 @admin.register(Reflection)
 class ReflectionAdmin(PlayRowAdmin):
-    """What a piece of writing reflects on, and Embrace or Disown (#5124)."""
+    """What a piece of writing reflects on, and what the writer does with it (#5124, #5177)."""
 
     list_display = [
         "id",
@@ -3554,12 +3594,13 @@ class ReflectionAdmin(PlayRowAdmin):
         "choice",
         "resonance",
         "grant",
+        "tether",
         "rite",
         "created_at",
     ]
     list_filter = ["choice", "resonance"]
-    list_select_related = ["character_sheet", "resonance", "grant", "rite"]
-    raw_id_fields = ["character_sheet", "grant", "interaction", "journal_entry", "rite"]
+    list_select_related = ["character_sheet", "resonance", "grant", "tether", "rite"]
+    raw_id_fields = ["character_sheet", "grant", "tether", "interaction", "journal_entry", "rite"]
     date_hierarchy = "created_at"
 
 

@@ -158,8 +158,10 @@ class SoulTetherConfigGetterTest(TestCase):
         cfg = get_soul_tether_config()
         self.assertEqual(cfg.pk, 1)
         # Sineating fields
-        self.assertEqual(cfg.anima_cost_per_unit, 2)
-        self.assertEqual(cfg.fatigue_cost_per_unit, 1)
+        self.assertIsNone(cfg.sineating_check_type)
+        self.assertEqual(cfg.sineating_difficulty_level, 0)
+        self.assertEqual(cfg.corruption_per_unit, 60)
+        self.assertEqual(cfg.resonance_per_unit, 5)
         self.assertEqual(cfg.per_scene_cap_hard_max, 20)
         self.assertEqual(cfg.per_scene_cap_base, 5)
         # Rescue strain thresholds

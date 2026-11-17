@@ -57,6 +57,7 @@ function makeTetherDetail(overrides: Partial<SoulTetherDetail> = {}): SoulTether
     sineater_lifetime_helped: 42,
     sinner_corruption_stage: 1,
     sineater_strain_stage: 0,
+    mire: [],
     ...overrides,
   };
 }
@@ -330,5 +331,52 @@ describe('SoulTetherStatusPanel', () => {
     render(<SoulTetherStatusPanel relationshipIds={[1]} />, { wrapper: createWrapper() });
 
     expect(screen.getByText(/could not be read/i)).toBeInTheDocument();
+  });
+
+  describe('the Mire a Sineater carries (#5177)', () => {
+    const mire: SoulTetherDetail['mire'] = [
+      {
+        sinner_sheet_id: 10,
+        sinner_name: 'Ysmay',
+        rows: [
+          { resonance_name: 'Ruin', amount: 108, label: 'Intrusive Thoughts: Ruin' },
+          { resonance_name: 'Hunger', amount: 40, label: 'Hunger' },
+        ],
+        total: 148,
+      },
+    ];
+
+    it('shows the Sineater each row with its amount and the total carried for the Sinner', () => {
+      const detail = makeTetherDetail({ relationship_id: 8, mire });
+      vi.mocked(magicQueries.useSoulTetherDetail).mockReturnValue(
+        makeQueryResult({ data: detail, isSuccess: true, status: 'success' })
+      );
+
+      render(<SoulTetherStatusPanel relationshipIds={[8]} callerSheetId={20} />, {
+        wrapper: createWrapper(),
+      });
+
+      const carried = screen.getByTestId('tether-mire-10');
+      expect(carried).toHaveTextContent('The Mire you carry for Ysmay');
+      expect(carried).toHaveTextContent('148');
+      expect(carried).toHaveTextContent('Intrusive Thoughts: Ruin');
+      expect(carried).toHaveTextContent('108');
+      expect(carried).toHaveTextContent('Hunger');
+      expect(carried).toHaveTextContent('40');
+    });
+
+    it('shows the Sinner nothing, because the payload carries no Mire for them', () => {
+      const detail = makeTetherDetail({ relationship_id: 9, mire: [] });
+      vi.mocked(magicQueries.useSoulTetherDetail).mockReturnValue(
+        makeQueryResult({ data: detail, isSuccess: true, status: 'success' })
+      );
+
+      render(<SoulTetherStatusPanel relationshipIds={[9]} callerSheetId={10} />, {
+        wrapper: createWrapper(),
+      });
+
+      expect(screen.getByText('Sinner')).toBeInTheDocument();
+      expect(screen.queryByText(/The Mire you carry/)).not.toBeInTheDocument();
+    });
   });
 });

@@ -119,7 +119,6 @@ def convert_resonance_amount(  # noqa: PLR0913
     amount: int,
     multiplier: Decimal,
     gain_source: str,
-    mire_amount: int = 0,
 ) -> tuple[int, int]:
     """Convert ``amount`` of one resonance's lifetime into another resonance (#5123).
 
@@ -127,10 +126,8 @@ def convert_resonance_amount(  # noqa: PLR0913
     aura follows (``recompute_aura``); the source's spendable balance moves only as far as
     it exists (``min(amount, balance)``), and only that part is granted to the target at the
     pair rate (a multiplier that floors the grant to 0 still grants 1). Resonance already
-    spent is still converted: the lifetime moves with no balance behind it. ``mire_amount``
-    is the part of ``amount`` taken from the source's Mire lifetime (Mire excess first); the
-    source's ``mire_lifetime`` shrinks by it and is clamped to the lifetime left. The target
-    receives the lifetime as its own. Returns ``(granted_balance, granted_lifetime)``.
+    spent is still converted: the lifetime moves with no balance behind it. The target
+    receives the lifetime. Returns ``(granted_balance, granted_lifetime)``.
 
     Raises ValueError when ``amount`` is not positive, exceeds the source's lifetime, or
     the character holds no row for the source resonance.
@@ -150,11 +147,9 @@ def convert_resonance_amount(  # noqa: PLR0913
 
     balance_moved = min(amount, cr.balance)
     granted_balance = max(1, int(Decimal(balance_moved) * multiplier)) if balance_moved else 0
-    mire_moved = min(mire_amount, amount, cr.mire_lifetime)
     cr.balance -= balance_moved
     cr.lifetime_earned -= amount
-    cr.mire_lifetime = min(cr.mire_lifetime - mire_moved, cr.lifetime_earned)
-    cr.save(update_fields=["balance", "lifetime_earned", "mire_lifetime"])
+    cr.save(update_fields=["balance", "lifetime_earned"])
 
     if granted_balance > 0:
         grant_resonance(character_sheet, target_resonance, granted_balance, source=gain_source)
@@ -198,8 +193,7 @@ def _convert_full(
 
     cr.balance = 0
     cr.lifetime_earned = 0
-    cr.mire_lifetime = 0
-    cr.save(update_fields=["balance", "lifetime_earned", "mire_lifetime"])
+    cr.save(update_fields=["balance", "lifetime_earned"])
 
     target_cr, created = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,

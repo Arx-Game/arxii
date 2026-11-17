@@ -16,7 +16,6 @@ from rest_framework.response import Response
 from world.character_sheets.models import CharacterSheet
 from world.magic.serializers_reflection import ReflectionOptionSerializer
 from world.magic.services.reflection import reflectable_for
-from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
 
@@ -46,10 +45,10 @@ class ReflectableViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = ReflectionOptionSerializer
 
     def get_queryset(self):
-        own = RosterEntry.objects.for_account(self.request.user).values_list(
-            "character_sheet_id", flat=True
-        )
-        return CharacterSheet.objects.filter(pk__in=list(own))
+        # Every character the requester plays, a lent NPC included (#5177): a GM settling
+        # the Mire for a borrowed NPC Sineater reflects through the same row.
+        played = [entry.character_sheet_id for entry in self.request.user.cached_roster_entries]
+        return CharacterSheet.objects.filter(pk__in=played)
 
     def list(self, request, *args, **kwargs):
         sheet = self.filter_queryset(self.get_queryset()).first()

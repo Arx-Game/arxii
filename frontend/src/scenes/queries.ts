@@ -10,6 +10,8 @@ import type {
   SceneScenarioPayload,
   SceneStakesSummary,
 } from './types';
+import type { ReflectionFields } from '@/magic/reflection';
+import type { SineatingFields } from '@/magic/sineating';
 import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
 
 // ---------------------------------------------------------------------------
@@ -237,7 +239,7 @@ export async function fetchPendingUnlinkedActions(
   return data.results;
 }
 
-export interface SubmitPoseBody {
+export interface SubmitPoseBody extends ReflectionFields, SineatingFields {
   persona_id: number;
   scene_id?: number;
   content: string;
@@ -268,10 +270,6 @@ export interface SubmitPoseBody {
    * straight off the reader can be forwarded here verbatim.
    */
   reply_to?: { id: number; timestamp: string };
-  /** What the pose reflects on, and Embrace or Disown (#5124). Omit for no reflection. */
-  reflect_choice?: 'EMBRACE' | 'DISOWN';
-  reflect_grant_id?: number;
-  reflect_resonance_id?: number;
 }
 
 /**
@@ -291,6 +289,10 @@ export interface SubmitPoseResult {
   reflection_line?: string;
   /** False when the pose posted but its reflection was not recorded; the line says why. */
   reflection_recorded?: boolean;
+  /** Told to the writer alone when the pose carried a Sineating: what the plea or ritual did (#5177). */
+  sineating_line?: string;
+  /** False when the pose posted but the Sineating was not recorded; the line says why. */
+  sineating_recorded?: boolean;
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult> {

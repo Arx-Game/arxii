@@ -25,6 +25,20 @@ _CENT = Decimal("0.01")
 _FULL = Decimal("100.00")
 
 
+def ensure_aura(character_sheet: CharacterSheet) -> CharacterAura:
+    """The sheet's aura, creating an empty one (no shares) when it has none.
+
+    Only character creation writes an aura, so a character minted another way (a story
+    NPC a GM runs) has none. An empty aura holds no affinity shares, which no gate reads
+    as a primary affinity, and it gains shares through the first resonance grant.
+    """
+    aura = character_sheet.aura_or_none
+    if aura is not None:
+        return aura
+    aura, _ = CharacterAura.objects.get_or_create(character=character_sheet)
+    return aura
+
+
 def aura_percentages(aura: CharacterAura) -> AuraPercentages:
     """Snapshot of an aura's stored shares, ordered by affinity pk."""
     shares = sorted(aura.cached_shares, key=lambda share: share.affinity_id)

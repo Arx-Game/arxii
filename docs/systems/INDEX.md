@@ -40,7 +40,7 @@
   the controls. Details: [Combat Defense Composition](COMBAT_DEFENSES.md#authored-defense-piercing-4575).
 
 - **Magical skills (#4450, ADR-4450):** every magical roll adds skills staff choose in admin;
-  no skill is named in code. `MagicActivity` (18 kinds of roll) plus `MagicActivitySkill`
+  no skill is named in code. `MagicActivity` (23 kinds of roll) plus `MagicActivitySkill`
   (`activity`, `skill`, `weight`) map a roll to skills; `TechniqueStyle.skill` (the casting
   style's skill: a Gift's own style, else the caster's Path style, via
   `world/magic/services/casting_style.py`, #5002) and `Technique.skill` (override) set a cast's
@@ -94,9 +94,11 @@
   with one offering and one roll. `DriftCorrectionConfig` (singleton: `rite`, `check_type`,
   `check_difficulty_level`, `cap_percent`, `disown_deed_percent`) and `DriftCorrectionOutcomeShare` (share of
   each reflection carried out per `CheckOutcome`) feed it; it grows embraced deeds (`GainSource.EMBRACED_DEED`),
-  converts disowned resonance (Mire excess first) through `convert_resonance_amount`
+  converts disowned resonance through `convert_resonance_amount`
   (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the `AffinityInteraction` pair rate,
-  and accepts the aura's change (`accept_aura_change(sheet, fraction=)`, #5123, now only the rite's step).
+  accepts the aura's change (`accept_aura_change(sheet, fraction=)`, #5123, now only the rite's step), and
+  settles the Mire a Sineater carries (`Reflection.tether`, Absolve / Condemn / Succumb,
+  `services/mire_settling.py`, #5177).
   Embracing a deed grows `embraced_amount` (the deed's amount x the share x the direction rate for the
   main-to-deed pair, #4751). It is the only rite for a changing aura: the Rite of Atonement was removed in
   #4751 (ADR-4751), and "atonement" now only names a reflection that turns away from something.
@@ -182,8 +184,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
   work in the worn self's affinity. See magic.md.
 - **Unsettled and Resonance Conflict (#4732, #5123):** `DriftConfig` (singleton, `get_drift_config()`),
-  `CharacterAuraShare.settled_percent`, `CharacterResonance.mire_lifetime`, `drift_for(sheet)` (the
-  unsettled reading on the true aura; the range before Unsettled and step are per main affinity,
+  `CharacterAuraShare.settled_percent`, `drift_for(sheet)` (the
+  unsettled reading on the true aura, a `DriftReading` of `shares`, `settled_shares` and `excess_points`; the range before Unsettled and step are per main affinity,
   `Affinity.unsettled_tolerance_percent` / `unsettled_step_percent` through `_unsettled_numbers`, #4751),
   and `check_resonance_focus` (once per cast, inside
   `use_technique`'s `_complete_technique_cast`, so every cast path rolls it); the conflict
@@ -203,9 +205,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   `intensity-tiers-never-lower-control`. See magic.md.
 - **Models:**
   - **Identity/aura/techniques:** `Affinity`, `Resonance`, `CharacterAura`,
-    `CharacterResonance` (reshaped Spec A §2.2 — `balance` + `lifetime_earned`, plus `mire_lifetime`,
-    the Sineater's Mire part of lifetime, #5123; `CharacterAuraShare.settled_percent` is who the
-    character is),
+    `CharacterResonance` (reshaped Spec A §2.2: `balance` + `lifetime_earned`, plus
+    `corruption_current` / `corruption_lifetime` and `lifetime_helped`; `mire_lifetime`, #5123, was
+    removed in #5177; `CharacterAuraShare.settled_percent` is who the character is),
     `Gift` (self-FK `parent`, PROTECT — **gift lineage** (#2891, ADR-0192): holding a
     gift reaches its ancestors' techniques on ONE thread and ONE cap, so shared species
     material lives once in an umbrella gift; `Gift.lineage` / `lineage_ids` /
@@ -329,7 +331,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     independent of `items.QualityTier` — `name`, `tier_level`, `description`),
     `ThreadWeavingUnlock`,
     `CharacterThreadWeavingUnlock`, `ThreadWeavingTeachingOffer`,
-    `SoulTetherConfig` (singleton pk=1, rescue + sineating tuning knobs),
+    `SoulTetherConfig` (singleton pk=1: Sineating check and sizes, settling the Mire, resistance, rescue
+    tuning knobs), `SineatingOutcomeAward` (share of full resonance per outcome tier, #5177),
+    `MireHolding` (corruption a Sineater carries per Sinner and resonance, #5177; the jackpot and fall counters are `CharacterRelationship.mire_purified_since_payout` / `mire_succumbed_since_fall`),
+    `ImpulseShown` (an impulse a character was told of in a scene, #5177),
     `SoulfrayReveal` (the #924 outcome wheel for a dramatic Soulfray stage draw, #4089 -
     `title`, `stage_label`, `faces` built from the drawn tier's UNFILTERED effective
     consequences, `selected`),
@@ -750,7 +755,27 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - Soul Tether config: `get_soul_tether_config() -> SoulTetherConfig` (lazy pk=1 singleton)
   - Soul Tether events: `SOUL_TETHER_DISSOLVED` emitted by `dissolve_soul_tether`
   - Soul Tether strain: `CharacterSheet.get_tether_strain_stage() -> int` (current Sineater
-    Strain stage for the active resonance; used in sineating offer payloads)
+    Strain stage; one shared condition per Sineater; used in the Sineating plea's offer payload)
+  - **Sineating and the Mire (#5177, ADR-5177):** Sineating is a ritual with a roll, asked for by the
+    Sinner's pose and performed by the Sineater's pose: `services/sineating.py` (`request_sineating`,
+    `perform_sineating`, `decline_sineating`, `sineating_lines`, `sineating_is_ready`,
+    `sineating_options_for`), actions `entreat_sineating` / `perform_sineating` / `decline_sineating`
+    (`actions/definitions/sineating.py`), pose fields `sineating_role` / `sineating_partner_id` /
+    `sineating_units`, telnet `pose/entreat` and `pose/sineat`, `sineater decline|pleas|brace|rescue`,
+    REST `GET /api/magic/sineating-options/` and `POST /api/magic/soul-tether/sineating/decline/`, React
+    `SineatingRow`. The Mire is corruption a Sineater carries for their Sinners (`services/mire.py`:
+    `take_on_corruption`, `release_mire`, `corruption_that_can_move`, `add_to_largest_holding`,
+    `mire_carried_by`; `MireHolding`); it is settled through the settling rite by Absolve, Condemn or Succumb
+    (`services/mire_settling.py`; `Reflection.tether`, `ReflectionTargetKind.BURDEN`, telnet
+    `mire:<Sinner>`), and the fall pays every Sinner. Forming a tether also weaves the Sineater's own thread
+    (`ensure_sineater_thread`, `default_sineater_resonance`); presence is by character
+    (`shared_active_scene`, `sineater_has_fallen`, `SineaterFallenError`); the Soul Tether detail is read
+    only by the bond's two parties and staff.
+  - **Impulses (#5177):** `services/impulses.py` (`corruption_display_name`, `impulses_now`,
+    `refresh_impulses`, `earned_in_scene`, `give_in_to_compulsion`), `CorruptionConfig` stage fields and
+    `compulsion_condition`, `Resonance.impulse_text`, `ImpulseShown`, `CorruptionSource.INDULGED`;
+    the `impulses` list on `GET /api/magic/kindled-resonances/` and telnet `resonances`; React
+    `KindledResonancesPanel`.
   - VITAL_BONUS routing: `recompute_max_health_with_threads(character_sheet) -> int`,
     `apply_damage_reduction_from_threads(character, damage_amount) -> int`.
     `recompute_max_health_with_threads` calls `world.vitals.services.recompute_max_health`,

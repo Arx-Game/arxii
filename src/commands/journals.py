@@ -64,6 +64,8 @@ class CmdJournal(ArxCommand):
         journal write title=<text> body=<text> [public] [tags=a,b,c] [about=<id>]
         journal/reflect <deed number or resonance>=<embrace|disown> title=<text> body=<text>
             [public] [tags=a,b,c] [about=<id>]
+        journal/reflect mire:<Sinner>=<absolve|condemn|succumb> title=<text> body=<text>
+            [public] [tags=a,b,c] [about=<id>]
         journal respond <id|#> type=praise|retort|condemn title=<text> body=<text>
         journal edit <id|#> [title=<text>] [body=<text>] [about=<id>|about=none]
         journal disposition sheet=<reveal|seal>
@@ -72,7 +74,8 @@ class CmdJournal(ArxCommand):
 
     ``journal/reflect`` writes an entry like ``write`` and records that it reflects on a deed
     (the number ``reflect`` lists) or on the resonance unsettling you (its name), embracing or
-    disowning it. Only you see the reflection.
+    disowning it, or on the Mire you carry for a Sinner (``mire:`` and their name), absolving,
+    condemning or succumbing to it. Only you see the reflection.
 
     ``title`` / ``body`` are free text - their values run to the next
     ``key=`` token. ``public`` is a bare flag (entries are private by default).
@@ -128,7 +131,7 @@ class CmdJournal(ArxCommand):
             self._actor_sheet(self.caller),
             rest,
             usage=(
-                "Usage: journal/reflect <deed or resonance>=<embrace|disown> "
+                "Usage: journal/reflect <deed, resonance or mire:Sinner>=<choice> "
                 "title=<text> body=<text> [public] [tags=a,b,c] [about=<id>]"
             ),
         )

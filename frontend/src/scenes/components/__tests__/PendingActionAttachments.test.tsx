@@ -67,7 +67,7 @@ describe('PendingActionAttachments', () => {
 
   it('renders one chip per action when query returns multiple items', () => {
     vi.mocked(hooks.usePendingUnlinkedActions).mockReturnValue(
-      makeHookResult([makeAction(1, 'Tidal Fury vs Mire Knight'), makeAction(2, 'Shadow Step')])
+      makeHookResult([makeAction(1, 'Tidal Fury vs Bog Knight'), makeAction(2, 'Shadow Step')])
     );
 
     const Wrapper = createWrapper();
@@ -77,7 +77,7 @@ describe('PendingActionAttachments', () => {
       </Wrapper>
     );
 
-    expect(screen.getByText(/Tidal Fury vs Mire Knight/)).toBeInTheDocument();
+    expect(screen.getByText(/Tidal Fury vs Bog Knight/)).toBeInTheDocument();
     expect(screen.getByText(/Shadow Step/)).toBeInTheDocument();
   });
 

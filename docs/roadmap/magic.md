@@ -980,7 +980,7 @@ caster's personal Anima Check.
 - Check engine: `ExtraTraitTerm` and a keyword-only `extra_traits` on the roll functions
   (`docs/systems/checks.md`). Terms score like extra check type rows, develop once per trait per
   roll, and join the roll's involved traits.
-- Models: `MagicActivity` (18 kinds of roll), `MagicActivitySkill`, `Path.technique_skill`,
+- Models: `MagicActivity` (23 kinds of roll), `MagicActivitySkill`, `Path.technique_skill`,
   `Gift.technique_skill` (Minor Gifts only, DB constraint), `Technique.skill`,
   `ConditionCategory.adds_loss_of_self_skills`. Schema-only migrations, no placeholder rows.
 - `world/magic/services/magic_skills.py`: the technique skill order (technique override, then the
@@ -1189,8 +1189,8 @@ width (`Affinity.unsettled_tolerance_percent`, `unsettled_step_percent`; `_unset
 can be strict; embracing a deed pays at the direction rate for the pair (`embraced_amount`, preview
 included); a disown across an unset conversion pair names the pair, and the Required content row
 `affinity-conversion-pairs` lists the unset pairs; the canonical Primal corruption coefficient is 0, so only
-Abyssal casts corrupt. Corruption now falls only by daily decay and a Sineater's rescue (stage 1 and 2
-characters have only decay until the Sineating work lands). Staff still author Celestial's range and set
+Abyssal casts corrupt. Corruption falls by daily decay and a Sineater's rescue, and, since #5177 (below),
+by Sineating, which takes it on at any stage. Staff still author Celestial's range and set
 Primal's coefficient to 0 on the production Affinity pages.
 
 Drift thresholds (slice 3, #4732) were built after this slice and replaced by the unsettled reading
@@ -1271,18 +1271,19 @@ A mixed character is the normal case. Built, as one PR:
   every held resonance's perks per thread, and the pull dialog's Pay with list and Inspect perks
   show them. Telnet `pull=<thread>:<resonance>`, `imbue ... resonance=`.
 - **Unsettled replaces drift.** `CharacterAuraShare.settled_percent` is who the character is
-  (set at creation from the weighted picks, nudged by the Glimpse, moved by accepting);
-  `CharacterResonance.mire_lifetime` is a Sineater's Mire share with its own allowance. A
+  (set at creation from the weighted picks, nudged by the Glimpse, moved by accepting). (This
+  work also gave a Sineater a Mire share with its own allowance, `CharacterResonance.mire_lifetime`;
+  #5177 removed it, because the Mire is now carried corruption.) A
   non-main affinity grown past its settled share plus the range before Unsettled (per main affinity since #4751) makes the character
   unsettled; a pull outside the main affinity calls for no check of its own. Exit (since #5124): the
-  rite of settling over what the character reflected on, which atones (lifetime-based, Mire first) or
+  rite of settling over what the character reflected on, which atones (lifetime-based) or
   accepts the aura's change by the roll's share. A mixed character
   casts at the full alignment bonus in every affinity they are settled in.
 - **Creation.** The Gift stage's resonance step spreads `DriftConfig.creation_points` across
   several resonances with a live halo in words; `provision_magic` seeds lifetime (a
   `CHARACTER_CREATION` ledger row) so a new character reads exactly settled. The 80/20
   `starting_aura_shares` is gone.
-- **Surfaces.** The sheet's `AuraHalo` (settled line, Mire share apart, Unsettled status) and its
+- **Surfaces.** The sheet's `AuraHalo` (settled line and Unsettled status; its Mire band went in #5177) and its
   reflections card with `SettleAuraDialog` (#5124), telnet `aura` / `aura settle <offering>`.
 - **Removed:** `DriftConfig.threshold_percent`, `threshold_floor`, `severity_step`,
   `off_aura_pull_steps`, `AffinityInteraction.conflict_weight`, `provision_additional_gift_thread`,
@@ -1312,7 +1313,8 @@ Built as one PR (spec in the issue body; #5129's settling rite folded in):
   roll; an outcome with no act aimed at it earns nothing; a mission option shows which kindled
   resonance it feeds. Taking an action never asks how the character feels.
 - **Reflecting and settling.** A pose or journal entry carries an optional "Reflecting on" row
-  (a deed or the unsettling resonance, then Embrace or Disown). One rite of settling carries every
+  (a deed or the unsettling resonance, then Embrace or Disown; since #5177 also the Mire a Sineater
+  carries, then Absolve, Condemn or Succumb). One rite of settling carries every
   waiting reflection out with one offering and one roll; the chance to atone no longer lapses with
   the scene; the click-to-accept, atone and decline paths are gone.
 - **Surfaces.** Admin (situations on the Resonance and Affinity pages, one Kindling config page),
@@ -1321,6 +1323,41 @@ Built as one PR (spec in the issue body; #5129's settling rite folded in):
 - **Not built (by design).** No GM is needed for kindling; a Rally or GM kindling never earns by
   itself; nothing is earned for an outcome alone. Staff must author the situations: until they do,
   nothing is kindled.
+
+## Sineating as a ritual, the Mire as carried corruption, and succumbing (#5177, ADR-5177, BUILT 2026-11-17)
+
+The second of four pieces agreed in the design session for #4751 (the first is #5176; staff sizes are
+listed in #5179; earning resonance through poses and the Anima ritual is #5181). Built as one PR:
+
+- **Sineating is a ritual with a roll.** The Sinner's pose attaches a plea; the Sineater's pose performs the
+  ritual, chooses how many offered units to take on, and rolls `SoulTetherConfig.sineating_check_type`. The
+  chosen units move corruption from the Sinner onto the Sineater whatever the roll, and refill the Hollow;
+  the roll's `SineatingOutcomeAward` scales the resonance each party earns, each in the resonance of their
+  own half of the bond. It costs no anima and no fatigue. Telnet `pose/entreat` and `pose/sineat`, the web
+  pose composer's Sineating row, actions `entreat_sineating` / `perform_sineating` / `decline_sineating`.
+- **The Sineater's own thread** is woven when the tether forms, and presence is by character, so a GM can
+  run an NPC Sineater. A Sineater whose aura is predominantly Abyssal has fallen and serves no one.
+  The resistance a Sineater earns now applies to every Sineater with a tether (it had required a thread of their own in the accruing resonance that nothing prompted them to weave), and its divisor is
+  `SoulTetherConfig.resistance_full_at`.
+- **The Mire is corruption.** What a Sineater takes on is held on their own corruption, partitioned per
+  Sinner by `MireHolding`, softened by resistance, and stopped at the Compulsion stage. It replaces
+  #5123's Mire share of the aura (`mire_lifetime`, `mire_allowance_percent`, the drift reading's Mire
+  fields, the halo's Mire band), which had no effect until it passed 30% of the aura.
+- **Settling the Mire** is a third target of the reflection and the settling rite: Absolve and Condemn
+  clear it and reward the Sineater and move the tie; Succumb turns it into the Sinner's resonance in the
+  Sineater's aura, pays the Sinner from a per-tether jackpot, and the Sineater can atone by reflecting on
+  the succumbing as a deed; the fall pays every Sinner when the Sineater's aura turns Abyssal.
+- **Impulses.** Corruption a character carries shows as Intrusive Thoughts and then Compulsion (the
+  Sinner's own corruption too); the Compulsion is a scene-scoped condition that penalizes rolls until the
+  character earns the resonance there, which adds a little more corruption.
+- **Also:** the Soul Tether detail is read only by the bond's two parties and staff; the Tether Strain
+  command is `sineater brace`; Required content lists an unset Sineating check, a missing outcome award and
+  an unset or unfinished Compulsion condition. Journeys: `integration_tests/test_sineating_journeys.py`,
+  `test_mire_settling_journeys.py`, `test_impulse_journeys.py`.
+- **Not built (by design).** Rules for one NPC shared by several GMs; magical scars (the conditions are
+  built so scars can reuse them); removing `CorruptionSource.SPEC_B_REDIRECT` and `redirect_origin`, a
+  decision for the maintainer. Staff must author the Sineating check, its outcome tiers' shares (seeded),
+  the Compulsion condition, each resonance's impulse words, and tune the sizes (#5179).
 
 ## Audere earlier with control; Soulfray's anima-0 stage (#4740, slice 4 of #4727, BUILT 2026-10-27)
 

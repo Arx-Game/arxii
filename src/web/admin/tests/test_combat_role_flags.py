@@ -299,8 +299,9 @@ class RegistryTest(CombatRoleFlagsCase):
 #: styles (the style probe is one query, #4932). It does grow with the combo map's source
 #: list: the two condition probes read each setter source once, so a new SetterSource in
 #: web/admin/combo_map/sources.py adds 2 (the pact offer, #4341), and so does a new
-#: ReaderSource (the three kindling fields added 6, #5124).
-FLAG_QUERIES = 125
+#: ReaderSource (the three kindling fields added 6, #5124), and the corruption config's
+#: compulsion condition adds 2 (#5177).
+FLAG_QUERIES = 127
 
 
 class QueryCountTest(CombatRoleFlagsCase):

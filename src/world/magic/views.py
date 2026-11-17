@@ -170,10 +170,6 @@ from world.magic.serializers import (
     SettlingRiteReadingSerializer,
     SettlingRiteReadQuerySerializer,
     SettlingRiteResultSerializer,
-    SineatingOfferSerializer,
-    SineatingRequestSerializer,
-    SineatingRespondSerializer,
-    SineatingResultSerializer,
     SoulTetherDetailSerializer,
     SoulTetherRescueSerializer,
     StageAdvanceBonusResultSerializer,
@@ -2005,7 +2001,9 @@ class SoulTetherDetailView(APIView):
     GET /api/magic/soul-tether/{relationship_id}/
 
     Returns Hollow current/max, Thread levels, Sineater stats, and roles.
-    Either party may retrieve; relationship_id may be either directional row.
+    Either party may retrieve; relationship_id may be either directional row. Anyone who plays
+    neither character of the bond, and is not staff, gets a 404 (#5177): the numbers are the
+    bond's own. An NPC a GM runs counts as played.
     """
 
     permission_classes = [IsAuthenticated]
@@ -2016,68 +2014,11 @@ class SoulTetherDetailView(APIView):
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
         rel = get_object_or_404(CharacterRelationship, pk=relationship_id, is_soul_tether=True)
+        played = {entry.character_sheet_id for entry in request.user.cached_roster_entries}
+        if not request.user.is_staff and not {rel.source_id, rel.target_id} & played:
+            raise Http404
         serializer = SoulTetherDetailSerializer(rel, context={"request": request})
         return Response(serializer.data)
-
-
-class SineatingRequestView(APIView):
-    """Sinner-initiated Sineating request (Spec B §7).
-
-    POST /api/magic/soul-tether/sineating/request/
-
-    Accepts ``{actor_sheet_id, sineater_sheet_id, resonance_id, max_units, scene_id}``.
-    Returns a ``SineatingOffer`` payload for the Sineater to accept or decline via
-    the respond endpoint.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        request=SineatingRequestSerializer,
-        responses={200: SineatingOfferSerializer},
-    )
-    def post(self, request: Request) -> Response:
-        """Validate and dispatch request_sineating; return offer payload."""
-        serializer = SineatingRequestSerializer(
-            data=request.data,
-            context={"request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-        offer = serializer.save()
-        return Response(
-            SineatingOfferSerializer(offer).data,
-            status=status.HTTP_200_OK,
-        )
-
-
-class SineatingRespondView(APIView):
-    """Sineater accepts or declines a Sineating offer (Spec B §7).
-
-    POST /api/magic/soul-tether/sineating/respond/
-
-    Accepts ``{sinner_sheet_id, sineater_sheet_id, resonance_id, max_units,
-    scene_id, units_accepted}``. Re-validates the offer server-side (Option B
-    synchronous path) then calls ``resolve_sineating``. Returns the result.
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        request=SineatingRespondSerializer,
-        responses={200: SineatingResultSerializer},
-    )
-    def post(self, request: Request) -> Response:
-        """Re-validate offer + dispatch resolve_sineating; return result payload."""
-        serializer = SineatingRespondSerializer(
-            data=request.data,
-            context={"request": request},
-        )
-        serializer.is_valid(raise_exception=True)
-        result = serializer.save()
-        return Response(
-            SineatingResultSerializer(result).data,
-            status=status.HTTP_200_OK,
-        )
 
 
 class SoulTetherRescueView(APIView):
@@ -2153,21 +2094,13 @@ class SineatingPendingOfferViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
 
-        user = self.request.user
-        # Resolve the authenticated user to their character sheets via the
-        # Roster tenure chain (CharacterSheet → RosterEntry → RosterTenure
-        # → PlayerData → AccountDB). Filter to active tenures only
-        # (end_date__isnull=True) to avoid surfacing stale character
-        # associations, and use distinct() to prevent duplicates when a sheet
-        # has multiple past tenures for the same account.
+        # The characters the requester plays now, a lent NPC included (the loan-aware rule the
+        # Sineating options and decline surfaces use), never a bare tenure join.
+        played = [entry.character_sheet_id for entry in self.request.user.cached_roster_entries]
         return (
-            SineatingPendingOffer.objects.filter(
-                sineater_sheet__roster_entry__tenures__player_data__account=user,
-                sineater_sheet__roster_entry__tenures__end_date__isnull=True,
-            )
+            SineatingPendingOffer.objects.filter(sineater_sheet_id__in=played)
             .select_related("sinner_sheet", "scene", "resonance")
             .order_by("-created_at")
-            .distinct()
         )
 
 
@@ -2194,15 +2127,11 @@ class PendingStageAdvanceOfferViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
 
-        user = self.request.user
+        played = [entry.character_sheet_id for entry in self.request.user.cached_roster_entries]
         return (
-            PendingStageAdvanceOffer.objects.filter(
-                sineater_sheet__roster_entry__tenures__player_data__account=user,
-                sineater_sheet__roster_entry__tenures__end_date__isnull=True,
-            )
+            PendingStageAdvanceOffer.objects.filter(sineater_sheet_id__in=played)
             .select_related("sinner_sheet", "scene", "resonance")
             .order_by("-created_at")
-            .distinct()
         )
 
 

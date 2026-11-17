@@ -20,8 +20,6 @@ TypeScript types for the magic module.
 - `PaginatedTeachingOfferList` — `components['schemas']['PaginatedThreadWeavingTeachingOfferList']`
 - `TargetKind` — `components['schemas']['TargetKindEnum']`
 - `CharacterResonance` — `components['schemas']['CharacterResonance']` — identity anchor + currency bucket
-- `SineatingPendingOffer` — `components['schemas']['SineatingPendingOffer']` — Sineater inbox row
-- `PaginatedSineatingPendingOfferList`
 - `PendingStageAdvanceOffer` — `components['schemas']['PendingStageAdvanceOffer']` — stage-advance inbox row
 - `PaginatedPendingStageAdvanceOfferList`
 - `CrossXPLockRequest` — `{ boundary_level: number }` (generated via `@extend_schema`)
@@ -61,10 +59,7 @@ emits real components; re-exported instead of hand-rolled so they can't drift):
 - `SoulTetherDetail` — `components['schemas']['SoulTetherDetail']` — response for
   `GET /api/magic/soul-tether/{relationship_id}/`
 - `DissolveRequest` — `components['schemas']['DissolveRequest']`
-- `SineatingRequest` — `components['schemas']['SineatingRequestRequest']` (request body → "Request" suffix)
-- `SineatingOffer` — `components['schemas']['SineatingOffer']`
-- `SineatingRespondRequest` — `components['schemas']['SineatingRespondRequest']` (units_accepted=0 declines)
-- `SineatingResult` — `components['schemas']['SineatingResult']`
+- `SineatingDeclineRequest` — `components['schemas']['SineatingDeclineRequest']` (`{ actor_sheet_id, sinner_sheet_id }`)
 - `RescueRequest` — `components['schemas']['SoulTetherRescueRequest']`
 - `RescueOutcome` — `components['schemas']['RescueOutcome']`
 - `StageAdvanceRespondRequest` — `components['schemas']['StageAdvanceRespondRequest']` (units_committed=0 declines)
@@ -113,9 +108,11 @@ REST API client for all soul-tether, thread, character-resonance, thread-spendin
 **Reads:**
 
 - `getSoulTetherDetail(relationshipId)` — GET `/api/magic/soul-tether/{relationship_id}/`
-- `getPendingSineatingOffers()` — GET `/api/magic/soul-tether/sineating/pending/`
+- `getSineatingOptions(characterSheetId)` — GET `/api/magic/sineating-options/?character_sheet=<id>` →
+  `SineatingOption[]` (the page's `results`): `{ role ('entreat' | 'perform'), partner_sheet_id,
+partner_name, max_units, resonance_name }`, every Sineater present the character can entreat and every plea
+  they can answer
 - `getPendingStageAdvanceOffers()` — GET `/api/magic/soul-tether/stage-advance/pending/`
-- `getPendingSineatingOffer(id)` — GET `/api/magic/soul-tether/sineating/pending/{id}/`
 - `getPendingStageAdvanceOffer(id)` — GET `/api/magic/soul-tether/stage-advance/pending/{id}/`
 - `getThreads()` — GET `/api/magic/threads/`
 - `getThread(id)` — GET `/api/magic/threads/{id}/`
@@ -160,8 +157,8 @@ resonance_name, cost, balance, affordable, effects, level_read}`, the effects be
 **Soul Tether mutations:**
 
 - `dissolveSoulTether(body)` — POST `/api/magic/soul-tether/dissolve/` → `void`
-- `requestSineating(body)` — POST `/api/magic/soul-tether/sineating/request/` → `SineatingOffer`
-- `respondToSineating(body)` — POST `/api/magic/soul-tether/sineating/respond/` → `SineatingResult`
+- `declineSineating(body)` — POST `/api/magic/soul-tether/sineating/decline/` → `{ detail }` (the line the
+  Sineater is told; a refusal is 400 `{detail}`)
 - `performRescue(body)` — POST `/api/magic/soul-tether/rescue/` → `RescueOutcome`
 - `respondToStageAdvance(body)` — POST `/api/magic/soul-tether/stage-advance/respond/` → `StageAdvanceBonusResult`
 
@@ -224,7 +221,7 @@ React Query hooks with a `magicKeys` query key factory.
 - `magicKeys.alterationLibrary(id)` → `['magic', 'pending-alterations', 'library', id]`
 - `magicKeys.soulTether()` → `[..., 'soul-tether']`
 - `magicKeys.soulTetherDetail(id)` → `[..., 'detail', id]`
-- `magicKeys.sineatingPending()` → `[..., 'sineating', 'pending']`
+- `magicKeys.sineatingOptions(sheetId)` → `['magic', 'sineating-options', sheetId]`
 - `magicKeys.stageAdvancePending()` → `[..., 'stage-advance', 'pending']`
 - `magicKeys.threadList()` → `['magic', 'threads', 'list']`
 - `magicKeys.thread(id)` → `['magic', 'threads', id]`
@@ -249,7 +246,8 @@ React Query hooks with a `magicKeys` query key factory.
 **Read hooks:**
 
 - `useSoulTetherDetail(relationshipId)` — disabled when id ≤ 0
-- `usePendingSineatingOffers()`
+- `useSineatingOptions(characterSheetId, enabled?)` — polled every 5 s so a plea made in the scene
+  reaches the Sineater's composer without a reload; off while `enabled` is false (no active scene)
 - `usePendingStageAdvanceOffers()`
 - `useThreads()`
 - `useThread(id)` — disabled when id ≤ 0
@@ -270,8 +268,10 @@ React Query hooks with a `magicKeys` query key factory.
 **Mutation hooks:**
 
 - `useDissolveSoulTether()` — invalidates `soulTetherDetail(id)` + `soulTether()`
-- `useRequestSineating()` — invalidates `sineatingPending()`
-- `useRespondToSineating()` — invalidates `sineatingPending()` + `soulTether()`
+- `useDeclineSineating()` — invalidates every `sineatingOptions`
+- `useRefreshSineating(characterSheetId)` — not a mutation: the callback the composer runs once a Sineating
+  posts (re-reads the options, the Soul Tether and `reflectionOptionsAll`, since a Sineater now carries a
+  Mire to reflect on)
 - `usePerformRescue()` — invalidates `soulTether()`
 - `useRespondToStageAdvance()` — invalidates `stageAdvancePending()` + `soulTether()`
 - `useWeaveThread()` — invalidates `threadList`, `threadHubSummary`
@@ -330,8 +330,8 @@ Pull previews are user-driven and ephemeral; components should debounce calls ma
 
 Unit tests for read and mutation hooks. Uses `vi.fn()` mocks of `api.*` (no msw).
 
-Covers: `useSoulTetherDetail`, `usePendingSineatingOffers`, `usePendingStageAdvanceOffers`,
-`useThreads`, `useCharacterResonances`, `useDissolveSoulTether`, `useRespondToSineating`,
+Covers: `useSoulTetherDetail`, `usePendingStageAdvanceOffers`,
+`useThreads`, `useCharacterResonances`, `useDissolveSoulTether`,
 `useThreadHubSummary`, `useThread`, `useTeachingOffers`, `useWeaveThread`,
 `usePatchThreadNarrative`, `useRetireThread`, `useImbueThread`, `useCrossXPLock`,
 `useAcceptTeachingOffer`, `useNextPathOptions`, `useMotifStyleBindings`/
@@ -396,45 +396,82 @@ rows via `TeachingOfferCard`; each card opens `AcceptOfferDialog` to pay XP and 
 The aura in words and as a halo. `aura.ts` is the one place an aura's figures become language
 (never a number to a player): `shareInWords(share, total)` (the backend `share_in_words`
 thresholds in `world/magic/services/drift.py`, so every surface reads alike), `auraSentence(shares)`
-("Mostly primal, a third abyssal."), `wordsToPart(words)` (the midpoint of a word's band, for
-sizing a segment where the API sends only a word), `affinitySlug` and `haloGradient(segments)` (the
+("Mostly primal, a third abyssal."), `affinitySlug` and `haloGradient(segments)` (the
 conic gradient over the `--aura-*` tokens in `character_sheets/sheet.css`). `auraQueries.ts` holds
 `useCharacterAuras(characterId | null, enabled)` (GET `/api/magic/character-auras/[?character=]`,
-the owner's own auras with `settled_percent`, `unsettled`, `unsettled_line`, `mire_share_words`).
+the owner's own auras with `settled_percent`, `unsettled`, `unsettled_line`). The aura carries no Mire
+(#5177): the Mire is corruption a Sineater carries for each Sinner, shown on the Soul Tether panel.
 The accept endpoint and `useAcceptAura` are gone (#5124): nothing settles without a reflection.
 They live apart from `api.ts` and `queries.ts`, so a test that mocks `@/magic/queries` wholesale
 must also mock `@/magic/auraQueries`. `AuraHalo` replaces the old `AuraStrip`: props `shares`,
-optional `settled` (a dashed ring of who they are), `mire {words, part}` (a Sineater's Mire share
-drawn apart from their own Abyssal, with a key), `unsettled` and `unsettledLine` (restless halo,
+optional `settled` (a dashed ring of who they are), `unsettled` and `unsettledLine` (restless halo,
 the Unsettled status and the ruled line in place of the split sentence), `size 'full' | 'mini'`,
 `sentence` and `children`; it imports `sheet.css` itself so the creation page gets the colours,
 and renders nothing without shares. The sheet payload carries no settled or unsettled data: the
-settled ring, the Mire key and the Unsettled status show to the owner only (`isMyCharacter`,
+settled ring and the Unsettled status show to the owner only (`isMyCharacter`,
 read from `useCharacterAuras`); everyone else sees the halo and the words. Mounted by
 `SpellbookTab` (its reflections card carries the "Settle your aura" button, #5124) and by the Gift stage's resonance
 step in character creation (`character-creation/components/gift/ResonanceWeights.tsx`, with
 `auraSentence` of the weighted picks).
 
-### `components/KindledResonancesPanel.tsx` (#5124)
+### `components/KindledResonancesPanel.tsx` (#5124, #5177)
 
 "Your resonances" (demo Screen 1): each resonance she holds with its affinity, "Kindled,
 <strength word>" or "Not kindled" (dimmed), and the reasons in player words; no numbers. Reads
 `useKindledResonances(characterSheetId)` (`GET /api/magic/kindled-resonances/`, refetched every
-30 s). Mounted in the scene tools (`SceneDetailPage`) and in the combat rail beside Dig deep
-(`YourTurn`); renders nothing for a character with no resonance.
+30 s), whose data is a `KindledReading` `{ results: KindledResonance[], impulses: Impulse[] }`
+(`YourTurn` reads `data?.results`). Under the resonances, "Impulses" lists what the corruption the
+character carries stirs: an `Impulse` is `{ resonance_id, resonance_name, label ("Intrusive Thoughts:
+Ruin" / "Compulsion: Ruin"), present, is_compulsion, text, reasons }`. The row shows the `label`, the
+`text` when the server sent words, the `reasons`, and "Present" while something the resonance cares
+about is here. Three looks, told apart by `data-state`: `stirring` (violet, an Intrusive Thought),
+`compulsion` (red, bold, a Compulsion not in effect) and `compulsion-active` (a heavy red border and
+fill, a Compulsion that is costing rolls now). Mounted in the scene tools (`SceneDetailPage`), the game
+page and the combat rail beside Dig deep (`YourTurn`); renders nothing for a character with no
+resonance and no impulse.
 
-### `components/ReflectingOnRow.tsx` (#5124)
+### `components/ReflectingOnRow.tsx` (#5124, #5177)
 
 The optional "Reflecting on" row of a pose and of a journal entry (demo Screen 5): each
-unreflected kindled deed (newest first) and then the unsettling resonance as pills, with the
-Embrace / Disown pair always shown beside them; picking a pressed pill again clears it. A target
-without a choice, or a choice without a target, shows a line and holds the send (`isReflectionIncomplete`);
-a note says a new reflection replaces a waiting one when `replaces_waiting` is set. Reads `useReflectionOptions(characterSheetId)`
-(`GET /api/magic/reflectables/`) and renders nothing when there is nothing to reflect on. State
-is a `ReflectionDraft` (`reflection.ts`, `NO_REFLECTION` while idle); `reflectionFields(draft)` gives the three
-`reflect_*` fields a request carries. Mounted by `CommandInput` (pose mode, not Commands or
-companion; a scene pose sends the fields to `submit-pose`, an out-of-scene one dispatches the
-registry `pose` action) and by `JournalEntryFields` (the desk and the composer dialog).
+unreflected kindled deed (newest first), then the unsettling resonance, then the Mire the writer carries
+for a Sinner (a `burden` option, "The Mire you carry for Ysmay"), as pills; picking a pressed pill again
+clears it. The choices follow the kind of the picked option and come from one place, `choicesFor(option)`
+in `reflection.ts`, so the pose composer and the journal editor cannot drift: Embrace and Disown for a
+deed or the unsettling resonance (and while nothing is picked), Absolve, Condemn and Succumb for a
+burden. `pickOption` drops a choice the new pick does not take. A target without a choice, or a choice
+without a target, shows `reflectionIncompleteLine(draft)` ("Choose Absolve, Condemn or Succumb, or clear
+them.") and holds the send (`isReflectionIncomplete`); a note says a new reflection replaces a waiting one
+when `replaces_waiting` is set. Reads `useReflectionOptions(characterSheetId)`
+(`GET /api/magic/reflectables/`, rows `{ kind ('deed' | 'resonance' | 'burden'), id, label,
+replaces_waiting }`; a burden's `id` is the Sineater side's tether pk) and renders nothing when there is
+nothing to reflect on. State is a `ReflectionDraft` (`reflection.ts`, `NO_REFLECTION` while idle);
+`reflectionFields(draft)` gives the `reflect_*` fields a request carries: `reflect_choice` plus exactly
+one of `reflect_grant_id` (deed), `reflect_resonance_id` or `reflect_tether_id` (burden). The pose body
+(`scenes/queries.ts`) and the journal request (`journals/api.ts`) extend `ReflectionFields` rather than
+repeat it. Mounted by `CommandInput` (pose mode, not Commands or companion; a scene pose sends the fields
+to `submit-pose`, an out-of-scene one dispatches the registry `pose` action) and by `JournalEntryFields`
+(the desk and the composer dialog). A succumbing is a deed in the list, labelled by where it happened.
+`AuraReflections` lists deeds and burdens with no reflection waiting under "Not yet reflected on".
+
+### `components/SineatingRow.tsx` (#5177)
+
+The optional "Sineating" row of a pose, beside "Reflecting on" in the `CommandInput` footer (pose mode
+in an active scene: it needs `sceneId` and `personaId`, and reads `useSineatingOptions`, polled). One pill
+per option: "Ask Corvin to take on your sins" (`role: 'entreat'`, the Sinner's plea) or "Take on Ysmay's
+sins" (`role: 'perform'`, a plea waiting for the writer to answer), each with the tether's resonance.
+A plea waiting for the writer badges the row "Plea waiting" and its pill has a Decline button
+(`useDeclineSineating`, the line comes back as a toast). Picking an option shows Units pills 1 to
+`max_units`, preselected at `max_units`. The draft is a `SineatingDraft` (`sineating.ts`, `NO_SINEATING`
+while idle); `sineatingFields(draft)` gives the three fields the pose body carries: `sineating_role`,
+`sineating_partner_id` (the other character's sheet id), `sineating_units`. A pose carries a Sineating or
+a reflection, never both: `CommandInput` clears one when the other is picked. The pose response carries
+`sineating_line` (lines joined by a newline) and `sineating_recorded`; each line is shown to the writer
+alone as a system note in the feed, or as an error toast when not recorded. A refusal before posting is
+400 `{detail}`: the pose is not posted, the toast shows `detail` and the typed pose and the pick stay. A
+pick whose option leaves the polled list (answered, declined) is dropped. The old inbox, request dialog
+and the request and respond routes are gone; `GET /api/magic/soul-tether/sineating/pending/` still
+exists and has no web caller. Tests: `components/SineatingRow.test.tsx`, and the "Sineating" block of
+`game/components/CommandInput.test.tsx`.
 
 ### `components/threads/ResonanceBalanceCard.tsx`
 
@@ -710,8 +747,7 @@ writes through `useSetMotifFacet(characterSheetId)` (`{facet_id, resonance_id, t
 
 ### `components/MotifStylePanel.test.tsx` (#2030)
 
-9 unit tests (mocks `../queries`, no msw — mirrors `SineatingRequestDialog.test.tsx`'s
-idiom). Covers: bindings grouped by resonance; empty-bindings message; unbind fires
+9 unit tests (mocks `../queries`, no msw). Covers: bindings grouped by resonance; empty-bindings message; unbind fires
 `{ style_id }`; bind form submits `{ style_id, resonance_id }`; Bind stays disabled
 until both selects have a value; "claim a resonance first" empty state (and no
 selects rendered); the bind and unbind mutations' 400 `detail` messages both render;
@@ -778,8 +814,8 @@ gate and its strip are gone.
 
 - `getSettlingRite(characterSheetId)` - GET `/api/magic/settling-rite/?character_sheet=<id>` ->
   `SettlingRiteReading` `{ reflections[], offerings[], rite_ready, not_ready_message, check_name }`.
-  A reflection is `{ id, choice ('EMBRACE' | 'DISOWN'), kind ('deed' | 'resonance'), title ("Disown your
-Domination"), where ('"The collar" · journal' / 'Pose in The Quarry'), from_line ('from your journal,
+  A reflection is `{ id, choice ('EMBRACE' | 'DISOWN' | 'ABSOLVE' | 'CONDEMN' | 'SUCCUMB'), kind ('deed' |
+'resonance' | 'burden'), title ("Disown your Domination", "Absolve the Mire you carry for Ysmay"), where ('"The collar" · journal' / 'Pose in The Quarry'), from_line ('from your journal,
 "The collar"'), excerpt, effect_line }`; an offering is `{ item_id, name, mode ('material' | 'facet' |
 'keepsake'), resonance_name, focus_bonus }`. Owner only (404 for anyone else's character).
 - `performSettlingRite({ character_sheet_id, component_ids })` - POST the same URL ->
@@ -796,7 +832,7 @@ reading, the pending chance, `reflectionOptionsAll`, `characterResonanceList`, t
 
 **Components:** `AuraReflections` (the sheet's aura card, owner only: "Your reflections" as
 `<where> · <title>`, one "Settle your aura" button shown only while a reflection waits, "Not yet reflected
-on" with the unreflected deeds and `atoneChanceLine`'s "A chance to atone is open: up to 3 toward Fury.";
+on" with the unreflected deeds and burdens and `atoneChanceLine`'s "A chance to atone is open: up to 3 toward Fury.";
 renders nothing with nothing to list) and `SettleAuraDialog` (Screen 6: "Settling your aura", each
 reflection's title, quoted excerpt with its `from_line` and effect line, an "Offering" pill per carried
 item that counts (`offeringLabel`: "Iron collar · a keepsake of Fury"; a lone one is the choice), the roll
@@ -814,9 +850,14 @@ character. The feed offers the same dialog: `CommandInput`'s toast for a recorde
 ## Data Flow
 
 - **GET soul-tether detail:** `useSoulTetherDetail(relationshipId)` → `SoulTetherDetail`
-  — shows Hollow state, corruption stage, lifetime helped
-- **Sineating request:** Sinner calls `useRequestSineating` → Sineater sees offer in
-  `usePendingSineatingOffers` → Sineater calls `useRespondToSineating`
+  — shows Hollow state, corruption stage, lifetime helped, and `mire`: `[{ sinner_sheet_id,
+sinner_name, rows: [{ resonance_name, amount, label }], total }]`, the Mire the viewer carries for
+  that Sinner. The backend fills it only when the viewer plays the Sineater side (a Sinner gets `[]`), and
+  answers 404 to anyone who plays neither side of the bond. `SoulTetherStatusPanel` draws each entry under
+  the Hollow bar as "The Mire you carry for Ysmay" with its total, then one line per row.
+- **Sineating:** the Sinner attaches a plea to a pose (`SineatingRow`, role `entreat`) → the Sineater's
+  `useSineatingOptions` poll lists it (role `perform`) → the Sineater attaches the ritual to a pose, or
+  declines (`useDeclineSineating`). Nothing is sent outside a pose.
 - **Stage-advance prompt:** Server fires the prompt → Sineater sees it in
   `usePendingStageAdvanceOffers` → Sineater calls `useRespondToStageAdvance`
 - **Rescue:** Sineater calls `usePerformRescue` (stage 3+ required server-side)
@@ -829,14 +870,13 @@ character. The feed offers the same dialog: `CommandInput`'s toast for a recorde
 - **Backend:** `world.magic` — services/soul_tether.py, views.py, urls.py
 - **Serializer mapping** (all generated via `@extend_schema`, #920):
   - `SoulTetherDetailSerializer` → `SoulTetherDetail`
-  - `SineatingOfferSerializer` → `SineatingOffer`
-  - `SineatingResultSerializer` → `SineatingResult`
+  - `SineatingOptionSerializer` → `SineatingOption`
+  - `SineatingDeclineSerializer` → `SineatingDeclineRequest`
   - `RescueOutcomeSerializer` → `RescueOutcome`
   - `StageAdvanceBonusResultSerializer` → `StageAdvanceBonusResult`
-  - `SineatingPendingOfferSerializer` → `SineatingPendingOffer`
   - `PendingStageAdvanceOfferSerializer` → `PendingStageAdvanceOffer`
-- **Consumers (Phase 3 Tasks 3.2–3.7):** SoulTetherPanel, SineatingInbox,
-  SineatingRespondDialog, StageAdvanceInbox, RescueDialog, DissolveDialog
+- **Consumers (Phase 3 Tasks 3.2–3.7):** SoulTetherPanel, StageAdvanceInbox, RescueDialog,
+  DissolveDialog; the Sineating row of the pose composer (#5177)
 
 ## Shared Hooks Outside This Module
 
@@ -878,9 +918,10 @@ schema. Use string comparison rather than importing a local enum.
 `POST /api/magic/soul-tether/dissolve/` returns HTTP 200 with no body. The `api.dissolveSoulTether`
 function returns `Promise<void>`. The mutation hook `useDissolveSoulTether` has no `data`.
 
-**`units_accepted=0` and `units_committed=0` are declines.**
-Both `useRespondToSineating` and `useRespondToStageAdvance` accept 0 as a valid input — it
-signals decline (not an error). The returned result will have `declined: true`.
+**`units_committed=0` is a decline.**
+`useRespondToStageAdvance` accepts 0 as a valid input — it signals decline (not an error). The
+returned result will have `declined: true`. A Sineating plea is declined through
+`useDeclineSineating`, not with zero units.
 
 **`CharacterResonance[]` (not paginated).**
 The `GET /api/magic/character-resonances/` response is a bare array, not a paginated object.

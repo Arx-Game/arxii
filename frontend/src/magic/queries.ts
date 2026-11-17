@@ -33,10 +33,9 @@ import type {
   PatchThreadRequest,
   PullPreviewRequest,
   RescueRequest,
+  SineatingDeclineRequest,
   SetGlimpseProseRequest,
   SetGlimpseTagsRequest,
-  SineatingRequest,
-  SineatingRespondRequest,
   StageAdvanceRespondRequest,
   TechniqueDesignRequest,
   TrainTechniqueRequest,
@@ -54,9 +53,6 @@ export const magicKeys = {
   soulTether: () => [...magicKeys.all, 'soul-tether'] as const,
   soulTetherDetail: (relationshipId: number) =>
     [...magicKeys.soulTether(), 'detail', relationshipId] as const,
-
-  sineatingPending: () => [...magicKeys.soulTether(), 'sineating', 'pending'] as const,
-  sineatingPendingDetail: (id: number) => [...magicKeys.sineatingPending(), id] as const,
 
   stageAdvancePending: () => [...magicKeys.soulTether(), 'stage-advance', 'pending'] as const,
   stageAdvancePendingDetail: (id: number) => [...magicKeys.stageAdvancePending(), id] as const,
@@ -115,6 +111,9 @@ export const magicKeys = {
   reflectionOptions: (characterSheetId: number) =>
     [...magicKeys.all, 'reflection-options', characterSheetId] as const,
 
+  sineatingOptions: (characterSheetId: number) =>
+    [...magicKeys.all, 'sineating-options', characterSheetId] as const,
+
   audereUltimates: (characterSheetId: number) =>
     [...magicKeys.all, 'audere', 'ultimates', characterSheetId] as const,
 
@@ -171,19 +170,6 @@ export function useMyTetherBonds(myCharacterSheetId: number | null) {
     queryKey: magicKeys.tetherBonds(myCharacterSheetId ?? 0),
     queryFn: () => api.getMyTetherBonds(myCharacterSheetId!),
     enabled: myCharacterSheetId !== null && myCharacterSheetId > 0,
-    throwOnError: true,
-  });
-}
-
-/**
- * Sineater inbox: paginated list of pending Sineating offers.
- * Polls every 5 seconds for new offers so the Sineater sees them without refreshing.
- */
-export function usePendingSineatingOffers() {
-  return useQuery({
-    queryKey: magicKeys.sineatingPending(),
-    queryFn: () => api.getPendingSineatingOffers(),
-    refetchInterval: 5_000,
     throwOnError: true,
   });
 }
@@ -281,39 +267,6 @@ export function useDissolveSoulTether() {
       qc.invalidateQueries({
         queryKey: magicKeys.soulTetherDetail(variables.relationship_id),
       }).catch(() => {});
-      qc.invalidateQueries({ queryKey: magicKeys.soulTether() }).catch(() => {});
-    },
-  });
-}
-
-/**
- * Sinner initiates a Sineating request.
- *
- * Returns the SineatingOffer payload. Invalidates the pending sineating list
- * so the Sineater's inbox refreshes.
- */
-export function useRequestSineating() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: SineatingRequest) => api.requestSineating(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.sineatingPending() }).catch(() => {});
-    },
-  });
-}
-
-/**
- * Sineater accepts or declines a pending Sineating offer.
- *
- * units_accepted=0 is a decline. Invalidates the pending list and the
- * soul-tether detail so Hollow state updates.
- */
-export function useRespondToSineating() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: SineatingRespondRequest) => api.respondToSineating(body),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: magicKeys.sineatingPending() }).catch(() => {});
       qc.invalidateQueries({ queryKey: magicKeys.soulTether() }).catch(() => {});
     },
   });
@@ -1242,7 +1195,54 @@ export function useRefreshReflectionOptions(characterSheetId: number | null) {
   };
 }
 
-/** Each resonance the character holds, kindled or not, with the strength word and reasons. */
+/**
+ * What a pose can carry as a Sineating (#5177): a plea to make to each Sineater here, and a
+ * plea to answer for each one waiting. Polled, so a plea made in the scene shows up on the
+ * Sineater's composer without a reload. Empty until `characterSheetId` is known, and off while
+ * `enabled` is false (no active scene).
+ */
+export function useSineatingOptions(characterSheetId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: magicKeys.sineatingOptions(characterSheetId ?? 0),
+    queryFn: () => api.getSineatingOptions(characterSheetId ?? 0),
+    enabled: enabled && characterSheetId != null && characterSheetId > 0,
+    refetchInterval: 5_000,
+  });
+}
+
+/**
+ * Re-read what a Sineating changes once a pose carrying one posts: the options themselves,
+ * the Soul Tether (Hollow and the Mire carried), and what a reflection can name (a Sineater
+ * now carries a Mire to reflect on).
+ */
+export function useRefreshSineating(characterSheetId: number | null) {
+  const queryClient = useQueryClient();
+  return () => {
+    if (characterSheetId != null) {
+      void queryClient.invalidateQueries({
+        queryKey: magicKeys.sineatingOptions(characterSheetId),
+      });
+    }
+    void queryClient.invalidateQueries({ queryKey: magicKeys.soulTether() });
+    void queryClient.invalidateQueries({ queryKey: magicKeys.reflectionOptionsAll() });
+  };
+}
+
+/** A Sineater turns a waiting plea down; the options re-read so it leaves the row. */
+export function useDeclineSineating() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body: SineatingDeclineRequest) => api.declineSineating(body),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: [...magicKeys.all, 'sineating-options'] });
+    },
+  });
+}
+
+/**
+ * Each resonance the character holds, kindled or not, with the strength word and reasons, and
+ * the impulses their carried corruption stirs.
+ */
 export function useKindledResonances(characterSheetId: number) {
   return useQuery({
     queryKey: magicKeys.kindledResonances(characterSheetId),

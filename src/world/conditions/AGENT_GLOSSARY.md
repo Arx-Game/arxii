@@ -208,7 +208,9 @@ An authored block on a condition in an `alters_behavior` category: what it wants
 attacking an opponent), the roll to go against it, the actions it forbids with each one's extra
 difficulty, and a `CompulsionResistBand` per roll outcome (acts freely, acts strained, the
 compulsion acts). It never refuses an action: anything other than what it wants rolls the
-resist check. NPCs never roll. _Avoid_: lock, forced action, declaration lock, mind control
+resist check. NPCs never roll. Not the corruption **Compulsion** of `world/magic/AGENT_GLOSSARY.md`
+(#5177), which is a display name on a corruption condition plus one penalty condition and never
+reads this model. _Avoid_: lock, forced action, declaration lock, mind control
 (that is the condition, not the compulsion).
 
 **Band** (`ControlLossBand`, `CompulsionResistBand`, #4802):

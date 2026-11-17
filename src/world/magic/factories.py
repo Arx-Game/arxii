@@ -2636,8 +2636,52 @@ class SineatingFactory(factory.django.DjangoModelFactory):
     resonance = factory.SubFactory(ResonanceFactory)
     units_offered = 5
     units_accepted = 5
-    anima_cost = 10
-    fatigue_cost = 5
+
+
+class SineatingOutcomeAwardFactory(factory.django.DjangoModelFactory):
+    """The share of full resonance a Sineating earns each party at one outcome tier (#5177)."""
+
+    class Meta:
+        model = "arxii.SineatingOutcomeAward"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    earned_share = Decimal("1.00")
+
+
+def place_in_active_scene(*sheets: Any) -> Any:
+    """Test helper: stand each sheet's character in one new room that has an active scene.
+
+    Returns the scene. Sineating, the rescue and the stage-advance offer find the scene they
+    happen in by where the two characters stand, so a test that needs one puts them here
+    rather than patching the presence check.
+    """
+    from evennia.objects.models import ObjectDB
+
+    from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
+    from world.scenes.factories import SceneFactory
+    from world.scenes.interaction_services import invalidate_active_scene_cache
+
+    room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+    scene = SceneFactory(location=RoomProfileFactory(objectdb=room))
+    # A rolled-back test's room can come back under the same pk with its old cached scene.
+    invalidate_active_scene_cache(room)
+    for sheet in sheets:
+        # A sheet the test built earlier can hold a character instance the identity map no
+        # longer serves, so stand the identity map's own instance in the room too.
+        for character in (sheet.character, ObjectDB.objects.get(pk=sheet.pk)):
+            character.location = room
+    return scene
+
+
+class MireHoldingFactory(factory.django.DjangoModelFactory):
+    """A Sineater's holding for one Sinner (#5177). ``relationship`` is the Sineater's side."""
+
+    class Meta:
+        model = "arxii.MireHolding"
+
+    relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+    amount = 0
 
 
 class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
@@ -2999,14 +3043,16 @@ def wire_soul_tether_active_template(_template: object) -> tuple:
 def wire_soul_tether_stat_definitions() -> None:
     """Idempotent seed for Soul Tether achievement stat definitions (Spec B §14.3).
 
-    Creates StatDefinition rows for all 7 stats fired by Soul Tether services:
-    - sineating.units_accepted: Units accepted in a Sineating (fired by resolve_sineating)
-    - sineating.units_declined: Sineating requests declined (fired by resolve_sineating)
+    Creates StatDefinition rows for all 10 stats fired by Soul Tether services:
+    - sineating.units_accepted: Units accepted in a Sineating (fired by perform_sineating)
+    - sineating.units_declined: Sineating requests declined (fired by decline_sineating)
     - sineating.requests_made: Sineating requests initiated (fired by request_sineating)
     - rescue.performed: Soul Tether rescues performed (fired by perform_soul_tether_rescue)
     - rescue.stage5_save: Rescues from stage 5 Subsumption (fired by perform_soul_tether_rescue)
     - rescue.severity_reduced: Corruption severity reduced (fired by perform_soul_tether_rescue)
     - tether.formed: Soul Tethers formed (fired by accept_soul_tether)
+    - sineater.succumbed / sineater.succumbed_amount / sineater.broken: fired on the Sinner
+      when their Sineater succumbs at a settling rite and when that Sineater falls (#5177)
 
     ``achievements.StatDefinition`` is content-repo-owned (#2698) — each is
     looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
@@ -3054,6 +3100,21 @@ def wire_soul_tether_stat_definitions() -> None:
             "key": "tether.formed",
             "name": "Soul Tethers Formed",
             "description": "Soul Tether bonds formed with other players",
+        },
+        {
+            "key": "sineater.succumbed",
+            "name": "Sineater Succumbed",
+            "description": "Times a Sineater succumbed to the Mire they carried for this Sinner",
+        },
+        {
+            "key": "sineater.succumbed_amount",
+            "name": "Mire Succumbed To",
+            "description": "Total Mire Sineaters succumbed to that they carried for this Sinner",
+        },
+        {
+            "key": "sineater.broken",
+            "name": "Sineater Broken",
+            "description": "Times a Sineater this Sinner tempted fell to the Abyss",
         },
     ]
 
@@ -5138,3 +5199,36 @@ class ReflectionFactory(factory.django.DjangoModelFactory):
         author=factory.SelfAttribute("..character_sheet"),
     )
     rite = None
+
+
+def author_compulsion_condition(check_type: object, *, penalty: int = -3) -> object:
+    """The Compulsion condition staff author, designated on the corruption configuration.
+
+    A scene-duration condition with one check modifier on ``check_type`` of ``penalty`` per
+    point of severity (it scales with severity), named on ``CorruptionConfig.compulsion_condition``
+    (#5177). For tests and dev setups only: the live game's condition is authored in admin,
+    and no seeder writes it. Returns the condition template.
+    """
+    from world.conditions.constants import DurationType
+    from world.conditions.factories import (
+        ConditionCategoryFactory,
+        ConditionCheckModifierFactory,
+        ConditionTemplateFactory,
+    )
+    from world.magic.services.corruption import get_corruption_config
+
+    condition = ConditionTemplateFactory(
+        name="Clouded by a Compulsion",
+        category=ConditionCategoryFactory(self_shakeable=True),
+        default_duration_type=DurationType.SCENE,
+    )
+    ConditionCheckModifierFactory(
+        condition=condition,
+        check_type=check_type,
+        modifier_value=penalty,
+        scales_with_severity=True,
+    )
+    cfg = get_corruption_config()
+    cfg.compulsion_condition = condition
+    cfg.save()
+    return condition

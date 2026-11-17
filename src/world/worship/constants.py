@@ -153,7 +153,8 @@ class PledgeCreditSource(models.TextChoices):
 #: Resonance grant sources with no character action behind them. Favor with a being
 #: comes only from a character's actions (owner ruling 2026-10-16), so a grant from
 #: one of these earns no pledge deed favor: the daily residence and outfit trickles,
-#: a distinction's granted resonance, and a staff grant. A worship rite's own grant
+#: a distinction's granted resonance, a staff grant, and the payouts a Sinner gets when their
+#: Sineater succumbs or falls. A worship rite's own grant
 #: is excluded separately (the rite pays its own favor).
 PASSIVE_DEED_SOURCES: frozenset[str] = frozenset(
     {
@@ -164,6 +165,9 @@ PASSIVE_DEED_SOURCES: frozenset[str] = frozenset(
         # #4733: a drift correction converts resonance the character already earned
         # by deeds; the deeds earned their favor, so the conversion earns none again.
         GainSource.DRIFT_CORRECTION,
+        # #5177: a Sinner is paid when their Sineater succumbs or falls, without acting.
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
     }
 )
 

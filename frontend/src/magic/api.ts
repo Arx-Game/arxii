@@ -16,8 +16,9 @@ import { readErrorDetail } from '@/lib/errors';
 import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch';
 import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
+import type { SineatingOption } from '@/magic/sineating';
 import type {
-  KindledResonance,
+  KindledReading,
   ManifestChoice,
   ReflectionOption,
   ThreadResonanceOptions,
@@ -55,7 +56,6 @@ import type {
   PaginatedPendingAudereMajoraOfferList,
   PaginatedPendingEntryFlourishOfferList,
   PaginatedPendingStageAdvanceOfferList,
-  PaginatedSineatingPendingOfferList,
   PaginatedStyleList,
   PaginatedTeachingOfferList,
   PaginatedThreadList,
@@ -68,13 +68,9 @@ import type {
   ReadiedUltimate,
   RescueOutcome,
   RescueRequest,
+  SineatingDeclineRequest,
   SetGlimpseProseRequest,
   SetGlimpseTagsRequest,
-  SineatingOffer,
-  SineatingPendingOffer,
-  SineatingRequest,
-  SineatingRespondRequest,
-  SineatingResult,
   SoulTetherDetail,
   StageAdvanceBonusResult,
   StageAdvanceRespondRequest,
@@ -144,17 +140,6 @@ export async function getSoulTetherDetail(relationshipId: number): Promise<SoulT
 }
 
 /**
- * GET /api/magic/soul-tether/sineating/pending/
- *
- * Sineater-facing inbox: pending Sineating offers addressed to the caller.
- */
-export async function getPendingSineatingOffers(): Promise<PaginatedSineatingPendingOfferList> {
-  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/pending/`);
-  if (!res.ok) throw new Error('Failed to load pending Sineating offers');
-  return res.json() as Promise<PaginatedSineatingPendingOfferList>;
-}
-
-/**
  * GET /api/magic/soul-tether/stage-advance/pending/
  *
  * Sineater-facing inbox: pending stage-advance bonus offers.
@@ -184,46 +169,6 @@ export async function dissolveSoulTether(body: DissolveRequest): Promise<void> {
   if (!res.ok) {
     await readErrorDetail(res, 'Failed to dissolve Soul Tether');
   }
-}
-
-/**
- * POST /api/magic/soul-tether/sineating/request/
- *
- * Sinner initiates a Sineating offer. Returns the SineatingOffer payload so the
- * Sineater can respond via /sineating/respond/.
- */
-export async function requestSineating(body: SineatingRequest): Promise<SineatingOffer> {
-  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/request/`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    await readErrorDetail(res, 'Failed to send Sineating request');
-  }
-
-  return res.json() as Promise<SineatingOffer>;
-}
-
-/**
- * POST /api/magic/soul-tether/sineating/respond/
- *
- * Sineater accepts or declines a pending Sineating offer (units_accepted=0 = decline).
- * Returns SineatingResult with the outcome.
- */
-export async function respondToSineating(body: SineatingRespondRequest): Promise<SineatingResult> {
-  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/respond/`, {
-    method: 'POST',
-    headers: jsonHeaders(),
-    body: JSON.stringify(body),
-  });
-
-  if (!res.ok) {
-    await readErrorDetail(res, 'Failed to respond to Sineating offer');
-  }
-
-  return res.json() as Promise<SineatingResult>;
 }
 
 /**
@@ -329,15 +274,6 @@ export async function fetchCharacterGifts(characterId: number): Promise<Characte
 // ---------------------------------------------------------------------------
 // Pending offer detail reads (used for refresh after mutation)
 // ---------------------------------------------------------------------------
-
-/**
- * GET /api/magic/soul-tether/sineating/pending/{id}/
- */
-export async function getPendingSineatingOffer(id: number): Promise<SineatingPendingOffer> {
-  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/pending/${id}/`);
-  if (!res.ok) throw new Error(`Failed to load Sineating offer ${id}`);
-  return res.json() as Promise<SineatingPendingOffer>;
-}
 
 /**
  * GET /api/magic/soul-tether/stage-advance/pending/{id}/
@@ -1440,14 +1376,14 @@ const KINDLED_RESONANCES_URL = '/api/magic/kindled-resonances/';
 
 /**
  * GET /api/magic/kindled-resonances/?character_sheet=<id> (#5124): each resonance the
- * character holds, whether a situation kindles it now, the strength word and the reasons.
- * Owner or staff only.
+ * character holds, whether a situation kindles it now, the strength word and the reasons, and
+ * the impulses the corruption they carry stirs (#5177). Owner or staff only.
  */
-export async function getKindledResonances(characterSheetId: number): Promise<KindledResonance[]> {
+export async function getKindledResonances(characterSheetId: number): Promise<KindledReading> {
   const res = await apiFetch(`${KINDLED_RESONANCES_URL}?character_sheet=${characterSheetId}`);
   if (!res.ok) await readErrorDetail(res, 'Failed to load your resonances');
-  const page = (await res.json()) as { results: KindledResonance[] };
-  return page.results;
+  const page = (await res.json()) as KindledReading;
+  return { results: page.results, impulses: page.impulses };
 }
 
 // ---------------------------------------------------------------------------
@@ -1466,4 +1402,35 @@ export async function getReflectionOptions(characterSheetId: number): Promise<Re
   if (!res.ok) await readErrorDetail(res, 'Failed to load what you can reflect on');
   const page = (await res.json()) as { results: ReflectionOption[] };
   return page.results;
+}
+
+// ---------------------------------------------------------------------------
+// Sineating by pose (#5177)
+// ---------------------------------------------------------------------------
+
+const SINEATING_OPTIONS_URL = '/api/magic/sineating-options/';
+
+/**
+ * GET /api/magic/sineating-options/?character_sheet=<id>: every Sineater present the
+ * character can entreat, and every plea they can answer. Only a character the caller plays.
+ */
+export async function getSineatingOptions(characterSheetId: number): Promise<SineatingOption[]> {
+  const res = await apiFetch(`${SINEATING_OPTIONS_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load Sineating options');
+  const page = (await res.json()) as { results: SineatingOption[] };
+  return page.results;
+}
+
+/**
+ * POST /api/magic/soul-tether/sineating/decline/: the Sineater turns a waiting plea down.
+ * Answers `{detail}`, the line the Sineater is told.
+ */
+export async function declineSineating(body: SineatingDeclineRequest): Promise<{ detail: string }> {
+  const res = await apiFetch(`${SOUL_TETHER_URL}/sineating/decline/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await readErrorDetail(res, 'Failed to decline the plea');
+  return res.json() as Promise<{ detail: string }>;
 }

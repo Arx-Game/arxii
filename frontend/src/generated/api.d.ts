@@ -16412,6 +16412,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/sineating-options/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description What the requester's character can attach to a pose as a Sineating. */
+    get: operations['magic_sineating_options_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/soul-tether/{relationship_id}/': {
     parameters: {
       query?: never;
@@ -16480,6 +16497,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/soul-tether/sineating/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST /api/magic/soul-tether/sineating/decline/ turns a waiting plea down.
+     *
+     *     Accepts ``{actor_sheet_id, sinner_sheet_id}``; answers ``{"detail": <what the Sinner is
+     *     told the Sineater did>}``.
+     */
+    post: operations['magic_soul_tether_sineating_decline_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/soul-tether/sineating/pending/': {
     parameters: {
       query?: never;
@@ -16524,40 +16563,6 @@ export interface paths {
     get: operations['magic_soul_tether_sineating_pending_retrieve'];
     put?: never;
     post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/soul-tether/sineating/request/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Validate and dispatch request_sineating; return offer payload. */
-    post: operations['magic_soul_tether_sineating_request_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/soul-tether/sineating/respond/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /** @description Re-validate offer + dispatch resolve_sineating; return result payload. */
-    post: operations['magic_soul_tether_sineating_respond_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -28272,12 +28277,15 @@ export interface components {
      *     ``partner_sheet_id`` identifies the partner's character sheet.
      *     ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
      *     ``resonance_id`` selects the resonance for the Sinner's Thread.
+     *     ``sineater_resonance_id`` optionally selects the resonance for the Sineater's own Thread
+     *     (#5177); without it the Sineater's strongest resonance of their main affinity is used.
      */
     AcceptSoulTetherRequest: {
       actor_sheet_id: number;
       partner_sheet_id: number;
       sinner_role: components['schemas']['SinnerRoleEnum'];
       resonance_id: number;
+      sineater_resonance_id?: number;
     };
     /**
      * @description Serializer for accepting a ThreadWeavingTeachingOffer (Spec A §6.1).
@@ -29362,7 +29370,7 @@ export interface components {
     /** @description One side in the battle, with its victory tally and fielding covenant. */
     BattleSide: {
       readonly id: number;
-      role?: components['schemas']['RoleEnum'];
+      role?: components['schemas']['Role27cEnum'];
       victory_points?: number;
       victory_threshold?: number;
       posture?: components['schemas']['PostureEnum'];
@@ -31317,8 +31325,6 @@ export interface components {
        *     The one embracing it ("You become more ...", ``accept_aura_change``) names.
        */
       readonly unsettled_affinity_name: string;
-      /** @description The Mire's share of everything they have gained, in words. */
-      readonly mire_share_words: string;
       /**
        * @description Deferral/progress state of the Glimpse (#2427). Cache of prose+tag truth — maintained by world.magic.services.glimpse, never written directly.
        *
@@ -38896,6 +38902,20 @@ export interface components {
       readonly is_active: boolean;
       readonly sort_order: number;
     };
+    /** @description What the viewing Sineater carries for one Sinner (#5177). Never shown to the Sinner. */
+    MireForSinner: {
+      sinner_sheet_id: number;
+      sinner_name: string;
+      rows: components['schemas']['MireRow'][];
+      total: number;
+    };
+    /** @description One resonance a Sineater carries corruption in for a Sinner. */
+    MireRow: {
+      resonance_name: string;
+      amount: number;
+      /** @description The name shown for the Sineater's corruption in this resonance at its stage. */
+      label: string;
+    };
     /** @description Result of the #1023 abandon endpoint — the run's id and new status. */
     MissionAbandonResult: {
       readonly id: number;
@@ -43322,6 +43342,15 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['KindledResonance'][];
+      impulses: {
+        resonance_id: number;
+        resonance_name: string;
+        label: string;
+        present: boolean;
+        is_compulsion: boolean;
+        text: string;
+        reasons: string[];
+      }[];
     };
     PaginatedKnownSecretList: {
       /** @example 123 */
@@ -44711,6 +44740,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['ShipDetails'][];
+    };
+    PaginatedSineatingOptionList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['SineatingOption'][];
     };
     PaginatedSineatingPendingOfferList: {
       /** @example 123 */
@@ -49747,9 +49791,10 @@ export interface components {
     /**
      * @description * `deed` - Deed
      *     * `resonance` - Resonance
+     *     * `burden` - Burden
      * @enum {string}
      */
-    ReflectionOptionKindEnum: 'deed' | 'resonance';
+    ReflectionOptionKindEnum: 'deed' | 'resonance' | 'burden';
     /** @description ``{target_type, target_id, value, reason}``: the NPC's opinion of one target. */
     RegardRequest: {
       target_type: components['schemas']['TargetTypeFedEnum'];
@@ -50133,6 +50178,10 @@ export interface components {
        *     * `CHARACTER_CREATION` - Character creation
        *     * `KINDLED_DEED` - Kindled deed
        *     * `EMBRACED_DEED` - Embraced deed
+       *     * `MIRE_PURIFIED` - Mire purified
+       *     * `SUCCUMBED` - Succumbed to the Mire
+       *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
+       *     * `SINEATER_FALL` - Sineater fell
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -50169,6 +50218,10 @@ export interface components {
      *     * `CHARACTER_CREATION` - Character creation
      *     * `KINDLED_DEED` - Kindled deed
      *     * `EMBRACED_DEED` - Embraced deed
+     *     * `MIRE_PURIFIED` - Mire purified
+     *     * `SUCCUMBED` - Succumbed to the Mire
+     *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
+     *     * `SINEATER_FALL` - Sineater fell
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -50197,7 +50250,11 @@ export interface components {
       | 'SINEATING'
       | 'CHARACTER_CREATION'
       | 'KINDLED_DEED'
-      | 'EMBRACED_DEED';
+      | 'EMBRACED_DEED'
+      | 'MIRE_PURIFIED'
+      | 'SUCCUMBED'
+      | 'SUCCUMB_BONUS'
+      | 'SINEATER_FALL';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -50513,6 +50570,12 @@ export interface components {
       responded_at: string | null;
     };
     /**
+     * @description * `attacker` - Attacker
+     *     * `defender` - Defender
+     * @enum {string}
+     */
+    Role27cEnum: 'attacker' | 'defender';
+    /**
      * @description * `informant` - Informant
      *     * `contact` - Contact
      *     * `personal_favor` - Personal Favor
@@ -50522,12 +50585,6 @@ export interface components {
      * @enum {string}
      */
     RoleContextEnum: 'informant' | 'contact' | 'personal_favor' | 'guard' | 'fan' | 'minor_ally';
-    /**
-     * @description * `attacker` - Attacker
-     *     * `defender` - Defender
-     * @enum {string}
-     */
-    RoleEnum: 'attacker' | 'defender';
     /** @description A roll laid out as a heading, source rows and a result line (#4858); read-only. */
     RollBreakdown: {
       heading: string;
@@ -51519,21 +51576,28 @@ export interface components {
       readonly prose_noun: string;
       readonly exposes_beneath: boolean;
     };
-    /** @description Read serializer for SineatingOffer payloads returned by the request endpoint. */
-    SineatingOffer: {
-      /** @description Return sinner_sheet PK. */
-      readonly sinner_sheet_id: number;
-      /** @description Return sineater_sheet PK. */
-      readonly sineater_sheet_id: number;
-      /** @description Return resonance PK. */
-      readonly resonance_id: number;
-      max_units_offered: number;
-      anima_cost_per_unit: number;
-      fatigue_cost_per_unit: number;
-      current_hollow: number;
-      hollow_max: number;
-      sineater_current_strain_stage: number;
+    /** @description A Sineater turns down the plea a Sinner has waiting for them (#5177). */
+    SineatingDeclineRequest: {
+      actor_sheet_id: number;
+      sinner_sheet_id: number;
     };
+    SineatingDeclineResult: {
+      detail: string;
+    };
+    /** @description One plea the character can make or answer, as the composer's picker lists it. */
+    SineatingOption: {
+      role: components['schemas']['SineatingOptionRoleEnum'];
+      partner_sheet_id: number;
+      partner_name: string;
+      max_units: number;
+      resonance_name: string;
+    };
+    /**
+     * @description * `entreat` - Entreat a Sineater
+     *     * `perform` - Perform Sineating
+     * @enum {string}
+     */
+    SineatingOptionRoleEnum: 'entreat' | 'perform';
     /**
      * @description Sineater-facing view of a pending Sineating offer (inbox UI).
      *
@@ -51547,45 +51611,10 @@ export interface components {
       readonly scene_id: number;
       readonly scene_name: string;
       readonly resonance_id: number;
+      readonly resonance_name: string;
       readonly units_offered: number;
-      readonly anima_cost_per_unit: number;
-      readonly fatigue_cost_per_unit: number;
       /** Format: date-time */
       readonly created_at: string;
-    };
-    /**
-     * @description Write serializer for Sinner-initiated Sineating request (Spec B §7).
-     *
-     *     Returns a ``SineatingOffer`` that the Sineater can accept or decline via
-     *     the respond endpoint.
-     */
-    SineatingRequestRequest: {
-      actor_sheet_id: number;
-      sineater_sheet_id: number;
-      resonance_id: number;
-      max_units: number;
-      scene_id: number;
-    };
-    /**
-     * @description Write serializer for the Sineater's response to a Sineating request (Spec B §7).
-     *
-     *     The pending offer row is the canonical source of truth for scene, resonance,
-     *     and units cap — the caller only needs to identify the pair and supply their choice.
-     *     ``units_accepted=0`` means decline.
-     */
-    SineatingRespondRequest: {
-      sinner_sheet_id: number;
-      sineater_sheet_id: number;
-      units_accepted: number;
-    };
-    /** @description Read serializer for SineatingResult payloads. */
-    SineatingResult: {
-      units_accepted: number;
-      declined: boolean;
-      new_hollow_current: number;
-      new_lifetime_helped: number;
-      /** @description Return the audit Sineating row PK. */
-      readonly audit_row_id: number;
     };
     /**
      * @description * `SINNER` - SINNER
@@ -51844,6 +51873,7 @@ export interface components {
       readonly sinner_corruption_stage: number;
       /** @description Return the Sineater's current Tether Strain severity (or 0 if none). */
       readonly sineater_strain_stage: number;
+      readonly mire: components['schemas']['MireForSinner'][];
     };
     /**
      * @description Write serializer for the rescue ritual (Spec B §9).
@@ -77042,6 +77072,10 @@ export interface operations {
          *     * `CHARACTER_CREATION` - Character creation
          *     * `KINDLED_DEED` - Kindled deed
          *     * `EMBRACED_DEED` - Embraced deed
+         *     * `MIRE_PURIFIED` - Mire purified
+         *     * `SUCCUMBED` - Succumbed to the Mire
+         *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
+         *     * `SINEATER_FALL` - Sineater fell
          */
         source?:
           | 'CHARACTER_CREATION'
@@ -77055,6 +77089,7 @@ export interface operations {
           | 'ENTRY_FLOURISH'
           | 'FALL_CONVERSION'
           | 'KINDLED_DEED'
+          | 'MIRE_PURIFIED'
           | 'MISSION_REPORT'
           | 'MISSION_REWARD'
           | 'OUTFIT_TRICKLE'
@@ -77065,10 +77100,13 @@ export interface operations {
           | 'SANCTUM_OWNER_BONUS'
           | 'SANCTUM_WEAVING'
           | 'SCENE_ENTRY'
+          | 'SINEATER_FALL'
           | 'SINEATING'
           | 'STAFF_GRANT'
           | 'STAKE_REWARD'
           | 'STYLE_PRESENTATION'
+          | 'SUCCUMBED'
+          | 'SUCCUMB_BONUS'
           | 'WORSHIP_RITE';
       };
       header?: never;
@@ -77768,6 +77806,30 @@ export interface operations {
       };
     };
   };
+  magic_sineating_options_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedSineatingOptionList'];
+        };
+      };
+    };
+  };
   magic_soul_tether_retrieve: {
     parameters: {
       query?: never;
@@ -77857,6 +77919,29 @@ export interface operations {
       };
     };
   };
+  magic_soul_tether_sineating_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SineatingDeclineRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['SineatingDeclineResult'];
+        };
+      };
+    };
+  };
   magic_soul_tether_sineating_pending_list: {
     parameters: {
       query?: {
@@ -77898,52 +77983,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['SineatingPendingOffer'];
-        };
-      };
-    };
-  };
-  magic_soul_tether_sineating_request_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SineatingRequestRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['SineatingOffer'];
-        };
-      };
-    };
-  };
-  magic_soul_tether_sineating_respond_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SineatingRespondRequest'];
-      };
-    };
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['SineatingResult'];
         };
       };
     };

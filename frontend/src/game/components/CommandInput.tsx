@@ -30,17 +30,19 @@ import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { addFeedNote } from '@/store/gameSlice';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
-import { useRefreshReflectionOptions } from '@/magic/queries';
+import { SineatingRow } from '@/magic/components/SineatingRow';
+import { useRefreshReflectionOptions, useRefreshSineating } from '@/magic/queries';
 import { SettleAuraDialog } from '@/magic/components/SettleAuraDialog';
 import { useSettleAuraRequests } from '@/magic/settleAuraRequest';
 import {
   isReflecting,
   isReflectionIncomplete,
   NO_REFLECTION,
-  REFLECTION_INCOMPLETE_LINE,
+  reflectionIncompleteLine,
   reflectionFields,
   type ReflectionDraft,
 } from '@/magic/reflection';
+import { isSineating, NO_SINEATING, sineatingFields, type SineatingDraft } from '@/magic/sineating';
 import type { MyRosterEntry } from '@/roster/types';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -319,6 +321,18 @@ export function CommandInput({
   // refused or failed send keeps the writer's pick along with their text.
   const [reflection, setReflection] = useState<ReflectionDraft>(NO_REFLECTION);
   const refreshReflectionOptions = useRefreshReflectionOptions(characterSheetId);
+  // #5177 — a plea or a ritual this pose carries, if anything. A pose carries a reflection or
+  // a Sineating, never both: picking one clears the other. Cleared once the pose lands.
+  const [sineating, setSineating] = useState<SineatingDraft>(NO_SINEATING);
+  const refreshSineating = useRefreshSineating(characterSheetId);
+  const changeReflection = useCallback((next: ReflectionDraft) => {
+    setReflection(next);
+    if (next.option !== null || next.choice !== null) setSineating(NO_SINEATING);
+  }, []);
+  const changeSineating = useCallback((next: SineatingDraft) => {
+    setSineating(next);
+    if (isSineating(next)) setReflection(NO_REFLECTION);
+  }, []);
   // The `client_request_id` of a socket-sent pose that carries a reflection, until its ack.
   const reflectedSendRef = useRef<string | null>(null);
   // The rite of settling, opened by the button on the feed card a recorded reflection adds.
@@ -344,6 +358,24 @@ export function CommandInput({
           },
         })
       );
+    },
+    [dispatch, character]
+  );
+  // The writer's own lines after a Sineating: what the plea or the ritual did. Nobody else is told.
+  const showSineatingLine = useCallback(
+    (line: string, recorded: boolean) => {
+      if (!recorded) {
+        toast.error(line);
+        return;
+      }
+      for (const part of line.split('\n').filter((text) => text.trim() !== '')) {
+        dispatch(
+          addFeedNote({
+            character,
+            note: { kind: 'system', content: part, timestamp: new Date().toISOString() },
+          })
+        );
+      }
     },
     [dispatch, character]
   );
@@ -696,7 +728,7 @@ export function CommandInput({
       if (!trimmed) return false;
       // A reflection with a target but no choice, or the reverse, never posts half-chosen.
       if (isReflectionIncomplete(reflection)) {
-        toast.error(REFLECTION_INCOMPLETE_LINE);
+        toast.error(reflectionIncompleteLine(reflection));
         return false;
       }
       if (draft.content.length > MAX_POSE_LENGTH) {
@@ -1002,8 +1034,16 @@ export function CommandInput({
           ? { reply_to: { id: replyTarget.id, timestamp: replyTarget.timestamp } }
           : {}),
         ...reflectionFields(reflection),
+        ...sineatingFields(sineating),
       })
         .then((response) => {
+          if (isSineating(sineating)) {
+            if (response?.sineating_line) {
+              showSineatingLine(response.sineating_line, response.sineating_recorded !== false);
+            }
+            setSineating(NO_SINEATING);
+            refreshSineating();
+          }
           if (isReflecting(reflection)) {
             if (response?.reflection_line) {
               showReflectionLine(response.reflection_line, response.reflection_recorded !== false);
@@ -1150,6 +1190,9 @@ export function CommandInput({
     reflection,
     refreshReflectionOptions,
     showReflectionLine,
+    sineating,
+    refreshSineating,
+    showSineatingLine,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1470,12 +1513,21 @@ export function CommandInput({
           !isCommandsMode &&
           !asCompanion &&
           (!composerMode || composerMode.command === 'pose') && (
-            <ReflectingOnRow
-              characterSheetId={characterSheetId}
-              value={reflection}
-              onChange={setReflection}
-              className="m-2"
-            />
+            <>
+              <SineatingRow
+                characterSheetId={characterSheetId ?? null}
+                inScene={sceneId !== undefined && personaId != null}
+                value={sineating}
+                onChange={changeSineating}
+                className="m-2"
+              />
+              <ReflectingOnRow
+                characterSheetId={characterSheetId}
+                value={reflection}
+                onChange={changeReflection}
+                className="m-2"
+              />
+            </>
           )
         }
         ghostText={ghostText}

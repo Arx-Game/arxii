@@ -54,13 +54,25 @@ They do not use the command system, dispatchers, or handlers.
   returns the outcome and one line per reflection, the actor's alone. Refuses, writing nothing, with
   no waiting reflection or no qualifying offering. Shared by telnet `aura settle <offering>` and the
   web `SettlingRiteView`. The older atone, decline and accept actions are gone (nothing settles
-  without a reflection);
+  without a reflection). The rite also carries out burden reflections (the Mire a Sineater carries,
+  Absolve / Condemn / Succumb, #5177) and returns the Sinners' private lines as `RiteNotice` rows
+  that the action sends once the rite has committed;
+  `sineating.py` (#5177): `EntreatSineatingAction` (`"entreat_sineating"`, the Sinner's plea),
+  `PerformSineatingAction` (`"perform_sineating"`, the Sineater's ritual) and `DeclineSineatingAction`
+  (`"decline_sineating"`), REGISTRY, `target_type=SELF`, `category="magic"`; kwargs `partner_sheet_id`
+  and `units` (not for decline). Entreat and perform share `_run_part`, which calls
+  `pending_sineating_from` and `record_pending_sineating` in `world.magic.services.sineating`, so
+  telnet and the web converge on one seam; `run_pose_sineating(actor, pending)` is what `PoseAction`
+  calls after the pose it rides has posted, turning a late refusal into "Your pose was posted, but the
+  Sineating did not happen: <why>". Sineating needs no anima and no fatigue;
   `gm_props.py` (#5124) adds `KindleResonanceAction` (`"stage_kindle"`, the room GM's gate, writes
   `kindle_by_gm`) and `GMListKindlingAction` (`"gm_list_kindling"`, scoped to a character in the
   GM's room); `PoseAction` and `CreateJournalEntryAction` take optional `reflect_choice` with
-  `reflect_grant_id` or `reflect_resonance_id` and record a `Reflection` with the writing (checked
+  `reflect_grant_id`, `reflect_resonance_id` or (#5177) `reflect_tether_id` and record a `Reflection` with the writing (checked
   before the pose posts; the room sees only the pose; the result `data` carries
-  `reflection_recorded`); `CastTechniqueAction` carries `fury_resonance_id` into the combat
+  `reflection_recorded`); `PoseAction` also takes `sineating_role` (`entreat` or `perform`),
+  `sineating_partner_id` and `sineating_units` (#5177), refuses a pose that carries both a reflection and a
+  Sineating, and refreshes the writer's impulses once the pose posts (`refresh_impulses_for_character`); `CastTechniqueAction` carries `fury_resonance_id` into the combat
   declaration kwargs;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;

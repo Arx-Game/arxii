@@ -63,6 +63,7 @@ from world.scenes.models import Interaction
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import CheckOutcomeFactory
 from world.worship.constants import (
+    PASSIVE_DEED_SOURCES,
     BeingResonanceTier,
     FavorAwardKind,
     PledgeCreditSource,
@@ -426,6 +427,23 @@ class DeedTests(PledgeTestBase):
         favor_before = self._favor()
 
         self._grant(self.favored, 3, source=GainSource.STAFF_GRANT)
+
+        self.assertEqual(PledgeCredit.objects.count(), credits_before)
+        self.assertEqual(self._favor(), favor_before)
+
+    def test_a_sineaters_payout_to_a_sinner_credits_no_favor(self) -> None:
+        # The Sinner is paid without acting (#5177), so these are passive; the Sineater's own
+        # Sineating and purifying earnings are their action and stay out of the passive set.
+        self.assertTrue(
+            {GainSource.SUCCUMB_BONUS, GainSource.SINEATER_FALL} <= PASSIVE_DEED_SOURCES
+        )
+        self.assertFalse({GainSource.MIRE_PURIFIED, GainSource.SINEATING} & PASSIVE_DEED_SOURCES)
+        take_pledge(self.sheet, self.pledge)
+        credits_before = PledgeCredit.objects.count()
+        favor_before = self._favor()
+
+        self._grant(self.favored, 3, source=GainSource.SUCCUMB_BONUS)
+        self._grant(self.favored, 3, source=GainSource.SINEATER_FALL)
 
         self.assertEqual(PledgeCredit.objects.count(), credits_before)
         self.assertEqual(self._favor(), favor_before)

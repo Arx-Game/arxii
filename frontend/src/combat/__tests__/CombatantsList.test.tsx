@@ -125,7 +125,7 @@ function makeOpponent(overrides: Partial<Opponent> = {}): Opponent {
   return {
     id: 1,
     objectdb_id: null,
-    name: 'Mire Knight',
+    name: 'Bog Knight',
     tier: 'elite',
     health: 5,
     max_health: 10,
@@ -250,7 +250,7 @@ describe('CombatantsList', () => {
     const encounter = makeEncounter(
       [],
       [
-        makeOpponent({ id: 10, name: 'Mire Knight' }),
+        makeOpponent({ id: 10, name: 'Bog Knight' }),
         makeOpponent({ id: 11, name: 'Shadow Archer' }),
       ]
     );
@@ -259,7 +259,7 @@ describe('CombatantsList', () => {
 
     expect(screen.getByTestId('opponent-row-10')).toBeInTheDocument();
     expect(screen.getByTestId('opponent-row-11')).toBeInTheDocument();
-    expect(screen.getByText('Mire Knight')).toBeInTheDocument();
+    expect(screen.getByText('Bog Knight')).toBeInTheDocument();
     expect(screen.getByText('Shadow Archer')).toBeInTheDocument();
   });
 
@@ -495,7 +495,7 @@ describe('CombatantsList', () => {
       [
         makeOpponent({
           id: 10,
-          name: 'Mire Knight',
+          name: 'Bog Knight',
           current_square: null,
           current_position: { id: 5, name: 'Center' },
         }),
@@ -512,7 +512,7 @@ describe('CombatantsList', () => {
   it('renders no position badge for an opponent with current_position null', () => {
     const encounter = makeEncounter(
       [],
-      [makeOpponent({ id: 10, name: 'Mire Knight', current_position: null })]
+      [makeOpponent({ id: 10, name: 'Bog Knight', current_position: null })]
     );
 
     render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
@@ -527,7 +527,7 @@ describe('CombatantsList', () => {
 
   describe('opponent click-menu', () => {
     it('renders a menu trigger when canDeclareManeuvers and characterId are provided', () => {
-      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Bog Knight' })]);
 
       render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
         wrapper: createWrapper(),
@@ -537,7 +537,7 @@ describe('CombatantsList', () => {
     });
 
     it('does not render a menu trigger when canDeclareManeuvers is false (GM/observer)', () => {
-      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Bog Knight' })]);
 
       render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={false} />, {
         wrapper: createWrapper(),
@@ -547,7 +547,7 @@ describe('CombatantsList', () => {
     });
 
     it('does not render a menu trigger without a characterId', () => {
-      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Bog Knight' })]);
 
       render(<CombatantsList encounter={encounter} canDeclareManeuvers={true} />, {
         wrapper: createWrapper(),
@@ -563,7 +563,7 @@ describe('CombatantsList', () => {
       ['combat_mark', 'Mark'],
     ] as const)('%s dispatches with the opponent_id kwarg', async (registryKey, label) => {
       const user = userEvent.setup();
-      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Bog Knight' })]);
 
       render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
         wrapper: createWrapper(),
@@ -581,7 +581,7 @@ describe('CombatantsList', () => {
 
     it('tags the maneuvers a compulsion judges with their difficulty, and not Mark', async () => {
       const user = userEvent.setup();
-      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Bog Knight' })]);
       const compulsion = {
         condition_name: 'Berserk',
         wants_label: 'Attack an opponent',
@@ -630,7 +630,7 @@ describe('CombatantsList', () => {
       const user = userEvent.setup();
       const encounter = makeEncounter(
         [makeParticipant({ id: 1, character_sheet_id: 7 })],
-        [makeOpponent({ id: 10, name: 'Mire Knight' })]
+        [makeOpponent({ id: 10, name: 'Bog Knight' })]
       );
 
       render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
@@ -653,7 +653,7 @@ describe('CombatantsList', () => {
         success: false,
         message: 'Too far away to taunt.',
       });
-      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Bog Knight' })]);
 
       render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
         wrapper: createWrapper(),
@@ -673,7 +673,7 @@ describe('CombatantsList', () => {
 
     it('Engage dispatches combat_engage with the opponent_id kwarg', async () => {
       const user = userEvent.setup();
-      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Mire Knight' })]);
+      const encounter = makeEncounter([], [makeOpponent({ id: 10, name: 'Bog Knight' })]);
 
       render(<CombatantsList encounter={encounter} characterId={7} canDeclareManeuvers={true} />, {
         wrapper: createWrapper(),
@@ -693,7 +693,7 @@ describe('CombatantsList', () => {
       const encounter: EncounterDetail = {
         ...makeEncounter(
           [makeParticipant({ id: 1, character_name: 'Aerande' })],
-          [makeOpponent({ id: 10, name: 'Mire Knight' })]
+          [makeOpponent({ id: 10, name: 'Bog Knight' })]
         ),
         engagement_locks: [
           {
@@ -722,7 +722,7 @@ describe('CombatantsList', () => {
       const encounter: EncounterDetail = {
         ...makeEncounter(
           [makeParticipant({ id: 1, character_name: 'Aerande', character_sheet_id: 7 })],
-          [makeOpponent({ id: 10, name: 'Mire Knight' })]
+          [makeOpponent({ id: 10, name: 'Bog Knight' })]
         ),
         engagement_locks: [
           {
@@ -759,7 +759,7 @@ describe('CombatantsList', () => {
     const encounter: EncounterDetail = {
       ...makeEncounter(
         [makeParticipant({ id: 1, character_name: 'Aerande' })],
-        [makeOpponent({ id: 10, name: 'Mire Knight' })]
+        [makeOpponent({ id: 10, name: 'Bog Knight' })]
       ),
       engagement_locks: [
         {
@@ -783,7 +783,7 @@ describe('CombatantsList', () => {
     const encounter: EncounterDetail = {
       ...makeEncounter(
         [makeParticipant({ id: 1, character_name: 'Aerande' })],
-        [makeOpponent({ id: 10, name: 'Mire Knight' })]
+        [makeOpponent({ id: 10, name: 'Bog Knight' })]
       ),
       engagement_locks: [
         {
@@ -800,13 +800,13 @@ describe('CombatantsList', () => {
     render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
 
     const row = screen.getByTestId('participant-row-1');
-    expect(within(row).getByTestId('engagement-lock-badge')).toHaveTextContent('Mire Knight');
+    expect(within(row).getByTestId('engagement-lock-badge')).toHaveTextContent('Bog Knight');
   });
 
   it('renders no engagement-lock badge when engagement_locks is empty', () => {
     const encounter = makeEncounter(
       [makeParticipant({ id: 1, character_name: 'Aerande' })],
-      [makeOpponent({ id: 10, name: 'Mire Knight' })]
+      [makeOpponent({ id: 10, name: 'Bog Knight' })]
     );
 
     render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
