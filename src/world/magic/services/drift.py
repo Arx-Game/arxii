@@ -98,6 +98,20 @@ def _share_of(part: int, whole: int) -> Decimal:
     return Decimal(part) * _ONE_HUNDRED / Decimal(whole) if whole else Decimal(0)
 
 
+def _unsettled_numbers(main: Affinity, cfg: DriftConfig) -> tuple[int, int]:
+    """The range before Unsettled and the step, in percentage points, for ``main``.
+
+    The main affinity's own values when staff set them, else the general ``DriftConfig``
+    values.
+    """
+    tolerance = main.unsettled_tolerance_percent
+    step = main.unsettled_step_percent
+    return (
+        cfg.unsettled_tolerance_percent if tolerance is None else tolerance,
+        cfg.unsettled_step_percent if step is None else step,
+    )
+
+
 def drift_for(sheet: CharacterSheet) -> DriftReading:
     """Whether ``sheet``'s character is unsettled, and by how much (#5123).
 
@@ -106,9 +120,11 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
     as a percent of all the character's own lifetime resonance; its Mire share is the
     Mire part as a percent of all lifetime resonance. For every affinity other than the
     main one (the largest settled share), the excess is how far its own share stands past
-    its settled share plus ``unsettled_tolerance_percent``, plus how far its Mire share
-    stands past ``mire_allowance_percent``. ``steps_past`` is the total excess in
-    ``unsettled_step_percent`` bands, rounded up.
+    its settled share plus the range before Unsettled, plus how far its Mire share
+    stands past ``mire_allowance_percent``. ``steps_past`` is the total excess in bands of
+    the step, rounded up. The range and the step are the main affinity's own
+    ``unsettled_tolerance_percent`` and ``unsettled_step_percent`` when set, else the
+    general values on ``DriftConfig`` (``_unsettled_numbers``).
 
     A character with no aura, or an aura with nothing settled yet, reads zero.
     """
@@ -126,6 +142,7 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         )
 
     cfg = get_drift_config()
+    tolerance_percent, step_percent = _unsettled_numbers(main, cfg)
     settled_shares = {share.affinity_id: share.settled_percent for share in aura.cached_shares}
     rows = list(
         CharacterResonance.objects.filter(character_sheet=sheet).select_related(
@@ -153,7 +170,7 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         past_settled = (
             own_shares.get(affinity_id, Decimal(0))
             - settled_shares.get(affinity_id, Decimal(0))
-            - cfg.unsettled_tolerance_percent
+            - tolerance_percent
         )
         past_allowance = (
             _share_of(mire_lifetime.get(affinity_id, 0), total_lifetime)
@@ -176,7 +193,7 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         in_worst = [row for row in rows if row.resonance.affinity_id == worst]
         leading = min(in_worst, key=lambda row: (-row.lifetime_earned, row.resonance_id)).resonance
     return DriftReading(
-        steps_past=ceil(excess_total / cfg.unsettled_step_percent),
+        steps_past=ceil(excess_total / step_percent),
         main_affinity=main,
         leading_excess_resonance=leading,
         excess_percent=excess_total,

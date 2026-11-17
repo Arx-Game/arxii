@@ -94,6 +94,29 @@ class UnsettledReadingTests(_UnsettledCase):
         self.assertEqual(reading.steps_past, 3)
         self.assertEqual(reading.leading_excess_resonance, self.dread)
 
+    def test_the_main_affinitys_own_range_and_step_replace_the_general_ones(self) -> None:
+        self.settle(celestial="90", abyssal="10")
+        _hold(self.sheet, self.dawnlight, 70)
+        _hold(self.sheet, self.dread, 30)
+        # Blank on the affinity: the general 5 and 5 apply, as before.
+        self.assertIsNone(self.celestial.unsettled_tolerance_percent)
+        self.assertEqual(drift_for(self.sheet).steps_past, 3)
+
+        self.celestial.unsettled_tolerance_percent = 1
+        self.celestial.unsettled_step_percent = 2
+        self.celestial.save()
+
+        reading = drift_for(self.sheet)
+        # 30 own share - 10 settled - 1 range = 19 past, 2 to a step.
+        self.assertEqual(reading.excess_percent, Decimal(19))
+        self.assertEqual(reading.steps_past, 10)
+        # A character led by another affinity keeps the general numbers.
+        other = CharacterSheetFactory()
+        self.settle(other, primal="90", abyssal="10")
+        _hold(other, self.wild, 70)
+        _hold(other, self.dread, 30)
+        self.assertEqual(drift_for(other).steps_past, 3)
+
     def test_on_the_tolerance_is_not_past_it(self) -> None:
         self.settle(celestial="90", abyssal="10")
         _hold(self.sheet, self.dawnlight, 85)

@@ -29,7 +29,9 @@ class DriftConfig(SharedMemoryModel):
 
     A character is unsettled when a non-main affinity's share of their aura passes its
     settled share by ``unsettled_tolerance_percent``; each ``unsettled_step_percent``
-    past that is one step of severity on the conflict condition.
+    past that is one step of severity on the conflict condition. These two numbers are the
+    general values: an Affinity may set its own range and step for characters whose main
+    affinity it is, and ``drift_for`` reads those first.
 
     Access via ``get_drift_config()`` in ``world.magic.services.drift``.
     """
@@ -39,12 +41,19 @@ class DriftConfig(SharedMemoryModel):
     unsettled_tolerance_percent = models.PositiveSmallIntegerField(
         default=5,
         validators=[MaxValueValidator(100)],
-        help_text="Percentage points an affinity may exceed its settled share before unsettled.",
+        help_text=(
+            "General range before Unsettled: percentage points an affinity may exceed its "
+            "settled share. An Affinity's own value, when set, replaces it for characters "
+            "whose main affinity is that one."
+        ),
     )
     unsettled_step_percent = models.PositiveSmallIntegerField(
         default=5,
         validators=[MinValueValidator(1), MaxValueValidator(100)],
-        help_text="Percentage points past the tolerance that add one step of severity.",
+        help_text=(
+            "General step: percentage points past the range that add one step of severity. "
+            "An Affinity's own value, when set, replaces it."
+        ),
     )
     creation_points = models.PositiveSmallIntegerField(
         default=10,

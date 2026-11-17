@@ -273,7 +273,14 @@ class AffinityKindlingSituationInline(KindlingSituationInline):
 
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "corruption_coefficient", "burn_value", "description"]
+    list_display = [
+        "name",
+        "corruption_coefficient",
+        "burn_value",
+        "unsettled_tolerance_percent",
+        "unsettled_step_percent",
+        "description",
+    ]
     search_fields = ["name"]
     inlines = [AffinityKindlingSituationInline]
 

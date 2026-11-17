@@ -7,6 +7,7 @@ Both are proper domain models replacing the old ModifierTarget-based pattern.
 
 from decimal import Decimal
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -91,6 +92,28 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text=(
             "Strain units one burned point of this affinity's resonance is worth. "
             "Higher makes burning this affinity's resonance push harder."
+        ),
+    )
+    unsettled_tolerance_percent = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MaxValueValidator(100)],
+        verbose_name="Range before Unsettled (percentage points)",
+        help_text=(
+            "How far another affinity may grow past its settled share before a character "
+            "whose main affinity is this one is Unsettled. Blank uses the general value "
+            "from the drift configuration."
+        ),
+    )
+    unsettled_step_percent = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        verbose_name="Each further step (percentage points)",
+        help_text=(
+            "Percentage points past the range that add one step of severity, for a "
+            "character whose main affinity is this one. Blank uses the general value "
+            "from the drift configuration."
         ),
     )
     objects = AffinityManager()
