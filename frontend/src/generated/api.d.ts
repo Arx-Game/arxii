@@ -43308,6 +43308,15 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['KindledResonance'][];
+      impulses: {
+        resonance_id: number;
+        resonance_name: string;
+        label: string;
+        present: boolean;
+        is_compulsion: boolean;
+        text: string;
+        reasons: string[];
+      }[];
     };
     PaginatedKnownSecretList: {
       /** @example 123 */

@@ -76801,6 +76801,7 @@ components:
       required:
       - count
       - results
+      - impulses
       properties:
         count:
           type: integer
@@ -76819,6 +76820,35 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/KindledResonance'
+        impulses:
+          type: array
+          items:
+            type: object
+            properties:
+              resonance_id:
+                type: integer
+              resonance_name:
+                type: string
+              label:
+                type: string
+              present:
+                type: boolean
+              is_compulsion:
+                type: boolean
+              text:
+                type: string
+              reasons:
+                type: array
+                items:
+                  type: string
+            required:
+            - resonance_id
+            - resonance_name
+            - label
+            - present
+            - is_compulsion
+            - text
+            - reasons
     PaginatedKnownSecretList:
       type: object
       required:

@@ -33,8 +33,29 @@ class KindledResonancePagination(StandardResultsSetPagination):
         base = super().get_paginated_response_schema(schema)
         base["properties"]["impulses"] = {
             "type": "array",
-            "items": {"$ref": "#/components/schemas/Impulse"},
+            "items": {
+                "type": "object",
+                "properties": {
+                    "resonance_id": {"type": "integer"},
+                    "resonance_name": {"type": "string"},
+                    "label": {"type": "string"},
+                    "present": {"type": "boolean"},
+                    "is_compulsion": {"type": "boolean"},
+                    "text": {"type": "string"},
+                    "reasons": {"type": "array", "items": {"type": "string"}},
+                },
+                "required": [
+                    "resonance_id",
+                    "resonance_name",
+                    "label",
+                    "present",
+                    "is_compulsion",
+                    "text",
+                    "reasons",
+                ],
+            },
         }
+        base["required"] = [*base.get("required", []), "impulses"]
         return base
 
 
