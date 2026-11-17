@@ -216,8 +216,14 @@ export async function fetchBoonOptions(
   return (await res.json()) as BoonOptions;
 }
 
+/**
+ * Pending requests addressed to the viewer in this scene. `role=incoming` keeps only requests
+ * whose target persona is one the account plays, so the person who asked for an action never
+ * sees the partner's consent prompt on their own screen (the list also returns the account's
+ * own outgoing requests).
+ */
 export async function fetchPendingRequests(sceneId: string): Promise<{ results: ActionRequest[] }> {
-  const res = await apiFetch(`/api/action-requests/?scene=${sceneId}&status=pending`);
+  const res = await apiFetch(`/api/action-requests/?scene=${sceneId}&status=pending&role=incoming`);
   if (!res.ok) throw new Error('Failed to load pending requests');
   return res.json();
 }
