@@ -1,0 +1,18 @@
+== Technique admin page for Kindle (a technique of the major Gift Pyrecraft)
+chosen Properties before: ["fiery"]
+chosen Properties after unticking fiery in the widget: []
+after Save: messages = ["The Technique “Kindle (Pyrecraft)” was changed successfully. You may edit it again below."]
+chosen Properties on the reloaded page: []
+
+== Power Builder page for the application "Light a pyre" (needs the property fiery)
+techniques module text:
+Techniques that do it
+any gift
+TECHNIQUE	GIFT · PATH	ITS PROPERTIES	GRANTS IGNITION	STRENGTH AT REFERENCE	EACH USE
+Kindle	Pyrecraft · no path
+ fiery
+	base  per power   remove grant	11; 16 one level better	a cast: 4 anima, its own roll	edit all
+
+Path is the path whose grant of the gift lists the technique. Untick fiery or remove the grant and the row moves to "one step away" on save.
+checkbox 0: label="fiery" name=t1-properties checked=true
+checkbox 1: label="remove grant" name=t1-remove_grant checked=false

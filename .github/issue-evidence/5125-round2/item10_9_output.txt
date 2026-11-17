@@ -1,0 +1,94 @@
+######## ITEM 10, part 1: an ordinary hot room (The Forge: heat past normal, no authored Primum)
+Mira is in: The Forge
+Mira> look
+The Forge
+This is a room.
+Exits: out
+Characters: Tomas and Mira
+You sense fire Primum: Trace.
+[DB before] Mira: Fire Primum items held=0, action points=(no pool row yet), physical fatigue=(no pool row yet)
+Mira> extract
+There is nothing here for you to extract.
+Mira> extract fire
+There is nothing left to extract.
+[DB after] Mira: Fire Primum items held=0, action points=(no pool row yet), physical fatigue=(no pool row yet)
+
+######## ITEM 9 (the offer lines) and a lair: The Ash Lair, fire 100
+Mira> ash
+The Ash Lair
+This is a room.
+Exits: out
+Characters: Mira
+You sense fire Primum: Massive.
+[Mira is in The Ash Lair]
+Maren> ash
+The Ash Lair
+This is a room.
+Exits: out
+Characters: Mira and Maren
+You sense fire Primum: Massive.
+[Maren is in The Ash Lair]
+Ilsa> ash
+The Ash Lair
+This is a room.
+Exits: out
+Characters: Mira, Maren, and Ilsa
+[Ilsa is in The Ash Lair]
+
+######## ITEM 9: Mira (thread on Pyrecraft) and Maren (holds Pyrecraft, no thread) list what they can extract
+Mira> extract
+Maren arrives to The Ash Lair from Crossroads.
+Ilsa arrives to The Ash Lair from Crossroads.
+You can extract fire Primum (Massive) here.
+  Check: Harvest Primum · +5 from your thread on Pyrecraft
+Each attempt costs 2 AP, whatever you roll.
+Maren> extract
+Ilsa arrives to The Ash Lair from Crossroads.
+You can extract fire Primum (Massive) here.
+  Check: Harvest Primum
+Each attempt costs 2 AP, whatever you roll.
+
+######## ITEM 10, part 2: Ilsa (ice mage, has NOT perceived the fire) in the lair
+Ilsa> look
+The Ash Lair
+This is a room.
+Exits: out
+Characters: Mira, Maren, and Ilsa
+[DB before] Ilsa: Fire Primum items held=0, action points=(no pool row yet), physical fatigue=(no pool row yet); Ash Lair fire stored=100
+Ilsa> extract
+There is nothing here for you to extract.
+Ilsa> extract fire
+There is nothing left to extract.
+[DB after the refused attempts] Ilsa: Fire Primum items held=0, action points=(no pool row yet), physical fatigue=(no pool row yet); Ash Lair fire stored=100
+scene id 5
+Ilsa casts Magesight over REST: 201
+Ilsa> look
+Ilsa casts Magesight: Success.
+The Ash Lair
+This is a room.
+Exits: out
+Characters: Mira, Maren, and Ilsa
+You sense fire Primum: Massive.
+Ilsa> extract
+You can extract fire Primum (Massive) here.
+  Check: Harvest Primum
+Each attempt costs 2 AP, whatever you roll.
+[DB before extracting] Ilsa: Fire Primum items held=0, action points=(no pool row yet), physical fatigue=(no pool row yet); Ash Lair fire stored=100
+Ilsa> extract fire
+Success. You draw out 2 Fire Primum (Fine).
+The Ash Lair now holds a Rich amount of fire Primum. It will not refill.
+[DB after extracting] Ilsa: Fire Primum items held=2, action points=198, physical fatigue=2; Ash Lair fire stored=95
+
+######## ITEM 9 (continued): Mira and Maren both extract in the same lair
+[DB before] Mira: Fire Primum items held=0, action points=(no pool row yet), physical fatigue=(no pool row yet); Ash Lair fire stored=95
+Mira> extract fire
+Ilsa casts Magesight: Success.
+Success. You draw out 2 Fire Primum (Fine).
+The Ash Lair now holds a Rich amount of fire Primum. It will not refill.
+[DB after] Mira: Fire Primum items held=2, action points=198, physical fatigue=2; Ash Lair fire stored=90
+[DB before] Maren: Fire Primum items held=0, action points=(no pool row yet), physical fatigue=(no pool row yet); Ash Lair fire stored=90
+Maren> extract fire
+Ilsa casts Magesight: Success.
+Success. You draw out 2 Fire Primum (Fine).
+The Ash Lair now holds a Rich amount of fire Primum. It will not refill.
+[DB after] Maren: Fire Primum items held=2, action points=198, physical fatigue=2; Ash Lair fire stored=85

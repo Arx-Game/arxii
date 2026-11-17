@@ -1,0 +1,14 @@
+== ITEM 15, service-level reads (Kindle is a technique of the major Gift Pyrecraft; substance fire carries property fiery)
+[before] stored marks on Kindle = ['fiery']
+[before] effect_property_ids_by_technique -> Kindle ['fiery'], Frost [], Magesight []
+[before] has_property('fiery'): Kindle=True, Frost (ice gift, no property on ice)=False, Magesight (minor gift)=False
+-- technique.properties.set([]) done
+[after clearing the stored marks] stored marks on Kindle = []
+[after clearing the stored marks] effect_property_ids_by_technique -> Kindle ['fiery'], Frost [], Magesight []
+[after clearing the stored marks] has_property('fiery'): Kindle=True, Frost (ice gift, no property on ice)=False, Magesight (minor gift)=False
+-- stored mark 'fiery' put back on Kindle (so the admin untick has something to untick)
+[stored mark restored] stored marks on Kindle = ['fiery']
+[stored mark restored] effect_property_ids_by_technique -> Kindle ['fiery'], Frost [], Magesight []
+[stored mark restored] has_property('fiery'): Kindle=True, Frost (ice gift, no property on ice)=False, Magesight (minor gift)=False
+[after the Technique admin save and the Power Builder save, both with fiery unticked] stored marks on Kindle = []
+[after] effect_property_ids_by_technique -> Kindle ['fiery']; has_property('fiery') = True

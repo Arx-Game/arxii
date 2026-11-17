@@ -1,0 +1,33 @@
+# Config now says a call-up costs 20 anima (staff set it through the config admin page; default was 3).
+# Mira leaves and re-enters The Forge so her earlier call-ups are cleared.
+> out
+Crossroads
+This is a room.
+Exits: forge, cinder, ash, sunlit, frost, and vault
+Characters: Maren, Ilsa, and Mira
+[Mira is in The Forge]
+> look
+The Forge
+This is a room.
+Exits: out
+Characters: Tomas and Mira
+You sense fire Primum: Trace.
+[DB state before]
+  anima (current, maximum): 30 | 30
+  every CharacterResonance row of Mira (resonance, balance, lifetime): 1 | 10 | 10
+  call-up rows (room, substance, caster, amount): none
+> callup
+Your gift: fire (10 anima here)
+> callup fire
+Mira begins to manifest fire in the area.
+You call up fire. Cost: 10 anima.
+> look
+The Forge
+This is a room.
+Exits: out
+Characters: Tomas and Mira
+You sense fire Primum: Some.
+[DB state after the call-up]
+  anima (current, maximum): 20 | 30
+  every CharacterResonance row of Mira (resonance, balance, lifetime): 1 | 10 | 10
+  call-up rows (room, substance, caster, amount): 4 | 1 | 22 | 10

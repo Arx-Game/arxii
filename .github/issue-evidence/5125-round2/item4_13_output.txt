@@ -1,0 +1,51 @@
+# Mira goes to Cinder Hall (fire Primum 10, Some = 4 points)
+Cinder Hall
+> inventory
+You are carrying: Ember Coat, Ash Brand
+scene id 2
+--- Kindle card, S0: nothing worn, coat and brand are in the bag
+    heading  'Fire around you'                                                           amount=0
+    source   'Cinder Hall · Some'                                                        amount=4
+    power    'Fire adds'                                                                 amount=4
+--- Kindle cast, S0: ledger environment lines
+    'Surroundings: fire'                               +4
+    environment total +4; final power 10
+> wear Ash Brand
+Mira casts Kindle: Success.
+You equip Ash Brand.
+> inventory
+You are carrying: Ember Coat, Ash Brand
+--- Kindle card, S1: Ash Brand held in the right hand (hand slot), coat still in the bag
+    heading  'Fire around you'                                                           amount=0
+    source   'Cinder Hall · Some'                                                        amount=4
+    source   'Ash Brand, worn · carries fire'                                            amount=4
+    power    'Fire adds'                                                                 amount=6
+    hint     'The more fire around you, the less each extra source adds.'                amount=0
+--- Kindle cast, S1: ledger environment lines
+    'Surroundings: fire'                               +3
+    'Ash Brand (fire)'                                 +3
+    environment total +6; final power 12
+> wear Ember Coat
+Mira casts Kindle: Success.
+You equip Ember Coat.
+--- Kindle card, S2: brand in hand AND coat worn
+    heading  'Fire around you'                                                           amount=0
+    source   'Cinder Hall · Some'                                                        amount=4
+    source   'Ash Brand, worn · carries fire'                                            amount=4
+    source   'Ember Coat, worn · carries fire'                                           amount=4
+    power    'Fire adds'                                                                 amount=8
+    hint     'The more fire around you, the less each extra source adds.'                amount=0
+--- Kindle cast, S2: ledger environment lines
+    'Surroundings: fire'                               +3
+    'Ash Brand (fire)'                                 +3
+    'Ember Coat (fire)'                                +2
+    environment total +8; final power 14
+> remove Ash Brand
+Mira casts Kindle: Success.
+You remove Ash Brand.
+--- Kindle card, S3: brand put back in the bag, coat still worn
+    heading  'Fire around you'                                                           amount=0
+    source   'Cinder Hall · Some'                                                        amount=4
+    source   'Ember Coat, worn · carries fire'                                           amount=4
+    power    'Fire adds'                                                                 amount=6
+    hint     'The more fire around you, the less each extra source adds.'                amount=0
