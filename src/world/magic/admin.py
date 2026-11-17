@@ -3278,7 +3278,6 @@ class DriftConfigAdmin(admin.ModelAdmin):
         "unsettled_tolerance_percent",
         "unsettled_step_percent",
         "creation_points",
-        "mire_allowance_percent",
         "focus_check_type",
         "conflict_condition",
         "updated_at",

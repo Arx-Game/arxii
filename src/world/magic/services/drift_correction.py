@@ -392,7 +392,7 @@ def _convert(
     Never raises for what it cannot do: no target, no authored pair or nothing held converts
     nothing, and a missing pair is named on the result so the caller can say so. The amount
     is at most the source's lifetime, and, with ``limit_to_excess``, what its affinity stands
-    past who the character is. The Mire's excess converts first.
+    past who the character is.
     """
     if wanted <= 0 or target is None or source.pk == target.pk:
         return _Conversion()
@@ -402,14 +402,12 @@ def _convert(
         return _Conversion(missing_pair=(source.affinity, target.affinity))
     rows = CharacterResonance.objects.filter(character_sheet=sheet, resonance=source)
     list(rows.select_for_update())
-    lifetime, row_mire = rows.values_list("lifetime_earned", "mire_lifetime").first() or (0, 0)
-    reading = drift_for(sheet)
+    lifetime = rows.values_list("lifetime_earned", flat=True).first() or 0
     amount = min(wanted, lifetime)
     if limit_to_excess:
-        amount = min(amount, reading.convertible_points(source.affinity_id, row_mire))
+        amount = min(amount, drift_for(sheet).excess_points.get(source.affinity_id, 0))
     if amount <= 0:
         return _Conversion()
-    mire_part = min(amount, reading.mire_excess_points.get(source.affinity_id, 0))
     granted, _ = convert_resonance_amount(
         sheet,
         source_resonance=source,
@@ -417,7 +415,6 @@ def _convert(
         amount=amount,
         multiplier=pair.conversion_multiplier,
         gain_source=GainSource.DRIFT_CORRECTION,
-        mire_amount=mire_part,
     )
     return _Conversion(moved=amount, granted=granted)
 

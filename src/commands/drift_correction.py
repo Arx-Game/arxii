@@ -150,8 +150,6 @@ class CmdAura(ArxCommand):
         unsettled = unsettled_line(reading)
         if unsettled:
             lines.append(unsettled)
-        if reading.mire_share_percent > 0:
-            lines.append(f"The Mire holds {share_in_words(reading.mire_share_percent)} of you.")
         lines.extend(self._describe_rite(sheet))
         return "\n".join(lines)
 

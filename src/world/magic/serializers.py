@@ -605,12 +605,10 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
     shares = CharacterAuraShareSerializer(source="cached_shares", many=True, read_only=True)
     dominant_affinity = serializers.SerializerMethodField()
     dominant_affinity_display = serializers.SerializerMethodField()
-    # #5123: whether the character is unsettled, the sentence naming what made them so, and
-    # the Mire's share of all their resonance in words (never a number).
+    # #5123: whether the character is unsettled and the sentence naming what made them so.
     unsettled = serializers.SerializerMethodField()
     unsettled_line = serializers.SerializerMethodField()
     unsettled_affinity_name = serializers.SerializerMethodField()
-    mire_share_words = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterAura
@@ -623,7 +621,6 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "unsettled",
             "unsettled_line",
             "unsettled_affinity_name",
-            "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
@@ -635,7 +632,6 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
             "unsettled",
             "unsettled_line",
             "unsettled_affinity_name",
-            "mire_share_words",
             "glimpse_state",
             "updated_at",
         ]
@@ -671,12 +667,6 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
         if reading.steps_past <= 0 or leading is None:
             return ""
         return leading.affinity.name
-
-    def get_mire_share_words(self, obj: CharacterAura) -> str:
-        """The Mire's share of everything they have gained, in words."""
-        from world.magic.services.drift import share_in_words  # noqa: PLC0415
-
-        return share_in_words(self._reading(obj).mire_share_percent)
 
     def get_dominant_affinity(self, obj: CharacterAura) -> str:
         """The dominant affinity's name, blank before the aura holds any share."""

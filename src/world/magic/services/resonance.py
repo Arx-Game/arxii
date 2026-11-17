@@ -119,7 +119,6 @@ def grant_resonance(  # noqa: PLR0913
     kindling_situation: KindlingSituation | None = None,
     settling_rite: SettlingRite | None = None,
     reflection: Reflection | None = None,
-    from_mire: bool = False,
     deed_label: str | None = None,
     ledger_out: list[ResonanceGrant] | None = None,
 ) -> CharacterResonance:
@@ -155,8 +154,6 @@ def grant_resonance(  # noqa: PLR0913
         settling_rite: Required for EMBRACED_DEED (#5124) and SUCCUMBED (#5177); the rite that
             grew the deed or took the Mire.
         reflection: Required for EMBRACED_DEED and SUCCUMBED; the reflection the rite applied.
-        from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
-            grant also counts toward the row's ``mire_lifetime``.
         deed_label: What the character did, in her own words, recorded on a KINDLED_DEED
             grant (#5124); None for every other source.
         ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
@@ -167,15 +164,11 @@ def grant_resonance(  # noqa: PLR0913
 
     Raises:
         InvalidImbueAmount: If amount <= 0.
-        ValueError: If source/kwarg shape is invalid, or ``from_mire`` is set for a source
-            other than ``GainSource.SINEATING``.
+        ValueError: If source/kwarg shape is invalid.
     """
     if amount <= 0:
         msg = "Resonance grant amount must be positive."
         raise InvalidImbueAmount(msg)
-    if from_mire and source != GainSource.SINEATING:
-        msg = "Only a Sineating grant can take resonance from the Mire."
-        raise ValueError(msg)
 
     _validate_grant_source_shape(
         source,
@@ -226,11 +219,7 @@ def grant_resonance(  # noqa: PLR0913
     )
     cr.balance += amount
     cr.lifetime_earned += amount
-    update_fields = ["balance", "lifetime_earned"]
-    if from_mire:
-        cr.mire_lifetime += amount
-        update_fields.append("mire_lifetime")
-    cr.save(update_fields=update_fields)
+    cr.save(update_fields=["balance", "lifetime_earned"])
     if created and cached_resonances is not None:
         character_sheet.cached_resonances = [*cached_resonances, cr]
 

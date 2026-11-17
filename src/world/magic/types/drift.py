@@ -19,54 +19,34 @@ if TYPE_CHECKING:
 class DriftReading:
     """Whether a character is unsettled: affinities grown past who they are (#5123).
 
-    Read on the true aura. ``own_shares`` is each affinity's percent of the character's own
-    lifetime resonance (the Mire excluded); ``settled_shares`` is who they are, per
-    affinity. ``main_affinity`` is the largest settled share. ``excess_percent`` is how far
-    the non-main affinities stand past their settled shares plus the tolerance, with the
-    Sineater's Mire share past its allowance added; ``steps_past`` is how many
-    ``unsettled_step_percent`` bands that is (0 when settled). ``leading_excess_resonance``
-    is the resonance contributing most to the excess. ``mire_share_percent`` is the Mire's
-    share of all the character's lifetime resonance, shown apart from their own.
-    ``main_affinity`` is None, and every number 0, when she has no settled aura to measure
-    against. ``own_excess_points`` and ``mire_excess_points`` are the excess per affinity pk
-    in lifetime points, which is what atoning may convert (the Mire part first).
+    Read on the true aura. ``shares`` is each affinity's percent of the character's
+    lifetime resonance; ``settled_shares`` is who they are, per affinity. ``main_affinity``
+    is the largest settled share. ``excess_percent`` is how far the non-main affinities
+    stand past their settled shares plus the range before Unsettled; ``steps_past`` is how
+    many ``unsettled_step_percent`` bands that is (0 when settled). ``leading_excess_resonance``
+    is the resonance contributing most to the excess. ``main_affinity`` is None, and every
+    number 0, when she has no settled aura to measure against. ``excess_points`` is the
+    excess per affinity pk in lifetime points, which is what atoning may convert.
     """
 
     steps_past: int
     main_affinity: Affinity | None
     leading_excess_resonance: Resonance | None
     excess_percent: Decimal
-    mire_share_percent: Decimal
-    own_shares: dict[int, Decimal]
+    shares: dict[int, Decimal]
     settled_shares: dict[int, Decimal]
-    own_excess_points: dict[int, int] = field(default_factory=dict)
-    mire_excess_points: dict[int, int] = field(default_factory=dict)
-
-    def convertible_points(self, affinity_id: int, row_mire: int | None = None) -> int:
-        """Lifetime points that atoning may convert away from ``affinity_id`` (0 if none).
-
-        ``row_mire`` is the Mire lifetime of the one resonance row being converted from: the
-        Mire excess can only be taken from the row that holds it, so it counts at most that
-        much. Left as None, the whole affinity's Mire excess counts (is the affinity
-        convertible at all).
-        """
-        mire = self.mire_excess_points.get(affinity_id, 0)
-        if row_mire is not None:
-            mire = min(mire, row_mire)
-        return self.own_excess_points.get(affinity_id, 0) + mire
+    excess_points: dict[int, int] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class AcceptAuraResult:
     """What accepting the changes to the aura did.
 
-    ``mire_moved`` is the lifetime resonance taken from the Mire that became the
-    character's own; ``settled_shares`` is who they are now, per affinity pk.
-    ``grown_affinity`` is the affinity they grew toward: the affinity of the resonance that
-    made them unsettled, read before accepting. It is what "You become more ..." names.
+    ``settled_shares`` is who they are now, per affinity pk. ``grown_affinity`` is the
+    affinity they grew toward: the affinity of the resonance that made them unsettled, read
+    before accepting. It is what "You become more ..." names.
     """
 
-    mire_moved: int
     main_affinity: Affinity | None
     grown_affinity: Affinity | None
     settled_shares: dict[int, Decimal]

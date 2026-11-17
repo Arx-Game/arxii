@@ -73,11 +73,6 @@ class DriftConfig(SharedMemoryModel):
             "when it pays a pull."
         ),
     )
-    mire_allowance_percent = models.PositiveSmallIntegerField(
-        default=30,
-        validators=[MaxValueValidator(100)],
-        help_text="Percent of a Sineater's lifetime resonance the Mire may hold before unsettled.",
-    )
     focus_base_difficulty_level = models.PositiveSmallIntegerField(
         default=1,
         help_text=(
