@@ -294,6 +294,7 @@ def accept_soul_tether(  # noqa: PLR0913 - the pair, the role, two resonances an
             rel_incoming,
             resonance=sineater_resonance or default_sineater_resonance(sineater_sheet),
             ritual=ritual,
+            fresh_capstone=True,
         )
 
         # 10. Install the SoulTetherActive ConditionInstance on the Sinner if absent.
@@ -360,14 +361,20 @@ def _weave_sineater_thread(
     *,
     resonance: Resonance | None,
     ritual: Ritual | None,
+    fresh_capstone: bool,
 ) -> Thread | None:
     """Weave the Sineater's thread on a ritual capstone of their own side.
 
+    A formation passes ``fresh_capstone=True``: every formation is its own event, so it gets a
+    capstone of its own, as the Sinner's side does (the capstone lookups read the newest). The
+    backfill for a tether that has none passes False and reuses a capstone already there.
     None when there is no resonance to channel.
     """
     if resonance is None:
         return None
-    capstone = rel_incoming.capstones.filter(is_ritual_capstone=True).first()
+    capstone = (
+        None if fresh_capstone else rel_incoming.capstones.filter(is_ritual_capstone=True).first()
+    )
     if capstone is None:
         capstone = RelationshipCapstone.objects.create(
             relationship=rel_incoming,
@@ -423,6 +430,7 @@ def ensure_sineater_thread(
             rel_incoming,
             resonance=resonance or default_sineater_resonance(sineater_sheet),
             ritual=Ritual.objects.filter(name="accept_soul_tether").first(),
+            fresh_capstone=False,
         )
 
 

@@ -504,6 +504,51 @@ class SineaterHalfOfBondTests(TestCase):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
+class ReformingATetherTests(TestCase):
+    """Each formation is its own event: the Sineater's half gets a fresh ritual capstone,
+    as the Sinner's does, and the lookups read the newest."""
+
+    def test_forming_again_after_a_dissolution_weaves_on_a_new_capstone_on_both_sides(self) -> None:
+        from world.magic.services.soul_tether import dissolve_soul_tether
+
+        sinner, sineater = _make_eligible_pair()
+        _make_active_relationship(sinner, sineater)
+        abyssal = ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
+        primal = ResonanceFactory(affinity=AffinityFactory(name="Primal"))
+        CharacterResonanceFactory(character_sheet=sineater, resonance=primal, lifetime_earned=40)
+
+        def form():
+            return accept_soul_tether(
+                initiator_sheet=sinner,
+                partner_sheet=sineater,
+                sinner_role=SoulTetherRoleEnum.SINNER,
+                resonance=abyssal,
+                ritual_components=[],
+            )
+
+        form()
+        side = CharacterRelationship.objects.get(source=sineater, target=sinner)
+        first = side.capstones.get(is_ritual_capstone=True)
+        dissolve_soul_tether(
+            relationship_id=CharacterRelationship.objects.get(source=sinner, target=sineater).pk,
+            initiator_sheet=sinner,
+        )
+
+        form()
+
+        capstones = list(side.capstones.filter(is_ritual_capstone=True))
+        self.assertEqual(len(capstones), 2)
+        newest = side.capstones.filter(is_ritual_capstone=True).first()
+        self.assertNotEqual(newest.pk, first.pk)
+        live = Thread.objects.get(
+            owner=sineater,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            retired_at__isnull=True,
+        )
+        self.assertEqual(live.target_capstone_id, newest.pk)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
 class MireServicesTests(TestCase):
     """take_on_corruption and release_mire move corruption and the holding together."""
 
