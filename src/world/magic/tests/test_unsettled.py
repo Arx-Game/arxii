@@ -6,7 +6,6 @@ burden is read apart and has its own allowance (30 percent of their lifetime res
 """
 
 from decimal import Decimal
-from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.db import IntegrityError, transaction
@@ -28,7 +27,6 @@ from world.magic.services.aura import recompute_aura
 from world.magic.services.conversion import convert_resonance_amount
 from world.magic.services.drift import check_resonance_focus, drift_for, get_drift_config
 from world.magic.services.resonance import grant_resonance
-from world.magic.services.soul_tether import _grant_sineating_resonance
 
 
 def _hold(sheet, resonance, lifetime, mire=0):
@@ -229,10 +227,9 @@ class MireShareTests(_UnsettledCase):
         _hold(self.sheet, self.wild, 75)
         _hold(sineater, self.dawnlight, 75)
 
-        offer = SimpleNamespace(
-            sinner_sheet=self.sheet, sineater_sheet=sineater, resonance=self.dread
-        )
-        _grant_sineating_resonance(offer, 25)
+        # What a Sineating used to grant both parties; step 7 of #5177 removes the Mire share.
+        grant_resonance(self.sheet, self.dread, 25, source=GainSource.SINEATING)
+        grant_resonance(sineater, self.dread, 25, source=GainSource.SINEATING, from_mire=True)
 
         sinner_row = CharacterResonance.objects.get(
             character_sheet=self.sheet, resonance=self.dread

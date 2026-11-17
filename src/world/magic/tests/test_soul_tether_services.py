@@ -7,9 +7,6 @@ Tests cover:
     4.4  Idempotency — duplicate formation raises SoulTetherFormationError
     4.5  Multi-tether — second tether to different Sineater reuses ConditionInstance
 
-    5.1  request_sineating validation gates
-    5.2  resolve_sineating happy path (units > 0 deducts costs, increments state, audit row)
-    5.3  resolve_sineating decline path (units == 0 writes audit row, no state changes)
     5.4  Per-scene cap clamping (max_units_offered capped to per-scene formula)
 
     8.1  Stage-3 rescue happy path (costs paid, severity reduced, audit row, lifetime_helped)
@@ -56,17 +53,16 @@ from world.magic.models import CharacterAura, CharacterResonance, MireHolding, T
 from world.magic.models.soul_tether import Sineating
 from world.magic.services.corruption import accrue_corruption, reduce_corruption
 from world.magic.services.mire import release_mire, take_on_corruption
+from world.magic.services.sineating import request_sineating
 from world.magic.services.soul_tether import (
     _compute_per_scene_sineating_cap,
     accept_soul_tether,
     ensure_sineater_thread,
-    request_sineating,
-    resolve_sineating,
     shared_active_scene,
     sineater_has_fallen,
 )
 from world.magic.types.corruption import CorruptionRecoverySource, CorruptionSource
-from world.magic.types.soul_tether import SineatingOffer, SoulTetherRole as SoulTetherRoleEnum
+from world.magic.types.soul_tether import SoulTetherRole as SoulTetherRoleEnum
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipTypeFactory,
@@ -642,25 +638,19 @@ class PresenceAndFallenSineaterTests(TestCase):
         )
         CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
 
-    def _request(self, scene: object) -> object:
-        return request_sineating(
-            sinner_sheet=self.sinner,
-            sineater_sheet=self.sineater,
-            resonance=self.resonance,
-            max_units=5,
-            scene=scene,
-        )
+    def _request(self) -> object:
+        return request_sineating(self.sinner, self.sineater, 5)
 
     def test_an_npc_without_a_player_tenure_takes_part_when_it_is_there(self) -> None:
         scene = place_in_active_scene(self.sinner, self.sineater)
         self.assertEqual(shared_active_scene(self.sinner, self.sineater), scene)
-        self.assertEqual(self._request(scene).scene, scene)
+        self.assertEqual(self._request().scene, scene)
 
         # Standing in different places, they share no scene.
-        elsewhere = place_in_active_scene(self.sineater)
+        place_in_active_scene(self.sineater)
         self.assertIsNone(shared_active_scene(self.sinner, self.sineater))
         with self.assertRaises(SineatingValidationError) as ctx:
-            self._request(elsewhere)
+            self._request()
         self.assertIn("same scene", ctx.exception.user_message)
 
     def test_a_fallen_sineater_refuses_a_sineating_and_a_rescue(self) -> None:
@@ -675,7 +665,7 @@ class PresenceAndFallenSineaterTests(TestCase):
         name = self.sineater.primary_persona.name
         expected = f"{name} has fallen too far into the Abyss to carry anyone's sins."
         with self.assertRaises(SineaterFallenError) as ctx:
-            self._request(scene)
+            self._request()
         self.assertEqual(ctx.exception.user_message, expected)
         with self.assertRaises(SineaterFallenError) as ctx:
             perform_soul_tether_rescue(
@@ -852,363 +842,6 @@ def _make_tethered_pair(
     return sinner, sineater, resonance, relationship
 
 
-def _make_sineating_offer(  # noqa: PLR0913
-    sinner: object,
-    sineater: object,
-    resonance: object,
-    relationship: object,
-    max_units: int = 5,
-    *,
-    scene: object,
-) -> SineatingOffer:
-    """Build a SineatingOffer directly, bypassing scene validation.
-
-    Used by tests that focus on resolve_sineating logic rather than
-    request_sineating validation.  The SineatingOffer is the frozen
-    dataclass accepted by resolve_sineating — constructing it manually
-    allows us to skip the roster/scene-participation lookup chain.
-    ``scene`` is required; pass a real ``SceneFactory()`` instance.
-    """
-    return SineatingOffer(
-        sinner_sheet=sinner,  # type: ignore[arg-type]
-        sineater_sheet=sineater,  # type: ignore[arg-type]
-        relationship=relationship,  # type: ignore[arg-type]
-        resonance=resonance,  # type: ignore[arg-type]
-        max_units_offered=max_units,
-        anima_cost_per_unit=2,  # default from SoulTetherConfig
-        fatigue_cost_per_unit=1,  # default from SoulTetherConfig
-        current_hollow=0,
-        hollow_max=0,
-        sineater_current_strain_stage=0,
-        scene=scene,
-    )
-
-
-# ---------------------------------------------------------------------------
-# 5.1  request_sineating validation gates
-# ---------------------------------------------------------------------------
-
-
-@override_settings(SEED_SAMPLE_CONTENT=True)
-class RequestSineatingValidationTests(TestCase):
-    """Spec B §7.2 — validation gates for request_sineating."""
-
-    def setUp(self) -> None:
-        wire_soul_tether_content()
-        self.track = RelationshipTypeFactory()
-        abyssal_affinity = AffinityFactory(name="Abyssal")
-        self.resonance = ResonanceFactory(affinity=abyssal_affinity)
-        self.sinner, self.sineater = _make_eligible_pair(track=self.track)
-        _make_active_relationship(self.sinner, self.sineater)
-
-    def test_no_active_tether_raises(self) -> None:
-        """Requesting Sineating without a Soul Tether raises SineatingValidationError."""
-        # No tether formed — relationship rows exist but is_soul_tether is False.
-        with self.assertRaises(SineatingValidationError) as ctx:
-            request_sineating(
-                sinner_sheet=self.sinner,
-                sineater_sheet=self.sineater,
-                resonance=self.resonance,
-                max_units=5,
-                scene=None,
-            )
-        self.assertIn(
-            ctx.exception.user_message,
-            SineatingValidationError.SAFE_MESSAGES,
-        )
-        self.assertIn("No active Soul Tether", ctx.exception.user_message)
-
-    def test_scene_none_raises(self) -> None:
-        """Sineating requires a scene; scene=None raises SineatingValidationError."""
-        # Form the tether first so the tether check passes.
-        accept_soul_tether(
-            initiator_sheet=self.sinner,
-            partner_sheet=self.sineater,
-            sinner_role=SoulTetherRoleEnum.SINNER,
-            resonance=self.resonance,
-            ritual_components=[],
-        )
-        # Seed a CharacterResonance so the resonance gate passes too.
-        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
-
-        with self.assertRaises(SineatingValidationError) as ctx:
-            request_sineating(
-                sinner_sheet=self.sinner,
-                sineater_sheet=self.sineater,
-                resonance=self.resonance,
-                max_units=5,
-                scene=None,  # Explicit None — no active scene
-            )
-        self.assertIn("same scene", ctx.exception.user_message)
-
-    def test_resonance_not_accrued_by_sinner_raises(self) -> None:
-        """Resonance with no CharacterResonance row for Sinner raises SineatingValidationError."""
-        # Form tether so the tether check passes.
-        accept_soul_tether(
-            initiator_sheet=self.sinner,
-            partner_sheet=self.sineater,
-            sinner_role=SoulTetherRoleEnum.SINNER,
-            resonance=self.resonance,
-            ritual_components=[],
-        )
-        # Use a *different* resonance that Sinner has no CharacterResonance for.
-        other_resonance = ResonanceFactory()
-
-        scene = place_in_active_scene(self.sinner, self.sineater)
-        with self.assertRaises(SineatingValidationError) as ctx:
-            request_sineating(
-                sinner_sheet=self.sinner,
-                sineater_sheet=self.sineater,
-                resonance=other_resonance,
-                max_units=5,
-                scene=scene,
-            )
-        self.assertIn("not one the Sinner accrues", ctx.exception.user_message)
-
-    def test_offer_carries_scene(self) -> None:
-        """Phase 7: the returned SineatingOffer.scene must equal the scene passed in."""
-        # Form tether so the tether check passes.
-        accept_soul_tether(
-            initiator_sheet=self.sinner,
-            partner_sheet=self.sineater,
-            sinner_role=SoulTetherRoleEnum.SINNER,
-            resonance=self.resonance,
-            ritual_components=[],
-        )
-        # Seed a CharacterResonance so the resonance gate passes.
-        CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
-
-        scene = place_in_active_scene(self.sinner, self.sineater)
-        offer = request_sineating(
-            sinner_sheet=self.sinner,
-            sineater_sheet=self.sineater,
-            resonance=self.resonance,
-            max_units=5,
-            scene=scene,
-        )
-        self.assertEqual(offer.scene, scene)
-
-
-# ---------------------------------------------------------------------------
-# 5.2  resolve_sineating happy path (units > 0)
-# ---------------------------------------------------------------------------
-
-
-@override_settings(SEED_SAMPLE_CONTENT=True)
-class ResolveSineatingHappyPathTests(TestCase):
-    """Spec B §7.2 — accepted Sineating deducts costs, increments state, writes audit row."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        wire_soul_tether_content()
-        track = RelationshipTypeFactory()
-        cls.sinner, cls.sineater, cls.resonance, cls.relationship = _make_tethered_pair(track=track)
-
-        # Seed Sineater's anima so the deduction can proceed.
-        cls.sineater_anima = CharacterAnimaFactory(
-            character=cls.sineater,
-            current=20,
-            maximum=20,
-        )
-
-        # Seed a CharacterResonance for the Sinner (required for the tether's resonance gate).
-        CharacterResonanceFactory(character_sheet=cls.sinner, resonance=cls.resonance)
-
-    def _build_offer(self, max_units: int = 5) -> SineatingOffer:
-        from world.scenes.factories import SceneFactory
-
-        return _make_sineating_offer(
-            self.sinner,
-            self.sineater,
-            self.resonance,
-            self.relationship,
-            max_units=max_units,
-            scene=SceneFactory(),
-        )
-
-    def test_returns_sineating_result_with_correct_units(self) -> None:
-        offer = self._build_offer()
-        result = resolve_sineating(offer, units_accepted=3)
-        self.assertEqual(result.units_accepted, 3)
-        self.assertFalse(result.declined)
-
-    def test_audit_row_written(self) -> None:
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=3)
-        self.assertEqual(Sineating.objects.filter(sineater_sheet=self.sineater).count(), 1)
-
-    def test_audit_row_units_accepted_matches(self) -> None:
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=3)
-        row = Sineating.objects.get(sineater_sheet=self.sineater)
-        self.assertEqual(row.units_accepted, 3)
-        self.assertEqual(row.units_offered, offer.max_units_offered)
-
-    def test_anima_deducted_from_sineater(self) -> None:
-        from world.magic.models import CharacterAnima
-
-        initial_current = 20
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=3)
-
-        anima = CharacterAnima.objects.get(character=self.sineater)
-        expected = initial_current - 3 * offer.anima_cost_per_unit
-        self.assertEqual(anima.current, expected)
-
-    def test_hollow_current_incremented_on_sinner_thread(self) -> None:
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=3)
-
-        sinner_thread = Thread.objects.filter(
-            owner=self.sinner,
-            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
-            resonance=self.resonance,
-            retired_at__isnull=True,
-        ).first()
-        # Thread level is 0, so hollow_max = 0*10 = 0; clamped to hollow_max.
-        # The hollow_max for a level-0 thread is 0, so hollow_current stays 0.
-        # This tests that the clamping logic doesn't crash; a level-1+ test would show growth.
-        self.assertIsNotNone(sinner_thread)
-        self.assertGreaterEqual(sinner_thread.hollow_current, 0)
-
-    def test_lifetime_helped_incremented_on_sineater_resonance(self) -> None:
-        from world.magic.models.aura import CharacterResonance
-
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=3)
-
-        cr = CharacterResonance.objects.get(
-            character_sheet=self.sineater,
-            resonance=self.resonance,
-        )
-        self.assertEqual(cr.lifetime_helped, 3)
-        self.assertEqual(cr.balance, 3)
-        sinner_resonance = CharacterResonance.objects.get(
-            character_sheet=self.sinner,
-            resonance=self.resonance,
-        )
-        self.assertEqual(sinner_resonance.balance, 3)
-
-    def test_result_new_lifetime_helped_matches_db(self) -> None:
-        from world.magic.models.aura import CharacterResonance
-
-        offer = self._build_offer()
-        result = resolve_sineating(offer, units_accepted=4)
-
-        cr = CharacterResonance.objects.get(
-            character_sheet=self.sineater,
-            resonance=self.resonance,
-        )
-        self.assertEqual(result.new_lifetime_helped, cr.lifetime_helped)
-
-    def test_units_clamped_to_max_units_offered(self) -> None:
-        """Requesting more units than offered clamps to max_units_offered."""
-        offer = self._build_offer(max_units=5)
-        result = resolve_sineating(offer, units_accepted=999)
-        self.assertEqual(result.units_accepted, 5)
-
-    def test_audit_row_scene_matches_offer_scene(self) -> None:
-        """Phase 7: Sineating audit row.scene is taken from offer.scene."""
-        from world.scenes.factories import SceneFactory
-
-        scene = SceneFactory()
-        offer = _make_sineating_offer(
-            self.sinner,
-            self.sineater,
-            self.resonance,
-            self.relationship,
-            scene=scene,
-        )
-        resolve_sineating(offer, units_accepted=2)
-        row = Sineating.objects.get(sineater_sheet=self.sineater)
-        self.assertEqual(row.scene, scene)
-
-
-# ---------------------------------------------------------------------------
-# 5.3  resolve_sineating decline path (units == 0)
-# ---------------------------------------------------------------------------
-
-
-@override_settings(SEED_SAMPLE_CONTENT=True)
-class ResolveSineatingDeclineTests(TestCase):
-    """Spec B §7.2 — declined Sineating writes audit row with units_accepted=0, no state changes."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        wire_soul_tether_content()
-        track = RelationshipTypeFactory()
-        cls.sinner, cls.sineater, cls.resonance, cls.relationship = _make_tethered_pair(track=track)
-        # Seed Sineater's anima for deduction baseline.
-        cls.sineater_anima = CharacterAnimaFactory(
-            character=cls.sineater,
-            current=20,
-            maximum=20,
-        )
-        CharacterResonanceFactory(character_sheet=cls.sinner, resonance=cls.resonance)
-
-    def _build_offer(self) -> SineatingOffer:
-        from world.scenes.factories import SceneFactory
-
-        return _make_sineating_offer(
-            self.sinner,
-            self.sineater,
-            self.resonance,
-            self.relationship,
-            scene=SceneFactory(),
-        )
-
-    def test_decline_returns_declined_true(self) -> None:
-        offer = self._build_offer()
-        result = resolve_sineating(offer, units_accepted=0)
-        self.assertTrue(result.declined)
-        self.assertEqual(result.units_accepted, 0)
-
-    def test_decline_audit_row_written(self) -> None:
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=0)
-        self.assertEqual(Sineating.objects.filter(sineater_sheet=self.sineater).count(), 1)
-
-    def test_decline_audit_row_units_accepted_is_zero(self) -> None:
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=0)
-        row = Sineating.objects.get(sineater_sheet=self.sineater)
-        self.assertEqual(row.units_accepted, 0)
-
-    def test_decline_no_anima_deducted(self) -> None:
-        from world.magic.models import CharacterAnima
-
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=0)
-        anima = CharacterAnima.objects.get(character=self.sineater)
-        self.assertEqual(anima.current, 20)  # unchanged
-
-    def test_decline_no_lifetime_helped_change(self) -> None:
-        from world.magic.models.aura import CharacterResonance
-
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=0)
-        # No CharacterResonance row should have been created for the Sineater
-        # (it's only created on acceptance).
-        self.assertFalse(
-            CharacterResonance.objects.filter(
-                character_sheet=self.sineater,
-                resonance=self.resonance,
-            ).exists()
-        )
-
-    def test_decline_hollow_unchanged(self) -> None:
-        offer = self._build_offer()
-        resolve_sineating(offer, units_accepted=0)
-        sinner_thread = Thread.objects.filter(
-            owner=self.sinner,
-            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
-            resonance=self.resonance,
-            retired_at__isnull=True,
-        ).first()
-        if sinner_thread is not None:
-            self.assertEqual(sinner_thread.hollow_current, 0)  # unchanged
-
-
 # ---------------------------------------------------------------------------
 # 5.4  Per-scene cap clamping
 # ---------------------------------------------------------------------------
@@ -1280,14 +913,8 @@ class PerSceneCapTests(TestCase):
         CharacterResonanceFactory(character_sheet=sinner, resonance=self.resonance)
 
         # A real Scene both characters stand in, so the pending offer FK can be saved.
-        scene = place_in_active_scene(sinner, sineater)
-        offer = request_sineating(
-            sinner_sheet=sinner,
-            sineater_sheet=sineater,
-            resonance=self.resonance,
-            max_units=9999,  # far above any cap
-            scene=scene,
-        )
+        place_in_active_scene(sinner, sineater)
+        offer = request_sineating(sinner, sineater, 9999)  # far above any cap
 
         # Level-0 thread → cap = 5; max_units_offered should be clamped.
         self.assertLessEqual(offer.max_units_offered, 20)  # hard-max guard
@@ -1789,20 +1416,16 @@ class PerformSoulTetherRescueGateTests(TestCase):
 # =============================================================================
 
 
-def _form_tether_and_resolve(
-    sinner: object,
-    sineater: object,
-    resonance: object,
-    relationship: object,
-    units: int = 3,
-) -> None:
-    """Accept a tether and resolve a Sineating to make hollow_current > 0."""
-    from world.scenes.factories import SceneFactory
-
-    offer = _make_sineating_offer(
-        sinner, sineater, resonance, relationship, max_units=units, scene=SceneFactory()
+def _fill_hollow(sinner: object, resonance: object, units: int = 3) -> None:
+    """Fill the Sinner's Hollow so hollow_current > 0."""
+    thread = Thread.objects.get(
+        owner=sinner,
+        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+        resonance=resonance,
+        retired_at__isnull=True,
     )
-    resolve_sineating(offer, units_accepted=units)
+    thread.hollow_current = units
+    thread.save(update_fields=["hollow_current"])
 
 
 # ---------------------------------------------------------------------------
@@ -1827,8 +1450,6 @@ class DissolveSoulTetherSingleTests(TestCase):
         CharacterRelationshipFactory(source=self.sinner, target=self.sineater)
         CharacterRelationshipFactory(source=self.sineater, target=self.sinner)
 
-        # Seed Sineater anima for resolve_sineating.
-        CharacterAnimaFactory(character=self.sineater, current=20, maximum=20)
         CharacterResonanceFactory(character_sheet=self.sinner, resonance=self.resonance)
 
         self.capstone = accept_soul_tether(
@@ -1844,17 +1465,23 @@ class DissolveSoulTetherSingleTests(TestCase):
 
         # Seed some sineating so hollow_current > 0 (optional — dissolution retires
         # threads regardless, but this validates hollow doesn't interfere).
-        from world.scenes.factories import SceneFactory
+        _fill_hollow(self.sinner, self.resonance, 3)
+        from world.magic.factories import SineatingFactory
+        from world.magic.models.aura import CharacterResonance
 
-        offer = _make_sineating_offer(
-            self.sinner,
-            self.sineater,
-            self.resonance,
-            self.relationship,
-            max_units=3,
-            scene=SceneFactory(),
+        row, _ = CharacterResonance.objects.get_or_create(
+            character_sheet=self.sineater, resonance=self.resonance
         )
-        resolve_sineating(offer, units_accepted=3)
+        row.lifetime_helped = 3
+        row.save(update_fields=["lifetime_helped"])
+        SineatingFactory(
+            sinner_sheet=self.sinner,
+            sineater_sheet=self.sineater,
+            relationship=self.relationship,
+            resonance=self.resonance,
+            units_offered=3,
+            units_accepted=3,
+        )
 
     def _dissolve(self) -> None:
         from world.magic.services.soul_tether import dissolve_soul_tether
@@ -1954,7 +1581,6 @@ class DissolveSoulTetherSingleTests(TestCase):
 
     def test_sineating_audit_rows_persist(self) -> None:
         """Sineating audit rows must NOT be deleted on dissolution."""
-        from world.magic.models.soul_tether import Sineating
 
         self._dissolve()
         self.assertGreater(Sineating.objects.filter(sinner_sheet=self.sinner).count(), 0)

@@ -3046,8 +3046,8 @@ def wire_soul_tether_stat_definitions() -> None:
     """Idempotent seed for Soul Tether achievement stat definitions (Spec B §14.3).
 
     Creates StatDefinition rows for all 7 stats fired by Soul Tether services:
-    - sineating.units_accepted: Units accepted in a Sineating (fired by resolve_sineating)
-    - sineating.units_declined: Sineating requests declined (fired by resolve_sineating)
+    - sineating.units_accepted: Units accepted in a Sineating (fired by perform_sineating)
+    - sineating.units_declined: Sineating requests declined (fired by decline_sineating)
     - sineating.requests_made: Sineating requests initiated (fired by request_sineating)
     - rescue.performed: Soul Tether rescues performed (fired by perform_soul_tether_rescue)
     - rescue.stage5_save: Rescues from stage 5 Subsumption (fired by perform_soul_tether_rescue)

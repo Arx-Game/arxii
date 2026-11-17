@@ -1633,7 +1633,7 @@ def resolve_stage_advance_prompt_from_db(
 ) -> StageAdvanceBonusResult:
     """Resolve a stage-advance bonus offer fetched from the database (Task 1.7).
 
-    Parallel to ``resolve_sineating_from_db``. Looks up the ``PendingStageAdvanceOffer``
+    Parallel to ``perform_sineating``. Looks up the ``PendingStageAdvanceOffer``
     row, validates TTL and co-location, then delegates to ``resolve_stage_advance_prompt``.
 
     TTL check: If ``expires_at < now()``, the offer is stale — delete the row and raise.

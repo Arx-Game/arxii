@@ -276,7 +276,7 @@ def _checked_performance(
 
 
 def _earned(units: int, cfg: SoulTetherConfig, share: Decimal) -> int:
-    return int(Decimal(units * cfg.resonance_per_unit) * share)
+    return int(Decimal(units * cfg.resonance_per_unit) * Decimal(share))
 
 
 def _refill_hollow(sinner_sheet: CharacterSheet, pending: SineatingPendingOffer, units: int) -> int:

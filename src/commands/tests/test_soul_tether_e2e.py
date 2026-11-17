@@ -7,16 +7,15 @@ Proves CmdTether and CmdSineater converge on the same service seam as the
 Journey:
   1. Sinner runs ``tether burden Sineater resonance=...``
      → CharacterRelationship.is_soul_tether=True + RELATIONSHIP_CAPSTONE Thread created
-  2. Sinner runs ``tether entreat Sineater sins=3``
-     → SineatingPendingOffer row created
-  3. Sineater runs ``sineater consume Sinner``
-     → offer consumed, hollow filled, offer row deleted
-  4. Stage-advance offer seeded directly → Sineater runs ``sineater mire Sinner sins=2``
+  2. Stage-advance offer seeded directly → Sineater runs ``sineater brace Sinner sins=2``
      → PendingStageAdvanceOffer row deleted, Strain added
-  5. Sinner at corruption stage 3 → Sineater runs ``sineater rescue Sinner``
+  3. Sinner at corruption stage 3 → Sineater runs ``sineater rescue Sinner``
      → RescueOutcome returned, Sineater msg sent
-  6. Sinner runs ``tether dissolve Sineater``
+  4. Sinner runs ``tether dissolve Sineater``
      → is_soul_tether=False
+
+Sineating itself is a pose (``pose/entreat``, ``pose/sineat``); its journeys are in
+``integration_tests/test_sineating_journeys.py``.
 
 ``perform_check`` and ``emit_event`` are patched — same boundary as
 ``test_soul_tether_flow.py`` — so the test is reproducible without a running Twisted
@@ -51,7 +50,7 @@ from world.magic.factories import (
     with_corruption_at_stage,
 )
 from world.magic.models import Thread
-from world.magic.models.soul_tether import PendingStageAdvanceOffer, SineatingPendingOffer
+from world.magic.models.soul_tether import PendingStageAdvanceOffer
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.relationships.models import CharacterRelationship
 from world.scenes.factories import SceneFactory
@@ -128,7 +127,7 @@ def _mock_check_result(success_level: int = 2) -> MagicMock:
 @tag("postgres")
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class SoulTetherJourneyTests(TestCase):
-    """Full bond lifecycle via telnet commands: burden→entreat→consume→mire→rescue→dissolve."""
+    """Full bond lifecycle via telnet commands: burden→brace→rescue→dissolve."""
 
     def setUp(self) -> None:
         # DbHolder trap: build all Evennia ObjectDB fixtures in setUp (not setUpTestData).
@@ -213,7 +212,7 @@ class SoulTetherJourneyTests(TestCase):
     # ------------------------------------------------------------------
 
     def test_full_lifecycle(self) -> None:
-        """Burden → entreat → consume → mire → rescue → dissolve."""
+        """Burden → brace → rescue → dissolve."""
         # 1. Sinner forms the tether (burden = Sinner-initiated).
         self._run(
             CmdTether,
@@ -233,32 +232,7 @@ class SoulTetherJourneyTests(TestCase):
         )
         self.assertEqual(thread.resonance, self.resonance)
 
-        # 2. Sinner entreats: request sineat.
-        self._run(
-            CmdTether,
-            self.sinner_char,
-            f"entreat {self.sineater_char.db_key} sins=3",
-        )
-        offer = SineatingPendingOffer.objects.get(
-            sinner_sheet=self.sinner_sheet,
-            sineater_sheet=self.sineater_sheet,
-        )
-        self.assertGreater(offer.units_offered, 0)
-
-        # 3. Sineater consumes (default: all offered).
-        self._run(
-            CmdSineater,
-            self.sineater_char,
-            f"consume {self.sinner_char.db_key}",
-        )
-        self.assertFalse(
-            SineatingPendingOffer.objects.filter(
-                sinner_sheet=self.sinner_sheet,
-                sineater_sheet=self.sineater_sheet,
-            ).exists()
-        )
-
-        # 4. Seed a PendingStageAdvanceOffer directly; Sineater pledges with mire.
+        # 2. Seed a PendingStageAdvanceOffer directly; Sineater braces against it.
         PendingStageAdvanceOffer.objects.create(
             sinner_sheet=self.sinner_sheet,
             sineater_sheet=self.sineater_sheet,
@@ -273,7 +247,7 @@ class SoulTetherJourneyTests(TestCase):
         self._run(
             CmdSineater,
             self.sineater_char,
-            f"mire {self.sinner_char.db_key} sins=2",
+            f"brace {self.sinner_char.db_key} sins=2",
         )
         self.assertFalse(
             PendingStageAdvanceOffer.objects.filter(
@@ -282,7 +256,7 @@ class SoulTetherJourneyTests(TestCase):
             ).exists()
         )
 
-        # 5. Push Sinner to corruption stage 3; Sineater rescues.
+        # 3. Push Sinner to corruption stage 3; Sineater rescues.
         with_corruption_at_stage(self.sinner_sheet, self.resonance, stage=3)
         self._run(
             CmdSineater,
@@ -291,7 +265,7 @@ class SoulTetherJourneyTests(TestCase):
         )
         self.sineater_char.msg.assert_called()
 
-        # 6. Sinner dissolves the tether.
+        # 4. Sinner dissolves the tether.
         self._run(
             CmdTether,
             self.sinner_char,
@@ -299,65 +273,3 @@ class SoulTetherJourneyTests(TestCase):
         )
         rel.refresh_from_db()
         self.assertFalse(rel.is_soul_tether)
-
-    # ------------------------------------------------------------------
-    # Error paths
-    # ------------------------------------------------------------------
-
-    def test_entreat_no_active_scene_sends_error(self) -> None:
-        # Form the tether first.
-        self._run(
-            CmdTether,
-            self.sinner_char,
-            (f"burden {self.sineater_char.db_key} resonance={self.resonance.name}"),
-        )
-        # Remove character from room so get_active_scene returns None.
-        self.sinner_char.location = None
-        self.sinner_char.save()
-        if hasattr(self.room, "_active_scene_cache"):
-            del self.room._active_scene_cache
-
-        self._run(
-            CmdTether,
-            self.sinner_char,
-            f"entreat {self.sineater_char.db_key} sins=3",
-        )
-        msg = self.sinner_char.msg.call_args[0][0]
-        self.assertIn("active scene", msg.lower())
-
-    def test_pleas_lists_pending_plea(self) -> None:
-        # Form tether + entreat, then check pleas listing.
-        self._run(
-            CmdTether,
-            self.sinner_char,
-            (f"burden {self.sineater_char.db_key} resonance={self.resonance.name}"),
-        )
-        self._run(
-            CmdTether,
-            self.sinner_char,
-            f"entreat {self.sineater_char.db_key} sins=2",
-        )
-        self._run(CmdSineater, self.sineater_char, "pleas")
-        msg = self.sineater_char.msg.call_args[0][0]
-        self.assertIn("Sinner", msg)
-
-    def test_consume_decline_with_sins_zero(self) -> None:
-        # Form tether + entreat.
-        self._run(
-            CmdTether,
-            self.sinner_char,
-            (f"burden {self.sineater_char.db_key} resonance={self.resonance.name}"),
-        )
-        self._run(
-            CmdTether,
-            self.sinner_char,
-            f"entreat {self.sineater_char.db_key} sins=3",
-        )
-        # Decline with sins=0.
-        self._run(
-            CmdSineater,
-            self.sineater_char,
-            f"consume {self.sinner_char.db_key} sins=0",
-        )
-        msg = self.sineater_char.msg.call_args[0][0]
-        self.assertIn("decline", msg.lower())
