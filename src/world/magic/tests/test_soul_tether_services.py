@@ -434,6 +434,14 @@ class SineaterHalfOfBondTests(TestCase):
         self.assertEqual(sineater_thread.target_capstone.relationship.source, self.sineater)
         self.assertTrue(sineater_thread.target_capstone.is_ritual_capstone)
 
+    def test_both_threads_name_the_two_characters_as_players_know_them(self) -> None:
+        """A thread's description is shown to its owner, so it names personas, never a sheet."""
+        names = {self.sinner.primary_persona.name, self.sineater.primary_persona.name}
+        for thread in Thread.objects.filter(target_kind=TargetKind.RELATIONSHIP_CAPSTONE):
+            self.assertNotIn("Sheet for", thread.description)
+            for name in names:
+                self.assertIn(name, thread.description)
+
     def _fresh_tether(self) -> tuple:
         """A new tethered (sinner, sineater) pair; the Sineater holds no resonance yet."""
         sinner, sineater = CharacterSheetFactory(), CharacterSheetFactory()

@@ -283,7 +283,8 @@ def accept_soul_tether(  # noqa: PLR0913 - the pair, the role, two resonances an
             resonance=resonance,
             name="Soul Tether Hollow",
             description=(
-                f"The hollow woven between {sinner_sheet} and {sineater_sheet}. "
+                f"The hollow woven between {sinner_sheet.primary_persona.name} and "
+                f"{sineater_sheet.primary_persona.name}. "
                 "Absorbs corruption before it reaches the Sinner's soul."
             ),
         )
@@ -389,7 +390,8 @@ def _weave_sineater_thread(
         resonance,
         name="Soul Tether Burden",
         description=(
-            f"The burden {rel_incoming.source} carries for {rel_incoming.target}. "
+            f"The burden {rel_incoming.source.primary_persona.name} carries for "
+            f"{rel_incoming.target.primary_persona.name}. "
             "Softens the corruption a Sineater takes on."
         ),
     )
