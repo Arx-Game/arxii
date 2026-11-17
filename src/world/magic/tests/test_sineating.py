@@ -19,7 +19,7 @@ from rest_framework.test import APITestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
-from world.magic.constants import GainSource, TargetKind
+from world.magic.constants import GainSource, SineatingPoseRole, TargetKind
 from world.magic.exceptions import SineaterFallenError, SineatingValidationError
 from world.magic.factories import (
     AffinityFactory,
@@ -42,6 +42,7 @@ from world.magic.services.sineating import (
     perform_sineating,
     request_sineating,
     sineating_lines,
+    sineating_options_for,
 )
 from world.magic.services.soul_tether import accept_soul_tether, get_soul_tether_config
 from world.magic.types.soul_tether import SoulTetherRole as SoulTetherRoleEnum
@@ -541,3 +542,26 @@ class SineatingPendingOfferUniquenessTests(TestCase):
         SineatingPendingOffer.objects.create(units_offered=5, **fields)
         with self.assertRaises(IntegrityError):
             SineatingPendingOffer.objects.create(units_offered=3, **fields)
+
+
+@override_settings(SEED_SAMPLE_CONTENT=True)
+class SineatingOptionsTests(SineatingCase):
+    """The composer's picker reads only what the pose could post (#5177)."""
+
+    def test_the_entreat_option_is_offered_in_the_live_scene(self) -> None:
+        options = sineating_options_for(self.sinner)
+        self.assertEqual(
+            [(option.role, option.partner_sheet_id) for option in options],
+            [(SineatingPoseRole.ENTREAT, self.sineater.pk)],
+        )
+
+    def test_no_live_scene_offers_nothing_for_a_bonded_pair(self) -> None:
+        # The scene ends: the tether and the Sinner's corruption are still there, but no live
+        # scene stands where the Sinner is, so the picker returns before reading any bond.
+        self.scene.is_active = False
+        self.scene.save(update_fields=["is_active"])
+        # The one query is the live-scene lookup at the Sinner's location (an active scene
+        # there, read from the scene table). The Sinner's character and its location are
+        # already in the identity map from setUp, so reading them costs nothing here.
+        with self.assertNumQueries(1):
+            self.assertEqual(sineating_options_for(self.sinner), [])

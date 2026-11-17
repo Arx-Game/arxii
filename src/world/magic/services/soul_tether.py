@@ -843,15 +843,24 @@ def shared_active_scene(
 
     Used by Sineating, the rescue and the stage-advance offer.
     """
-    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
-
     first_location = first_sheet.character.location
     second_location = second_sheet.character.location
     if first_location is None or second_location is None:
         return None
     if first_location.pk != second_location.pk:
         return None
-    scene = get_active_scene(first_location)
+    return live_scene_at(first_location)
+
+
+def live_scene_at(location: Any) -> Any | None:
+    """The live scene at ``location``, or None: a scene that is active and not finished (#5177).
+
+    The one rule for "a scene Sineating can happen in". ``shared_active_scene`` and the pose
+    picker both read it, so they cannot disagree about what is live.
+    """
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+
+    scene = get_active_scene(location)
     if scene is None or not scene.is_active or scene.is_finished:
         return None
     return scene

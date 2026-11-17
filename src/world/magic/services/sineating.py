@@ -16,6 +16,7 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 from django.db.models import QuerySet
 
@@ -47,6 +48,7 @@ from world.magic.services.soul_tether import (
     _refuse_fallen_sineater,
     ensure_sineater_thread,
     get_soul_tether_config,
+    live_scene_at,
     send_stored_notice,
     shared_active_scene,
 )
@@ -577,18 +579,41 @@ def record_pending_sineating(pending: PendingSineating) -> tuple[str, ...]:
     return lines.sineater
 
 
+def _same_location(sheet: CharacterSheet, location: Any) -> bool:
+    """Whether ``sheet``'s character stands in ``location`` (a sheet with no character: no)."""
+    try:
+        other = sheet.character.location
+    except ObjectDoesNotExist:
+        return False
+    return other is not None and other.pk == location.pk
+
+
 def sineating_options_for(sheet: CharacterSheet) -> list[SineatingOption]:
     """What ``sheet`` can attach to a pose right now (#5177), for the composer's picker.
 
     A plea to make to each Sineater bonded to them who is here, and a plea to answer for each
     one waiting for them. Each is listed only when the pose could be posted: the pair share
     the active scene, the Sineater has not fallen, and they have not performed it there yet.
+
+    The composer polls this, so the cheap exits come first: a character with no location or
+    no live scene there gets ``[]`` before any bond is read. A partner who is not in the same
+    place is skipped before the checks. The per-bond checks that follow are the pose path's
+    own (``_checked_plea`` and ``_checked_performance``), so the picker never offers what the
+    pose would refuse; they run once per bond and once per waiting plea, a handful at most.
     """
+    try:
+        location = sheet.character.location
+    except ObjectDoesNotExist:
+        return []
+    if location is None or live_scene_at(location) is None:
+        return []
     options: list[SineatingOption] = []
     tethers = CharacterRelationship.objects.filter(
         source=sheet, is_soul_tether=True, soul_tether_role=SoulTetherRole.SINNER
-    ).select_related("target")
+    ).select_related("target", "target__character")
     for relationship in tethers:
+        if not _same_location(relationship.target, location):
+            continue
         try:
             _, thread, _, cap = _checked_plea(sheet, relationship.target, 1_000_000)
         except SoulTetherError:
@@ -607,6 +632,8 @@ def sineating_options_for(sheet: CharacterSheet) -> list[SineatingOption]:
     )
     for plea in pleas:
         # A plea gone stale is skipped here, not cleaned up: a read writes nothing.
+        if not _same_location(plea.sinner_sheet, location):
+            continue
         if not _in_scene_together(plea.sinner_sheet, sheet, plea.scene):
             continue
         try:
