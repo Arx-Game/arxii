@@ -12,6 +12,7 @@ has: it rolls its own check) is resolved by ``resolve_ritual_request``.
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
@@ -35,6 +36,19 @@ _NOT_SET_UP = "Your anima ritual is not set up yet."
 _NEEDS_PARTNER = "Name someone else to take part in your ritual."
 _ALREADY_PERFORMED = "You have already performed your anima ritual in this scene."
 _ALREADY_ASKED = "You already have a ritual waiting for an answer in this scene."
+_NOT_TOGETHER = "You and your partner must both be in this scene, in the same place."
+_ONE_PLAYER = "You cannot perform your ritual with another character you play."
+
+
+def _in_scene_together(
+    initiator_sheet: CharacterSheet, partner_sheet: CharacterSheet, scene: Scene
+) -> bool:
+    """True when both characters stand in the same place and ``scene`` is the live scene
+    there. Reads the one rule Sineating uses (``shared_active_scene``)."""
+    from world.magic.services.soul_tether import shared_active_scene  # noqa: PLC0415
+
+    shared = shared_active_scene(initiator_sheet, partner_sheet)
+    return shared is not None and shared.pk == scene.pk
 
 
 def check_partner_ritual(
@@ -44,13 +58,15 @@ def check_partner_ritual(
 
     Raises:
         ValidationError: no ritual or one not set up, no partner or the performer themselves,
-            the ritual already performed in this scene, or already asked of someone and
+            a partner who is not in this scene and the same place, a partner the same account
+            plays, the ritual already performed in this scene, or already asked of someone and
             waiting.
     """
     from world.magic.services.anima import (  # noqa: PLC0415
         get_character_anima_ritual,
         has_performed_anima_ritual_in_scene,
     )
+    from world.roster.services.npc_lending import played_by_one_account  # noqa: PLC0415
     from world.scenes.action_constants import ActionRequestStatus  # noqa: PLC0415
     from world.scenes.action_models import SceneActionRequest  # noqa: PLC0415
 
@@ -63,6 +79,11 @@ def check_partner_ritual(
         raise ValidationError(_NOT_SET_UP)
     if target_persona is None or target_persona.character_sheet_id == sheet.pk:
         raise ValidationError(_NEEDS_PARTNER)
+    partner_sheet = target_persona.character_sheet
+    if not _in_scene_together(sheet, partner_sheet, scene):
+        raise ValidationError(_NOT_TOGETHER)
+    if played_by_one_account(sheet, partner_sheet):
+        raise ValidationError(_ONE_PLAYER)
     if has_performed_anima_ritual_in_scene(ritual=ritual, scene=scene):
         raise ValidationError(_ALREADY_PERFORMED)
     waiting = SceneActionRequest.objects.filter(
@@ -107,11 +128,18 @@ def ritual_consent_sentence(action_request: SceneActionRequest) -> str:
 
     Only a ritual request names a resonance, so any other request reads blank.
     """
-    from world.magic.services.ritual_bond import ritual_partner_effect_sentence  # noqa: PLC0415
+    from world.magic.services.ritual_bond import (  # noqa: PLC0415
+        performer_holds,
+        ritual_partner_effect_sentence,
+    )
 
     if action_request.action_key != ANIMA_RITUAL_ACTION_KEY:
         return ""
-    return ritual_partner_effect_sentence(action_request.snapshot_resonance)
+    resonance = action_request.snapshot_resonance
+    # A resonance the performer does not hold does nothing to the partner, so say nothing.
+    if not performer_holds(action_request.initiator_persona.character_sheet, resonance):
+        return ""
+    return ritual_partner_effect_sentence(resonance)
 
 
 def is_templateless_ritual_request(action_request: SceneActionRequest) -> bool:
@@ -129,10 +157,12 @@ def resolve_ritual_request(action_request: SceneActionRequest) -> None:
     The ritual's check type and difficulty were snapshotted when the request was made. The
     request is marked resolved; the performer and the partner are told privately once the
     surrounding transaction commits. A ritual already performed in the scene since (two
-    requests raced) is resolved with no effect.
+    requests raced) is resolved with no effect, and so is one whose partner is no longer in the
+    scene and the same place as the performer.
     """
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
+    from world.magic.exceptions import RitualAlreadyPerformedThisScene  # noqa: PLC0415
     from world.magic.services.anima import has_performed_anima_ritual_in_scene  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
     from world.scenes.action_constants import ActionRequestStatus  # noqa: PLC0415
@@ -140,7 +170,13 @@ def resolve_ritual_request(action_request: SceneActionRequest) -> None:
     ritual = action_request.snapshot_ritual
     sheet = action_request.initiator_persona.character_sheet
     difficulty = action_request.snapshot_target_difficulty or 0
-    if not has_performed_anima_ritual_in_scene(ritual=ritual, scene=action_request.scene):
+    target = action_request.target_persona
+    together = target is None or _in_scene_together(
+        sheet, target.character_sheet, action_request.scene
+    )
+    if together and not has_performed_anima_ritual_in_scene(
+        ritual=ritual, scene=action_request.scene
+    ):
         check_result = perform_check_with_modifiers(
             sheet.character,
             check_type=action_request.snapshot_check_type,
@@ -148,7 +184,10 @@ def resolve_ritual_request(action_request: SceneActionRequest) -> None:
             scene=action_request.scene,
             extra_traits=activity_skill_terms(MagicActivity.ANIMA_RITUAL),
         )
-        apply_ritual_to_request(action_request, ritual, check_result.outcome)
+        # A request that raced this one and won the once-per-scene rule inside the lock pays
+        # nothing; this one is resolved with no effect.
+        with contextlib.suppress(RitualAlreadyPerformedThisScene):
+            apply_ritual_to_request(action_request, ritual, check_result.outcome)
     action_request.status = ActionRequestStatus.RESOLVED
     action_request.resolved_at = timezone.now()
     action_request.resolved_difficulty = difficulty
@@ -251,7 +290,12 @@ def _resolve_anima_ritual(
 
     outcome = main_result.check_result.outcome
 
-    ritual_outcome, _bond = apply_ritual_to_request(action_request, ritual, outcome)
+    from world.magic.exceptions import RitualAlreadyPerformedThisScene  # noqa: PLC0415
+
+    try:
+        ritual_outcome, _bond = apply_ritual_to_request(action_request, ritual, outcome)
+    except RitualAlreadyPerformedThisScene:
+        return  # a racing request already performed it this scene; this one pays nothing
 
     # Attach a transient payload so the response serializer can include
     # anima_recovery for the initiator without a second DB query.

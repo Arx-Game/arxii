@@ -267,6 +267,7 @@ class CmdRitual(ArxCommand):
             ritual_consent_sentence,
             start_partner_ritual,
         )
+        from world.magic.services.soul_tether import send_stored_notice  # noqa: PLC0415
         from world.scenes.action_constants import ActionRequestStatus  # noqa: PLC0415
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
@@ -301,7 +302,12 @@ class CmdRitual(ArxCommand):
         sentence = ritual_consent_sentence(request)
         asked = f"{initiator_persona.name} asks you to take part in their ritual."
         how = f"Type |waccept {request.pk}|n to agree or |wdeny {request.pk}|n to refuse."
-        partner.msg(" ".join(part for part in (asked, sentence, how) if part))
+        # Stored, as the ritual's result lines are: a partner who is offline reads it at login.
+        send_stored_notice(
+            sheets[1],
+            " ".join(part for part in (asked, sentence, how) if part),
+            ooc_note="Anima ritual request",
+        )
 
     # ------------------------------------------------------------------
     # Session handlers

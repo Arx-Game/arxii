@@ -209,6 +209,7 @@ def apply_anima_ritual_outcome(
     """
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.conditions.services import decay_condition_severity  # noqa: PLC0415
+    from world.magic.exceptions import RitualAlreadyPerformedThisScene  # noqa: PLC0415
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
     from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
     from world.magic.services.soulfray import soulfray_condition_id  # noqa: PLC0415
@@ -219,6 +220,11 @@ def apply_anima_ritual_outcome(
     budget = _budget_for_outcome(outcome)
 
     anima = CharacterAnima.objects.select_for_update().get(character=character_sheet)
+
+    # Once per scene must hold when two requests resolve at once: the lock above makes the second
+    # wait for the first to commit, and only then does this read, so it sees the first's row.
+    if has_performed_anima_ritual_in_scene(ritual=ritual, scene=scene):
+        raise RitualAlreadyPerformedThisScene
 
     soulfray_inst = (
         ConditionInstance.objects.select_for_update()

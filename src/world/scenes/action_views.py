@@ -217,6 +217,22 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             raise DRFValidationError({"target_persona_ids": "This action targets the caster only."})
 
     @staticmethod
+    def _worn_ritual_partner(action_key: str, target_persona: Persona | None) -> Persona | None:
+        """The persona an Anima ritual's partner is wearing now (#5181).
+
+        The submitted persona only selects the partner's character. The request records the
+        face they present, as telnet does, so the private lines never print a masked
+        character's true name. Every other action key keeps the persona as given.
+        """
+        from world.magic.services.anima_ritual_action import (  # noqa: PLC0415
+            ANIMA_RITUAL_ACTION_KEY,
+        )
+
+        if action_key != ANIMA_RITUAL_ACTION_KEY or target_persona is None:
+            return target_persona
+        return active_persona_for_sheet(target_persona.character_sheet)
+
+    @staticmethod
     def _ritual_kwargs(
         action_key: str,
         *,
@@ -463,6 +479,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             get_object_or_404(Persona, pk=primary_id) if primary_id is not None else None
         )
         additional = [get_object_or_404(Persona, pk=pk) for pk in target_ids[1:]]
+        target_persona = self._worn_ritual_partner(action_key, target_persona)
 
         technique = None
         if technique_id is not None:

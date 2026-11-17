@@ -19,7 +19,7 @@ from actions.constants import ActionCategory
 from world.fatigue.constants import EffortLevel
 from world.fatigue.services import apply_fatigue, recover_fatigue
 from world.magic.constants import GainSource
-from world.magic.models import AnimaRitualResonanceAward
+from world.magic.models import AnimaRitualResonanceAward, CharacterResonance
 from world.magic.services.kindling import kindled_for, kindling_context_for
 from world.magic.services.resonance import grant_resonance
 from world.magic.types.ritual import RitualBond
@@ -34,6 +34,20 @@ EASES_FATIGUE_SENTENCE = "It will ease your fatigue."
 
 def _sign(value: int) -> int:
     return (value > 0) - (value < 0)
+
+
+def performer_holds(performer_sheet: CharacterSheet, resonance: Resonance | None) -> bool:
+    """True when the performer already holds ``resonance`` (a ``CharacterResonance`` row).
+
+    The ritual's resonance is chosen by its owner, so only a resonance the performer holds
+    earns anything or touches the partner (the same notion of holding the thread pull payers
+    use). Otherwise the ritual restores anima as before and does nothing else.
+    """
+    if resonance is None:
+        return False
+    return CharacterResonance.objects.filter(
+        character_sheet=performer_sheet, resonance=resonance
+    ).exists()
 
 
 def ritual_partner_effect_sentence(resonance: Resonance | None) -> str:
@@ -78,14 +92,14 @@ def apply_ritual_bond(
 ) -> RitualBond:
     """Earn the ritual's resonance for the performer and touch the partner's fatigue.
 
-    ``resonance`` is the one the ritual names; None means it earns nothing and does nothing to
-    the partner. The earning is paid in full at once through
+    ``resonance`` is the one the ritual names; None, or one the performer does not hold, means it
+    earns nothing and does nothing to the partner. The earning is paid in full at once through
     ``grant_resonance(source=ANIMA_RITUAL)`` and skipped when it is 0. The partner's fatigue,
     in the social category, rises by the affinity's positive ``ritual_partner_fatigue`` (scaled by
     their own fatigue rules, as any fatigue is) or falls by its negative one. Corruption is
     never added. A partner who is an NPC is treated as a player character is.
     """
-    if resonance is None:
+    if not performer_holds(performer_sheet, resonance):
         return RitualBond()
     amount = _resonance_to_earn(performer_sheet, resonance, outcome)
     granted = 0
