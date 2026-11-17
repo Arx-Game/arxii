@@ -2094,21 +2094,13 @@ class SineatingPendingOfferViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         from world.magic.models.soul_tether import SineatingPendingOffer  # noqa: PLC0415
 
-        user = self.request.user
-        # Resolve the authenticated user to their character sheets via the
-        # Roster tenure chain (CharacterSheet → RosterEntry → RosterTenure
-        # → PlayerData → AccountDB). Filter to active tenures only
-        # (end_date__isnull=True) to avoid surfacing stale character
-        # associations, and use distinct() to prevent duplicates when a sheet
-        # has multiple past tenures for the same account.
+        # The characters the requester plays now, a lent NPC included (the loan-aware rule the
+        # Sineating options and decline surfaces use), never a bare tenure join.
+        played = [entry.character_sheet_id for entry in self.request.user.cached_roster_entries]
         return (
-            SineatingPendingOffer.objects.filter(
-                sineater_sheet__roster_entry__tenures__player_data__account=user,
-                sineater_sheet__roster_entry__tenures__end_date__isnull=True,
-            )
+            SineatingPendingOffer.objects.filter(sineater_sheet_id__in=played)
             .select_related("sinner_sheet", "scene", "resonance")
             .order_by("-created_at")
-            .distinct()
         )
 
 
@@ -2135,15 +2127,11 @@ class PendingStageAdvanceOfferViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self):
         from world.magic.models.soul_tether import PendingStageAdvanceOffer  # noqa: PLC0415
 
-        user = self.request.user
+        played = [entry.character_sheet_id for entry in self.request.user.cached_roster_entries]
         return (
-            PendingStageAdvanceOffer.objects.filter(
-                sineater_sheet__roster_entry__tenures__player_data__account=user,
-                sineater_sheet__roster_entry__tenures__end_date__isnull=True,
-            )
+            PendingStageAdvanceOffer.objects.filter(sineater_sheet_id__in=played)
             .select_related("sinner_sheet", "scene", "resonance")
             .order_by("-created_at")
-            .distinct()
         )
 
 
