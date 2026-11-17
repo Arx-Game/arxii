@@ -1,7 +1,0 @@
-harvest config: check=Harvest Primum, skill=Primum harvesting, thread bonus per rung scale=5
-Mira: thread contributions = [('Your Pyrecraft thread', 5)]
-Mira: modifier breakdown = [(ModifierSourceKind.ROLLMOD, 'Roll modifier', 100), (ModifierSourceKind.CHARACTER, 'Your Pyrecraft thread', 5)], extra_modifiers_total=5
-Mira: check total_points=5 (trait_points=0), effective_roll=100, outcome=Success
-Maren: thread contributions = none
-Maren: modifier breakdown = [(ModifierSourceKind.ROLLMOD, 'Roll modifier', 100)], extra_modifiers_total=0
-Maren: check total_points=0 (trait_points=0), effective_roll=100, outcome=Success
