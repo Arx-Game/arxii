@@ -3634,9 +3634,9 @@ class PrimumStepInline(ConfigRowsInline):
     verbose_name_plural = "Primum steps"
     fields = ["rank", "name", "starts_at", "points", "item_quality"]
     note = (
-        "A place or creature reads as the highest step whose Starts at it reaches. Points are "
-        "what a source at that step is worth to a caster. Staff can rename a step; the game "
-        "knows only their order."
+        "A place's amount is shown as the highest step whose Starts at it has reached. Points "
+        "are what a source at that step is worth to a caster. Staff can rename a step; the "
+        "game knows only their order."
     )
 
 
@@ -3649,8 +3649,9 @@ class SubstancePowerStepInline(ConfigRowsInline):
     verbose_name_plural = "Power curve"
     fields = ["points_reached", "power"]
     note = (
-        "A caster gets the power of the highest row her points reach. A caster below every "
-        "row gets none. Raise Points faster than Power so each extra source adds less."
+        "A caster's total points read the highest Points reached that they meet, and give that "
+        "Power. A caster below the lowest Points gets none. Raise Points faster than Power so "
+        "each extra source adds less."
     )
 
 

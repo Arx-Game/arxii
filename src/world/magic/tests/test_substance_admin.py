@@ -5,7 +5,7 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
-from web.admin.tests.test_kindling_admin import form_data
+from web.admin.tests.support import form_data
 from world.magic.constants import GiftKind, SubstanceRelationKind
 from world.magic.factories import GiftFactory, SubstanceFactory, SubstanceRelationFactory
 from world.magic.models import PrimumStep, SubstancePowerStep, SubstanceRelation
