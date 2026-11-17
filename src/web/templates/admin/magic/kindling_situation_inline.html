@@ -92,7 +92,7 @@
     var allowed = allowedBySituation[select.value] || [];
     var shown = 0;
     row.querySelectorAll(".kp").forEach(function (span) {
-      var show = allowed.indexOf(span.getAttribute("data-param")) !== -1 || hasValue(span);
+      var show = allowed.indexOf(span.dataset.param) !== -1 || hasValue(span);
       span.hidden = !show;
       if (show) { shown += 1; }
     });

@@ -345,6 +345,13 @@ def perk_scope_matches(
         ctx.mission is None or ctx.mission.template_id != perk.mission_template_id
     ):
         return False
+    return _mission_category_matches(perk, ctx, mission_category_ids)
+
+
+def _mission_category_matches(
+    perk: VowSituationalPerk, ctx: SituationContext, mission_category_ids: frozenset[int] | None
+) -> bool:
+    """Match an optional mission category using the caller's hoisted ids."""
     if perk.mission_category_id is not None:
         if ctx.mission is None:
             return False

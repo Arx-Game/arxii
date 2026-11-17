@@ -2446,22 +2446,7 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     )
                 }
             )
-        if self.mission_category_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
-            raise ValidationError(
-                {
-                    "mission_category": (
-                        "mission_category is only meaningful when effect_kind=CHECK_BONUS."
-                    )
-                }
-            )
-        if self.mission_template_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
-            raise ValidationError(
-                {
-                    "mission_template": (
-                        "mission_template is only meaningful when effect_kind=CHECK_BONUS."
-                    )
-                }
-            )
+        self._validate_mission_scope()
         template_error = announce_placeholder_error(self.announce_template)
         if template_error is not None:
             raise ValidationError({"announce_template": template_error})
@@ -2476,6 +2461,25 @@ class VowSituationalPerk(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                     "battle_action_kind": (
                         "battle_action_kind is only meaningful when effect_kind=CHECK_BONUS "
                         "or effect_kind=POWER_BONUS."
+                    )
+                }
+            )
+
+    def _validate_mission_scope(self) -> None:
+        """Mission scopes are meaningful only for check bonuses."""
+        if self.mission_category_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
+            raise ValidationError(
+                {
+                    "mission_category": (
+                        "mission_category is only meaningful when effect_kind=CHECK_BONUS."
+                    )
+                }
+            )
+        if self.mission_template_id is not None and self.effect_kind != PerkEffectKind.CHECK_BONUS:
+            raise ValidationError(
+                {
+                    "mission_template": (
+                        "mission_template is only meaningful when effect_kind=CHECK_BONUS."
                     )
                 }
             )
