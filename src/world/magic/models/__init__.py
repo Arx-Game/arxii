@@ -34,7 +34,7 @@ Submodules (see Scope 6 §4.4):
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
 - kindling: KindlingSituation, KindledStrengthTier, KindlingConfig, KindledDeedAward,
-  RallyKindlingStrength, Kindling (#5124)
+  AnimaRitualResonanceAward (#5181), RallyKindlingStrength, Kindling (#5124)
 - reflection: Reflection, SettlingRite (#5124)
 - progression_milestone: MagicProgressionMilestone
 - drift: DriftCorrectionConfig, DriftCorrectionOutcomeShare, DriftConversionOffer,
@@ -160,6 +160,7 @@ from world.magic.models.grants import (
 )
 from world.magic.models.impulse import ImpulseShown
 from world.magic.models.kindling import (
+    AnimaRitualResonanceAward,
     KindledDeedAward,
     KindledStrengthTier,
     Kindling,
@@ -312,6 +313,7 @@ __all__ = [
     # soulfray (#1207)
     "AnimaRitualBudgetAward",
     "AnimaRitualPerformance",
+    "AnimaRitualResonanceAward",
     # appetites (#2853)
     "AppetitePeriod",
     "AppetiteUpkeep",

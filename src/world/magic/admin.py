@@ -34,6 +34,7 @@ from world.magic.models import (
     AnimaConfig,
     AnimaRitualBudgetAward,
     AnimaRitualPerformance,
+    AnimaRitualResonanceAward,
     AuraAffinityThreshold,
     AuraPowerConfig,
     BeginningsRitualGrant,
@@ -281,6 +282,10 @@ class AffinityAdmin(admin.ModelAdmin):
         "burn_value",
         "unsettled_tolerance_percent",
         "unsettled_step_percent",
+        "claim_verb",
+        "earn_rate_percent",
+        "learn_rate_percent",
+        "ritual_partner_fatigue",
         "description",
     ]
     search_fields = ["name"]
@@ -3519,6 +3524,27 @@ class KindledDeedAwardInline(ConfigRowsInline):
         return field
 
 
+class AnimaRitualResonanceAwardInline(ConfigRowsInline):
+    """What an Anima ritual with a partner earns per roll result (#5181)."""
+
+    model = AnimaRitualResonanceAward
+    extra = 1
+    verbose_name_plural = "Anima ritual earns"
+    fields = ["outcome_tier", "amount"]
+    note = (
+        "Resonance an Anima ritual with a partner earns, before the strength's Earned share "
+        "when the ritual's resonance is kindled. A result with no row earns nothing."
+    )
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        field = super().formfield_for_dbfield(db_field, request, **kwargs)
+        if db_field.name == "outcome_tier":  # noqa: STRING_LITERAL - a model field name
+            field.label = "Result"
+        elif db_field.name == "amount":  # noqa: STRING_LITERAL - a model field name
+            field.label = "Earned"
+        return field
+
+
 @admin.register(KindlingConfig)
 class KindlingConfigAdmin(admin.ModelAdmin):
     """The one Kindling config page (#5124, screen 8).
@@ -3529,9 +3555,14 @@ class KindlingConfigAdmin(admin.ModelAdmin):
     """
 
     change_form_template = "admin/magic/kindlingconfig/change_form.html"
-    fields = ["harm_property"]
+    fields = ["harm_property", "instant_percent", "claim_percent"]
     autocomplete_fields = ["harm_property"]
-    inlines = [KindledStrengthTierInline, RallyKindlingStrengthInline, KindledDeedAwardInline]
+    inlines = [
+        KindledStrengthTierInline,
+        RallyKindlingStrengthInline,
+        KindledDeedAwardInline,
+        AnimaRitualResonanceAwardInline,
+    ]
 
     def changelist_view(
         self,

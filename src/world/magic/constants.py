@@ -358,6 +358,11 @@ class GainSource(models.TextChoices):
     SUCCUMBED = "SUCCUMBED", "Succumbed to the Mire"
     SUCCUMB_BONUS = "SUCCUMB_BONUS", "Sineater succumbed bonus"
     SINEATER_FALL = "SINEATER_FALL", "Sineater fell"
+    # #5181: the share of a kindled deed set aside to claim, collected by a claiming pose or
+    # journal entry, and the resonance an Anima ritual with a partner earns. Both are deeds
+    # the character did; neither names a typed source row.
+    KINDLED_CLAIM = "KINDLED_CLAIM", "Kindled deed claimed"
+    ANIMA_RITUAL = "ANIMA_RITUAL", "Anima ritual"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -415,6 +420,10 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SUCCUMBED,
         GainSource.SUCCUMB_BONUS,
         GainSource.SINEATER_FALL,
+        # #5181: a claim collects a kindled deed's set-aside share and the ritual pays off its
+        # own roll; neither is witnessed, so neither takes the distinction rate.
+        GainSource.KINDLED_CLAIM,
+        GainSource.ANIMA_RITUAL,
     }
 )
 
@@ -438,6 +447,25 @@ DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.WORSHIP_RITE,
         GainSource.KINDLED_DEED,
         # #5177: the Sineater chose to succumb, and the player can reflect on it and atone.
+        GainSource.SUCCUMBED,
+        # #5181: the claimed share of a kindled deed and an Anima ritual the character performed.
+        GainSource.KINDLED_CLAIM,
+        GainSource.ANIMA_RITUAL,
+    }
+)
+
+# #5181: the sources the per-affinity earn rate never scales. Each is a grant staff or the system
+# makes, or resonance only being moved, converted or re-counted (settling an aura, embracing a
+# deed, a fall, cleansing, succumbing, a dissolved sanctum), not resonance newly earned.
+AFFINITY_RATE_EXEMPT_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.STAFF_GRANT,
+        GainSource.CHARACTER_CREATION,
+        GainSource.DRIFT_CORRECTION,
+        GainSource.FALL_CONVERSION,
+        GainSource.EMBRACED_DEED,
+        GainSource.CORRUPTION_CLEANSING,
+        GainSource.SANCTUM_DISSOLUTION_RECOVERY,
         GainSource.SUCCUMBED,
     }
 )

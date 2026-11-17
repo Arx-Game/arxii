@@ -410,6 +410,9 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         GainSource.MIRE_PURIFIED,
         GainSource.SUCCUMB_BONUS,
         GainSource.SINEATER_FALL,
+        # #5181: a claimed share and an Anima ritual's resonance name no typed row either.
+        GainSource.KINDLED_CLAIM,
+        GainSource.ANIMA_RITUAL,
     ):
         # No typed source FK — the grant is attributed by discriminator only.
         return
