@@ -518,12 +518,6 @@ def _record_pose_submission(  # noqa: PLR0913
         broadcast()
         if after_first_acceptance is not None:
             after_first_acceptance(result.interaction)
-        # #5177: a pose in a scene is when what the character carries pulls at them.
-        from world.magic.services.impulses import (  # noqa: PLC0415
-            refresh_impulses_for_character,
-        )
-
-        refresh_impulses_for_character(actor)
     return None
 
 
@@ -767,6 +761,14 @@ class PoseAction(Action):
 
         def _reflect(interaction: Interaction | None) -> None:
             _carry_attachments(actor, pending, sineating, interaction, told, sineated)
+            # #5177: a pose in a scene is when what the character carries pulls at them.
+            # Both ways of posting (with and without a request id) end here, once, and a
+            # replayed request never gets here.
+            from world.magic.services.impulses import (  # noqa: PLC0415
+                refresh_impulses_for_character,
+            )
+
+            refresh_impulses_for_character(actor)
 
         client_request_id = kwargs.get("client_request_id")
         if client_request_id is not None:
