@@ -192,17 +192,24 @@ class SineatingJourneyCase(JourneyCase):
         with force_check_outcome(self.outcomes[tier]):
             return self.telnet(character, f"pose/sineat {sinner_name}={units} {PERFORM}")
 
+    def telnet(self, character, line: str) -> str:
+        """A typed line, with the after-commit sends it causes run: a Sinner's notices are
+        stored narrative messages sent once the transaction commits (#5177)."""
+        with self.captureOnCommitCallbacks(execute=True):
+            return super().telnet(character, line)
+
     def web_pose(self, client, character, content: str, **fields):
-        return client.post(
-            SUBMIT_POSE,
-            {
-                "persona_id": character.sheet_data.primary_persona.pk,
-                "content": content,
-                "client_request_id": str(uuid.uuid4()),
-                **fields,
-            },
-            format="json",
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            return client.post(
+                SUBMIT_POSE,
+                {
+                    "persona_id": character.sheet_data.primary_persona.pk,
+                    "content": content,
+                    "client_request_id": str(uuid.uuid4()),
+                    **fields,
+                },
+                format="json",
+            )
 
 
 class ASineatingByTelnet(SineatingJourneyCase):

@@ -110,7 +110,7 @@ class _ImpulseCase(SineatingCase):
         """Refresh the bearer's impulses; returns the result and the lines they were sent."""
         with (
             patch.object(self.bearer.character, "msg") as msg,
-            patch("world.magic.services.impulses.session_count", return_value=1),
+            patch.object(self.bearer.character.sessions, "all", return_value=[object()]),
         ):
             result = refresh_impulses(self.bearer, self.scene)
         return result, [call.args[0] for call in msg.call_args_list]
@@ -199,7 +199,7 @@ class _IntrusiveThoughts:
 
         with (
             patch.object(self.bearer.character, "msg") as msg,
-            patch("world.magic.services.impulses.session_count", return_value=0),
+            patch.object(self.bearer.character.sessions, "all", return_value=[]),
         ):
             result = refresh_impulses(self.bearer, self.scene)
 

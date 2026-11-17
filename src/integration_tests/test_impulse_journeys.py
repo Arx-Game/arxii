@@ -113,14 +113,15 @@ class ImpulseJourneyCase(SineatingJourneyCase):
 
     def deed(self, character) -> None:
         """A deed of Ruin: the kindled-deed grant that a situation's act earns."""
-        grant_resonance(
-            character.sheet_data,
-            self.ruin,
-            10,
-            source=GainSource.KINDLED_DEED,
-            kindling_situation=self.situation,
-            deed_label="Fed the hunger",
-        )
+        with self.captureOnCommitCallbacks(execute=True):
+            grant_resonance(
+                character.sheet_data,
+                self.ruin,
+                10,
+                source=GainSource.KINDLED_DEED,
+                kindling_situation=self.situation,
+                deed_label="Fed the hunger",
+            )
 
     def holding(self) -> MireHolding:
         return MireHolding.objects.get(relationship__source=self.corvin.sheet_data)

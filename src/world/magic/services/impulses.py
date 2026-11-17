@@ -33,7 +33,6 @@ from world.magic.models.grant import ResonanceGrant
 from world.magic.models.impulse import ImpulseShown
 from world.magic.services.corruption import accrue_corruption, get_corruption_config
 from world.magic.types.corruption import CorruptionSource
-from world.roster.services.presence import session_count
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -252,7 +251,8 @@ def _tell_once(
     A character with no live session cannot hear it: nothing is recorded and nothing is sent,
     so the once-per-scene line is not spent on nobody.
     """
-    if sheet.character is None or not session_count(sheet.character):
+    # The same question the stored-message push asks: does a session hold this character now.
+    if sheet.character is None or not sheet.character.sessions.all():
         return None
     _, created = ImpulseShown.objects.get_or_create(
         character_sheet=sheet, resonance=resonance, scene=scene, kind=kind
