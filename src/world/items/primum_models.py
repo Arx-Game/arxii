@@ -1,8 +1,10 @@
 """The substance an item carries (#5125).
 
-A Primum item is an ordinary ``ItemInstance`` made from a template that names a substance. When
-one is made or granted, an ``ItemSubstance`` row records which substance it carries and at what
-Primum step, so a worn or held item can be read back without re-deriving it from its quality.
+A Primum item is an ordinary ``ItemInstance`` made from a template that names a substance; a
+minted Primum item gets no row here, since its template says what it is. An ``ItemSubstance``
+row is written by crafting (``stamp_primum_substances``): when a craft uses up Primum items,
+the crafted piece carries their substance at a Primum step, so a worn or held item is read back
+without re-deriving it from the materials.
 
 All models set ``Meta.app_label = "arxii"`` (the single collapsed app, #2906).
 """
