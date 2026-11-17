@@ -22,7 +22,7 @@ from django.test import TestCase, override_settings, tag
 from django.utils import timezone
 from rest_framework.test import APITestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from world.magic.constants import TargetKind
 from world.magic.exceptions import StageAdvanceBonusError
 from world.magic.factories import (
@@ -34,6 +34,7 @@ from world.magic.factories import (
     CorruptionConditionTemplateFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
+    place_in_active_scene,
     wire_soul_tether_content,
 )
 from world.magic.models import Thread
@@ -349,11 +350,9 @@ class SoulTetherStageAdvancePromptWritesPendingRowTests(TestCase):
         sineater_char.location = self.room
         sineater_char.save()
 
-        # Also create SceneParticipation so _find_shared_active_scene returns a scene
-        # and the DB row is persisted (scene FK is NOT NULL).
-        self.scene = SceneFactory()
-        SceneParticipationFactory(scene=self.scene, account=self.sinner_account)
-        SceneParticipationFactory(scene=self.scene, account=self.sineater_account)
+        # An active scene at that room, so shared_active_scene returns it and the DB row
+        # is persisted (scene FK is NOT NULL).
+        self.scene = SceneFactory(location=RoomProfileFactory(objectdb=self.room))
 
         # Make a Corruption condition instance at stage 1, severity 7 (will cross 10 on +5).
         from world.conditions.factories import ConditionInstanceFactory
@@ -490,8 +489,8 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
         thread.hollow_current = 5
         thread.save()
 
-        # Place both in the same room (triggers the subscriber) but do NOT create
-        # SceneParticipation rows — _find_shared_active_scene returns None.
+        # Place both in the same room (triggers the subscriber) but give the room no
+        # scene — shared_active_scene returns None.
         sinner_char = self.sinner_sheet.character
         sineater_char = self.sineater_sheet.character
         sinner_char.location = self.room
@@ -515,7 +514,7 @@ class SoulTetherStageAdvancePromptNoSharedSceneTests(TestCase):
 
     @patch("world.conditions.services.perform_check_with_modifiers")
     def test_no_pending_row_when_no_shared_scene(self, mock_check: object) -> None:
-        """When no shared SceneParticipation exists, no PendingStageAdvanceOffer is written."""
+        """When the room has no active scene, no PendingStageAdvanceOffer is written."""
         from world.conditions.services import advance_condition_severity
 
         mock_check.return_value = _make_check_result(success_level=-1)
@@ -569,9 +568,7 @@ class ResolveStageAdvanceFromDbHappyPathTests(TestCase):
             maximum=20,
         )
 
-        cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.sinner_account)
-        SceneParticipationFactory(scene=cls.scene, account=cls.sineater_account)
+        cls.scene = place_in_active_scene(cls.sinner_sheet, cls.sineater_sheet)
 
         # Pre-charge the Sinner's Thread Hollow.
         cls.thread = _get_sinner_tether_thread(cls.sinner_sheet, cls.resonance)
@@ -647,9 +644,7 @@ class ResolveStageAdvanceFromDbTTLStalenessTests(TestCase):
         cls.sinner_account = cls.sinner_tenure.player_data.account
         cls.sineater_account = cls.sineater_tenure.player_data.account
 
-        cls.scene = SceneFactory()
-        SceneParticipationFactory(scene=cls.scene, account=cls.sinner_account)
-        SceneParticipationFactory(scene=cls.scene, account=cls.sineater_account)
+        cls.scene = place_in_active_scene(cls.sinner_sheet, cls.sineater_sheet)
 
         cls.thread = _get_sinner_tether_thread(cls.sinner_sheet, cls.resonance)
         cls.thread.hollow_current = 8

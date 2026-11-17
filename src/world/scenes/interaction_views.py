@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from http import HTTPMethod
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
@@ -15,14 +15,19 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from actions.definitions.sineating import run_pose_sineating
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
-from world.magic.exceptions import ReflectionError
+from world.magic.exceptions import ReflectionError, SoulTetherError
 from world.magic.models import CharacterResonance, PoseEndorsement
 from world.magic.services.reflection import (
     pending_reflection_from,
     record_pending_reflection,
     recorded_line,
+)
+from world.magic.services.sineating import (
+    BOTH_REFLECTION_AND_SINEATING,
+    pending_sineating_from,
 )
 from world.relationships.reads import resolve_viewer_sheet
 from world.scenes.block_services import flag_blocked_contact_attempt, hidden_persona_ids_for_viewer
@@ -82,6 +87,16 @@ from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 
 if TYPE_CHECKING:
     from world.magic.types.reflection import PendingReflection
+    from world.magic.types.soul_tether import PendingSineating
+
+
+def _duplicate_entrance(pose_kind: str, scene: Scene | None, persona: Persona) -> bool:
+    """Only an entrance in a scene can duplicate an existing entrance."""
+    if pose_kind != PoseKind.ENTRY or scene is None:
+        return False
+    from world.scenes.participation import has_entered  # noqa: PLC0415
+
+    return has_entered(scene, persona.character_sheet_id)
 
 
 def _refusal_response(*, code: str, field: str, detail: str, hint: str | None) -> Response:
@@ -212,6 +227,65 @@ class InteractionCursorPagination(CursorPagination):
     cursor_query_description = "The pagination cursor value."
 
 
+def _refresh_impulses_after_pose(persona: Persona, character: Any, scene: Scene | None) -> None:
+    """A pose in a scene is when what the character carries pulls at them (#5177)."""
+    from world.magic.services.impulses import (  # noqa: PLC0415
+        safe_refresh_impulses,
+        safe_refresh_impulses_for_character,
+    )
+
+    if scene is None:
+        safe_refresh_impulses_for_character(character)
+    else:
+        safe_refresh_impulses(persona.character_sheet, scene)
+
+
+def _pose_deed_fields(  # noqa: PLR0913
+    persona: Persona,
+    character: Any,
+    *,
+    replayed: bool,
+    reflection: PendingReflection | None,
+    sineating: PendingSineating | None,
+    writing: Interaction | None,
+) -> dict[str, object]:
+    """The reflection and Sineating lines a new pose answers with (#5124, #5177).
+
+    Both are carried out once the pose is down, on first acceptance only. A reflection that
+    cannot be recorded does not undo the pose: the writer is told why.
+    """
+    if replayed:
+        return {}
+    fields: dict[str, object] = {}
+    if reflection is not None:
+        reflection_line = None
+        reflection_recorded = True
+        try:
+            reflection_line = recorded_line(
+                record_pending_reflection(persona.character_sheet, reflection, writing=writing)
+            )
+        except ReflectionError as exc:
+            # The pose cannot be un-posted, so it stands and the writer is told why the
+            # reflection was not recorded.
+            reflection_recorded = False
+            reflection_line = (
+                f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
+            )
+        if reflection_line:
+            fields = {
+                "reflection_line": reflection_line,
+                "reflection_recorded": reflection_recorded,
+            }
+    if sineating is not None:
+        sineating_line, sineating_recorded = run_pose_sineating(character, sineating)
+        fields = {
+            **fields,
+            "sineating_line": sineating_line,
+            "sineating_recorded": sineating_recorded,
+        }
+    return fields
+
+
 def _record_submitted_pose(  # noqa: PLR0913
     *,
     persona: Persona,
@@ -225,11 +299,14 @@ def _record_submitted_pose(  # noqa: PLR0913
     on_created: Callable[[Interaction], None] | None,
     serializer_context: dict[str, object],
     reflection: PendingReflection | None = None,
+    sineating: PendingSineating | None = None,
 ) -> Response:
     """Record, broadcast, and serialize a submitted pose.
 
     ``reflection`` (#5124) is recorded against the new row on first acceptance only. It is
     never broadcast: the room gets the pose text and the writer's response carries the line.
+    ``sineating`` (#5177) is carried out once the pose is down, on first acceptance only; the
+    response carries ``sineating_line`` and ``sineating_recorded``.
     """
     target_pks = frozenset(p.pk for p in target_personas) if target_personas else frozenset()
     try:
@@ -273,30 +350,19 @@ def _record_submitted_pose(  # noqa: PLR0913
         # client drops it because the Interaction pushed above is the render.
         # Untagged, every web viewer in the room got the pose twice.
         message_location(caller_state, content, echo_of=InteractionMode.POSE)
-    reflection_line = None
-    reflection_recorded = True
-    if reflection is not None and not result.replayed:
-        try:
-            reflection_line = recorded_line(
-                record_pending_reflection(
-                    persona.character_sheet, reflection, writing=result.interaction
-                )
-            )
-        except ReflectionError as exc:
-            # The pose cannot be un-posted, so it stands and the writer is told why the
-            # reflection was not recorded.
-            reflection_recorded = False
-            reflection_line = (
-                f"Your pose was posted, but your reflection was not recorded: {exc.user_message}"
-            )
-
     response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
     interaction = result.interaction
-    extra = (
-        {"reflection_line": reflection_line, "reflection_recorded": reflection_recorded}
-        if reflection_line
-        else {}
+    extra = _pose_deed_fields(
+        persona,
+        character,
+        replayed=result.replayed,
+        reflection=reflection,
+        sineating=sineating,
+        writing=interaction,
     )
+    if not result.replayed:
+        # Last, so a failure here can never skip the reflection or the Sineating above it.
+        _refresh_impulses_after_pose(persona, character, scene)
     if interaction is None:
         return Response(
             {"ephemeral": True, "replayed": result.replayed, **extra}, status=response_status
@@ -304,6 +370,42 @@ def _record_submitted_pose(  # noqa: PLR0913
     _seed_fresh_pose_caches(interaction, target_personas=target_personas, replayed=result.replayed)
     output = InteractionListSerializer(interaction, context=serializer_context)
     return Response({**output.data, "replayed": result.replayed, **extra}, status=response_status)
+
+
+def _checked_pose_deeds(
+    persona: Persona, data: Mapping[str, Any]
+) -> tuple[PendingReflection | None, PendingSineating | None, Response | None]:
+    """Check a pose's reflection and Sineating before anything posts (#5124, #5177).
+
+    A refused one costs the writer nothing: the refusal is returned as the response. A retry
+    of a pose that already landed is the replay it is, and its deeds were carried out the
+    first time, so nothing is checked again.
+    """
+    if pose_already_submitted(persona, data["client_request_id"]):
+        return None, None, None
+    try:
+        reflection = pending_reflection_from(persona.character_sheet, data)
+    except ReflectionError as exc:
+        return (
+            None,
+            None,
+            Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST),
+        )
+    try:
+        sineating = pending_sineating_from(persona.character_sheet, data)
+    except SoulTetherError as exc:
+        return (
+            None,
+            None,
+            Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST),
+        )
+    if sineating is not None and reflection is not None:
+        return (
+            None,
+            None,
+            Response({"detail": BOTH_REFLECTION_AND_SINEATING}, status=status.HTTP_400_BAD_REQUEST),
+        )
+    return reflection, sineating, None
 
 
 class InteractionViewSet(
@@ -604,12 +706,9 @@ class InteractionViewSet(
         # the writer nothing.
         # A retry of a pose that already landed is the replay it is, and its reflection was
         # recorded the first time: it is not checked again (the deed it names is now taken).
-        reflection = None
-        if not pose_already_submitted(persona, data["client_request_id"]):
-            try:
-                reflection = pending_reflection_from(persona.character_sheet, data)
-            except ReflectionError as exc:
-                return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        reflection, sineating, refusal = _checked_pose_deeds(persona, data)
+        if refusal is not None:
+            return refusal
 
         target_names: list[str] = data.get("target_names") or []
         target_characters = (
@@ -632,14 +731,11 @@ class InteractionViewSet(
 
         # The entrance is the first line (#3867): the service marks it and opens its
         # window; a client asking for a second one is refused.
-        if pose_kind == PoseKind.ENTRY and scene is not None:
-            from world.scenes.participation import has_entered  # noqa: PLC0415
-
-            if has_entered(scene, persona.character_sheet_id):
-                return Response(
-                    {"detail": "You have already made your entrance in this scene."},
-                    status=status.HTTP_400_BAD_REQUEST,
-                )
+        if _duplicate_entrance(pose_kind, scene, persona):
+            return Response(
+                {"detail": "You have already made your entrance in this scene."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         def _on_created(created: Interaction) -> None:
             if action_link_ids is not None:
@@ -669,6 +765,7 @@ class InteractionViewSet(
             on_created=_on_created,
             serializer_context=self.get_serializer_context(),
             reflection=reflection,
+            sineating=sineating,
         )
 
 

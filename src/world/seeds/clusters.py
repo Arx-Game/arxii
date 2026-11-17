@@ -11,7 +11,7 @@ def _seed_magic() -> None:
 
     seed_magic_dev()
     # Rite of Honors (#3466): a societies/legend rite, but dispatched via the
-    # same Ritual machinery as Imbuing/Atonement/the Durance — see
+    # same Ritual machinery as Imbuing/the Durance — see
     # seed_canonical_rituals() for the sibling pattern this mirrors.
     ensure_rite_of_honors_ritual()
 
@@ -1018,8 +1018,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # technique (#2015). Represented by Technique (the charm technique).
         "social_combat": [Technique],
         # Ritual counts the covenant/org lifecycle rituals seeded by
-        # wire_covenant_lifecycle_rituals() (#2114) alongside Rite of Imbuing/
-        # Atonement and the Soul Tether rituals — so operators can see the
+        # wire_covenant_lifecycle_rituals() (#2114) alongside Rite of Imbuing
+        # and the Soul Tether rituals — so operators can see the
         # covenant-lifecycle content landed after the Big Button run.
         "magic": [Affinity, Resonance, Ritual],
         # Style also carries the seeded aesthetic vocabulary spread across the four

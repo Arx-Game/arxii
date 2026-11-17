@@ -123,6 +123,8 @@ describe('ReviewStage', () => {
     });
     expect(await screen.findByText('I intend to be a captain.')).toBeInTheDocument();
     expect(screen.getByText('Background')).toHaveClass('written-label');
+    // The Background written on Final Touches is quoted under that label (#5178).
+    expect(screen.getByText('Third daughter.')).toBeInTheDocument();
     expect(screen.queryByText(/quick of hand/i)).toBeNull();
   });
 

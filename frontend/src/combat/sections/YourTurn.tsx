@@ -61,7 +61,7 @@ import {
 } from '@/magic/components/threads/ThreadPullDialog';
 import { useCharacterAnima, useKindledResonances, usePullBurnPreview } from '@/magic/queries';
 import { burnResonanceFor, effectiveBurn } from '@/magic/burn';
-import type { PullPreviewRequest } from '@/magic/types';
+import type { KindledResonance, PullPreviewRequest } from '@/magic/types';
 import {
   Select,
   SelectContent,
@@ -96,6 +96,8 @@ import type {
   RoundComboSlot,
 } from '../types';
 import type { components } from '@/generated/api';
+
+const NO_RESONANCES: KindledResonance[] = [];
 
 type ConditionInstance = components['schemas']['ConditionInstance'];
 type RallyResonanceChoice = components['schemas']['RallyResonanceChoice'];
@@ -1332,7 +1334,7 @@ function CoverControl({
 interface GuardControlProps {
   declaredManeuver: string | null;
   encounter: EncounterDetail | null | undefined;
-  guardControlRef: React.RefObject<HTMLDivElement>;
+  guardControlRef: React.RefObject<HTMLDivElement | null>;
   coverableAllies: Participant[];
   protectiveTechniques: PlayerAction[];
   selectedGuardTechnique: PlayerAction | undefined;
@@ -1658,7 +1660,7 @@ interface ManeuverDeclarationSectionProps {
   coverableAllies: Participant[];
   protectiveTechniques: PlayerAction[];
   isRedirectGuardTechnique: boolean;
-  guardControlRef: React.RefObject<HTMLDivElement>;
+  guardControlRef: React.RefObject<HTMLDivElement | null>;
   guardAllyId: string;
   guardTechniqueId: string;
   guardDestination: string;
@@ -2362,7 +2364,7 @@ export function YourTurn({
   );
 
   // The resonances she holds, for Dig deep to name one (the panel above it reads the same query).
-  const { data: heldResonances = [] } = useKindledResonances(characterSheetId);
+  const heldResonances = useKindledResonances(characterSheetId).data?.results ?? NO_RESONANCES;
 
   // The viewer's own participant row — shared by actorPositionId below and the
   // Mounted-condition gate for the Charge/Joust mini-panel (#3381).

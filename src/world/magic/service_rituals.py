@@ -27,7 +27,6 @@ SERVICE_RITUAL_FUNCTIONS: dict[str, str] = {
         "Covenants: raise a battle covenant"
     ),
     # Magic
-    "world.magic.services.atonement.perform_atonement_rite": "Magic: atonement",
     "world.magic.services.drift_correction.perform_settling_rite": ("Magic: rite of settling"),
     "world.magic.services.fall_redemption.perform_fall": "Magic: Ritual of Falling",
     "world.magic.services.ghost_tutor.summon_ghost_tutor": "Magic: summon a ghost tutor",

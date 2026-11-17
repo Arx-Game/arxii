@@ -333,12 +333,11 @@ class GainSource(models.TextChoices):
     COMBO_DISCOVERY = "COMBO_DISCOVERY", "Combo discovery"
     # #1583 — Fall/Redemption: compromising acts grant non-native resonance
     COMPROMISE = "COMPROMISE", "Moral compromise"
-    PENANCE = "PENANCE", "Atonement resonance conversion"
     FALL_CONVERSION = "FALL_CONVERSION", "Fall/Redemption conversion"
     # #3777: a worship rite performed in a scene
     WORSHIP_RITE = "WORSHIP_RITE", "Worship rite"
     # #4733: a drift correction moves some of one resonance into another the
-    # character chose; no typed source FK (like PENANCE).
+    # character chose; no typed source FK (like COMPROMISE).
     DRIFT_CORRECTION = "DRIFT_CORRECTION", "Drift correction"
     CORRUPTION_CLEANSING = "CORRUPTION_CLEANSING", "Corruption cleansing payout"
     SINEATING = "SINEATING", "Sineating payout"
@@ -350,6 +349,15 @@ class GainSource(models.TextChoices):
     # reflection). Embraced deeds are not deeds: they re-count one already done.
     KINDLED_DEED = "KINDLED_DEED", "Kindled deed"
     EMBRACED_DEED = "EMBRACED_DEED", "Embraced deed"
+    # #5177: settling the Mire. The Sineater's reward for purifying (no typed source FK); the
+    # Sinner's resonance arriving in a Sineater's own aura when they succumb (typed sources:
+    # the rite and the burden reflection, like EMBRACED_DEED; it IS a deed, so it can be
+    # reflected on and atoned for); the Sinner's payout when a Sineater succumbs; and the
+    # Sinners' payout when a Sineater falls to the Abyss (the last two: no typed source FK).
+    MIRE_PURIFIED = "MIRE_PURIFIED", "Mire purified"
+    SUCCUMBED = "SUCCUMBED", "Succumbed to the Mire"
+    SUCCUMB_BONUS = "SUCCUMB_BONUS", "Sineater succumbed bonus"
+    SINEATER_FALL = "SINEATER_FALL", "Sineater fell"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -384,7 +392,6 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SANCTUM_DISSOLUTION_RECOVERY,
         GainSource.COMBO_DISCOVERY,
         GainSource.COMPROMISE,
-        GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
         # #3777: a rite pays off the performer's own roll against an authored
         # award table; a live scene is its prerequisite, not its witness, and
@@ -401,6 +408,13 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         # embraced deed re-counts a deed already counted; neither takes the distinction rate.
         GainSource.KINDLED_DEED,
         GainSource.EMBRACED_DEED,
+        # #5177: Sineating and settling the Mire pay off rolls and authored percentages of
+        # what was moved; none of it is perceived or witnessed, so none takes the distinction
+        # rate (SINEATING above is the precedent). Succumbing re-counts Mire already carried.
+        GainSource.MIRE_PURIFIED,
+        GainSource.SUCCUMBED,
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
     }
 )
 
@@ -423,8 +437,17 @@ DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.COMBO_DISCOVERY,
         GainSource.WORSHIP_RITE,
         GainSource.KINDLED_DEED,
+        # #5177: the Sineater chose to succumb, and the player can reflect on it and atone.
+        GainSource.SUCCUMBED,
     }
 )
+
+# #5177: the grants that count as a character INDULGING a Compulsion. A Compulsion lifts for the
+# scene once the character EARNS the compelled resonance there by a deed they did themselves: a
+# kindled deed. A grant that lands from another player (a pose endorsement settled weekly, a scene
+# entry), a GM, a mission or a cron is not the character giving in, and neither is succumbing to
+# the Mire. The pose that claims a resonance (a later issue) adds its own source to this set.
+COMPULSION_INDULGING_SOURCES: frozenset[str] = frozenset({GainSource.KINDLED_DEED})
 
 NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
     {
@@ -436,13 +459,16 @@ NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SANCTUM_DISSOLUTION_RECOVERY,
         GainSource.DISTINCTION,
         GainSource.COMPROMISE,
-        GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
         GainSource.DRIFT_CORRECTION,
         GainSource.SINEATING,
         GainSource.CORRUPTION_CLEANSING,
         GainSource.CHARACTER_CREATION,
         GainSource.EMBRACED_DEED,
+        # #5177: payouts from a Sineater's settling are not the receiver's own deed.
+        GainSource.MIRE_PURIFIED,
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
     }
 )
 
@@ -630,13 +656,32 @@ class ReflectionChoice(models.TextChoices):
 
     EMBRACE = "EMBRACE", "Embrace"
     DISOWN = "DISOWN", "Disown"
+    # #5177: what a Sineater does with the Mire they carry for one Sinner. These fit only a
+    # burden; Embrace and Disown fit only a deed or the unsettling resonance.
+    ABSOLVE = "ABSOLVE", "Absolve"
+    CONDEMN = "CONDEMN", "Condemn"
+    SUCCUMB = "SUCCUMB", "Succumb"
+
+
+# The choices a burden takes, and the two a deed or the unsettling resonance takes (#5177).
+BURDEN_REFLECTION_CHOICES: tuple[str, ...] = (
+    ReflectionChoice.ABSOLVE,
+    ReflectionChoice.CONDEMN,
+    ReflectionChoice.SUCCUMB,
+)
+DEED_REFLECTION_CHOICES: tuple[str, ...] = (
+    ReflectionChoice.EMBRACE,
+    ReflectionChoice.DISOWN,
+)
 
 
 class ReflectionTargetKind(models.TextChoices):
-    """What a "Reflecting on" row can name (#5124): one deed, or the unsettling resonance."""
+    """What a "Reflecting on" row can name (#5124, #5177): one deed, the unsettling resonance,
+    or the Mire a Sineater carries for one Sinner (a burden)."""
 
     DEED = "deed", "Deed"
     RESONANCE = "resonance", "Resonance"
+    BURDEN = "burden", "Burden"
 
 
 class KindlingSource(models.TextChoices):
@@ -876,6 +921,20 @@ class PreparedByRole(models.TextChoices):
     TABLE_GM = "table_gm", "Table GM"
 
 
+class SineatingPoseRole(models.TextChoices):
+    """Which part of a Sineating the writer of a pose plays (#5177)."""
+
+    ENTREAT = "entreat", "Entreat a Sineater"
+    PERFORM = "perform", "Perform Sineating"
+
+
+class ImpulseKind(models.TextChoices):
+    """Which impulse a character was told of in a scene (#5177)."""
+
+    INTRUSIVE = "intrusive", "Intrusive Thoughts"
+    COMPULSION = "compulsion", "Compulsion"
+
+
 class MagicActivity(models.TextChoices):
     """A kind of magical roll that adds staff-chosen skills (#4450).
 
@@ -905,6 +964,7 @@ class MagicActivity(models.TextChoices):
     DREAM_PERIL = "dream_peril", "Dream peril"
     PUSHING_HARD = "pushing_hard", "Pushing hard by burning resonance"
     KEEPING_FOCUS = "keeping_focus", "Keeping focus against carried drift"
+    SINEATING = "sineating", "Performing Sineating"
 
 
 # Names of the three canonical Affinity rows. Looked up by the

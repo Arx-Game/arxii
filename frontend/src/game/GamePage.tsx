@@ -634,6 +634,18 @@ function combatMapId(show: boolean, id: number): number | undefined {
   return show ? id : undefined;
 }
 
+function validRailSelection(key: string | null, rows: { key: string }[]): string | null {
+  return key !== null && rows.some((row) => row.key === key) ? key : null;
+}
+
+function visibleSidebarMode(mode: SidebarMode, channelsInSidebar: boolean): SidebarMode {
+  return mode === 'channels' && !channelsInSidebar ? 'here' : mode;
+}
+
+function sidebarChannels(enabled: boolean, mode: SidebarMode) {
+  return enabled ? <ChannelsPanel active={mode === 'channels'} /> : undefined;
+}
+
 export function GamePage() {
   const account = useAccount();
   const dispatch = useAppDispatch();
@@ -821,10 +833,7 @@ export function GamePage() {
   const activeThreadTabRaw = activeSession?.activeThreadTab ?? null;
   // Guard against a stale pointer: only a row the rail offers may be the
   // selection; anything else reads as All.
-  const activeThreadTab =
-    activeThreadTabRaw !== null && railRows.some((row) => row.key === activeThreadTabRaw)
-      ? activeThreadTabRaw
-      : null;
+  const activeThreadTab = validRailSelection(activeThreadTabRaw, railRows);
   const selectedRow = railRows.find((row) => row.key === activeThreadTab) ?? null;
 
   // #3761 Task 1: lifted from PlaySidebar/SidebarTabPanel so a later top-bar
@@ -833,8 +842,7 @@ export function GamePage() {
   // to Here mode + the Room tab, where `CombatRail` already renders.
   const [sidebarModeState, setSidebarMode] = useState<SidebarMode>('here');
   // Turning the opt-in off while Channels is the open mode falls back to Here.
-  const sidebarMode: SidebarMode =
-    sidebarModeState === 'channels' && !channelsInSidebar ? 'here' : sidebarModeState;
+  const sidebarMode = visibleSidebarMode(sidebarModeState, channelsInSidebar);
   const channelsUnread = useChannelUnreadTotal();
   // A selected channel row is a lane being read: no unread bump, and its count clears.
   const selectedChannel = isChannelRowKey(activeThreadTab) ? (selectedRow?.channel ?? null) : null;
@@ -1274,11 +1282,7 @@ export function GamePage() {
               onModeChange={setSidebarMode}
               hasActiveEncounter={hasActiveEncounter}
               onJumpToCombat={jumpToCombat}
-              channels={
-                channelsInSidebar ? (
-                  <ChannelsPanel active={sidebarMode === 'channels'} />
-                ) : undefined
-              }
+              channels={sidebarChannels(channelsInSidebar, sidebarMode)}
               channelsUnread={channelsUnread}
               here={
                 <GameRightSidebar

@@ -1,7 +1,7 @@
 /**
  * Types for the magic module.
  *
- * Re-exports generated schemas for Thread, CharacterResonance, SineatingPendingOffer,
+ * Re-exports generated schemas for Thread, CharacterResonance,
  * PendingStageAdvanceOffer, Ritual, ThreadWeavingTeachingOffer, and related list types.
  * The soul-tether / Audere / Audere Majora respond + detail endpoints are now annotated
  * with `@extend_schema` (#920), so their request/response shapes are re-exported from the
@@ -26,9 +26,6 @@ export type PaginatedTeachingOfferList =
 export type TargetKind = components['schemas']['ThreadTargetKindEnum'];
 export type CharacterResonance = components['schemas']['CharacterResonance'];
 export type CharacterGift = components['schemas']['CharacterGift'];
-export type SineatingPendingOffer = components['schemas']['SineatingPendingOffer'];
-export type PaginatedSineatingPendingOfferList =
-  components['schemas']['PaginatedSineatingPendingOfferList'];
 export type PendingStageAdvanceOffer = components['schemas']['PendingStageAdvanceOffer'];
 export type PaginatedPendingStageAdvanceOfferList =
   components['schemas']['PaginatedPendingStageAdvanceOfferList'];
@@ -45,13 +42,7 @@ export type PaginatedPendingStageAdvanceOfferList =
 export type SoulTetherDetail = components['schemas']['SoulTetherDetail'];
 export type DissolveRequest = components['schemas']['DissolveRequest'];
 
-// SineatingRequestSerializer is a request body, so the generated component
-// carries drf-spectacular's "Request" suffix (→ SineatingRequestRequest).
-export type SineatingRequest = components['schemas']['SineatingRequestRequest'];
-export type SineatingOffer = components['schemas']['SineatingOffer'];
-
-export type SineatingRespondRequest = components['schemas']['SineatingRespondRequest'];
-export type SineatingResult = components['schemas']['SineatingResult'];
+export type SineatingDeclineRequest = components['schemas']['SineatingDeclineRequest'];
 
 // RescueRequest maps to the generated SoulTetherRescueRequest component.
 export type RescueRequest = components['schemas']['SoulTetherRescueRequest'];
@@ -753,6 +744,19 @@ export type ManifestOptionChoice = components['schemas']['ManifestOptionChoice']
 
 /** One resonance the character holds: kindled or not, the strength word, the reasons. */
 export type KindledResonance = components['schemas']['KindledResonance'];
+
+/**
+ * A pull the character feels from the corruption they carry (#5177): "Intrusive Thoughts" while it
+ * only stirs, "Compulsion" once it costs them rolls (`is_compulsion`, `present` while something
+ * it cares about is in the scene).
+ */
+export type Impulse = components['schemas']['PaginatedKindledResonanceList']['impulses'][number];
+
+/** What the kindled-resonances endpoint answers: the resonances, and the impulses beside them. */
+export interface KindledReading {
+  results: KindledResonance[];
+  impulses: Impulse[];
+}
 
 // ---------------------------------------------------------------------------
 // Reflections (#5124): the "Reflecting on" row on a pose or a journal entry.

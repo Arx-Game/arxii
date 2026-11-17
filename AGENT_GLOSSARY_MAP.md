@@ -16,7 +16,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   Personalized name; and Prepared Text (#4101); and Cosmetic Mage Scar (#4501); and Magical training points and Teaching fit (#4659,
   ADR-4659-B; replaced the #4457 Magic skill floor); and Thread level / level cap (#4585; one scale since #5091); and Drift, Drift correction, Conversion offer,
   Rite of settling (#4733, #5124); and Thread retune (#4735, slice 6 of #4672, reshaped by #5123); and the several-resonances terms (#5123,
-  ADR-5123-A and B): Unsettled, Settled share, Mire share, Leading resonance, Paying resonance; and the kindled-resonance terms (#5124, ADR-5124): Kindled (_Avoid_: stirred), Kindling situation, Kindled strength, Reflection, Embrace, Disown
+  ADR-5123-A and B): Unsettled, Range before Unsettled (_Avoid_: room, headroom; #4751), Settled share, Leading resonance, Paying resonance; and the kindled-resonance terms (#5124, ADR-5124): Kindled (_Avoid_: stirred), Kindling situation, Kindled strength, Reflection, Embrace, Disown; and the Sineating terms (#5177, ADR-5177): Mire (the corruption a Sineater carries for their Sinners, held per Sinner in `MireHolding`; _Avoid_: Mire share, burden share; replaces the Mire share of #5123), Sineating, Sinner, Sineater, Burden reflection, Absolve, Condemn, Succumb, Jackpot, Fall of a Sineater, Intrusive Thoughts, and the corruption Compulsion (not the conditions app's `Compulsion` model)
 - [covenants](src/world/covenants/AGENT_GLOSSARY.md) - also holds the #4581 vow added effect terms
   (ADR-4581-A): Vow added effect, Upgrade (of a vow added effect), Added-effect firing
   (_Avoid_: vow rider, vow switch); and Focus pick and Combat style (#4759, ADR-4759)
@@ -33,7 +33,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   (_Avoid_: motive, reaction, regard rule, spark, ask, hook, aura, sway, persona opponent,
   aggro, re-aggro, timer)
 - [battles](src/world/battles/AGENT_GLOSSARY.md)
-- [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms, and vulnerability, control-loss trigger, compulsion and band (#4802)
+- [conditions](src/world/conditions/AGENT_GLOSSARY.md), also holds the #4091 settle terms, and vulnerability, control-loss trigger, compulsion and band (#4802) (the corruption Compulsion of #5177 is a different thing, in the magic glossary)
   (ADR-4091): Settle, Settle pool, Hold strength; and (ADR-4120) Settled round / Settle round
   effects
 - [vitals](src/world/vitals/AGENT_GLOSSARY.md) - also holds Certain death (deferred) (#4098) and Mend fraction (#4600)
@@ -61,7 +61,7 @@ term is chosen and the rest are listed under `_Avoid_`.
   Seat, Hall, Land Shape, Demesne, House State, Household, Contested Title, and (#3983 Plan B
   Task 7) Claim Grants, Founder Place, Capital (canonical; areas holds a stub), Claim Tier
   (though `OriginTemplate.max_claim_tier` itself is a `character_creation` field —
-  `character_creation` now has `src/world/character_creation/AGENT_GLOSSARY.md` (#4124: beat, life stage, unknown beat, kept beat, told background, maturation floor); see houses.md's Founder mode
+  `character_creation` now has `src/world/character_creation/AGENT_GLOSSARY.md` (#4124: beat, life stage, unknown beat, kept beat, told background, maturation floor; #5178: Background, the one free text a player writes at Final Touches); see houses.md's Founder mode
   section)
 - [realms](src/world/realms/AGENT_GLOSSARY.md)
 - [relationships](src/world/relationships/AGENT_GLOSSARY.md)

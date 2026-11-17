@@ -6,6 +6,8 @@
  * - Role label (Sinner / Sineater), derived from callerSheetId vs the detail payload
  * - HollowBar (current/max)
  * - lifetime_helped (shown only when caller is the Sineater)
+ * - the Mire the caller carries for the Sinner, row by row with its total (#5177). The
+ *   detail payload fills `mire` only for the Sineater, so a Sinner is shown nothing here.
  *
  * Contract decision: accepts `relationshipIds` (array of CharacterRelationship PKs)
  * and optionally `callerSheetId` (so we can determine which side of each bond the
@@ -75,6 +77,27 @@ function deriveBondInfo(
 }
 
 // ---------------------------------------------------------------------------
+// Sub-component: the Mire a Sineater carries for one Sinner
+// ---------------------------------------------------------------------------
+
+function MireCarried({ carried }: { carried: SoulTetherDetail['mire'][number] }) {
+  return (
+    <div className="refsheet-ledger mt-1" data-testid={`tether-mire-${carried.sinner_sheet_id}`}>
+      <div className="flex justify-between gap-3 font-semibold">
+        <span>{`The Mire you carry for ${carried.sinner_name}`}</span>
+        <span>{carried.total}</span>
+      </div>
+      {carried.rows.map((row) => (
+        <div key={row.resonance_name} className="flex justify-between gap-3">
+          <span>{row.label}</span>
+          <span>{row.amount}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sub-component: single bond row
 // ---------------------------------------------------------------------------
 
@@ -117,6 +140,9 @@ function BondRow({ relationshipId, callerSheetId, bondedCharacterNames }: BondRo
       }
     >
       <HollowBar current={data.hollow_current} max={data.hollow_max} />
+      {data.mire.map((carried) => (
+        <MireCarried key={carried.sinner_sheet_id} carried={carried} />
+      ))}
     </Entry>
   );
 }

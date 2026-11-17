@@ -7,6 +7,7 @@ Both are proper domain models replacing the old ModifierTarget-based pattern.
 
 from decimal import Decimal
 
+from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -93,6 +94,28 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "Higher makes burning this affinity's resonance push harder."
         ),
     )
+    unsettled_tolerance_percent = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MaxValueValidator(100)],
+        verbose_name="Range before Unsettled (percentage points)",
+        help_text=(
+            "How far another affinity may grow past its settled share before a character "
+            "whose main affinity is this one is Unsettled. Blank uses the general value "
+            "from the drift configuration."
+        ),
+    )
+    unsettled_step_percent = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(1), MaxValueValidator(100)],
+        verbose_name="Each further step (percentage points)",
+        help_text=(
+            "Percentage points past the range that add one step of severity, for a "
+            "character whose main affinity is this one. Blank uses the general value "
+            "from the drift configuration."
+        ),
+    )
     objects = AffinityManager()
 
     class NaturalKeyConfig:
@@ -166,6 +189,14 @@ class Resonance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         related_name="feeling_of_resonances",
         help_text=("Conditions carrying this property count as this resonance's feeling."),
+    )
+    impulse_text = models.TextField(
+        blank=True,
+        help_text=(
+            "The words a character carrying corruption in this resonance is sent, once per "
+            "scene, when something this resonance cares about is present. Written in second "
+            "person. Blank uses a plain default line."
+        ),
     )
     objects = ResonanceManager()
 

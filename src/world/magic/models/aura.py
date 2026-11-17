@@ -184,13 +184,6 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
         default=0,
         help_text="Monotonic total of resonance earned (never decremented).",
     )
-    mire_lifetime = models.PositiveIntegerField(
-        default=0,
-        help_text=(
-            "The part of lifetime_earned taken from the Mire as a Sineater. Never exceeds "
-            "lifetime_earned; moves with lifetime when resonance is converted."
-        ),
-    )
     claimed_at = models.DateTimeField(
         auto_now_add=True,
         help_text="When this resonance row was created (claimed by the character).",
@@ -227,12 +220,6 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
 
     class Meta:
         unique_together = (("character_sheet", "resonance"),)
-        constraints = [
-            models.CheckConstraint(
-                condition=models.Q(mire_lifetime__lte=models.F("lifetime_earned")),
-                name="characterresonance_mire_within_lifetime",
-            )
-        ]
         verbose_name = "Character Resonance"
         verbose_name_plural = "Character Resonances"
 

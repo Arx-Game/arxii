@@ -89,45 +89,12 @@ class TypesImportTests(TestCase):
         self.assertEqual(SoulTetherRole.SINNER.value, "SINNER")
         self.assertEqual(SoulTetherRole.SINEATER.value, "SINEATER")
 
-    def test_sineating_offer_frozen(self) -> None:
-        from world.character_sheets.factories import CharacterSheetFactory
-        from world.magic.factories import ResonanceFactory
-        from world.magic.types.soul_tether import SineatingOffer
-        from world.relationships.factories import CharacterRelationshipFactory
-        from world.scenes.factories import SceneFactory
-
-        sinner = CharacterSheetFactory()
-        sineater = CharacterSheetFactory()
-        relationship = CharacterRelationshipFactory(source=sinner, target=sineater)
-        resonance = ResonanceFactory()
-        scene = SceneFactory()
-
-        offer = SineatingOffer(
-            sinner_sheet=sinner,
-            sineater_sheet=sineater,
-            relationship=relationship,
-            resonance=resonance,
-            max_units_offered=10,
-            anima_cost_per_unit=2,
-            fatigue_cost_per_unit=1,
-            current_hollow=5,
-            hollow_max=20,
-            sineater_current_strain_stage=0,
-            scene=scene,
-        )
-        self.assertEqual(offer.max_units_offered, 10)
-        # Verify it's frozen (immutable)
-        with self.assertRaises(AttributeError):
-            offer.max_units_offered = 5  # type: ignore[misc]
-
 
 class ServiceSkeletonImportsTests(TestCase):
     def test_service_module_imports(self) -> None:
         from world.magic.services import soul_tether
 
         self.assertTrue(callable(soul_tether.accept_soul_tether))
-        self.assertTrue(callable(soul_tether.request_sineating))
-        self.assertTrue(callable(soul_tether.resolve_sineating))
         self.assertTrue(callable(soul_tether.perform_soul_tether_rescue))
         self.assertTrue(callable(soul_tether.dissolve_soul_tether))
         self.assertTrue(callable(soul_tether.soul_tether_redirect_handler))
@@ -169,8 +136,6 @@ class SineatingModelTests(TestCase):
             resonance=resonance,
             units_offered=10,
             units_accepted=7,
-            anima_cost=14,
-            fatigue_cost=7,
         )
         self.assertEqual(row.units_offered, 10)
         self.assertEqual(row.units_accepted, 7)
@@ -193,7 +158,6 @@ class SineatingFactoryRoundTripTests(TestCase):
         self.assertIsInstance(row, Sineating)
         self.assertEqual(row.units_accepted, 5)
         self.assertEqual(row.units_offered, 5)
-        self.assertEqual(row.anima_cost, 10)
 
     def test_sineating_factory_declined_variant(self) -> None:
         from world.magic.factories import SineatingFactory

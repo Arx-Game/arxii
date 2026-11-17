@@ -21,3 +21,17 @@ class KindledResonanceSerializer(serializers.Serializer):
 
     def get_strength_name(self, obj) -> str | None:
         return obj.tier.name if obj.tier is not None else None
+
+
+class ImpulseSerializer(serializers.Serializer):
+    """An ``Impulse`` as the panel reads it (#5177): the pull of corruption the character
+    carries in one resonance. ``label`` is the condition's display name ("Intrusive Thoughts:
+    <resonance>" or "Compulsion: <resonance>"); ``text`` is the words staff wrote for it."""
+
+    resonance_id = serializers.IntegerField(source="resonance.pk")
+    resonance_name = serializers.CharField(source="resonance.name")
+    label = serializers.CharField()
+    present = serializers.BooleanField()
+    is_compulsion = serializers.BooleanField()
+    text = serializers.CharField()
+    reasons = serializers.ListField(child=serializers.CharField())

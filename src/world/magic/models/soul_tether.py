@@ -17,13 +17,13 @@ class SineatingPendingOffer(SharedMemoryModel):
     """Pending Sineating offer awaiting Sineater response (Task 1.6).
 
     Persisted so the frontend inbox UI can poll a real endpoint. The row is
-    created by ``request_sineating`` and consumed (then deleted) by
-    ``resolve_sineating_from_db``.
+    created by ``request_sineating`` (the Sinner's plea, attached to a pose) and consumed
+    (then deleted) by ``perform_sineating`` or ``decline_sineating``.
 
-    Co-location is re-validated at accept time — either character may have left
-    the scene since the offer was created. ``resolve_sineating_from_db`` raises
-    ``SineatingValidationError`` and deletes the row when either character is no
-    longer a participant of ``scene``.
+    Co-location is re-validated when the ritual is performed: either character may have left
+    the scene since the plea was made. ``perform_sineating`` raises
+    ``SineatingValidationError`` and deletes the row when they no longer share an active
+    scene.
 
     The unique constraint on ``(sinner_sheet, sineater_sheet)`` ensures at most
     one pending offer per pair. ``request_sineating`` uses ``update_or_create``
@@ -57,8 +57,6 @@ class SineatingPendingOffer(SharedMemoryModel):
         related_name="sineating_pending_offers",
     )
     units_offered = models.PositiveSmallIntegerField()
-    anima_cost_per_unit = models.PositiveSmallIntegerField()
-    fatigue_cost_per_unit = models.PositiveSmallIntegerField()
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -83,7 +81,7 @@ class PendingStageAdvanceOffer(SharedMemoryModel):
     poll a real endpoint. Created by ``soul_tether_stage_advance_prompt`` and
     consumed (then deleted) by ``resolve_stage_advance_prompt_from_db``.
 
-    The row is only written when ``_find_shared_active_scene`` finds a shared
+    The row is only written when ``shared_active_scene`` finds a shared
     active scene for the pair — guaranteeing ``scene`` is always non-null and
     that the co-location check at resolve time has a real scene to validate.
 
@@ -191,8 +189,30 @@ class Sineating(SharedMemoryModel):
     units_accepted = models.PositiveIntegerField(
         help_text="0 = declined; 1..N = accepted that many units.",
     )
-    anima_cost = models.PositiveIntegerField(default=0)
-    fatigue_cost = models.PositiveIntegerField(default=0)
+    corruption_moved = models.PositiveIntegerField(
+        default=0,
+        help_text="Corruption that left the Sinner.",
+    )
+    corruption_taken = models.PositiveIntegerField(
+        default=0,
+        help_text="Corruption that arrived on the Sineater, after their resistance.",
+    )
+    outcome = models.ForeignKey(
+        "arxii.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text="The outcome of the Sineater's roll. Empty for a declined plea.",
+    )
+    sinner_resonance_earned = models.PositiveIntegerField(
+        default=0,
+        help_text="Resonance the Sinner earned in their thread's resonance.",
+    )
+    sineater_resonance_earned = models.PositiveIntegerField(
+        default=0,
+        help_text="Resonance the Sineater earned in their thread's resonance.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -204,8 +224,8 @@ class Sineating(SharedMemoryModel):
 
     def __str__(self) -> str:
         return (
-            f"Sineating({self.sineater_sheet} ate {self.units_accepted}/"
-            f"{self.units_offered} from {self.sinner_sheet})"
+            f"Sineating({self.sineater_sheet} took on {self.units_accepted}/"
+            f"{self.units_offered} units for {self.sinner_sheet})"
         )
 
 
@@ -260,4 +280,51 @@ class SoulTetherRescue(SharedMemoryModel):
         return (
             f"SoulTetherRescue({self.sineater_sheet} pulled {self.sinner_sheet} "
             f"from stage {self.sinner_stage_at_start} to {self.sinner_stage_at_end})"
+        )
+
+
+class MireHolding(SharedMemoryModel):
+    """How much corruption a Sineater carries for one Sinner in one resonance (#5177).
+
+    The corruption itself lives where all corruption lives, on the Sineater's
+    ``CharacterResonance.corruption_current`` for the resonance. ``amount`` says how much of
+    it came from this Sinner, so the holdings in a resonance never sum to more than that
+    corruption. Only ``take_on_corruption`` and ``release_mire`` write ``amount``, and
+    ``reduce_corruption`` shrinks it when corruption falls for any other reason.
+
+    ``relationship`` is the Sineater's own side toward the Sinner, which is unique per pair
+    and outlives a tether being dissolved and formed again. The jackpot and fall counters are
+    per tether, not per resonance, so they live on that side
+    (``CharacterRelationship.mire_purified_since_payout`` / ``mire_succumbed_since_fall``).
+    """
+
+    relationship = models.ForeignKey(
+        CHARACTER_RELATIONSHIP_MODEL,
+        on_delete=models.CASCADE,
+        related_name="mire_holdings",
+        help_text="The Sineater's own relationship side toward the Sinner they carry for.",
+    )
+    resonance = models.ForeignKey(
+        RESONANCE_MODEL,
+        on_delete=models.PROTECT,
+        related_name="mire_holdings",
+    )
+    amount = models.PositiveIntegerField(
+        default=0,
+        help_text="Corruption held from this Sinner in this resonance.",
+    )
+
+    class Meta:
+        ordering = ["relationship", "resonance"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["relationship", "resonance"],
+                name="one_mire_holding_per_relationship_resonance",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return (
+            f"MireHolding({self.relationship.source} carries {self.amount} "
+            f"{self.resonance} for {self.relationship.target})"
         )

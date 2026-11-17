@@ -213,8 +213,12 @@ const getReflectionOptionsMock = vi.fn((): Promise<unknown[]> =>
     },
   ])
 );
+// #5177 — the pleas a pose can carry; the "Sineating" row reads it. Shaped like the generated
+// `SineatingOption` rows.
+const getSineatingOptionsMock = vi.fn((): Promise<unknown[]> => Promise.resolve([]));
 vi.mock('@/magic/api', () => ({
   getReflectionOptions: () => getReflectionOptionsMock(),
+  getSineatingOptions: () => getSineatingOptionsMock(),
 }));
 
 // A scene pose goes out over REST and the composer clears when it lands. Wait
@@ -2504,5 +2508,127 @@ describe('the "Reflecting on" row on a pose (#5124)', () => {
 
     await waitFor(() => expect(getReflectionOptionsMock).toHaveBeenCalled());
     expect(screen.queryByTestId('reflecting-on-row')).toBeNull();
+  });
+});
+
+describe('the "Sineating" row on a pose (#5177)', () => {
+  const pose: ComposerMode = { command: 'pose', targets: [], label: 'Pose \u2192 Room' };
+  const entreat = {
+    role: 'entreat',
+    partner_sheet_id: 20,
+    partner_name: 'Corvin',
+    max_units: 2,
+    resonance_name: 'Ruin',
+  };
+
+  beforeEach(() => {
+    sendMock.mockClear();
+    submitPoseMock.mockClear();
+    toastErrorMock.mockClear();
+    dispatchMock.mockClear();
+    submitPoseMock.mockImplementation(() => Promise.resolve());
+    getSineatingOptionsMock.mockResolvedValue([entreat]);
+    mockRoomCharacters = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
+    queryClient.clear();
+    sessionStorage.clear();
+  });
+
+  function renderComposer() {
+    return render(
+      <CommandInput
+        character="Alice"
+        characterSheetId={7}
+        composerMode={pose}
+        sceneId="5"
+        personaId={9}
+      />
+    );
+  }
+
+  it('sends the plea with the scene pose and shows the writer what it did', async () => {
+    submitPoseMock.mockImplementation(() =>
+      Promise.resolve({
+        id: 1,
+        sineating_line: 'You entreat Corvin to take on 2 units of your sins.',
+        sineating_recorded: true,
+      })
+    );
+    renderComposer();
+    fireEvent.click(await screen.findByTestId('sineating-option-entreat-20'));
+    fireEvent.click(screen.getByTestId('sineating-units-1'));
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'Ysmay kneels and asks.' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        scene_id: 5,
+        content: 'Ysmay kneels and asks.',
+        sineating_role: 'entreat',
+        sineating_partner_id: 20,
+        sineating_units: 1,
+      })
+    );
+    await poseLands();
+    expect(dispatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'game/addFeedNote',
+        payload: expect.objectContaining({
+          note: expect.objectContaining({
+            kind: 'system',
+            content: 'You entreat Corvin to take on 2 units of your sins.',
+          }),
+        }),
+      })
+    );
+    await waitFor(() =>
+      expect(screen.getByTestId('sineating-option-entreat-20')).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      )
+    );
+  });
+
+  it('keeps the typed pose and the pick when the Sineating is refused, and shows why', async () => {
+    submitPoseMock.mockImplementation(() =>
+      Promise.reject(new Error('Corvin is not here to be asked.'))
+    );
+    renderComposer();
+    fireEvent.click(await screen.findByTestId('sineating-option-entreat-20'));
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'Ysmay kneels and asks.' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() =>
+      expect(toastErrorMock).toHaveBeenCalledWith('Corvin is not here to be asked.')
+    );
+    expect(screen.getByRole('textbox')).toHaveValue('Ysmay kneels and asks.');
+    expect(screen.getByTestId('sineating-option-entreat-20')).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+  });
+
+  it('carries a Sineating or a reflection, never both: picking one clears the other', async () => {
+    renderComposer();
+    fireEvent.click(await screen.findByTestId('reflect-option-deed-33'));
+    fireEvent.click(screen.getByTestId('reflect-choice-EMBRACE'));
+
+    fireEvent.click(await screen.findByTestId('sineating-option-entreat-20'));
+    expect(screen.getByTestId('reflect-option-deed-33')).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByTestId('reflect-choice-EMBRACE')).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(screen.getByTestId('reflect-option-deed-33'));
+    expect(screen.getByTestId('sineating-option-entreat-20')).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+  });
+
+  it('offers no row when there is nothing to make or answer, or outside a scene', async () => {
+    getSineatingOptionsMock.mockResolvedValue([]);
+    renderComposer();
+    await waitFor(() => expect(getSineatingOptionsMock).toHaveBeenCalled());
+    expect(screen.queryByTestId('sineating-row')).toBeNull();
   });
 });

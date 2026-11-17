@@ -9,11 +9,6 @@ with, as her techniques' variants already do, so a Celestial gift cast in the Ab
 self keeps the full alignment term. An alternate self with no resonance changes
 nothing.
 
-The Rite of Atonement reads the true aura too (its Abyssal-lead gate), but no journey
-drives it: the ritual dispatch calls a SERVICE ritual with ``character_sheet=`` and
-``ritual=``, while ``perform_atonement_rite`` takes ``performer_sheet=`` and
-``target_sheet=``, so the rite cannot be performed from ``ritual`` or the web client yet.
-
 Expected numbers come from the ruled split and the affinity-alignment bonus of 100:
 bonus x percent / 100. Names are invented.
 """

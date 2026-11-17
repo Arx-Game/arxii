@@ -1054,6 +1054,7 @@ class LifePointsSeed:
     costly_price: int
     paying_card: str
     paying_price: int
+    later_card: str
 
 
 #: The life-points spec's own route, beat and the two cards on it.
@@ -1065,15 +1066,21 @@ LIFE_POINTS_COSTLY_CARD = "Counting-house clerk"
 LIFE_POINTS_COSTLY_PRICE = 15
 LIFE_POINTS_PAYING_CARD = "Owes the road"
 LIFE_POINTS_PAYING_PRICE = 10
+#: A second beat in a later life stage, with one card (#5160): the life page opens with
+#: every stage and section expanded, which one beat in one stage cannot show.
+LIFE_POINTS_LATER_BEAT = "What the road cost you"
+LIFE_POINTS_LATER_CARD = "Left someone behind"
+LIFE_POINTS_LATER_PRICE = 5
 
 
 def seed_life_points_spec(*, username: str) -> LifePointsSeed:
-    """A creation draft of *username*'s at Lineage with one life beat and two cards (#5141).
+    """A creation draft of *username*'s at Lineage with two life beats (#5141, #5160).
 
-    The beat is offered to this draft's beginning alone, so no other account's draft
-    meets it. One card costs 15 CG points and the world pays 10 for the other. The
-    draft holds no pick and is stamped as having loaded its suggested life, so the page
-    opens on the beat with nothing chosen.
+    The beats are offered to this draft's beginning alone, so no other account's draft
+    meets them. The childhood beat has two cards: one costs 15 CG points and the world
+    pays 10 for the other. The youth beat has one card, so the life has two stages and
+    two sections. The draft holds no pick and is stamped as having loaded its suggested
+    life, so the page opens with nothing chosen.
     """
     from django.db import transaction  # noqa: PLC0415
     from django.utils.text import slugify  # noqa: PLC0415
@@ -1082,6 +1089,7 @@ def seed_life_points_spec(*, username: str) -> LifePointsSeed:
     from world.character_creation.constants import (  # noqa: PLC0415
         BeatAudience,
         BeatSelection,
+        LifeStage,
         OfferChapter,
         Parentage,
         Stage,
@@ -1129,13 +1137,22 @@ def seed_life_points_spec(*, username: str) -> LifePointsSeed:
                 offered_to=BeatAudience.ONLY_LISTED,
             )
             LifeBeatExclusionFactory(beat=beat, beginning=beginning)
-            for name, price in (
-                (LIFE_POINTS_COSTLY_CARD, LIFE_POINTS_COSTLY_PRICE),
-                (LIFE_POINTS_PAYING_CARD, -LIFE_POINTS_PAYING_PRICE),
+            later = LifeBeatFactory(
+                name=LIFE_POINTS_LATER_BEAT,
+                life_stage=LifeStage.YOUTH,
+                prompt="What did the road take from you.",
+                selection=BeatSelection.ANY,
+                offered_to=BeatAudience.ONLY_LISTED,
+            )
+            LifeBeatExclusionFactory(beat=later, beginning=beginning)
+            for on_beat, name, price in (
+                (beat, LIFE_POINTS_COSTLY_CARD, LIFE_POINTS_COSTLY_PRICE),
+                (beat, LIFE_POINTS_PAYING_CARD, -LIFE_POINTS_PAYING_PRICE),
+                (later, LIFE_POINTS_LATER_CARD, LIFE_POINTS_LATER_PRICE),
             ):
                 DistinctionOfferFactory(
                     chapter=OfferChapter.BACKGROUNDS,
-                    beat=beat,
+                    beat=on_beat,
                     appearance_section=None,
                     prompt="",
                     distinction=DistinctionFactory(
@@ -1169,4 +1186,5 @@ def seed_life_points_spec(*, username: str) -> LifePointsSeed:
         costly_price=LIFE_POINTS_COSTLY_PRICE,
         paying_card=LIFE_POINTS_PAYING_CARD,
         paying_price=LIFE_POINTS_PAYING_PRICE,
+        later_card=LIFE_POINTS_LATER_CARD,
     )

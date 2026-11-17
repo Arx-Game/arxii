@@ -11,13 +11,15 @@ from collections.abc import Iterable
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
-from world.magic.constants import ReflectionChoice
+from world.magic.constants import ReflectionChoice, ReflectionTargetKind
 from world.magic.models.drift import DriftConversionCap
 from world.magic.models.reflection import Reflection
 from world.magic.services.drift import get_drift_correction_config
 from world.magic.services.drift_correction import (
     RITE_NOT_READY_MESSAGE,
+    burden_holdings,
     disowns_unsettling,
+    embraced_amount,
     fallback_conversion_target,
     main_affinity_rows,
     offerings_for,
@@ -27,6 +29,7 @@ from world.magic.services.drift_correction import (
     waiting_reflections,
 )
 from world.magic.services.reflection import deed_in_sentence, deed_what
+from world.magic.services.soul_tether import get_soul_tether_config, sineater_thread_resonance
 from world.magic.types.drift import ReflectionReading, SettlingRiteReading
 
 if TYPE_CHECKING:
@@ -76,18 +79,22 @@ def open_cap_line(sheet: CharacterSheet) -> str:
 
 
 def _effect_line(
+    sheet: CharacterSheet,
     reflection: Reflection,
     target: Resonance | None,
     caps: dict[int, int],
     disown_percent: int,
 ) -> str:
+    if reflection.tether_id is not None:
+        return _burden_effect_line(reflection)
     resonance = reflected_resonance(reflection)
     embrace = reflection.choice == ReflectionChoice.EMBRACE
     if reflection.grant is not None:
         grant = reflection.grant
         if embrace:
             what = deed_in_sentence(grant) or f"your {resonance.name}"
-            return f"Your {resonance.name} from {what} grows, up to {grant.amount}."
+            most = embraced_amount(sheet, grant, Decimal(1))
+            return f"Your {resonance.name} from {what} grows, up to {most}."
         most = int(Decimal(grant.amount) * Decimal(disown_percent) / _ONE_HUNDRED)
         if most <= 0:
             return "Nothing will turn, because the deed earned too little."
@@ -100,11 +107,48 @@ def _effect_line(
     return f"{resonance.name} turns toward {_target_name(target)}, up to {most}."
 
 
+def _burden_effect_line(reflection: Reflection) -> str:
+    """What a full share would do to the Mire a Sineater carries for one Sinner. It says nothing
+    of what the Sinner will be paid, or of the jackpot."""
+    holdings = burden_holdings(reflection)
+    if not holdings:
+        return "Nothing will clear, because you carry none of it now."
+    if reflection.choice == ReflectionChoice.SUCCUMB:
+        parts = " and ".join(f"{h.amount} {h.resonance.name}" for h in holdings)
+        becomes = "become" if len(holdings) > 1 else "becomes"
+        return f"Up to {parts} {becomes} part of you."
+    total = sum(h.amount for h in holdings)
+    percent = get_soul_tether_config().purify_reward_percent
+    reward = sum(h.amount * percent // 100 for h in holdings)
+    own = sineater_thread_resonance(reflection.tether)
+    if own is None or reward <= 0:
+        return f"Up to {total} of it clears."
+    return f"Up to {total} of it clears; your {own.name} grows by up to {reward}."
+
+
+def _kind(reflection: Reflection) -> str:
+    if reflection.tether_id is not None:
+        return ReflectionTargetKind.BURDEN.value
+    if reflection.grant is not None:
+        return ReflectionTargetKind.DEED.value
+    return ReflectionTargetKind.RESONANCE.value
+
+
 def _target_name(target: Resonance | None) -> str:
     return target.name if target is not None else "your own affinity"
 
 
+_BURDEN_VERBS = {
+    ReflectionChoice.ABSOLVE: "Absolve",
+    ReflectionChoice.CONDEMN: "Condemn",
+    ReflectionChoice.SUCCUMB: "Succumb to",
+}
+
+
 def _title(reflection: Reflection) -> str:
+    if reflection.tether_id is not None:
+        verb = _BURDEN_VERBS[reflection.choice]
+        return f"{verb} the Mire you carry for {reflection.tether.target.primary_persona.name}"
     verb = "Embrace" if reflection.choice == ReflectionChoice.EMBRACE else "Disown"
     if reflection.grant is not None:
         grant = reflection.grant
@@ -132,12 +176,14 @@ def settling_rite_reading(
             ReflectionReading(
                 id=reflection.pk,
                 choice=reflection.choice,
-                kind="deed" if reflection.grant is not None else "resonance",
+                kind=_kind(reflection),
                 title=_title(reflection),
                 where=where,
                 from_line=from_line,
                 excerpt=excerpt,
-                effect_line=_effect_line(reflection, target, caps, config.disown_deed_percent),
+                effect_line=_effect_line(
+                    sheet, reflection, target, caps, config.disown_deed_percent
+                ),
             )
         )
     ready = rite_is_ready(config)

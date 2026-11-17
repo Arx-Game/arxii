@@ -9,7 +9,8 @@ Three sub-tasks per plan Phase 13:
 Pattern mirrors src/world/magic/tests/integration/test_corruption_flow.py and
 test_soulfray_recovery_flow.py:
   - Use real service functions; patch only network/session-adjacent surfaces
-    (_both_in_scene, perform_check) that can't run without a live process.
+    (perform_check) that can't run without a live process; the characters stand in one room
+    with an active scene.
   - Assertions against the DB, not against mocks.
   - No freezegun — dormancy is simulated by counting corrupt-decay ticks
     directly rather than wall-clock time.
@@ -37,6 +38,7 @@ from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     ResonanceFactory,
     ThreadWeavingUnlockFactory,
+    place_in_active_scene,
     wire_soul_tether_content,
     with_corruption_at_stage,
 )
@@ -47,13 +49,9 @@ from world.magic.services.soul_tether import (
     accept_soul_tether,
     dissolve_soul_tether,
     perform_soul_tether_rescue,
-    resolve_sineating,
 )
 from world.magic.types.corruption import CorruptionSource
-from world.magic.types.soul_tether import (
-    SineatingOffer,
-    SoulTetherRole as SoulTetherRoleEnum,
-)
+from world.magic.types.soul_tether import SoulTetherRole as SoulTetherRoleEnum
 from world.relationships.factories import (
     CharacterRelationshipFactory,
     RelationshipTypeFactory,
@@ -66,7 +64,6 @@ from world.seeds.modifier_values import seed_pool_and_cap_lanes
 # ---------------------------------------------------------------------------
 
 _PERFORM_CHECK_PATH = "world.checks.services.perform_check"
-_BOTH_IN_SCENE_PATH = "world.magic.services.soul_tether._both_in_scene"
 
 # Counter for unique room keys (avoid DB unique constraint collisions).
 _room_counter = 0
@@ -226,29 +223,22 @@ def _make_simple_corruption_template(resonance: object) -> tuple:
     return template, stages
 
 
-def _build_sineating_offer(
-    sinner: object,
-    sineater: object,
-    resonance: object,
-    relationship: object,
-    max_units: int = 5,
-) -> SineatingOffer:
-    """Construct a SineatingOffer directly, bypassing scene/roster validation."""
-    from world.scenes.factories import SceneFactory
+def _sineat_for_state(sinner: object, sineater: object, resonance: object, units: int) -> None:
+    """Leave the state a Sineating of ``units`` leaves: a filled Hollow and lifetime helped.
 
-    return SineatingOffer(
-        sinner_sheet=sinner,  # type: ignore[arg-type]
-        sineater_sheet=sineater,  # type: ignore[arg-type]
-        relationship=relationship,  # type: ignore[arg-type]
-        resonance=resonance,  # type: ignore[arg-type]
-        max_units_offered=max_units,
-        anima_cost_per_unit=2,  # default from SoulTetherConfig
-        fatigue_cost_per_unit=1,  # default from SoulTetherConfig
-        current_hollow=0,
-        hollow_max=100,
-        sineater_current_strain_stage=0,
-        scene=SceneFactory(),
+    The ritual itself is covered in ``test_sineating``; these flows only need what it leaves.
+    """
+    thread = Thread.objects.get(
+        owner=sinner,
+        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+        resonance=resonance,
+        retired_at__isnull=True,
     )
+    thread.hollow_current = units
+    thread.save(update_fields=["hollow_current"])
+    row, _ = CharacterResonance.objects.get_or_create(character_sheet=sineater, resonance=resonance)
+    row.lifetime_helped = units
+    row.save(update_fields=["lifetime_helped"])
 
 
 # ===========================================================================
@@ -362,13 +352,7 @@ class SoulTetherFullPipelineTests(TestCase):
         sinner_thread.refresh_from_db()
 
         # ---- Step 2: Sineating fills the Hollow ----
-        offer = _build_sineating_offer(
-            self.sinner, self.sineater, self.resonance, rel_out, max_units=10
-        )
-        result = resolve_sineating(offer, units_accepted=10)
-
-        self.assertFalse(result.declined)
-        self.assertEqual(result.units_accepted, 10)
+        _sineat_for_state(self.sinner, self.sineater, self.resonance, 10)
 
         sinner_thread.refresh_from_db()
         # hollow_max = level*10 = 30; we added 10 units → hollow_current = min(30, 10) = 10
@@ -426,16 +410,14 @@ class SoulTetherFullPipelineTests(TestCase):
         sineater_cr.save(update_fields=["balance"])
 
         mock_check = _make_mock_check(success_level=1)
-        with (
-            patch(_BOTH_IN_SCENE_PATH, return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(self.sinner, self.sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             rescue_outcome = perform_soul_tether_rescue(
                 sineater_sheet=self.sineater,
                 sinner_sheet=self.sinner,
                 resonance=self.resonance,
                 components=[],
-                scene=None,  # scene-participation patched above
+                scene=None,  # the scene is found where the two characters stand
             )
 
         self.assertGreater(rescue_outcome.severity_reduced, 0)
@@ -750,22 +732,6 @@ class ManyToManyIndependenceTests(TestCase):
         self.assertEqual(thread_a.target_capstone_id, self.capstone_a.pk)
         self.assertEqual(thread_b.target_capstone_id, self.capstone_b.pk)
 
-    def test_hollow_current_is_independent_per_sinner(self) -> None:
-        """Sineating for Sinner A does not change Sinner B's hollow_current."""
-        rel_a = CharacterRelationship.objects.get(source=self.sinner_a, target=self.sineater)
-
-        # Sineat for Sinner A only.
-        offer_a = _build_sineating_offer(
-            self.sinner_a, self.sineater, self.resonance_a, rel_a, max_units=8
-        )
-        resolve_sineating(offer_a, units_accepted=8)
-
-        thread_a = _get_sinner_thread(self.sinner_a, self.capstone_a, self.resonance_a)
-        thread_b = _get_sinner_thread(self.sinner_b, self.capstone_b, self.resonance_b)
-
-        self.assertGreater(thread_a.hollow_current, 0, "Sinner A's Hollow should have filled")
-        self.assertEqual(thread_b.hollow_current, 0, "Sinner B's Hollow must not be affected")
-
     @tag("postgres")
     def test_rescue_for_sinner_a_leaves_sinner_b_unchanged(self) -> None:
         """Rescue for Sinner A reduces Sinner A's corruption; Sinner B's is untouched."""
@@ -789,10 +755,8 @@ class ManyToManyIndependenceTests(TestCase):
         sineater_cr_a.save(update_fields=["balance"])
 
         mock_check = _make_mock_check(success_level=1)
-        with (
-            patch(_BOTH_IN_SCENE_PATH, return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(self.sinner_a, self.sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             rescue_outcome = perform_soul_tether_rescue(
                 sineater_sheet=self.sineater,
                 sinner_sheet=self.sinner_a,
@@ -815,34 +779,6 @@ class ManyToManyIndependenceTests(TestCase):
         ).first()
         b_corruption_after = cr_b_after.corruption_current if cr_b_after else 0
         self.assertEqual(b_corruption_after, b_corruption_before)
-
-    def test_sineater_lifetime_helped_accumulates_across_both_bonds(self) -> None:
-        """lifetime_helped on Sineater grows when Sineating for either Sinner.
-
-        NOTE: lifetime_helped is per-CharacterResonance, so it is tracked
-        independently per resonance (resonance_a vs resonance_b).
-        """
-        rel_a = CharacterRelationship.objects.get(source=self.sinner_a, target=self.sineater)
-        rel_b = CharacterRelationship.objects.get(source=self.sinner_b, target=self.sineater)
-
-        offer_a = _build_sineating_offer(
-            self.sinner_a, self.sineater, self.resonance_a, rel_a, max_units=5
-        )
-        resolve_sineating(offer_a, units_accepted=5)
-
-        offer_b = _build_sineating_offer(
-            self.sinner_b, self.sineater, self.resonance_b, rel_b, max_units=4
-        )
-        resolve_sineating(offer_b, units_accepted=4)
-
-        cr_a = CharacterResonance.objects.get(
-            character_sheet=self.sineater, resonance=self.resonance_a
-        )
-        cr_b = CharacterResonance.objects.get(
-            character_sheet=self.sineater, resonance=self.resonance_b
-        )
-        self.assertEqual(cr_a.lifetime_helped, 5)
-        self.assertEqual(cr_b.lifetime_helped, 4)
 
     def test_dissolution_of_bond_a_leaves_bond_b_intact(self) -> None:
         """Dissolving Bond A (Sinner A ↔ Sineater) leaves Bond B (Sinner B ↔ Sineater) active."""
@@ -889,10 +825,8 @@ class ManyToManyIndependenceTests(TestCase):
         sineater_cr_a.save(update_fields=["balance"])
 
         mock_check = _make_mock_check(success_level=1)
-        with (
-            patch(_BOTH_IN_SCENE_PATH, return_value=True),
-            patch(_PERFORM_CHECK_PATH, return_value=mock_check),
-        ):
+        place_in_active_scene(self.sinner_a, self.sineater)
+        with patch(_PERFORM_CHECK_PATH, return_value=mock_check):
             perform_soul_tether_rescue(
                 sineater_sheet=self.sineater,
                 sinner_sheet=self.sinner_a,

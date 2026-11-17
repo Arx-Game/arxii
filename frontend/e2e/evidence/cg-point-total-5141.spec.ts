@@ -16,6 +16,12 @@ import { BEGINNING, CRADLE, DRAFT_ID, mockCg } from './fixtures/cgLineage';
 const here = path.dirname(fileURLToPath(import.meta.url));
 const shot = (name: string) => path.join(here, '..', '..', 'test-results', 'cg-points-5141', name);
 
+/** The life's choices in the chapter's right-hand panel, and that panel's points line (#5148). */
+const PANEL_CHOICES = '.interview .chapter > aside .ledger';
+const PANEL_POINTS = '.interview .record-rail .row:has(dt:text-is("CG points")) dd';
+/** The points line for a remaining figure out of the fixture's 100. */
+const spentLine = (remaining: number) => `${100 - remaining} of 100 spent`;
+
 const BEAT = {
   beat_id: 1,
   name: 'How you were raised',
@@ -196,8 +202,14 @@ test.describe('character creation: the CG points move with a card click (#5141)'
     const bookish = page.getByRole('button', { name: /^Bookish/ });
     const scrabble = page.getByRole('button', { name: /^Hard scrabble/ });
     await expect(bookish).toBeVisible({ timeout: 15000 });
-    const ledger = page.getByRole('complementary', { name: 'CG points' });
+    // Since #5148 the right-hand panel is the one every stage shows: its "CG points" line
+    // is the total, and the life's choices are listed under it. The build before #5141
+    // had a ledger box of its own with four totals.
+    const ledger = oldBuild
+      ? page.getByRole('complementary', { name: 'CG points' })
+      : page.locator(PANEL_CHOICES);
     const totals = () => ledger.locator('.tot').allTextContents();
+    const total = () => page.locator(PANEL_POINTS).textContent();
     const rows = () => ledger.locator('.row').allTextContents();
 
     if (oldBuild) {
@@ -221,17 +233,18 @@ test.describe('character creation: the CG points move with a card click (#5141)'
       return;
     }
 
-    // Two totals: Starting and Remaining. No Spent or Gained line.
-    expect(await totals()).toEqual(['Starting100', 'Remaining100']);
-    await expect(ledger.getByText('Spent')).toHaveCount(0);
-    await expect(ledger.getByText('Gained')).toHaveCount(0);
+    // One points line, the panel's own. No Starting, Spent, Gained or Remaining lines.
+    expect(await total()).toBe(spentLine(100));
+    await expect(page.locator('.interview .chapter > aside')).not.toContainText(
+      /Starting|Gained|Remaining/
+    );
     await page.screenshot({ path: shot('1-before-any-pick.png'), fullPage: true });
 
     // A card that costs 15. The save takes three seconds; the total has moved well
     // inside one, with nothing answered.
     const clicked = Date.now();
     await bookish.click();
-    await expect.poll(totals, { timeout: 1000 }).toEqual(['Starting100', 'Remaining85']);
+    await expect.poll(total, { timeout: 1000 }).toBe(spentLine(85));
     expect(Date.now() - clicked).toBeLessThan(1000);
     expect(await rows()).toEqual(['Bookish−15']);
     await expect(page.getByText('1 taken, 15 of 100 points spent')).toBeVisible();
@@ -247,11 +260,11 @@ test.describe('character creation: the CG points move with a card click (#5141)'
     expect(server.saveAnswers).toBe(1);
     await page.waitForTimeout(1000);
     expect(server.draftAnswersAfterSave).toBe(0);
-    expect(await totals()).toEqual(['Starting100', 'Remaining85']);
+    expect(await total()).toBe(spentLine(85));
 
     // A second card, one the world pays 10 for, while that draft fetch is still out.
     await scrabble.click();
-    await expect.poll(totals, { timeout: 1000 }).toEqual(['Starting100', 'Remaining95']);
+    await expect.poll(total, { timeout: 1000 }).toBe(spentLine(95));
     expect(await rows()).toEqual(['Bookish−15', 'Hard scrabble+10']);
     expect(server.saveAnswers).toBe(1);
     await page.waitForTimeout(500);
@@ -264,8 +277,8 @@ test.describe('character creation: the CG points move with a card click (#5141)'
     // off it in between.
     const seen: string[] = [];
     const watch = setInterval(() => {
-      void totals()
-        .then((t) => seen.push(t.join(' ')))
+      void total()
+        .then((t) => seen.push(t ?? ''))
         .catch(() => {});
     }, 200);
     await expect.poll(() => server.saveAnswers, { timeout: SAVE_MS + 3000 }).toBe(2);
@@ -274,8 +287,8 @@ test.describe('character creation: the CG points move with a card click (#5141)'
       .toBeGreaterThan(0);
     await page.waitForTimeout(1000);
     clearInterval(watch);
-    expect(new Set(seen)).toEqual(new Set(['Starting100 Remaining95']));
-    expect(await totals()).toEqual(['Starting100', 'Remaining95']);
+    expect(new Set(seen)).toEqual(new Set([spentLine(95)]));
+    expect(await total()).toBe(spentLine(95));
     await page.screenshot({ path: shot('4-confirmed-by-the-server.png'), fullPage: true });
     expect(errors).toEqual([]);
   });
@@ -297,21 +310,20 @@ test.describe('character creation: the CG points move with a card click (#5141)'
     await page.goto('/characters/create');
     const bookish = page.getByRole('button', { name: /^Bookish/ });
     await expect(bookish).toBeVisible({ timeout: 15000 });
-    const ledger = page.getByRole('complementary', { name: 'CG points' });
-    const totals = () => ledger.locator('.tot').allTextContents();
+    const total = () => page.locator(PANEL_POINTS).textContent();
 
     await bookish.click();
     // The forecast, from the offer's price.
-    await expect.poll(totals, { timeout: 1000 }).toEqual(['Starting100', 'Remaining85']);
+    await expect.poll(total, { timeout: 1000 }).toBe(spentLine(85));
     expect(server.saveAnswers).toBe(0);
     // The save answers with what it charged: 18.
     await expect.poll(() => server.saveAnswers, { timeout: SAVE_MS + 3000 }).toBe(1);
-    await expect.poll(totals, { timeout: 1000 }).toEqual(['Starting100', 'Remaining82']);
+    await expect.poll(total, { timeout: 1000 }).toBe(spentLine(82));
     expect(server.draftAnswersAfterSave).toBe(0);
     await page.screenshot({ path: shot('5-the-save-charged-18.png'), fullPage: true });
     // The draft fetch lands with the server's own sum: 20.
     await expect.poll(() => server.draftAnswersAfterSave, { timeout: DRAFT_MS + 3000 }).toBe(1);
-    await expect.poll(totals, { timeout: 1000 }).toEqual(['Starting100', 'Remaining80']);
+    await expect.poll(total, { timeout: 1000 }).toBe(spentLine(80));
     await page.screenshot({ path: shot('6-the-server-sum-is-20.png'), fullPage: true });
   });
 
@@ -327,15 +339,15 @@ test.describe('character creation: the CG points move with a card click (#5141)'
     await page.goto('/characters/create');
     const bookish = page.getByRole('button', { name: /^Bookish/ });
     await expect(bookish).toBeVisible({ timeout: 15000 });
-    const ledger = page.getByRole('complementary', { name: 'CG points' });
-    const totals = () => ledger.locator('.tot').allTextContents();
+    const ledger = page.locator(PANEL_CHOICES);
+    const total = () => page.locator(PANEL_POINTS).textContent();
 
     await bookish.click();
-    await expect.poll(totals, { timeout: 1000 }).toEqual(['Starting100', 'Remaining85']);
+    await expect.poll(total, { timeout: 1000 }).toBe(spentLine(85));
     expect(server.saveAnswers).toBe(0);
     // The server refuses. The card lets go, the row leaves, the total reads 100 again.
     await expect.poll(() => server.saveAnswers, { timeout: SAVE_MS + 3000 }).toBe(1);
-    await expect.poll(totals, { timeout: 1000 }).toEqual(['Starting100', 'Remaining100']);
+    await expect.poll(total, { timeout: 1000 }).toBe(spentLine(100));
     await expect(bookish).toHaveAttribute('aria-pressed', 'false');
     expect(await ledger.locator('.row').allTextContents()).toEqual([]);
     await expect(page.getByText('0 taken, 0 of 100 points spent')).toBeVisible();

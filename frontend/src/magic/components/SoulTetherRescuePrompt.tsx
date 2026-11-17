@@ -10,7 +10,7 @@
  * flash between polling cycles.
  *
  * Style: amber/red warning palette, matching SoulfrayWarning.tsx.
- * Pattern: polled banner, cloned from SineatingInbox.tsx.
+ * Pattern: polled banner, cloned from ConsentPrompt.tsx.
  */
 
 import { useSelector } from 'react-redux';

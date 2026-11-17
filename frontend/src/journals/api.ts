@@ -18,7 +18,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
-import type { ReflectionChoice } from '@/magic/reflection';
+import type { ReflectionFields } from '@/magic/reflection';
 
 const ENTRIES_URL = '/api/journals/entries';
 
@@ -186,7 +186,7 @@ export type JournalEntryListFilters = {
   page_size?: number;
 };
 
-export interface CreateJournalEntryRequest {
+export interface CreateJournalEntryRequest extends ReflectionFields {
   title: string;
   body: string;
   is_public: boolean;
@@ -196,10 +196,6 @@ export interface CreateJournalEntryRequest {
   posthumous_override?: PosthumousOverride;
   /** CharacterSheet id this entry is about, or null for none (#3941). */
   about?: number | null;
-  /** What the entry reflects on, and Embrace or Disown (#5124). Omit for no reflection. */
-  reflect_choice?: ReflectionChoice;
-  reflect_grant_id?: number;
-  reflect_resonance_id?: number;
 }
 
 export interface RespondToJournalRequest {

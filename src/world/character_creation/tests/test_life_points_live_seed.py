@@ -18,6 +18,8 @@ from rest_framework.test import APITestCase
 from evennia_extensions.factories import AccountFactory
 from integration_tests.live_seeds import (
     LIFE_POINTS_BEAT,
+    LIFE_POINTS_LATER_BEAT,
+    LIFE_POINTS_LATER_PRICE,
     seed_family_seats_spec,
     seed_life_points_spec,
 )
@@ -61,7 +63,7 @@ class LifePointsLiveSeedTests(APITestCase):
     def setUp(self) -> None:
         _as_a_fresh_process_after_another_seed()
 
-    def test_seed_is_idempotent_and_the_page_reads_one_beat_with_two_priced_cards(self) -> None:
+    def test_seed_is_idempotent_and_the_page_reads_two_beats_in_two_stages(self) -> None:
         account = AccountFactory(username=ACCOUNT)
 
         first = seed_life_points_spec(username=ACCOUNT)
@@ -73,15 +75,38 @@ class LifePointsLiveSeedTests(APITestCase):
         self.client.force_authenticate(user=account)
         base = f"/api/character-creation/drafts/{first.draft_id}"
         beats = self.client.get(f"{base}/beats/").json()
-        self.assertEqual([beat["name"] for beat in beats], [LIFE_POINTS_BEAT], beats)
+        # Two beats in two life stages (#5160): the page has two stages to open.
+        self.assertEqual(
+            [(beat["name"], beat["life_stage"]) for beat in beats],
+            [(LIFE_POINTS_BEAT, "childhood"), (LIFE_POINTS_LATER_BEAT, "youth")],
+            beats,
+        )
         offers = self.client.get(f"{base}/offers/", {"chapter": "backgrounds"}).json()["offers"]
         self.assertEqual(
             {offer["name"]: offer["cost_per_rank"] for offer in offers},
-            {first.costly_card: first.costly_price, first.paying_card: -first.paying_price},
+            {
+                first.costly_card: first.costly_price,
+                first.paying_card: -first.paying_price,
+                first.later_card: LIFE_POINTS_LATER_PRICE,
+            },
         )
+        by_name = {offer["name"]: offer["offer_id"] for offer in offers}
         self.assertEqual(
-            sorted(beats[0]["answer_offer_ids"]), sorted(offer["offer_id"] for offer in offers)
+            sorted(beats[0]["answer_offer_ids"]),
+            sorted([by_name[first.costly_card], by_name[first.paying_card]]),
         )
+        self.assertEqual(beats[1]["answer_offer_ids"], [by_name[first.later_card]])
+        # The Background is kept as sent, and an emptied one is accepted (the browser
+        # spec writes one at Final Touches, reads it back after a reload, and empties it).
+        for text in ("Kept the ledgers.", ""):
+            saved = self.client.patch(
+                f"{base}/",
+                {"draft_data": {"background": text}},
+                format="json",
+            )
+            self.assertEqual(saved.status_code, 200, saved.content)
+            held = self.client.get(f"{base}/").json()["draft_data"]["background"]
+            self.assertEqual(held, text)
         # Another account's draft, on another beginning, never meets the beat.
         other = AccountFactory(username="someone_else")
         elsewhere = CharacterDraftFactory(account=other, selected_beginnings=BeginningsFactory())

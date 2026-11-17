@@ -108,6 +108,13 @@ class PickEncounterOptionTests(EncounterOptionTestBase):
         self.instance.refresh_from_db()
         self.assertTrue(self.instance.is_paused)
 
+    def test_encounter_rejects_routing_free_resolution(self) -> None:
+        with self.assertRaisesRegex(ValueError, "advance=False"):
+            resolve_option(self.instance, self.entry, self.option, self.participant, advance=False)
+        self.assertFalse(CombatEncounter.objects.filter(scenario_deed__isnull=False).exists())
+        self.instance.refresh_from_db()
+        self.assertFalse(self.instance.is_paused)
+
     def test_standoff_option_opens_a_standoff(self) -> None:
         from world.standoffs.constants import StandoffGroupState
         from world.standoffs.models import StandoffGroup

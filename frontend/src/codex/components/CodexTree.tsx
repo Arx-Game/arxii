@@ -139,7 +139,7 @@ interface CategoryNodeProps {
   loadedChildren: Map<number, CodexSubjectTreeNode[]>;
   loadingNodes: Set<number>;
   loadChildren: (subjectId: number) => void;
-  selectedRef: React.RefObject<HTMLButtonElement>;
+  selectedRef: React.RefObject<HTMLButtonElement | null>;
 }
 
 function CategoryNode({
@@ -218,7 +218,7 @@ interface SubjectNodeProps {
   loadedChildren: Map<number, CodexSubjectTreeNode[]>;
   loadingNodes: Set<number>;
   loadChildren: (subjectId: number) => void;
-  selectedRef: React.RefObject<HTMLButtonElement>;
+  selectedRef: React.RefObject<HTMLButtonElement | null>;
 }
 
 function SubjectNode({

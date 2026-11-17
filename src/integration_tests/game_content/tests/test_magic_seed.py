@@ -286,15 +286,12 @@ class TestSeedCanonicalRituals(TestCase):
     def test_creation(self) -> None:
         from world.magic.models import Ritual
 
-        self.assertEqual(Ritual.objects.count(), 3)
+        self.assertEqual(Ritual.objects.count(), 2)
         imbuing = Ritual.objects.get(name="Rite of Imbuing")
-        atonement = Ritual.objects.get(name="Rite of Atonement")
         durance = Ritual.objects.get(name="Ritual of the Durance")
         self.assertIsNotNone(imbuing)
-        self.assertIsNotNone(atonement)
         self.assertIsNotNone(durance)
         self.assertEqual(self.result.rite_of_imbuing.name, "Rite of Imbuing")
-        self.assertEqual(self.result.rite_of_atonement.name, "Rite of Atonement")
 
     def test_idempotency(self) -> None:
         from world.magic.models import Ritual
@@ -302,9 +299,8 @@ class TestSeedCanonicalRituals(TestCase):
         first = seed_canonical_rituals()
         second = seed_canonical_rituals()
 
-        self.assertEqual(Ritual.objects.count(), 3)
+        self.assertEqual(Ritual.objects.count(), 2)
         self.assertEqual(first.rite_of_imbuing.pk, second.rite_of_imbuing.pk)
-        self.assertEqual(first.rite_of_atonement.pk, second.rite_of_atonement.pk)
 
     def test_edit_preserved_on_rerun(self) -> None:
         from world.magic.models import Ritual
@@ -670,7 +666,6 @@ class TestSeedMagicDev(TestCase):
 
         # --- Task 1.2: canonical rituals ---
         self.assertTrue(Ritual.objects.filter(name="Rite of Imbuing").exists())
-        self.assertTrue(Ritual.objects.filter(name="Rite of Atonement").exists())
 
         # --- Task 1.3: thread pull catalog ---
         # 3 universal + 1 GIFT (imbue-only; ADR-0051) = 4.

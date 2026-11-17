@@ -397,10 +397,19 @@ class CmdPose(ArxCommand):
     Usage:
         pose <text>
         pose/reflect <deed number or resonance>=<embrace|disown> <text>
+        pose/reflect mire:<Sinner>=<absolve|condemn|succumb> <text>
+        pose/entreat <sineater>=<units> <text>
+        pose/sineat <sinner>=<units> <text>
 
     ``pose/reflect`` poses ``<text>`` and records that it reflects on a deed (the number
-    ``reflect`` lists) or on the resonance unsettling you (its name), embracing or
-    disowning it. The room sees only the pose.
+    ``reflect`` lists), on the resonance unsettling you (its name), embracing or disowning
+    it, or on the Mire you carry for a Sinner (``mire:`` and their name), absolving,
+    condemning or succumbing to it. The room sees only the pose.
+
+    ``pose/entreat`` poses ``<text>`` and asks your Sineater to take on that many units of
+    your sins. ``pose/sineat`` poses ``<text>`` and performs Sineating for the Sinner whose
+    plea waits (``sineater pleas``), taking on that many of the units offered, and rolls for
+    it. A pose carries one of these, and the room sees only the pose.
     """
 
     key = "pose"
@@ -413,18 +422,7 @@ class CmdPose(ArxCommand):
         reflection: dict[str, Any] = {}
         args = self.args or ""
         if self.switches:
-            if list(self.switches) != [_SWITCH_REFLECT]:
-                msg = (
-                    "Usage: pose <text> | pose/reflect <deed or resonance>=<embrace|disown> <text>"
-                )
-                raise CommandError(msg)
-            from commands.reflection import reflection_kwargs_and_rest  # noqa: PLC0415
-
-            reflection, args = reflection_kwargs_and_rest(
-                self.caller.character_sheet,
-                args,
-                usage="Usage: pose/reflect <deed or resonance>=<embrace|disown> <text>",
-            )
+            reflection, args = self._attachment_and_rest(args)
         text = args.strip()
         if not text:
             msg = "Pose what?"
@@ -436,6 +434,38 @@ class CmdPose(ArxCommand):
         if targets:
             result["targets"] = targets
         return result
+
+    def _attachment_and_rest(self, args: str) -> tuple[dict[str, Any], str]:
+        """The reflection or Sineating the one switch names, and the rest of the line."""
+        from commands.sineating import (  # noqa: PLC0415
+            SINEATING_SWITCHES,
+            sineating_kwargs_and_rest,
+        )
+
+        switches = list(self.switches)
+        if switches == [_SWITCH_REFLECT]:
+            from commands.reflection import reflection_kwargs_and_rest  # noqa: PLC0415
+
+            return reflection_kwargs_and_rest(
+                self.caller.character_sheet,
+                args,
+                usage=(
+                    "Usage: pose/reflect <deed or resonance>=<embrace|disown> <text> | "
+                    "pose/reflect mire:<Sinner>=<absolve|condemn|succumb> <text>"
+                ),
+            )
+        if len(switches) == 1 and switches[0] in SINEATING_SWITCHES:
+            return sineating_kwargs_and_rest(
+                self,
+                SINEATING_SWITCHES[switches[0]],
+                args,
+                usage=f"Usage: pose/{switches[0]} <name>=<units> <text>",
+            )
+        msg = (
+            "Usage: pose <text> | pose/reflect <deed, resonance or mire:Sinner>=<choice> <text> | "
+            "pose/entreat <sineater>=<units> <text> | pose/sineat <sinner>=<units> <text>"
+        )
+        raise CommandError(msg)
 
 
 class CmdMutter(ArxCommand):

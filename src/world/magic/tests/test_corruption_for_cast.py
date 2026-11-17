@@ -7,7 +7,7 @@ Formula (spec §3.1):
     tick        = ceil(base_tick × multipliers)
 
 Default config coefficients (integer-tenths):
-    celestial = 0, primal = 2, abyssal = 10
+    celestial = 0, primal = 0, abyssal = 10 (only Abyssal casts corrupt, #4751)
     tier 1 = 10, tier 2 = 20, tier 3 = 40, tier 4 = 80, tier 5 = 160
     deficit_multiplier = 20, mishap_multiplier = 15, audere_multiplier = 15
 """
@@ -328,13 +328,12 @@ class TestAccrueCorruptionForCast(TestCase):
     def test_multi_resonance_distributes_per_resonance_ticks(self) -> None:
         """Two non-zero involvements → two accrue_corruption calls with distinct resonances.
 
-        Primal coef=2 (×0.1→0.2), Abyssal coef=10 (×0.1→1.0), tier 1 coef=10 (×0.1→1.0).
-        Primal involvement=10: base = 10 × 0.2 × 1.0 = 2.0 → ceil(2.0) = 2
-        Abyssal involvement=10: base = 10 × 1.0 × 1.0 = 10.0 → ceil(10.0) = 10
+        Abyssal coef=10 (×0.1→1.0), tier 1 coef=10 (×0.1→1.0).
+        First involvement=10: base = 10 × 1.0 × 1.0 = 10.0 → ceil(10.0) = 10
+        Second involvement=3: base = 3 × 1.0 × 1.0 = 3.0 → ceil(3.0) = 3
         """
-        primal_affinity = ensure_canonical_affinities()[1]
         abyssal_affinity = ensure_canonical_affinities()[2]
-        primal_resonance = ResonanceFactory(name="Primal Multi", affinity=primal_affinity)
+        first_resonance = ResonanceFactory(name="Dread Multi", affinity=abyssal_affinity)
         abyssal_resonance = ResonanceFactory(name="Abyssal Multi", affinity=abyssal_affinity)
         technique = TechniqueFactory(level=1)
 
@@ -342,13 +341,13 @@ class TestAccrueCorruptionForCast(TestCase):
             technique=technique,
             resonance_involvements=[
                 ResonanceInvolvement(
-                    resonance=primal_resonance,
+                    resonance=first_resonance,
                     stat_bonus_contribution=10,
                     thread_pull_resonance_spent=0,
                 ),
                 ResonanceInvolvement(
                     resonance=abyssal_resonance,
-                    stat_bonus_contribution=10,
+                    stat_bonus_contribution=3,
                     thread_pull_resonance_spent=0,
                 ),
             ],
@@ -362,8 +361,8 @@ class TestAccrueCorruptionForCast(TestCase):
         amounts = {
             call.kwargs["resonance"]: call.kwargs["amount"] for call in mock_accrue.call_args_list
         }
-        self.assertEqual(amounts[primal_resonance], 2)
-        self.assertEqual(amounts[abyssal_resonance], 10)
+        self.assertEqual(amounts[first_resonance], 10)
+        self.assertEqual(amounts[abyssal_resonance], 3)
         # Both results are in per_resonance
         self.assertEqual(len(summary.per_resonance), 2)
 
@@ -577,11 +576,11 @@ class TestAccrueCorruptionForCast(TestCase):
         self.assertEqual(summary.per_resonance, ())
 
     # ------------------------------------------------------------------
-    # Primal coefficient
+    # Primal coefficient and fractional coefficients
     # ------------------------------------------------------------------
 
-    def test_primal_coefficient_applied(self) -> None:
-        """Primal coef=2, tier 1, involvement=10 → base = 10 × 0.2 × 1.0 = 2.0 → tick=2."""
+    def test_primal_cast_does_not_corrupt(self) -> None:
+        """Primal coef=0 (#4751): a Primal cast of any involvement accrues no corruption."""
         primal_affinity = ensure_canonical_affinities()[1]
         resonance = ResonanceFactory(name="Primal Coef", affinity=primal_affinity)
         technique = TechniqueFactory(level=1)
@@ -601,13 +600,12 @@ class TestAccrueCorruptionForCast(TestCase):
             mock_accrue.return_value = mock.MagicMock()
             self._call(technique_use_result=result_obj)
 
-        call_kwargs = mock_accrue.call_args.kwargs
-        self.assertEqual(call_kwargs["amount"], 2)
+        mock_accrue.assert_not_called()
 
-    def test_primal_low_involvement_rounds_up_to_one(self) -> None:
-        """Primal coef=2, tier 1, involvement=1 → base = 1 × 0.2 × 1.0 = 0.2 → ceil(0.2) = 1."""
-        primal_affinity = ensure_canonical_affinities()[1]
-        resonance = ResonanceFactory(name="Primal Ceil", affinity=primal_affinity)
+    def test_a_fractional_coefficient_with_low_involvement_rounds_up_to_one(self) -> None:
+        """Coef=2, tier 1, involvement=1 → base = 1 × 0.2 × 1.0 = 0.2 → ceil(0.2) = 1."""
+        faint_affinity = AffinityFactory(corruption_coefficient=2)
+        resonance = ResonanceFactory(name="Faint Ceil", affinity=faint_affinity)
         technique = TechniqueFactory(level=1)
 
         result_obj = _make_result(

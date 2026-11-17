@@ -1735,6 +1735,78 @@ def _probe_drift_conflict_condition_check_modifier() -> ProbeResult:
     )
 
 
+def _corruption_config():
+    """The corruption configuration row, or None when none exists (never creates one)."""
+    from world.magic.models import CorruptionConfig  # noqa: PLC0415
+
+    return CorruptionConfig.objects.cached_singleton()
+
+
+def _probe_compulsion_condition() -> ProbeResult:
+    """`CorruptionConfig.compulsion_condition` names the condition a Compulsion lays (#5177)."""
+    config = _corruption_config()
+    if config is None:
+        return ProbeResult(present=False, detail="No corruption configuration row exists.")
+    if config.compulsion_condition_id is None:
+        return ProbeResult(
+            present=False,
+            detail="The corruption configuration's Compulsion condition field is empty.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_compulsion_condition_scene_duration() -> ProbeResult:
+    """The Compulsion condition lasts the scene (#5177).
+
+    A character at the Compulsion stage has it laid on them while something their resonance
+    cares about is present, and it ends when the scene does (`finish_scene_full`). Any other
+    duration would outlast the scene or end before it. A missing config or unset condition is
+    the other probe's gap, so it is not reported twice here.
+    """
+    from world.conditions.constants import DurationType  # noqa: PLC0415
+
+    config = _corruption_config()
+    if config is None or config.compulsion_condition_id is None:
+        return ProbeResult(present=True)
+    condition = config.compulsion_condition
+    if condition.default_duration_type == DurationType.SCENE:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        detail=(
+            f"The Compulsion condition ({condition.name}) does not have a scene duration, "
+            "so it does not end when the scene does."
+        ),
+    )
+
+
+def _probe_compulsion_condition_check_modifier() -> ProbeResult:
+    """The Compulsion condition carries at least one check modifier (#5177).
+
+    Its penalty is the authored `ConditionCheckModifier`, on the condition or one of its
+    stages. With none, it lands and changes no roll.
+    """
+    from django.db.models import Q  # noqa: PLC0415
+
+    from world.conditions.models import ConditionCheckModifier  # noqa: PLC0415
+
+    config = _corruption_config()
+    if config is None or config.compulsion_condition_id is None:
+        return ProbeResult(present=True)
+    condition_id = config.compulsion_condition_id
+    if ConditionCheckModifier.objects.filter(
+        Q(condition_id=condition_id) | Q(stage__condition_id=condition_id)
+    ).exists():
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        detail=(
+            f"The Compulsion condition ({config.compulsion_condition.name}) has no check "
+            "modifier, on itself or on any stage."
+        ),
+    )
+
+
 def _designation_result(
     config_exists: bool,
     designated_id: int | None,
@@ -2195,6 +2267,72 @@ def _probe_drift_correction_config() -> ProbeResult:
             present=False,
             missing=missing,
             detail=f"No drift correction share for outcome(s): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_sineating_config() -> ProbeResult:
+    """Sineating has a check type and an award for every outcome tier (#5177).
+
+    Consumer: `world/magic/services/sineating.py perform_sineating()`. It refuses with
+    "Sineating has not been set up yet." unless `sineating_is_ready()`:
+    `SoulTetherConfig.sineating_check_type` set and a `SineatingOutcomeAward` row for every
+    `CheckOutcome` (`outcome_tiers_without_a_sineating_award()` empty), since the roll can land
+    on any of them. The probe reads the same conditions, through the same tier query.
+    """
+    from world.magic.services.sineating import (  # noqa: PLC0415
+        outcome_tiers_without_a_sineating_award,
+    )
+    from world.magic.services.soul_tether import get_soul_tether_config  # noqa: PLC0415
+
+    if get_soul_tether_config().sineating_check_type_id is None:
+        return ProbeResult(
+            present=False,
+            missing=("the check type",),
+            detail="The Soul Tether configuration has no Sineating check type.",
+        )
+    missing = tuple(
+        outcome_tiers_without_a_sineating_award()
+        .order_by("success_level")
+        .values_list("name", flat=True)
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No Sineating award for outcome(s): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_affinity_conversion_pairs() -> ProbeResult:
+    """Every ordered pair of distinct affinities has an authored conversion (#4751).
+
+    Consumer: `world/magic/services/conversion.py conversion_pair()`, read by the settling
+    rite when a deed is disowned (turning a stray affinity back toward the main one) and when a
+    deed is embraced (the direction rate). A pair is usable when its `AffinityInteraction`
+    row exists with both a `conversion_multiplier` and a `conversion_type`. The probe reads
+    the same function and lists each pair that raises.
+    """
+    from world.magic.exceptions import ConversionMappingError  # noqa: PLC0415
+    from world.magic.models import Affinity  # noqa: PLC0415
+    from world.magic.services.conversion import conversion_pair  # noqa: PLC0415
+
+    affinities = list(Affinity.objects.order_by("name"))
+    missing = []
+    for source in affinities:
+        for target in affinities:
+            if source.pk == target.pk:
+                continue
+            try:
+                conversion_pair(source, target)
+            except ConversionMappingError:
+                missing.append(f"{source.name} to {target.name}")
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=tuple(missing),
+            detail=f"No usable conversion is set for: {', '.join(missing)}.",
         )
     return ProbeResult(present=True)
 
@@ -3942,6 +4080,42 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="DriftConfig",
         ),
         ContentDependency(
+            key="compulsion-condition",
+            label="Compulsion condition set on the corruption configuration",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/impulses.py refresh_impulses()",
+            consequence=(
+                "A character at the Compulsion stage is shown the pull and nothing is laid "
+                "on them, so carrying corruption never costs their rolls anything."
+            ),
+            probe=CustomProbe(fn=_probe_compulsion_condition),
+            admin_model="CorruptionConfig",
+        ),
+        ContentDependency(
+            key="compulsion-condition-scene-duration",
+            label="Compulsion condition lasts the scene",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/impulses.py refresh_impulses()",
+            consequence=(
+                "The Compulsion does not end when the scene does: it outlasts it, or it "
+                "runs out before the scene is over."
+            ),
+            probe=CustomProbe(fn=_probe_compulsion_condition_scene_duration),
+            admin_model="CorruptionConfig",
+        ),
+        ContentDependency(
+            key="compulsion-condition-check-modifier",
+            label="Compulsion condition carries a check modifier",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/impulses.py refresh_impulses()",
+            consequence=(
+                "The Compulsion is laid on a character and changes no roll, so giving in "
+                "to it never matters."
+            ),
+            probe=CustomProbe(fn=_probe_compulsion_condition_check_modifier),
+            admin_model="CorruptionConfig",
+        ),
+        ContentDependency(
             key="soulfray-stage-pools",
             label="Soulfray stage consequence pools",
             tier=DependencyTier.REQUIRED,
@@ -3982,6 +4156,38 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_drift_correction_config),
             admin_model="DriftCorrectionConfig",
+        ),
+        ContentDependency(
+            key="sineating-config",
+            label="Sineating check and outcome awards",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/sineating.py sineating_is_ready(), perform_sineating()"
+            ),
+            consequence=(
+                "A Sinner can still ask by pose, but a Sineater's ritual says 'Sineating has "
+                "not been set up yet' while the check type or any outcome tier's award is "
+                "missing; no corruption moves and nothing is earned until staff author them."
+            ),
+            probe=CustomProbe(fn=_probe_sineating_config),
+            admin_model="SoulTetherConfig",
+        ),
+        ContentDependency(
+            key="affinity-conversion-pairs",
+            label="A conversion rate for every pair of affinities",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/conversion.py conversion_pair(), read by "
+                "world/magic/services/drift_correction.py when a deed is disowned or embraced"
+            ),
+            consequence=(
+                "Disowning a deed between a pair with no rate converts nothing, and the "
+                "rite tells the player no conversion has been set. Embracing a deed across "
+                "such a pair pays the deed's plain amount, with no rise or fall for the "
+                "direction."
+            ),
+            probe=CustomProbe(fn=_probe_affinity_conversion_pairs),
+            admin_model="AffinityInteraction",
         ),
         ContentDependency(
             key="thread-resonance-ritual",

@@ -395,6 +395,76 @@
   changed_when: false
   failed_when: false
 
+- name: Read service state before migration
+  ansible.builtin.service_facts:
+  when: app_migrate_check.rc != 0
+
+- name: Check for the last successfully reloaded release
+  ansible.builtin.stat:
+    path: "{{ app_reload_stamp }}"
+  register: app_safety_reload_stamp
+  when: app_migrate_check.rc != 0
+
+- name: Check whether a release was previously made current
+  ansible.builtin.stat:
+    path: "{{ app_current }}"
+    follow: false
+  register: app_safety_current
+  when: app_migrate_check.rc != 0
+
+- name: Refuse an existing service without a verified running revision
+  ansible.builtin.assert:
+    that:
+      - app_safety_reload_stamp.stat.exists
+    fail_msg: Cannot verify migration compatibility without the running release stamp.
+  when:
+    - app_migrate_check.rc != 0
+    - >-
+      ('arxii.service' in ansible_facts.services and
+       ansible_facts.services['arxii.service'].state != 'stopped')
+      or app_safety_current.stat.exists
+
+# The release checkout is deliberately shallow. An ancestry test must have the
+# full history or it will reject a valid earlier compatibility commit.
+- name: Fetch history for migration compatibility checks
+  ansible.builtin.shell: |
+    if [ "$(git rev-parse --is-shallow-repository)" = true ]; then
+      git fetch --unshallow
+    fi
+  args:
+    chdir: "{{ app_release_dir }}"
+    executable: /bin/bash
+  environment:
+    GIT_TERMINAL_PROMPT: "0"
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  when:
+    - app_migrate_check.rc != 0
+    - app_safety_reload_stamp.stat.exists
+
+# Run even when the unit is inactive: the watchdog could restart the old code
+# while migrations run. A genuinely new install has no previous reload stamp.
+- name: Check pending migrations against the last running server
+  ansible.builtin.shell: |
+    set -a
+    . {{ secrets_env_file | default('/etc/arxii/arxii.env') }}
+    set +a
+    set -o pipefail
+    revision=$(cat {{ app_reload_stamp | quote }})
+    {{ base_uv_bin }} run python ../tools/check_release_safety.py "$revision"
+  args:
+    chdir: "{{ app_release_gamedir }}"
+    executable: /bin/bash
+  environment:
+    DJANGO_SETTINGS_MODULE: "{{ app_django_settings_module }}"
+  become: true
+  become_user: "{{ app_user }}"
+  changed_when: false
+  when:
+    - app_migrate_check.rc != 0
+    - app_safety_reload_stamp.stat.exists
+
 # NOT `failed_when: false`. This task failing must abort the play with the
 # migration unapplied — that is the entire point. A deploy that cannot prove it
 # has a recovery copy does not get to touch the schema.
@@ -414,16 +484,7 @@
   changed_when: "'verified' in app_premigrate_dump.stdout"
 
 # EnvironmentFile gives the migration the Postgres password + SECRET_KEY it
-# needs. Runs every deploy by design — the gate against schema-breaking
-# changes belongs in the release-safety classifier upstream, not here.
-#
-# WARNING (2026-08-26): that classifier is DESIGNED BUT NOT BUILT. There is no
-# tools/check_release_safety.py and no CI step; grep for "release-safety" finds
-# only the design in docs/operations/observability-baseline.md §4.5. So this task
-# currently applies whatever migration reached main, unattended, with PR review
-# as the only gate — which since alpha means a RemoveField/DeleteModel merged
-# here destroys authored content that exists nowhere else (ADR-0237). Do not read
-# the line above as "something upstream already checked this."
+# needs. The compatibility gate above runs before the live schema is changed.
 #
 # Deliberately `python -m django migrate`, NOT `evennia migrate`. Evennia's
 # launcher calls check_database() before it dispatches the command, and that

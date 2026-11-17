@@ -1,8 +1,10 @@
 /**
  * ReflectingOnRow (#5124, demo Screen 5): the optional "Reflecting on" row of a pose and of a
- * journal entry. The writer picks one thing the writing reflects on, a kindled deed or the
- * resonance unsettling them, and Embrace or Disown (the pair is always shown). Posting records the reflection and
- * changes nothing yet; the room sees only the pose, and only the writer sees this row.
+ * journal entry. The writer picks one thing the writing reflects on, a kindled deed, the
+ * resonance unsettling them or the Mire they carry for a Sinner, and a choice about it:
+ * Embrace or Disown for the first two (shown until something is picked), Absolve, Condemn or
+ * Succumb for the Mire. Posting records the reflection and changes nothing yet; the room sees
+ * only the pose, and only the writer sees this row.
  *
  * Reflecting on the unsettling resonance replaces an older reflection still waiting on it, so
  * the row says so before the writer posts. Renders nothing when there is nothing to reflect on.
@@ -13,9 +15,10 @@
 import { cn } from '@/lib/utils';
 import { useReflectionOptions } from '@/magic/queries';
 import {
-  REFLECTION_CHOICES,
-  REFLECTION_INCOMPLETE_LINE,
+  choicesFor,
   isReflectionIncomplete,
+  pickOption,
+  reflectionIncompleteLine,
   sameOption,
   type ReflectionChoice,
   type ReflectionDraft,
@@ -62,10 +65,7 @@ export function ReflectingOnRow({ characterSheetId, value, onChange, className }
   const { data: options = [] } = useReflectionOptions(characterSheetId);
   if (options.length === 0) return null;
 
-  const pick = (option: (typeof options)[number]) => {
-    const same = value.option !== null && sameOption(value.option, option);
-    onChange({ ...value, option: same ? null : option });
-  };
+  const pick = (option: (typeof options)[number]) => onChange(pickOption(value, option));
   const choose = (choice: ReflectionChoice) => {
     onChange({ ...value, choice: value.choice === choice ? null : choice });
   };
@@ -91,8 +91,8 @@ export function ReflectingOnRow({ characterSheetId, value, onChange, className }
           </Pill>
         ))}
       </div>
-      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Embrace or disown">
-        {REFLECTION_CHOICES.map((choice) => (
+      <div className="flex flex-wrap gap-1.5" role="group" aria-label="Your choice">
+        {choicesFor(value.option).map((choice) => (
           <Pill
             key={choice.value}
             pressed={value.choice === choice.value}
@@ -105,7 +105,7 @@ export function ReflectingOnRow({ characterSheetId, value, onChange, className }
       </div>
       {isReflectionIncomplete(value) && (
         <p className="text-xs text-destructive" data-testid="reflect-incomplete" role="status">
-          {REFLECTION_INCOMPLETE_LINE}
+          {reflectionIncompleteLine(value)}
         </p>
       )}
       {value.option?.replaces_waiting && (

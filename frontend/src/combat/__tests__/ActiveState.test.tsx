@@ -56,7 +56,7 @@ function makeEncounter(clashes: ClashState[] = []): EncounterDetail {
       {
         id: 10,
         objectdb_id: null,
-        name: 'Mire Knight',
+        name: 'Bog Knight',
         tier: 'elite',
         health: 10,
         max_health: 10,
@@ -174,7 +174,7 @@ describe('ActiveState', () => {
 
     render(<ActiveState encounter={makeEncounter(clashes)} />, { wrapper: createWrapper() });
 
-    expect(screen.getByText(/Mire Knight/)).toBeInTheDocument();
+    expect(screen.getByText(/Bog Knight/)).toBeInTheDocument();
   });
 
   it('collapses content when collapsed=true', () => {

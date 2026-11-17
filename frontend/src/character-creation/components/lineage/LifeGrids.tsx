@@ -1,15 +1,18 @@
 /**
- * The life as an accordion (#4874, slice 9 of #4813; the beats library of #4124, the
- * grids of #4395), built against the approved demo.
+ * The life as folds (#4874, slice 9 of #4813; the beats library of #4124, the grids of
+ * #4395), built against the approved demo.
  *
- * One fold per stage the Beginning offers (a struck stage is simply absent): a closed
- * stage shows its heading and how many of its beats are answered, or Unknown; the open
- * stage shows its sections, one open at a time, each a beat whose answers are the
- * `backgrounds` chapter's offers through `ChapterOffers` as a grid of cards, grouped
- * under headings when the answers carry a group, priced as signed numbers, every term
- * on a card's mechanics line a click that opens its definition. A closed section shows
- * its answers, or the beat's own prompt in plain text when nothing is picked. Next
- * closes a section and opens the one below; the last Next opens the next stage.
+ * One fold per stage the Beginning offers (a struck stage is simply absent), and inside
+ * it one fold per beat, a section. The page opens with every stage and every section
+ * expanded (owner ruling 2026-11-16, #5160: "everything should start as expanded"), and
+ * each fold opens and closes by itself: the demo's one-open-at-a-time accordion is gone.
+ * A closed stage shows its heading and how many of its beats are answered, or Unknown.
+ * An open section shows its beat's answers, the `backgrounds` chapter's offers through
+ * `ChapterOffers` as a grid of cards, grouped under headings when the answers carry a
+ * group, priced as signed numbers, every term on a card's mechanics line showing its
+ * definition on hover. A closed section shows its answers, or the beat's own prompt in
+ * plain text when nothing is picked. Next folds its section and makes sure the one below
+ * (or the next stage and its first section) is open.
  *
  * Every section's grid ends on an Amnesiac card (#5102): no cost, not a distinction,
  * its text a staff copy row. Picking it marks that one beat unknown, which drops its
@@ -18,8 +21,9 @@
  * is Amnesiac reads Unknown. A pick can be marked secret; on a one-of row a secret
  * pick opens the Cover story box and the next click on another card sets that card as
  * the cover (the public sheet shows it in the secret's place). A person card takes the
- * figure's name once picked. Every stage ends on Description (Optional), one paragraph
- * saved to `draft_data.stage_descriptions`.
+ * figure's name once picked. The page holds no free text about the life as a whole: the
+ * Background is one box on Final Touches (#5178, owner ruling 2026-11-17), which replaced
+ * the Background Notes each stage ended on and the Recent History box.
  *
  * The draft's state per beat lives at `draft_data.beats[<beat_id>]` (taken, unknown,
  * line, `secret_offer_ids`, `cover_offer_id`, `figures`); the whole map is sent on every
@@ -27,10 +31,11 @@
  * are refetched after, since an unknown mark is what closes a beat's answers. Fold state
  * is local and never saved.
  *
- * The ledger rail beside the life lists the purse and every pick under its stage with
- * its signed price. Every life ends on the Recent History box (#4830) and the life so far
- * in one paragraph. A beginning that strikes every stage (the Sleeper) has an empty pool;
- * its `struck_stages_text` stands where the stage rows would be, over that box.
+ * The life's choices are listed in the chapter's right-hand panel, under the "CG
+ * selections" every stage shows, each pick under its stage with its signed price (#5148).
+ * Every life ends on the life so far in one paragraph. A beginning that strikes every
+ * stage (the Sleeper) has an empty pool; its `struck_stages_text` stands where the stage
+ * rows would be, with nothing to fill in.
  */
 
 import { useQueryClient } from '@tanstack/react-query';
@@ -49,8 +54,6 @@ import {
   FIGURE_NAME_MAX_LENGTH,
   LIFE_GRID_LABELS,
   LIFE_STAGE_ORDER,
-  RECENT_HISTORY_MAX_LENGTH,
-  STAGE_DESCRIPTION_MAX_LENGTH,
   type BeatPoolEntry,
   type CGExplanations,
   type CharacterDraft,
@@ -91,6 +94,13 @@ function pickLine(beat: BeatPoolEntry, copy: CGExplanations | undefined): string
   );
 }
 
+/** A fold set with one entry flipped: in if it was out, out if it was in. */
+function flipped<T>(set: ReadonlySet<T>, item: T): Set<T> {
+  const next = new Set(set);
+  if (!next.delete(item)) next.add(item);
+  return next;
+}
+
 /** A signed total for a summary or the rail: `+N` when the world pays, `−N` when you do. */
 function Signed({ cost }: { cost: number }) {
   if (cost === 0) return null;
@@ -105,15 +115,26 @@ export function LifeGrids({ draft, copy }: Props) {
   const { data: beats, isLoading } = useDraftBeats(draft.id);
   const { data: offersData } = useDraftOffers(draft.id, 'backgrounds');
   // The picks and the points on screen (#5141): a save in flight is laid over the saved
-  // list, so the ledger, its totals and the section summaries move with the click.
+  // list, so the list of choices, the foot line and the section summaries move with the
+  // click.
   const shown = useShownPicks(draft);
   const rail = useChapterRail();
   const updateDraft = useUpdateDraft();
   const queryClient = useQueryClient();
-  // Fold state (#4874), never saved: `undefined` is the default (the first stage, its
-  // first section), `null` is folded shut.
-  const [openStage, setOpenStage] = useState<string | null | undefined>(undefined);
-  const [openBeat, setOpenBeat] = useState<number | null | undefined>(undefined);
+  // Fold state, never saved: the stages and the sections the player has folded on this
+  // visit. Both start empty, so everything starts open (#5160).
+  const [foldedStages, setFoldedStages] = useState<ReadonlySet<string>>(() => new Set());
+  const [foldedBeats, setFoldedBeats] = useState<ReadonlySet<number>>(() => new Set());
+  // The section Next has just folded. A tall section folding under the pointer leaves
+  // the window showing the middle of the one below, so its own line is brought back
+  // into the window and the section below reads from its top.
+  const foldedByNext = useRef<number | null>(null);
+  useEffect(() => {
+    if (foldedByNext.current === null) return;
+    const line = document.getElementById(`life-sec-${foldedByNext.current}`);
+    foldedByNext.current = null;
+    line?.scrollIntoView?.({ block: 'nearest' });
+  }, [foldedBeats]);
   // The suggested life (#4865): loaded once when the grids first open for a beginning the
   // draft's stamp does not name. The server's stamp is the durable guard (a life the player
   // edited or cleared never reloads); the ref only stops a second call in one mount.
@@ -169,13 +190,6 @@ export function LifeGrids({ draft, copy }: Props) {
     'No idea what happened in this part of your life. No memory of it at all.';
   const beginning = draft.selected_beginnings;
   const stages = LIFE_STAGE_ORDER.filter((stage) => (byStage.get(stage) ?? []).length > 0);
-  const currentStage = openStage === undefined ? (stages[0] ?? null) : openStage;
-  const currentBeat = (stage: string): number | null => {
-    const pool = byStage.get(stage) ?? [];
-    if (openBeat === undefined) return pool[0]?.beat_id ?? null;
-    if (openBeat !== null && pool.some((b) => b.beat_id === openBeat)) return openBeat;
-    return null;
-  };
 
   // Every stage struck (#4830, the Sleeper): the pool is empty and the beginning's own
   // text stands where the stage rows would be; until that text is authored, the mockup's
@@ -189,43 +203,14 @@ export function LifeGrids({ draft, copy }: Props) {
     beginning.strikes_adulthood;
   const struck = struckAll
     ? beginning.struck_stages_text.trim() ||
-      (copy?.life_struck_fallback ??
-        'Every stage of this life is struck. What there is to say begins below.')
+      (copy?.life_struck_fallback ?? 'Every stage of this life is struck.')
     : '';
-  const recentHistory = draft.draft_data.recent_history ?? '';
-  const saveRecentHistory = (value: string) => {
-    if (value === recentHistory) return;
-    void updateDraft.mutateAsync({
-      draftId: draft.id,
-      data: { draft_data: { recent_history: value } },
-    });
-  };
-  const recentHistoryBox = (
-    <div className="field recent-history">
-      <label htmlFor="recent-history">
-        {copy?.life_recent_history_label ?? 'Recent History (Optional)'}
-      </label>
-      <textarea
-        id="recent-history"
-        rows={3}
-        maxLength={RECENT_HISTORY_MAX_LENGTH}
-        defaultValue={recentHistory}
-        aria-describedby="recent-history-help"
-        onBlur={(e) => saveRecentHistory(e.target.value)}
-      />
-      <span id="recent-history-help" className="hint">
-        {copy?.life_recent_history_help ?? 'What you want a GM or another player to pick up.'}
-      </span>
-    </div>
-  );
-
   if (beats.length === 0) {
-    return (
+    return struck ? (
       <div className="life">
-        {struck && <p className="absent">{struck}</p>}
-        {recentHistoryBox}
+        <p className="absent">{struck}</p>
       </div>
-    );
+    ) : null;
   }
 
   const save = async (next: Record<string, DraftBeatState>) => {
@@ -312,38 +297,34 @@ export function LifeGrids({ draft, copy }: Props) {
     else delete figures[String(offerId)];
     patch(beat, { figures });
   };
-  const descriptions = draft.draft_data.stage_descriptions ?? {};
-  const saveDescription = (stage: string, value: string) => {
-    if ((descriptions[stage] ?? '') === value) return;
-    void updateDraft.mutateAsync({
-      draftId: draft.id,
-      data: { draft_data: { stage_descriptions: { ...descriptions, [stage]: value } } },
-    });
-  };
-
-  const openSection = (stage: string | null, beatId: number | null | undefined) => {
-    setOpenStage(stage);
-    setOpenBeat(beatId);
-  };
-  const toggleStage = (stage: string) =>
-    currentStage === stage ? openSection(null, null) : openSection(stage, undefined);
+  const toggleStage = (stage: string) => setFoldedStages((folded) => flipped(folded, stage));
+  const toggleSection = (beat: BeatPoolEntry) =>
+    setFoldedBeats((folded) => flipped(folded, beat.beat_id));
+  // Next folds its own section. The one below is open already unless the player folded
+  // it, and then Next opens it: the section under this one in the stage, or the first
+  // section of the next stage (and that stage) after a stage's last section.
   const next = (stage: string, beat: BeatPoolEntry) => {
     const pool = byStage.get(stage) ?? [];
     const at = pool.findIndex((b) => b.beat_id === beat.beat_id);
-    if (at + 1 < pool.length) {
-      openSection(stage, pool[at + 1].beat_id);
-      return;
-    }
-    // The last Next of a stage opens the next stage on its first section; the last
-    // stage's last Next folds its sections.
-    const stageAt = stages.indexOf(stage);
-    if (stageAt + 1 < stages.length) openSection(stages[stageAt + 1], undefined);
-    else openSection(stage, null);
+    const lastOfStage = at + 1 >= pool.length;
+    const nextStage = lastOfStage ? stages[stages.indexOf(stage) + 1] : undefined;
+    const below = lastOfStage ? nextStage && (byStage.get(nextStage) ?? [])[0] : pool[at + 1];
+    foldedByNext.current = beat.beat_id;
+    setFoldedBeats((folded) => {
+      const after = new Set(folded);
+      after.add(beat.beat_id);
+      if (below) after.delete(below.beat_id);
+      return after;
+    });
+    if (nextStage !== undefined)
+      setFoldedStages((folded) => {
+        const after = new Set(folded);
+        after.delete(nextStage);
+        return after;
+      });
   };
 
   const takenCount = beats.filter((b) => b.taken || picksOf(b).length > 0).length;
-  // The ledger's two totals (owner ruling 2026-11-15: "Just starting and remaining is
-  // fine, that's all that matters"; the Spent and Gained lines are gone).
   const budget = shown.spent + shown.remaining;
   const foot = (copy?.beats_foot ?? '{taken} taken, {spent} of {budget} points spent')
     .replace('{taken}', String(takenCount))
@@ -381,7 +362,7 @@ export function LifeGrids({ draft, copy }: Props) {
   );
 
   const renderSection = (stage: string, beat: BeatPoolEntry) => {
-    const open = currentBeat(stage) === beat.beat_id;
+    const open = !foldedBeats.has(beat.beat_id);
     const summary = summaryOf(beat);
     const state = stateOf(beat);
     const picks = picksOf(beat);
@@ -405,15 +386,21 @@ export function LifeGrids({ draft, copy }: Props) {
         <button
           type="button"
           className="sec-sum"
+          id={`life-sec-${beat.beat_id}`}
           aria-expanded={open}
-          onClick={() => openSection(stage, open ? null : beat.beat_id)}
+          onClick={() => toggleSection(beat)}
           data-testid={`sec-${beat.beat_id}`}
         >
           <span className="nm">{beat.name}</span>
           <span className="pts">
             <Signed cost={summary.cost} />
           </span>
-          <span className={summary.none ? 'ans none' : 'ans'}>{summary.text}</span>
+          {/* An open section with nothing picked prints its prompt in its body; the
+              line does not say it a second time (with every section open on arrival,
+              #5160, that was every prompt on the page twice). */}
+          {!(open && summary.none) && (
+            <span className={summary.none ? 'ans none' : 'ans'}>{summary.text}</span>
+          )}
         </button>
         {open && (
           <div className="sec-body">
@@ -532,7 +519,7 @@ export function LifeGrids({ draft, copy }: Props) {
   const renderStage = (stage: string) => {
     const pool = byStage.get(stage) ?? [];
     const label = copy?.[`life_${stage}_heading`] ?? LIFE_GRID_LABELS[stage] ?? stage;
-    const open = currentStage === stage;
+    const open = !foldedStages.has(stage);
     const unknown = stageUnknown(pool);
     const answered = pool.filter((b) => !b.unknown && picksOf(b).length > 0).length;
     const prog = unknown
@@ -554,25 +541,7 @@ export function LifeGrids({ draft, copy }: Props) {
             <span className="prog">{prog}</span>
           </button>
         </h3>
-        {open && (
-          <div className="stage-body">
-            {pool.map((beat) => renderSection(stage, beat))}
-            {!unknown && (
-              <div className="field stage-description">
-                <label htmlFor={`stage-desc-${stage}`}>
-                  {copy?.life_stage_description_label ?? 'Description (Optional)'}
-                </label>
-                <textarea
-                  id={`stage-desc-${stage}`}
-                  rows={3}
-                  maxLength={STAGE_DESCRIPTION_MAX_LENGTH}
-                  defaultValue={descriptions[stage] ?? ''}
-                  onBlur={(e) => saveDescription(stage, e.target.value)}
-                />
-              </div>
-            )}
-          </div>
-        )}
+        {open && <div className="stage-body">{pool.map((beat) => renderSection(stage, beat))}</div>}
       </section>
     );
   };
@@ -595,20 +564,13 @@ export function LifeGrids({ draft, copy }: Props) {
     return { stage, label, rows };
   });
 
-  // The ledger is the page's right-hand rail where the chapter keeps one (#5144: from
-  // 74rem of window), so it stands at the far edge of the window beside the whole stage;
-  // elsewhere it sits beside the life, or under it on a phone.
+  // The life's choices, by life stage, each with its signed price. They stand in the
+  // chapter's right-hand panel under the "CG selections" every stage shows (#5148); the
+  // points line there is the panel's own, so this list prints no totals.
+  const life = copy?.life_so_far_heading ?? 'Life So Far';
   const ledger = (
-    <aside className="ledger" aria-label={copy?.life_ledger_heading ?? 'CG points'}>
-      <h3>{copy?.life_ledger_heading ?? 'CG points'}</h3>
-      <div className="tot">
-        <span>{copy?.life_ledger_starting ?? 'Starting'}</span>
-        <b>{budget}</b>
-      </div>
-      <div className="tot">
-        <span>{copy?.life_ledger_remaining ?? 'Remaining'}</span>
-        <b>{shown.remaining}</b>
-      </div>
+    <section className="ledger" aria-label={life}>
+      <h2 className="rail-label">{life}</h2>
       {ledgerRows.every((s) => s.rows.length === 0) ? (
         <p className="empty">{copy?.life_ledger_empty ?? 'Nothing chosen yet.'}</p>
       ) : (
@@ -628,7 +590,7 @@ export function LifeGrids({ draft, copy }: Props) {
             </div>
           ))
       )}
-    </aside>
+    </section>
   );
 
   return (
@@ -642,7 +604,6 @@ export function LifeGrids({ draft, copy }: Props) {
           )}
         </p>
         {stages.map(renderStage)}
-        {recentHistoryBox}
         <div className="life-foot">
           <span>{foot}</span>
         </div>

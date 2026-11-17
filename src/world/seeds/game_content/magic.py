@@ -5,8 +5,8 @@ Exports:
   Composes all Phase 1 seed helpers into a single idempotent call. This is
   the magic-cluster contribution to Phase 3's ``seed_dev_database()``.
 - ``seed_magic_config()`` — Task 1.1 — singletons + IntensityTier + MishapPoolTier
-- ``seed_canonical_rituals()`` — Task 1.2 — Rite of Imbuing + Rite of Atonement +
-  Ritual of the Durance (#2121)
+- ``seed_canonical_rituals()`` — Task 1.2 — Rite of Imbuing + Ritual of the Durance
+  (#2121)
 - ``seed_thread_pull_catalog()`` — Task 1.3 — ThreadPullCost + ThreadPullEffect catalog
 - ``MagicContent`` — static factory helpers for integration-test technique wiring
 
@@ -1702,7 +1702,7 @@ _AFFINITY_INTERACTION_ROWS: list[_AffinityRow] = [
 ]
 
 #: Integer tenths of corruption per cast tick, by canonical affinity name.
-_CORRUPTION_COEFFICIENTS: dict[str, int] = {"Celestial": 0, "Primal": 2, "Abyssal": 10}
+_CORRUPTION_COEFFICIENTS: dict[str, int] = {"Celestial": 0, "Primal": 0, "Abyssal": 10}
 
 
 def _seed_affinity_interactions() -> None:
@@ -1823,6 +1823,7 @@ def seed_magic_config() -> MagicConfigResult:
     - IntensityTier rows: Minor (threshold=5), Moderate (threshold=10), Major (threshold=15)
     - AudereThreshold (minimum_intensity_tier=Major, minimum_warp_stage=Soulfray "Ripping")
     - MishapPoolTier (min_deficit=1, max_deficit=None) backed by a minimal ConsequencePool
+    - SineatingOutcomeAward: one row per canonical CheckOutcome tier (#5177).
     - AnimaRitualBudgetAward / SanctumHomecomingGainAward / SanctumPurgingRetentionAward /
       SanctumDissolutionRecoveryAward: one row per canonical CheckOutcome tier for each of
       the 4 outcome-tier award tables (#1207). Without these, the corresponding
@@ -1847,6 +1848,7 @@ def seed_magic_config() -> MagicConfigResult:
         SanctumHomecomingGainAward,
         SanctumPurgingRetentionAward,
     )
+    from world.magic.models.soul_tether_config import SineatingOutcomeAward  # noqa: PLC0415
     from world.magic.models.soulfray import AnimaRitualBudgetAward  # noqa: PLC0415
 
     # --- AnimaConfig (has its own get_or_create helper) ---
@@ -1953,6 +1955,19 @@ def seed_magic_config() -> MagicConfigResult:
             defaults={"recovery_fraction": recovery_fraction},
         )
 
+    # --- SineatingOutcomeAward: the share of full resonance each party earns (#5177) ---
+    for name, earned_share in (
+        (_CRITICAL_SUCCESS, Decimal("1.50")),
+        ("Success", Decimal("1.00")),
+        (_PARTIAL_SUCCESS, Decimal("0.50")),
+        ("Failure", Decimal("0.25")),
+        (_CRITICAL_FAILURE, Decimal("0.00")),
+    ):
+        SineatingOutcomeAward.objects.get_or_create(
+            outcome_tier=CheckOutcome.objects.get(name=name),
+            defaults={"earned_share": earned_share},
+        )
+
     # --- ResonanceGainConfig (pk=1) ---
     resonance_gain_config, _ = ResonanceGainConfig.objects.get_or_create(pk=1, defaults={})
 
@@ -2051,18 +2066,17 @@ def seed_magic_config() -> MagicConfigResult:
 class RitualSeedResult:
     """Returned by seed_canonical_rituals().
 
-    Wraps the canonical Rite of Imbuing, Rite of Atonement, and Ritual of the
-    Durance rituals. All are lazy-created via factory django_get_or_create on
-    name, so re-running preserves any edits to existing rows (idempotent).
+    Wraps the canonical Rite of Imbuing and Ritual of the Durance rituals. Both are
+    lazy-created via factory django_get_or_create on name, so re-running preserves any
+    edits to existing rows (idempotent).
     """
 
     rite_of_imbuing: Ritual
-    rite_of_atonement: Ritual
     ritual_of_the_durance: Ritual
 
 
 def seed_canonical_rituals() -> RitualSeedResult:
-    """Lazy-create the canonical rituals: Imbuing, Atonement, and the Durance.
+    """Lazy-create the canonical rituals: Imbuing and the Durance.
 
     All factories use django_get_or_create(name=...) so re-running on a
     populated DB is a no-op. Existing rows are never modified; staff edits
@@ -2070,10 +2084,9 @@ def seed_canonical_rituals() -> RitualSeedResult:
 
     Creates:
     - Ritual: "Rite of Imbuing" (SERVICE dispatch to spend_resonance_for_imbuing)
-    - Ritual: "Rite of Atonement" (SERVICE dispatch to atonement service)
     - Ritual: "Ritual of the Durance" (SERVICE dispatch to
-      advance_class_level_via_session, #1352/#2121) — as canonical as Imbuing/
-      Atonement: every character needs it eventually, not just covenant
+      advance_class_level_via_session, #1352/#2121) — as canonical as Imbuing:
+      every character needs it eventually, not just covenant
       members. Previously created only in test factories, so even a live
       officiant's ``ritual draft "Ritual of the Durance"`` failed by name on a
       fresh DB (RitualOfTheDuranceFactory also lazy-creates the companion
@@ -2086,11 +2099,10 @@ def seed_canonical_rituals() -> RitualSeedResult:
     rather than fabricated.
 
     Returns:
-        RitualSeedResult dataclass with all three ritual instances (a field
+        RitualSeedResult dataclass with both ritual instances (a field
         is ``None`` when its content isn't authored and sample content is off).
     """
     from world.magic.factories import (  # noqa: PLC0415
-        AtonementRitualFactory,
         ImbuingRitualFactory,
         RitualOfTheDuranceFactory,
     )
@@ -2110,11 +2122,9 @@ def seed_canonical_rituals() -> RitualSeedResult:
         return None
 
     imbuing = _authored_ritual_or_sample(ImbuingRitualFactory, "Rite of Imbuing")
-    atonement = _authored_ritual_or_sample(AtonementRitualFactory, "Rite of Atonement")
     durance = _authored_ritual_or_sample(RitualOfTheDuranceFactory, "Ritual of the Durance")
     return RitualSeedResult(
         rite_of_imbuing=imbuing,
-        rite_of_atonement=atonement,
         ritual_of_the_durance=durance,
     )
 
@@ -2759,8 +2769,8 @@ def seed_magic_dev() -> MagicDevSeedResult:
 
     1. ``seed_magic_config()`` — AnimaConfig, SoulfrayConfig, ResonanceGainConfig,
        CorruptionConfig, AudereThreshold, IntensityTier × 3, MishapPoolTier
-    2. ``seed_canonical_rituals()`` — Rite of Imbuing, Rite of Atonement, Ritual
-       of the Durance (#2121)
+    2. ``seed_canonical_rituals()`` — Rite of Imbuing and Ritual of the
+       Durance (#2121)
     3. ``seed_thread_pull_catalog()`` — ThreadPullCost × 3, ThreadPullEffect × 4,
        reference TRAIT rows on the first authored resonance; then
        ``seed_thread_survivability_tuning()`` —

@@ -10,8 +10,8 @@ import { test, expect, type Page } from '@playwright/test';
  * Needs the rows `integration_tests.live_seeds.seed_life_points_spec` writes for its own
  * account, e2e_life_points_account (the real-test workflow seeds it after the server
  * starts and writes the ids to the JSON file named by LIFE_POINTS_SEED): a creation
- * draft at Lineage whose beginning meets one life beat with two cards, one that costs
- * CG points and one the world pays for.
+ * draft at Lineage whose beginning meets a childhood beat with two cards, one that costs
+ * CG points and one the world pays for, and a youth beat with one card (#5160).
  *
  * The page works its total out before the server has answered, from prices the server
  * sent earlier. This is the check that the figure it shows is the figure the server
@@ -28,6 +28,7 @@ interface Seed {
   costly_price: number;
   paying_card: string;
   paying_price: number;
+  later_card: string;
 }
 
 interface Points {
@@ -82,11 +83,16 @@ test.describe('the CG points beside the life', () => {
       }
     }
 
-    const ledger = page.locator('aside.ledger');
-    const totals = () => ledger.locator('.tot').allTextContents();
+    // The right-hand panel is the one every stage shows (#5148): its "CG points" row is
+    // the page's total, and the life's choices are listed under it.
+    const panel = page.getByRole('complementary', { name: 'Marginalia' });
+    const ledger = panel.locator('section.ledger');
+    const total = () =>
+      panel.locator('.record-rail .row', { hasText: 'CG points' }).locator('dd').textContent();
     const start = await serverPoints(page, seed);
     const budget = start.starting_budget;
-    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${start.remaining}`]);
+    const line = (remaining: number) => `${budget - remaining} of ${budget} spent`;
+    await expect.poll(total).toBe(line(start.remaining));
 
     // From here every save waits in the browser before it is sent.
     let sent = 0;
@@ -106,9 +112,7 @@ test.describe('the CG points beside the life', () => {
     );
     await costly.click();
     const afterCostly = start.remaining - seed.costly_price;
-    await expect
-      .poll(totals, { timeout: 1500 })
-      .toEqual([`Starting${budget}`, `Remaining${afterCostly}`]);
+    await expect.poll(total, { timeout: 1500 }).toBe(line(afterCostly));
     // The server has not been asked: the save is still waiting in the browser, and the
     // server's own sum is where it was.
     expect(sent).toBe(0);
@@ -118,10 +122,10 @@ test.describe('the CG points beside the life', () => {
     // The save lands. The server's sum is the figure the page was already showing.
     expect((await saved).status()).toBe(200);
     expect((await serverPoints(page, seed)).remaining).toBe(afterCostly);
-    expect(await totals()).toEqual([`Starting${budget}`, `Remaining${afterCostly}`]);
+    expect(await total()).toBe(line(afterCostly));
     // And it is still showing it once the page has fetched the draft again.
     expect((await refetched).status()).toBe(200);
-    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${afterCostly}`]);
+    await expect.poll(total).toBe(line(afterCostly));
     await expect(
       page.getByText(`CG points: ${budget - afterCostly} of ${budget}`, { exact: true })
     ).toBeVisible();
@@ -134,9 +138,7 @@ test.describe('the CG points beside the life', () => {
     await expect(paying).toBeEnabled();
     await paying.click();
     const afterBoth = afterCostly + seed.paying_price;
-    await expect
-      .poll(totals, { timeout: 1500 })
-      .toEqual([`Starting${budget}`, `Remaining${afterBoth}`]);
+    await expect.poll(total, { timeout: 1500 }).toBe(line(afterBoth));
     expect(sent).toBe(1);
     expect((await serverPoints(page, seed)).remaining).toBe(afterCostly);
 
@@ -144,7 +146,7 @@ test.describe('the CG points beside the life', () => {
     const end = await serverPoints(page, seed);
     expect(end.remaining).toBe(afterBoth);
     expect((await refetched).status()).toBe(200);
-    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${afterBoth}`]);
+    await expect.poll(total).toBe(line(afterBoth));
     await expect(ledger.locator('.row')).toHaveCount(2);
     await expect(
       page.getByText(`CG points: ${end.spent} of ${budget}`, { exact: true })
@@ -169,8 +171,91 @@ test.describe('the CG points beside the life', () => {
     expect((await cleared).status()).toBe(200);
     expect((await serverPoints(page, seed)).remaining).toBe(start.remaining);
     await expect(ledger.locator('.row')).toHaveCount(0);
-    await expect.poll(totals).toEqual([`Starting${budget}`, `Remaining${start.remaining}`]);
+    await expect.poll(total).toBe(line(start.remaining));
     await expect(costly).toHaveAttribute('aria-pressed', 'false');
     await expect(paying).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  test('the life opens with every fold open and holds no text box, and the Background written on Final Touches is kept by the server (#5160, #5178)', async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    const seed = readSeed();
+    await logIn(page);
+    await page.goto('/characters/create');
+
+    // Two life stages, one section in each, and nothing has been clicked: both stages
+    // and both sections are open, and the later stage's card is on the page.
+    const costly = page.getByRole('button', { name: new RegExp(`^${seed.costly_card}`) });
+    const later = page.getByRole('button', { name: new RegExp(`^${seed.later_card}`) });
+    await expect(costly).toBeVisible({ timeout: 20000 });
+    await expect(later).toBeVisible();
+    await expect(page.locator('.interview .stage-acc')).toHaveCount(2);
+    await expect(page.locator('.interview .stage-acc[data-open="true"]')).toHaveCount(2);
+    await expect(page.locator('.interview .sec')).toHaveCount(2);
+    await expect(page.locator('.interview .sec[data-open="true"]')).toHaveCount(2);
+
+    // The life page asks for no free text about the life (#5178): no box at the end of
+    // a stage and none under the last stage.
+    await expect(page.getByText('Background Notes')).toHaveCount(0);
+    await expect(page.getByText(/Recent History/)).toHaveCount(0);
+    await expect(page.locator('.interview .life textarea')).toHaveCount(0);
+
+    // The Background is one box on Final Touches, with a placeholder saying where the
+    // text goes.
+    const stageLink = (name: string) =>
+      page.locator('.interview .toc-list a').filter({ hasText: name });
+    await stageLink('Final Touches').click();
+    const box = page.locator('#background');
+    await expect(box).toBeVisible({ timeout: 20000 });
+    await expect(page.getByRole('heading', { name: 'Background', exact: true })).toBeVisible();
+    await expect(box).toHaveAttribute(
+      'placeholder',
+      /^You can write an optional description .* listed as their Background on the character sheet\.$/
+    );
+    await expect(box).toHaveAttribute('maxlength', '4000');
+
+    // Text typed in the box is sent when the stage is left, and the server keeps it: the
+    // draft read straight from the server holds it, the Review stage quotes it, and the
+    // box shows it after a reload.
+    const draftUrl = `/api/character-creation/drafts/${seed.draft_id}/`;
+    const savesBackground = (url: string, method: string, body: string | null, value: string) => {
+      if (new URL(url).pathname !== draftUrl || method !== 'PATCH' || !body) return false;
+      const sent = JSON.parse(body) as { draft_data?: { background?: string } };
+      return sent.draft_data?.background === value;
+    };
+    const text = `Kept the ledgers for a season (${Date.now()}).\n\nThen the river took the shop.`;
+    let saved = page.waitForResponse((r) =>
+      savesBackground(r.url(), r.request().method(), r.request().postData(), text)
+    );
+    await box.fill(text);
+    await stageLink('Review').click();
+    expect((await saved).status()).toBe(200);
+    const held = await page.request.get(draftUrl);
+    expect(held.ok(), await held.text()).toBe(true);
+    expect((await held.json()).draft_data.background).toBe(text);
+    const quoted = page.locator('.interview .written').filter({ hasText: 'Background' });
+    await expect(quoted.locator('blockquote span')).toHaveText(text, {
+      timeout: 20000,
+      useInnerText: true,
+    });
+
+    await page.reload();
+    await stageLink('Final Touches').click();
+    await expect(page.locator('#background')).toHaveValue(text, { timeout: 20000 });
+
+    // A second run on the same database starts from the same place: the box emptied and
+    // the draft back on the life page.
+    saved = page.waitForResponse((r) =>
+      savesBackground(r.url(), r.request().method(), r.request().postData(), '')
+    );
+    await page.locator('#background').fill('');
+    await stageLink('Lineage').click();
+    expect((await saved).status()).toBe(200);
+    const after = await page.request.get(draftUrl);
+    expect((await after.json()).draft_data.background).toBe('');
+    await expect(costly).toBeVisible({ timeout: 20000 });
+    // The life page starts expanded again: fold state is never saved.
+    await expect(page.locator('.interview .sec[data-open="true"]')).toHaveCount(2);
   });
 });

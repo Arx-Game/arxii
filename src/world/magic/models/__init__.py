@@ -160,6 +160,7 @@ from world.magic.models.grants import (
     TraditionGiftGrant,
     TraditionRitualGrant,
 )
+from world.magic.models.impulse import ImpulseShown
 from world.magic.models.kindling import (
     KindledDeedAward,
     KindledStrengthTier,
@@ -232,12 +233,13 @@ from world.magic.models.signature import (
     SignatureMotifBonusDamageProfile,
 )
 from world.magic.models.soul_tether import (
+    MireHolding,
     PendingStageAdvanceOffer,
     Sineating,
     SineatingPendingOffer,
     SoulTetherRescue,
 )
-from world.magic.models.soul_tether_config import SoulTetherConfig
+from world.magic.models.soul_tether_config import SineatingOutcomeAward, SoulTetherConfig
 from world.magic.models.soulfray import AnimaRitualBudgetAward, MishapPoolTier, SoulfrayConfig
 from world.magic.models.substance import (
     HarvestOutcome,
@@ -417,6 +419,8 @@ __all__ = [
     "HarvestOutcome",
     # rituals
     "ImbuingProseTemplate",
+    # impulses (#5177)
+    "ImpulseShown",
     "IntensityTier",
     # kindled resonances (#5124)
     "KindledDeedAward",
@@ -435,6 +439,8 @@ __all__ = [
     # alterations
     "MagicalAlterationEvent",
     "MagicalAlterationTemplate",
+    # soul tether Mire (#5177)
+    "MireHolding",
     # soulfray
     "MishapPoolTier",
     "Motif",
@@ -514,6 +520,7 @@ __all__ = [
     "SignatureMotifBonusDamageProfile",
     # soul tether (Spec B §14.1, §15.1)
     "Sineating",
+    "SineatingOutcomeAward",
     "SineatingPendingOffer",
     "SoulTetherConfig",
     "SoulTetherRescue",

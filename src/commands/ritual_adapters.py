@@ -78,6 +78,7 @@ class RitualDraftAdapter:
 _SOUL_TETHER_SERVICE_PATH = "world.magic.services.soul_tether.accept_soul_tether_via_session"
 _PARTICIPANT_ROLE_KEY = "soul_tether_role"
 _SESSION_RESONANCE_ID_KEY = "resonance_id"
+_SESSION_SINEATER_RESONANCE_ID_KEY = "sineater_resonance_id"
 
 
 def _resolve_soul_tether_role(token: str) -> str:
@@ -100,8 +101,8 @@ def _resolve_soul_tether_role(token: str) -> str:
 class SoulTetherAdapter(RitualDraftAdapter):
     """Adapter for the soul-tether BILATERAL session ritual.
 
-    Translates ``role=`` and ``resonance=`` tokens into the ``draft_session``
-    kwargs that ``accept_soul_tether_via_session`` expects.
+    Translates ``role=``, ``resonance=`` and ``sineater_resonance=`` tokens into the
+    ``draft_session`` kwargs that ``accept_soul_tether_via_session`` expects.
     """
 
     def parse_draft(self, *, kwargs: dict[str, str], caller: Any) -> DraftParse:
@@ -125,6 +126,16 @@ class SoulTetherAdapter(RitualDraftAdapter):
                 msg = f"No resonance named '{resonance_name}'."
                 raise CommandError(msg)
             session_kwargs[_SESSION_RESONANCE_ID_KEY] = resonance.pk
+        sineater_resonance_token = kwargs.get("sineater_resonance", "")
+        if sineater_resonance_token:
+            sineater_resonance_name = sineater_resonance_token.strip()
+            sineater_resonance = Resonance.objects.filter(
+                name__iexact=sineater_resonance_name
+            ).first()
+            if sineater_resonance is None:
+                msg = f"No resonance named '{sineater_resonance_name}'."
+                raise CommandError(msg)
+            session_kwargs[_SESSION_SINEATER_RESONANCE_ID_KEY] = sineater_resonance.pk
 
         return DraftParse(
             session_kwargs=session_kwargs,

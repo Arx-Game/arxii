@@ -22,15 +22,18 @@ class CorruptionSource(models.TextChoices):
     SPEC_B_REDIRECT = "SPEC_B_REDIRECT", "Soul Tether redirect"
     STAFF_GRANT = "STAFF_GRANT", "Staff grant"
     DEFILEMENT = "DEFILEMENT", "World defilement (caster overpowers an opposed place)"
+    SINEATING_CARRIED = "SINEATING_CARRIED", "Carried for a Sinner (Sineating)"
+    INDULGED = "INDULGED", "Given in to a Compulsion"
 
 
 class CorruptionRecoverySource(models.TextChoices):
     """Source classifier for a reduce_corruption call."""
 
-    ATONEMENT_RITE = "ATONEMENT_RITE", "Rite of Atonement"
     SPEC_B_RESCUE = "SPEC_B_RESCUE", "Soul Tether rescue"
     PASSIVE_DECAY = "PASSIVE_DECAY", "Passive decay tick"
     STAFF_GRANT = "STAFF_GRANT", "Staff intervention"
+    SINEATING = "SINEATING", "Taken on by a Sineater"
+    MIRE_SETTLED = "MIRE_SETTLED", "Mire settled by the Sineater"
 
 
 class CorruptionCause(models.TextChoices):

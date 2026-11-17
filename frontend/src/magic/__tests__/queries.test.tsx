@@ -2,8 +2,7 @@
  * Magic Query Hooks Tests
  *
  * Tests for React Query hooks in the magic module.
- * Covers soul-tether detail, threads, pending sineating, pending stage-advance,
- * and the dissolve + respond-to-sineating mutations.
+ * Covers soul-tether detail, threads, pending stage-advance, and the dissolve mutation.
  */
 
 import { renderHook, waitFor, act } from '@testing-library/react';
@@ -12,12 +11,10 @@ import { vi } from 'vitest';
 import type { ReactNode } from 'react';
 import {
   useSoulTetherDetail,
-  usePendingSineatingOffers,
   usePendingStageAdvanceOffers,
   useThreads,
   useCharacterResonances,
   useDissolveSoulTether,
-  useRespondToSineating,
   useThreadHubSummary,
   useThread,
   useTeachingOffers,
@@ -39,15 +36,11 @@ import { __resetImbuingRitualIdCacheForTests } from '../api';
 // Mock the API module
 vi.mock('../api', () => ({
   getSoulTetherDetail: vi.fn(),
-  getPendingSineatingOffers: vi.fn(),
   getPendingStageAdvanceOffers: vi.fn(),
   getPendingStageAdvanceOffer: vi.fn(),
-  getPendingSineatingOffer: vi.fn(),
   getThreads: vi.fn(),
   getCharacterResonances: vi.fn(),
   dissolveSoulTether: vi.fn(),
-  requestSineating: vi.fn(),
-  respondToSineating: vi.fn(),
   performRescue: vi.fn(),
   respondToStageAdvance: vi.fn(),
   // New functions for thread spending UI
@@ -118,19 +111,7 @@ const mockSoulTetherDetail = {
   sineater_lifetime_helped: 100,
   sinner_corruption_stage: 2,
   sineater_strain_stage: 0,
-};
-
-const mockSineatingOffer = {
-  id: 1,
-  sinner_sheet_id: 10,
-  sinner_persona_name: 'Aelindra',
-  scene_id: 5,
-  scene_name: 'The Whispering Grove',
-  resonance_id: 3,
-  units_offered: 5,
-  anima_cost_per_unit: 2,
-  fatigue_cost_per_unit: 1,
-  created_at: '2026-05-01T12:00:00Z',
+  mire: [],
 };
 
 const mockStageAdvanceOffer = {
@@ -255,50 +236,6 @@ describe('useSoulTetherDetail', () => {
 });
 
 // ---------------------------------------------------------------------------
-// usePendingSineatingOffers
-// ---------------------------------------------------------------------------
-
-describe('usePendingSineatingOffers', () => {
-  it('fetches pending sineating offers list', async () => {
-    const mockList = { count: 1, next: null, previous: null, results: [mockSineatingOffer] };
-    vi.mocked(api.getPendingSineatingOffers).mockResolvedValue(mockList);
-
-    const { result } = renderHook(() => usePendingSineatingOffers(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(result.current.data).toEqual(mockList);
-    expect(api.getPendingSineatingOffers).toHaveBeenCalledTimes(1);
-  });
-
-  it('enters error state on fetch failure', async () => {
-    vi.mocked(api.getPendingSineatingOffers).mockRejectedValue(new Error('Unauthorized'));
-
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-
-    const { result } = renderHook(
-      () =>
-        useQuery({
-          queryKey: magicKeys.sineatingPending(),
-          queryFn: () => api.getPendingSineatingOffers(),
-          retry: false,
-        }),
-      { wrapper: createWrapper() }
-    );
-
-    await waitFor(() => {
-      expect(result.current.isError).toBe(true);
-    });
-
-    consoleSpy.mockRestore();
-  });
-});
-
-// ---------------------------------------------------------------------------
 // usePendingStageAdvanceOffers
 // ---------------------------------------------------------------------------
 
@@ -410,63 +347,6 @@ describe('useDissolveSoulTether', () => {
 });
 
 // ---------------------------------------------------------------------------
-// useRespondToSineating
-// ---------------------------------------------------------------------------
-
-describe('useRespondToSineating', () => {
-  it('posts accept response with units_accepted > 0', async () => {
-    const mockResult = {
-      units_accepted: 3,
-      declined: false,
-      new_hollow_current: 33,
-      new_lifetime_helped: 103,
-      audit_row_id: 99,
-    };
-    vi.mocked(api.respondToSineating).mockResolvedValue(mockResult);
-
-    const { result } = renderHook(() => useRespondToSineating(), {
-      wrapper: createWrapper(),
-    });
-
-    const body = { sinner_sheet_id: 10, sineater_sheet_id: 20, units_accepted: 3 };
-
-    await act(async () => {
-      await result.current.mutateAsync(body);
-    });
-
-    await waitFor(() => {
-      expect(result.current.isSuccess).toBe(true);
-    });
-
-    expect(api.respondToSineating).toHaveBeenCalledWith(body);
-    expect(result.current.data).toEqual(mockResult);
-  });
-
-  it('posts decline response with units_accepted=0', async () => {
-    const mockResult = {
-      units_accepted: 0,
-      declined: true,
-      new_hollow_current: 30,
-      new_lifetime_helped: 100,
-      audit_row_id: 100,
-    };
-    vi.mocked(api.respondToSineating).mockResolvedValue(mockResult);
-
-    const { result } = renderHook(() => useRespondToSineating(), {
-      wrapper: createWrapper(),
-    });
-
-    const body = { sinner_sheet_id: 10, sineater_sheet_id: 20, units_accepted: 0 };
-
-    await act(async () => {
-      await result.current.mutateAsync(body);
-    });
-
-    expect(api.respondToSineating).toHaveBeenCalledWith(body);
-  });
-});
-
-// ---------------------------------------------------------------------------
 // magicKeys factory
 // ---------------------------------------------------------------------------
 
@@ -475,14 +355,6 @@ describe('magicKeys', () => {
     expect(magicKeys.all).toEqual(['magic']);
     expect(magicKeys.soulTether()).toEqual(['magic', 'soul-tether']);
     expect(magicKeys.soulTetherDetail(42)).toEqual(['magic', 'soul-tether', 'detail', 42]);
-    expect(magicKeys.sineatingPending()).toEqual(['magic', 'soul-tether', 'sineating', 'pending']);
-    expect(magicKeys.sineatingPendingDetail(5)).toEqual([
-      'magic',
-      'soul-tether',
-      'sineating',
-      'pending',
-      5,
-    ]);
     expect(magicKeys.stageAdvancePending()).toEqual([
       'magic',
       'soul-tether',

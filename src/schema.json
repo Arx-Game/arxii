@@ -24090,10 +24090,10 @@ paths:
           - ENTRY_FLOURISH
           - FALL_CONVERSION
           - KINDLED_DEED
+          - MIRE_PURIFIED
           - MISSION_REPORT
           - MISSION_REWARD
           - OUTFIT_TRICKLE
-          - PENANCE
           - POSE_ENDORSEMENT
           - PROJECT_CONTRIBUTION
           - ROOM_RESIDENCE
@@ -24101,10 +24101,13 @@ paths:
           - SANCTUM_OWNER_BONUS
           - SANCTUM_WEAVING
           - SCENE_ENTRY
+          - SINEATER_FALL
           - SINEATING
           - STAFF_GRANT
           - STAKE_REWARD
           - STYLE_PRESENTATION
+          - SUCCUMBED
+          - SUCCUMB_BONUS
           - WORSHIP_RITE
         description: |-
           Discriminator. Identifies which source_* FK is populated.
@@ -24127,7 +24130,6 @@ paths:
           * `DISTINCTION` - Distinction
           * `COMBO_DISCOVERY` - Combo discovery
           * `COMPROMISE` - Moral compromise
-          * `PENANCE` - Atonement resonance conversion
           * `FALL_CONVERSION` - Fall/Redemption conversion
           * `WORSHIP_RITE` - Worship rite
           * `DRIFT_CORRECTION` - Drift correction
@@ -24136,6 +24138,10 @@ paths:
           * `CHARACTER_CREATION` - Character creation
           * `KINDLED_DEED` - Kindled deed
           * `EMBRACED_DEED` - Embraced deed
+          * `MIRE_PURIFIED` - Mire purified
+          * `SUCCUMBED` - Succumbed to the Mire
+          * `SUCCUMB_BONUS` - Sineater succumbed bonus
+          * `SINEATER_FALL` - Sineater fell
       tags:
       - magic
       security:
@@ -25023,6 +25029,34 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/magic/sineating-options/:
+    get:
+      operationId: magic_sineating_options_list
+      description: What the requester's character can attach to a pose as a Sineating.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSineatingOptionList'
+          description: ''
   /api/magic/soul-tether/{relationship_id}/:
     get:
       operationId: magic_soul_tether_retrieve
@@ -25104,6 +25138,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/RescueOutcome'
           description: ''
+  /api/magic/soul-tether/sineating/decline/:
+    post:
+      operationId: magic_soul_tether_sineating_decline_create
+      description: |-
+        POST /api/magic/soul-tether/sineating/decline/ turns a waiting plea down.
+
+        Accepts ``{actor_sheet_id, sinner_sheet_id}``; answers ``{"detail": <what the Sinner is
+        told the Sineater did>}``.
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SineatingDeclineRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SineatingDeclineResult'
+          description: ''
   /api/magic/soul-tether/sineating/pending/:
     get:
       operationId: magic_soul_tether_sineating_pending_list
@@ -25166,48 +25225,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/SineatingPendingOffer'
-          description: ''
-  /api/magic/soul-tether/sineating/request/:
-    post:
-      operationId: magic_soul_tether_sineating_request_create
-      description: Validate and dispatch request_sineating; return offer payload.
-      tags:
-      - magic
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SineatingRequestRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SineatingOffer'
-          description: ''
-  /api/magic/soul-tether/sineating/respond/:
-    post:
-      operationId: magic_soul_tether_sineating_respond_create
-      description: Re-validate offer + dispatch resolve_sineating; return result payload.
-      tags:
-      - magic
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SineatingRespondRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SineatingResult'
           description: ''
   /api/magic/soul-tether/stage-advance/pending/:
     get:
@@ -45765,6 +45782,8 @@ components:
         ``partner_sheet_id`` identifies the partner's character sheet.
         ``sinner_role`` determines which side (SINNER or SINEATER) the initiator holds.
         ``resonance_id`` selects the resonance for the Sinner's Thread.
+        ``sineater_resonance_id`` optionally selects the resonance for the Sineater's own Thread
+        (#5177); without it the Sineater's strongest resonance of their main affinity is used.
       properties:
         actor_sheet_id:
           type: integer
@@ -45773,6 +45792,8 @@ components:
         sinner_role:
           $ref: '#/components/schemas/SinnerRoleEnum'
         resonance_id:
+          type: integer
+        sineater_resonance_id:
           type: integer
       required:
       - actor_sheet_id
@@ -48095,7 +48116,7 @@ components:
           type: integer
           readOnly: true
         role:
-          $ref: '#/components/schemas/RoleEnum'
+          $ref: '#/components/schemas/Role27cEnum'
         victory_points:
           type: integer
           maximum: 2147483647
@@ -52247,10 +52268,6 @@ components:
 
             The one embracing it ("You become more ...", ``accept_aura_change``) names.
           readOnly: true
-        mire_share_words:
-          type: string
-          description: The Mire's share of everything they have gained, in words.
-          readOnly: true
         glimpse_state:
           allOf:
           - $ref: '#/components/schemas/GlimpseStateEnum'
@@ -52271,7 +52288,6 @@ components:
       - dominant_affinity_display
       - glimpse_state
       - id
-      - mire_share_words
       - shares
       - unsettled
       - unsettled_affinity_name
@@ -68700,6 +68716,42 @@ components:
       - narrative_text
       - resonance_pool_cost
       - sort_order
+    MireForSinner:
+      type: object
+      description: What the viewing Sineater carries for one Sinner (#5177). Never
+        shown to the Sinner.
+      properties:
+        sinner_sheet_id:
+          type: integer
+        sinner_name:
+          type: string
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/MireRow'
+        total:
+          type: integer
+      required:
+      - rows
+      - sinner_name
+      - sinner_sheet_id
+      - total
+    MireRow:
+      type: object
+      description: One resonance a Sineater carries corruption in for a Sinner.
+      properties:
+        resonance_name:
+          type: string
+        amount:
+          type: integer
+        label:
+          type: string
+          description: The name shown for the Sineater's corruption in this resonance
+            at its stage.
+      required:
+      - amount
+      - label
+      - resonance_name
     MissionAbandonResult:
       type: object
       description: 'Result of the #1023 abandon endpoint — the run''s id and new status.'
@@ -76892,6 +76944,7 @@ components:
       required:
       - count
       - results
+      - impulses
       properties:
         count:
           type: integer
@@ -76910,6 +76963,35 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/KindledResonance'
+        impulses:
+          type: array
+          items:
+            type: object
+            properties:
+              resonance_id:
+                type: integer
+              resonance_name:
+                type: string
+              label:
+                type: string
+              present:
+                type: boolean
+              is_compulsion:
+                type: boolean
+              text:
+                type: string
+              reasons:
+                type: array
+                items:
+                  type: string
+            required:
+            - resonance_id
+            - resonance_name
+            - label
+            - present
+            - is_compulsion
+            - text
+            - reasons
     PaginatedKnownSecretList:
       type: object
       required:
@@ -79069,6 +79151,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ShipDetails'
+    PaginatedSineatingOptionList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SineatingOption'
     PaginatedSineatingPendingOfferList:
       type: object
       required:
@@ -88409,10 +88514,12 @@ components:
       enum:
       - deed
       - resonance
+      - burden
       type: string
       description: |-
         * `deed` - Deed
         * `resonance` - Resonance
+        * `burden` - Burden
     RegardRequest:
       type: object
       description: '``{target_type, target_id, value, reason}``: the NPC''s opinion
@@ -89296,7 +89403,6 @@ components:
             * `DISTINCTION` - Distinction
             * `COMBO_DISCOVERY` - Combo discovery
             * `COMPROMISE` - Moral compromise
-            * `PENANCE` - Atonement resonance conversion
             * `FALL_CONVERSION` - Fall/Redemption conversion
             * `WORSHIP_RITE` - Worship rite
             * `DRIFT_CORRECTION` - Drift correction
@@ -89305,6 +89411,10 @@ components:
             * `CHARACTER_CREATION` - Character creation
             * `KINDLED_DEED` - Kindled deed
             * `EMBRACED_DEED` - Embraced deed
+            * `MIRE_PURIFIED` - Mire purified
+            * `SUCCUMBED` - Succumbed to the Mire
+            * `SUCCUMB_BONUS` - Sineater succumbed bonus
+            * `SINEATER_FALL` - Sineater fell
         granted_at:
           type: string
           format: date-time
@@ -89356,7 +89466,6 @@ components:
       - DISTINCTION
       - COMBO_DISCOVERY
       - COMPROMISE
-      - PENANCE
       - FALL_CONVERSION
       - WORSHIP_RITE
       - DRIFT_CORRECTION
@@ -89365,6 +89474,10 @@ components:
       - CHARACTER_CREATION
       - KINDLED_DEED
       - EMBRACED_DEED
+      - MIRE_PURIFIED
+      - SUCCUMBED
+      - SUCCUMB_BONUS
+      - SINEATER_FALL
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -89385,7 +89498,6 @@ components:
         * `DISTINCTION` - Distinction
         * `COMBO_DISCOVERY` - Combo discovery
         * `COMPROMISE` - Moral compromise
-        * `PENANCE` - Atonement resonance conversion
         * `FALL_CONVERSION` - Fall/Redemption conversion
         * `WORSHIP_RITE` - Worship rite
         * `DRIFT_CORRECTION` - Drift correction
@@ -89394,6 +89506,10 @@ components:
         * `CHARACTER_CREATION` - Character creation
         * `KINDLED_DEED` - Kindled deed
         * `EMBRACED_DEED` - Embraced deed
+        * `MIRE_PURIFIED` - Mire purified
+        * `SUCCUMBED` - Succumbed to the Mire
+        * `SUCCUMB_BONUS` - Sineater succumbed bonus
+        * `SINEATER_FALL` - Sineater fell
     ResonanceLine:
       type: object
       properties:
@@ -90043,6 +90159,14 @@ components:
       - character_sheet_id
       - responded_at
       - state
+    Role27cEnum:
+      enum:
+      - attacker
+      - defender
+      type: string
+      description: |-
+        * `attacker` - Attacker
+        * `defender` - Defender
     RoleContextEnum:
       enum:
       - informant
@@ -90059,14 +90183,6 @@ components:
         * `guard` - Guard
         * `fan` - Fan
         * `minor_ally` - Minor Ally
-    RoleEnum:
-      enum:
-      - attacker
-      - defender
-      type: string
-      description: |-
-        * `attacker` - Attacker
-        * `defender` - Defender
     RollBreakdown:
       type: object
       description: A roll laid out as a heading, source rows and a result line (#4858);
@@ -92223,45 +92339,53 @@ components:
       - name
       - prose_noun
       - wear_family
-    SineatingOffer:
+    SineatingDeclineRequest:
       type: object
-      description: Read serializer for SineatingOffer payloads returned by the request
-        endpoint.
+      description: A Sineater turns down the plea a Sinner has waiting for them (#5177).
       properties:
+        actor_sheet_id:
+          type: integer
         sinner_sheet_id:
           type: integer
-          description: Return sinner_sheet PK.
-          readOnly: true
-        sineater_sheet_id:
-          type: integer
-          description: Return sineater_sheet PK.
-          readOnly: true
-        resonance_id:
-          type: integer
-          description: Return resonance PK.
-          readOnly: true
-        max_units_offered:
-          type: integer
-        anima_cost_per_unit:
-          type: integer
-        fatigue_cost_per_unit:
-          type: integer
-        current_hollow:
-          type: integer
-        hollow_max:
-          type: integer
-        sineater_current_strain_stage:
-          type: integer
       required:
-      - anima_cost_per_unit
-      - current_hollow
-      - fatigue_cost_per_unit
-      - hollow_max
-      - max_units_offered
-      - resonance_id
-      - sineater_current_strain_stage
-      - sineater_sheet_id
+      - actor_sheet_id
       - sinner_sheet_id
+    SineatingDeclineResult:
+      type: object
+      properties:
+        detail:
+          type: string
+      required:
+      - detail
+    SineatingOption:
+      type: object
+      description: One plea the character can make or answer, as the composer's picker
+        lists it.
+      properties:
+        role:
+          $ref: '#/components/schemas/SineatingOptionRoleEnum'
+        partner_sheet_id:
+          type: integer
+        partner_name:
+          type: string
+        max_units:
+          type: integer
+        resonance_name:
+          type: string
+      required:
+      - max_units
+      - partner_name
+      - partner_sheet_id
+      - resonance_name
+      - role
+    SineatingOptionRoleEnum:
+      enum:
+      - entreat
+      - perform
+      type: string
+      description: |-
+        * `entreat` - Entreat a Sineater
+        * `perform` - Perform Sineating
     SineatingPendingOffer:
       type: object
       description: |-
@@ -92288,13 +92412,10 @@ components:
         resonance_id:
           type: integer
           readOnly: true
+        resonance_name:
+          type: string
+          readOnly: true
         units_offered:
-          type: integer
-          readOnly: true
-        anima_cost_per_unit:
-          type: integer
-          readOnly: true
-        fatigue_cost_per_unit:
           type: integer
           readOnly: true
         created_at:
@@ -92302,83 +92423,15 @@ components:
           format: date-time
           readOnly: true
       required:
-      - anima_cost_per_unit
       - created_at
-      - fatigue_cost_per_unit
       - id
       - resonance_id
+      - resonance_name
       - scene_id
       - scene_name
       - sinner_persona_name
       - sinner_sheet_id
       - units_offered
-    SineatingRequestRequest:
-      type: object
-      description: |-
-        Write serializer for Sinner-initiated Sineating request (Spec B §7).
-
-        Returns a ``SineatingOffer`` that the Sineater can accept or decline via
-        the respond endpoint.
-      properties:
-        actor_sheet_id:
-          type: integer
-        sineater_sheet_id:
-          type: integer
-        resonance_id:
-          type: integer
-        max_units:
-          type: integer
-          minimum: 1
-        scene_id:
-          type: integer
-      required:
-      - actor_sheet_id
-      - max_units
-      - resonance_id
-      - scene_id
-      - sineater_sheet_id
-    SineatingRespondRequest:
-      type: object
-      description: |-
-        Write serializer for the Sineater's response to a Sineating request (Spec B §7).
-
-        The pending offer row is the canonical source of truth for scene, resonance,
-        and units cap — the caller only needs to identify the pair and supply their choice.
-        ``units_accepted=0`` means decline.
-      properties:
-        sinner_sheet_id:
-          type: integer
-        sineater_sheet_id:
-          type: integer
-        units_accepted:
-          type: integer
-          minimum: 0
-      required:
-      - sineater_sheet_id
-      - sinner_sheet_id
-      - units_accepted
-    SineatingResult:
-      type: object
-      description: Read serializer for SineatingResult payloads.
-      properties:
-        units_accepted:
-          type: integer
-        declined:
-          type: boolean
-        new_hollow_current:
-          type: integer
-        new_lifetime_helped:
-          type: integer
-        audit_row_id:
-          type: integer
-          description: Return the audit Sineating row PK.
-          readOnly: true
-      required:
-      - audit_row_id
-      - declined
-      - new_hollow_current
-      - new_lifetime_helped
-      - units_accepted
     SinnerRoleEnum:
       enum:
       - SINNER
@@ -92937,10 +92990,16 @@ components:
           description: Return the Sineater's current Tether Strain severity (or 0
             if none).
           readOnly: true
+        mire:
+          type: array
+          items:
+            $ref: '#/components/schemas/MireForSinner'
+          readOnly: true
       required:
       - hollow_current
       - hollow_max
       - is_soul_tether
+      - mire
       - relationship_id
       - sineater_lifetime_helped
       - sineater_sheet_id

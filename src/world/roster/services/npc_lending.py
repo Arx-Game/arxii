@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
     from evennia.accounts.models import AccountDB
 
+    from world.character_sheets.models import CharacterSheet
     from world.roster.models import RosterEntry, StoryNPCSettings
     from world.scenes.models import Scene
 
@@ -98,6 +99,36 @@ def active_loan_for(entry: RosterEntry) -> NPCLoan | None:
         .select_related("borrower")
         .first()
     )
+
+
+def current_player_of(sheet: CharacterSheet) -> AccountDB | None:
+    """The account that plays ``sheet`` right now, or None when nobody does.
+
+    The borrower of its ACTIVE loan (a lent NPC is played by the borrower and not by its
+    holder), else the account holding its current tenure. The same rule as
+    ``playable_entries``, read from the character's side.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    try:
+        entry = sheet.roster_entry
+    except CharacterSheet.roster_entry.RelatedObjectDoesNotExist:
+        return None
+    loan = active_loan_for(entry)
+    if loan is not None:
+        return loan.borrower
+    return _holder_account(entry)
+
+
+def played_by_one_account(first: CharacterSheet, second: CharacterSheet) -> bool:
+    """Whether one account plays both characters now (a sheet nobody plays shares none).
+
+    The Soul Tether refuses to bond, and Sineating refuses to run between, two characters a
+    single account plays: one person must never ask as one and perform as the other. A GM
+    running an NPC for a different player's character is two accounts and passes.
+    """
+    player = current_player_of(first)
+    return player is not None and player == current_player_of(second)
 
 
 def active_loans_touching(account: AccountDB, entry_ids: Iterable[int]) -> list[NPCLoan]:

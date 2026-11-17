@@ -718,22 +718,7 @@ def resolve_option(  # noqa: PLR0913
         _spawn_mission_instance_room(instance, option, character)
 
     if option.option_kind == OptionKind.ENCOUNTER:
-        # advance=False is the JOINT-orchestrator's routing-free primitive;
-        # clean() forbids ENCOUNTER on a JOINT node (one fight resolves the
-        # whole node - there is no per-participant tier to combine), so this
-        # combination should be unreachable outside a graph-authoring bug.
-        if not advance:
-            msg = (
-                f"ENCOUNTER option {option.pk} resolved with advance=False - "
-                "clean() should forbid ENCOUNTER on a JOINT node; the graph "
-                "is corrupt."
-            )
-            raise ValueError(msg)
-        from world.missions.services.encounter_option import (  # noqa: PLC0415
-            start_encounter_for_option,
-        )
-
-        return start_encounter_for_option(instance, node, option, actor)
+        return _resolve_encounter_option(instance, node, option, actor, advance=advance)
 
     if option.option_kind in (OptionKind.BRANCH, OptionKind.EXTERNAL_ACT):
         return _resolve_branch(instance, node, option, character, advance=advance)
@@ -813,6 +798,33 @@ def resolve_option(  # noqa: PLR0913
             chosen_approach=chosen_approach,
             advance=advance,
         )
+
+
+def _resolve_encounter_option(
+    instance: MissionInstance,
+    node: MissionNode,
+    option: MissionOption,
+    actor: MissionParticipant,
+    *,
+    advance: bool,
+) -> MissionDeedRecord:
+    """Start an encounter only for a routing resolution."""
+    # advance=False is the JOINT-orchestrator's routing-free primitive;
+    # clean() forbids ENCOUNTER on a JOINT node (one fight resolves the
+    # whole node - there is no per-participant tier to combine), so this
+    # combination should be unreachable outside a graph-authoring bug.
+    if not advance:
+        msg = (
+            f"ENCOUNTER option {option.pk} resolved with advance=False - "
+            "clean() should forbid ENCOUNTER on a JOINT node; the graph "
+            "is corrupt."
+        )
+        raise ValueError(msg)
+    from world.missions.services.encounter_option import (  # noqa: PLC0415
+        start_encounter_for_option,
+    )
+
+    return start_encounter_for_option(instance, node, option, actor)
 
 
 def _roll_option_invocation(

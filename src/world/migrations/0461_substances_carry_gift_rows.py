@@ -238,7 +238,7 @@ def carry_gift_substances(apps, schema_editor) -> None:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0448_gift_substance_major_only"),
+        ("arxii", "0460_gift_substance_major_only"),
     ]
 
     operations = [

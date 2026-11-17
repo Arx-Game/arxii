@@ -379,11 +379,6 @@ class LifeStage(models.TextChoices):
 #: The one optional line a player may write under a taken beat (#4124).
 BEAT_LINE_MAX_LENGTH = 200
 
-#: The life page (#4872, slice 9 of #4813). ``draft_data.stage_descriptions`` maps a
-#: ``LifeStage`` value to the one paragraph the player writes for that stage, written at
-#: finalize as a stage row on ``CharacterOriginSlot`` and read into the told background.
-STAGE_DESCRIPTIONS_KEY = "stage_descriptions"
-STAGE_DESCRIPTION_MAX_LENGTH = 1000
 #: A figure's name on a person card (``Distinction.asks_figure_name``), kept under the
 #: beat's state as ``figures`` (offer id to name) and written to the pick's notes.
 FIGURE_NAME_MAX_LENGTH = 60
@@ -392,10 +387,13 @@ FIGURE_NAME_MAX_LENGTH = 60
 BEAT_SECRET_OFFER_IDS = "secret_offer_ids"  # noqa: S105  # a draft_data key, no credential
 BEAT_COVER_OFFER_ID = "cover_offer_id"
 BEAT_FIGURES = "figures"
-#: The optional Recent History a life ends on (#4830, ruled 2026-10-30 and 2026-10-31): free
-#: text the player writes for the hooks GMs and other players may pick up, public on the sheet,
-#: written at finalize as the lead-in paragraph of ``Profile.background``.
-RECENT_HISTORY_MAX_LENGTH = 2000
+#: The character's Background (#5178, ruled 2026-11-17): the one free text the player writes
+#: at Final Touches, under ``draft_data.background``, written at finalize as
+#: ``Profile.background`` word for word. It replaced the paragraph each life stage ended on
+#: (#4872) and the Recent History box (#4830), whose keys the draft serializer now refuses.
+BACKGROUND_KEY = "background"
+BACKGROUND_MAX_LENGTH = 4000
+RETIRED_BACKGROUND_KEYS: tuple[str, ...] = ("stage_descriptions", "recent_history")
 
 
 #: The age rule for a beat whose picks scale with age (#4395, re-ruled #4829): one career

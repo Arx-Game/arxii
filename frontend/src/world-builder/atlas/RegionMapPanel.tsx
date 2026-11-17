@@ -1,5 +1,6 @@
 /**
- * The region map's side panel (#4242): the view picker (#5030), what is selected, its
+ * The region map's side panel (#4242): the view picker (#5030), the tier toggles under it
+ * (#5157), what is selected, its
  * Historical Charter (#4983) and the terrain legend. It folds to a thin rail (#4993); the
  * selection and the view live on the page, so folding loses nothing.
  */
@@ -11,7 +12,15 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 import type { RegionMapFootprint, RegionMapLandlessTitle } from '../types';
-import { MAP_VIEW_LABELS, MAP_VIEWS, type MapView } from './mapViews';
+import {
+  MAP_TIER_LABELS,
+  MAP_TIERS,
+  MAP_VIEW_LABELS,
+  MAP_VIEWS,
+  type MapTier,
+  type MapTiers,
+  type MapView,
+} from './mapViews';
 import { STRIKE_COLOR, TERRAIN_COLORS } from './regionMapCanvas';
 
 interface FoldToggleProps {
@@ -67,6 +76,9 @@ interface RegionMapPanelProps {
   /** What the map shows (#5030), and the domain the Domain views are anchored on. */
   view: MapView;
   onView: (view: MapView) => void;
+  /** Which tiers draw their borders, names and seat markers (#5157). */
+  tiers: MapTiers;
+  onToggleTier: (tier: MapTier) => void;
   anchorCaption: string;
   selection: MapSelectionSummary;
   charterOn: boolean;
@@ -188,6 +200,8 @@ export function RegionMapPanel({
   onToggle,
   view,
   onView,
+  tiers,
+  onToggleTier,
   anchorCaption,
   selection,
   charterOn,
@@ -237,6 +251,27 @@ export function RegionMapPanel({
               </Button>
             ))}
           </div>
+          {view !== 'geography' && (
+            <div
+              role="group"
+              aria-label="tiers"
+              className="mb-1 flex flex-wrap gap-1"
+              data-testid="map-tier-picker"
+            >
+              {MAP_TIERS.map((tier) => (
+                <Button
+                  key={tier}
+                  type="button"
+                  size="sm"
+                  variant={tiers.has(tier) ? 'default' : 'outline'}
+                  aria-pressed={tiers.has(tier)}
+                  onClick={() => onToggleTier(tier)}
+                >
+                  {MAP_TIER_LABELS[tier]}
+                </Button>
+              ))}
+            </div>
+          )}
           <p
             className="mb-4 font-body text-xs italic text-muted-foreground"
             data-testid="map-view-anchor"

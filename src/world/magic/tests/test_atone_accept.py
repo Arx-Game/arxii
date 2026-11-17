@@ -2,7 +2,7 @@
 
 Two exits from being unsettled: atone through the drift correction rite inside a live
 scene (it works on lifetime, so it opens and converts even when the excess was already
-spent, Mire excess first), or accept the changes to the aura. A mixed character casts at
+spent), or accept the changes to the aura. A mixed character casts at
 full alignment in every affinity that is part of who they are.
 """
 
@@ -13,7 +13,6 @@ from decimal import Decimal
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.constants import GainSource
 from world.magic.exceptions import NotUnsettledError
 from world.magic.factories import (
     AuraPowerConfigFactory,
@@ -26,19 +25,16 @@ from world.magic.factories import (
     set_aura_split,
 )
 from world.magic.models import CharacterResonance, DriftConversionCap, DriftConversionOffer
-from world.magic.services.conversion import _convert_full, convert_resonance_amount
 from world.magic.services.drift import accept_aura_change, drift_for
 from world.magic.services.power_terms import ApplicableThread, PowerTermContext, aura_power_term
-from world.magic.services.resonance import grant_resonance
 from world.magic.tests.test_drift_correction_rite import DriftRiteTestBase
 from world.magic.tests.test_drift_offer import DriftOfferTestBase
 
 
-def _set(sheet, resonance, *, balance, lifetime, mire=0) -> CharacterResonance:
+def _set(sheet, resonance, *, balance, lifetime) -> CharacterResonance:
     row, _ = CharacterResonance.objects.get_or_create(character_sheet=sheet, resonance=resonance)
     row.balance = balance
     row.lifetime_earned = lifetime
-    row.mire_lifetime = mire
     row.save()
     return row
 
@@ -123,53 +119,6 @@ class AtoneTests(DriftRiteTestBase):
         self.assertEqual(self.cap_value(), 30)
         self.assertTrue(DriftConversionOffer.objects.filter(pk=self.offer.pk).exists())
 
-    def _sineater(self) -> None:
-        # 60 of 180 is a third Mire: 6 points past the allowance (54) to atone for; the
-        # Sineater's own 20 Abyssal stand 11.7 past a line of nothing, 14 points.
-        _set(self.sheet, self.dread, balance=60, lifetime=80, mire=60)
-        _set(self.sheet, self.dawnlight, balance=0, lifetime=100)
-
-    def test_atone_converts_mire_excess_first(self) -> None:
-        self._sineater()
-        reading = drift_for(self.sheet)
-        self.assertEqual(reading.mire_excess_points[self.abyssal.pk], 6)
-        self.cap.cap = 6
-        self.cap.save()
-
-        self.perform()
-
-        dread = _row(self.sheet, self.dread)
-        self.assertEqual((dread.lifetime_earned, dread.mire_lifetime), (74, 54))
-
-    def test_atone_past_the_mire_excess_then_converts_own(self) -> None:
-        self._sineater()
-        self.cap.cap = 10
-        self.cap.save()
-
-        self.perform()
-
-        dread = _row(self.sheet, self.dread)
-        self.assertEqual((dread.lifetime_earned, dread.mire_lifetime), (70, 54))
-        dawn = _row(self.sheet, self.dawnlight)
-        self.assertEqual(dawn.mire_lifetime, 0)
-
-    def test_mire_never_exceeds_lifetime_after_atone(self) -> None:
-        _set(self.sheet, self.dread, balance=60, lifetime=80, mire=60)
-
-        # A conversion that names no Mire part still never leaves Mire past lifetime.
-        convert_resonance_amount(
-            self.sheet,
-            source_resonance=self.dread,
-            target_resonance=self.dawnlight,
-            amount=40,
-            multiplier=Decimal(1),
-            gain_source=GainSource.DRIFT_CORRECTION,
-        )
-
-        dread = _row(self.sheet, self.dread)
-        self.assertEqual(dread.lifetime_earned, 40)
-        self.assertLessEqual(dread.mire_lifetime, dread.lifetime_earned)
-
 
 class AcceptTests(TestCase):
     @classmethod
@@ -196,7 +145,6 @@ class AcceptTests(TestCase):
         shares = {s.affinity_id: s.settled_percent for s in self.aura.shares.all()}
         self.assertEqual(shares, {self.celestial.pk: Decimal(70), self.abyssal.pk: Decimal(30)})
         self.assertEqual(result.settled_shares, shares)
-        self.assertEqual(result.mire_moved, 0)
 
     def test_accept_moves_a_new_main_affinity(self) -> None:
         _set(self.sheet, self.dawnlight, balance=10, lifetime=10)
@@ -205,18 +153,6 @@ class AcceptTests(TestCase):
         result = accept_aura_change(self.sheet)
 
         self.assertEqual(result.main_affinity, self.abyssal)
-        self.assertEqual(drift_for(self.sheet).steps_past, 0)
-
-    def test_accept_sineater_past_allowance_steps_zero(self) -> None:
-        _set(self.sheet, self.dawnlight, balance=100, lifetime=100)
-        _set(self.sheet, self.dread, balance=60, lifetime=60, mire=60)
-        self.assertGreater(drift_for(self.sheet).steps_past, 0)
-
-        result = accept_aura_change(self.sheet)
-
-        self.assertEqual(result.mire_moved, 60)
-        dread = _row(self.sheet, self.dread)
-        self.assertEqual((dread.mire_lifetime, dread.lifetime_earned), (0, 60))
         self.assertEqual(drift_for(self.sheet).steps_past, 0)
 
     def test_accept_refused_when_settled(self) -> None:
@@ -230,7 +166,7 @@ class AcceptTests(TestCase):
 
     def test_accept_writes_no_corruption(self) -> None:
         _set(self.sheet, self.dawnlight, balance=70, lifetime=70)
-        _set(self.sheet, self.dread, balance=30, lifetime=30, mire=10)
+        _set(self.sheet, self.dread, balance=30, lifetime=30)
 
         accept_aura_change(self.sheet)
 
@@ -239,19 +175,18 @@ class AcceptTests(TestCase):
 
     def test_a_share_of_zero_moves_nothing_and_a_part_share_moves_part_of_the_way(self) -> None:
         _set(self.sheet, self.dawnlight, balance=70, lifetime=70)
-        _set(self.sheet, self.dread, balance=30, lifetime=30, mire=10)
+        _set(self.sheet, self.dread, balance=30, lifetime=30)
 
         nothing = accept_aura_change(self.sheet, fraction=Decimal(0))
-        self.assertEqual(nothing.mire_moved, 0)
+        self.assertEqual(
+            nothing.settled_shares, {self.celestial.pk: Decimal(90), self.abyssal.pk: Decimal(10)}
+        )
         self.assertGreater(drift_for(self.sheet).steps_past, 0)
 
-        part = accept_aura_change(self.sheet, fraction=Decimal("0.5"))
-        # A share of the Mire moves by the same share: half of 10.
-        self.assertEqual(part.mire_moved, 5)
-        self.assertEqual(_row(self.sheet, self.dread).mire_lifetime, 5)
+        accept_aura_change(self.sheet, fraction=Decimal("0.5"))
         shares = {s.affinity_id: s.settled_percent for s in self.aura.shares.all()}
-        # Settled began at 90/10; own shares are 70/30 (less the Mire's part), so halfway
-        # lands between them, and the shares still sum to 100.
+        # Settled began at 90/10 and the aura is 70/30, so halfway lands between them (20 in
+        # Abyssal), and the shares still sum to 100.
         self.assertEqual(sum(shares.values()), Decimal(100))
         self.assertTrue(shares[self.abyssal.pk] > Decimal(10))
         self.assertTrue(shares[self.abyssal.pk] < Decimal(30))
@@ -350,29 +285,3 @@ class AlignmentPowerTests(TestCase):
         # The gift's own (settled) Celestial gives the full bonus; the unsettled 30 percent
         # Abyssal payer would give only 6, and must not replace it.
         self.assertEqual((unpulled, pulled), (20, 20))
-
-
-class MireBookkeepingTests(TestCase):
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.celestial, cls.primal, cls.abyssal = ensure_canonical_affinities()
-        cls.dawnlight = ResonanceFactory(name="Mire Dawnlight", affinity=cls.celestial)
-        cls.dread = ResonanceFactory(name="Mire Dread", affinity=cls.abyssal)
-
-    def test_only_a_sineating_grant_may_come_from_the_mire(self) -> None:
-        sheet = CharacterSheetFactory()
-
-        with self.assertRaises(ValueError):
-            grant_resonance(sheet, self.dread, 5, source=GainSource.STAFF_GRANT, from_mire=True)
-
-        self.assertFalse(CharacterResonance.objects.filter(character_sheet=sheet).exists())
-
-    def test_fall_zeroes_the_mire_without_breaking_the_constraint(self) -> None:
-        sheet = CharacterSheetFactory()
-        row = _set(sheet, self.dread, balance=40, lifetime=60, mire=45)
-
-        _convert_full(row, sheet, self.dawnlight, Decimal(1))
-
-        row.refresh_from_db()
-        self.assertEqual((row.balance, row.lifetime_earned, row.mire_lifetime), (0, 0, 0))
-        self.assertEqual(_row(sheet, self.dawnlight).lifetime_earned, 60)

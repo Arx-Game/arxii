@@ -285,22 +285,7 @@ def _resolve_tuned_rally(
 
         # Great success: restore morale to ally-side summon opponents.
         if success_level >= RALLY_GREAT_SUCCESS_LEVEL:
-            from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
-            from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
-
-            # Each success level restores the rallier's Rally morale (the maneuver effect
-            # catalog, #4783: base 15, plus the rallier's own modifiers).
-            restore = success_level * effect_value(
-                participant.character_sheet, ManeuverEffectKey.RALLY_MORALE
-            )
-            ally_summons = CombatOpponent.objects.filter(
-                encounter=participant.encounter,
-                status=OpponentStatus.ACTIVE,
-                allegiance=CombatAllegiance.ALLY,
-            )
-            for opp in ally_summons:
-                opp.morale = min(opp.max_morale, opp.morale + restore)
-                opp.save(update_fields=["morale"])
+            _restore_ally_summon_morale(participant, success_level)
 
     if ally is not None:
         _surge_rallied_ally(
@@ -313,6 +298,26 @@ def _resolve_tuned_rally(
             resonance=named,
         )
         _kindle_rallied_resonance(participant, ally, named, rally_result.outcome, kindled_tier)
+
+
+def _restore_ally_summon_morale(participant: CombatParticipant, success_level: int) -> None:
+    """Restore allied summons' morale on a great rally."""
+    from world.mechanics.constants import ManeuverEffectKey  # noqa: PLC0415
+    from world.mechanics.effect_targets import effect_value  # noqa: PLC0415
+
+    # Each success level restores the rallier's Rally morale (the maneuver effect
+    # catalog, #4783: base 15, plus the rallier's own modifiers).
+    restore = success_level * effect_value(
+        participant.character_sheet, ManeuverEffectKey.RALLY_MORALE
+    )
+    ally_summons = CombatOpponent.objects.filter(
+        encounter=participant.encounter,
+        status=OpponentStatus.ACTIVE,
+        allegiance=CombatAllegiance.ALLY,
+    )
+    for opp in ally_summons:
+        opp.morale = min(opp.max_morale, opp.morale + restore)
+        opp.save(update_fields=["morale"])
 
 
 def _kindled_tier_of(ally: CombatParticipant, resonance: Resonance) -> KindledStrengthTier | None:

@@ -858,6 +858,42 @@ def weave_thread(  # noqa: PLR0913
 
 
 @transaction.atomic
+def weave_tether_bond_thread(
+    character_sheet: CharacterSheet,
+    capstone: RelationshipCapstone,
+    resonance: ResonanceModel,
+    *,
+    name: str = "",
+    description: str = "",
+) -> Thread:
+    """Weave the Sineater's half of a Soul Tether onto their own side's ritual capstone.
+
+    The tether's formation grants this thread, so it skips the ThreadWeavingUnlock gate that
+    ``weave_thread`` enforces in play (the Sineater paid nothing toward an unlock; the
+    Sinner's unlock is checked by ``accept_soul_tether``). It still refuses a capstone that
+    is not on the owner's own relationship side and an anchor the owner already holds.
+
+    Call only from Soul Tether formation or ``ensure_sineater_thread``.
+    """
+    _validate_relationship_ownership(character_sheet, capstone)
+    _refuse_taken_anchor(character_sheet, TargetKind.RELATIONSHIP_CAPSTONE, capstone)
+    thread = Thread.objects.create(
+        owner=character_sheet,
+        resonance=resonance,
+        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+        target_capstone=capstone,
+        name=name,
+        description=description,
+        level=0,
+        developed_points=0,
+    )
+    write_resonance_rows(thread, [resonance])
+    character_sheet.character.threads.invalidate()
+    recompute_max_health_with_threads(character_sheet)
+    return thread
+
+
+@transaction.atomic
 def weave_creation_technique_thread(
     character_sheet: CharacterSheet,
     technique: Technique,

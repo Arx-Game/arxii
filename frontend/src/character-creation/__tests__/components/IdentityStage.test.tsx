@@ -1,11 +1,14 @@
 /**
  * IdentityStage Component Tests
  *
- * Tests for name, concept, quote, and background fields.
+ * Tests for the name line and the concept and quote fields. The Background is Final
+ * Touches' (#5178): this stage neither shows nor saves it.
  */
 
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
+import { updateDraft } from '../../api';
 import { IdentityStage } from '../../components/IdentityStage';
 import {
   mockCGExplanations,
@@ -89,6 +92,33 @@ describe('IdentityStage', () => {
     });
 
     expect(screen.queryByLabelText(/personality/i)).toBeNull();
+  });
+
+  it('saves the concept and the quote and never a background, so it cannot overwrite the one written on Final Touches (#5178)', async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateDraft).mockResolvedValue(mockCompleteDraft);
+    let leave: (() => Promise<boolean>) | null = null;
+    const draft = createMockDraft({
+      draft_data: { concept: 'A pilot', quote: '', background: 'Written on Final Touches.' },
+    });
+    renderWithCharacterCreationProviders(
+      <IdentityStage
+        draft={draft}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />,
+      { queryClient: createTestQueryClient() }
+    );
+    expect(screen.queryByLabelText(/background/i)).toBeNull();
+    await user.type(screen.getByLabelText(/character concept/i), ' of the lower river');
+    await act(async () => {
+      await leave!();
+    });
+    expect(updateDraft).toHaveBeenCalledTimes(1);
+    const sent = vi.mocked(updateDraft).mock.calls[0][1].draft_data ?? {};
+    expect(sent).toEqual({ concept: 'A pilot of the lower river', quote: '' });
+    expect(sent).not.toHaveProperty('background');
   });
 
   describe('Concept Section', () => {

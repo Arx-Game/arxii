@@ -55,6 +55,8 @@ PROSE_FIELD_NAMES = frozenset(
         "frame_narrative",
         "goal",
         "guidance_text",
+        # #5177: the second-person line a corrupted character is sent once per scene.
+        "impulse_text",
         "capture_cell_description",
         "capture_clue_description",
         "cg_hint",

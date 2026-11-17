@@ -26,7 +26,7 @@ separately.
 > below is `(owner, target)` without the resonance. `spend_resonance_for_imbuing` takes the
 > resonance that pays, each pulled thread names its paying resonance, and a pull's perks are the
 > payer's. "Drift" (off-aura balance weighted by `conflict_weight`) is replaced by the unsettled
-> reading on the aura (`drift_for`, `settled_percent`, `mire_lifetime`). Read
+> reading on the aura (`drift_for`, `settled_percent`; #5123's `mire_lifetime` went in #5177). Read
 > `docs/systems/magic.md` for the current shapes.
 
 ---

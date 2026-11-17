@@ -30,17 +30,19 @@ import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { addFeedNote } from '@/store/gameSlice';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
-import { useRefreshReflectionOptions } from '@/magic/queries';
+import { SineatingRow } from '@/magic/components/SineatingRow';
+import { useRefreshReflectionOptions, useRefreshSineating } from '@/magic/queries';
 import { SettleAuraDialog } from '@/magic/components/SettleAuraDialog';
 import { useSettleAuraRequests } from '@/magic/settleAuraRequest';
 import {
   isReflecting,
   isReflectionIncomplete,
   NO_REFLECTION,
-  REFLECTION_INCOMPLETE_LINE,
+  reflectionIncompleteLine,
   reflectionFields,
   type ReflectionDraft,
 } from '@/magic/reflection';
+import { isSineating, NO_SINEATING, sineatingFields, type SineatingDraft } from '@/magic/sineating';
 import type { MyRosterEntry } from '@/roster/types';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -126,6 +128,19 @@ function resolveSpeechMode(
       : null;
   const resolvedSpeechMode = draft.status !== 'clean' && draft.mode ? draft.mode : liveSpeechMode;
   return { liveSpeechMode, resolvedSpeechMode };
+}
+
+/** A whisper cannot be dispatched without an addressee. */
+function missingWhisperTarget(mode: DraftMode | null): boolean {
+  return mode?.command === 'whisper' && mode.targets.length === 0;
+}
+
+/** An explicit command or a non-pose mode must not use the pose endpoint. */
+function isPoseDispatch(
+  explicitCommand: boolean,
+  mode: DraftMode | ComposerMode | null | undefined
+): boolean {
+  return !explicitCommand && (!mode || mode.command === 'pose');
 }
 
 /**
@@ -306,6 +321,18 @@ export function CommandInput({
   // refused or failed send keeps the writer's pick along with their text.
   const [reflection, setReflection] = useState<ReflectionDraft>(NO_REFLECTION);
   const refreshReflectionOptions = useRefreshReflectionOptions(characterSheetId);
+  // #5177 — a plea or a ritual this pose carries, if anything. A pose carries a reflection or
+  // a Sineating, never both: picking one clears the other. Cleared once the pose lands.
+  const [sineating, setSineating] = useState<SineatingDraft>(NO_SINEATING);
+  const refreshSineating = useRefreshSineating(characterSheetId);
+  const changeReflection = useCallback((next: ReflectionDraft) => {
+    setReflection(next);
+    if (next.option !== null || next.choice !== null) setSineating(NO_SINEATING);
+  }, []);
+  const changeSineating = useCallback((next: SineatingDraft) => {
+    setSineating(next);
+    if (isSineating(next)) setReflection(NO_REFLECTION);
+  }, []);
   // The `client_request_id` of a socket-sent pose that carries a reflection, until its ack.
   const reflectedSendRef = useRef<string | null>(null);
   // The rite of settling, opened by the button on the feed card a recorded reflection adds.
@@ -331,6 +358,24 @@ export function CommandInput({
           },
         })
       );
+    },
+    [dispatch, character]
+  );
+  // The writer's own lines after a Sineating: what the plea or the ritual did. Nobody else is told.
+  const showSineatingLine = useCallback(
+    (line: string, recorded: boolean) => {
+      if (!recorded) {
+        toast.error(line);
+        return;
+      }
+      for (const part of line.split('\n').filter((text) => text.trim() !== '')) {
+        dispatch(
+          addFeedNote({
+            character,
+            note: { kind: 'system', content: part, timestamp: new Date().toISOString() },
+          })
+        );
+      }
     },
     [dispatch, character]
   );
@@ -683,7 +728,7 @@ export function CommandInput({
       if (!trimmed) return false;
       // A reflection with a target but no choice, or the reverse, never posts half-chosen.
       if (isReflectionIncomplete(reflection)) {
-        toast.error(REFLECTION_INCOMPLETE_LINE);
+        toast.error(reflectionIncompleteLine(reflection));
         return false;
       }
       if (draft.content.length > MAX_POSE_LENGTH) {
@@ -743,83 +788,92 @@ export function CommandInput({
     // I4: Whisper mode requires a target — don't send a malformed command.
     // Checked against the RESOLVED mode, not the live composerMode prop, for
     // the same reason as above.
-    if (resolvedSpeechMode?.command === 'whisper' && resolvedSpeechMode.targets.length === 0) {
+    if (missingWhisperTarget(resolvedSpeechMode)) {
       return;
     }
 
-    // #3299: a channel row posts through the channels REST API (the account's
-    // own action), ack-gated like the companion emote below. With no speaker
-    // chosen it has nowhere to send: the rail row carries the picker, and the
-    // refusal names what to do.
-    if (dispatchMode?.command === 'channel') {
-      const channelId = composerMode?.channelId;
-      if (channelId === undefined) {
-        toast.error('Choose who you speak as in this channel first.');
-        return;
+    function submitChannel(): boolean {
+      // #3299: a channel row posts through the channels REST API (the account's
+      // own action), ack-gated like the companion emote below. With no speaker
+      // chosen it has nowhere to send: the rail row carries the picker, and the
+      // refusal names what to do.
+      if (dispatchMode?.command === 'channel') {
+        const channelId = composerMode?.channelId;
+        if (channelId === undefined) {
+          toast.error('Choose who you speak as in this channel first.');
+          return true;
+        }
+        submittingRef.current = true;
+        const clientRequestId = beginSend(null);
+        pendingSpeechRef.current = { clientRequestId, text: trimmed };
+        postChannelMessage(channelId, spoken)
+          .then((message) => {
+            addMessageToCache(queryClient, message);
+            acknowledge(clientRequestId);
+            setHistory((prev) => [...prev, trimmed]);
+            setHistoryIndex(-1);
+          })
+          .catch((error: unknown) => {
+            const message = error instanceof Error ? error.message : 'Failed to post to channel.';
+            rejectDraft(clientRequestId, message);
+            toast.error(message);
+          })
+          .finally(() => {
+            if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
+              pendingSpeechRef.current = null;
+            }
+            submittingRef.current = false;
+          });
+        return true;
       }
-      submittingRef.current = true;
-      const clientRequestId = beginSend(null);
-      pendingSpeechRef.current = { clientRequestId, text: trimmed };
-      postChannelMessage(channelId, spoken)
-        .then((message) => {
-          addMessageToCache(queryClient, message);
-          acknowledge(clientRequestId);
-          setHistory((prev) => [...prev, trimmed]);
-          setHistoryIndex(-1);
-        })
-        .catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : 'Failed to post to channel.';
-          rejectDraft(clientRequestId, message);
-          toast.error(message);
-        })
-        .finally(() => {
-          if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
-            pendingSpeechRef.current = null;
-          }
-          submittingRef.current = false;
-        });
-      return;
+      return false;
     }
+    if (submitChannel()) return;
 
     submittingRef.current = true;
 
-    // #3294 — companion-attributed pose: a dedicated dispatch, bypassing
-    // ModeSelector's mode entirely (a companion emote is always a room-level
-    // pose). The server re-validates ownership + room presence on every call
-    // (CompanionPresentPrerequisite), so a stale toggle (companion left the
-    // room mid-composition) fails loud via toast rather than ghost-posing.
-    //
-    // #3782 — ack-gated exactly like the REST-pose branch below: `beginSend`
-    // mints/reuses a `client_request_id` so a dropped-connection retry is
-    // idempotent server-side (`idempotent_record_interaction`) instead of
-    // double-posting, and the draft is only cleared on a matching success —
-    // a rejected request (e.g. a 409 payload conflict on id reuse) keeps the
-    // player's text so a retry doesn't mean retyping the whole emote.
-    if (asCompanion) {
-      const clientRequestId = beginSend(liveSpeechMode);
-      pendingSpeechRef.current = { clientRequestId, text: trimmed };
-      companionEmote(asCompanion.id, spoken, clientRequestId)
-        .then(() => {
-          // Finding 5 (#3760 final review) — a newer edit made while this
-          // request was in flight survives, because `acknowledge` no-ops
-          // once that edit nulled the dispatched id (#3784).
-          acknowledge(clientRequestId);
-          setHistory((prev) => [...prev, trimmed]);
-          setHistoryIndex(-1);
-        })
-        .catch((error: unknown) => {
-          const message = error instanceof Error ? error.message : 'Failed to emote as companion.';
-          rejectDraft(clientRequestId, message);
-          toast.error(message);
-        })
-        .finally(() => {
-          if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
-            pendingSpeechRef.current = null;
-          }
-          submittingRef.current = false;
-        });
-      return;
+    function submitCompanion(): boolean {
+      // #3294 — companion-attributed pose: a dedicated dispatch, bypassing
+      // ModeSelector's mode entirely (a companion emote is always a room-level
+      // pose). The server re-validates ownership + room presence on every call
+      // (CompanionPresentPrerequisite), so a stale toggle (companion left the
+      // room mid-composition) fails loud via toast rather than ghost-posing.
+      //
+      // #3782 — ack-gated exactly like the REST-pose branch below: `beginSend`
+      // mints/reuses a `client_request_id` so a dropped-connection retry is
+      // idempotent server-side (`idempotent_record_interaction`) instead of
+      // double-posting, and the draft is only cleared on a matching success —
+      // a rejected request (e.g. a 409 payload conflict on id reuse) keeps the
+      // player's text so a retry doesn't mean retyping the whole emote.
+      if (asCompanion) {
+        const clientRequestId = beginSend(liveSpeechMode);
+        pendingSpeechRef.current = { clientRequestId, text: trimmed };
+        companionEmote(asCompanion.id, spoken, clientRequestId)
+          .then(() => {
+            // Finding 5 (#3760 final review) — a newer edit made while this
+            // request was in flight survives, because `acknowledge` no-ops
+            // once that edit nulled the dispatched id (#3784).
+            acknowledge(clientRequestId);
+            setHistory((prev) => [...prev, trimmed]);
+            setHistoryIndex(-1);
+          })
+          .catch((error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : 'Failed to emote as companion.';
+            rejectDraft(clientRequestId, message);
+            toast.error(message);
+          })
+          .finally(() => {
+            if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
+              pendingSpeechRef.current = null;
+            }
+            submittingRef.current = false;
+          });
+        return true;
+      }
+      return false;
     }
+    if (submitCompanion()) return;
 
     // #3760 Task 11 critical fix — `buildFullCommand`'s legacy-WS fallback
     // (used by the whisper/tt branches below when their dispatch precondition
@@ -921,8 +975,7 @@ export function CommandInput({
     // An explicit command (`/look`, or a typed known verb) is never a pose,
     // whatever the mode: in a scene it goes over the socket as typed, not to
     // the pose endpoint as prose (#3857).
-    const isPose =
-      !hasExplicitCommandOverride && (!dispatchMode || dispatchMode.command === 'pose');
+    const isPose = isPoseDispatch(hasExplicitCommandOverride, dispatchMode);
     const detachedSet = new Set(detachedActionIds ?? []);
     const hasDetachments = detachedSet.size > 0;
     const usesRestSubmit = isPose && sceneId !== undefined && personaId != null;
@@ -981,8 +1034,16 @@ export function CommandInput({
           ? { reply_to: { id: replyTarget.id, timestamp: replyTarget.timestamp } }
           : {}),
         ...reflectionFields(reflection),
+        ...sineatingFields(sineating),
       })
         .then((response) => {
+          if (isSineating(sineating)) {
+            if (response?.sineating_line) {
+              showSineatingLine(response.sineating_line, response.sineating_recorded !== false);
+            }
+            setSineating(NO_SINEATING);
+            refreshSineating();
+          }
           if (isReflecting(reflection)) {
             if (response?.reflection_line) {
               showReflectionLine(response.reflection_line, response.reflection_recorded !== false);
@@ -1044,24 +1105,28 @@ export function CommandInput({
       return;
     }
 
-    // A pose that reflects on something outside a scene (#5124) is a structured send like
-    // `tt`: the registry `pose` action takes the reflection, and the draft and the pick clear
-    // together on the matching ack (`handleActionResult`).
-    if (isPose && isReflecting(reflection)) {
-      const clientRequestId = beginSend(liveSpeechMode);
-      pendingSpeechRef.current = { clientRequestId, text: trimmed };
-      reflectedSendRef.current = clientRequestId;
-      // The typed "@Name" targets travel by name, as on the scene pose, and stay in the text.
-      const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
-      executeAction(character, 'pose', {
-        text: spoken,
-        client_request_id: clientRequestId,
-        ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
-        ...reflectionFields(reflection),
-      });
-      submittingRef.current = false;
-      return;
+    function submitReflection(): boolean {
+      // A pose that reflects on something outside a scene (#5124) is a structured send like
+      // `tt`: the registry `pose` action takes the reflection, and the draft and the pick clear
+      // together on the matching ack (`handleActionResult`).
+      if (isPose && isReflecting(reflection)) {
+        const clientRequestId = beginSend(liveSpeechMode);
+        pendingSpeechRef.current = { clientRequestId, text: trimmed };
+        reflectedSendRef.current = clientRequestId;
+        // The typed "@Name" targets travel by name, as on the scene pose, and stay in the text.
+        const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
+        executeAction(character, 'pose', {
+          text: spoken,
+          client_request_id: clientRequestId,
+          ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
+          ...reflectionFields(reflection),
+        });
+        submittingRef.current = false;
+        return true;
+      }
+      return false;
     }
+    if (submitReflection()) return;
 
     // WebSocket path: existing behavior. Server-side auto-link will attach
     // any pending ACTION interactions when the POSE is created.
@@ -1125,6 +1190,9 @@ export function CommandInput({
     reflection,
     refreshReflectionOptions,
     showReflectionLine,
+    sineating,
+    refreshSineating,
+    showSineatingLine,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1445,12 +1513,21 @@ export function CommandInput({
           !isCommandsMode &&
           !asCompanion &&
           (!composerMode || composerMode.command === 'pose') && (
-            <ReflectingOnRow
-              characterSheetId={characterSheetId}
-              value={reflection}
-              onChange={setReflection}
-              className="m-2"
-            />
+            <>
+              <SineatingRow
+                characterSheetId={characterSheetId ?? null}
+                inScene={sceneId !== undefined && personaId != null}
+                value={sineating}
+                onChange={changeSineating}
+                className="m-2"
+              />
+              <ReflectingOnRow
+                characterSheetId={characterSheetId}
+                value={reflection}
+                onChange={changeReflection}
+                className="m-2"
+              />
+            </>
           )
         }
         ghostText={ghostText}

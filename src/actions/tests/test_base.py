@@ -833,6 +833,10 @@ class ActionRegistryTests(TestCase):
             "set_channel_identity",
             "delete_channel_message",
             "ban_channel_author",
+            # #5177 - Sineating pleas and rituals.
+            "entreat_sineating",
+            "perform_sineating",
+            "decline_sineating",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

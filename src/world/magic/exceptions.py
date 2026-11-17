@@ -310,6 +310,7 @@ class SoulTetherFormationError(SoulTetherError):
             "Soul Tether formation failed.",
             "Both characters must consent to forming a Soul Tether.",
             "An active Soul Tether already exists between these characters.",
+            "You cannot form a Soul Tether between two characters you play.",
         },
     )
 
@@ -327,6 +328,13 @@ class SineatingValidationError(SoulTetherError):
             "Per-scene Sineating cap reached for this bond.",
             "No pending Sineating offer found.",
             "This offer expired because you are no longer in the same scene.",
+            "Sineating has not been set up yet.",
+            "You carry too much of the Mire to take on more. Settle some of it first.",
+            "The Soul Tether is missing its resonance thread.",
+            "That character cannot be found.",
+            "Sineating needs a role, a partner and a number of units.",
+            "A pose can carry a reflection or a Sineating, not both.",
+            "You cannot perform Sineating between two characters you play.",
         },
     )
 
@@ -344,6 +352,22 @@ class RescueValidationError(SoulTetherError):
             "Sineater has insufficient resonance for the ritual cost.",
         },
     )
+
+
+class SineaterFallenError(SineatingValidationError, RescueValidationError):
+    """Raised when a fallen Sineater (predominantly Abyssal) is asked to carry a Sinner (#5177).
+
+    Both a Sineating and a rescue refuse a fallen Sineater, so callers that catch either
+    validation error catch this one. The message names the Sineater, so it is not a fixed
+    string and ``SAFE_MESSAGES`` stays empty.
+    """
+
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset()
+
+    def __init__(self, sineater_name: str) -> None:
+        super().__init__(
+            f"{sineater_name} has fallen too far into the Abyss to carry anyone's sins."
+        )
 
 
 class StageAdvanceBonusError(SoulTetherError):
@@ -803,10 +827,6 @@ class ConversionMappingError(FallRedemptionError):
     (source_resonance, target_affinity) pair."""
 
 
-class PenanceError(FallRedemptionError):
-    """Raised when there is no non-native resonance to convert during Atonement."""
-
-
 class AlreadyInTraditionError(MagicError):
     """Raised when ``join_tradition`` is called with the character's own currently
     active tradition (#2441) — a no-op re-join is refused rather than silently
@@ -989,6 +1009,12 @@ class ResonanceNotUnsettlingError(ReflectionError):
     """Only the resonance that is unsettling the character can be reflected on (#5124)."""
 
     user_message = "That resonance is not what is unsettling you."
+
+
+class NotABurdenError(ReflectionError):
+    """Only Mire a Sineater carries for a Sinner can be reflected on as a burden (#5177)."""
+
+    user_message = "That is not Mire you carry."
 
 
 class ThreadResonanceChangeError(MagicError):

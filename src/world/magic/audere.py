@@ -733,7 +733,7 @@ def maybe_create_audere_offer(
 def resolve_audere_offer(offer_id: int, *, accept: bool) -> AudereOfferResult:
     """Resolve a pending Audere offer: accept or decline, then delete the row.
 
-    Two-phase (mirrors resolve_sineating_from_db in services/soul_tether.py):
+    Two-phase (mirrors perform_sineating in services/sineating.py):
     a plain lookup + staleness re-validation run OUTSIDE any transaction so a
     stale row can be deleted without leaving ghosts; the actual resolution
     re-fetches with select_for_update inside transaction.atomic(). A re-fetch

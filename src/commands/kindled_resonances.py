@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from commands.command import ArxCommand
 
 if TYPE_CHECKING:
+    from world.magic.services.impulses import Impulse
     from world.magic.types.kindling import KindledResonance
 
 NO_SHEET = "You have no character sheet."
@@ -31,6 +32,21 @@ def kindled_lines(rows: list[KindledResonance]) -> list[str]:
     return lines
 
 
+def impulse_lines(impulses: list[Impulse]) -> list[str]:
+    """The Impulses section: the pull of corruption the character carries (#5177). Each
+    impulse names its resonance, says whether something it cares about is here, and shows the
+    words staff wrote for it while it is."""
+    lines = ["|wImpulses|n"]
+    for impulse in impulses:
+        state = "here now" if impulse.present else "not here"
+        lines.append(f"{impulse.label} - {state}")
+        if impulse.present:
+            lines.extend(f"  {reason}" for reason in impulse.reasons)
+            if impulse.text:
+                lines.append(f"  {impulse.text}")
+    return lines
+
+
 class CmdKindledResonances(ArxCommand):
     """See which of your resonances are kindled, how strongly, and why.
 
@@ -44,6 +60,9 @@ class CmdKindledResonances(ArxCommand):
     action = None
 
     def func(self) -> None:
+        from world.magic.services.impulses import (  # noqa: PLC0415
+            safe_refresh_impulses_for_character,
+        )
         from world.magic.services.kindling import kindled_resonances_now  # noqa: PLC0415
 
         sheet = self.caller.character_sheet
@@ -51,7 +70,12 @@ class CmdKindledResonances(ArxCommand):
             self.msg(NO_SHEET)
             return
         rows = kindled_resonances_now(sheet)
-        if not rows:
+        refreshed = safe_refresh_impulses_for_character(self.caller)
+        impulses = list(refreshed.impulses) if refreshed is not None else []
+        if not rows and not impulses:
             self.msg(NO_RESONANCES)
             return
-        self.msg("\n".join(kindled_lines(rows)))
+        lines = kindled_lines(rows) if rows else [NO_RESONANCES]
+        if impulses:
+            lines = [*lines, "", *impulse_lines(impulses)]
+        self.msg("\n".join(lines))

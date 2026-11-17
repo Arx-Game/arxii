@@ -90,10 +90,10 @@ The magic system for Arx II. Power flows from identity and connection.
 - `CharacterResonance` - Per-character per-resonance row. Identity anchor AND
   spendable currency bucket. Fields: `character_sheet` FK, `resonance` FK,
   `balance` (spendable), `lifetime_earned` (monotonic audit), `claimed_at`,
-  `flavor_text`, `mire_lifetime` (#5123: the part of `lifetime_earned` taken from the Mire as a
-  Sineater; written only on the Sineater's grant by `_grant_sineating_resonance`, moved in
-  proportion by every conversion, zeroed by a Fall and by accepting; a DB CheckConstraint keeps
-  it at or under `lifetime_earned`). Unified per Spec A §2.2 — the old `scope`/`strength`/`is_active`
+  `flavor_text`, `lifetime_helped` (the Sineater's monotonic Sineating counter; sizes their
+  resistance), `corruption_current` / `corruption_lifetime`. (`mire_lifetime`, #5123's marker of
+  the part of a Sineater's lifetime taken from the Mire, was removed in #5177: the Mire is
+  corruption now, held in `MireHolding`.) Unified per Spec A §2.2: the old `scope`/`strength`/`is_active`
   shape was dropped; row existence replaces `is_active`.
 - `CharacterAnima` - Magical resource (anima) tracking
 - `ANIMA_BANDS` / `anima_band_for(current, maximum)` (`constants.py`, #1446) - Qualitative
@@ -181,7 +181,8 @@ The magic system for Arx II. Power flows from identity and connection.
   path hardcodes to ENEMY/1). See ADR-0064.
 - `TechniqueBudgetConfig` - Singleton (pk=1) of power-cost-per-unit knobs (intensity, control, payload, restriction refund multiplier). Lazy-created via `get_technique_budget_config()` in `services/technique_builder.py`.
 - `TechniqueTierBudget` - Per-tier reference power budget + representative level stamped on techniques authored at that tier. Lazy-created via `get_technique_tier_budget(tier)`.
-- `SoulTetherConfig` - Singleton (pk=1) of Soul Tether tuning knobs: sineating anima/fatigue costs per unit, per-scene caps, hollow-max multiplier, rescue strain thresholds, rescue resonance costs, rescue budget bases and multipliers. All fields are integers; multipliers encoded as integer-tenths or integer-hundredths. Lazy-created via `get_soul_tether_config()` in `services/soul_tether.py`.
+- `SoulTetherConfig` - Singleton (pk=1) of Soul Tether tuning knobs: the Sineating check type and difficulty (`sineating_check_type` is a nullable FK; unset means Sineating refuses), `corruption_per_unit`, `resonance_per_unit`, the per-plea unit cap, the settling-the-Mire sizes (`purify_reward_percent`, the four tie-gauge steps, `succumb_bonus_percent`, `jackpot_percent`, `fall_payout_percent`, `fall_breaker_bonus_percent`), `resistance_full_at`, and the rescue strain thresholds, resonance costs and budget bases and multipliers. Sineating's anima and fatigue costs were removed in #5177. The cap's and the Hollow's level scaling are `ModifierLevelBaseline` lane rows. Lazy-created via `get_soul_tether_config()` in `services/soul_tether.py`. `SineatingOutcomeAward` (an `OutcomeTierAward`, `earned_share`) is the per-outcome-tier share of full resonance a Sineating earns each party.
+- `MireHolding` - How much corruption a Sineater carries for one Sinner in one resonance (#5177): `relationship` (the Sineater's own `CharacterRelationship` side toward the Sinner), `resonance` and `amount`; unique per `(relationship, resonance)`. The jackpot's base and the fall's tally are per tether, so they are `CharacterRelationship.mire_purified_since_payout` and `mire_succumbed_since_fall` on that same Sineater-side row. `ImpulseShown` - the record that a character was told of an impulse in a scene (`character_sheet`, `resonance`, `scene`, `kind`); unique per tuple. `CorruptionConfig` carries the impulse stages and the Compulsion condition (see "Corruption impulses").
 - `TouchstoneCastConfig` - Singleton (pk=1) of touchstone combat resonance tuning (#2023). `config_scale` (integer-tenths, default 10 = ×1.0) scales the per-tier cast bonus: `resonance_tier.tier_level × config_scale / 10`. Lazy-created via `get_touchstone_cast_config()` in `services/touchstone.py`. The touchstone power-term provider (`touchstone_power_term` in `services/power_terms.py`) scans equipped items for `template.tied_resonance` matches and folds the bonus into `_derive_power`'s TERM stage.
 
 ### Technique authoring (budget builder)
@@ -397,7 +398,7 @@ Full reference: `docs/systems/magic.md` "Substances and Primum". `Substance` is 
 Every magical roll adds skills staff chose in admin; no skill is named in code. Full reference:
 `docs/systems/magic.md` "Magical skills".
 
-- **Models:** `MagicActivity` (`constants.py`, 20 kinds of roll), `MagicActivitySkill`
+- **Models:** `MagicActivity` (`constants.py`, 23 kinds of roll), `MagicActivitySkill`
   (`models/magic_activity.py`: activity, skill, weight; unique per pair), `TechniqueStyle.skill`
   (#5002: the casting style carries the cast skill; `Path.technique_skill` and
   `Gift.technique_skill` are gone), `Technique.skill` (override),
@@ -1388,59 +1389,115 @@ declaring a residence, tagging a room's aura, and reaching both without a manual
   Sanctum's consecrated type, trickles daily for free as a side effect of ordinary Homecoming
   ritual growth — no extra wiring needed, and no code should special-case it.
 
-### Soul Tether (Resonance Pivot Spec B)
+### Soul Tether (Resonance Pivot Spec B; Sineating and the Mire, #5177)
 
-**Spec:** `docs/architecture/soul-tether.md`
+**Spec:** `docs/architecture/soul-tether.md`. **Decision:** ADR-5177.
 
-Bond mechanic between two PCs (Sinner + Sineater) that mediates Corruption accrual from
-non-Celestial casting. The Sinner's `RELATIONSHIP_CAPSTONE` Thread carries **the Hollow**
-(a buffer that absorbs incoming corruption). The Sineater eats sins out of the Hollow
-during Sineating actions, which refills the Hollow's capacity.
+Bond mechanic between two characters (Sinner + Sineater) that mediates Corruption. The Sinner's
+`RELATIONSHIP_CAPSTONE` Thread carries **the Hollow** (a buffer that absorbs incoming corruption); what
+it cannot absorb accrues to the Sinner, and nothing passes to the Sineater. Corruption a character
+already carries comes down only through a Sineater (apart from daily decay): **Sineating** is a ritual
+with a roll that moves it onto the Sineater, who carries it as **the Mire** and settles it later.
 
-**New fields on existing models:**
-- `Thread.hollow_current` — PositiveIntegerField; the Hollow's current refilled capacity.
-  Drained by the redirect handler on Sinner casts; refilled by `resolve_sineating`.
-- `CharacterResonance.lifetime_helped` — PositiveIntegerField (monotonic); increments on
-  every accepted Sineating unit and every rescue ritual. Drives `CORRUPTION_RESISTANCE`
-  passive benefit on the Sineater's Thread.
+- **The Sineater's half.** Forming a tether (`accept_soul_tether`) also weaves a RELATIONSHIP_CAPSTONE
+  thread for the Sineater, on a fresh ritual capstone of the Sineater's OWN side, never the Sinner's and
+  never one reused from an earlier formation (`weave_tether_bond_thread`, no unlock gate), at `sineater_resonance` or `default_sineater_resonance` (their strongest main-affinity
+  resonance); a sheet with no aura gets one (`ensure_aura`). A tether from before #5177 gets it on the
+  first Sineating (`ensure_sineater_thread`). That thread's resonance is what the Sineater earns, and its
+  presence turns on their resistance.
+- **Presence is by character, play is by account.** `shared_active_scene(first, second)` (both characters in one room that has
+  a live scene) replaces pairing player accounts, so a GM-puppeted NPC can be a Sineater. But no tether forms,
+  and no plea or ritual runs, between two characters one account plays (`played_by_one_account`,
+  `world/roster/services/npc_lending.py`, the loan-aware current player of each sheet; a sheet nobody plays
+  shares none): `SoulTetherFormationError` / `SineatingValidationError`. A plea needs the asker to hold the
+  tether's SINNER side, so reversing the pair is refused. Sineating, the
+  rescue and the stage-advance offer use it. `sineater_has_fallen` (aura `dominant_affinity` Abyssal) makes
+  Sineating and the rescue refuse with `SineaterFallenError`.
+- **Sineating** (`services/sineating.py`). `request_sineating` is the Sinner's plea (a
+  `SineatingPendingOffer`, one per pair, clamped to the per-plea cap); `perform_sineating` is the Sineater's
+  ritual: refusals first (no plea, stale scene, fallen, already performed this scene, not set up, Mire at
+  its stage cap), then in one transaction `ensure_sineater_thread`, roll `sineating_check_type` (with the
+  activity terms of `MagicActivity.SINEATING`), `take_on_corruption` (`units x corruption_per_unit`, never
+  more than the Sinner's own corruption (what they carry less what they hold as a Sineater for someone else) or than fits under `CorruptionConfig.sineater_max_stage`, whatever the roll),
+  refill the Hollow, `lifetime_helped += units`, and each party earns
+  `floor(units x resonance_per_unit x earned_share)` (the rolled tier's `SineatingOutcomeAward`) of the
+  resonance of their own thread, as `GainSource.SINEATING`. No anima and no fatigue. `decline_sineating`,
+  `sineating_lines` (both parties' result lines), `sineating_is_ready` (check type set and an award per
+  outcome tier; the Required content probe reads the same), `sineating_options_for(sheet)`.
+- **A pose carries it**, as it carries a reflection: pose fields `sineating_role` (`entreat` / `perform`,
+  `SineatingPoseRole`), `sineating_partner_id` (the other sheet id), `sineating_units`;
+  `pending_sineating_from` checks before the pose posts, `record_pending_sineating` acts after it; a pose
+  carries a reflection or a Sineating, not both. Actions (`actions/definitions/sineating.py`):
+  `entreat_sineating`, `perform_sineating`, `decline_sineating`; `run_pose_sineating` is what the pose
+  action calls. Telnet: `pose/entreat <sineater>=<units> <text>`, `pose/sineat <sinner>=<units> <text>`,
+  `sineater decline <sinner>`, `sineater pleas` (the pleas waiting and what the Sineater carries),
+  `sineater brace <sinner> [sins=<n>]` (renamed from `sineater mire`; the stage-advance pledge),
+  `sineater rescue`. Web: a Sineating row in the pose composer.
+- **The Mire** (`services/mire.py`; `MireHolding`). The Mire is corruption on the Sineater's own
+  `CharacterResonance.corruption_current`; `MireHolding.amount` records how much came from which Sinner,
+  and **the holdings in a resonance never exceed that corruption**. `take_on_corruption` (the Sinner sheds
+  through `reduce_corruption`, source `SINEATING`, no cleansing payout; the Sineater takes on through
+  `accrue_corruption`, source `SINEATING_CARRIED`, after resistance) and `release_mire` (lowers the
+  corruption and one holding through `reduce_corruption`, source `MIRE_SETTLED`) are the only writers of
+  `amount`; every other reduction (`reduce_corruption` with `shrink_holdings=True`: decay, rescue, staff)
+  takes unheld corruption first and then shrinks holdings in proportion. `corruption_that_can_move` and
+  `corruption_ceiling` work out what fits under the stage cap, working backward through resistance.
+  `add_to_largest_holding` carries what a Sineater adds by giving in to a Compulsion. `mire_carried_by`
+  and `mire_for_sinner` read what is carried, with each resonance's stage and display name; the web shows
+  it to the Sineater only (`SoulTetherDetailSerializer.mire`).
+- **Resistance** (`_apply_sineater_corruption_resistance`, `services/corruption.py`): a Sineater with any
+  live thread on a tether resists `1 - max(0.1, 1 - lifetime_helped / resistance_full_at)` of what they
+  take on in a resonance, sized by their `lifetime_helped` in the accruing resonance, capped at 90%; the
+  thread's own resonance need not match. It does not apply to `INDULGED` corruption.
+- **Settling the Mire** (`services/mire_settling.py`, called by the settling rite): see "Drift correction
+  and the rite of settling". Absolve and Condemn clear and reward, Succumb pays the Sinner from the
+  jackpot, and `apply_fall` pays every Sinner when the Sineater's aura turns predominantly Abyssal.
 
-**The Mire share (#5123).** `_grant_sineating_resonance` grants both parties the resonance;
-the Sinner's gain is their own, the Sineater's passes `from_mire=True` to `grant_resonance`,
-which adds it to that row's `mire_lifetime` too. The Sineater's burden therefore arrives as any
-other resonance beyond who they are, shown apart as the Mire share and held to the wider
-`DriftConfig.mire_allowance_percent` before it unsettles them (`drift_for`). Atoning converts the
-Mire's excess first; accepting turns the Mire into their own.
+**Fields:**
+- `Thread.hollow_current` - the Hollow's available capacity. Drained by the redirect handler on Sinner
+  casts (which skips `SINEATING_CARRIED` and `INDULGED` and lowers `payload.amount` to the unabsorbed
+  remainder); refilled by `perform_sineating`.
+- `CharacterResonance.lifetime_helped` - monotonic; increments by the units of every performed Sineating
+  and by `severity_reduced` on every rescue; sizes the Sineater's resistance.
 
-**New audit models (`models/soul_tether.py`):**
-- `Sineating` — Audit row for each Sineating offer/accept/decline cycle. FKs to
-  `sinner_sheet`, `sineater_sheet`, `relationship`, `scene` (nullable), `resonance`.
-  Fields: `units_offered`, `units_accepted` (0 = declined), `anima_cost`, `fatigue_cost`.
-- `SoulTetherRescue` — Audit row for stage-3+ rescue ritual. FKs to `sinner_sheet`,
-  `sineater_sheet`, `relationship`, `scene` (nullable), `resonance`, `check_outcome`.
-  Fields: `sinner_stage_at_start`, `sinner_stage_at_end`, `severity_reduced`,
-  `sineater_strain_taken`.
+**Audit models (`models/soul_tether.py`):**
+- `Sineating` - one row per performed or declined Sineating: `sinner_sheet`, `sineater_sheet`,
+  `relationship`, `scene` (nullable), `resonance`, `units_offered`, `units_accepted` (0 = declined),
+  `corruption_moved`, `corruption_taken`, `outcome` (nullable), `sinner_resonance_earned`,
+  `sineater_resonance_earned`. The once-per-pair-per-scene rule reads these rows.
+- `SineatingPendingOffer` - the Sinner's plea, unique per pair.
+- `SoulTetherRescue` - one row per rescue: stages at start and end, `severity_reduced`,
+  `sineater_strain_taken`, `check_outcome`.
+- `PendingStageAdvanceOffer` - the stage-advance bonus offer.
 
-**New constant / exception surface:**
-- `ThreadPullEffect.EffectKind.CORRUPTION_RESISTANCE` — tier-0 passive effect kind for
-  Sineater Thread; value derived from `lifetime_helped` at resolution time.
-- `SoulTetherRole` TextChoices in `constants.py` (SINNER / SINEATER).
-- Exception hierarchy in `exceptions.py`: `SoulTetherError` (base), `AffinityGateError`,
-  `NoSoulTetherUnlockError`, `SoulTetherFormationError`, `SineatingValidationError`,
-  `RescueValidationError`, `StageAdvanceBonusError`.
+**Constants and exceptions:**
+- `ThreadPullEffect.EffectKind.CORRUPTION_RESISTANCE` names the benefit; its value is computed inline in
+  `accrue_corruption`, not through `resolve_pull_effects`.
+- `SoulTetherRole` (SINNER / SINEATER), `SineatingPoseRole`, `MagicActivity.SINEATING`, `GainSource`
+  `SINEATING`, `MIRE_PURIFIED`, `SUCCUMBED`, `SUCCUMB_BONUS`, `SINEATER_FALL`, `CorruptionSource`
+  `SINEATING_CARRIED` / `INDULGED`, `CorruptionRecoverySource` `SINEATING` / `MIRE_SETTLED`.
+- `exceptions.py`: `SoulTetherError` (base), `AffinityGateError`, `NoSoulTetherUnlockError`,
+  `SoulTetherFormationError`, `SineatingValidationError`, `RescueValidationError`, `SineaterFallenError`
+  (both a Sineating and a rescue refusal), `StageAdvanceBonusError`.
 - `SOUL_TETHER_FORMED` / `SOUL_TETHER_DISSOLVED` event names in `flows/constants.py`.
-  `SOUL_TETHER_DISSOLVED` is emitted by `dissolve_soul_tether` after the bond is torn.
+- Stats (`_increment_stat_safe`): `sineating.requests_made`, `sineating.units_accepted`,
+  `sineating.units_declined`, `sineater.succumbed`, `sineater.succumbed_amount`, `sineater.broken`,
+  `rescue.*`, `tether.formed`; they key on the sheet, so an NPC counts.
 
 **CharacterSheet integration:**
-- `CharacterSheet.get_tether_strain_stage() -> int` — returns the Sineater's current
-  Tether Strain stage for the character's active resonance. Used by `request_sineating`
-  and `refresh_sineating_pending_offer` to populate `sineater_current_strain_stage` in
-  the `SineatingOffer` payload so the Sineater can see their Strain level before deciding.
-- `CharacterAnima` and `FatiguePool` are seeded at CG finalization so they exist for all
-  finalized characters that Sineating cost-deduction can safely read from on first call.
+- `CharacterSheet.get_tether_strain_stage() -> int` - the Sineater's Tether Strain stage (one shared
+  condition per Sineater, not per resonance); used for `sineater_current_strain_stage` in the plea's
+  `SineatingOffer`.
+
+**The rescue is unchanged** except for three things (#5177): presence is by character (the scene is found
+from where the two stand; a scene passed in must be that one), a fallen Sineater is refused, and the
+Sineater's thread level reaches the rescue budget (`_get_sineater_thread_level` reads a live thread of the
+Sineater's on this bond, whatever resonance it channels).
 
 **Authored content (factories, not migrations):**
 - `TetherStrainTemplate` — ConditionTemplate applied to the Sineater at dramatic moments
-  (opt-in stage-advance bonus, overflow commits). Only accrued via explicit opt-in.
+  (opt-in stage-advance bonus, rescue rituals). Only accrued via explicit opt-in; Sineating
+  never adds Strain.
 - `SoulTetherActiveTemplate` — ConditionTemplate installed on the Sinner at formation.
   Carries two reactive trigger M2Ms (soul_tether_redirect, soul_tether_stage_advance_prompt).
 - `accept_soul_tether` Ritual — SERVICE-dispatched formation capstone.
@@ -1450,7 +1507,11 @@ Mire's excess first; accepting turns the Mire into their own.
   `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`.
 
 All wired via `wire_soul_tether_content()` in `factories.py`, which `seed_magic_dev()` calls
-(#2027) so this content exists in a real deploy, not only under test setup.
+(#2027) so this content exists in a real deploy, not only under test setup. `seed_magic_config()`
+seeds one `SineatingOutcomeAward` per canonical `CheckOutcome` (a share of 1.50 for a critical
+success down to 0.00 for a critical failure); the Sineating check type and the Compulsion condition
+are staff-authored, and the Required content page lists them while unset (`sineating-config`,
+`compulsion-condition*`).
 `seed_relationship_track_thread_unlock()` (`world/seeds/game_content/magic.py`) resolves the
 paired RELATIONSHIP_TRACK `ThreadWeavingUnlock` + its "Sworn" `RelationshipType` (#3957) that
 `accept_soul_tether`'s `_validate_unlock` gates on — `ThreadWeavingUnlock.unlock_type` is a
@@ -1468,56 +1529,53 @@ either is absent.
 - `RelationshipCapstone.ritual` — nullable FK to `magic.Ritual`.
 
 **Services (`services/soul_tether.py`):**
-- `accept_soul_tether(sinner_sheet, sineater_sheet, scene, resonance, capstone)` — Formation
-  ritual: affinity gate (Sineater must be non-Abyssal; Sinner must be non-Celestial), unlock
-  gate (Sinner must have RELATIONSHIP_TRACK ThreadWeavingUnlock), idempotency check, Sinner
-  Thread auto-weave (RELATIONSHIP_CAPSTONE), installs `SoulTetherActive` ConditionInstance
-  and trigger rows on the Sinner.
-- `dissolve_soul_tether(sinner_sheet, sineater_sheet)` — Tears bond: retires tether Threads,
-  removes ConditionInstance + triggers, emits `SOUL_TETHER_DISSOLVED` event.
-- `get_soul_tether_config() -> SoulTetherConfig` — Lazy-creates the singleton (pk=1).
-  All rescue and sineating cost calculations read from this config rather than module
-  constants, making them staff-tunable via admin without a code change.
-- `request_sineating(sinner_sheet, scene, resonance, units_offered)` — Sinner-initiated offer;
-  enforces per-scene cap and hollow-max; fires `PROMPT_PLAYER` to Sineater with
-  `SineatingOffer` payload.
-- `resolve_sineating(sinner_sheet, sineater_sheet, units_accepted, resonance, scene)` —
-  Sineater `@reply` handler: atomically deducts Sineater anima/fatigue, increments
-  `hollow_current` + `lifetime_helped`, writes `Sineating` audit row, fires achievement
-  stats. Returns `SineatingResult` frozen dataclass.
-- `perform_soul_tether_rescue(sineater_sheet, sinner_sheet, resonance, scene)` — Stage-3+
-  rescue ritual: performs check roll, applies Strain cost, deducts resonance cost,
-  calls `reduce_corruption` to pull severity back, writes `SoulTetherRescue` audit, fires
-  achievement stats. Returns `RescueOutcome` frozen dataclass.
-- `soul_tether_redirect_handler(*, payload)` — Reactive subscriber on `CORRUPTION_ACCRUING`.
-  Drains `hollow_current` to absorb corruption; emits replacement events for overflow;
-  cancels original event when fully absorbed.
-- `soul_tether_stage_advance_prompt(*, payload)` — Reactive subscriber on
-  `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`. Fires `PROMPT_PLAYER` to Sineater with
-  `StageAdvanceBonusOffer` so they can opt-in to reservoir/Strain bonus.
-- `resolve_stage_advance_prompt(sineater_sheet, sinner_sheet, resonance, commit_units, take_strain)` —
-  Sineater `@reply` resolution for stage-advance prompt.
+- `accept_soul_tether(initiator_sheet, partner_sheet, sinner_role, resonance, ritual_components,
+  sineater_resonance=None)` - Formation ritual: `ensure_aura` for both, affinity gate (Sineater must be
+  non-Abyssal-primary; Sinner non-Celestial-primary), unlock gate (Sinner must have a RELATIONSHIP_TRACK
+  ThreadWeavingUnlock), idempotency check, the Sinner's Thread (RELATIONSHIP_CAPSTONE), the Sineater's
+  thread, and the `SoulTetherActive` ConditionInstance and trigger rows on the Sinner. Returns the
+  Sinner's-side capstone.
+- `dissolve_soul_tether(relationship, initiator_sheet)` - Tears the bond: retires tether Threads, removes
+  the ConditionInstance and triggers when it was the Sinner's last tether, emits `SOUL_TETHER_DISSOLVED`.
+- `ensure_sineater_thread`, `default_sineater_resonance`, `sineater_thread_resonance`,
+  `sinner_thread_resonance`, `sineater_has_fallen`, `shared_active_scene`, `get_soul_tether_config()`.
+- `perform_soul_tether_rescue(sineater_sheet, sinner_sheet, resonance, components, scene=None)` -
+  Stage-3+ rescue: gates (including the fallen refusal and the shared active scene), a check roll, Strain
+  cost, resonance cost, `reduce_corruption`, `SoulTetherRescue` audit row, stats. Returns `RescueOutcome`.
+- `soul_tether_redirect_handler(*, payload)` - subscriber on `CORRUPTION_ACCRUING`: drains `hollow_current`
+  (strongest thread first) and lowers `payload.amount`.
+- `soul_tether_stage_advance_prompt(*, payload)` - subscriber on
+  `CONDITION_STAGE_ADVANCE_CHECK_ABOUT_TO_FIRE`: fires `PROMPT_PLAYER` to a Sineater in the same room.
+- `resolve_stage_advance_prompt(...)` / `resolve_stage_advance_prompt_from_db(...)` - the Sineater's
+  response to it (telnet `sineater brace`, REST `stage-advance/respond/`).
 
-**`CORRUPTION_RESISTANCE` effect resolution** (in `services/corruption.py`):
-Passive tier-0 `ThreadPullEffect` rows on Sineater's `RELATIONSHIP_CAPSTONE` Thread are
-evaluated in `accrue_corruption` on the Sineater's own casting path. Value derived from
-`lifetime_helped` for that resonance; reduces effective accrual before it writes.
+**`CORRUPTION_RESISTANCE` resolution** (`_apply_sineater_corruption_resistance` in
+`services/corruption.py`, inside `accrue_corruption`): see "Resistance" above. It is not a
+`ThreadPullEffect` evaluation.
 
-**API endpoints (`views.py` + `urls.py`):**
-- `POST /api/magic/soul-tether/accept/` — `SoulTetherAcceptView`
-- `POST /api/magic/soul-tether/<id>/dissolve/` — `SoulTetherDissolveView`
-- `POST /api/magic/soul-tether/<id>/sineat/request/` — `SineatingRequestView`
-- `POST /api/magic/soul-tether/<id>/sineat/respond/` — `SineatingRespondView`
-- `POST /api/magic/soul-tether/<id>/rescue/` — `SoulTetherRescueView`
-- `GET /api/magic/soul-tether/<id>/detail/` — `SoulTetherDetailView`
+**API endpoints (`views.py`, `views_sineating.py`, `urls.py`; all under `/api/magic/`):**
+- `POST soul-tether/accept/` - `SoulTetherAcceptView`
+- `POST soul-tether/dissolve/` - `SoulTetherDissolveView`
+- `POST soul-tether/rescue/` - `SoulTetherRescueView`
+- `GET soul-tether/<relationship_id>/` - `SoulTetherDetailView`: Hollow, thread levels, stats, and the Mire
+  for the Sineater only. Only the two parties of the bond (an NPC a GM runs counts as played) and staff
+  read it; anyone else gets a 404.
+- `GET sineating-options/?character_sheet=<id>` - `SineatingOptionViewSet`: the pleas the character can
+  make or answer with a pose; only a character the requester plays.
+- `POST soul-tether/sineating/decline/` - `SineatingDeclineView` (runs `DeclineSineatingAction`)
+- `GET soul-tether/sineating/pending/` (and `<id>/`) - `SineatingPendingOfferViewSet`
+- `GET soul-tether/stage-advance/pending/` (and `<id>/`), `POST soul-tether/stage-advance/respond/`
+- The plea and the ritual are not endpoints: they ride the pose endpoint's `sineating_*` fields. The old
+  `sineating/request/` and `sineating/respond/` routes were removed in #5177.
 
 **Types (`types/soul_tether.py`):**
-- `SineatingOffer` — frozen dataclass with `units_offered`, `hollow_current`,
-  `hollow_max`, per-unit `anima_cost`, `fatigue_cost`.
-- `SineatingResult` — frozen dataclass with accepted units, costs, new `hollow_current`.
-- `StageAdvanceBonusOffer` — frozen dataclass; `PROMPT_PLAYER` payload for stage-advance prompt.
-- `StageAdvanceBonusResult` — outcome of the Sineater's stage-advance response.
-- `RescueOutcome` — frozen dataclass; severity_reduced, stage_before/after, strain_taken.
+- `SineatingOffer`, `SineatingResult`, `SineatingLines`, `SineatingOption`, `PendingSineating` - the
+  plea, the ritual's result (units, corruption moved and taken, outcome, both earnings), what each party
+  reads, a picker row, and a checked pose attachment.
+- `MireTransfer`, `MireCarried`, `MireForSinner` - what `take_on_corruption` moved and what a Sineater
+  carries.
+- `StageAdvanceBonusOffer` / `StageAdvanceBonusResult` - the stage-advance prompt and its outcome.
+- `RescueOutcome` - severity_reduced, stage_before/after, strain_taken.
 
 ### Covenant Lifecycle Content (#2114)
 
@@ -1873,8 +1931,8 @@ Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/ma
 
 **Unsettled and Resonance Conflict (#4732, #5123):** `services/drift.py` holds `drift_for(sheet)`
 (whether the character is unsettled: on the TRUE aura, each non-main affinity's own share of
-lifetime resonance against its `CharacterAuraShare.settled_percent` plus the tolerance, and a
-Sineater's `mire_lifetime` share against its allowance) and `check_resonance_focus(character,
+lifetime resonance against its `CharacterAuraShare.settled_percent` plus the range before Unsettled; the
+Mire is corruption now, not a share of the aura, so it has no part in this reading, #5177) and `check_resonance_focus(character,
 technique)`, called once per cast from `_complete_technique_cast` inside
 `use_technique` (after anima, before `resolve_fn` runs), so every cast path rolls it; a pull is
 part of its cast and adds no steps, only being unsettled calls for the roll. Scene casts, combat casts, clash
@@ -1884,14 +1942,25 @@ actions gather modifiers before `use_technique`, so the penalty counts from her 
 battles roll focus but their roll reads no condition modifiers (pre-existing,
 `BattleTechniqueResolver`); the joust is not a cast. Every number and both designations
 (focus check type, conflict condition) are on the `DriftConfig` singleton
-(`get_drift_config()`): `unsettled_tolerance_percent` (5) and `unsettled_step_percent` (5, one
-step of severity per band past it), `mire_allowance_percent` (30, the Sineater's wider room),
+(`get_drift_config()`): `unsettled_tolerance_percent` (5, the general range before Unsettled) and
+`unsettled_step_percent` (5, one step of severity per band past it) (`mire_allowance_percent` was
+removed in #5177),
 `creation_points` (10) and `creation_seed_per_point` (10) for character creation,
 `second_resonance_level_step` (10) for pull perks, plus the focus check's base difficulty and
-per-step difficulty. The reading `drift_for` returns is a `DriftReading` (`types/drift.py`):
+per-step difficulty. **The range before Unsettled and the step are per main affinity (#4751):**
+`Affinity.unsettled_tolerance_percent` (0 to 100) and `Affinity.unsettled_step_percent` (1 to 100) are
+nullable, and `_unsettled_numbers(main, cfg)` in `services/drift.py` returns the main affinity's own
+values when set, else the `DriftConfig` ones. Staff set them on the Affinity admin page: Celestial's range
+is small (a Celestial-led character unsettles early by her own Abyssal acts), Primal and Abyssal keep the
+general value. Never call the range "room" or "headroom" (the glossary's term is "range before Unsettled").
+The reading `drift_for` returns is a `DriftReading` (`types/drift.py`):
 `steps_past`, `main_affinity`, `leading_excess_resonance` (the resonance named in "Your X has
-grown strong enough to make you unsettled"), `own_shares`, `settled_shares`, `mire_share_percent`
-and the excess in lifetime points (what atoning may convert). A character with nothing settled
+grown strong enough to make you unsettled"), `shares` (each affinity's percent of lifetime
+resonance), `settled_shares` and `excess_points` (the excess per affinity in lifetime points, what
+atoning may convert). The earlier `own_shares`, `own_excess_points`, `mire_share_percent`,
+`mire_excess_points` and `convertible_points` went in #5177. A Sineater who succumbs to the Mire
+grows the Sinner's resonance in their own aura (`GainSource.SUCCUMBED`), which can put them past the
+range before Unsettled like any resonance. A character with nothing settled
 (no aura, or magic not yet provisioned) reads zero. Unset designations skip the check and show on the Required content
 dashboard, which also flags a conflict condition with `break_free_mode` NONE or no
 `ConditionCheckModifier`. The penalty is the conflict condition's authored
@@ -2167,7 +2236,7 @@ becomes available when the target affinity crosses
 - `ResonanceConversion` — authored mapping (source_resonance,
   target_affinity FK to `Affinity`) → target_resonance. One row per path.
 - `FallRedemptionConfig` — singleton (pk=1, `ArxSharedMemoryManager`) with
-  the penance exchange rate + fall threshold. The per-path multipliers and
+  the fall threshold (the old penance exchange rate was removed, #4751). The per-path multipliers and
   Fall/Redemption type are `AffinityInteraction.conversion_multiplier` /
   `conversion_type` on the directed (source, environment) pair; a database
   check keeps the two both set or both unset. `from_affinity`/`to_affinity`
@@ -2176,15 +2245,15 @@ becomes available when the target affinity crosses
   or Redemption. `ConversionType` TextChoices: FALL / REDEMPTION.
 
 **Services:**
-- `services/conversion.py` — `convert_resonance()` shared engine for both
-  partial (Atonement) and full (Fall) conversion. Transfers `balance` and
+- `services/conversion.py` — `convert_resonance()` is the full (Fall / Redemption)
+  conversion engine; `convert_resonance_amount()` is the single-resonance primitive the
+  settling rite uses. `convert_resonance` transfers `balance` and
   `lifetime_earned` (scaled by multiplier) from source to target resonance.
   `lifetime_earned` is transferred, not decremented — the total is preserved
   modulo the multiplier, so `recompute_aura` shifts correctly. Full
   conversion converts each live thread's `ThreadResonance` rows in the affinity (scaling
   amounts and points, merging rows that land on one resonance, then
-  `refresh_leading_resonance`). Partial
-  conversion (Atonement) does NOT touch threads.
+  `refresh_leading_resonance`).
 - `services/fall_redemption.py` — `grant_compromise_resonance()` (thin
   wrapper over `grant_resonance`), `perform_fall()` (the full ceremony,
   gated by aura threshold + irreversibility; after the conversion it calls
@@ -2192,33 +2261,37 @@ becomes available when the target affinity crosses
   Redemption also moves who she is: her `settled_percent` follows her new own shares and
   `steps_past` reads 0, #5123), `get_fall_redemption_config()`.
 
-**Extended Rite of Atonement (`services/atonement.py`):**
-The existing Rite of Atonement is extended to do BOTH:
-1. **Corruption reduction** (existing) — `reduce_corruption` for stages 1–2.
-   Stage 3+ still raises; stage 0 skips this effect.
-2. **Resonance conversion** (new) — if the performer is Celestial-dominant
-   with non-native `balance > 0`, converts it back to Celestial at the lossy
-  `penance_exchange_rate` (default 0.5 = 2:1). No typed FK needed.
-At least one effect must fire, or `AtonementNothingToAtone` is raised.
-Repeatable (not a Fall); each conversion loses half the value.
+**The old Rite of Atonement is gone (#4751).** The settling rite (below) is the only rite for a
+changing aura; "atonement" is the plain word for the reflections that turn away from something
+(disowning). Corruption a character carries falls by daily decay, a Sineater's rescue and, since #5177,
+Sineating (a Sineater takes it on, `services/mire.py`): the old rite's cut to corruption at stages 1 and 2
+was not carried over. Only Abyssal casts corrupt (Primal's
+canonical `corruption_coefficient` is 0). Removed with it: `services/atonement.py`,
+`FallRedemptionConfig.penance_exchange_rate`, `GainSource.PENANCE` and its grant constraint,
+`CorruptionRecoverySource.ATONEMENT_RITE`, `PenanceError`, the partial path of `convert_resonance`, and
+the Ritual row (migrations 0448 and 0449). ADR-4751.
 
 **New `GainSource` values** (all `NON_ACCELERATED_GAIN_SOURCES`):
-`COMPROMISE`, `PENANCE`, `FALL_CONVERSION`. No typed source FK
-(MISSION_REPORT shape). Three new `ResonanceGrant` CheckConstraints.
-`DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`.
+`COMPROMISE`, `FALL_CONVERSION`. No typed source FK
+(MISSION_REPORT shape). Two `ResonanceGrant` CheckConstraints.
+`DRIFT_CORRECTION` (#4733) joins them with `res_grant_drift_correction_shape`. #5177 adds
+`MIRE_PURIFIED`, `SUCCUMB_BONUS` and `SINEATER_FALL` (non-deeds, no typed source FK), and `SUCCUMBED`
+(a **deed**, in `DEED_GAIN_SOURCES`; it carries the rite and the burden reflection like
+`EMBRACED_DEED`, so the Sineater can reflect on the succumbing and atone); all four are
+`NON_ACCELERATED_GAIN_SOURCES`. `SINEATING` is the payout for performing it.
 
 **Drift correction and the rite of settling (#4733, slice 4 of #4672; #5124).** Atoning (#5123) reads
 lifetime, not balance: `drift_holdings` is resonance of a non-main affinity that stands past who
-the character is (`DriftReading.convertible_points`); `AuraDrift` / `recompute_aura` is the
+the character is (`DriftReading.excess_points`); `AuraDrift` / `recompute_aura` is the
 older sense (shift in aura percentages). Do not mix the two in names. Nothing settles without a
 reflection behind it: the one **rite of settling** (`perform_settling_rite`,
 `services/drift_correction.py`; action `PerformSettlingRiteAction`, key
 `perform_settling_rite`) takes every waiting `Reflection` (`rite` null) and applies one roll's share to
 each. `accept_aura_change(sheet, fraction=Decimal(1))` (`services/drift.py`) is its internal step for
 Embrace of the unsettling resonance, no longer an action: refused with `NotUnsettledError` unless
-`steps_past > 0`; at a full fraction it moves every `mire_lifetime` into the character's own and sets
-each `settled_percent` to the resulting share, at a part fraction each settled share and the Mire move
-that part of the way (`settle_shares(sheet, fraction)`), at 0 nothing moves; writes no corruption.
+`steps_past > 0`; at a full fraction it sets each `settled_percent` to the aura's share, at a part
+fraction each settled share moves that part of the way (`settle_shares(sheet, fraction)`), at 0 nothing
+moves; writes no corruption. (It no longer moves a Mire lifetime: `mire_lifetime` is gone, #5177.)
 `AcceptAuraResult.grown_affinity` is the affinity of the resonance that made them unsettled, read
 before accepting; it is what "You become more abyssal." names.
 - Models (`models/drift.py`): `DriftCorrectionConfig` (singleton; `rite`, `check_type` null until
@@ -2239,16 +2312,23 @@ before accepting; it is what "You become more abyssal." names.
 - The rite: refuses, writing nothing, with no waiting reflection (`NoWaitingReflectionError`), with
   the rite unready (`rite_is_ready`: a rite, a check type and a share for every `CheckOutcome`;
   `RITE_NOT_READY_MESSAGE`) and with an offering that satisfies the rite for none of the resonances it
-  moves (`rite_resonances`: each reflection's resonance, then the main-affinity resonances when
-  anything is disowned). Then it rolls `check_type` with `focus_bonus` toward the resonance the
+  moves (`rite_resonances`: each reflection's resonance, a burden's holdings and then the
+  Sineater's own thread's resonance, then the main-affinity resonances when anything is disowned or a
+  burden is settled). Then it rolls `check_type` with `focus_bonus` toward the resonance the
   offering is tied to, writes a `SettlingRite` (outcome, share, scene), spends the offering whatever
   the roll, applies the share and sets `rite` on every reflection, even at a share of 0. Order:
-  disowned deeds, the disowned unsettling resonance, embraced deeds, accepting last. Embrace a deed
-  grows `grant.amount x s` as `EMBRACED_DEED` (`grant_resonance(settling_rite=, reflection=)`);
+  disowned deeds, the disowned unsettling resonance, burdens (below), embraced deeds, accepting, and
+  `apply_fall` last. Embrace a deed
+  grows `embraced_amount(sheet, grant, s)` as `EMBRACED_DEED` (`grant_resonance(settling_rite=, reflection=)`):
+  `grant.amount x s`, and for a deed of an affinity other than her main one also x the direction rate
+  `conversion_pair(main, deed affinity).conversion_multiplier` (a fall toward the Abyss pays more than the
+  deed was worth, a climb pays less; no authored pair leaves the rate at 1). The preview reads the same
+  helper (#4751);
   disown a deed converts `amount x disown_deed_percent x s` (no open chance needed, up to the
-  deed's resonance lifetime); embrace the unsettling resonance calls `accept_aura_change(fraction=s)`;
+  deed's resonance lifetime); when no usable conversion is authored for the pair, `_convert` returns a
+  `_Conversion` carrying `missing_pair` and the line says "no conversion from X to Y has been set"; embrace the unsettling resonance calls `accept_aura_change(fraction=s)`;
   disown it converts up to the open cap toward the conversion target x s, bounded by what stands past
-  who she is (the Mire's excess first), and the cap falls by what converted. Conversions turn toward
+  who she is, and the cap falls by what converted. Conversions turn toward
   the main-affinity resonance the offering is tied to, else (`fallback_conversion_target`, which the
   preview's effect line also reads) the one with the largest open cap when the rite disowns the unsettling
   resonance, else the largest main-affinity resonance held,
@@ -2260,6 +2340,33 @@ before accepting; it is what "You become more abyssal." names.
 - Reads: `services/settling_preview.py` `settling_rite_reading(sheet, items)` (waiting reflections as
   a player reads them, the offerings among `items`, readiness) feeds `GET /api/magic/settling-rite/`
   and telnet `aura`; `open_cap_line(sheet)` is the open-chance sentence.
+- **Burden reflections and settling the Mire (#5177; ADR-5177).** `Reflection` names exactly one of
+  `grant`, `resonance` or `tether` (the Sineater's own `CharacterRelationship` side), enforced by
+  `reflection_exactly_one_target`; `ReflectionTargetKind` is DEED / RESONANCE / BURDEN. A burden takes
+  only `ReflectionChoice` ABSOLVE / CONDEMN / SUCCUMB and a deed or the unsettling resonance only
+  EMBRACE / DISOWN (`reflection_choice_fits_target`; `BURDEN_REFLECTION_CHOICES` /
+  `DEED_REFLECTION_CHOICES`); a newer waiting burden reflection on a tether replaces the older. Telnet
+  names a burden `mire:<Sinner>` (`BURDEN_PREFIX`) in `reflect`, `pose/reflect` and `journal/reflect`.
+  `reflectable_for` lists one burden per tether with anything held, and `SUCCUMBED` grants as deeds
+  beside kindled ones (`deed_what` / `deed_label` describe them by the pose or journal entry of the
+  succumbing). The rite applies each burden in `services/mire_settling.py` at its share `s`, per
+  resonance held from that Sinner: **Absolve/Condemn** `cleared = floor(held x s)` leaves the Mire
+  (`release_mire`, no cleansing payout), the tether's `mire_purified_since_payout` rises by it, the Sineater earns
+  `purify_reward_percent` of it in their own thread's resonance (`MIRE_PURIFIED`), and their side of the
+  tie moves by `absolve_affection` / `condemn_conflict` x `s` (`move_gauges`); **Succumb**
+  `taken = floor(held x s)` leaves the Mire and is granted as the Sinner's resonance in the Sineater's own
+  aura (`SUCCUMBED`, with the rite and reflection), the tether's `mire_succumbed_since_fall` rises, the Sinner earns
+  `taken x succumb_bonus_percent + mire_purified_since_payout x jackpot_percent` of their thread's resonance
+  (`SUCCUMB_BONUS`; the jackpot is the tether's, paid once and reset to 0), both gauges move, and the
+  Sinner's `sineater.succumbed*` stats rise. **The fall** (`apply_fall`, once per rite, last): when the
+  Sineater's aura is now predominantly Abyssal each Sinner whose tether has `mire_succumbed_since_fall` above 0 earns
+  `fall_payout_percent` of it (`SINEATER_FALL`), the Sinner of the most recent Succumb
+  `fall_breaker_bonus_percent` more, and every counter resets (what stops a second payout for one
+  fall). The Sinners' lines are `RiteNotice` rows on the result, sent by the action after the rite
+  commits as stored narrative messages (`send_stored_notice`), so an offline Sinner reads them at login;
+  the Sineating result lines to a Sinner are stored the same way, and the plea notice to the Sineater is a
+  live line. `SUCCUMB_BONUS` and `SINEATER_FALL` are in `PASSIVE_DEED_SOURCES` (no pledge favor). The preview (`settling_preview`) reads the same numbers. A Sineater who succumbs is usually
+  Unsettled and atones by reflecting on the succumbing deed and choosing Disown, or Embrace to keep it.
 - Components: `qualifying_components_by_target` (`ComponentMode` MATERIAL, FACET, KEEPSAKE, in that
   order). `focus_bonus` adds to the check, not the output. `max_yield_per_earned_point` is the
   anti-farm estimator (per point). A cap grows by `amount x cap_percent // 100` per deed; only the
@@ -2271,7 +2378,8 @@ before accepting; it is what "You become more abyssal." names.
   `SettleAuraDialog` and the sheet's `AuraReflections` (`frontend/src/magic/CLAUDE.md`). #5124 removed
   the separate accept, atone and decline actions with their endpoints and verbs, the scene-page gate
   and the scene-end lapse of the chance. Required
-  content row `drift-correction-config`. Details: `docs/systems/magic.md` "Drift correction".
+  content rows `drift-correction-config` and `affinity-conversion-pairs` (every ordered pair of distinct
+  affinities has a `conversion_multiplier` and `conversion_type`). Details: `docs/systems/magic.md` "Drift correction".
 
 **Thread retune (#4735, slice 6 of #4672; reshaped by #5123).** `services/thread_resonance.py` moves
 part of ONE `ThreadResonance` row of a thread to another resonance's row through the SERVICE
@@ -2335,12 +2443,56 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
   situation fed, `KindledDeedAward(outcome).amount x earn_percent // 100`, with
   `grant_resonance(kindling_situation=)`; seams are named in `docs/systems/magic.md`. A rollless act
   earns at `lowest_success_outcome()`.
-- **Surfaces.** `GET /api/magic/kindled-resonances/` (`views_kindling.py`), telnet `resonances`,
+- **Surfaces.** `GET /api/magic/kindled-resonances/` (`views_kindling.py`; its response carries an
+  `impulses` list beside `results`, see "Corruption impulses"), telnet `resonances`,
   `GET /api/magic/reflectables/` (`views_reflection.py`) and telnet `reflect`, `pose/reflect`,
   `journal/reflect`. Reflections and the rite are in "Drift correction and the rite of settling"
   above. The model map and `docs/systems/INDEX.md` list the signatures.
 - **Admin.** Situations are authored inline on the Resonance and Affinity pages; the strength tiers,
   Rally strengths, deed amounts and harm property are one page, "Kindling config".
+
+## Corruption impulses (#5177, ADR-5177)
+
+`services/impulses.py`. A character carrying corruption in a resonance, their own or a Sineater's Mire
+(one store), feels it pull. The same code serves a Sinner and a Sineater because it reads corruption, not
+the tether.
+
+- **Config.** `CorruptionConfig`: `intrusive_thoughts_stage` (1), `compulsion_stage` (2), `sineater_max_stage`
+  (2; `clean` keeps it and `compulsion_stage` at or above the first), `compulsion_condition` (nullable FK to a `ConditionTemplate`
+  staff author with a scene duration and a check modifier that scales with severity),
+  `compulsion_indulge_corruption` (5). `Resonance.impulse_text` is the words staff write for a resonance's
+  impulse. Required content probes list an unset Compulsion condition, one without a scene duration and one
+  with no check modifier.
+- **Display only.** `corruption_display_name(instance_or_template, stage_order, resonance=None)` names a
+  corruption condition "Intrusive Thoughts: <resonance>" from `intrusive_thoughts_stage` and "Compulsion:
+  <resonance>" from `compulsion_stage`; the condition serializers (`condition_display_name`, owner and
+  observer), `mire_carried_by`, telnet `resonances` and the Soul Tether panel use it. No template is renamed
+  and it is never a lookup key. **This `Compulsion` is a name on a corruption condition; it is not the
+  control-loss `Compulsion` model in `world/conditions/models.py`** (forbidden actions and resist bands on a
+  condition template). The corruption Compulsion is a display name plus a penalty condition and never reads
+  or writes that model; the way to tell them apart is the code path: `corruption_display_name` and
+  `CorruptionConfig.compulsion_condition` here, `Compulsion` rows in the conditions app.
+- **Reading and applying.** `impulses_now(sheet)` returns an `Impulse` per resonance the character carries
+  corruption in at the Intrusive Thoughts stage or above (`present` = `kindled_for(...).fed_tier` is set,
+  that is, an authored situation of the resonance holds; `text`, `reasons`, `is_compulsion`) and writes
+  nothing. `refresh_impulses(sheet, scene)` applies: with the situation present it sends the impulse words
+  once per resonance per scene (`ImpulseShown`), and at the Compulsion stage, unless the resonance was earned
+  by a `COMPULSION_INDULGING_SOURCES` grant since the scene began (`earned_in_scene`), lays `compulsion_condition` at severity
+  `stage - compulsion_stage + 1` (keeping a higher one) and lifts it when nothing compels any more. It is
+  called explicitly: after a pose posts (web `_refresh_impulses_after_pose`, telnet pose), before a cast's
+  modifiers are gathered, and when the kindled panel or telnet `resonances` is shown.
+- **Giving in.** `grant_resonance` calls `give_in_to_compulsion(grant, row)`: for a grant whose source is in
+  `COMPULSION_INDULGING_SOURCES` (`constants.py`; today only `KINDLED_DEED`, the character's own act, and the
+  later claiming pose joins it; a grant from another player, a GM or a cron, and `SUCCUMBED`, never counts) of a resonance the character is compelled by, in a live scene
+  and the first such deed there, it lifts the Compulsion for the scene, accrues
+  `compulsion_indulge_corruption` (`CorruptionSource.INDULGED`: exact, no resistance, the Hollow absorbs none)
+  and, for a Sineater, assigns it to their largest holding (`add_to_largest_holding`). The line goes out in
+  `transaction.on_commit`, and a failure is logged and forfeits only the giving in (`_isolated`). Every refresh
+  call site uses `safe_refresh_impulses` / `safe_refresh_impulses_for_character`, which log and swallow a
+  failure, and the web pose refreshes after the reflection and the Sineating so it can skip neither. A line
+  is not spent (no `ImpulseShown` row, nothing sent) while the character has no live session.
+- **Where it shows.** `GET /api/magic/kindled-resonances/` returns `impulses` (resonance, `label`, `present`,
+  `is_compulsion`, `text`, `reasons`); `KindledResonancesPanel` draws them.
 
 ## Removed Models (deprecated)
 

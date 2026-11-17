@@ -1,5 +1,6 @@
 """CorruptionConfig — singleton tuning surface for the Corruption foundation."""
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from core.managers import ArxSharedMemoryManager
@@ -46,6 +47,53 @@ class CorruptionConfig(SharedMemoryModel):
         ),
     )
 
+    intrusive_thoughts_stage = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "The corruption stage at which a character carrying corruption in a resonance "
+            "begins to feel its impulse: the condition reads 'Intrusive Thoughts: <resonance>' "
+            "and, when something that resonance cares about is present in a scene, they are "
+            "sent the resonance's impulse text once."
+        ),
+    )
+    compulsion_stage = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "The corruption stage at which the impulse becomes a Compulsion: the condition "
+            "reads 'Compulsion: <resonance>' and, when something that resonance cares about "
+            "is present in a scene, the Compulsion condition penalizes the character's rolls "
+            "until they earn that resonance there."
+        ),
+    )
+    sineater_max_stage = models.PositiveSmallIntegerField(
+        default=2,
+        help_text=(
+            "The corruption stage a Sineater's carried corruption stops at. Sineating takes on "
+            "only what fits below the top of this stage and refuses when nothing fits. "
+            "Normally the Compulsion stage."
+        ),
+    )
+    compulsion_condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The condition laid on a character at the Compulsion stage while something their "
+            "resonance cares about is present. Give it a scene duration and a check modifier "
+            "that scales with severity. Unset applies nothing and the Required content page "
+            "lists it."
+        ),
+    )
+    compulsion_indulge_corruption = models.PositiveIntegerField(
+        default=5,
+        help_text=(
+            "Corruption added in the resonance when a character under a Compulsion gives in "
+            "by earning that resonance in the scene. The Compulsion lifts for the scene."
+        ),
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
         "accounts.AccountDB",
@@ -57,3 +105,18 @@ class CorruptionConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"CorruptionConfig(pk={self.pk})"
+
+    def clean(self) -> None:
+        """A Sineater's cap and the Compulsion cannot sit below the stage where impulses begin."""
+        super().clean()
+        errors = {}
+        if self.sineater_max_stage < self.intrusive_thoughts_stage:
+            errors["sineater_max_stage"] = (
+                "A Sineater's cap cannot be below the stage where Intrusive Thoughts begin."
+            )
+        if self.compulsion_stage < self.intrusive_thoughts_stage:
+            errors["compulsion_stage"] = (
+                "Compulsion cannot begin before the stage where Intrusive Thoughts begin."
+            )
+        if errors:
+            raise ValidationError(errors)

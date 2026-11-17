@@ -80,6 +80,7 @@ from world.magic.audere_majora import (
 )
 from world.magic.models.affinity import Resonance
 from world.magic.models.alterations import MagicalAlterationTemplate
+from world.magic.models.corruption_config import CorruptionConfig
 from world.magic.models.crossing import CrossingOption
 from world.magic.models.drift import DriftConfig
 from world.magic.models.fury import FuryConfig
@@ -531,6 +532,15 @@ SETTER_SOURCES: tuple[SetterSource, ...] = (
         "conflict_condition",
         _fixed("on the caster, on a failed focus check"),
         label=_fixed("Drift config"),
+    ),
+    SetterSource(
+        _CONFIG,
+        CorruptionConfig,
+        "compulsion_condition",
+        _fixed(
+            "on a character carrying corruption, while what their resonance cares about is here"
+        ),
+        label=_fixed("Corruption config"),
     ),
     SetterSource(
         _CONFIG,

@@ -18,7 +18,7 @@ from django.db import migrations
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0449_substances_carry_gift_rows"),
+        ("arxii", "0461_substances_carry_gift_rows"),
     ]
 
     operations = [

@@ -2,7 +2,7 @@
 
 Power-side readers (the aura-alignment power term, resonance of place, covenant
 affinity situations) read this. Identity-side readers (Fall threshold, Soul Tether,
-atonement, the sheet display, gates) keep reading the true ``CharacterAura``.
+the settling rite, the sheet display, gates) keep reading the true ``CharacterAura``.
 Derive-on-read (ADR-0014): nothing is written when an alternate self is assumed.
 """
 

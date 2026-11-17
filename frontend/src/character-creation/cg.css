@@ -340,22 +340,6 @@
   max-height: calc(100dvh - 3rem);
   overflow-y: auto;
 }
-/* A stage whose leaf is grids takes the whole room. From 74rem of window it sends its
-   own panel to the rail (the life page's CG points ledger; `ChapterLeaf` decides, since
-   the panel is rendered there), and the rail is the panel's width. */
-.interview .chapter.chapter-grids {
-  grid-template-columns: minmax(0, 1fr);
-}
-.interview .chapter.chapter-railed {
-  grid-template-columns: minmax(0, 1fr) minmax(14rem, 17rem);
-}
-.interview .chapter > .chapter-rail {
-  position: sticky;
-  top: 1.5rem;
-  margin-top: 2.9rem;
-  max-height: calc(100dvh - 3rem);
-  overflow-y: auto;
-}
 .interview .note-group .note {
   display: block;
   margin-bottom: 1.6rem;
@@ -377,8 +361,11 @@
   border-top: 0;
   margin-top: -1.75rem;
 }
+/* A short window lets the panel scroll away with a reading stage. A stage of grids
+   keeps it in view (it scrolls inside itself if it must): the life page is long, and
+   its points line and choices have to stay beside the cards being clicked. */
 @media (max-height: 52rem) {
-  .interview .chapter > aside {
+  .interview .chapter:not(.chapter-grids) > aside {
     position: static;
     max-height: none;
   }
@@ -386,6 +373,9 @@
 @media (max-width: 74rem) {
   .interview .chapter:not(.chapter-grids) {
     grid-template-columns: minmax(0, 38rem);
+  }
+  .interview .chapter.chapter-grids {
+    grid-template-columns: minmax(0, 1fr);
   }
   .interview .chapter > aside {
     border-left: none;
@@ -1292,9 +1282,17 @@
   color: var(--cg-muted);
   font-style: italic;
 }
-/* The Recent History box (#4830) sits under the last stage, before the footer. */
-.interview .life .recent-history {
-  margin-top: 1.6rem;
+/* The Background box on Final Touches (#5178): its placeholder is the box's only
+   explanation, so it is italic and in an ink that reads, not the browser's pale grey.
+   The box is tall because a Background runs to paragraphs, and a placeholder cannot
+   be scrolled, so at a phone's width it still shows the whole sentence. */
+.interview .field textarea.background-text {
+  min-height: 12rem;
+}
+.interview .field textarea.background-text::placeholder {
+  font-style: italic;
+  color: var(--cg-text-soft);
+  opacity: 1;
 }
 .interview .life-foot {
   display: flex;
@@ -1375,27 +1373,12 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
-/* The life as an accordion (#4874, slice 9 of #4813), built against the demo: the life on
-   the left is its own container, the ledger rail beside it; the grids widen with the
-   container while the prose keeps reading width. From 74rem of window the ledger is the
-   chapter's rail instead (#5144) and the life has the leaf to itself. */
-.interview .leafwrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(14rem, 17rem);
-  gap: 1.25rem;
-  align-items: start;
-}
-.interview .chapter-railed .leafwrap {
-  display: block;
-}
+/* The life as an accordion (#4874, slice 9 of #4813), built against the demo. The life is
+   its own container: the grids widen with it while the prose keeps reading width. Its
+   choices are listed in the chapter's right-hand panel (#5148), not beside it. */
 .interview .leafwrap > .life {
   container-type: inline-size;
   min-width: 0;
-}
-@media (max-width: 52rem) {
-  .interview .leafwrap {
-    grid-template-columns: 1fr;
-  }
 }
 .interview .life .section-h.first {
   margin-top: 0;
@@ -1413,7 +1396,6 @@
   max-width: 68ch;
 }
 .interview .life .beat-prompt,
-.interview .life .stage-description,
 .interview .life .cover-box,
 .interview .life .figure,
 .interview .life .testament {
@@ -1611,11 +1593,23 @@
   text-underline-offset: 3px;
   cursor: pointer;
 }
-.interview .popover {
+/* The box is rendered through a portal to <body>, so it is not inside the page's
+   `.interview` root and no `.interview <descendant>` rule can reach it. It carries the
+   root's class itself, for the inks, and these rules name both classes on the one
+   element (#5148: written as a descendant rule, none of this applied, and the box was a
+   blank page-high sheet placed in the document instead of at the term). The root's own
+   page-height floor is taken back off. */
+.interview.popover {
   position: fixed;
+  right: auto;
+  bottom: auto;
   z-index: 30;
   margin: 0;
-  max-width: 22rem;
+  min-height: 0;
+  width: max-content;
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  /* It appears under the pointer's word and must not take the pointer from it. */
+  pointer-events: none;
   background: var(--cg-bg);
   color: var(--cg-text);
   border: 1px solid var(--cg-hairline);
@@ -1625,7 +1619,7 @@
   line-height: 1.45;
   box-shadow: 0 6px 24px rgb(0 0 0 / 18%);
 }
-.interview .popover b {
+.interview.popover b {
   font-family: 'Cinzel', serif;
   font-size: 0.78rem;
   letter-spacing: 0.1em;
@@ -1663,40 +1657,10 @@
   font-weight: 500;
   color: var(--cg-text);
 }
-/* The ledger rail: the purse, then every pick under its stage with its signed price. */
+/* The life's choices in the chapter's right-hand panel (#5148): every pick under its
+   stage with its signed price, set as the "CG selections" rows above it are. */
 .interview .ledger {
-  position: sticky;
-  top: 0.75rem;
-  background: var(--cg-bg);
   color: var(--cg-text);
-  border: 1px solid var(--cg-hairline);
-  padding: 1rem 1.1rem;
-}
-/* In the chapter's rail, the rail is what sticks. */
-.interview .chapter-rail > .ledger {
-  position: static;
-}
-.interview .ledger h3 {
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  font-size: 0.82rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--cg-accent);
-  margin: 0 0 0.5rem;
-}
-.interview .ledger .tot {
-  display: flex;
-  justify-content: space-between;
-  font-family: 'Cinzel', serif;
-  font-size: 0.8rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 0.35rem 0;
-  border-bottom: 1px solid var(--cg-hairline);
-}
-.interview .ledger .tot b {
-  font-variant-numeric: tabular-nums;
 }
 .interview .ledger .st {
   font-family: 'Cinzel', serif;
@@ -1710,8 +1674,10 @@
   display: flex;
   justify-content: space-between;
   gap: 0.6rem;
-  font-size: 0.98rem;
-  padding: 0.15rem 0;
+  font-size: 1rem;
+  line-height: 1.5;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--cg-hairline);
 }
 .interview .ledger .row span:last-child {
   font-family: 'Cinzel', serif;

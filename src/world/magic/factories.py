@@ -254,7 +254,7 @@ def ensure_canonical_affinities() -> tuple[Affinity, Affinity, Affinity]:
     """Create the Celestial, Primal and Abyssal rows if absent and drop the getter cache.
 
     For tests that reach code using ``Affinity.objects.get_*_affinity()`` (a CG finalize's
-    starting aura, the fall/atonement rites). Returns (celestial, primal, abyssal).
+    starting aura, the fall and redemption rites). Returns (celestial, primal, abyssal).
     """
     from world.magic.constants import (
         AFFINITY_ABYSSAL,
@@ -276,7 +276,7 @@ def ensure_canonical_affinities() -> tuple[Affinity, Affinity, Affinity]:
 
 
 #: Corruption tenths per cast tick for (Celestial, Primal, Abyssal), as production authors them.
-_CANONICAL_CORRUPTION_COEFFICIENTS = (0, 2, 10)
+_CANONICAL_CORRUPTION_COEFFICIENTS = (0, 0, 10)
 
 
 def ensure_conversion_pairs() -> tuple[Affinity, Affinity, Affinity]:
@@ -1682,36 +1682,6 @@ class WeavingCeremonyFactory(RitualFactory):
     flow = None
 
 
-class AtonementRitualFactory(RitualFactory):
-    """Seed factory for the canonical 'Rite of Atonement' ritual.
-
-    SERVICE-dispatched (deviation from spec §4.1 FLOW recommendation — see
-    services/atonement.py for rationale).  Uses django_get_or_create so
-    repeated calls in tests return the same row.  Scope #7 Phase 8.
-    """
-
-    class Meta:
-        model = Ritual
-        django_get_or_create = ("name",)
-
-    name = "Rite of Atonement"
-    description = (
-        "A ritual of self-cleansing for those touched by corruption. "
-        "Effective only at stages 1-2; requires Celestial or Primal affinity."
-    )
-    narrative_prose = (
-        "The performer kneels at a consecrated site and speaks the words of "
-        "unbinding, drawing the corruption out of themselves through sustained "
-        "focus and will. The process is painful and requires witnesses to anchor "
-        "the soul."
-    )
-    execution_kind = RitualExecutionKind.SERVICE
-    service_function_path = "world.magic.services.atonement.perform_atonement_rite"
-    flow = None
-    hedge_accessible = False
-    glimpse_eligible = False
-
-
 class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     """Factory for RitualComponentRequirement."""
 
@@ -2748,7 +2718,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
         #
         # Abyssal (e.g. Web of Spiders):
         #   decay_per_day=1, max_severity=10 (only the very lowest stages auto-decay).
-        #   Abyssal-primary characters past tier 1 must rely on Sineating or Atonement.
+        #   Abyssal-primary characters past tier 1 must rely on a Sineater's rescue.
         if is_abyssal:
             self.passive_decay_per_day = 1
             self.passive_decay_max_severity = 10  # decays only below this severity
@@ -2814,8 +2784,52 @@ class SineatingFactory(factory.django.DjangoModelFactory):
     resonance = factory.SubFactory(ResonanceFactory)
     units_offered = 5
     units_accepted = 5
-    anima_cost = 10
-    fatigue_cost = 5
+
+
+class SineatingOutcomeAwardFactory(factory.django.DjangoModelFactory):
+    """The share of full resonance a Sineating earns each party at one outcome tier (#5177)."""
+
+    class Meta:
+        model = "arxii.SineatingOutcomeAward"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    earned_share = Decimal("1.00")
+
+
+def place_in_active_scene(*sheets: Any) -> Any:
+    """Test helper: stand each sheet's character in one new room that has an active scene.
+
+    Returns the scene. Sineating, the rescue and the stage-advance offer find the scene they
+    happen in by where the two characters stand, so a test that needs one puts them here
+    rather than patching the presence check.
+    """
+    from evennia.objects.models import ObjectDB
+
+    from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
+    from world.scenes.factories import SceneFactory
+    from world.scenes.interaction_services import invalidate_active_scene_cache
+
+    room = ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
+    scene = SceneFactory(location=RoomProfileFactory(objectdb=room))
+    # A rolled-back test's room can come back under the same pk with its old cached scene.
+    invalidate_active_scene_cache(room)
+    for sheet in sheets:
+        # A sheet the test built earlier can hold a character instance the identity map no
+        # longer serves, so stand the identity map's own instance in the room too.
+        for character in (sheet.character, ObjectDB.objects.get(pk=sheet.pk)):
+            character.location = room
+    return scene
+
+
+class MireHoldingFactory(factory.django.DjangoModelFactory):
+    """A Sineater's holding for one Sinner (#5177). ``relationship`` is the Sineater's side."""
+
+    class Meta:
+        model = "arxii.MireHolding"
+
+    relationship = factory.SubFactory("world.relationships.factories.CharacterRelationshipFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+    amount = 0
 
 
 class SoulTetherRescueFactory(factory.django.DjangoModelFactory):
@@ -3177,14 +3191,16 @@ def wire_soul_tether_active_template(_template: object) -> tuple:
 def wire_soul_tether_stat_definitions() -> None:
     """Idempotent seed for Soul Tether achievement stat definitions (Spec B §14.3).
 
-    Creates StatDefinition rows for all 7 stats fired by Soul Tether services:
-    - sineating.units_accepted: Units accepted in a Sineating (fired by resolve_sineating)
-    - sineating.units_declined: Sineating requests declined (fired by resolve_sineating)
+    Creates StatDefinition rows for all 10 stats fired by Soul Tether services:
+    - sineating.units_accepted: Units accepted in a Sineating (fired by perform_sineating)
+    - sineating.units_declined: Sineating requests declined (fired by decline_sineating)
     - sineating.requests_made: Sineating requests initiated (fired by request_sineating)
     - rescue.performed: Soul Tether rescues performed (fired by perform_soul_tether_rescue)
     - rescue.stage5_save: Rescues from stage 5 Subsumption (fired by perform_soul_tether_rescue)
     - rescue.severity_reduced: Corruption severity reduced (fired by perform_soul_tether_rescue)
     - tether.formed: Soul Tethers formed (fired by accept_soul_tether)
+    - sineater.succumbed / sineater.succumbed_amount / sineater.broken: fired on the Sinner
+      when their Sineater succumbs at a settling rite and when that Sineater falls (#5177)
 
     ``achievements.StatDefinition`` is content-repo-owned (#2698) — each is
     looked up rather than invented unless ``SEED_SAMPLE_CONTENT`` is on. A
@@ -3232,6 +3248,21 @@ def wire_soul_tether_stat_definitions() -> None:
             "key": "tether.formed",
             "name": "Soul Tethers Formed",
             "description": "Soul Tether bonds formed with other players",
+        },
+        {
+            "key": "sineater.succumbed",
+            "name": "Sineater Succumbed",
+            "description": "Times a Sineater succumbed to the Mire they carried for this Sinner",
+        },
+        {
+            "key": "sineater.succumbed_amount",
+            "name": "Mire Succumbed To",
+            "description": "Total Mire Sineaters succumbed to that they carried for this Sinner",
+        },
+        {
+            "key": "sineater.broken",
+            "name": "Sineater Broken",
+            "description": "Times a Sineater this Sinner tempted fell to the Abyss",
         },
     ]
 
@@ -3701,10 +3732,6 @@ def wire_fall_redemption_content() -> object:
       per-pair conversion multipliers are seeded by ``_seed_affinity_interactions``).
     - "Ritual of Falling" Ritual — SERVICE dispatch to
       ``world.magic.services.fall_redemption.perform_fall``.
-
-    The existing "Rite of Atonement" Ritual row is already seeded by
-    ``seed_canonical_rituals()`` — its service function is extended in-place
-    (#1583); no new Ritual row is needed for Atonement.
 
     Also seeds example ``CompromiseActType`` and ``ResonanceConversion``
     rows against one authored Resonance per affinity, skipping gracefully when
@@ -5320,3 +5347,36 @@ class ReflectionFactory(factory.django.DjangoModelFactory):
         author=factory.SelfAttribute("..character_sheet"),
     )
     rite = None
+
+
+def author_compulsion_condition(check_type: object, *, penalty: int = -3) -> object:
+    """The Compulsion condition staff author, designated on the corruption configuration.
+
+    A scene-duration condition with one check modifier on ``check_type`` of ``penalty`` per
+    point of severity (it scales with severity), named on ``CorruptionConfig.compulsion_condition``
+    (#5177). For tests and dev setups only: the live game's condition is authored in admin,
+    and no seeder writes it. Returns the condition template.
+    """
+    from world.conditions.constants import DurationType
+    from world.conditions.factories import (
+        ConditionCategoryFactory,
+        ConditionCheckModifierFactory,
+        ConditionTemplateFactory,
+    )
+    from world.magic.services.corruption import get_corruption_config
+
+    condition = ConditionTemplateFactory(
+        name="Clouded by a Compulsion",
+        category=ConditionCategoryFactory(self_shakeable=True),
+        default_duration_type=DurationType.SCENE,
+    )
+    ConditionCheckModifierFactory(
+        condition=condition,
+        check_type=check_type,
+        modifier_value=penalty,
+        scales_with_severity=True,
+    )
+    cfg = get_corruption_config()
+    cfg.compulsion_condition = condition
+    cfg.save()
+    return condition

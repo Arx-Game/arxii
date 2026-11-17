@@ -9,7 +9,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0447_substances_and_primum_add"),
+        ("arxii", "0459_substances_and_primum_add"),
     ]
 
     operations = [

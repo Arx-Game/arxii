@@ -66,13 +66,22 @@ Vacancy), parent card.
 **Struck-stages text** (`Beginnings.struck_stages_text`, #4830):
 What the life page shows in place of the stage rows when a beginning strikes every stage (the Sleeper's). _Avoid_: frame (that is the prose at the pick), absent-life text.
 
-**Recent History** (`draft_data["recent_history"]`, `RECENT_HISTORY_MAX_LENGTH`, #4830):
-The optional free text a life ends on, the hooks a player wants picked up; written at finalize as the lead-in paragraph of `Profile.background`, public. _Avoid_: since the Glimpse (the cut stage), hooks (those are GM-seeded, #4397).
+**Background** (`draft_data["background"]`, `BACKGROUND_KEY`, `BACKGROUND_MAX_LENGTH`, #5178, ADR-5178):
+The one free text a player writes about the character's history, in the Background box on
+Final Touches; finalize copies it to `Profile.background` word for word, and a player who
+writes nothing has an empty one. The only free text about the life in creation. _Avoid_:
+background notes, recent history, stage description (all retired), backstory.
 
-**Stage description** (`draft_data["stage_descriptions"]`, `CharacterOriginSlot.life_stage`, #4872):
-The one paragraph a player writes for a whole stage of the life, printed under the stage's
-name in the told background before its beats. A row with a stage and no slot or beat.
-_Avoid_: beat line (the per-beat sentence), stage note.
+**Recent History** (retired by #5178; was `draft_data["recent_history"]`, #4830):
+The optional free text a life once ended on, written at finalize as the lead-in paragraph
+of `Profile.background`. The draft serializer refuses the key (`RETIRED_BACKGROUND_KEYS`);
+the **Background** replaced it. _Avoid_ as a live term.
+
+**Stage description** (retired by #5178; was `draft_data["stage_descriptions"]` and a
+`CharacterOriginSlot` row with `life_stage` set, #4872; labelled "Background Notes" in #5160):
+The one paragraph a player once wrote for a whole stage of the life. The key is refused and
+the column is gone (migrations 0450, 0451); the **Background** replaced it. _Avoid_ as a
+live term.
 
 **Cover story** (`draft_data.beats[<id>].cover_offer_id`, `CharacterDistinction.is_cover`, #4872):
 The answer on the same row a secret pick hides behind; held at finalize as a card that grants
@@ -96,10 +105,12 @@ _Avoid_: tooltip text (a copy key), glossary entry.
 The one beat a blank-slate Beginning (the Sleeper) takes by itself; every other beat
 stands unknown and nothing is addable. _Avoid_: forced beat, default beat.
 
-**Told background** (`Profile.background`, #1270, #4124):
-The prose a face presents, drafted from the Upbringing answers and the beats and edited
-freely; public by design, one per face. The beats are the true life and are private.
-_Avoid_: bio, backstory flag, public beats.
+**Told background** (`Profile.background`, #1270, #4124, #5178):
+The prose a face presents; public by design, one per face. For the real face it is the
+**Background** the player wrote at Final Touches, word for word; a second face writes its
+own in its door. Since #5178 nothing is drafted into it from the Upbringing answers or the
+beats: that composed prose (`assemble_origin_prose`) is read only by the Durance testament.
+The beats are the true life and are private. _Avoid_: bio, backstory flag, public beats.
 
 **Maturation floor** (`CharacterSheet.maturation_floor`, #4124):
 The matured years a character arrived with; milestones at or below it never bank.

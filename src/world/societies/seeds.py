@@ -31,7 +31,7 @@ def ensure_rite_of_honors_ritual() -> Ritual | None:
     ``magic.ritual`` is a ``CONTENT_MODELS`` entry (mixed ownership, split by
     ``author_account__isnull`` — see ``core_management/content_export.py``),
     so this follows ``world.seeds.game_content.magic.seed_canonical_rituals``'s
-    own pattern for "Rite of Imbuing"/"Rite of Atonement"/"Ritual of the
+    own pattern for "Rite of Imbuing"/"Ritual of the
     Durance": looked up first, invented only when ``SEED_SAMPLE_CONTENT`` is on
     or the content repo already authored it. Returns ``None`` otherwise
     (logged) rather than fabricating a row that would land in a content

@@ -119,7 +119,6 @@ def grant_resonance(  # noqa: PLR0913
     kindling_situation: KindlingSituation | None = None,
     settling_rite: SettlingRite | None = None,
     reflection: Reflection | None = None,
-    from_mire: bool = False,
     deed_label: str | None = None,
     ledger_out: list[ResonanceGrant] | None = None,
 ) -> CharacterResonance:
@@ -152,10 +151,9 @@ def grant_resonance(  # noqa: PLR0913
         worship_rite_performance: Required for WORSHIP_RITE source (#3777).
         kindling_situation: Required for KINDLED_DEED source (#5124); the authored situation
             that held.
-        settling_rite: Required for EMBRACED_DEED source (#5124); the rite that grew the deed.
-        reflection: Required for EMBRACED_DEED source (#5124); the reflection the rite applied.
-        from_mire: True when a Sineater takes the resonance from the Mire (#5123); the
-            grant also counts toward the row's ``mire_lifetime``.
+        settling_rite: Required for EMBRACED_DEED (#5124) and SUCCUMBED (#5177); the rite that
+            grew the deed or took the Mire.
+        reflection: Required for EMBRACED_DEED and SUCCUMBED; the reflection the rite applied.
         deed_label: What the character did, in her own words, recorded on a KINDLED_DEED
             grant (#5124); None for every other source.
         ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
@@ -166,15 +164,11 @@ def grant_resonance(  # noqa: PLR0913
 
     Raises:
         InvalidImbueAmount: If amount <= 0.
-        ValueError: If source/kwarg shape is invalid, or ``from_mire`` is set for a source
-            other than ``GainSource.SINEATING``.
+        ValueError: If source/kwarg shape is invalid.
     """
     if amount <= 0:
         msg = "Resonance grant amount must be positive."
         raise InvalidImbueAmount(msg)
-    if from_mire and source != GainSource.SINEATING:
-        msg = "Only a Sineating grant can take resonance from the Mire."
-        raise ValueError(msg)
 
     _validate_grant_source_shape(
         source,
@@ -225,11 +219,7 @@ def grant_resonance(  # noqa: PLR0913
     )
     cr.balance += amount
     cr.lifetime_earned += amount
-    update_fields = ["balance", "lifetime_earned"]
-    if from_mire:
-        cr.mire_lifetime += amount
-        update_fields.append("mire_lifetime")
-    cr.save(update_fields=update_fields)
+    cr.save(update_fields=["balance", "lifetime_earned"])
     if created and cached_resonances is not None:
         character_sheet.cached_resonances = [*cached_resonances, cr]
 
@@ -281,6 +271,12 @@ def grant_resonance(  # noqa: PLR0913
     from world.magic.services.drift import open_or_extend_conversion_offer  # noqa: PLC0415
 
     open_or_extend_conversion_offer(grant)
+
+    # #5177: a deed that grew a resonance the character is compelled by is giving in to it.
+    # It returns at once, with no query, for a row carrying no corruption.
+    from world.magic.services.impulses import give_in_to_compulsion  # noqa: PLC0415
+
+    give_in_to_compulsion(grant, cr)
 
     # Endorsement/resonance-threshold distinction rank-up (#2037 Decision 8) — only
     # for the "sustained endorsements" identity-reinforcing-play sources. Gating on
@@ -405,12 +401,15 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         GainSource.STAKE_REWARD,
         GainSource.COMBO_DISCOVERY,
         GainSource.COMPROMISE,
-        GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
         GainSource.DRIFT_CORRECTION,
         GainSource.SINEATING,
         GainSource.CORRUPTION_CLEANSING,
         GainSource.CHARACTER_CREATION,
+        # #5177: settling the Mire; the Sinner's and the Sineater's payouts name no typed row.
+        GainSource.MIRE_PURIFIED,
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
     ):
         # No typed source FK — the grant is attributed by discriminator only.
         return
@@ -452,6 +451,11 @@ _SOURCE_REQUIRED_KWARG: dict[str, Callable[..., tuple[object | None, str]]] = {
     # Both the rite and the reflection are required; naming the rite when either is missing
     # keeps the one-value shape of this table (the constraint refuses a row with only one).
     GainSource.EMBRACED_DEED: lambda **kw: (
+        kw["settling_rite"] if kw["reflection"] is not None else None,
+        "settling_rite and reflection",
+    ),
+    # Succumbing to the Mire (#5177) carries the rite and the burden reflection the same way.
+    GainSource.SUCCUMBED: lambda **kw: (
         kw["settling_rite"] if kw["reflection"] is not None else None,
         "settling_rite and reflection",
     ),
