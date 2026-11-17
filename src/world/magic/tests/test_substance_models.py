@@ -97,6 +97,10 @@ class PlacePrimumTests(TestCase):
         )
         self.assertEqual(finite.current_amount(stamped + timedelta(days=30)), 2)
 
+    def test_place_primum_stored_amount_cannot_exceed_capacity(self) -> None:
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            PlacePrimumFactory(capacity=5, stored_amount=6)
+
 
 class PrimumCallUpTests(TestCase):
     def test_call_up_needs_exactly_one_owner(self) -> None:

@@ -19,6 +19,13 @@ CRITICAL_SUCCESS_TIER_MIN_LEVEL = 2
 FAILURE_TIER_MAX_LEVEL = -1
 
 
+class PrimumRevealScope(models.TextChoices):
+    """How much of the Primum in a place a consequence lets the character perceive (#5125)."""
+
+    STRONGEST = "strongest", "The strongest substance"
+    ALL = "all", "Every substance"
+
+
 class CombatRollKind(models.TextChoices):
     """Which combat roll a ``ConsequenceOutcome`` records, for its breakdown (#4884).
 

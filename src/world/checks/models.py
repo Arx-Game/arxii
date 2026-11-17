@@ -14,6 +14,7 @@ from world.checks.constants import (
     EffectTarget,
     EffectType,
     PositionDestination,
+    PrimumRevealScope,
 )
 
 # Modifier value table, level baselines and tapers (#4594).
@@ -31,7 +32,6 @@ from world.checks.outcome_models import ConsequenceOutcome, ConsequenceOutcomeMo
 # The level share of the check scale (#5093).
 from world.checks.scale_config import CheckScaleConfig  # noqa: F401
 from world.contributors.models import CreditedContent
-from world.magic.constants import PrimumRevealScope
 from world.scenes.action_constants import DifficultyChoice
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.

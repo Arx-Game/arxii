@@ -344,6 +344,18 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "written_on",
+                    models.DateField(
+                        blank=True, help_text="Date the prose was written.", null=True
+                    ),
+                ),
+                (
+                    "reviewed_on",
+                    models.DateField(
+                        blank=True, help_text="Date the prose was reviewed.", null=True
+                    ),
+                ),
+                (
                     "name",
                     models.CharField(
                         help_text='What lines and cards call it ("fire", "ice", "shadow").',
@@ -401,6 +413,28 @@ class Migration(migrations.Migration):
                         related_name="substances",
                         to="arxii.property",
                         verbose_name="Property new techniques start with",
+                    ),
+                ),
+                (
+                    "reviewed_by",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Who reviewed this row's prose, if anyone. Distinct from writing it.",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="+",
+                        to="arxii.contentcontributor",
+                    ),
+                ),
+                (
+                    "written_by",
+                    models.ForeignKey(
+                        blank=True,
+                        help_text="Who wrote this row's prose. Null means it is still a placeholder.",
+                        null=True,
+                        on_delete=django.db.models.deletion.SET_NULL,
+                        related_name="+",
+                        to="arxii.contentcontributor",
                     ),
                 ),
             ],
@@ -769,6 +803,13 @@ class Migration(migrations.Migration):
             constraint=models.UniqueConstraint(
                 fields=("room_profile", "substance"),
                 name="magic_placeprimum_room_substance_unique",
+            ),
+        ),
+        migrations.AddConstraint(
+            model_name="placeprimum",
+            constraint=models.CheckConstraint(
+                condition=models.Q(("stored_amount__lte", models.F("capacity"))),
+                name="magic_placeprimum_stored_within_capacity",
             ),
         ),
         migrations.AddConstraint(

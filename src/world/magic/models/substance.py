@@ -21,6 +21,7 @@ from django.db.models import F, Q
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.checks.models import OutcomeTierAward
+from world.contributors.models import CreditedContent
 from world.locations.constants import STAT_CLAMPS, STAT_DEFAULTS, StatKey
 from world.magic.constants import SubstanceDirection, SubstanceRelationKind
 
@@ -32,7 +33,7 @@ class SubstanceManager(NaturalKeyManager):
     """Manager for Substance with natural key support."""
 
 
-class Substance(NaturalKeyMixin, SharedMemoryModel):
+class Substance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One substance a gift can work through, such as fire, ice or shadow (#5125).
 
     The room condition is optional: a substance with none has no ordinary room reading, so a

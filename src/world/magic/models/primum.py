@@ -12,7 +12,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
@@ -32,7 +32,7 @@ class PlacePrimum(NaturalKeyMixin, SharedMemoryModel):
 
     A lair refills very slowly or never. ``stored_amount`` is what was held at ``stamped_at``;
     ``current_amount`` adds whole days of refill since, up to ``capacity``. A finite place never
-    refills.
+    refills. The database refuses a ``stored_amount`` above ``capacity``.
     """
 
     room_profile = models.ForeignKey(
@@ -79,6 +79,10 @@ class PlacePrimum(NaturalKeyMixin, SharedMemoryModel):
             models.UniqueConstraint(
                 fields=["room_profile", "substance"],
                 name="magic_placeprimum_room_substance_unique",
+            ),
+            models.CheckConstraint(
+                check=Q(stored_amount__lte=F("capacity")),
+                name="magic_placeprimum_stored_within_capacity",
             ),
         ]
 

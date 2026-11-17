@@ -961,13 +961,6 @@ class SubstanceRelationKind(models.TextChoices):
     OPPOSED = "opposed", "Opposed"
 
 
-class PrimumRevealScope(models.TextChoices):
-    """How much of the Primum in a place a consequence lets the character perceive (#5125)."""
-
-    STRONGEST = "strongest", "The strongest substance"
-    ALL = "all", "Every substance"
-
-
 class PrimumLineKind(models.TextChoices):
     """Where a Primum power line comes from: the place the cast is made in or a carried item."""
 
