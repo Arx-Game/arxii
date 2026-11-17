@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from world.items.constants import BodyRegion
 from world.items.crafting.constants import CostConsumption
 from world.items.models import EquippedItem, ItemInstance, ItemSubstance, ItemTemplate
 from world.items.services.materialize import materialize_item_game_object
@@ -25,6 +26,18 @@ def item_substance_rows(sheet: CharacterSheet) -> list[ItemSubstance]:
         ItemSubstance.objects.filter(item_instance__equipped_slots__character=sheet)
         .select_related("substance", "step", "item_instance__template")
         .distinct()
+    )
+
+
+_HAND_REGIONS = (BodyRegion.LEFT_HAND, BodyRegion.RIGHT_HAND)
+
+
+def held_item_ids(sheet: CharacterSheet) -> set[int]:
+    """The ids of the items ``sheet`` has equipped in a hand slot: held, not worn."""
+    return set(
+        EquippedItem.objects.filter(character=sheet, body_region__in=_HAND_REGIONS).values_list(
+            "item_instance_id", flat=True
+        )
     )
 
 

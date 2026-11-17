@@ -31,6 +31,7 @@ from world.events.factories import EventFactory
 from world.events.services import complete_event
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemSubstanceFactory
+from world.items.models import EquippedItem
 from world.locations.constants import StatKey
 from world.locations.services import (
     felt_exposure,
@@ -262,6 +263,16 @@ class TheBonusGrowsWithThePrimumHere(_FireField):
             ("hint", "The more fire around you, the less each extra source adds.", 0),
             self.card_rows(),
         )
+        # An item in a hand slot is held; the same item on the torso is worn.
+        texts = [line["text"] for line in self.card()["surroundings"]]
+        self.assertIn("Ash brand, held · carries fire", texts)
+        slot = EquippedItem.objects.get(item_instance=held.item_instance)
+        slot.body_region = BodyRegion.TORSO
+        slot.save(update_fields=["body_region"])
+        texts = [line["text"] for line in self.card()["surroundings"]]
+        self.assertIn("Ash brand, worn · carries fire", texts)
+        slot.body_region = BodyRegion.RIGHT_HAND
+        slot.save(update_fields=["body_region"])
 
         massive = PrimumStep.objects.get(rank=4)
         held.step = massive

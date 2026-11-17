@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from django.db.models import Sum
 
 from evennia_extensions.models import RoomProfile
-from world.items.services.primum_items import item_substance_rows
+from world.items.services.primum_items import held_item_ids, item_substance_rows
 from world.locations.constants import STAT_DEFAULTS, StatKey
 from world.locations.services import felt_reading, felt_readings
 from world.magic.constants import (
@@ -357,6 +357,7 @@ def _item_rows(
     if sheet is None:
         return []
     lines: list[SourcePoints] = []
+    held = held_item_ids(sheet)
     for row in item_substance_rows(sheet):
         factor = _factor(own, row.substance_id, relations, share_pct)
         points = row.step.points * factor // _FULL_PERCENT
@@ -369,7 +370,9 @@ def _item_rows(
                     substance_id=row.substance_id,
                     item_id=row.item_instance_id,
                     card_label=(
-                        f"{row.item_instance.display_name}, worn · carries {row.substance.name}"
+                        f"{row.item_instance.display_name}, "
+                        f"{'held' if row.item_instance_id in held else 'worn'}"
+                        f" · carries {row.substance.name}"
                     ),
                     relation=_relation_of(own, row.substance_id, relations),
                 )
