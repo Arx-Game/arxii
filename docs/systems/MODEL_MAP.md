@@ -6057,6 +6057,10 @@
   - scene -> scenes.Scene [FK] (nullable)
   - outcome -> traits.CheckOutcome [FK] (nullable)
 
+### AnimaRitualResonanceAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### AppetiteUpkeep
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [OneToOne]
@@ -11945,6 +11949,7 @@
   - arxii_driftcorrectionoutcomeshare <- magic.DriftCorrectionOutcomeShare
   - arxii_furydegreeshare <- magic.FuryDegreeShare
   - arxii_kindleddeedaward <- magic.KindledDeedAward
+  - arxii_animaritualresonanceaward <- magic.AnimaRitualResonanceAward
   - arxii_rallykindlingstrength <- magic.RallyKindlingStrength
   - arxii_sanctumhomecominggainaward <- magic.SanctumHomecomingGainAward
   - arxii_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward

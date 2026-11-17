@@ -28,6 +28,18 @@ A staff-authored `KindlingSituation` row: one situation (from the covenants `Sit
 **Kindled strength** (#5124):
 A staff-named step of how strongly a resonance is kindled (Faint, Strong and Blazing to start), one `KindledStrengthTier` row each, compared only by its `rank`. It sets the pull uplift, the deepest Fury tier, the Dig deep and Rally surge and the share of a deed earned. Players see only the name. _Avoid_: kindle level, intensity (a cast's power), strength of feeling.
 
+**Drawing strength** (#5181):
+The general term for a character taking resonance from what moves them or from a willing partner: a kindled deed that pays, a claim, an Anima ritual with a partner. "Feed" is reserved for Abyssal drawing, so an Abyssal ritual feeds on its partner and a Celestial or Primal one draws strength. No corruption comes from drawing strength; corruption falls only through a Sineater. (This is the same term the kindled pull uses: a kindled payer reads a thread higher.) _Avoid_: feeding (for a Celestial or Primal character), harvesting, draining.
+
+**Claim** (#5181):
+Collecting the share of a kindled deed that was set aside when the deed was done, by writing a claiming pose or a journal entry. The share waits in `CharacterResonance.kindled_unclaimed` and never expires; one pose or entry claims any or all of what waits, across every affinity. The word the player reads on the private line is the verb staff wrote on that resonance's Affinity (`claim_verb`: gloat for Abyssal, inspire for Celestial, relish for Primal, as authored). Only the writer reads it; the room sees the pose. _Avoid_: cash in, redeem, harvest, collect (the verb names the act in play, `claim` names the thing).
+
+**Earn rate** (#5181):
+How fast a character earns resonance, as a percentage set on each Affinity (`Affinity.earn_rate_percent`) and applied by the character's main affinity: 100 is as authored. It scales resonance newly earned and never resonance that is only moved or converted (`AFFINITY_RATE_EXEMPT_SOURCES`). _Avoid_: earn multiplier, gain speed.
+
+**Learn rate** (#5181):
+How fast a character's technique training advances, as a percentage set on each Affinity (`Affinity.learn_rate_percent`) and applied by the character's main affinity: 100 is as authored. The weekly training limit and the action point cost still count the unscaled points. _Avoid_: learning speed, training multiplier.
+
 **Embrace** (#5124):
 One of the two things a **Reflection** says. Embracing a deed grows the resonance it earned; embracing the unsettling resonance is accepting the aura's change. Carried out by the **Rite of settling**, never when the reflection is written. _Avoid_: accept (accepting is only what embracing the unsettling resonance does), keep, endorse.
 

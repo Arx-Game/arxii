@@ -112,7 +112,8 @@ In-process exporter exposing Prometheus metrics on `/metrics`. Lives in Arx II s
   dump is taken before every migration. Until the setting is turned on, a
   migration needs no `# release-safety:` comment, and a drop may ship in the
   same release as the code that stopped using the column. Turn the setting on
-  when the game leaves alpha; the rules above then apply as written.
+  when production holds play state that must be kept; the rules above then
+  apply as written.
 
   This is a deploy-time declaration and ancestry gate, not the planned CI
   classifier or the restore-against-production-data rehearsal. Those remain
