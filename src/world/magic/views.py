@@ -2001,7 +2001,9 @@ class SoulTetherDetailView(APIView):
     GET /api/magic/soul-tether/{relationship_id}/
 
     Returns Hollow current/max, Thread levels, Sineater stats, and roles.
-    Either party may retrieve; relationship_id may be either directional row.
+    Either party may retrieve; relationship_id may be either directional row. Anyone who plays
+    neither character of the bond, and is not staff, gets a 404 (#5177): the numbers are the
+    bond's own. An NPC a GM runs counts as played.
     """
 
     permission_classes = [IsAuthenticated]
@@ -2012,6 +2014,9 @@ class SoulTetherDetailView(APIView):
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
         rel = get_object_or_404(CharacterRelationship, pk=relationship_id, is_soul_tether=True)
+        played = {entry.character_sheet_id for entry in request.user.cached_roster_entries}
+        if not request.user.is_staff and not {rel.source_id, rel.target_id} & played:
+            raise Http404
         serializer = SoulTetherDetailSerializer(rel, context={"request": request})
         return Response(serializer.data)
 

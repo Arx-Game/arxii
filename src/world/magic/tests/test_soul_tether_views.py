@@ -242,6 +242,11 @@ class SoulTetherDetailViewTests(APITestCase):
             target=cls.sineater_sheet,
             is_soul_tether=True,
         )
+        cls.sineater_row = CharacterRelationship.objects.get(
+            source=cls.sineater_sheet,
+            target=cls.sinner_sheet,
+            is_soul_tether=True,
+        )
 
     def test_happy_path_returns_200_with_state(self) -> None:
         """GET with a valid soul-tether relationship_id returns 200 with hollow/strain data."""
@@ -296,6 +301,20 @@ class SoulTetherDetailViewTests(APITestCase):
         self.assertEqual((row["resonance_name"], row["amount"]), (self.resonance.name, 120))
         self.assertTrue(row["label"])
         self.assertEqual(sinner_view, [])
+
+    def test_only_the_two_parties_of_the_bond_read_it(self) -> None:
+        """Each party gets 200 from either row, an unrelated account gets 404 (#5177)."""
+        from world.roster.factories import RosterTenureFactory
+
+        stranger = RosterTenureFactory().player_data.account
+        sineater = self.sineater_tenure.player_data.account
+        for row in (self.relationship, self.sineater_row):
+            url = f"/api/magic/soul-tether/{row.pk}/"
+            for party in (self.sinner_account, sineater):
+                self.client.force_authenticate(user=party)
+                self.assertEqual(self.client.get(url).status_code, 200)
+            self.client.force_authenticate(user=stranger)
+            self.assertEqual(self.client.get(url).status_code, 404)
 
     def test_unauthenticated_returns_403(self) -> None:
         """Unauthenticated requests are rejected."""
