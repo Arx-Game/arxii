@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any
 from rest_framework import serializers
 
 from world.magic.services.harvest import harvest_offers
-from world.magic.services.primum_perception import sense_line, sensed_primum
+from world.magic.services.primum import primum_steps
+from world.magic.services.primum_perception import (
+    perceived_substance_ids,
+    sense_line,
+    sensed_primum,
+)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -50,9 +55,15 @@ class PrimumBlockSerializer(serializers.Serializer):
 
 def primum_block(character: ObjectDB, room: ObjectDB) -> dict[str, Any]:  # noqa: OBJECTDB_PARAM - a character and a room
     """What ``character`` senses in ``room`` and can extract there, as the frame carries it."""
-    senses = sensed_primum(character, room)
+    perceived = perceived_substance_ids(character, room)
+    steps = primum_steps()
+    senses = sensed_primum(character, room, perceived=perceived, steps=steps)
     # A dreamside viewer's room is the dream, not the place she stands: nothing to extract.
-    offers = harvest_offers(character) if room == character.location else []
+    offers = (
+        harvest_offers(character, perceived=perceived, steps=steps)
+        if room == character.location
+        else []
+    )
     return dict(
         PrimumBlockSerializer(
             {

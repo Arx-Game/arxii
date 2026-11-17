@@ -31,17 +31,19 @@ from world.items.services.primum_items import mint_primum_items
 from world.magic.constants import TargetKind
 from world.magic.exceptions import HarvestNotConfigured
 from world.magic.models import CreaturePrimum, HarvestOutcome, PlacePrimum, Substance
-from world.magic.services.primum import gift_substance, step_names_for
+from world.magic.services.primum import gift_substance, primum_steps, step_names_for
 from world.magic.services.primum_perception import perceived_substance_ids
 from world.magic.services.resonance_environment import get_resonance_environment_config
 from world.magic.services.threads import thread_level_multiplier, thread_rung
 from world.magic.types.primum import HarvestOffer, HarvestResult
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import ResonanceEnvironmentConfig, Thread
+    from world.magic.models import PrimumStep, ResonanceEnvironmentConfig, Thread
 
 SOURCE_PLACE = "place"
 SOURCE_CREATURE = "creature"
@@ -60,7 +62,9 @@ def _room_and_profile(character: ObjectDB) -> tuple[ObjectDB, RoomProfile] | Non
         return None
 
 
-def _place_offers(profile: RoomProfile, perceived: frozenset[int]) -> list[HarvestOffer]:
+def _place_offers(
+    profile: RoomProfile, perceived: frozenset[int], steps: Sequence[PrimumStep] | None
+) -> list[HarvestOffer]:
     rows = [
         (row, row.current_amount())
         for row in PlacePrimum.objects.filter(
@@ -68,7 +72,7 @@ def _place_offers(profile: RoomProfile, perceived: frozenset[int]) -> list[Harve
         ).select_related("substance")
     ]
     rows = [(row, amount) for row, amount in rows if amount > 0]
-    steps = step_names_for([amount for _row, amount in rows])
+    names = step_names_for([amount for _row, amount in rows], steps=steps)
     return [
         HarvestOffer(
             substance_id=row.substance_id,
@@ -76,13 +80,15 @@ def _place_offers(profile: RoomProfile, perceived: frozenset[int]) -> list[Harve
             source=SOURCE_PLACE,
             opponent_id=None,
             opponent_name="",
-            step_name=step,
+            step_name=name,
         )
-        for (row, _amount), step in zip(rows, steps, strict=True)
+        for (row, _amount), name in zip(rows, names, strict=True)
     ]
 
 
-def _creature_offers(room: ObjectDB, perceived: frozenset[int]) -> list[HarvestOffer]:
+def _creature_offers(
+    room: ObjectDB, perceived: frozenset[int], steps: Sequence[PrimumStep] | None
+) -> list[HarvestOffer]:
     foes = list(
         CombatOpponent.objects.filter(
             encounter__room=room,
@@ -101,7 +107,7 @@ def _creature_offers(room: ObjectDB, perceived: frozenset[int]) -> list[HarvestO
     ).select_related("substance"):
         carried.setdefault(row.creature_template_id, []).append(row)
     pairs = [(foe, row) for foe in foes for row in carried.get(foe.creature_template_id, [])]
-    steps = step_names_for([row.amount for _foe, row in pairs])
+    names = step_names_for([row.amount for _foe, row in pairs], steps=steps)
     return [
         HarvestOffer(
             substance_id=row.substance_id,
@@ -109,14 +115,22 @@ def _creature_offers(room: ObjectDB, perceived: frozenset[int]) -> list[HarvestO
             source=SOURCE_CREATURE,
             opponent_id=foe.pk,
             opponent_name=foe.name,
-            step_name=step,
+            step_name=name,
         )
-        for (foe, row), step in zip(pairs, steps, strict=True)
+        for (foe, row), name in zip(pairs, names, strict=True)
     ]
 
 
-def harvest_offers(character: ObjectDB) -> list[HarvestOffer]:  # noqa: OBJECTDB_PARAM - a character
+def harvest_offers(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - a character
+    *,
+    perceived: frozenset[int] | None = None,
+    steps: Sequence[PrimumStep] | None = None,
+) -> list[HarvestOffer]:
     """The Primum ``character`` can extract where she stands, and only what she perceives.
+
+    ``perceived`` and ``steps`` are reads the caller already made (``perceived_substance_ids``
+    for her own room, ``primum_steps``); omitted, they are read here.
 
     A lair's stock that still holds some, and each slain creature in the room not yet
     harvested whose kind carries Primum. Never an ordinary room condition or a call-up.
@@ -125,10 +139,13 @@ def harvest_offers(character: ObjectDB) -> list[HarvestOffer]:  # noqa: OBJECTDB
     if located is None:
         return []
     room, profile = located
-    perceived = perceived_substance_ids(character, room)
+    if perceived is None:
+        perceived = perceived_substance_ids(character, room)
     if not perceived:
         return []
-    return _place_offers(profile, perceived) + _creature_offers(room, perceived)
+    if steps is None:
+        steps = primum_steps()
+    return _place_offers(profile, perceived, steps) + _creature_offers(room, perceived, steps)
 
 
 def _gift_thread(character: ObjectDB, substance: Substance) -> Thread | None:  # noqa: OBJECTDB_PARAM - a character

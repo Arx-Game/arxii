@@ -74,6 +74,11 @@ def _steps() -> list[PrimumStep]:
     return list(PrimumStep.objects.all())
 
 
+def primum_steps() -> list[PrimumStep]:
+    """Every authored step, read once, for a caller that reads amounts several times."""
+    return _steps()
+
+
 def _step_in(steps: Sequence[PrimumStep], amount: int) -> PrimumStep | None:
     reached = [step for step in steps if step.starts_at <= amount]
     return max(reached, key=lambda step: step.rank) if reached else None
@@ -84,9 +89,15 @@ def step_for(amount: int) -> PrimumStep | None:
     return _step_in(_steps(), amount)
 
 
-def step_names_for(amounts: Sequence[int]) -> list[str]:
-    """The step name each amount reads as ("" below the first step), with one read of the steps."""
-    steps = _steps()
+def step_names_for(
+    amounts: Sequence[int], *, steps: Sequence[PrimumStep] | None = None
+) -> list[str]:
+    """The step name each amount reads as ("" below the first step), with one read of the steps.
+
+    ``steps`` is a read the caller already made (``primum_steps``); omitted, it is read here.
+    """
+    if steps is None:
+        steps = _steps()
     names = []
     for amount in amounts:
         step = _step_in(steps, amount)
@@ -150,13 +161,16 @@ def place_amount(
     return held
 
 
-def room_substance_amounts(room: ObjectDB, *, now: datetime | None = None) -> dict[int, int]:
+def room_substance_amounts(
+    room: ObjectDB, *, now: datetime | None = None, steps: Sequence[PrimumStep] | None = None
+) -> dict[int, int]:
     """Substance pk to the Primum in ``room``, for every substance with any (zeros omitted)."""
     profile = _profile(room)
     if profile is None:
         return {}
     amounts = _held_amounts(profile, now)
-    steps = _steps()
+    if steps is None:
+        steps = _steps()
     if steps:
         for substance in Substance.objects.exclude(stat_key=""):
             if ordinary_leans(room, substance):

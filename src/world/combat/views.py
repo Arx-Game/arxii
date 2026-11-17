@@ -114,7 +114,6 @@ from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
 from world.magic.services.harvest import harvest_offers
 from world.mechanics.models import Property
-from world.roster.services.selection import selected_character
 from world.scenes.constants import RoundStatus
 from world.scenes.models import Persona, Scene
 from world.societies.models import Organization
@@ -1578,19 +1577,25 @@ class CombatEncounterViewSet(ModelViewSet):
     ) -> frozenset[int]:
         """The slain opponents the viewer can extract Primum from (#5125).
 
-        Read from the character the request acts as (ADR-0260), so a viewer who perceives no
-        Primum, or whose character is not in the room, gets none. A fight with nothing slain
-        costs no query.
+        The union of the offers of every character the account plays that stands in this
+        encounter's room, the way this viewset identifies the viewer everywhere else
+        (``_viewer_character_ids``). A character who perceives no Primum adds none. A fight
+        with nothing slain costs no query.
         """
         if not any(
             opponent.status == OpponentStatus.DEFEATED for opponent in encounter.opponents_cached
         ):
             return frozenset()
-        character = selected_character(request.user)
-        if character is None:
-            return frozenset()
-        offers = harvest_offers(character)
-        return frozenset(offer.opponent_id for offer in offers if offer.opponent_id is not None)
+        # A CharacterSheet shares its pk with its character's ObjectDB.
+        characters = ObjectDB.objects.filter(
+            pk__in=self._viewer_character_ids(request), db_location_id=encounter.room_id
+        )
+        return frozenset(
+            offer.opponent_id
+            for character in characters
+            for offer in harvest_offers(character)
+            if offer.opponent_id is not None
+        )
 
     def _current_round_action(
         self,

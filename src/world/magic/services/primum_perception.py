@@ -21,11 +21,20 @@ from world.checks.constants import PrimumRevealScope
 from world.combat.constants import OpponentStatus
 from world.combat.models import CombatOpponent
 from world.magic.models import CharacterGift, CreaturePrimum, PrimumSighting, Substance
-from world.magic.services.primum import gift_substance, room_substance_amounts, step_names_for
+from world.magic.services.primum import (
+    gift_substance,
+    primum_steps,
+    room_substance_amounts,
+    step_names_for,
+)
 from world.magic.types.primum import PrimumSense
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from evennia.objects.models import ObjectDB
+
+    from world.magic.models import PrimumStep
 
 
 def perceived_substance_ids(character: ObjectDB, room: ObjectDB | None) -> frozenset[int]:
@@ -81,36 +90,54 @@ def creature_substance_amounts(room: ObjectDB) -> dict[int, int]:
     return {pk: amount for pk, amount in amounts.items() if amount > 0}
 
 
-def candidate_substances(room: ObjectDB) -> dict[int, int]:
+def candidate_substances(
+    room: ObjectDB, *, steps: Sequence[PrimumStep] | None = None
+) -> dict[int, int]:
     """Substance pk to the Primum a Magesight check could name in ``room``.
 
     The place's amounts and the creatures' amounts, the larger of the two for each substance.
     """
-    amounts = room_substance_amounts(room)
+    amounts = room_substance_amounts(room, steps=steps)
     for pk, amount in creature_substance_amounts(room).items():
         amounts[pk] = max(amounts.get(pk, 0), amount)
     return amounts
 
 
-def sensed_primum(character: ObjectDB, room: ObjectDB) -> list[PrimumSense]:  # noqa: OBJECTDB_PARAM - a character
+def sensed_primum(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - a character
+    room: ObjectDB,
+    *,
+    perceived: frozenset[int] | None = None,
+    steps: Sequence[PrimumStep] | None = None,
+) -> list[PrimumSense]:
     """What ``character`` senses in ``room``: each substance she perceives that reaches a step.
+
+    ``perceived`` and ``steps`` are reads the caller already made (``perceived_substance_ids``,
+    ``primum_steps``); omitted, they are read here.
 
     Never a substance she has not perceived. A perceived substance the place holds none of, or
     less than the first step, is left out; so is any substance when no steps are authored.
     Ordered by substance name.
     """
-    perceived = perceived_substance_ids(character, room)
+    if perceived is None:
+        perceived = perceived_substance_ids(character, room)
     if not perceived:
         return []
-    amounts = {pk: amount for pk, amount in candidate_substances(room).items() if pk in perceived}
+    if steps is None:
+        steps = primum_steps()
+    amounts = {
+        pk: amount
+        for pk, amount in candidate_substances(room, steps=steps).items()
+        if pk in perceived
+    }
     if not amounts:
         return []
     substances = list(Substance.objects.filter(pk__in=amounts).order_by("name"))
-    steps = step_names_for([amounts[substance.pk] for substance in substances])
+    names = step_names_for([amounts[substance.pk] for substance in substances], steps=steps)
     return [
-        PrimumSense(substance_id=substance.pk, substance_name=substance.name, step_name=step)
-        for substance, step in zip(substances, steps, strict=True)
-        if step
+        PrimumSense(substance_id=substance.pk, substance_name=substance.name, step_name=name)
+        for substance, name in zip(substances, names, strict=True)
+        if name
     ]
 
 

@@ -11,8 +11,10 @@ from __future__ import annotations
 
 from unittest.mock import PropertyMock, patch
 
+from evennia_extensions.factories import CharacterFactory
 from flows.service_functions.serializers.room_state import build_room_state_payload
 from integration_tests.harness import JourneyCase
+from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckCategoryFactory, CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.combat.constants import OpponentStatus
@@ -38,6 +40,7 @@ from world.magic.factories import (
 from world.magic.models import Affinity
 from world.magic.services.resonance_environment import get_resonance_environment_config
 from world.magic.tests._cache_isolation import ResonanceCacheIsolationMixin
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.skills.factories import MagicSkillFactory
 from world.traits.factories import CheckOutcomeFactory, CheckSystemSetupFactory
 
@@ -200,12 +203,29 @@ class TheFightPanel(_Caldera):
 
         self.assertEqual(self.opponents_seen_by(self.mira, foe.encounter), {"elemental": False})
 
+    def test_an_account_sees_a_foe_harvestable_through_a_played_character_it_has_not_selected(
+        self,
+    ) -> None:
+        foe = self.slain_elemental()
+        vesna = CharacterFactory(db_key="Vesna", location=self.room)
+        CharacterSheetFactory(character=vesna)
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet__character=vesna),
+            player_data=self.account_of(self.odo).player_data,
+            end_date=None,
+        )
+        self.sense(vesna)
+
+        # The account's selected character is still Odo, who perceives nothing.
+        self.assertEqual(self.opponents_seen_by(self.odo, foe.encounter), {"elemental": True})
+
 
 class AfterAHarvest(_Caldera):
     def test_a_successful_extract_pushes_every_viewer_a_fresh_frame_with_the_new_step(self) -> None:
         self.sense(self.tomas)
         self.tune_harvest()
         self.connect_telnet(self.tomas)
+        self.connect_telnet(self.odo)
         before = len(self.room_frames(self.tomas))
 
         with (
@@ -219,6 +239,8 @@ class AfterAHarvest(_Caldera):
         frames = self.room_frames(self.tomas)
         self.assertEqual(len(frames), before + 1)
         self.assertEqual(frames[-1]["primum"]["line"], "You sense fire Primum: Some.")
+        # Odo perceives nothing, so his fresh frame carries no Primum at all.
+        self.assertEqual(self.room_frames(self.odo)[-1]["primum"], NO_PRIMUM)
 
     def tune_harvest(self) -> None:
         """Staff set up harvesting: a check type, a skill, an item and one outcome."""
