@@ -11,6 +11,9 @@ from __future__ import annotations
 
 from unittest.mock import PropertyMock, patch
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
+
 from evennia_extensions.factories import CharacterFactory
 from flows.service_functions.serializers.room_state import build_room_state_payload
 from integration_tests.harness import JourneyCase
@@ -157,6 +160,34 @@ class TheRoomFrame(_Caldera):
         for who in (self.mira, self.tomas, self.odo):
             self.assertNotIn("earth", str(self.frame(who)).lower())
         self.assertNotIn("fire", str(self.frame(self.odo)).lower())
+
+    def test_the_frame_costs_the_same_queries_however_many_substances_the_room_reads(
+        self,
+    ) -> None:
+        def frame_queries() -> int:
+            self.frame(self.mira)  # warm the identity map, as a live server already is
+            with CaptureQueriesContext(connection) as queries:
+                self.frame(self.mira)
+            return len(queries)
+
+        before = frame_queries()
+        for name, stat_key in (
+            ("ice", StatKey.COLD),
+            ("water", StatKey.WET),
+            ("air", StatKey.WIND),
+            ("shadow", StatKey.NOISE),
+        ):
+            substance = SubstanceFactory(
+                name=name, stat_key=stat_key, direction=SubstanceDirection.RISING
+            )
+            self.lair(substance, 10)
+            self.sense(self.mira, substance)
+
+        self.assertEqual(
+            [row["substance_name"] for row in self.frame(self.mira)["sensed"]],
+            ["air", "fire", "ice", "shadow", "water"],
+        )
+        self.assertLessEqual(frame_queries(), before)
 
     def test_the_frame_arrives_as_the_one_room_state_frame_with_the_block(self) -> None:
         with patch.object(type(self.mira), "has_account", new_callable=PropertyMock) as has:

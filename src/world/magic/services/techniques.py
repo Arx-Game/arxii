@@ -1288,8 +1288,12 @@ def _calculate_technique_cost(  # noqa: PLR0913
     lethal: bool,
     apply_variant: bool,
     preferred_resonance,
+    lines_cache=None,
 ):
     """Calculate runtime stats, anima cost, effective strain and the substance plan.
+
+    ``lines_cache`` is passed through to ``plan_substance_call_up`` by a caller pricing many
+    techniques for one character in one room.
 
     #5125: the cast's call-up of its gift's substance (only ever to Trace) is added to the
     technique's own cost before control is taken off, so her spare control (control over
@@ -1309,6 +1313,7 @@ def _calculate_technique_cost(  # noqa: PLR0913
         room=character.location,
         control_surplus=max(best_delta - technique.anima_cost, 0),
         to_trace_only=True,
+        lines_cache=lines_cache,
     )
     total_base_cost = technique.anima_cost + plan.call_up_anima
     anima = CharacterAnima.objects.filter(character_id=character.pk).first()

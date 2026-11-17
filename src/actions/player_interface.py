@@ -755,6 +755,8 @@ def _combat_actions(
 
     lethal = ctx.participant.encounter.is_lethal if isinstance(ctx, CombatRoundContext) else True
     result: list[PlayerAction] = []
+    # #5125: the Primum lines of one gift in this room, read once for all its techniques.
+    lines_cache: dict = {}
     for technique in techniques:
         if not technique_performable(character, technique):
             continue
@@ -796,7 +798,9 @@ def _combat_actions(
                 available_fury_tiers=fury_tiers,
                 eligible_fury_resonances=eligible_fury_resonances,
                 is_ultimate=technique.is_ultimate,
-                cast_preview=_cast_preview(character, technique, lethal=lethal),
+                cast_preview=_cast_preview(
+                    character, technique, lethal=lethal, lines_cache=lines_cache
+                ),
                 enchants_strike=technique.enchants_strike,
                 enchant_damage_types=_enchant_damage_types(technique),
             )
@@ -817,12 +821,19 @@ def _enchant_damage_types(technique: Technique) -> tuple[str, ...]:
     return tuple(words)
 
 
-def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) -> CastPreview:
+def _cast_preview(
+    character: ObjectDB,
+    technique: Technique,
+    *,
+    lethal: bool,
+    lines_cache: dict | None = None,
+) -> CastPreview:
     """The intensity, control and anima cost this cast would run at now (#4799).
 
     Priced by the cast's own cost function, so the card agrees with the charge: the
     cheaper of the variant and base form, and capped at current anima in a non-lethal
-    fight. Declared strain is added at declaration, not here.
+    fight. Declared strain is added at declaration, not here. ``lines_cache`` is one dict a
+    caller pricing a whole list keeps, so the Primum lines are read once per gift (#5125).
     """
     from world.magic.services.surroundings import cast_surroundings_lines  # noqa: PLC0415
     from world.magic.services.techniques import _calculate_technique_cost  # noqa: PLC0415
@@ -834,6 +845,7 @@ def _cast_preview(character: ObjectDB, technique: Technique, *, lethal: bool) ->
         lethal=lethal,
         apply_variant=True,
         preferred_resonance=None,
+        lines_cache=lines_cache,
     )
     return CastPreview(
         intensity=stats.intensity,

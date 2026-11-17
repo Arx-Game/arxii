@@ -35,7 +35,7 @@ from world.magic.models import (
     TechniqueCapabilityGrant,
 )
 from world.magic.services.capability_curve import get_capability_power_config
-from world.magic.services.primum import gift_substance
+from world.magic.services.primum import substances_by_gift
 from world.magic.services.technique_marks import substance_property_ids_by_technique
 from world.mechanics.models import Application, Property, TraitCapabilityDerivation
 
@@ -357,10 +357,9 @@ def _add_techniques(page: PowerPage, ref: Reference) -> None:
     not_granting: list[Technique] = []
     if required is not None:
         carrying_gifts = [
-            gift
-            for gift in Gift.objects.all()
-            if (substance := gift_substance(gift)) is not None
-            and substance.property_id == required.pk
+            gift_id
+            for gift_id, substance in substances_by_gift().items()
+            if substance.property_id == required.pk
         ]
         # Membership by subquery, not a join: a join returns a technique once per stored mark.
         ticked = Technique.properties.through.objects.filter(property_id=required.pk).values(
@@ -541,9 +540,10 @@ def substance_by_gift(gifts: list[Gift]) -> dict[int, Property]:
     Every technique of the gift carries it without being ticked, so the page names it as a
     note on the gift choice (#5125).
     """
+    substances = substances_by_gift()
     found: dict[int, Property] = {}
     for gift in gifts:
-        substance = gift_substance(gift)
+        substance = substances.get(gift.pk)
         if substance is not None and substance.property is not None:
             found[gift.pk] = substance.property
     return found

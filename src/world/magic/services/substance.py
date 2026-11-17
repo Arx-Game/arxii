@@ -130,6 +130,7 @@ def plan_substance_call_up(  # noqa: PLR0913 - keyword-only reads of one plan, n
     control_surplus: int,
     to_trace_only: bool = False,
     with_lines: bool = True,
+    lines_cache: dict[tuple[int, int], tuple[SourcePoints, ...]] | None = None,
 ) -> SubstancePlan:
     """What calling up ``gift``'s substance in ``room`` would take and do. Pure read.
 
@@ -138,7 +139,9 @@ def plan_substance_call_up(  # noqa: PLR0913 - keyword-only reads of one plan, n
     paying for, which covers that much of the call-up's anima. ``to_trace_only`` is the cast
     path: it calls up only where the place holds less than the first step. ``with_lines=False``
     skips the power-line queries for a caller that only reads the call-up (the enhancement
-    index, the combat call-up offers); ``lines`` is then empty.
+    index, the combat call-up offers); ``lines`` is then empty. ``lines_cache`` is a dict the
+    caller keeps for one character in one room while pricing many techniques (the action
+    list, the cast list): the lines are read once per gift and call-up and reused.
     """
     from world.magic.services.resonance_environment import (  # noqa: PLC0415
         get_resonance_environment_config,
@@ -182,11 +185,26 @@ def plan_substance_call_up(  # noqa: PLR0913 - keyword-only reads of one plan, n
         covered_anima=covered,
         place_shift_pct=shift,
         lines=(
-            tuple(cast_points(character, gift, room, extra_place_amount=call_up_amount))
-            if with_lines
-            else ()
+            _plan_lines(character, gift, room, call_up_amount, lines_cache) if with_lines else ()
         ),
     )
+
+
+def _plan_lines(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - a caster
+    gift: Gift,
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM - a room
+    call_up_amount: int,
+    lines_cache: dict[tuple[int, int], tuple[SourcePoints, ...]] | None,
+) -> tuple[SourcePoints, ...]:
+    """The plan's power lines, read once per (gift, call-up) when the caller keeps a cache."""
+    key = (gift.pk, call_up_amount)
+    if lines_cache is not None and key in lines_cache:
+        return lines_cache[key]
+    lines = tuple(cast_points(character, gift, room, extra_place_amount=call_up_amount))
+    if lines_cache is not None:
+        lines_cache[key] = lines
+    return lines
 
 
 def _thread_multiplier(plan: SubstancePlan) -> Decimal:

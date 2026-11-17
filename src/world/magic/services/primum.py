@@ -17,7 +17,7 @@ from django.db.models import Sum
 from evennia_extensions.models import RoomProfile
 from world.items.services.primum_items import item_substance_rows
 from world.locations.constants import STAT_DEFAULTS, StatKey
-from world.locations.services import felt_reading
+from world.locations.services import felt_reading, felt_readings
 from world.magic.constants import (
     GiftKind,
     PrimumLineKind,
@@ -57,6 +57,31 @@ def gift_substance(gift: Gift | None) -> Substance | None:
     return None
 
 
+def substances_by_gift() -> dict[int, Substance]:
+    """Gift pk to the substance it works through (``gift_substance``), for every gift that has
+    one, from one query: for a caller walking many gifts (the Power Builder)."""
+    gifts = {gift.pk: gift for gift in Gift.objects.select_related("substance__property")}
+    found: dict[int, Substance] = {}
+    for gift in gifts.values():
+        if gift.kind == GiftKind.MINOR:
+            continue
+        seen: set[int] = set()
+        current: Gift | None = gift
+        while current is not None and current.pk not in seen:
+            seen.add(current.pk)
+            if current.substance_id is not None:
+                found[gift.pk] = current.substance
+                break
+            current = gifts.get(current.parent_id) if current.parent_id else None
+    return found
+
+
+def _leans(substance: Substance, value: int) -> bool:
+    stat_key = StatKey(substance.stat_key)
+    sign = 1 if substance.direction == SubstanceDirection.RISING else -1
+    return sign * (value - STAT_DEFAULTS[stat_key]) > 0
+
+
 def ordinary_leans(room: ObjectDB, substance: Substance) -> bool:
     """Whether the room's ordinary condition leans the way ``substance`` grows.
 
@@ -65,9 +90,19 @@ def ordinary_leans(room: ObjectDB, substance: Substance) -> bool:
     """
     if not substance.stat_key:
         return False
-    stat_key = StatKey(substance.stat_key)
-    sign = 1 if substance.direction == SubstanceDirection.RISING else -1
-    return sign * (felt_reading(room, stat_key=stat_key).value - STAT_DEFAULTS[stat_key]) > 0
+    return _leans(substance, felt_reading(room, stat_key=StatKey(substance.stat_key)).value)
+
+
+def leaning_substance_ids(room: ObjectDB, substances: Sequence[Substance]) -> set[int]:
+    """The pks of ``substances`` the room's ordinary condition leans toward (``ordinary_leans``),
+    with the room read once for all of them."""
+    with_condition = [substance for substance in substances if substance.stat_key]
+    readings = felt_readings(room, [StatKey(substance.stat_key) for substance in with_condition])
+    return {
+        substance.pk
+        for substance in with_condition
+        if _leans(substance, readings[StatKey(substance.stat_key)].value)
+    }
 
 
 def _steps() -> list[PrimumStep]:
@@ -162,19 +197,30 @@ def place_amount(
 
 
 def room_substance_amounts(
-    room: ObjectDB, *, now: datetime | None = None, steps: Sequence[PrimumStep] | None = None
+    room: ObjectDB,
+    *,
+    now: datetime | None = None,
+    steps: Sequence[PrimumStep] | None = None,
+    extra: Mapping[int, int] | None = None,
 ) -> dict[int, int]:
-    """Substance pk to the Primum in ``room``, for every substance with any (zeros omitted)."""
+    """Substance pk to the Primum in ``room``, for every substance with any (zeros omitted).
+
+    ``extra`` (substance pk to amount) is added to what the place holds before the
+    ordinary-condition floor, as ``place_amount``'s ``extra`` is. The room's conditions are
+    read once for every substance that has one, so the cost does not grow with the catalog.
+    """
     profile = _profile(room)
     if profile is None:
-        return {}
+        return {pk: amount for pk, amount in (extra or {}).items() if amount > 0}
     amounts = _held_amounts(profile, now)
+    for pk, amount in (extra or {}).items():
+        amounts[pk] = amounts.get(pk, 0) + amount
     if steps is None:
         steps = _steps()
     if steps:
-        for substance in Substance.objects.exclude(stat_key=""):
-            if ordinary_leans(room, substance):
-                amounts[substance.pk] = max(amounts.get(substance.pk, 0), steps[0].starts_at)
+        conditioned = list(Substance.objects.exclude(stat_key=""))
+        for pk in leaning_substance_ids(room, conditioned):
+            amounts[pk] = max(amounts.get(pk, 0), steps[0].starts_at)
     return {pk: amount for pk, amount in amounts.items() if amount > 0}
 
 
@@ -218,8 +264,7 @@ def cast_points(
     if room is None:
         amounts = {own.pk: extra_place_amount} if extra_place_amount else {}
     else:
-        amounts = room_substance_amounts(room)
-        amounts[own.pk] = place_amount(room, own, extra=extra_place_amount)
+        amounts = room_substance_amounts(room, steps=steps, extra={own.pk: extra_place_amount})
     place_rows = _signed_points(own, amounts, steps, relations, share_pct)
     item_rows = _item_rows(character, own, relations, share_pct)
     names = {

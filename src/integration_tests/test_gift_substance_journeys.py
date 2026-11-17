@@ -32,7 +32,12 @@ from world.events.services import complete_event
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import EquippedItemFactory, ItemInstanceFactory, ItemSubstanceFactory
 from world.locations.constants import StatKey
-from world.locations.services import felt_exposure, set_room_stat_modifier
+from world.locations.services import (
+    felt_exposure,
+    felt_reading,
+    felt_readings,
+    set_room_stat_modifier,
+)
 from world.magic.constants import (
     RestrictionKind,
     SubstanceDirection,
@@ -552,6 +557,12 @@ class WallsAndRoofsKeepTheWeatherOut(JourneyCase):
         set_room_stat_modifier(self.cellar.room_profile, StatKey.WET, source="builder", value=30)
         self.assertEqual(felt_exposure(self.cellar, stat_key=StatKey.WET), 30)
         self.assertEqual(_lighting(self.cellar), -2)  # a roof alone lets the night in
+        # The many-axis read a room's substances use gives what one-axis reads give.
+        axes = [StatKey.WET, StatKey.LIGHTING, StatKey.HEAT]
+        for room in (self.street, self.hall, self.cellar):
+            self.assertEqual(
+                felt_readings(room, axes), {key: felt_reading(room, stat_key=key) for key in axes}
+            )
 
 
 class ATechniqueThatNeedsOtherSurroundings(_FireField):
