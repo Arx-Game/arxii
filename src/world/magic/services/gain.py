@@ -61,7 +61,7 @@ from __future__ import annotations
 from decimal import Decimal
 import logging
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 
@@ -484,6 +484,10 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
 
     cfg = get_resonance_gain_config()
     n = len(unsettled)
+    # The pot is a budget of UNSCALED shares: each endorsement draws ``share`` of it, and the
+    # character's earn rate (#5181) is their bonus on top, applied inside ``grant_resonance``.
+    # So the split stays in unscaled terms, while what is stored and totalled below is the
+    # amount the ledger row actually recorded.
     share = math.ceil(cfg.weekly_pot_per_character / n)
     now = timezone.now()
     total_granted = 0
@@ -495,23 +499,36 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
             endorsement.settled_at = now
             endorsement.save(update_fields=["granted_amount", "settled_at"])
             continue
+        ledger: list = []
         grant_resonance(
             endorsement.endorsee_sheet,
             endorsement.resonance,
             share,
             source=GainSource.POSE_ENDORSEMENT,
             pose_endorsement=endorsement,
+            ledger_out=ledger,
         )
-        endorsement.granted_amount = share
+        endorsement.granted_amount = ledger[-1].amount
         endorsement.settled_at = now
         endorsement.save(update_fields=["granted_amount", "settled_at"])
-        total_granted += share
+        total_granted += ledger[-1].amount
 
     return SettlementResult(
         endorser_sheet=endorser_sheet,
         endorsements_settled=n,
         total_granted=total_granted,
     )
+
+
+def _keep_granted_amount(row: Any, ledger: list[ResonanceGrant]) -> None:
+    """Make a receipt row's ``granted_amount`` the amount its ledger row recorded.
+
+    ``grant_resonance`` scales the amount by the character's earn rate (#5181), so the number
+    the receipt was created with is not always the number granted. No write when they agree.
+    """
+    if ledger[-1].amount != row.granted_amount:
+        row.granted_amount = ledger[-1].amount
+        row.save(update_fields=["granted_amount"])
 
 
 @transaction.atomic
@@ -593,13 +610,16 @@ def create_scene_entry_endorsement(
         persona_snapshot=entry_interaction.persona,
         granted_amount=cfg.scene_entry_grant,
     )
+    ledger: list = []
     grant_resonance(
         endorsee_sheet,
         resonance,
         cfg.scene_entry_grant,
         source=GainSource.SCENE_ENTRY,
         scene_entry_endorsement=endorsement,
+        ledger_out=ledger,
     )
+    _keep_granted_amount(endorsement, ledger)
     _notify_entry_poses(scene, endorsee_sheet)
     return endorsement
 
@@ -769,13 +789,16 @@ def create_style_presentation_endorsement(
         persona_snapshot=_persona_snapshot,
         granted_amount=grant_amount,
     )
+    ledger: list = []
     grant_resonance(
         endorsee_sheet,
         resonance,
         grant_amount,
         source=GainSource.STYLE_PRESENTATION,
         style_presentation_endorsement=endorsement,
+        ledger_out=ledger,
     )
+    _keep_granted_amount(endorsement, ledger)
 
     _bump_showcase_engagement(endorsee_sheet, scene)
     return endorsement
@@ -856,13 +879,16 @@ def create_entry_flourish(
         scene=scene,
         granted_amount=granted,
     )
+    ledger: list = []
     grant_resonance(
         character_sheet,
         resonance,
         granted,
         source=GainSource.ENTRY_FLOURISH,
         entry_flourish=record,
+        ledger_out=ledger,
     )
+    _keep_granted_amount(record, ledger)
     return record
 
 
