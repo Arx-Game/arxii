@@ -454,7 +454,7 @@ def harvest(
         outcome_name=outcome_name,
         message=f"{lead}You draw out {quantity} {name}{quality}.",
         remaining_line=(
-            f"Nothing more can be drawn from {opponent.name}."
+            f"Nothing more can be drawn from the {opponent.name}."
             if opponent is not None
             else _place_remaining_line(character.location.key, substance, left, refills=refills)
         ),

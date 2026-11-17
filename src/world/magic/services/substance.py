@@ -407,14 +407,17 @@ def _source_lines(plan: SubstancePlan) -> list[SurroundingsLine]:
 def _hint_texts(plan: SubstancePlan) -> list[str]:
     """The plain sentences under the total that explain it (the approved demo's hints).
 
-    Two or more sources adding to the total: each extra source adds less. A perceived related
+    Two or more sources adding points that the curve turns into less power than their sum (the
+    taper bites): each extra source adds less. A perceived related
     substance among the sources, with nothing opposed or hidden: she draws strength from it but
     cannot move it. The related hint ignores her own substance's lines, since a cast with none
     of it here calls it up to the first step on its own.
     """
     sources = plan.lines
     texts: list[str] = []
-    if sum(1 for source in sources if source.points > 0) >= 2:  # noqa: PLR2004 - two sources
+    adding = [source.points for source in sources if source.points > 0]
+    tapering = power_for_points(sum(adding)) < sum(adding)
+    if len(adding) >= 2 and tapering:  # noqa: PLR2004 - two sources
         texts.append(f"The more {plan.label} around you, the less each extra source adds.")
     related = [s for s in sources if s.relation == SubstanceRelationKind.RELATED and not s.hidden]
     nothing_against = all(

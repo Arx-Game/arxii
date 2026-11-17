@@ -1,6 +1,7 @@
 from functools import partial
 
 from django import forms
+from django.conf import settings
 from django.contrib import admin, messages
 from django.contrib.admin import helpers
 from django.contrib.admin.checks import InlineModelAdminChecks
@@ -1355,7 +1356,13 @@ class SubstanceAdmin(admin.ModelAdmin):
     ]
 
     class Media:
-        js = ["admin/js/inlines.js"]
+        # Django's own inline media order: inlines.js needs jQuery and jquery.init.js first.
+        extra = "" if settings.DEBUG else ".min"
+        js = [
+            f"admin/js/vendor/jquery/jquery{extra}.js",
+            "admin/js/jquery.init.js",
+            "admin/js/inlines.js",
+        ]
 
     def save_related(self, request, form, formsets, change) -> None:
         super().save_related(request, form, formsets, change)

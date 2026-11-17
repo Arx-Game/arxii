@@ -5142,7 +5142,7 @@ thread on <Gift>" (`check_line`) when she has a matching thread, on the web and 
 offer of bare `extract`. A lair harvest answers with a second line, `remaining_line`: "<Room>
 now holds a <Step> amount of <name> Primum." then "It refills slowly." (not finite, a refill
 above zero) or "It will not refill.", or "Nothing is left." once empty; a slain foe's is
-"Nothing more can be drawn from <foe>." Telnet `extract` prints it after the answer. A rolled outcome with no
+"Nothing more can be drawn from the <foe>." Telnet `extract` prints it after the answer. A rolled outcome with no
 `HarvestOutcome` row, or with a row that takes nothing, leaves a lair or a creature untouched
 alike. The rolled outcome picks a `HarvestOutcome`; `_take_from_place` and `_take_from_creature` cap it by what the
 source holds under `select_for_update`, and `mint_primum_items` gives her the items. A slain

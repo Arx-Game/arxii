@@ -257,6 +257,11 @@ class TheBonusGrowsWithThePrimumHere(_FireField):
         # 8 points reach 6 on the curve, less than twice the 4 that one source gives.
         self.assertEqual(lines, {"Surroundings: fire": 3, "Ash brand (fire)": 3})
         self.assertEqual(sum(lines.values()), power_for_points(8))
+        # The taper bites here (8 points give 6), so the card says each extra source adds less.
+        self.assertIn(
+            ("hint", "The more fire around you, the less each extra source adds.", 0),
+            self.card_rows(),
+        )
 
         massive = PrimumStep.objects.get(rank=4)
         held.step = massive
@@ -321,7 +326,6 @@ class AnOpposedSubstanceWorksAgainstHer(_IceField):
                 ("source", "The Long Hall · Trace", 2),
                 ("source", "Something here strengthens your ice", 2),
                 ("power", "Around you adds", 4),
-                ("hint", "The more ice around you, the less each extra source adds.", 0),
             ],
         )
 
@@ -336,7 +340,6 @@ class AnOpposedSubstanceWorksAgainstHer(_IceField):
                 ("source", "The Long Hall · Trace", 2),
                 ("source", "The Long Hall · Some steam, related to ice", 2),
                 ("power", "Around you adds", 4),
-                ("hint", "The more ice around you, the less each extra source adds.", 0),
                 (
                     "hint",
                     "You can draw strength for your ice from the steam here. "
