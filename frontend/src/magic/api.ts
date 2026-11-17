@@ -18,7 +18,7 @@ import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
 import type { SineatingOption } from '@/magic/sineating';
 import type {
-  KindledResonance,
+  KindledReading,
   ManifestChoice,
   ReflectionOption,
   ThreadResonanceOptions,
@@ -1376,14 +1376,14 @@ const KINDLED_RESONANCES_URL = '/api/magic/kindled-resonances/';
 
 /**
  * GET /api/magic/kindled-resonances/?character_sheet=<id> (#5124): each resonance the
- * character holds, whether a situation kindles it now, the strength word and the reasons.
- * Owner or staff only.
+ * character holds, whether a situation kindles it now, the strength word and the reasons, and
+ * the impulses the corruption they carry stirs (#5177). Owner or staff only.
  */
-export async function getKindledResonances(characterSheetId: number): Promise<KindledResonance[]> {
+export async function getKindledResonances(characterSheetId: number): Promise<KindledReading> {
   const res = await apiFetch(`${KINDLED_RESONANCES_URL}?character_sheet=${characterSheetId}`);
   if (!res.ok) await readErrorDetail(res, 'Failed to load your resonances');
-  const page = (await res.json()) as { results: KindledResonance[] };
-  return page.results;
+  const page = (await res.json()) as KindledReading;
+  return { results: page.results, impulses: page.impulses };
 }
 
 // ---------------------------------------------------------------------------

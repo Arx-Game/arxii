@@ -1239,7 +1239,10 @@ export function useDeclineSineating() {
   });
 }
 
-/** Each resonance the character holds, kindled or not, with the strength word and reasons. */
+/**
+ * Each resonance the character holds, kindled or not, with the strength word and reasons, and
+ * the impulses their carried corruption stirs.
+ */
 export function useKindledResonances(characterSheetId: number) {
   return useQuery({
     queryKey: magicKeys.kindledResonances(characterSheetId),

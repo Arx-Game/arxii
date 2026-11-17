@@ -274,7 +274,7 @@ const mockUsePendingStageAdvanceOffers = vi.fn(() => ({
 }));
 
 vi.mock('@/magic/queries', () => ({
-  useKindledResonances: () => ({ data: [] }),
+  useKindledResonances: () => ({ data: { results: [], impulses: [] } }),
   usePendingStageAdvanceOffers: () => mockUsePendingStageAdvanceOffers(),
   useRespondToStageAdvance: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   usePendingEntryFlourishOffers: () => ({ data: { results: [] } }),

@@ -2,8 +2,10 @@
  * KindledResonancesPanel (#5124, demo Screen 1): "Your resonances". Each resonance the
  * character holds, with its affinity, whether a situation kindles it now, how strongly (the
  * strength's own word) and what kindled it. An unkindled one is dimmed and says so. Numbers
- * stay hidden. Mounted in the scene sidebar and in the combat rail beside Dig deep; renders
- * nothing for a character with no resonance.
+ * stay hidden. Under them, the impulses the corruption the character carries stirs (#5177):
+ * "Intrusive Thoughts" that only stir, and a "Compulsion" that is costing them rolls while
+ * something the resonance cares about is here. Mounted in the scene sidebar and in the combat
+ * rail beside Dig deep; renders nothing for a character with no resonance and no impulse.
  *
  * Wire contract: GET /api/magic/kindled-resonances/ (KindledResonanceViewSet).
  */
@@ -11,7 +13,7 @@
 import { useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { useKindledResonances } from '@/magic/queries';
-import type { KindledResonance } from '@/magic/types';
+import type { Impulse, KindledResonance } from '@/magic/types';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk) of the acting character. */
@@ -66,8 +68,47 @@ function ResonanceRow({ row }: { row: KindledResonance }) {
   );
 }
 
+/** Stirring, a Compulsion not in effect, or a Compulsion costing rolls now. */
+function impulseState(impulse: Impulse): 'stirring' | 'compulsion' | 'compulsion-active' {
+  if (!impulse.is_compulsion) return 'stirring';
+  return impulse.present ? 'compulsion-active' : 'compulsion';
+}
+
+const IMPULSE_CLASSES = {
+  stirring: 'border-violet-400/60 bg-violet-500/5',
+  compulsion: 'border-red-500/50 bg-red-500/5',
+  'compulsion-active':
+    'border-2 border-red-600 bg-red-500/15 dark:border-red-400 dark:bg-red-500/20',
+} as const;
+
+function ImpulseRow({ impulse }: { impulse: Impulse }) {
+  const state = impulseState(impulse);
+  return (
+    <div
+      className={cn('space-y-0.5 rounded border px-3 py-1.5', IMPULSE_CLASSES[state])}
+      data-testid={`impulse-${impulse.resonance_id}`}
+      data-state={state}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className={cn('text-sm', state === 'stirring' ? 'font-medium' : 'font-bold')}>
+          {impulse.label}
+        </span>
+        {impulse.present && <span className="text-xs text-muted-foreground">Present</span>}
+      </div>
+      {impulse.text && <p className="text-sm italic">{impulse.text}</p>}
+      {impulse.reasons.map((reason) => (
+        <p key={reason} className="text-xs text-muted-foreground">
+          {reason}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 export function KindledResonancesPanel({ characterSheetId, refreshKey = null }: Props) {
-  const { data: rows = [], refetch } = useKindledResonances(characterSheetId);
+  const { data, refetch } = useKindledResonances(characterSheetId);
+  const rows = data?.results ?? [];
+  const impulses = data?.impulses ?? [];
   const lastKey = useRef(refreshKey);
   useEffect(() => {
     if (lastKey.current === refreshKey) return;
@@ -75,16 +116,30 @@ export function KindledResonancesPanel({ characterSheetId, refreshKey = null }: 
     refetch().catch(() => {});
   }, [refreshKey, refetch]);
 
-  if (rows.length === 0) return null;
+  if (rows.length === 0 && impulses.length === 0) return null;
 
   return (
     <section className="space-y-1.5" data-testid="kindled-resonances-panel">
-      <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Your resonances
-      </h3>
-      {rows.map((row) => (
-        <ResonanceRow key={row.id} row={row} />
-      ))}
+      {rows.length > 0 && (
+        <>
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Your resonances
+          </h3>
+          {rows.map((row) => (
+            <ResonanceRow key={row.id} row={row} />
+          ))}
+        </>
+      )}
+      {impulses.length > 0 && (
+        <div className="space-y-1.5" data-testid="impulses">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Impulses
+          </h3>
+          {impulses.map((impulse) => (
+            <ImpulseRow key={impulse.resonance_id} impulse={impulse} />
+          ))}
+        </div>
+      )}
     </section>
   );
 }
