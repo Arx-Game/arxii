@@ -513,7 +513,18 @@ class RoomStatePayloadSerializer(serializers.Serializer):
             "decorations": self._get_decorations(room),
             "comfort_level": self._get_comfort_level(room),
             "has_unseen_presence": self._has_unseen_presence(room),
+            "primum": self._get_primum(caller, room),
         }
+
+    def _get_primum(self, caller: BaseState, room: BaseState) -> dict[str, object]:
+        """#5125 - the Primum the viewer senses here and can extract (viewer-relative).
+
+        Only substances the caller has perceived appear, so two viewers of one room get
+        different blocks.
+        """
+        from world.magic.serializers_primum import primum_block  # noqa: PLC0415
+
+        return primum_block(caller.obj, room.obj)
 
     def _has_unseen_presence(self, room: BaseState) -> bool:
         """#3288 — whether ANY occupant carries active concealment, room-derived.

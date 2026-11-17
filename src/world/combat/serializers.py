@@ -90,6 +90,11 @@ if TYPE_CHECKING:
 # idmapper-shared ObjectDB would outlive the request and go stale (ADR-0263).
 ACTIVE_CONDITIONS_CONTEXT_KEY = "active_conditions_by_object_id"
 
+# Serializer-context key holding the pks of the slain opponents the viewer can harvest
+# Primum from (#5125). The viewset computes it once per request from the viewer's own
+# character; a serializer built without it (websocket push, tests) reports False.
+HARVESTABLE_OPPONENTS_CONTEXT_KEY = "harvestable_opponent_ids"
+
 
 def _context_active_conditions(target: ObjectDB, context: dict[str, Any]) -> list | None:
     """The request's preloaded active ConditionInstances on ``target``, or None.
@@ -231,6 +236,9 @@ class OpponentSerializer(serializers.ModelSerializer):
     active_conditions = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
+    # Viewer-relative (#5125): True only when this slain foe holds Primum the viewer perceives
+    # and has not yet been harvested.
+    harvestable = serializers.SerializerMethodField()
     current_position = PositionSummarySerializer(read_only=True, allow_null=True)
     current_square = serializers.SerializerMethodField()
     # The in-world ObjectDB pk, distinct from this opponent's own pk (``id``).
@@ -278,6 +286,7 @@ class OpponentSerializer(serializers.ModelSerializer):
             "active_conditions",
             "thumbnail_url",
             "thumbnail_media_url",
+            "harvestable",
             "current_position",
             "current_square",
             "mirrors_participant_id",
@@ -286,6 +295,10 @@ class OpponentSerializer(serializers.ModelSerializer):
     @extend_schema_field(SquareSerializer(allow_null=True))
     def get_current_square(self, obj: CombatOpponent) -> dict[str, int] | None:
         return _square_payload(obj.objectdb)
+
+    def get_harvestable(self, obj: CombatOpponent) -> bool:
+        """Whether the viewer can extract Primum from this slain foe (#5125)."""
+        return obj.pk in self.context.get(HARVESTABLE_OPPONENTS_CONTEXT_KEY, frozenset())
 
     def _is_gm_or_staff(self) -> bool:
         request = self.context.get("request")

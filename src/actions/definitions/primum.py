@@ -56,6 +56,20 @@ def _find_foe(actor: ObjectDB, opponent_id: object) -> CombatOpponent | None:  #
     ).first()
 
 
+def _refresh_room_panels(actor: ObjectDB) -> None:  # noqa: OBJECTDB_PARAM - the acting character
+    """Push a fresh ``room_state`` to everyone here: what the place holds has changed.
+
+    Each occupant's block is built for her own eyes, so a harvester's neighbour sees the lair
+    drop a step only if she perceives it.
+    """
+    room = actor.location
+    if room is None:
+        return
+    for occupant in room.sentient_contents:
+        if hasattr(occupant, "send_room_state"):
+            occupant.send_room_state()
+
+
 @dataclass
 class HarvestPrimumAction(Action):
     """Extract Primum of one substance from the lair she stands in or a slain creature."""
@@ -86,6 +100,7 @@ class HarvestPrimumAction(Action):
             return ActionResult(success=False, message=err.user_message)
         if not result.harvested:
             return ActionResult(success=False, message=result.message)
+        _refresh_room_panels(actor)
         return ActionResult(
             success=True,
             message=result.message,

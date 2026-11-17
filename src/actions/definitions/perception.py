@@ -102,6 +102,23 @@ def _character_look_worn_data(actor: ObjectDB, target: ObjectDB) -> dict[str, An
     return {"visible_worn_items": rows}
 
 
+def _with_primum_line(actor: ObjectDB, target: ObjectDB, description: str) -> str:
+    """End a look at the actor's own room with what she senses there (#5125).
+
+    The line names only Primum she has perceived; a room that holds none she senses adds
+    nothing.
+    """
+    if target != actor.location:
+        return description
+    from world.magic.services.primum_perception import (  # noqa: PLC0415
+        sense_line,
+        sensed_primum,
+    )
+
+    line = sense_line(sensed_primum(actor, target))
+    return f"{description}\n{line}" if line else description
+
+
 def _render_physical_look(
     actor: ObjectDB,
     target: ObjectDB,
@@ -125,6 +142,7 @@ def _render_physical_look(
         return ActionResult(success=True, message="")
     if extras.sections:
         description = f"{description}\n" + "\n".join(extras.sections)
+    description = _with_primum_line(actor, target, description)
     return ActionResult(
         success=True,
         message=description,

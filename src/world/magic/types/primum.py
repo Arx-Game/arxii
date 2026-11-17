@@ -58,3 +58,12 @@ class HarvestResult:
     quantity: int
     outcome_name: str
     message: str
+
+
+@dataclass(frozen=True)
+class PrimumSense:
+    """One substance a character senses in the place she stands, and the step it reads at."""
+
+    substance_id: int
+    substance_name: str
+    step_name: str

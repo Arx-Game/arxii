@@ -21,7 +21,8 @@ from world.checks.constants import PrimumRevealScope
 from world.combat.constants import OpponentStatus
 from world.combat.models import CombatOpponent
 from world.magic.models import CharacterGift, CreaturePrimum, PrimumSighting, Substance
-from world.magic.services.primum import gift_substance, room_substance_amounts
+from world.magic.services.primum import gift_substance, room_substance_amounts, step_names_for
+from world.magic.types.primum import PrimumSense
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -89,6 +90,38 @@ def candidate_substances(room: ObjectDB) -> dict[int, int]:
     for pk, amount in creature_substance_amounts(room).items():
         amounts[pk] = max(amounts.get(pk, 0), amount)
     return amounts
+
+
+def sensed_primum(character: ObjectDB, room: ObjectDB) -> list[PrimumSense]:  # noqa: OBJECTDB_PARAM - a character
+    """What ``character`` senses in ``room``: each substance she perceives that reaches a step.
+
+    Never a substance she has not perceived. A perceived substance the place holds none of, or
+    less than the first step, is left out; so is any substance when no steps are authored.
+    Ordered by substance name.
+    """
+    perceived = perceived_substance_ids(character, room)
+    if not perceived:
+        return []
+    amounts = {pk: amount for pk, amount in candidate_substances(room).items() if pk in perceived}
+    if not amounts:
+        return []
+    substances = list(Substance.objects.filter(pk__in=amounts).order_by("name"))
+    steps = step_names_for([amounts[substance.pk] for substance in substances])
+    return [
+        PrimumSense(substance_id=substance.pk, substance_name=substance.name, step_name=step)
+        for substance, step in zip(substances, steps, strict=True)
+        if step
+    ]
+
+
+def sense_line(senses: list[PrimumSense]) -> str:
+    """The sentence a ``look`` ends with: ``You sense fire Primum: Massive.`` per substance.
+
+    Joined with spaces; empty when she senses nothing.
+    """
+    return " ".join(
+        f"You sense {sense.substance_name} Primum: {sense.step_name}." for sense in senses
+    )
 
 
 def reveal(sheet: CharacterSheet, room: ObjectDB, scope: str) -> list[Substance]:

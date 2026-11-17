@@ -31,6 +31,7 @@ from world.character_sheets.models import CharacterSheet
 from world.combat.constants import (
     DuelChallengeStatus,
     EncounterType,
+    OpponentStatus,
     OpponentTier,
     ParticipantStatus,
 )
@@ -66,6 +67,7 @@ from world.combat.permissions import (
 )
 from world.combat.serializers import (
     ACTIVE_CONDITIONS_CONTEXT_KEY,
+    HARVESTABLE_OPPONENTS_CONTEXT_KEY,
     AddOpponentSerializer,
     AddParticipantSerializer,
     ConsiderReadingSerializer,
@@ -110,7 +112,9 @@ from world.conditions.models import ConditionInstance
 from world.covenants.models import CovenantRole
 from world.gm.permissions import IsGMOrStaff
 from world.items.models import ItemInstance
+from world.magic.services.harvest import harvest_offers
 from world.mechanics.models import Property
+from world.roster.services.selection import selected_character
 from world.scenes.constants import RoundStatus
 from world.scenes.models import Persona, Scene
 from world.societies.models import Organization
@@ -487,6 +491,9 @@ class CombatEncounterViewSet(ModelViewSet):
         encounter = self.get_object()
         context = self.get_serializer_context()
         context[ACTIVE_CONDITIONS_CONTEXT_KEY] = self._active_conditions_by_object_id(encounter)
+        context[HARVESTABLE_OPPONENTS_CONTEXT_KEY] = self._harvestable_opponent_ids(
+            request, encounter
+        )
         return Response(self.get_serializer_class()(encounter, context=context).data)
 
     def get_permissions(self) -> list:
@@ -1560,8 +1567,30 @@ class CombatEncounterViewSet(ModelViewSet):
             is_gm = encounter.scene.is_gm(request.user)
         context["is_gm"] = bool(request.user.is_authenticated and request.user.is_staff) or is_gm
         context[ACTIVE_CONDITIONS_CONTEXT_KEY] = self._active_conditions_by_object_id(encounter)
+        context[HARVESTABLE_OPPONENTS_CONTEXT_KEY] = self._harvestable_opponent_ids(
+            request, encounter
+        )
 
         return context
+
+    def _harvestable_opponent_ids(
+        self, request: Request, encounter: CombatEncounter
+    ) -> frozenset[int]:
+        """The slain opponents the viewer can extract Primum from (#5125).
+
+        Read from the character the request acts as (ADR-0260), so a viewer who perceives no
+        Primum, or whose character is not in the room, gets none. A fight with nothing slain
+        costs no query.
+        """
+        if not any(
+            opponent.status == OpponentStatus.DEFEATED for opponent in encounter.opponents_cached
+        ):
+            return frozenset()
+        character = selected_character(request.user)
+        if character is None:
+            return frozenset()
+        offers = harvest_offers(character)
+        return frozenset(offer.opponent_id for offer in offers if offer.opponent_id is not None)
 
     def _current_round_action(
         self,
