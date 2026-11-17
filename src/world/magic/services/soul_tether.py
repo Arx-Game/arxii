@@ -1272,9 +1272,10 @@ def soul_tether_redirect_handler(*, payload: Any) -> None:
     if payload.redirect_origin is not None:
         return
 
-    # Corruption a Sineater carries for a Sinner arrives whole; the carrier's own Hollow
-    # (if they are a Sinner too) does not absorb it (#5177).
-    if payload.source == CorruptionSource.SINEATING_CARRIED:
+    # Corruption a Sineater carries for a Sinner arrives whole, and so does what a character
+    # adds by giving in to a Compulsion; the carrier's own Hollow (if they are a Sinner too)
+    # absorbs neither (#5177).
+    if payload.source in (CorruptionSource.SINEATING_CARRIED, CorruptionSource.INDULGED):
         return
 
     sinner_sheet: CharacterSheet = payload.character_sheet

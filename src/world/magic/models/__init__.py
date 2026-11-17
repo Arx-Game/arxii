@@ -158,6 +158,7 @@ from world.magic.models.grants import (
     TraditionGiftGrant,
     TraditionRitualGrant,
 )
+from world.magic.models.impulse import ImpulseShown
 from world.magic.models.kindling import (
     KindledDeedAward,
     KindledStrengthTier,
@@ -402,6 +403,8 @@ __all__ = [
     "GlimpseTag",
     # rituals
     "ImbuingProseTemplate",
+    # impulses (#5177)
+    "ImpulseShown",
     "IntensityTier",
     # kindled resonances (#5124)
     "KindledDeedAward",

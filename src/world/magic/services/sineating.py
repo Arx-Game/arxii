@@ -32,6 +32,7 @@ from world.magic.exceptions import SineatingValidationError, SoulTetherError
 from world.magic.models.affinity import Resonance
 from world.magic.models.soul_tether import Sineating, SineatingPendingOffer
 from world.magic.models.soul_tether_config import SineatingOutcomeAward, SoulTetherConfig
+from world.magic.services.corruption import get_corruption_config
 from world.magic.services.mire import corruption_that_can_move, take_on_corruption
 from world.magic.services.soul_tether import (
     _MSG_NO_ACTIVE_TETHER,
@@ -115,13 +116,12 @@ def sineating_is_ready(config: SoulTetherConfig | None = None) -> bool:
 
 
 def _sineater_max_stage() -> int | None:
-    """The corruption stage a Sineater's Mire may not climb past, or None for no cap.
+    """The corruption stage a Sineater's Mire may not climb past (#5177).
 
-    Step 6 of #5177 adds ``CorruptionConfig.sineater_max_stage`` (the Compulsion stage) and
-    reads it here. Until it exists there is no cap to apply.
+    Staff set it on ``CorruptionConfig.sineater_max_stage``, normally the Compulsion stage.
+    The ritual takes on only what fits below the top of that stage.
     """
-    # HOOK (#5177 step 6): return CorruptionConfig's ``sineater_max_stage`` once it is added.
-    return None
+    return get_corruption_config().sineater_max_stage
 
 
 # =============================================================================

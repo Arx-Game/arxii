@@ -526,9 +526,12 @@ def accrue_corruption(  # noqa: PLR0913 - cohesive accrual-context params
     # Only effective when the character owns an active Sineater-side Thread in
     # this resonance AND has non-zero lifetime_helped.  Skipped when
     # redirect_origin is set (overflow accrual is NOT the character's own cast).
-    amount = _apply_sineater_corruption_resistance(
-        character_sheet, resonance, amount, redirect_origin
-    )
+    # Giving in to a Compulsion adds exactly the configured amount: the resistance a Sineater
+    # earns softens what they take on and what they cast, not what they choose to indulge.
+    if source != CorruptionSource.INDULGED:
+        amount = _apply_sineater_corruption_resistance(
+            character_sheet, resonance, amount, redirect_origin
+        )
 
     char_resonance, current_before, lifetime_before = _increment_corruption_totals(
         character_sheet, resonance, amount

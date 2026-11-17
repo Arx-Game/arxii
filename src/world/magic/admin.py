@@ -3023,10 +3023,16 @@ class CorruptionConfigAdmin(admin.ModelAdmin):
         "tier_4_coefficient",
         "tier_5_coefficient",
         "hasty_fall_multiplier",
+        "intrusive_thoughts_stage",
+        "compulsion_stage",
+        "sineater_max_stage",
+        "compulsion_condition",
         "updated_at",
     ]
+    list_select_related = ["compulsion_condition"]
     readonly_fields = ["updated_at"]
     raw_id_fields = ["updated_by"]
+    autocomplete_fields = ["compulsion_condition"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""

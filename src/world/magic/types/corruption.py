@@ -23,6 +23,7 @@ class CorruptionSource(models.TextChoices):
     STAFF_GRANT = "STAFF_GRANT", "Staff grant"
     DEFILEMENT = "DEFILEMENT", "World defilement (caster overpowers an opposed place)"
     SINEATING_CARRIED = "SINEATING_CARRIED", "Carried for a Sinner (Sineating)"
+    INDULGED = "INDULGED", "Given in to a Compulsion"
 
 
 class CorruptionRecoverySource(models.TextChoices):

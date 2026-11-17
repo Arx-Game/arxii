@@ -921,6 +921,13 @@ class SineatingPoseRole(models.TextChoices):
     PERFORM = "perform", "Perform Sineating"
 
 
+class ImpulseKind(models.TextChoices):
+    """Which impulse a character was told of in a scene (#5177)."""
+
+    INTRUSIVE = "intrusive", "Intrusive Thoughts"
+    COMPULSION = "compulsion", "Compulsion"
+
+
 class MagicActivity(models.TextChoices):
     """A kind of magical roll that adds staff-chosen skills (#4450).
 
