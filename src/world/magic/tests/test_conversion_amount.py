@@ -1,7 +1,7 @@
 """convert_resonance_amount: the single-resonance conversion primitive (slice 4 of #4672).
 
 Since #5123 the amount is lifetime points (who the character has become); balance moves
-only as far as it exists. The penance path still moves lifetime in proportion to balance.
+only as far as it exists.
 """
 
 from decimal import Decimal
@@ -16,7 +16,7 @@ from world.magic.factories import (
     ResonanceFactory,
 )
 from world.magic.models import CharacterResonance, Resonance, ResonanceGrant
-from world.magic.services.conversion import _convert_partial, convert_resonance_amount
+from world.magic.services.conversion import convert_resonance_amount
 
 
 class ConvertResonanceAmountTests(TestCase):
@@ -101,45 +101,3 @@ class ConvertResonanceAmountTests(TestCase):
             ).exists()
         )
         self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
-
-
-class ProportionalLifetimeIsExactTests(TestCase):
-    """Penance moves lifetime as ``amount x lifetime // balance``, never one short."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.sheet = CharacterSheetFactory()
-        cls.abyssal = ResonanceFactory(affinity=AffinityFactory(name="Abyssal"))
-        cls.celestial = ResonanceFactory(affinity=AffinityFactory(name="Celestial"))
-
-    def _hold(self, balance: int, lifetime: int) -> None:
-        CharacterResonanceFactory(
-            character_sheet=self.sheet,
-            resonance=self.abyssal,
-            balance=balance,
-            lifetime_earned=lifetime,
-        )
-
-    def _convert(self, amount: int) -> tuple[int, int]:
-        row = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.abyssal)
-        result = _convert_partial(row, self.sheet, self.celestial, Decimal("0.5"), amount)
-        assert result is not None
-        return result
-
-    def _lifetime(self, resonance: Resonance) -> int:
-        return CharacterResonance.objects.get(
-            character_sheet=self.sheet, resonance=resonance
-        ).lifetime_earned
-
-    def test_four_of_a_thirty_balance_with_thirty_lifetime_moves_four(self) -> None:
-        # 4/30 x 30 in Decimal is 3.999... and truncated to 3; 4 x 30 // 30 is 4.
-        self._hold(30, 30)
-        self.assertEqual(self._convert(4), (2, 4))
-        self.assertEqual(self._lifetime(self.abyssal), 26)
-        self.assertEqual(self._lifetime(self.celestial), 4)
-
-    def test_a_true_fraction_rounds_down(self) -> None:
-        # 4 x 40 / 30 is 5.33..., so 5 moves.
-        self._hold(30, 40)
-        self.assertEqual(self._convert(4), (2, 5))
-        self.assertEqual(self._lifetime(self.abyssal), 35)

@@ -405,7 +405,6 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         GainSource.STAKE_REWARD,
         GainSource.COMBO_DISCOVERY,
         GainSource.COMPROMISE,
-        GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
         GainSource.DRIFT_CORRECTION,
         GainSource.SINEATING,

@@ -132,12 +132,10 @@ class ResonanceConversion(NaturalKeyMixin, SharedMemoryModel):
 
 
 class FallRedemptionConfig(NaturalKeyMixin, SharedMemoryModel):
-    """Singleton (pk=1) of conversion multipliers per Fall/Redemption path.
+    """Singleton (pk=1) of Fall/Redemption tuning (the fall eligibility threshold).
 
+    The conversion multipliers live on the per-pair ``AffinityInteraction`` rows:
     Fall multipliers are >1.0 (gain); Redemption multipliers are <1.0 (loss).
-    Celestial→Abyssal is the largest gain; Abyssal→Celestial is the largest loss.
-    The penance_exchange_rate controls the lossy partial conversion during
-    the Rite of Atonement.
     """
 
     class NaturalKeyConfig:
@@ -145,18 +143,6 @@ class FallRedemptionConfig(NaturalKeyMixin, SharedMemoryModel):
 
     objects = NaturalKeyManager()
 
-    # Atonement resonance conversion (partial, lossy)
-    penance_exchange_rate = models.DecimalField(
-        max_digits=4,
-        decimal_places=2,
-        default=Decimal("0.50"),
-        help_text=(
-            "Multiplier applied to the converted amount. 0.5 = for every 2 non-native "
-            "balance converted, 1 Celestial balance is granted. The player specifies "
-            "how much non-native balance to convert; this rate determines the lossy "
-            "Celestial output."
-        ),
-    )
     # Fall eligibility
     fall_threshold_percent = models.DecimalField(
         max_digits=5,

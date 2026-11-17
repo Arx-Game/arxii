@@ -7,7 +7,8 @@ from the rolled tier's ``DriftCorrectionOutcomeShare`` and applies that share to
 reflection:
 
 | Reflection                     | Effect at share s                                        |
-| Embrace a deed                 | grant ``deed amount x s`` of its resonance (EMBRACED_DEED) |
+| Embrace a deed                 | grant ``deed amount x s x direction rate`` of its        |
+|                                | resonance (EMBRACED_DEED); see ``embraced_amount``       |
 | Disown a deed                  | convert ``amount x disown_deed_percent x s`` toward the  |
 |                                | main affinity; needs no open chance to atone             |
 | Embrace the unsettling         | ``accept_aura_change(fraction=s)``                       |
@@ -22,6 +23,8 @@ rite, even at a share of 0.
 from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping
+from contextlib import suppress
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -76,7 +79,8 @@ from world.traits.models import CheckOutcome
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.items.models import ItemInstance
-    from world.magic.models.affinity import Resonance
+    from world.magic.models.affinity import Affinity, Resonance
+    from world.magic.models.grant import ResonanceGrant
     from world.scenes.models import Scene
 
 
@@ -313,6 +317,30 @@ def _conversion_target(
     return fallback_conversion_target(main_rows, caps)
 
 
+@dataclass(frozen=True)
+class _Conversion:
+    """What ``_convert`` did: lifetime moved, resonance granted, and the pair it found unset.
+
+    ``missing_pair`` is (source affinity, target affinity) when nothing converted because
+    staff have authored no usable conversion between them, else None.
+    """
+
+    moved: int = 0
+    granted: int = 0
+    missing_pair: tuple[Affinity, Affinity] | None = None
+
+
+def _nothing_turned_reason(conversion: _Conversion) -> str:
+    """The clause after "but" when a disown converted nothing."""
+    if conversion.missing_pair is None:
+        return "the rite turns nothing of it away."
+    source, target = conversion.missing_pair
+    return (
+        f"no conversion from {source.name} to {target.name} has been set, "
+        "so the rite turns nothing of it away."
+    )
+
+
 def _convert(
     sheet: CharacterSheet,
     source: Resonance,
@@ -320,19 +348,20 @@ def _convert(
     wanted: int,
     *,
     limit_to_excess: bool,
-) -> tuple[int, int]:
-    """Convert up to ``wanted`` lifetime of ``source`` toward ``target``; return (moved, granted).
+) -> _Conversion:
+    """Convert up to ``wanted`` lifetime of ``source`` toward ``target``.
 
     Never raises for what it cannot do: no target, no authored pair or nothing held converts
-    nothing. The amount is at most the source's lifetime, and, with ``limit_to_excess``, what
-    its affinity stands past who the character is. The Mire's excess converts first.
+    nothing, and a missing pair is named on the result so the caller can say so. The amount
+    is at most the source's lifetime, and, with ``limit_to_excess``, what its affinity stands
+    past who the character is. The Mire's excess converts first.
     """
     if wanted <= 0 or target is None or source.pk == target.pk:
-        return 0, 0
+        return _Conversion()
     try:
         pair = conversion_pair(source.affinity, target.affinity)
     except ConversionMappingError:
-        return 0, 0
+        return _Conversion(missing_pair=(source.affinity, target.affinity))
     rows = CharacterResonance.objects.filter(character_sheet=sheet, resonance=source)
     list(rows.select_for_update())
     lifetime, row_mire = rows.values_list("lifetime_earned", "mire_lifetime").first() or (0, 0)
@@ -341,7 +370,7 @@ def _convert(
     if limit_to_excess:
         amount = min(amount, reading.convertible_points(source.affinity_id, row_mire))
     if amount <= 0:
-        return 0, 0
+        return _Conversion()
     mire_part = min(amount, reading.mire_excess_points.get(source.affinity_id, 0))
     granted, _ = convert_resonance_amount(
         sheet,
@@ -352,7 +381,7 @@ def _convert(
         gain_source=GainSource.DRIFT_CORRECTION,
         mire_amount=mire_part,
     )
-    return amount, granted
+    return _Conversion(moved=amount, granted=granted)
 
 
 def _turned_line(source: Resonance, target: Resonance, moved: int, granted: int) -> str:
@@ -397,10 +426,10 @@ def _disown_deed(
     grant = reflection.grant
     what = deed_what(grant) or f"your {grant.resonance.name}"
     wanted = int(Decimal(grant.amount) * Decimal(percent) / _ONE_HUNDRED * share)
-    moved, granted = _convert(sheet, grant.resonance, target, wanted, limit_to_excess=False)
-    if moved == 0 or target is None:
-        return f"You disown {what}, but the rite turns nothing of it away."
-    return f"You disown {what}: {_turned_line(grant.resonance, target, moved, granted)}"
+    done = _convert(sheet, grant.resonance, target, wanted, limit_to_excess=False)
+    if done.moved == 0 or target is None:
+        return f"You disown {what}, but {_nothing_turned_reason(done)}"
+    return f"You disown {what}: {_turned_line(grant.resonance, target, done.moved, done.granted)}"
 
 
 def _disown_unsettling(
@@ -408,13 +437,30 @@ def _disown_unsettling(
 ) -> str:
     source = reflection.resonance
     cap = _open_cap_toward(sheet, target) if target is not None else 0
-    moved, granted = _convert(
-        sheet, source, target, int(Decimal(cap) * share), limit_to_excess=True
+    done = _convert(sheet, source, target, int(Decimal(cap) * share), limit_to_excess=True)
+    if done.moved == 0 or target is None:
+        return f"You disown your {source.name}, but {_nothing_turned_reason(done)}"
+    _spend_cap(sheet, target, done.moved)
+    return (
+        f"You disown your {source.name}: {_turned_line(source, target, done.moved, done.granted)}"
     )
-    if moved == 0 or target is None:
-        return f"You disown your {source.name}, but the rite turns nothing of it away."
-    _spend_cap(sheet, target, moved)
-    return f"You disown your {source.name}: {_turned_line(source, target, moved, granted)}"
+
+
+def embraced_amount(sheet: CharacterSheet, grant: ResonanceGrant, share: Decimal) -> int:
+    """What embracing ``grant`` at ``share`` grants, rounded down (#4751).
+
+    The deed's amount times the share. When the deed is of an affinity other than the
+    character's main one, also times the direction rate authored for converting the main
+    affinity into the deed's: a fall toward the Abyss pays more than the deed was worth and
+    a climb pays less, as disowning already does. No main affinity, the same affinity or no
+    authored pair leaves the rate at 1. The rite and its preview both call this.
+    """
+    rate = Decimal(1)
+    main = own_affinity(sheet)
+    if main is not None and main.pk != grant.resonance.affinity_id:
+        with suppress(ConversionMappingError):
+            rate = conversion_pair(main, grant.resonance.affinity).conversion_multiplier
+    return int(Decimal(grant.amount) * share * rate)
 
 
 def _embrace_deed(
@@ -422,7 +468,7 @@ def _embrace_deed(
 ) -> str:
     grant = reflection.grant
     what = deed_what(grant) or f"your {grant.resonance.name}"
-    amount = int(Decimal(grant.amount) * share)
+    amount = embraced_amount(sheet, grant, share)
     if amount <= 0:
         return f"You embrace {what}, but the rite carries none of it through."
     grant_resonance(

@@ -803,10 +803,6 @@ class ConversionMappingError(FallRedemptionError):
     (source_resonance, target_affinity) pair."""
 
 
-class PenanceError(FallRedemptionError):
-    """Raised when there is no non-native resonance to convert during Atonement."""
-
-
 class AlreadyInTraditionError(MagicError):
     """Raised when ``join_tradition`` is called with the character's own currently
     active tradition (#2441) — a no-op re-join is refused rather than silently

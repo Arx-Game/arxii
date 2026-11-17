@@ -25,7 +25,7 @@ from world.magic.factories import (
 )
 from world.magic.models import Affinity, CharacterResonance
 from world.magic.services.aura import recompute_aura
-from world.magic.services.conversion import _convert_partial
+from world.magic.services.conversion import convert_resonance_amount
 from world.magic.services.drift import check_resonance_focus, drift_for, get_drift_config
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.soul_tether import _grant_sineating_resonance
@@ -93,6 +93,29 @@ class UnsettledReadingTests(_UnsettledCase):
         self.assertEqual(reading.excess_percent, Decimal(15))
         self.assertEqual(reading.steps_past, 3)
         self.assertEqual(reading.leading_excess_resonance, self.dread)
+
+    def test_the_main_affinitys_own_range_and_step_replace_the_general_ones(self) -> None:
+        self.settle(celestial="90", abyssal="10")
+        _hold(self.sheet, self.dawnlight, 70)
+        _hold(self.sheet, self.dread, 30)
+        # Blank on the affinity: the general 5 and 5 apply, as before.
+        self.assertIsNone(self.celestial.unsettled_tolerance_percent)
+        self.assertEqual(drift_for(self.sheet).steps_past, 3)
+
+        self.celestial.unsettled_tolerance_percent = 1
+        self.celestial.unsettled_step_percent = 2
+        self.celestial.save()
+
+        reading = drift_for(self.sheet)
+        # 30 own share - 10 settled - 1 range = 19 past, 2 to a step.
+        self.assertEqual(reading.excess_percent, Decimal(19))
+        self.assertEqual(reading.steps_past, 10)
+        # A character led by another affinity keeps the general numbers.
+        other = CharacterSheetFactory()
+        self.settle(other, primal="90", abyssal="10")
+        _hold(other, self.wild, 70)
+        _hold(other, self.dread, 30)
+        self.assertEqual(drift_for(other).steps_past, 3)
 
     def test_on_the_tolerance_is_not_past_it(self) -> None:
         self.settle(celestial="90", abyssal="10")
@@ -272,11 +295,22 @@ class FocusCheckTests(SeededLevelLadderMixin, _UnsettledCase):
         self.assertEqual(list(outcome.lines), [call.args[0] for call in msg.call_args_list])
 
 
-class MovePartialMireTests(_UnsettledCase):
-    def test_move_partial_moves_mire_proportionally(self) -> None:
+class ConvertAmountMireTests(_UnsettledCase):
+    def _convert(self, source, amount: int, mire_amount: int) -> None:
+        convert_resonance_amount(
+            self.sheet,
+            source_resonance=source.resonance,
+            target_resonance=self.dawnlight,
+            amount=amount,
+            multiplier=Decimal(1),
+            gain_source=GainSource.DRIFT_CORRECTION,
+            mire_amount=mire_amount,
+        )
+
+    def test_the_mire_part_of_an_amount_leaves_the_source_mire(self) -> None:
         source = _hold(self.sheet, self.dread, 100, mire=40)
 
-        _convert_partial(source, self.sheet, self.dawnlight, Decimal(1), 50)
+        self._convert(source, 50, 20)
 
         source.refresh_from_db()
         self.assertEqual(source.lifetime_earned, 50)
@@ -286,7 +320,7 @@ class MovePartialMireTests(_UnsettledCase):
         )
         self.assertEqual(target.mire_lifetime, 0)
 
-    def test_mire_never_exceeds_lifetime_after_rounding(self) -> None:
+    def test_mire_never_exceeds_lifetime_after_a_move(self) -> None:
         source = CharacterResonance.objects.create(
             character_sheet=self.sheet,
             resonance=self.dread,
@@ -295,9 +329,10 @@ class MovePartialMireTests(_UnsettledCase):
             mire_lifetime=9,
         )
 
-        _convert_partial(source, self.sheet, self.dawnlight, Decimal(1), 2)
+        self._convert(source, 8, 0)
 
         source.refresh_from_db()
+        self.assertEqual(source.lifetime_earned, 2)
         self.assertLessEqual(source.mire_lifetime, source.lifetime_earned)
 
     def test_the_database_refuses_mire_past_lifetime(self) -> None:

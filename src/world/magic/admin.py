@@ -273,7 +273,14 @@ class AffinityKindlingSituationInline(KindlingSituationInline):
 
 @admin.register(Affinity)
 class AffinityAdmin(admin.ModelAdmin):
-    list_display = ["name", "corruption_coefficient", "burn_value", "description"]
+    list_display = [
+        "name",
+        "corruption_coefficient",
+        "burn_value",
+        "unsettled_tolerance_percent",
+        "unsettled_step_percent",
+        "description",
+    ]
     search_fields = ["name"]
     inlines = [AffinityKindlingSituationInline]
 
@@ -2597,7 +2604,7 @@ class ResonanceConversionAdmin(admin.ModelAdmin):
 class FallRedemptionConfigAdmin(admin.ModelAdmin):
     """Admin for the Fall/Redemption tuning singleton."""
 
-    list_display = ("id", "penance_exchange_rate", "fall_threshold_percent")
+    list_display = ("id", "fall_threshold_percent")
 
 
 @admin.register(FallRedemptionRecord)

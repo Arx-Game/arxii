@@ -30,10 +30,6 @@ from world.magic.factories import (
 )
 from world.magic.models.aura import CharacterResonance
 from world.magic.services import use_technique
-from world.magic.services.atonement import (
-    AtonementStageOutOfRange,
-    perform_atonement_rite,
-)
 from world.magic.services.corruption import (
     accrue_corruption,
     reduce_corruption,
@@ -271,41 +267,6 @@ class ConsumerGateSanityTest(TestCase):
 
         with self.assertRaises(ProtagonismLockedError):
             spend_xp_on_unlock(character, unlock)
-
-
-class AtonementRiteTests(TestCase):
-    """Scenarios 7 + 8: Atonement Rite full path and stage-3+ refusal."""
-
-    def test_atonement_reduces_stage_1_corruption(self) -> None:
-        """Full path: stage 1 corruption → Atonement → corruption_current drops."""
-        resonance = ResonanceFactory()
-        sheet = CharacterSheetFactory()
-        with_corruption_at_stage(sheet, resonance, stage=1)
-        # stage 1 sets corruption_current = 50
-
-        result = perform_atonement_rite(
-            performer_sheet=sheet,
-            target_sheet=sheet,
-            resonance=resonance,
-        )
-
-        assert result.amount_reduced > 0
-        char_res = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
-        # ATONEMENT_REDUCE_AMOUNT=100 > 50, so clamped to 0
-        assert char_res.corruption_current == 0
-
-    def test_atonement_refused_for_stage_3(self) -> None:
-        """Stage 3 corruption — AtonementStageOutOfRange is raised."""
-        resonance = ResonanceFactory()
-        sheet = CharacterSheetFactory()
-        with_corruption_at_stage(sheet, resonance, stage=3)
-
-        with self.assertRaises(AtonementStageOutOfRange):
-            perform_atonement_rite(
-                performer_sheet=sheet,
-                target_sheet=sheet,
-                resonance=resonance,
-            )
 
 
 class DecaySyncTests(TestCase):

@@ -1180,6 +1180,19 @@ the rite of settling over what the character reflected on. It is read on lifetim
   verbs are removed); admin pages for the tuning rows; Required content row
   `drift-correction-config`. Journey: `integration_tests/test_drift_correction_journeys.py`.
 
+**One rite (#4751, BUILT 2026-11-17, ADR-4751).** The settling rite is the only rite for a changing
+aura; the older Rite of Atonement (never performable, since ritual dispatch called its service with
+arguments it did not accept) was removed with its Ritual row, `FallRedemptionConfig.penance_exchange_rate`,
+the partial path of `convert_resonance`, `GainSource.PENANCE` and `CorruptionRecoverySource.ATONEMENT_RITE`
+(migrations 0448 and 0449). Built with it: each main affinity sets its own range before Unsettled and step
+width (`Affinity.unsettled_tolerance_percent`, `unsettled_step_percent`; `_unsettled_numbers`), so Celestial
+can be strict; embracing a deed pays at the direction rate for the pair (`embraced_amount`, preview
+included); a disown across an unset conversion pair names the pair, and the Required content row
+`affinity-conversion-pairs` lists the unset pairs; the canonical Primal corruption coefficient is 0, so only
+Abyssal casts corrupt. Corruption now falls only by daily decay and a Sineater's rescue (stage 1 and 2
+characters have only decay until the Sineating work lands). Staff still author Celestial's range and set
+Primal's coefficient to 0 on the production Affinity pages.
+
 Drift thresholds (slice 3, #4732) were built after this slice and replaced by the unsettled reading
 (#5123, below). Nothing is authored yet: until staff set the rite, check type and a share for every outcome tier,
 the rite refuses and the dashboard row says so.
@@ -1260,7 +1273,7 @@ A mixed character is the normal case. Built, as one PR:
 - **Unsettled replaces drift.** `CharacterAuraShare.settled_percent` is who the character is
   (set at creation from the weighted picks, nudged by the Glimpse, moved by accepting);
   `CharacterResonance.mire_lifetime` is a Sineater's Mire share with its own allowance. A
-  non-main affinity grown past its settled share plus the tolerance makes the character
+  non-main affinity grown past its settled share plus the range before Unsettled (per main affinity since #4751) makes the character
   unsettled; a pull outside the main affinity calls for no check of its own. Exit (since #5124): the
   rite of settling over what the character reflected on, which atones (lifetime-based, Mire first) or
   accepts the aura's change by the roll's share. A mixed character

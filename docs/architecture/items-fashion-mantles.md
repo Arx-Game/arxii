@@ -1055,8 +1055,8 @@ def _validate_covenant_role_weave(owner: CharacterSheet, role: CovenantRole) -> 
         raise CovenantRoleNeverHeldError(role.name)
 ```
 
-`CovenantRoleNeverHeldError` follows the existing `MagicError` /
-`AtonementAffinityError` pattern: typed exception with `user_message` and
+`CovenantRoleNeverHeldError` follows the existing `MagicError`
+pattern: typed exception with `user_message` and
 SAFE_MESSAGES allowlist for API-safe responses.
 
 ### 6.4 ROOM (deferred)

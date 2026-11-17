@@ -27,7 +27,6 @@ class CorruptionSource(models.TextChoices):
 class CorruptionRecoverySource(models.TextChoices):
     """Source classifier for a reduce_corruption call."""
 
-    ATONEMENT_RITE = "ATONEMENT_RITE", "Rite of Atonement"
     SPEC_B_RESCUE = "SPEC_B_RESCUE", "Soul Tether rescue"
     PASSIVE_DECAY = "PASSIVE_DECAY", "Passive decay tick"
     STAFF_GRANT = "STAFF_GRANT", "Staff intervention"

@@ -2199,6 +2199,38 @@ def _probe_drift_correction_config() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_affinity_conversion_pairs() -> ProbeResult:
+    """Every ordered pair of distinct affinities has an authored conversion (#4751).
+
+    Consumer: `world/magic/services/conversion.py conversion_pair()`, read by the settling
+    rite when a deed is disowned (turning a stray affinity back toward the main one) and when a
+    deed is embraced (the direction rate). A pair is usable when its `AffinityInteraction`
+    row exists with both a `conversion_multiplier` and a `conversion_type`. The probe reads
+    the same function and lists each pair that raises.
+    """
+    from world.magic.exceptions import ConversionMappingError  # noqa: PLC0415
+    from world.magic.models import Affinity  # noqa: PLC0415
+    from world.magic.services.conversion import conversion_pair  # noqa: PLC0415
+
+    affinities = list(Affinity.objects.order_by("name"))
+    missing = []
+    for source in affinities:
+        for target in affinities:
+            if source.pk == target.pk:
+                continue
+            try:
+                conversion_pair(source, target)
+            except ConversionMappingError:
+                missing.append(f"{source.name} to {target.name}")
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=tuple(missing),
+            detail=f"No usable conversion is set for: {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_thread_resonance_ritual() -> ProbeResult:
     """A SERVICE ritual moves a thread to another resonance (slice 6 of #4672).
 
@@ -3982,6 +4014,23 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_drift_correction_config),
             admin_model="DriftCorrectionConfig",
+        ),
+        ContentDependency(
+            key="affinity-conversion-pairs",
+            label="A conversion rate for every pair of affinities",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/magic/services/conversion.py conversion_pair(), read by "
+                "world/magic/services/drift_correction.py when a deed is disowned or embraced"
+            ),
+            consequence=(
+                "Disowning a deed between a pair with no rate converts nothing, and the "
+                "rite tells the player no conversion has been set. Embracing a deed across "
+                "such a pair pays the deed's plain amount, with no rise or fall for the "
+                "direction."
+            ),
+            probe=CustomProbe(fn=_probe_affinity_conversion_pairs),
+            admin_model="AffinityInteraction",
         ),
         ContentDependency(
             key="thread-resonance-ritual",

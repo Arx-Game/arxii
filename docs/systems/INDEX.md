@@ -97,6 +97,9 @@
   converts disowned resonance (Mire excess first) through `convert_resonance_amount`
   (`services/conversion.py`) as `GainSource.DRIFT_CORRECTION` at the `AffinityInteraction` pair rate,
   and accepts the aura's change (`accept_aura_change(sheet, fraction=)`, #5123, now only the rite's step).
+  Embracing a deed grows `embraced_amount` (the deed's amount x the share x the direction rate for the
+  main-to-deed pair, #4751). It is the only rite for a changing aura: the Rite of Atonement was removed in
+  #4751 (ADR-4751), and "atonement" now only names a reflection that turns away from something.
   `RitualComponentRequirement.matches_target_resonance` +
   `min_item_meaning` add a third component mode (`ComponentMode`: material, facet, keepsake;
   `qualifying_components_by_target`). Helpers: `drift_holdings`, `convertible_drift`, `focus_bonus`,
@@ -106,7 +109,7 @@
   `NotUnsettledError`. Action `perform_settling_rite`; telnet `aura` / `aura settle <offering>`; REST
   `/api/magic/settling-rite/` (GET reading, POST perform) and `/api/magic/drift-correction/pending/`;
   React `SettleAuraDialog` and the sheet's `AuraReflections`, and `AuraHalo` on the sheet. One Required
-  content row, `drift-correction-config`. Details: [magic.md](magic.md) "Drift correction".
+  content rows, `drift-correction-config` and `affinity-conversion-pairs` (#4751). Details: [magic.md](magic.md) "Drift correction".
 
 - **Kindled resonances (#5124) [BUILT & WIRED]:** a resonance is kindled when one of its staff-authored
   `KindlingSituation` rows holds (`models/kindling.py`: set on a `resonance` or once on an `affinity`;
@@ -180,7 +183,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   work in the worn self's affinity. See magic.md.
 - **Unsettled and Resonance Conflict (#4732, #5123):** `DriftConfig` (singleton, `get_drift_config()`),
   `CharacterAuraShare.settled_percent`, `CharacterResonance.mire_lifetime`, `drift_for(sheet)` (the
-  unsettled reading on the true aura), and `check_resonance_focus` (once per cast, inside
+  unsettled reading on the true aura; the range before Unsettled and step are per main affinity,
+  `Affinity.unsettled_tolerance_percent` / `unsettled_step_percent` through `_unsettled_numbers`, #4751),
+  and `check_resonance_focus` (once per cast, inside
   `use_technique`'s `_complete_technique_cast`, so every cast path rolls it); the conflict
   condition is authored and `ConditionCategory.self_shakeable` lets `breakfree`/`rally` reach it.
   See magic.md.

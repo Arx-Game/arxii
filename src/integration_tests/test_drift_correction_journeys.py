@@ -86,6 +86,7 @@ NOT_READY = "The rite of settling is not set up yet; tell staff."
 NOTHING_WAITING = "You have no reflections waiting."
 PENDING = "/api/magic/drift-correction/pending/"
 RITE = "/api/magic/settling-rite/"
+AURAS = "/api/magic/character-auras/"
 POSE = "sets the iron on the altar and looks at it."
 
 
@@ -248,6 +249,13 @@ class DriftJourneyCase(JourneyCase):
     def settle(self, character, offering: str, tier: str = "Success") -> str:
         with force_check_outcome(self.outcomes[tier]):
             return strip_ansi(self.telnet(character, f"aura settle {offering}"))
+
+    def aura_payload(self, character) -> dict:
+        """The one aura row the sheet reads for ``character``, as her own account asks."""
+        response = self.api(self.account_of(character)).get(f"{AURAS}?character={character.pk}")
+        self.assertEqual(response.status_code, 200, response.content)
+        (row,) = response.json()
+        return row
 
 
 class DisowningWhatUnsettlesHer(DriftJourneyCase):
@@ -570,6 +578,68 @@ class AcceptingWhatSheHasBecome(DriftJourneyCase):
         self.assertEqual(self.waiting(self.ysmay), 0)
 
 
+class TheMainAffinitysOwnRange(DriftJourneyCase):
+    """Staff narrow Celestial's range before Unsettled; a small Abyssal deed then unsettles her."""
+
+    def test_a_deed_inside_the_general_range_unsettles_her_once_celestial_sets_a_narrower_one(
+        self,
+    ) -> None:
+        sheet = self.ysmay.sheet_data
+        thread = self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        # Start from a settled Celestial with no Ruin and the general 5 and 5.
+        ruin_row = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.ruin)
+        ruin_row.balance = 0
+        ruin_row.lifetime_earned = 0
+        ruin_row.save()
+        general = get_drift_config()
+        general.unsettled_tolerance_percent = 5
+        general.unsettled_step_percent = 5
+        general.save()
+
+        # She threatens a prisoner and earns 20 Ruin. Her lifetime resonance is now 500
+        # Dawnlight + 20 Ruin = 520, so Ruin is 20 / 520 = 3.85% of it, past the 0% she has
+        # settled for Abyssal. That is inside the general 5 points of range.
+        deed = self.kindled_deed(self.ysmay, self.ruin, 20)
+        self.assertIsNone(self.celestial.unsettled_tolerance_percent)
+        self.assertIsNone(self.celestial.unsettled_step_percent)
+        self.assertIs(self.aura_payload(self.ysmay)["unsettled"], False)
+        self.assertEqual(self.aura_payload(self.ysmay)["unsettled_line"], "")
+        self.assertNotIn("unsettled", strip_ansi(self.telnet(self.ysmay, "aura")))
+        self.assertEqual(drift_for(sheet).steps_past, 0)
+
+        # Staff set Celestial's range to 1 point and its step to 2. The same 3.85% is now
+        # 3.85 - 0 - 1 = 2.85 points past, and 2.85 / 2 = 1.42 rounds up to 2 steps.
+        self.celestial.unsettled_tolerance_percent = 1
+        self.celestial.unsettled_step_percent = 2
+        self.celestial.save()
+
+        payload = self.aura_payload(self.ysmay)
+        line = "Your Ruin has grown strong enough to make you unsettled."
+        self.assertIs(payload["unsettled"], True)
+        self.assertEqual(payload["unsettled_line"], line)
+        self.assertIn(line, strip_ansi(self.telnet(self.ysmay, "aura")))
+        self.assertEqual(drift_for(sheet).steps_past, 2)
+
+        # She disowns the deed and performs the rite at a full share. 75% of 20 is 15 Ruin
+        # turned, and 15 at Redemption's 0.5 is int(7.5) = 7 Dawnlight. Lifetime follows:
+        # Ruin 20 - 15 = 5 and Dawnlight 500 + 15 = 515, still 520 in all. 5 / 520 = 0.96%
+        # is under the 1 point of range, so she is settled again.
+        self.assertIn("recorded", self.reflect(self.ysmay, str(deed.pk), "disown"))
+        told = self.settle(self.ysmay, "Dawn-gold")
+
+        self.assertIn("You disown Held the line: 15 Ruin became 7 Dawnlight.", told)
+        self.assertTrue(consumed(thread))
+        ruin_after = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.ruin)
+        self.assertEqual((ruin_after.balance, ruin_after.lifetime_earned), (5, 5))
+        dawn_after = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.dawnlight)
+        self.assertEqual((dawn_after.balance, dawn_after.lifetime_earned), (7, 515))
+        payload = self.aura_payload(self.ysmay)
+        self.assertIs(payload["unsettled"], False)
+        self.assertEqual(payload["unsettled_line"], "")
+        self.assertNotIn("unsettled", strip_ansi(self.telnet(self.ysmay, "aura")))
+        self.assertEqual(drift_for(sheet).steps_past, 0)
+
+
 class AJournalEntryEmbracingWhatUnsettlesHer(DriftJourneyCase):
     def test_a_journal_entry_then_a_partial_rite_moves_her_settled_share_part_of_the_way(
         self,
@@ -703,6 +773,42 @@ class TheSameRiteOnTheWeb(DriftJourneyCase):
         self.assertFalse(consumed(mine))
         self.assertEqual(self.waiting(self.ysmay), 1)
         self.assertEqual(balance(self.ysmay, self.ruin), 30)
+
+
+class EmbracingAFallOnTheWeb(DriftJourneyCase):
+    """Embracing a deed of another affinity pays at the direction rate, shown before and after."""
+
+    def test_the_preview_the_result_line_and_the_balance_all_carry_the_rate(self) -> None:
+        ring = self.carry(self.ysmay, self.ruin, "Ruin-iron Ring")
+        # Ysmay is Celestial and the deed is Abyssal, so the pair is the seeded Celestial to
+        # Abyssal Fall at 1.50. A deed of 15 embraced at the full share of Success (1.00) grows
+        # 15 x 1.00 x 1.50 = 22.5, rounded down to 22; without the rate it would be 15.
+        deed = self.kindled_deed(self.ysmay, self.ruin, 15)
+        self.assertIn("recorded", self.reflect(self.ysmay, str(deed.pk), "embrace"))
+        before = balance(self.ysmay, self.ruin)
+        self.assertEqual(before, 30 + 15)
+        sheet_id = self.ysmay.sheet_data.pk
+        ysmay_api = self.api(self.account_of(self.ysmay))
+
+        reading = ysmay_api.get(RITE, {"character_sheet": sheet_id})
+
+        self.assertEqual(reading.status_code, 200)
+        (reflection,) = reading.data["reflections"]
+        self.assertEqual(reflection["choice"], "EMBRACE")
+        self.assertEqual(reflection["effect_line"], "Your Ruin from Held the line grows, up to 22.")
+        self.assertEqual(balance(self.ysmay, self.ruin), before)
+
+        with force_check_outcome(self.outcomes["Success"]):
+            done = ysmay_api.post(
+                RITE, {"character_sheet_id": sheet_id, "component_ids": [ring]}, format="json"
+            )
+
+        self.assertEqual(done.status_code, 200, done.content)
+        self.assertEqual(done.data["lines"], ["You embrace Held the line: your Ruin grows by 22."])
+        self.assertEqual(balance(self.ysmay, self.ruin), before + 22)
+        embraced = ResonanceGrant.objects.get(source=GainSource.EMBRACED_DEED)
+        self.assertEqual((embraced.resonance, embraced.amount), (self.ruin, 22))
+        self.assertEqual(self.waiting(self.ysmay), 0)
 
 
 class TheChanceStaysOpenWhenTheSceneEnds(DriftJourneyCase):

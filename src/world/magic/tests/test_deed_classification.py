@@ -19,7 +19,6 @@ class DeedClassificationTests(TestCase):
 
     def test_casting_and_conversions_are_not_deeds(self) -> None:
         for source in (
-            GainSource.PENANCE,
             GainSource.FALL_CONVERSION,
             GainSource.DRIFT_CORRECTION,
             GainSource.COMPROMISE,

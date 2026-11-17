@@ -600,7 +600,7 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="DISTINCTION"),
             ),
-            # #1583 — COMPROMISE / PENANCE / FALL_CONVERSION: no typed source FK.
+            # #1583 — COMPROMISE / FALL_CONVERSION: no typed source FK.
             # Attributed by discriminator only (like MISSION_REPORT / STAKE_REWARD).
             models.CheckConstraint(
                 name="res_grant_compromise_shape",
@@ -626,29 +626,6 @@ class ResonanceGrant(SharedMemoryModel):
                 | ~Q(source="COMPROMISE"),
             ),
             models.CheckConstraint(
-                name="res_grant_penance_shape",
-                check=(
-                    Q(source="PENANCE")
-                    & Q(source_room_profile__isnull=True)
-                    & Q(source_staff_account__isnull=True)
-                    & Q(source_pose_endorsement__isnull=True)
-                    & Q(source_scene_entry_endorsement__isnull=True)
-                    & Q(outfit_item_facet__isnull=True)
-                    & Q(source_sanctum_details__isnull=True)
-                    & Q(source_project__isnull=True)
-                    & Q(source_entry_flourish__isnull=True)
-                    & Q(source_dramatic_moment__isnull=True)
-                    & Q(source_style_presentation_endorsement__isnull=True)
-                    & Q(source_mission_deed_reward_line__isnull=True)
-                    & Q(source_character_distinction__isnull=True)
-                    & Q(source_worship_rite_performance__isnull=True)
-                    & Q(source_kindling_situation__isnull=True)
-                    & Q(source_settling_rite__isnull=True)
-                    & Q(source_reflection__isnull=True)
-                )
-                | ~Q(source="PENANCE"),
-            ),
-            models.CheckConstraint(
                 name="res_grant_fall_conversion_shape",
                 check=(
                     Q(source="FALL_CONVERSION")
@@ -671,10 +648,10 @@ class ResonanceGrant(SharedMemoryModel):
                 )
                 | ~Q(source="FALL_CONVERSION"),
             ),
-            # #4733 DRIFT_CORRECTION: no typed source FK, untyped like COMPROMISE and
-            # PENANCE. A cap row is deleted once a conversion exhausts it, and the offer
-            # (with its caps) on decline, when its last cap is spent, or at scene end, so
-            # the ledger row carries no provenance link afterwards.
+            # #4733 DRIFT_CORRECTION: no typed source FK, untyped like COMPROMISE. A cap row
+            # is deleted once a conversion exhausts it, and the offer (with its caps) on
+            # decline, when its last cap is spent, or at scene end, so the ledger row
+            # carries no provenance link afterwards.
             models.CheckConstraint(
                 name="res_grant_drift_correction_shape",
                 check=(

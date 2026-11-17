@@ -196,7 +196,6 @@ def _perform_fall(
         source_affinity=from_affinity,
         target_affinity=target_affinity,
         multiplier=multiplier,
-        partial=False,
     )
 
     # A Fall or Redemption also moves who she is: her settled shares follow the new aura, so

@@ -18,6 +18,7 @@ from world.magic.services.drift import get_drift_correction_config
 from world.magic.services.drift_correction import (
     RITE_NOT_READY_MESSAGE,
     disowns_unsettling,
+    embraced_amount,
     fallback_conversion_target,
     main_affinity_rows,
     offerings_for,
@@ -76,6 +77,7 @@ def open_cap_line(sheet: CharacterSheet) -> str:
 
 
 def _effect_line(
+    sheet: CharacterSheet,
     reflection: Reflection,
     target: Resonance | None,
     caps: dict[int, int],
@@ -87,7 +89,8 @@ def _effect_line(
         grant = reflection.grant
         if embrace:
             what = deed_in_sentence(grant) or f"your {resonance.name}"
-            return f"Your {resonance.name} from {what} grows, up to {grant.amount}."
+            most = embraced_amount(sheet, grant, Decimal(1))
+            return f"Your {resonance.name} from {what} grows, up to {most}."
         most = int(Decimal(grant.amount) * Decimal(disown_percent) / _ONE_HUNDRED)
         if most <= 0:
             return "Nothing will turn, because the deed earned too little."
@@ -137,7 +140,9 @@ def settling_rite_reading(
                 where=where,
                 from_line=from_line,
                 excerpt=excerpt,
-                effect_line=_effect_line(reflection, target, caps, config.disown_deed_percent),
+                effect_line=_effect_line(
+                    sheet, reflection, target, caps, config.disown_deed_percent
+                ),
             )
         )
     ready = rite_is_ready(config)

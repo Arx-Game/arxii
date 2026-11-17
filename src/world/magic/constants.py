@@ -333,12 +333,11 @@ class GainSource(models.TextChoices):
     COMBO_DISCOVERY = "COMBO_DISCOVERY", "Combo discovery"
     # #1583 — Fall/Redemption: compromising acts grant non-native resonance
     COMPROMISE = "COMPROMISE", "Moral compromise"
-    PENANCE = "PENANCE", "Atonement resonance conversion"
     FALL_CONVERSION = "FALL_CONVERSION", "Fall/Redemption conversion"
     # #3777: a worship rite performed in a scene
     WORSHIP_RITE = "WORSHIP_RITE", "Worship rite"
     # #4733: a drift correction moves some of one resonance into another the
-    # character chose; no typed source FK (like PENANCE).
+    # character chose; no typed source FK (like COMPROMISE).
     DRIFT_CORRECTION = "DRIFT_CORRECTION", "Drift correction"
     CORRUPTION_CLEANSING = "CORRUPTION_CLEANSING", "Corruption cleansing payout"
     SINEATING = "SINEATING", "Sineating payout"
@@ -384,7 +383,6 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SANCTUM_DISSOLUTION_RECOVERY,
         GainSource.COMBO_DISCOVERY,
         GainSource.COMPROMISE,
-        GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
         # #3777: a rite pays off the performer's own roll against an authored
         # award table; a live scene is its prerequisite, not its witness, and
@@ -436,7 +434,6 @@ NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SANCTUM_DISSOLUTION_RECOVERY,
         GainSource.DISTINCTION,
         GainSource.COMPROMISE,
-        GainSource.PENANCE,
         GainSource.FALL_CONVERSION,
         GainSource.DRIFT_CORRECTION,
         GainSource.SINEATING,

@@ -1299,7 +1299,7 @@ class PerformSoulTetherRescueGateTests(TestCase):
         self.resonance = ResonanceFactory(affinity=abyssal_affinity)
 
     def test_stage_below_3_raises(self) -> None:
-        """Sinner at stage 2 (Atonement territory) raises RescueValidationError."""
+        """Sinner at stage 2 raises RescueValidationError (a rescue starts at stage 3)."""
         from world.magic.exceptions import RescueValidationError
         from world.magic.factories import with_corruption_at_stage
         from world.magic.services.soul_tether import perform_soul_tether_rescue

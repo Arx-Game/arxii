@@ -81,7 +81,7 @@ and the 5-axis Thread model no longer exist.
 | `FacetAlias` | Another spelling that routes to a facet (#4197): the names a merge retired, and any spelling staff add by hand. Resolved by the pickers' search and the create endpoint; never shown to a player. Content (`CONTENT_MODELS`, natural key `name`); cascades with its facet. | `name` (unique), `facet` FK |
 | `FacetEffectBonus` | A facet's always-on bonus to one maneuver effect (#4815, slice 4 of #4783): the facet names the effect, whatever its thread's resonance ("Wolf: +2 Charge: damage"). Counted by `passive_facet_bonuses` while the character wears an item carrying the facet and has a FACET thread on it: `amount_tenths / 10 x the FACET_EFFECT_BONUS lane's baseline at max(1, thread_rung(level)) x item quality x attachment quality` (seeded 10 a rung, so +1 a rung per 10 thread levels, #5093) per worn item facet. Authored in the Facet admin's inline; `merge_facets` moves the rows. Content (`CONTENT_MODELS`, natural key `(facet, target)`). | `facet` FK (CASCADE), `target` FK `ModifierTarget` ("maneuver_effect" category only), `amount_tenths` (non-zero); unique per `(facet, target)` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance`; limits no Gift thread, only the default a grant naming no resonance reaches for (#5123), and not the cast-time value; the cast reads the character's GIFT-thread resonances, leading first, via `gift_resonances_for`, ADR-0052, ADR-5123-A), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"`: the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192), `natural_weapon_template` (nullable FK to an Unarmed `ItemTemplate`, PROTECT: claws or a bite the gift gives its holder, made and equipped by `grant_gift_to_character`, marked `ItemInstance.natural_weapon_gift`, and removed only when the gift is lost; #4898, see docs/systems/items.md "Natural weapons") |
-| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick). `mechanics.ModifierTarget.target_affinity` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
+| `Affinity` | Celestial / Primal / Abyssal rows; `Affinity.objects.get_celestial_affinity()` / `get_primal_affinity()` / `get_abyssal_affinity()` are the canonical getters | `name`, `corruption_coefficient` (integer tenths of corruption per cast tick; the canonical seed and test values are Celestial 0, Primal 0, Abyssal 10, so only Abyssal casts corrupt, #4751), `unsettled_tolerance_percent` and `unsettled_step_percent` (nullable: this affinity's own range before Unsettled and step width for characters it leads, null uses `DriftConfig`, #4751). `mechanics.ModifierTarget.target_affinity` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only at `GET /api/magic/affinities/` (`AffinityViewSet`) |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne. `mechanics.ModifierTarget.target_resonance` is the OneToOne that points here (reverse accessor `modifier_target`). Listed read-only, unpaginated, at `GET /api/magic/resonances/` (`ResonanceViewSet`, `ResonanceSerializer` with `affinity_name`; `?affinity=<pk>` filters): the CG Gift stage's Resonance picker reads it (#4665) |
 
 **Note:** `Affinity` and `Resonance` are proper first-class domain models in
@@ -2182,7 +2182,9 @@ push the cast harder. The burn rides the pull: no pull, no burn (`ResonanceBurnN
   non-combat cast pull plus burned points (`_PullSpend.add_burn` in
   `world/magic/services/techniques.py`, `hasty_fall_points`), which also closes a gap: a non-combat pull's resonance spend never
   reached corruption before. A pull on a resonance outside the gift's set still involves that
-  resonance. Celestial's coefficient 0 means no corruption.
+  resonance. A coefficient of 0 (Celestial and, since #4751, Primal in the canonical values) means no
+  corruption; only Abyssal casts add it, and it falls only by daily decay and a Sineater's rescue
+  (the Rite of Atonement was removed, ADR-4751).
 - **Engagement share.** After every cast whose strain bonus is above 0 (anima-only strain
   included), `_share_strain_with_engagement` adds
   `StrainConfig.engagement_share_percent` (default 50) of the bonus, floored, to
@@ -3494,9 +3496,9 @@ Resonance Conflict condition on them for the template's duration (authored as th
 of it lives in `world/magic/services/drift.py` and the `DriftConfig` singleton
 (`models/drift.py`, `get_drift_config()`); no number is in code.
 
-- `DriftConfig` fields for the reading: `unsettled_tolerance_percent` (5: points an affinity
-  may stand over its settled share), `unsettled_step_percent` (5: points past that per severity
-  step), `mire_allowance_percent` (30), plus `focus_base_difficulty_level`,
+- `DriftConfig` fields for the reading: `unsettled_tolerance_percent` (5: the general range
+  before Unsettled, the points an affinity may stand over its settled share), `unsettled_step_percent`
+  (5: points past that per severity step), `mire_allowance_percent` (30), plus `focus_base_difficulty_level`,
   `focus_difficulty_per_step_tenths`, and two designations by FK, `focus_check_type` and
   `conflict_condition`. Either designation unset means the check does not run; the Required
   content dashboard probes list both, require the conflict condition's category to be
@@ -3507,15 +3509,18 @@ of it lives in `world/magic/services/drift.py` and the `DriftConfig` singleton
   is the largest settled share (ties: lowest affinity id). `CharacterResonance.mire_lifetime` is
   the part of `lifetime_earned` a Sineater took from the Mire (a Sineater's grant in
   `_grant_sineating_resonance` passes `from_mire=True`; the Sinner's gain is their own).
-  `_move_partial` shrinks it in proportion when lifetime moves, and a DB check constraint keeps
-  it at or under `lifetime_earned`.
+  `convert_resonance_amount` shrinks it by the Mire part of the points it moves (the Mire's
+  excess first), and a DB check constraint keeps it at or under `lifetime_earned`.
 - `drift_for(sheet) -> DriftReading` (`steps_past`, `main_affinity`, `leading_excess_resonance`,
   `excess_percent`, `mire_share_percent`, `own_shares`, `settled_shares`) reads the TRUE aura
   (not `acting_aura`: a worn alternate self does not change who they are). An affinity's own
   share is its lifetime less its Mire part, as a percent of all the character's own lifetime;
   its Mire share is the Mire part as a percent of all lifetime. For each affinity other than the
-  main one, excess is `max(0, own - settled - tolerance) + max(0, mire - allowance)`;
-  `steps_past` is the total excess over `unsettled_step_percent`, rounded up. A character with
+  main one, excess is `max(0, own - settled - range) + max(0, mire - allowance)`;
+  `steps_past` is the total excess over the step, rounded up. The range and the step come from
+  `_unsettled_numbers(main, cfg)`: the main affinity's own `Affinity.unsettled_tolerance_percent` and
+  `unsettled_step_percent` when set, else the `DriftConfig` ones (#4751), so Celestial can be very
+  strict while Primal and Abyssal keep the general value. A character with
   no aura, or none of it settled, reads zero.
 - `check_resonance_focus(character, technique) -> FocusOutcome | None`
   runs once per cast, inside `_complete_technique_cast` in `use_technique`
@@ -4621,7 +4626,7 @@ partition every `GainSource`; `test_deed_classification.py` fails when a member 
 both. Deeds are the poses and scene entries others endorsed, entry flourishes, dramatic
 moments, style presentations, mission rewards and reports, stake rewards, project
 contributions, combo discoveries and worship rites. Passive trickles (room residence, outfit),
-staff grants, sanctum sources, distinction seeds, compromise, penance and both conversions
+staff grants, sanctum sources, distinction seeds, compromise and both conversions
 (`FALL_CONVERSION`, `DRIFT_CORRECTION`) are not deeds. Casting never counts. A new `GainSource`
 member must be placed in one set.
 
@@ -4674,8 +4679,8 @@ roll, applies the share, then sets `rite` on every reflection, even at a share o
 
 | Reflection | Effect at share s |
 |---|---|
-| Embrace a deed | `grant_resonance(deed resonance, amount x s, source=EMBRACED_DEED, settling_rite=, reflection=)` |
-| Disown a deed | convert `amount x disown_deed_percent x s` toward the main affinity; needs no open chance |
+| Embrace a deed | `grant_resonance(deed resonance, embraced_amount, source=EMBRACED_DEED, settling_rite=, reflection=)`; `embraced_amount` is `amount x s`, and for a deed of a non-main affinity also x the direction rate `conversion_pair(main, deed affinity).conversion_multiplier` (rate 1 with no authored pair), read by the preview too (#4751) |
+| Disown a deed | convert `amount x disown_deed_percent x s` toward the main affinity; needs no open chance; a pair with no usable conversion converts nothing and the line names the pair (#4751) |
 | Embrace the unsettling resonance | `accept_aura_change(sheet, fraction=s)` |
 | Disown the unsettling resonance | convert up to the open cap x s, as atoning always did; the cap falls by what converted |
 
@@ -4709,9 +4714,8 @@ each payer's effects apart, and a resolved effect names what it grants: `capabil
 otherwise). A Rite of Imbuing POST's `kwargs.resonance_id` must be a
 resonance the character holds (`RitualPerformRequestSerializer`), and a character creation
 draft's `draft_data["gift_resonance_weights"]` is checked with the stage's own
-`resonance_weights_error`, allowing a spread still short of the creation points. `_move_partial` (`conversion.py`, the Rite of Atonement's penance path, no longer
-the drift rite's) works its proportional share out in integers as `amount x lifetime // balance`: exact when the
-ratio is whole (4 of a 30 balance with 30 lifetime moves 4), rounded down on a true fraction.
+`resonance_weights_error`, allowing a spread still short of the creation points. (The old
+`_move_partial` and the Rite of Atonement it served were removed in #4751.)
 
 **Component modes.** `RitualComponentRequirement` has a third mode, `matches_target_resonance`
 (exclusive with `item_template` and `min_touchstone_tier`), with optional `min_item_meaning`
@@ -4752,6 +4756,10 @@ aura in words with the settled line and the Mire share apart. See `frontend/src/
 the Fall and Redemption pair multipliers in admin; offers and caps are read-only there. Until
 the rite and check type are set and every tier has a share, the rite refuses ("not set up yet")
 though offers still open; the `drift-correction-config` Required content probe reports it.
+Staff also set each affinity's range before Unsettled and step width on its Affinity page (blank uses the
+general `DriftConfig` value), and the `affinity-conversion-pairs` Required content row lists every ordered
+pair of distinct affinities with no conversion rate or type, since an unset pair converts nothing on a
+disown and leaves an embrace at the deed's plain amount (#4751).
 While the rite, the check type or a tier's share is missing (`rite_is_ready()` false;
 the tiers come from `outcome_tiers_without_a_share()`, which the probe reads too), telnet
 `aura` and `aura settle` say the same sentence (`RITE_NOT_READY_MESSAGE`, the
@@ -4889,11 +4897,10 @@ unless it is the thread's only row; a row already at 0 (a creation pick) moves o
 converted: `int(points x (unconverted + converted x multiplier) / total)`, so a thread wholly in
 the source affinity scales entirely and a half-converted one scales by half; `level` is
 unchanged. `refresh_leading_resonance` runs per thread, and `character.threads.invalidate()`
-once. Penance (`partial=True`) still touches no thread. A Fall or Redemption also moves who she
+once. A Fall or Redemption also moves who she
 is: `perform_fall` ends by calling `settle_shares` (`services/drift.py`, the settle step
 `accept_aura_change` shares), so her `settled_percent` follows her new own shares and she comes
-out of the rite settled, `steps_past == 0` (owner ruling 2026-11-14). Penance leaves her settled
-shares alone. Journeys and tests:
+out of the rite settled, `steps_past == 0` (owner ruling 2026-11-14). Journeys and tests:
 `integration_tests/test_thread_resonance_journeys.py` (`TheFallConvertsAThreadsRows`),
 `world/magic/tests/test_retune_rows.py`.
 

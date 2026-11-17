@@ -249,7 +249,7 @@ def ensure_canonical_affinities() -> tuple[Affinity, Affinity, Affinity]:
     """Create the Celestial, Primal and Abyssal rows if absent and drop the getter cache.
 
     For tests that reach code using ``Affinity.objects.get_*_affinity()`` (a CG finalize's
-    starting aura, the fall/atonement rites). Returns (celestial, primal, abyssal).
+    starting aura, the fall and redemption rites). Returns (celestial, primal, abyssal).
     """
     from world.magic.constants import (
         AFFINITY_ABYSSAL,
@@ -271,7 +271,7 @@ def ensure_canonical_affinities() -> tuple[Affinity, Affinity, Affinity]:
 
 
 #: Corruption tenths per cast tick for (Celestial, Primal, Abyssal), as production authors them.
-_CANONICAL_CORRUPTION_COEFFICIENTS = (0, 2, 10)
+_CANONICAL_CORRUPTION_COEFFICIENTS = (0, 0, 10)
 
 
 def ensure_conversion_pairs() -> tuple[Affinity, Affinity, Affinity]:
@@ -1534,36 +1534,6 @@ class WeavingCeremonyFactory(RitualFactory):
     flow = None
 
 
-class AtonementRitualFactory(RitualFactory):
-    """Seed factory for the canonical 'Rite of Atonement' ritual.
-
-    SERVICE-dispatched (deviation from spec §4.1 FLOW recommendation — see
-    services/atonement.py for rationale).  Uses django_get_or_create so
-    repeated calls in tests return the same row.  Scope #7 Phase 8.
-    """
-
-    class Meta:
-        model = Ritual
-        django_get_or_create = ("name",)
-
-    name = "Rite of Atonement"
-    description = (
-        "A ritual of self-cleansing for those touched by corruption. "
-        "Effective only at stages 1-2; requires Celestial or Primal affinity."
-    )
-    narrative_prose = (
-        "The performer kneels at a consecrated site and speaks the words of "
-        "unbinding, drawing the corruption out of themselves through sustained "
-        "focus and will. The process is painful and requires witnesses to anchor "
-        "the soul."
-    )
-    execution_kind = RitualExecutionKind.SERVICE
-    service_function_path = "world.magic.services.atonement.perform_atonement_rite"
-    flow = None
-    hedge_accessible = False
-    glimpse_eligible = False
-
-
 class RitualComponentRequirementFactory(factory.django.DjangoModelFactory):
     """Factory for RitualComponentRequirement."""
 
@@ -2600,7 +2570,7 @@ class CorruptionConditionTemplateFactory(factory.django.DjangoModelFactory):
         #
         # Abyssal (e.g. Web of Spiders):
         #   decay_per_day=1, max_severity=10 (only the very lowest stages auto-decay).
-        #   Abyssal-primary characters past tier 1 must rely on Sineating or Atonement.
+        #   Abyssal-primary characters past tier 1 must rely on a Sineater's rescue.
         if is_abyssal:
             self.passive_decay_per_day = 1
             self.passive_decay_max_severity = 10  # decays only below this severity
@@ -3553,10 +3523,6 @@ def wire_fall_redemption_content() -> object:
       per-pair conversion multipliers are seeded by ``_seed_affinity_interactions``).
     - "Ritual of Falling" Ritual — SERVICE dispatch to
       ``world.magic.services.fall_redemption.perform_fall``.
-
-    The existing "Rite of Atonement" Ritual row is already seeded by
-    ``seed_canonical_rituals()`` — its service function is extended in-place
-    (#1583); no new Ritual row is needed for Atonement.
 
     Also seeds example ``CompromiseActType`` and ``ResonanceConversion``
     rows against one authored Resonance per affinity, skipping gracefully when

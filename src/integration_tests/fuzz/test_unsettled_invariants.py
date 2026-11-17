@@ -526,7 +526,6 @@ class ThreadRowInvariants(HypothesisTestCase):
             source_affinity=self.primal,
             target_affinity=self.abyssal,
             multiplier=FALL_RATE,
-            partial=False,
         )
 
         expected = {
