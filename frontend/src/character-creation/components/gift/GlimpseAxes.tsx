@@ -1,13 +1,23 @@
 /**
  * GlimpseAxes: the CG mount's own axis-by-axis layout for "The Glimpse"
- * (#3675 fix round 1), in the folio grammar (`.field`/`.picks`/`.tags`/
- * `.conditional`), replacing the shared `GlimpseFlow`'s shadcn accordion
- * for this one mount. Every axis renders as its own `.field` at once (no
- * single-open accordion hiding two axes at a time, the demo-fidelity
- * defect Task 13 shipped), each with a `.picks` row of pill buttons.
+ * (#3675 fix round 1; cards and headings #5191), replacing the shared
+ * `GlimpseFlow`'s shadcn accordion for this one mount. Every axis renders
+ * as its own `.field` at once (no single-open accordion hiding two axes at
+ * a time, the demo-fidelity defect Task 13 shipped).
+ *
+ * An axis is headed by its name ("Trigger"), with a smaller lead-in line
+ * under it ("The Circumstances Around Your Glimpse:"). Its tags are the
+ * life page's cards (`ul.stances.grid.pair` of `button.stance`): one width,
+ * two across because a description can run to several sentences, the name
+ * over its description, a round mark on an axis that takes one answer and
+ * a square mark on one that takes several. Owner ruling
+ * 2026-11-18 (#5191): the pill buttons this replaced were each as wide as
+ * their own text and read as a run of uneven boxes; the question was a bad
+ * title; "choose one" is not printed. An axis that takes several answers
+ * keeps "choose any", because that is the exception.
  *
  * A chosen tag opens its own `ChapterOffers` sub-block directly under the
- * pick row, one sub-block PER TAG (not one per axis, Task 13's shape); two
+ * cards, one sub-block PER TAG (not one per axis, Task 13's shape); two
  * tags chosen on the same axis (e.g. Consequence: Mark + Loss) each get
  * their own heading, matching the demo's "What the mark is" / "What the
  * loss was" side by side under one axis. Each sub-block's heading carries
@@ -22,6 +32,7 @@
  */
 
 import type { ChangeEvent } from 'react';
+import { cn } from '@/lib/utils';
 import { AXIS_STEPS } from '@/magic/components/glimpse/GlimpseFlow';
 import type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
 import { Field } from '../../folio';
@@ -31,10 +42,12 @@ import { ChapterOffers } from '../offers/ChapterOffers';
 // `AXIS_STEPS` never carries a SENSORY entry (GlimpseAxes never renders a
 // field for it, same as GlimpseFlow), but `GlimpseTagOption['axis']` is the
 // full 7-member union; both maps carry an unreachable SENSORY entry purely
-// to satisfy `Record<GlimpseTagOption['axis'], string>`. These are the
-// fallback behind a `glimpse_axis_<axis>_chip` copy key (mirrors
+// to satisfy `Record<GlimpseTagOption['axis'], string>`. The axis name is
+// the fallback behind a `glimpse_axis_<axis>_chip` copy key (mirrors
 // `GlimpseTagAxis`'s own choice labels in `world.magic.constants`, the
-// authoritative source this literal must not drift from).
+// authoritative source this literal must not drift from). The key keeps the
+// name it had when the axis name was a chip beside the question, so a row
+// staff already edited still applies now that the name is the heading.
 const AXIS_DISPLAY_NAME: Record<GlimpseTagOption['axis'], string> = {
   TRIGGER: 'Trigger',
   CHOOSING: 'The Choosing',
@@ -45,15 +58,17 @@ const AXIS_DISPLAY_NAME: Record<GlimpseTagOption['axis'], string> = {
   SENSORY: '',
 };
 
-// Demo copy (Screen 3); GlimpseFlow's own question-style label
-// (`AXIS_STEPS`) is GlimpseFlow-only and not reused for these prompts.
-const AXIS_PROMPT_FALLBACK: Record<GlimpseTagOption['axis'], string> = {
-  TRIGGER: 'What was happening',
-  CHOOSING: 'How it claimed you',
-  REFLECTION: 'What you saw in yourself',
-  TONE: 'How it felt',
-  CONSEQUENCE: 'What it left behind',
-  WITNESS: 'Who saw',
+// The lead-in line under each axis name, read via
+// `glimpse_axis_<axis>_lead_in` (#5191). The keys are new on purpose: copy
+// rows already authored under the retired `glimpse_axis_<axis>_prompt` keys
+// hold the old headings, and a row beats this fallback.
+const AXIS_LEAD_IN_FALLBACK: Record<GlimpseTagOption['axis'], string> = {
+  TRIGGER: 'The Circumstances Around Your Glimpse:',
+  CHOOSING: 'How It Claimed You:',
+  REFLECTION: 'What You Saw in Yourself:',
+  TONE: 'How It Felt:',
+  CONSEQUENCE: 'What It Left Behind:',
+  WITNESS: 'Who Saw:',
   SENSORY: '',
 };
 
@@ -114,39 +129,39 @@ export function GlimpseAxes({
     <>
       {visibleSteps.map((step) => {
         const axisTags = tagsByAxis.get(step.axis) ?? [];
+        const axisKey = step.axis.toLowerCase();
+        const headingId = `glimpse-axis-${axisKey}`;
         return (
-          <div className="field" key={step.axis}>
-            <label>
-              {copy?.[`glimpse_axis_${step.axis.toLowerCase()}_prompt`] ??
-                AXIS_PROMPT_FALLBACK[step.axis]}
-              <span className="tags">
-                <span className="tag soft">
-                  {copy?.[`glimpse_axis_${step.axis.toLowerCase()}_chip`] ??
-                    AXIS_DISPLAY_NAME[step.axis]}
+          <fieldset className="field" aria-labelledby={headingId} key={step.axis}>
+            <h3 className="label" id={headingId}>
+              {copy?.[`glimpse_axis_${axisKey}_chip`] ?? AXIS_DISPLAY_NAME[step.axis]}
+              {step.multi && (
+                <span className="tags">
+                  <span className="tag soft">{copy?.glimpse_choose_any ?? 'choose any'}</span>
                 </span>
-                <span className="tag soft">
-                  {step.multi
-                    ? (copy?.glimpse_choose_any ?? 'choose any')
-                    : (copy?.glimpse_choose_one ?? 'choose one')}
-                </span>
-              </span>
-            </label>
-            <div className="picks">
-              {axisTags.map((tag) => {
-                const isSelected = selectedTagIdSet.has(tag.id);
-                return (
+              )}
+            </h3>
+            <p className="lead-in">
+              {copy?.[`glimpse_axis_${axisKey}_lead_in`] ?? AXIS_LEAD_IN_FALLBACK[step.axis]}
+            </p>
+            <ul className={cn('stances', 'grid', 'pair', !step.multi && 'oneof')}>
+              {axisTags.map((tag) => (
+                <li key={tag.id}>
                   <button
-                    key={tag.id}
                     type="button"
-                    aria-pressed={isSelected}
+                    className="stance"
+                    aria-pressed={selectedTagIdSet.has(tag.id)}
                     onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
                   >
-                    {tag.name}
-                    <small>{tag.description}</small>
+                    <span className={step.multi ? 'dot sq' : 'dot'} />
+                    <span>
+                      <b>{tag.name}</b>
+                      {tag.description && <span className="g">{tag.description}</span>}
+                    </span>
                   </button>
-                );
-              })}
-            </div>
+                </li>
+              ))}
+            </ul>
             {axisTags
               .filter((tag) => selectedTagIdSet.has(tag.id) && tag.offers.length > 0)
               .map((tag) => {
@@ -179,7 +194,7 @@ export function GlimpseAxes({
                   </div>
                 );
               })}
-          </div>
+          </fieldset>
         );
       })}
 

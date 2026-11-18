@@ -106,11 +106,11 @@ class TestLoreOnboardingSeed(TestCase):
         was undeclared until the same grep that found these keys caught it),
         none of which have a content-repo counterpart yet. Fix round 3 adds the
         per-axis Glimpse chip keys and the Review stage's own distinctions
-        ledger heading."""
+        ledger heading. #5191 replaces the per-axis Glimpse prompt keys with
+        lead-in keys and retires "choose one"."""
         _seed_cg_explanations()
         offers_chapter_keys = (
             "glimpse_choose_any",
-            "glimpse_choose_one",
             "glimpse_offers_heading",
             "offers_optional_chip",
             "glimpse_story_label",
@@ -121,12 +121,12 @@ class TestLoreOnboardingSeed(TestCase):
             "glimpse_axis_tone_chip",
             "glimpse_axis_consequence_chip",
             "glimpse_axis_witness_chip",
-            "glimpse_axis_trigger_prompt",
-            "glimpse_axis_choosing_prompt",
-            "glimpse_axis_reflection_prompt",
-            "glimpse_axis_tone_prompt",
-            "glimpse_axis_consequence_prompt",
-            "glimpse_axis_witness_prompt",
+            "glimpse_axis_trigger_lead_in",
+            "glimpse_axis_choosing_lead_in",
+            "glimpse_axis_reflection_lead_in",
+            "glimpse_axis_tone_lead_in",
+            "glimpse_axis_consequence_lead_in",
+            "glimpse_axis_witness_lead_in",
             "lineage_bundles_word",
             "lineage_offers_word",
             "lineage_offers_heading",

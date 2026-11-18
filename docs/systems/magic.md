@@ -496,8 +496,10 @@ full contract):
   - the CG mount, a thin state binder: draft reads, `updateDraft` writes
   `draft_data.glimpse_tag_ids`, the "skip for now" deferral, and the copy query.
   Renders `GlimpseAxes` (`frontend/src/character-creation/components/gift/GlimpseAxes.tsx`),
-  the folio-grammar per-axis layout (every axis visible at once, one `ChapterOffers`
-  sub-block per chosen tag), which owns the distinction picks itself; they sync
+  the folio-grammar per-axis layout (every axis visible at once, headed by its name
+  with a smaller lead-in line under it, its tags as the life page's cards in a grid
+  of one size (#5191), one `ChapterOffers` sub-block per chosen tag), which owns the
+  distinction picks itself; they sync
   immediately through `useSyncDistinctions`, never through a `draft_data` list.
   Prose stays on `GiftStage`'s `register('glimpse_story')`.
 - `GlimpseEditorDialog` (`frontend/src/magic/components/glimpse/GlimpseEditorDialog.tsx`)

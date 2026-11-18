@@ -1107,39 +1107,30 @@
   border-color: var(--cg-hairline-strong);
 }
 
-/* axis picks (#3675 fix round 1): the Glimpse's own field-per-axis layout,
-   pill toggle buttons standing in for the demo's static `<span>` mockup so
-   they carry native keyboard/focus/click behavior for free. */
-.interview .picks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-  margin: 0.6rem 0 0;
-}
-.interview .picks button {
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  font-size: 0.78rem;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
+/* A Glimpse axis (#5191): the axis name is the `.label` heading, this line reads under
+   it in the body face, and the tags are the life page's cards (`.stances.grid`), which
+   replaced pill buttons that were each as wide as their own text. */
+.interview .field .lead-in {
+  margin: -0.15rem 0 0;
+  font-size: 0.875rem;
+  font-style: italic;
   color: var(--cg-muted);
-  background: transparent;
-  border: 1px solid var(--cg-hairline-strong);
-  padding: 0.55rem 1.1rem;
-  cursor: pointer;
 }
-.interview .picks button[aria-pressed='true'] {
-  color: var(--cg-accent);
-  border-color: var(--cg-accent);
+/* An axis is a fieldset (a named group of toggles). A fieldset is by default at least as
+   wide as its widest word, which would push a card past a narrow column. */
+.interview fieldset.field {
+  min-width: 0;
 }
-.interview .picks button small {
-  display: block;
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 0.8rem;
-  letter-spacing: 0;
-  text-transform: none;
-  color: var(--cg-muted);
-  font-weight: 400;
+/* A Glimpse tag's description is prose, sometimes several sentences, so its cards run
+   two across in the reading column, where a third of the column is too narrow to read.
+   A row is as tall as its longer card. One across on a phone. */
+.interview .stances.grid.pair {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+@media (max-width: 30rem) {
+  .interview .stances.grid.pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 /* The note after a chapter heading over offer sections ("offered here", #3709). */
 .interview .section-h small {
