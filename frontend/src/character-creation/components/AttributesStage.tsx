@@ -7,7 +7,7 @@
  * lists the spend; it characterises nothing (Decision 8).
  */
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChapterLeaf,
   InstrumentFrame,
@@ -62,6 +62,21 @@ export function AttributesStage({ draft }: AttributesStageProps) {
     () => Object.fromEntries((statDefinitions ?? []).map((s) => [s.name, s.description])),
     [statDefinitions]
   );
+
+  // The spread on screen is the spread the draft holds (#5198). A draft that has never
+  // saved its statistics shows the even spread with no points left, and the server counted
+  // that as twelve missing statistics until a button was pressed, so a player who wanted
+  // the even spread had to lower one and raise it again. Opening the stage saves what it
+  // shows, once: the ref stops a second save while the first is in flight, and the saved
+  // draft stops any after it.
+  const hasSavedStats = draft.draft_data.stats != null;
+  const savedDefaultsFor = useRef<number | null>(null);
+  const saveStats = updateDraft.mutate;
+  useEffect(() => {
+    if (hasSavedStats || savedDefaultsFor.current === draft.id) return;
+    savedDefaultsFor.current = draft.id;
+    saveStats({ draftId: draft.id, data: { draft_data: { stats: getDefaultStats() } } });
+  }, [hasSavedStats, draft.id, saveStats]);
 
   const change = (stat: keyof Stats, value: number) => {
     updateDraft.mutate({

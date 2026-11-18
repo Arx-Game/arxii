@@ -230,7 +230,11 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   // gated on a tradition being chosen so it never fires before GiftSelector
   // itself would (and never races the unmocked network in a test that never
   // selects a tradition).
-  const { data: cgGifts } = useCGGifts(completion.tradition ? draft.id : undefined);
+  const { data: cgGifts } = useCGGifts(
+    completion.tradition ? draft.id : undefined,
+    draft.selected_path?.id,
+    draft.selected_tradition?.id
+  );
   const giftName = cgGifts?.find((gift) => gift.id === giftId)?.name;
   // The picks heaviest first: the step's gloss and the rail name them all, and the facets
   // below belong to the heaviest.

@@ -37,7 +37,15 @@ vi.mock('../../../api', () => ({
 
 function renderSelector(draft: CharacterDraft) {
   const queryClient = createTestQueryClient();
-  seedQueryData(queryClient, characterCreationKeys.cgGifts(draft.id), mockCGGiftOptions);
+  seedQueryData(
+    queryClient,
+    characterCreationKeys.cgGiftsFor(
+      draft.id,
+      draft.selected_path?.id ?? null,
+      draft.selected_tradition?.id ?? null
+    ),
+    mockCGGiftOptions
+  );
   seedQueryData(queryClient, characterCreationKeys.explanations(), {});
   // The gift options include a codex_entry_id (12) — CodexTerm/CodexModal mount
   // unconditionally and fetch on render, not just on open. Seed it so that

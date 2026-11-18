@@ -19,7 +19,11 @@ interface GiftSelectorProps {
 
 export function GiftSelector({ draft }: GiftSelectorProps) {
   const updateDraft = useUpdateDraft();
-  const { data: gifts, isLoading, isFetching } = useCGGifts(draft.id);
+  const {
+    data: gifts,
+    isLoading,
+    isFetching,
+  } = useCGGifts(draft.id, draft.selected_path?.id, draft.selected_tradition?.id);
   const { data: copy } = useCGExplanations();
   const selectedGiftId = draft.draft_data.selected_gift_id ?? null;
 

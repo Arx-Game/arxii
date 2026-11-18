@@ -109,6 +109,8 @@ export const characterCreationKeys = {
   gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
   // CG gift/technique options (GiftStage funnel, #2426 Task 10)
   cgGifts: (draftId: number) => [...characterCreationKeys.all, 'cg-gifts', draftId] as const,
+  cgGiftsFor: (draftId: number, pathId: number | null, traditionId: number | null) =>
+    [...characterCreationKeys.cgGifts(draftId), pathId, traditionId] as const,
   // Keyed by tradition too: the styles are the chosen Tradition's (#4921).
   cgCombatStyles: (draftId: number, traditionId: number | null) =>
     [...characterCreationKeys.all, 'cg-combat-styles', draftId, traditionId] as const,
@@ -546,9 +548,17 @@ export function useGift(giftId: number | undefined) {
  * Gifts pickable for a draft's chosen tradition + path (GiftStage funnel, #2426).
  * Empty until the draft has both a selected tradition and a selected path.
  */
-export function useCGGifts(draftId: number | undefined) {
+export function useCGGifts(
+  draftId: number | undefined,
+  pathId?: number | null,
+  traditionId?: number | null
+) {
   return useQuery({
-    queryKey: characterCreationKeys.cgGifts(draftId!),
+    // The server answers from the draft's path and tradition, so both are in the key: a
+    // change of either asks again (#5198: the list was cached by draft alone and a path
+    // change left "No gifts are available" on screen until a reload). The key still starts
+    // with `cgGifts(draftId)`, so invalidating that prefix reaches every entry.
+    queryKey: characterCreationKeys.cgGiftsFor(draftId!, pathId ?? null, traditionId ?? null),
     queryFn: () => getCGGifts(draftId!),
     enabled: !!draftId,
   });

@@ -15,6 +15,7 @@ import {
   useDraft,
   useCanCreateCharacter,
   useUpdateDraft,
+  useCGGifts,
   characterCreationKeys,
 } from '../queries';
 import type { CharacterDraft } from '../types';
@@ -34,6 +35,7 @@ vi.mock('../api', () => ({
   submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
   getCGExplanations: vi.fn(),
+  getCGGifts: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -261,6 +263,38 @@ describe('Character Creation Query Hooks', () => {
       expect(characterCreationKeys.families(1)).toEqual(['character-creation', 'families', 1]);
       expect(characterCreationKeys.draft()).toEqual(['character-creation', 'draft']);
       expect(characterCreationKeys.canCreate()).toEqual(['character-creation', 'can-create']);
+    });
+  });
+
+  // #5198: the gift list was cached by draft alone, so a change of path left the old
+  // path's answer ("No gifts are available") on screen until a reload.
+  describe('useCGGifts', () => {
+    it('asks again when the path or the tradition changes, and not otherwise', async () => {
+      vi.mocked(api.getCGGifts).mockResolvedValue([]);
+
+      const { result, rerender } = renderHook(
+        ({ pathId, traditionId }: { pathId: number; traditionId: number }) =>
+          useCGGifts(7, pathId, traditionId),
+        { wrapper: createWrapper(), initialProps: { pathId: 1, traditionId: 16 } }
+      );
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(api.getCGGifts).toHaveBeenCalledTimes(1);
+
+      rerender({ pathId: 1, traditionId: 16 });
+      expect(api.getCGGifts).toHaveBeenCalledTimes(1);
+
+      rerender({ pathId: 2, traditionId: 16 });
+      await waitFor(() => expect(api.getCGGifts).toHaveBeenCalledTimes(2));
+
+      rerender({ pathId: 2, traditionId: 17 });
+      await waitFor(() => expect(api.getCGGifts).toHaveBeenCalledTimes(3));
+    });
+
+    it('keeps the draft prefix, so invalidating a draft reaches every path and tradition', () => {
+      const key = characterCreationKeys.cgGiftsFor(7, 2, 16);
+      expect(key.slice(0, characterCreationKeys.cgGifts(7).length)).toEqual(
+        characterCreationKeys.cgGifts(7)
+      );
     });
   });
 });
