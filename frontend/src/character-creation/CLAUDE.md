@@ -72,7 +72,9 @@ character-creation/
     │                        #   `FamilyPathSection.tsx`.
     ├── PathStage.tsx        # Stage 5: Path selection
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
-    ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
+    ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection). A draft
+    │                        #   with no saved statistics has the spread on screen saved when
+    │                        #   the stage opens, once (#5198), so the even spread needs no click
     ├── GiftStage.tsx        # Stage 6 (Gift): vertical funnel — Tradition → Gift →
     │                        #   [magical training, #4659] → Techniques → Gift Resonance
     │                        #   (several resonances weighted by points, #5123: opens with
@@ -405,6 +407,11 @@ A string built from a count uses `countNoun(count, noun)` (`utils.ts`), so one o
 reads "1 pick" and "1 kind". A name the server sends in lower case (a statistic) goes
 through `capitalize` before it is printed beside a name that is not.
 
+## A stage opens at its top (#5198)
+
+`CharacterCreationPage` sets the window's scroll to 0 when `draft.current_stage` changes,
+whether by Next, Back or the stage list. A refetch of the same stage does not scroll.
+
 ## Key Features
 
 - **Free navigation**: All stages clickable, incomplete stages show warning badge
@@ -437,7 +444,10 @@ through `capitalize` before it is printed beside a name that is not.
 - `GET /api/character-creation/drafts/` - List user's drafts (returns array with 0-1 items)
 - `POST /api/character-creation/drafts/` - Create new draft
 - `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Draft detail operations
-- `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's tradition + path
+- `GET /api/character-creation/gifts/?draft_id=X` - List gifts pickable for the draft's tradition + path.
+  `useCGGifts(draftId, pathId, traditionId)` keys the cached list on all three
+  (`characterCreationKeys.cgGiftsFor`, which starts with `cgGifts(draftId)`), so a change of
+  path or tradition asks again (#5198)
 - `GET /api/character-creation/technique-options/?draft_id=X&gift_id=Y` - List technique options (pool ∪ signature) for the chosen gift
 - `GET /api/character-creation/combat-styles/?draft_id=X` - The combat styles the draft's Tradition teaches, with how each attacks and defends (#4921)
 - `GET /api/magic/resonances/` - Every Resonance with its `affinity_name`, unpaginated (the Gift
