@@ -387,7 +387,7 @@ related objects as well.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active`, `paths` (M2M to `classes.Path`, empty = all paths; #2611) |
+| `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active`, `stands_alone` (#5193: the tag cannot be chosen with any other tag of its axis, for an answer that rules the rest out on an axis that takes several, such as Fugue in The Reflection; off by default, ticked by staff in admin), `paths` (M2M to `classes.Path`, empty = all paths; #2611) |
 | `CharacterGlimpseTag` | A character's chosen tag. Instance data — never exported | `aura` FK (`CharacterAura`, `related_name="glimpse_tags"`), `tag` FK (PROTECT); unique per `(aura, tag)` |
 
 **Enums + config** (`constants.py`):
@@ -421,8 +421,14 @@ recomputes `glimpse_state` so it never drifts from the prose+tag truth:
   non-blank, else TAGS_ONLY if any tag row exists, else NOT_STARTED).
 - `set_glimpse_tags(aura, tags: Sequence[GlimpseTag], *, axis: GlimpseTagAxis) -> None`
   — replaces the character's chosen tags for one axis (transactional). Enforces
-  the axis's select-arity (`GLIMPSE_AXIS_CONFIG`) and that every tag belongs to
-  `axis`; an empty `tags` clears the axis. Calls `refresh_glimpse_state`.
+  the axis's select-arity (`GLIMPSE_AXIS_CONFIG`), that every tag belongs to
+  `axis`, and that a tag which stands alone is the only one ("Fugue cannot be chosen
+  with another The Reflection tag."); an empty `tags` clears the axis. Calls
+  `refresh_glimpse_state`.
+- `keep_stand_alone(tags) -> list[GlimpseTag]` (#5193): one axis's tags as they may be
+  saved, a stand-alone tag kept alone (the first, in the order given). For a writer
+  that must not fail on picks it did not check one by one: character creation's
+  finalize runs each axis through it before `set_glimpse_tags`.
 - `set_glimpse_prose(aura, text: str, *, edited_by=None) -> None` — writes
   `glimpse_story` through `character_sheets.services.update_profile_text`
   (`ProfileTextField.GLIMPSE`, #4224), so every rewrite keeps a `ProfileTextVersion` on the
@@ -436,8 +442,10 @@ recomputes `glimpse_state` so it never drifts from the prose+tag truth:
 **CG finalize wiring** (`world/character_creation/services.py`,
 `finalize_magic_data`), after creating `CharacterAura`, two `draft_data` keys
 are consumed through the glimpse services above (never written directly to the
-aura/tag rows): `glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis
-and passed to `set_glimpse_tags` per axis), `glimpse_story` (passed to
+aura/tag rows): `glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis,
+each axis reduced by `keep_stand_alone` so a draft holding a stand-alone tag beside
+another never fails the finalize, and passed to `set_glimpse_tags` per axis),
+`glimpse_story` (passed to
 `set_glimpse_prose`, defaults to `""`). Distinction-to-Glimpse provenance is no
 longer read from a separate `glimpse_linked_distinction_ids` list (#3675): every
 picked distinction whose `offer_ids` name a `DistinctionOffer` with
