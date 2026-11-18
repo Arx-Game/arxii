@@ -176,7 +176,7 @@ character-creation/
     │                            #   round 1): one `.field` per axis, all visible at once.
     │                            #   Since #5191 (owner ruling 2026-11-18) an axis is headed
     │                            #   by its name (an `h3.label`, "Trigger"; copy
-    │                            #   `glimpse_axis_<axis>_chip`) with a smaller `.lead-in`
+    │                            #   `glimpse_axis_<axis>_chip`) with a muted italic `.lead-in`
     │                            #   line under it ("The Circumstances Around Your
     │                            #   Glimpse:"; copy `glimpse_axis_<axis>_lead_in`), and its
     │                            #   tags are the life page's cards, `ul.stances.grid.pair`
@@ -185,7 +185,13 @@ character-creation/
     │                            #   run to several sentences, a round mark on an axis
     │                            #   that takes one answer and a square one on an axis that
     │                            #   takes several. Only the latter prints "choose any";
-    │                            #   "choose one" is never printed. The `.picks` pill
+    │                            #   "choose one" is never printed. What a click does to
+    │                            #   an axis's picks is `nextAxisSelection`
+    │                            #   (`@/magic/components/glimpse/axisSelection.ts`, shared
+    │                            #   with the sheet's editor): a tag that stands alone
+    │                            #   (`stands_alone`, #5193; Fugue in The Reflection)
+    │                            #   replaces the axis's other picks, and picking another
+    │                            #   lets it go. The `.picks` pill
     │                            #   buttons, the `glimpse_axis_<axis>_prompt` keys and
     │                            #   `glimpse_choose_one` are retired. One `ChapterOffers`
     │                            #   `.conditional` sub-block PER SELECTED TAG (not per

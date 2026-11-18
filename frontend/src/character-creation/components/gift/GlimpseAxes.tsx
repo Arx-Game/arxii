@@ -5,8 +5,10 @@
  * as its own `.field` at once (no single-open accordion hiding two axes at
  * a time, the demo-fidelity defect Task 13 shipped).
  *
- * An axis is headed by its name ("Trigger"), with a smaller lead-in line
- * under it ("The Circumstances Around Your Glimpse:"). Its tags are the
+ * An axis is headed by its name ("Trigger"), with a lead-in line under it
+ * ("The Circumstances Around Your Glimpse:") in muted italic: 14px against
+ * the heading's 13px capitals, so its capitals are no taller than the
+ * heading's and the rest of it is lowercase. Its tags are the
  * life page's cards (`ul.stances.grid.pair` of `button.stance`): one width,
  * two across because a description can run to several sentences, the name
  * over its description, a round mark on an axis that takes one answer and

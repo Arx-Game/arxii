@@ -505,7 +505,7 @@ full contract):
   `draft_data.glimpse_tag_ids`, the "skip for now" deferral, and the copy query.
   Renders `GlimpseAxes` (`frontend/src/character-creation/components/gift/GlimpseAxes.tsx`),
   the folio-grammar per-axis layout (every axis visible at once, headed by its name
-  with a smaller lead-in line under it, its tags as the life page's cards in a grid
+  with a muted italic lead-in line under it, its tags as the life page's cards in a grid
   of one size (#5191), one `ChapterOffers` sub-block per chosen tag), which owns the
   distinction picks itself; they sync
   immediately through `useSyncDistinctions`, never through a `draft_data` list.
