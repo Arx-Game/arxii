@@ -13,7 +13,9 @@ export function EntryList({ label, children }: { label: string; children: ReactN
 interface EntryProps {
   name: string;
   gloss?: string;
-  tag: string;
+  /** A word beside the name that marks the exception (a cost overspent, a count of kinds).
+   *  Left out for the ordinary case: "Available" on every row said nothing (#5207). */
+  tag?: string;
   /** Further tags beside `tag`, each its own bordered `.tag` (e.g. "Teaches well", #4659). */
   tags?: string[];
   chosen: boolean;

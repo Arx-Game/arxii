@@ -36,6 +36,7 @@ import {
   useUpdateDraft,
 } from '../queries';
 import type { Beginnings, CharacterDraft, Species } from '../types';
+import { countNoun } from '../utils';
 import { Stage } from '../types';
 import { PerspectivesPanel } from './PerspectivesPanel';
 
@@ -165,7 +166,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         key={s.id}
         name={s.name}
         gloss={gloss}
-        tag={overBudget ? 'CG points overspent' : 'Available'}
+        tag={overBudget ? 'CG points overspent' : undefined}
         chosen={isChosen}
         closed={overBudget}
         open={isChosen}
@@ -198,7 +199,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
         key={`parent-${item.parentId}`}
         name={item.name}
         gloss={chosenChild}
-        tag={`${item.children.length} kinds`}
+        tag={countNoun(item.children.length, 'kind')}
         chosen={false}
         closed
       >

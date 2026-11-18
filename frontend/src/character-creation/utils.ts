@@ -96,3 +96,16 @@ export function getGradientColors(name: string): [string, string] {
 
   return [`hsl(${hue1}, 40%, 25%)`, `hsl(${hue2}, 50%, 35%)`];
 }
+
+/**
+ * A count with its noun, the noun plural unless the count is one: "1 pick", "3 picks".
+ * For nouns that take a plain "s" (#5207: "1 picks" and "1 KINDS" were on the page).
+ */
+export function countNoun(count: number, noun: string): string {
+  return `${count} ${noun}${count === 1 ? '' : 's'}`;
+}
+
+/** A word with its first letter in upper case, for a name the server sends in lower case. */
+export function capitalize(word: string): string {
+  return word.charAt(0).toUpperCase() + word.slice(1);
+}

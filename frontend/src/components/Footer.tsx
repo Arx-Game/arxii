@@ -1,7 +1,10 @@
 import { Link } from 'react-router-dom';
 import { Separator } from './ui/separator';
+import { useAccount } from '@/store/hooks';
 
 export function Footer() {
+  // A signed-in player has nowhere to log in to (#5207).
+  const account = useAccount();
   return (
     <footer className="mt-8">
       <Separator />
@@ -16,9 +19,11 @@ export function Footer() {
           <Link to="/scenes" className="px-1 py-2 hover:text-foreground hover:underline">
             Scenes
           </Link>
-          <Link to="/login" className="px-1 py-2 hover:text-foreground hover:underline">
-            Log in
-          </Link>
+          {!account && (
+            <Link to="/login" className="px-1 py-2 hover:text-foreground hover:underline">
+              Log in
+            </Link>
+          )}
         </nav>
         <p>
           Powered by{' '}
