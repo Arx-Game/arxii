@@ -29,7 +29,9 @@ character-creation/
 │   ├── chapterRail.ts       # `useChapterRail()`: the slot at the foot of the right-hand
 │   │                        #   panel that a stage's own list portals into (#5148)
 │   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside
-│   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (an
+│   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (`tag`
+│   │                        #   is optional and marks the exception only, #5207: no
+│   │                        #   "Available" on every row; an
 │   │                        #   optional `tags` list prints extra `.tag`s beside `tag`). Since
 │   │                        #   #4022 the name row carries a square Select mark (Selected
 │   │                        #   once chosen, a second press clears; never toggles the
@@ -398,6 +400,12 @@ the one element (`.interview.popover`), taking back what the root rule adds (the
 `min-height`). `__tests__/portaledStyles.test.ts` holds this for every such element, and
 the `portaled-style-reach-reviewer` agent reads a diff for the shape. Evidence for a
 styled element is its computed style and its box in a browser, never its class name.
+
+## Counts and names in copy (#5207)
+
+A string built from a count uses `countNoun(count, noun)` (`utils.ts`), so one of a thing
+reads "1 pick" and "1 kind". A name the server sends in lower case (a statistic) goes
+through `capitalize` before it is printed beside a name that is not.
 
 ## A stage opens at its top (#5198)
 

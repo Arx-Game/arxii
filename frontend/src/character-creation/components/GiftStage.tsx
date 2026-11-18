@@ -43,6 +43,7 @@ import {
 } from '../queries';
 import { useShownPicks } from '../useShownPicks';
 import type { CharacterDraft, ResonanceWeightPick, Tradition, VisibleOffer } from '../types';
+import { capitalize, countNoun } from '../utils';
 import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftFacetsField } from './gift/GiftFacetsField';
@@ -302,7 +303,9 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   )?.name;
   const animaSkillName = skills?.find((skill) => skill.id === draftData.anima_check_skill_id)?.name;
   const animaCheckLine =
-    animaStatName && animaSkillName ? `${animaStatName} + ${animaSkillName}` : undefined;
+    animaStatName && animaSkillName
+      ? `${capitalize(animaStatName)} + ${animaSkillName}`
+      : undefined;
 
   const handleResonanceWeights = (weights: ResonanceWeightPick[]) => {
     updateDraft.mutate({
@@ -371,7 +374,8 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       <Marginalia id="note-gift">
         {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Techniques">
-          are capped at {picks} picks at this stage; the budget comes from your distinctions.
+          are capped at {countNoun(picks, 'pick')} at this stage; the budget comes from your
+          distinctions.
         </Note>
       </Marginalia>
     </>

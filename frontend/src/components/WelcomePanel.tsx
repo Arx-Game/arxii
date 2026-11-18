@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useDraft } from '@/character-creation/queries';
+import { useDraft, useDraftApplication } from '@/character-creation/queries';
 import { useAccount } from '@/store/hooks';
 
 export function WelcomePanel() {
@@ -11,7 +11,12 @@ export function WelcomePanel() {
   const pending = account?.pending_applications ?? [];
 
   const { data: draft } = useDraft(!!account && !hasCharacters);
-  const showDraftLink = !hasCharacters && !!draft;
+  const hasDraft = !hasCharacters && !!draft;
+  // The application line is for a draft that has been submitted (#5207). It was shown for
+  // any draft, so a player who had only started a character was told to check the status
+  // of an application they never made.
+  const { data: application } = useDraftApplication(hasDraft ? draft?.id : undefined);
+  const hasApplication = hasDraft && !!application;
 
   if (!account) return null;
 
@@ -38,15 +43,15 @@ export function WelcomePanel() {
               ))}
             </div>
           )}
-          {showDraftLink && (
+          {hasApplication && (
             <p>
               <Link to="/characters/create/application" className="text-primary underline">
                 Your character application
-              </Link>{' '}
+              </Link>
               : check its status.
             </p>
           )}
-          {!hasCharacters && pending.length === 0 && (
+          {!hasCharacters && pending.length === 0 && !hasApplication && (
             <div className="space-y-3">
               <p>You don't have a character yet: two ways to get one:</p>
               <div className="flex flex-wrap gap-2">
@@ -54,7 +59,9 @@ export function WelcomePanel() {
                   <Link to="/roster">Browse the roster</Link>
                 </Button>
                 <Button asChild variant="secondary">
-                  <Link to="/characters/create">Create a character</Link>
+                  <Link to="/characters/create">
+                    {hasDraft ? 'Continue your character' : 'Create a character'}
+                  </Link>
                 </Button>
               </div>
               <p className="text-muted-foreground">

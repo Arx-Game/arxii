@@ -414,5 +414,34 @@ describe('HeritageStage', () => {
       expect(rail).toBeInTheDocument();
       expect(screen.getByRole('group', { name: 'Gender' })).toBeInTheDocument();
     });
+
+    // #5207: every species carried "Available", which marks the default. A species row now
+    // carries a word only for the exception.
+    it('tags a species only when the draft is overspent', async () => {
+      const queryClient = createTestQueryClient();
+      seedHeritageStageData(queryClient);
+      const view = renderWithCharacterCreationProviders(
+        <HeritageStage
+          draft={{ ...mockDraftWithHeritage, selected_species: null, cg_points_remaining: 40 }}
+          onStageSelect={mockOnStageSelect}
+        />,
+        { queryClient }
+      );
+      await screen.findByRole('heading', { name: 'CG selections' });
+      expect(screen.queryByText('Available')).not.toBeInTheDocument();
+      expect(screen.queryByText('CG points overspent')).not.toBeInTheDocument();
+      view.unmount();
+
+      renderWithCharacterCreationProviders(
+        <HeritageStage
+          draft={{ ...mockDraftWithHeritage, selected_species: null, cg_points_remaining: -5 }}
+          onStageSelect={mockOnStageSelect}
+        />,
+        { queryClient }
+      );
+      await screen.findByRole('heading', { name: 'CG selections' });
+      expect((await screen.findAllByText('CG points overspent')).length).toBeGreaterThan(0);
+      expect(screen.queryByText('Available')).not.toBeInTheDocument();
+    });
   });
 });

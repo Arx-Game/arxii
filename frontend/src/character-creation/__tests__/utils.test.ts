@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { StartingArea } from '../types';
-import { formatHeight, getRealmTheme, statusLabel, statusVariant } from '../utils';
+import {
+  capitalize,
+  countNoun,
+  formatHeight,
+  getRealmTheme,
+  statusLabel,
+  statusVariant,
+} from '../utils';
 
 function makeArea(realm_theme: string): StartingArea {
   return {
@@ -68,5 +75,21 @@ describe('formatHeight', () => {
     [60, `5'0"`],
   ])('renders %i inches as %s', (inches, expected) => {
     expect(formatHeight(inches)).toBe(expected);
+  });
+});
+
+describe('countNoun', () => {
+  it('keeps the noun singular for one and makes it plural otherwise', () => {
+    expect(countNoun(1, 'pick')).toBe('1 pick');
+    expect(countNoun(2, 'pick')).toBe('2 picks');
+    expect(countNoun(0, 'kind')).toBe('0 kinds');
+  });
+});
+
+describe('capitalize', () => {
+  it('raises the first letter and leaves the rest', () => {
+    expect(capitalize('willpower')).toBe('Willpower');
+    expect(capitalize('Melee Combat')).toBe('Melee Combat');
+    expect(capitalize('')).toBe('');
   });
 });
