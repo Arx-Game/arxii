@@ -132,7 +132,7 @@ export function GlimpseAxes({
         const axisKey = step.axis.toLowerCase();
         const headingId = `glimpse-axis-${axisKey}`;
         return (
-          <div className="field" role="group" aria-labelledby={headingId} key={step.axis}>
+          <fieldset className="field" aria-labelledby={headingId} key={step.axis}>
             <h3 className="label" id={headingId}>
               {copy?.[`glimpse_axis_${axisKey}_chip`] ?? AXIS_DISPLAY_NAME[step.axis]}
               {step.multi && (
@@ -194,7 +194,7 @@ export function GlimpseAxes({
                   </div>
                 );
               })}
-          </div>
+          </fieldset>
         );
       })}
 

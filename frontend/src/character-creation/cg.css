@@ -1112,9 +1112,14 @@
    replaced pill buttons that were each as wide as their own text. */
 .interview .field .lead-in {
   margin: -0.15rem 0 0;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-style: italic;
   color: var(--cg-muted);
+}
+/* An axis is a fieldset (a named group of toggles). A fieldset is by default at least as
+   wide as its widest word, which would push a card past a narrow column. */
+.interview fieldset.field {
+  min-width: 0;
 }
 /* A Glimpse tag's description is prose, sometimes several sentences, so its cards run
    two across in the reading column, where a third of the column is too narrow to read.
