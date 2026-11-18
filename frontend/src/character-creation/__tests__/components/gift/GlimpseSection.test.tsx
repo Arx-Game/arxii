@@ -7,7 +7,7 @@
  * updateDraft is actually exercised.
  */
 
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { distinctionKeys } from '@/hooks/useDistinctions';
@@ -112,7 +112,19 @@ const WITNESS_ALONE: GlimpseTagOption = {
   offers: [tagOffer({ offer_id: 501, name: 'Solitary', cost_per_rank: -10 })],
 };
 
+const TRIGGER_CRISIS: GlimpseTagOption = {
+  id: 6,
+  axis: 'TRIGGER',
+  name: 'Crisis',
+  slug: 'crisis',
+  description: 'Magic woke when you needed more than you had.',
+  example: '',
+  sort_order: 1,
+  offers: [],
+};
+
 const CATALOG: GlimpseTagOption[] = [
+  TRIGGER_CRISIS,
   TONE_WONDER,
   TONE_DREAD,
   CONSEQUENCE_A,
@@ -210,9 +222,9 @@ describe('GlimpseSection', () => {
 
     // TONE (single-select) and CONSEQUENCE/WITNESS (multi) are all present
     // simultaneously; no accordion collapsing any of them away.
-    expect(screen.getByText('How it felt')).toBeInTheDocument();
-    expect(screen.getByText('What it left behind')).toBeInTheDocument();
-    expect(screen.getByText('Who saw')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Tone' })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /^Consequence/ })).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: /^Witness & Secrecy/ })).toBeInTheDocument();
 
     const wonderPick = screen.getByRole('button', { name: /Wonder/ });
     expect(wonderPick).toHaveAttribute('aria-pressed', 'false');
@@ -223,14 +235,70 @@ describe('GlimpseSection', () => {
     expect(screen.getByRole('button', { name: /Alone/ })).toBeInTheDocument();
   });
 
-  it('tags an axis field with its display name and arity (choose one vs choose any)', () => {
+  it("heads an axis with its name and a lead-in line, and never prints 'choose one' (#5191)", () => {
     const draft = createMockDraft({ id: 1, draft_data: {} });
     renderSection(draft);
 
-    expect(screen.getByText('Tone')).toBeInTheDocument();
-    expect(screen.getByText('choose one')).toBeInTheDocument();
-    expect(screen.getByText('Consequence')).toBeInTheDocument();
-    expect(screen.getAllByText('choose any').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByRole('heading', { level: 3, name: 'Trigger' })).toBeInTheDocument();
+    expect(screen.getByText('The Circumstances Around Your Glimpse:')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 3, name: 'Tone' })).toBeInTheDocument();
+    expect(screen.getByText('How It Felt:')).toBeInTheDocument();
+    // The old question headings are gone, and so is the mark on the default.
+    expect(screen.queryByText('What was happening')).not.toBeInTheDocument();
+    expect(screen.queryByText('choose one')).not.toBeInTheDocument();
+  });
+
+  it("marks only an axis that takes several answers with 'choose any' (#5191)", () => {
+    const draft = createMockDraft({ id: 1, draft_data: {} });
+    renderSection(draft);
+
+    // CONSEQUENCE and WITNESS take several; TRIGGER and TONE take one.
+    expect(screen.getAllByText('choose any')).toHaveLength(2);
+    expect(
+      within(screen.getByRole('group', { name: /^Consequence/ })).getByText('choose any')
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('group', { name: 'Trigger' })).queryByText('choose any')
+    ).not.toBeInTheDocument();
+  });
+
+  it("lays an axis's tags out as the life page's cards, one list item each (#5191)", () => {
+    const draft = createMockDraft({ id: 1, draft_data: {} });
+    renderSection(draft);
+
+    const tone = screen.getByRole('group', { name: 'Tone' });
+    const toneList = within(tone).getByRole('list');
+    expect(toneList).toHaveClass('stances', 'grid', 'oneof');
+    expect(within(toneList).getAllByRole('listitem')).toHaveLength(2);
+    const wonder = within(toneList).getByRole('button', { name: /Wonder/ });
+    expect(wonder).toHaveClass('stance');
+    // One answer: a round mark. Several: a square one.
+    expect(wonder.querySelector('.dot')).not.toHaveClass('sq');
+
+    const consequence = screen.getByRole('group', { name: /^Consequence/ });
+    const consequenceList = within(consequence).getAllByRole('list')[0];
+    expect(consequenceList).toHaveClass('stances', 'grid');
+    expect(consequenceList).not.toHaveClass('oneof');
+    expect(
+      within(consequenceList)
+        .getByRole('button', { name: /A Debt Incurred/ })
+        .querySelector('.dot')
+    ).toHaveClass('sq');
+  });
+
+  it('reads the lead-in from its own copy key, never from the retired prompt key (#5191)', () => {
+    const draft = createMockDraft({ id: 1, draft_data: {} });
+    renderSection(draft, {
+      glimpse_axis_trigger_prompt: 'What was happening',
+      glimpse_axis_tone_lead_in: 'What it was like:',
+    });
+
+    // A database that still holds the old prompt row shows the new line.
+    expect(screen.getByText('The Circumstances Around Your Glimpse:')).toBeInTheDocument();
+    expect(screen.queryByText('What was happening')).not.toBeInTheDocument();
+    // An authored lead-in row beats the fallback.
+    expect(screen.getByText('What it was like:')).toBeInTheDocument();
+    expect(screen.queryByText('How It Felt:')).not.toBeInTheDocument();
   });
 
   it('selecting a tone card PATCHes draft_data.glimpse_tag_ids', async () => {

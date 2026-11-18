@@ -332,8 +332,9 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "gift_schooling_label": "How you came to {tradition}",
     # The Glimpse's own offered distinctions (#3675 fix round 1), one
     # sub-block per chosen tag, and the CG-only axis layout's own copy.
+    # Only an axis that takes several answers is marked (#5191); "choose one"
+    # is not printed and its key is retired.
     "glimpse_choose_any": "choose any",
-    "glimpse_choose_one": "choose one",
     "glimpse_offers_heading": "What it left in you",
     "offers_optional_chip": "optional",
     # Printed under ChapterOffers/SchoolingStances (#3675 final fix F2) when
@@ -361,26 +362,29 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "glimpse_story_hint": (
         "The detail behind any of the picks above goes here; the picks stay short."
     ),
-    # Per-axis chip text on GlimpseAxes.tsx (#3675 fix round 3): the axis
-    # display name printed beside each field's prompt. Values mirror
-    # `GlimpseTagAxis`'s own choice labels (`world.magic.constants`) - the
-    # component's own literal fallback must not drift from these.
+    # Per-axis name on GlimpseAxes.tsx, the heading of each axis (#5191; it was
+    # a chip beside the question before, and the keys keep that name so a row
+    # staff edited still applies). Values mirror `GlimpseTagAxis`'s own choice
+    # labels (`world.magic.constants`) - the component's own literal fallback
+    # must not drift from these.
     "glimpse_axis_trigger_chip": "Trigger",
     "glimpse_axis_choosing_chip": "The Choosing",
     "glimpse_axis_reflection_chip": "The Reflection",
     "glimpse_axis_tone_chip": "Tone",
     "glimpse_axis_consequence_chip": "Consequence",
     "glimpse_axis_witness_chip": "Witness & Secrecy",
-    # Per-axis prompt text on GlimpseAxes.tsx (#3675 final fix F3): the
-    # question label above each field, read via `glimpse_axis_<axis>_prompt`.
-    # Values mirror the component's own AXIS_PROMPT_FALLBACK literal - must
-    # not drift from it.
-    "glimpse_axis_trigger_prompt": "What was happening",
-    "glimpse_axis_choosing_prompt": "How it claimed you",
-    "glimpse_axis_reflection_prompt": "What you saw in yourself",
-    "glimpse_axis_tone_prompt": "How it felt",
-    "glimpse_axis_consequence_prompt": "What it left behind",
-    "glimpse_axis_witness_prompt": "Who saw",
+    # Per-axis lead-in on GlimpseAxes.tsx (#5191): the smaller line under each
+    # axis name, read via `glimpse_axis_<axis>_lead_in`. Values mirror the
+    # component's own AXIS_LEAD_IN_FALLBACK literal - must not drift from it.
+    # These replace the `glimpse_axis_<axis>_prompt` keys, which are no longer
+    # read: a database that holds rows under the old keys keeps the old
+    # question headings in them, so the new lines needed keys of their own.
+    "glimpse_axis_trigger_lead_in": "The Circumstances Around Your Glimpse:",
+    "glimpse_axis_choosing_lead_in": "How It Claimed You:",
+    "glimpse_axis_reflection_lead_in": "What You Saw in Yourself:",
+    "glimpse_axis_tone_lead_in": "How It Felt:",
+    "glimpse_axis_consequence_lead_in": "What It Left Behind:",
+    "glimpse_axis_witness_lead_in": "Who Saw:",
     "appearance_age_heading": "Age",
     "appearance_birthday_heading": "Birthday",
     "appearance_height_heading": "Height",

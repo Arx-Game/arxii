@@ -173,8 +173,20 @@ character-creation/
     │   │                        #   two axes at a time; the sheet's live editor still uses
     │   │                        #   it, unchanged)
     │   └── GlimpseAxes.tsx      # CG-only folio-grammar layout for the Glimpse (#3675 fix
-    │                            #   round 1): one `.field` per axis, all visible at once,
-    │                            #   `.picks` pill buttons per tag, and one `ChapterOffers`
+    │                            #   round 1): one `.field` per axis, all visible at once.
+    │                            #   Since #5191 (owner ruling 2026-11-18) an axis is headed
+    │                            #   by its name (an `h3.label`, "Trigger"; copy
+    │                            #   `glimpse_axis_<axis>_chip`) with a smaller `.lead-in`
+    │                            #   line under it ("The Circumstances Around Your
+    │                            #   Glimpse:"; copy `glimpse_axis_<axis>_lead_in`), and its
+    │                            #   tags are the life page's cards, `ul.stances.grid.even`
+    │                            #   of `button.stance`: one width, one height per axis,
+    │                            #   three across (one on a phone), a round mark on an axis
+    │                            #   that takes one answer and a square one on an axis that
+    │                            #   takes several. Only the latter prints "choose any";
+    │                            #   "choose one" is never printed. The `.picks` pill
+    │                            #   buttons, the `glimpse_axis_<axis>_prompt` keys and
+    │                            #   `glimpse_choose_one` are retired. One `ChapterOffers`
     │                            #   `.conditional` sub-block PER SELECTED TAG (not per
     │                            #   axis: two tags chosen on one multi-select axis each
     │                            #   get their own heading, matching the demo). No heading
