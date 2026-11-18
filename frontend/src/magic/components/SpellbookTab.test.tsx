@@ -176,6 +176,7 @@ const glimpseTagCatalog: GlimpseTagOption[] = [
     description: 'It felt like the world cracked open.',
     example: 'Everything glowed.',
     sort_order: 1,
+    stands_alone: false,
     offers: [],
   },
   {
@@ -186,6 +187,7 @@ const glimpseTagCatalog: GlimpseTagOption[] = [
     description: 'It felt wrong from the first instant.',
     example: 'The air went cold.',
     sort_order: 2,
+    stands_alone: false,
     offers: [],
   },
 ];

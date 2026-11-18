@@ -65,6 +65,7 @@ const TONE_WONDER: GlimpseTagOption = {
   description: 'Awe at the impossible.',
   example: 'The light bent around her hand like water.',
   sort_order: 1,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 201, name: 'Keen Senses', cost_per_rank: 5 })],
 };
 
@@ -76,6 +77,7 @@ const TONE_DREAD: GlimpseTagOption = {
   description: 'Fear at the impossible.',
   example: 'The shadows breathed.',
   sort_order: 2,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 202, name: 'Marked', cost_per_rank: 5 })],
 };
 
@@ -87,6 +89,7 @@ const CONSEQUENCE_A: GlimpseTagOption = {
   description: 'Something was owed after.',
   example: 'The price came due at midnight.',
   sort_order: 1,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 301, name: 'Wrathful', cost_per_rank: -5 })],
 };
 
@@ -98,6 +101,7 @@ const CONSEQUENCE_B: GlimpseTagOption = {
   description: 'Something new became possible.',
   example: 'A door that was not there before, now was.',
   sort_order: 2,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 302, name: 'Impoverished', cost_per_rank: -25 })],
 };
 
@@ -109,6 +113,7 @@ const WITNESS_ALONE: GlimpseTagOption = {
   description: 'No one else saw.',
   example: 'She told no one.',
   sort_order: 1,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 501, name: 'Solitary', cost_per_rank: -10 })],
 };
 

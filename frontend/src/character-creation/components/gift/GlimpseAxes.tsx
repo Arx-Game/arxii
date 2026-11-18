@@ -33,6 +33,7 @@
 
 import type { ChangeEvent } from 'react';
 import { cn } from '@/lib/utils';
+import { nextAxisSelection } from '@/magic/components/glimpse/axisSelection';
 import { AXIS_STEPS } from '@/magic/components/glimpse/GlimpseFlow';
 import type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
 import { Field } from '../../folio';
@@ -113,16 +114,7 @@ export function GlimpseAxes({
   const visibleSteps = AXIS_STEPS.filter((step) => (tagsByAxis.get(step.axis)?.length ?? 0) > 0);
 
   const handleTagClick = (axis: GlimpseTagOption['axis'], multi: boolean, tagId: number) => {
-    const axisTagIds = new Set((tagsByAxis.get(axis) ?? []).map((tag) => tag.id));
-    const currentSelection = selectedTagIds.filter((id) => axisTagIds.has(id));
-    if (multi) {
-      const next = currentSelection.includes(tagId)
-        ? currentSelection.filter((id) => id !== tagId)
-        : [...currentSelection, tagId];
-      onChangeAxis(axis, next);
-    } else {
-      onChangeAxis(axis, currentSelection.includes(tagId) ? [] : [tagId]);
-    }
+    onChangeAxis(axis, nextAxisSelection(tagsByAxis.get(axis) ?? [], selectedTagIds, tagId, multi));
   };
 
   return (
