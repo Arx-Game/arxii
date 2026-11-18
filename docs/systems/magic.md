@@ -429,6 +429,14 @@ recomputes `glimpse_state` so it never drifts from the prose+tag truth:
   saved, a stand-alone tag kept alone (the first, in the order given). For a writer
   that must not fail on picks it did not check one by one: character creation's
   finalize runs each axis through it before `set_glimpse_tags`.
+- **Reading a character's tags: `CharacterAura.cached_glimpse_tags`** (#5193), a
+  `PrunedCachedProperty` list of the aura's `CharacterGlimpseTag` rows with the catalog
+  tag joined. The character sheet's prefetch lands on it. `set_glimpse_tags` clears it
+  (its queryset delete and bulk create run no row's `save()`), and a single row's save
+  or delete clears it through `CharacterGlimpseTag.related_cache_fields`. Before #5193
+  the sheet prefetched onto a plain attribute of the identity-mapped aura that nothing
+  cleared, so the sheet kept answering with the tags it first loaded and the Glimpse
+  editor never showed a pick it had saved. A new writer of these rows clears the list.
 - `set_glimpse_prose(aura, text: str, *, edited_by=None) -> None` — writes
   `glimpse_story` through `character_sheets.services.update_profile_text`
   (`ProfileTextField.GLIMPSE`, #4224), so every rewrite keeps a `ProfileTextVersion` on the
