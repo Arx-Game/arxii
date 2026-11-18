@@ -65,6 +65,7 @@ const TONE_WONDER: GlimpseTagOption = {
   description: 'Awe at the impossible.',
   example: 'The light bent around her hand like water.',
   sort_order: 1,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 201, name: 'Keen Senses', cost_per_rank: 5 })],
 };
 
@@ -76,6 +77,7 @@ const TONE_DREAD: GlimpseTagOption = {
   description: 'Fear at the impossible.',
   example: 'The shadows breathed.',
   sort_order: 2,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 202, name: 'Marked', cost_per_rank: 5 })],
 };
 
@@ -87,6 +89,7 @@ const CONSEQUENCE_A: GlimpseTagOption = {
   description: 'Something was owed after.',
   example: 'The price came due at midnight.',
   sort_order: 1,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 301, name: 'Wrathful', cost_per_rank: -5 })],
 };
 
@@ -98,6 +101,7 @@ const CONSEQUENCE_B: GlimpseTagOption = {
   description: 'Something new became possible.',
   example: 'A door that was not there before, now was.',
   sort_order: 2,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 302, name: 'Impoverished', cost_per_rank: -25 })],
 };
 
@@ -109,6 +113,7 @@ const WITNESS_ALONE: GlimpseTagOption = {
   description: 'No one else saw.',
   example: 'She told no one.',
   sort_order: 1,
+  stands_alone: false,
   offers: [tagOffer({ offer_id: 501, name: 'Solitary', cost_per_rank: -10 })],
 };
 
@@ -120,6 +125,20 @@ const TRIGGER_CRISIS: GlimpseTagOption = {
   description: 'Magic woke when you needed more than you had.',
   example: '',
   sort_order: 1,
+  stands_alone: false,
+  offers: [],
+};
+
+// A tag that stands alone on an axis that otherwise takes several (#5193).
+const CONSEQUENCE_ALONE: GlimpseTagOption = {
+  id: 7,
+  axis: 'CONSEQUENCE',
+  name: 'Nothing You Recall',
+  slug: 'nothing-you-recall',
+  description: 'You were told afterward.',
+  example: '',
+  sort_order: 3,
+  stands_alone: true,
   offers: [],
 };
 
@@ -129,6 +148,7 @@ const CATALOG: GlimpseTagOption[] = [
   TONE_DREAD,
   CONSEQUENCE_A,
   CONSEQUENCE_B,
+  CONSEQUENCE_ALONE,
   WITNESS_ALONE,
 ];
 
@@ -313,6 +333,41 @@ describe('GlimpseSection', () => {
         1,
         expect.objectContaining({
           draft_data: expect.objectContaining({ glimpse_tag_ids: [1] }),
+        })
+      );
+    });
+  });
+
+  it('picking a tag that stands alone drops the other picks of its axis, and no other axis (#5193)', async () => {
+    const user = userEvent.setup();
+    // Wonder (TONE) and both ordinary CONSEQUENCE tags are picked.
+    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 3, 4] } });
+    renderSection(draft);
+
+    await user.click(screen.getByRole('button', { name: /Nothing You Recall/ }));
+
+    await waitFor(() => {
+      expect(updateDraftMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          draft_data: expect.objectContaining({ glimpse_tag_ids: [1, 7] }),
+        })
+      );
+    });
+  });
+
+  it('picking another tag lets a stand-alone one go (#5193)', async () => {
+    const user = userEvent.setup();
+    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 7] } });
+    renderSection(draft);
+
+    await user.click(screen.getByRole('button', { name: /A Debt Incurred/ }));
+
+    await waitFor(() => {
+      expect(updateDraftMock).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          draft_data: expect.objectContaining({ glimpse_tag_ids: [1, 3] }),
         })
       );
     });

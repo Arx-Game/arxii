@@ -27,6 +27,11 @@ export interface GlimpseTagOption {
   description: string;
   example: string;
   sort_order: number;
+  /**
+   * This tag cannot be picked with any other tag of its axis (#5193); the
+   * rule lives in `axisSelection.ts`'s `nextAxisSelection`.
+   */
+  stands_alone: boolean;
   offers: TagOffer[];
 }
 

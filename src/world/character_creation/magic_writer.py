@@ -230,6 +230,7 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
     from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
     from world.magic.models import CharacterAura, GlimpseTag  # noqa: PLC0415
     from world.magic.services.glimpse import (  # noqa: PLC0415
+        keep_stand_alone,
         refresh_glimpse_state,
         set_glimpse_prose,
         set_glimpse_tags,
@@ -243,7 +244,9 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
     if picks.glimpse_tag_ids:
         tags = list(GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True))
         for axis in GlimpseTagAxis:
-            axis_tags = [tag for tag in tags if tag.axis == axis]
+            # A draft's list is not checked pick by pick, so a tag that stands alone
+            # is kept alone here and never fails the finalize (#5193).
+            axis_tags = keep_stand_alone([tag for tag in tags if tag.axis == axis])
             if axis_tags:
                 set_glimpse_tags(aura, axis_tags, axis=axis)
     # An unchanged Glimpse (a blank one, at CG) writes no version; the state is still

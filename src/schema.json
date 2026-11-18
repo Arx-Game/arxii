@@ -50403,6 +50403,12 @@ components:
           nullable: true
           description: Affinity this tag nudges at CG finalize. Set on TONE and TRIGGER
             tags to apply a small aura adjustment. Null = no affinity nudge.
+        stands_alone:
+          type: boolean
+          readOnly: true
+          description: 'This tag cannot be chosen with any other tag of its step:
+            choosing it clears the others, and choosing another clears it. For an
+            answer that rules the rest out, on a step that otherwise takes several.'
         offers:
           type: array
           items:
@@ -50418,6 +50424,7 @@ components:
       - offers
       - slug
       - sort_order
+      - stands_alone
     CGGlimpseTagOffer:
       type: object
       description: A ``DistinctionOffer`` embedded on a glimpse tag row (#3675).

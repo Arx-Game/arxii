@@ -643,6 +643,15 @@ chips (native `<button>`s, keyboard-operable for free) inside the
 always-visible story `Textarea`. `AXIS_STEPS` (the axis order + arity) is
 exported so `GlimpseAxes` (below) can reuse it without redeclaring it.
 
+**One rule for a click, `axisSelection.ts` (#5193).** `nextAxisSelection(axisTags,
+selectedTagIds, clickedTagId, multi)` returns an axis's picks after a click, and both
+mounts call it (`GlimpseFlow` here, `GlimpseAxes` in character creation): a click on a
+picked tag lets it go, an axis that takes one answer swaps, an axis that takes several
+adds, and a tag whose `stands_alone` is true (staff tick it in admin; Fugue in The
+Reflection is the first) replaces every other pick of its axis, while picking another
+tag lets it go. The server refuses a stand-alone tag beside another
+(`set_glimpse_tags`), so never write a second copy of this rule in a component.
+
 **Only one mount left:** the character sheet's live editor
 (`components/glimpse/GlimpseEditorDialog.tsx`, below), unchanged. The CG
 mount used to be `GiftStage` → `GlimpseSection` → this component (with a

@@ -373,7 +373,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "glimpse_axis_tone_chip": "Tone",
     "glimpse_axis_consequence_chip": "Consequence",
     "glimpse_axis_witness_chip": "Witness & Secrecy",
-    # Per-axis lead-in on GlimpseAxes.tsx (#5191): the smaller line under each
+    # Per-axis lead-in on GlimpseAxes.tsx (#5191): the muted italic line under each
     # axis name, read via `glimpse_axis_<axis>_lead_in`. Values mirror the
     # component's own AXIS_LEAD_IN_FALLBACK literal - must not drift from it.
     # These replace the `glimpse_axis_<axis>_prompt` keys, which are no longer

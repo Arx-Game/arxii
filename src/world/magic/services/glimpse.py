@@ -47,12 +47,17 @@ def set_glimpse_tags(
 ) -> None:
     """Replace the character's chosen tags for one axis.
 
-    Enforces the axis's select-arity (``GLIMPSE_AXIS_CONFIG``) and that every
-    tag belongs to ``axis``. An empty ``tags`` clears the axis.
+    Enforces the axis's select-arity (``GLIMPSE_AXIS_CONFIG``), that every tag
+    belongs to ``axis``, and that a tag which stands alone (``GlimpseTag.stands_alone``,
+    #5193) is the only one. An empty ``tags`` clears the axis.
     """
     rule = GLIMPSE_AXIS_CONFIG[GlimpseTagAxis(axis)]
     if not rule.multi and len(tags) > 1:
         msg = f"{GlimpseTagAxis(axis).label} accepts a single tag."
+        raise ValidationError(msg)
+    alone = [tag.name for tag in tags if tag.stands_alone]
+    if alone and len(tags) > 1:
+        msg = f"{alone[0]} cannot be chosen with another {GlimpseTagAxis(axis).label} tag."
         raise ValidationError(msg)
     wrong = [tag.name for tag in tags if tag.axis != axis]
     if wrong:
@@ -61,7 +66,24 @@ def set_glimpse_tags(
 
     CharacterGlimpseTag.objects.filter(aura=aura, tag__axis=axis).delete()
     CharacterGlimpseTag.objects.bulk_create(CharacterGlimpseTag(aura=aura, tag=tag) for tag in tags)
+    # The queryset delete and the bulk create run no row's save() or delete(), so the
+    # aura's cached list is dropped here; the sheet reads it (#5193).
+    aura.__dict__.pop("cached_glimpse_tags", None)
     refresh_glimpse_state(aura)
+
+
+def keep_stand_alone(tags: Sequence[GlimpseTag]) -> list[GlimpseTag]:
+    """One axis's tags as they may be saved: a tag that stands alone is kept alone (#5193).
+
+    For a writer that must not fail on picks it did not validate one by one (character
+    creation's finalize reads a draft's whole list): the first stand-alone tag, in the
+    order given, replaces the rest. Tags with no stand-alone tag among them come back
+    unchanged.
+    """
+    for tag in tags:
+        if tag.stands_alone:
+            return [tag]
+    return list(tags)
 
 
 def set_glimpse_prose(aura: CharacterAura, text: str, *, edited_by: object | None = None) -> None:

@@ -5,8 +5,10 @@
  * as its own `.field` at once (no single-open accordion hiding two axes at
  * a time, the demo-fidelity defect Task 13 shipped).
  *
- * An axis is headed by its name ("Trigger"), with a smaller lead-in line
- * under it ("The Circumstances Around Your Glimpse:"). Its tags are the
+ * An axis is headed by its name ("Trigger"), with a lead-in line under it
+ * ("The Circumstances Around Your Glimpse:") in muted italic: 14px against
+ * the heading's 13px capitals, so its capitals are no taller than the
+ * heading's and the rest of it is lowercase. Its tags are the
  * life page's cards (`ul.stances.grid.pair` of `button.stance`): one width,
  * two across because a description can run to several sentences, the name
  * over its description, a round mark on an axis that takes one answer and
@@ -33,6 +35,7 @@
 
 import type { ChangeEvent } from 'react';
 import { cn } from '@/lib/utils';
+import { nextAxisSelection } from '@/magic/components/glimpse/axisSelection';
 import { AXIS_STEPS } from '@/magic/components/glimpse/GlimpseFlow';
 import type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
 import { Field } from '../../folio';
@@ -113,16 +116,7 @@ export function GlimpseAxes({
   const visibleSteps = AXIS_STEPS.filter((step) => (tagsByAxis.get(step.axis)?.length ?? 0) > 0);
 
   const handleTagClick = (axis: GlimpseTagOption['axis'], multi: boolean, tagId: number) => {
-    const axisTagIds = new Set((tagsByAxis.get(axis) ?? []).map((tag) => tag.id));
-    const currentSelection = selectedTagIds.filter((id) => axisTagIds.has(id));
-    if (multi) {
-      const next = currentSelection.includes(tagId)
-        ? currentSelection.filter((id) => id !== tagId)
-        : [...currentSelection, tagId];
-      onChangeAxis(axis, next);
-    } else {
-      onChangeAxis(axis, currentSelection.includes(tagId) ? [] : [tagId]);
-    }
+    onChangeAxis(axis, nextAxisSelection(tagsByAxis.get(axis) ?? [], selectedTagIds, tagId, multi));
   };
 
   return (

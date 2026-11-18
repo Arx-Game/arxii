@@ -42,6 +42,24 @@ class GlimpseTagOfferTestCase(TestCase):
 
 
 class GlimpseTagOfferGetTest(GlimpseTagOfferTestCase):
+    def test_change_form_offers_the_stands_alone_tick_box_unticked(self):
+        """Staff tick "stands alone" on the tag's own page (#5193); it starts off."""
+        self.client.force_login(self.author)
+        body = self.client.get(self._change_url()).content.decode()
+        boxes = re.findall(r'<input[^>]*name="stands_alone"[^>]*>', body)
+        assert len(boxes) == 1
+        assert 'type="checkbox"' in boxes[0]
+        assert "checked" not in boxes[0]
+
+    def test_changelist_can_be_filtered_to_the_tags_that_stand_alone(self):
+        alone = GlimpseTagFactory(name="Fugue", slug="admin-fugue", stands_alone=True)
+        self.client.force_login(self.author)
+        resp = self.client.get(
+            reverse("admin:arxii_glimpsetag_changelist"), {"stands_alone__exact": "1"}
+        )
+        assert resp.status_code == 200
+        assert [tag.pk for tag in resp.context["cl"].result_list] == [alone.pk]
+
     def test_change_form_renders_the_offers_inline(self):
         self.client.force_login(self.author)
         resp = self.client.get(self._change_url())

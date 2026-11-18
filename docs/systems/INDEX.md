@@ -742,7 +742,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     section and `docs/systems/character_creation.md`'s Magic API section.
   - **Guided Glimpse Story (#2427):** `GlimpseTag` (`models/glimpse.py`, content model —
     `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
-    natural key, `description`, `example`, `sort_order`, `is_active`),
+    natural key, `description`, `example`, `sort_order`, `is_active`, `stands_alone`
+    (#5193: cannot be chosen with any other tag of its axis)),
     `CharacterGlimpseTag` (instance data, never exported; `aura` FK
     `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`).
     A tag's suggested distinctions are `character_creation.DistinctionOffer` rows
@@ -758,7 +759,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     .from_glimpse` (nullable FK → `CharacterAura`, SET_NULL — provenance, mirrors
     `CharacterDistinction.secret`). Services (`services/glimpse.py`):
     `refresh_glimpse_state(aura) -> GlimpseState`, `set_glimpse_tags(aura, tags, *,
-    axis)`, `set_glimpse_prose(aura, text, *, edited_by)` (versioned, #4224), `link_distinction_to_glimpse(character_distinction,
+    axis)` (refuses a stand-alone tag beside another), `keep_stand_alone(tags)`,
+    `set_glimpse_prose(aura, text, *, edited_by)` (versioned, #4224), `link_distinction_to_glimpse(character_distinction,
     aura)` / `unlink_distinction_from_glimpse(character_distinction)`. CG finalize
     (`world.character_creation.services.finalize_magic_data`) consumes
     `draft_data["glimpse_tag_ids"/"glimpse_story"]` through these services;

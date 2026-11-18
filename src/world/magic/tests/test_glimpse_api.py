@@ -54,6 +54,30 @@ class SetGlimpseTagsActionTest(GlimpseAuraActionTestBase):
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_stand_alone_tag_beside_another_is_refused_in_words(self):
+        """#5193: the sheet's editor cannot save Fugue beside another Reflection answer."""
+        majestic = GlimpseTagFactory(
+            axis=GlimpseTagAxis.REFLECTION, slug="api-majestic", name="Majestic"
+        )
+        fugue = GlimpseTagFactory(
+            axis=GlimpseTagAxis.REFLECTION, slug="api-fugue", name="Fugue", stands_alone=True
+        )
+
+        both = self.client.post(
+            self._url("set-glimpse-tags"),
+            {"axis": GlimpseTagAxis.REFLECTION, "tag_ids": [majestic.id, fugue.id]},
+            format="json",
+        )
+        alone = self.client.post(
+            self._url("set-glimpse-tags"),
+            {"axis": GlimpseTagAxis.REFLECTION, "tag_ids": [fugue.id]},
+            format="json",
+        )
+
+        assert both.status_code == status.HTTP_400_BAD_REQUEST
+        assert both.data["detail"] == "Fugue cannot be chosen with another The Reflection tag."
+        assert alone.status_code == status.HTTP_200_OK
+
     def test_unknown_tag_id_rejected(self):
         response = self.client.post(
             self._url("set-glimpse-tags"),

@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 import { useMemo } from 'react';
 import type { KeyboardEvent } from 'react';
+import { nextAxisSelection } from './axisSelection';
 import type { GlimpseFlowProps, GlimpseTagOption } from './glimpseTypes';
 
 // CHOOSING tags are all path-scoped to the Path of the Chosen, so the step
@@ -88,16 +89,7 @@ export function GlimpseFlow({
   );
 
   const handleTagClick = (axis: GlimpseTagOption['axis'], multi: boolean, tagId: number) => {
-    const axisTagIds = new Set((tagsByAxis.get(axis) ?? []).map((tag) => tag.id));
-    const currentSelection = selectedTagIds.filter((id) => axisTagIds.has(id));
-    if (multi) {
-      const next = currentSelection.includes(tagId)
-        ? currentSelection.filter((id) => id !== tagId)
-        : [...currentSelection, tagId];
-      onChangeAxis(axis, next);
-    } else {
-      onChangeAxis(axis, currentSelection.includes(tagId) ? [] : [tagId]);
-    }
+    onChangeAxis(axis, nextAxisSelection(tagsByAxis.get(axis) ?? [], selectedTagIds, tagId, multi));
   };
 
   // Activates a role="button" tag card from the keyboard the same way a click

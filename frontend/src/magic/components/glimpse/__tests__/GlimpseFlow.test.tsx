@@ -18,6 +18,7 @@ const TONE_WONDER: GlimpseTagOption = {
   description: 'Awe at the impossible.',
   example: 'The light bent around her hand like water.',
   sort_order: 1,
+  stands_alone: false,
   offers: [],
 };
 
@@ -29,6 +30,7 @@ const TONE_DREAD: GlimpseTagOption = {
   description: 'Fear at the impossible.',
   example: 'The shadows breathed.',
   sort_order: 2,
+  stands_alone: false,
   offers: [],
 };
 
@@ -40,6 +42,7 @@ const CONSEQUENCE_A: GlimpseTagOption = {
   description: 'Something was owed after.',
   example: 'The price came due at midnight.',
   sort_order: 1,
+  stands_alone: false,
   offers: [],
 };
 
@@ -51,6 +54,7 @@ const CONSEQUENCE_B: GlimpseTagOption = {
   description: 'Something new became possible.',
   example: 'A door that was not there before, now was.',
   sort_order: 2,
+  stands_alone: false,
   offers: [],
 };
 
@@ -62,6 +66,7 @@ const WITNESS_ALONE: GlimpseTagOption = {
   description: 'No one else saw.',
   example: 'She told no one.',
   sort_order: 1,
+  stands_alone: false,
   offers: [],
 };
 
@@ -73,6 +78,7 @@ const SENSORY_TASTE: GlimpseTagOption = {
   description: 'A sensory detail of the glimpse.',
   example: 'Copper on the tongue, like a coin.',
   sort_order: 1,
+  stands_alone: false,
   offers: [],
 };
 
@@ -84,6 +90,7 @@ const TRIGGER_TRAUMA: GlimpseTagOption = {
   description: 'A shattering event cracked you open.',
   example: 'The wound never fully closed.',
   sort_order: 1,
+  stands_alone: false,
   offers: [],
 };
 
@@ -95,6 +102,7 @@ const TRIGGER_PATRON: GlimpseTagOption = {
   description: 'A god, demon, or force selected you.',
   example: 'Something ancient turned its gaze upon you.',
   sort_order: 2,
+  stands_alone: false,
   offers: [],
 };
 
