@@ -179,9 +179,10 @@ character-creation/
     │                            #   `glimpse_axis_<axis>_chip`) with a smaller `.lead-in`
     │                            #   line under it ("The Circumstances Around Your
     │                            #   Glimpse:"; copy `glimpse_axis_<axis>_lead_in`), and its
-    │                            #   tags are the life page's cards, `ul.stances.grid.even`
-    │                            #   of `button.stance`: one width, one height per axis,
-    │                            #   three across (one on a phone), a round mark on an axis
+    │                            #   tags are the life page's cards, `ul.stances.grid.pair`
+    │                            #   of `button.stance`: one width, two across (one on a
+    │                            #   phone) because a tag's description is prose that can
+    │                            #   run to several sentences, a round mark on an axis
     │                            #   that takes one answer and a square one on an axis that
     │                            #   takes several. Only the latter prints "choose any";
     │                            #   "choose one" is never printed. The `.picks` pill

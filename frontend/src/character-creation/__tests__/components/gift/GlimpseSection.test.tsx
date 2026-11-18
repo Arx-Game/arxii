@@ -268,7 +268,7 @@ describe('GlimpseSection', () => {
 
     const tone = screen.getByRole('group', { name: 'Tone' });
     const toneList = within(tone).getByRole('list');
-    expect(toneList).toHaveClass('stances', 'grid', 'oneof');
+    expect(toneList).toHaveClass('stances', 'grid', 'pair', 'oneof');
     expect(within(toneList).getAllByRole('listitem')).toHaveLength(2);
     const wonder = within(toneList).getByRole('button', { name: /Wonder/ });
     expect(wonder).toHaveClass('stance');

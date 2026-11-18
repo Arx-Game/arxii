@@ -7,9 +7,10 @@
  *
  * An axis is headed by its name ("Trigger"), with a smaller lead-in line
  * under it ("The Circumstances Around Your Glimpse:"). Its tags are the
- * life page's cards (`ul.stances.grid` of `button.stance`): one size in a
- * grid, the name over its description, a round mark on an axis that takes
- * one answer and a square mark on one that takes several. Owner ruling
+ * life page's cards (`ul.stances.grid.pair` of `button.stance`): one width,
+ * two across because a description can run to several sentences, the name
+ * over its description, a round mark on an axis that takes one answer and
+ * a square mark on one that takes several. Owner ruling
  * 2026-11-18 (#5191): the pill buttons this replaced were each as wide as
  * their own text and read as a run of uneven boxes; the question was a bad
  * title; "choose one" is not printed. An axis that takes several answers
@@ -143,7 +144,7 @@ export function GlimpseAxes({
             <p className="lead-in">
               {copy?.[`glimpse_axis_${axisKey}_lead_in`] ?? AXIS_LEAD_IN_FALLBACK[step.axis]}
             </p>
-            <ul className={cn('stances', 'grid', 'even', !step.multi && 'oneof')}>
+            <ul className={cn('stances', 'grid', 'pair', !step.multi && 'oneof')}>
               {axisTags.map((tag) => (
                 <li key={tag.id}>
                   <button
