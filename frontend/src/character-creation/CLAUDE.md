@@ -402,8 +402,7 @@ styled element is its computed style and its box in a browser, never its class n
 ## A stage opens at its top (#5198)
 
 `CharacterCreationPage` sets the window's scroll to 0 when `draft.current_stage` changes,
-whether by Next, Back or the stage list. The first stage shown on arrival and a refetch of
-the same stage do not scroll.
+whether by Next, Back or the stage list. A refetch of the same stage does not scroll.
 
 ## Key Features
 

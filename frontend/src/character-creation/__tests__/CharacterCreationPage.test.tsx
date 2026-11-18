@@ -403,7 +403,7 @@ describe('CharacterCreationPage', () => {
   // #5198: the window kept its scroll position across a stage change, so Next at the foot
   // of a long stage showed the middle of the next one.
   describe('A stage opens at its top', () => {
-    it('scrolls the window to the top when the stage changes, and not on arrival', async () => {
+    it('scrolls the window to the top when the stage changes, and not on a refetch', async () => {
       const scrolledTo: number[] = [];
       const root = document.documentElement;
       Object.defineProperty(root, 'scrollTop', {
