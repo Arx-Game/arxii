@@ -966,25 +966,24 @@ def respond_to_conversion_offer(
 def pending_conversion_offers_for_account(
     account: object,
 ) -> "QuerySet[WorshipConversionOffer]":
-    """PENDING conversion offers addressed to any character this account has ever held,
-    whose rite is still open.
+    """Pending offers for characters currently held by the account, on open rites.
 
     Mirrors ``pending_seance_offers_for_account`` (#2393). A rite that concluded or
     was abandoned before the convert answered leaves its offer PENDING, and an answer
     to it is refused, so the inbox leaves it out (#3657 tranche 16).
     """
     from world.ceremonies.models import WorshipConversionOffer  # noqa: PLC0415
+    from world.roster.models import RosterTenure  # noqa: PLC0415
 
-    return (
-        WorshipConversionOffer.objects.filter(
-            status=ConversionOfferStatus.PENDING,
-            ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
-            ceremony_honoree__honoree_sheet__roster_entry__tenures__player_data__account=account,
-            ceremony_honoree__honoree_sheet__roster_entry__tenures__end_date__isnull=True,
-        )
-        .select_related("ceremony_honoree__honoree_sheet", "ceremony_honoree__ceremony")
-        .distinct()
-    )
+    active_sheet_ids = RosterTenure.objects.filter(
+        player_data__account=account, end_date__isnull=True
+    ).values("roster_entry__character_sheet_id")
+
+    return WorshipConversionOffer.objects.filter(
+        status=ConversionOfferStatus.PENDING,
+        ceremony_honoree__ceremony__status=CeremonyStatus.OPEN,
+        ceremony_honoree__honoree_sheet_id__in=active_sheet_ids,
+    ).select_related("ceremony_honoree__honoree_sheet", "ceremony_honoree__ceremony")
 
 
 def respond_to_wedding_consent_offer(

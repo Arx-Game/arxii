@@ -89,6 +89,26 @@ class ConversionOfferApiTests(TestCase):
         self.assertEqual([row["id"] for row in response.data], [offer.pk])
         self.assertEqual(response.data[0]["presented_being_name"], _new_being.name)
 
+    def test_list_excludes_former_tenure_when_another_account_holds_character(self) -> None:
+        offer, former_account, _new_being = _pc_officiated_conversion_offer()
+        entry = offer.ceremony_honoree.honoree_sheet.roster_entry
+        former_tenure = entry.tenures.get(player_data__account=former_account)
+        former_tenure.end_date = timezone.now()
+        former_tenure.save(update_fields=["end_date"])
+        current_tenure = RosterTenureFactory(
+            roster_entry=entry, player_number=former_tenure.player_number + 1
+        )
+
+        self.client.force_authenticate(user=former_account)
+        response = self.client.get("/api/ceremonies/conversion-offers/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data, [])
+
+        self.client.force_authenticate(user=current_tenure.player_data.account)
+        response = self.client.get("/api/ceremonies/conversion-offers/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([row["id"] for row in response.data], [offer.pk])
+
     def test_accept_dispatches_the_action_and_records_sincerity(self) -> None:
         offer, account, _new_being = _pc_officiated_conversion_offer()
         self.client.force_authenticate(user=account)
