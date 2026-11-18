@@ -66,6 +66,8 @@ export interface Beginnings {
   cg_point_cost: number;
   codex_entry_ids: number[];
   heritage: BeginningsHeritage | null;
+  /** No content behind this choice yet (#5197): listed and selectable, marked on the page. */
+  not_yet_implemented: boolean;
 }
 
 /**
@@ -356,6 +358,8 @@ export interface Path {
   icon_name: string; // Lucide icon name (e.g., 'swords', 'eye')
   aspects: string[]; // Aspect names only (weights are staff-only)
   codex_entry_ids: number[];
+  /** No content behind this choice yet (#5197): listed and selectable, marked on the page. */
+  not_yet_implemented: boolean;
   skill_suggestions?: PathSkillSuggestion[];
 }
 
@@ -692,6 +696,8 @@ export interface Tradition {
   favored_gift_names: string[];
   /** The affinities this Tradition teaches well (#4659). */
   favored_affinity_names: string[];
+  /** No content behind this choice yet (#5197): listed and selectable, marked on the page. */
+  not_yet_implemented: boolean;
 }
 
 /** One distinction, at one rank, and what it adds to the Magic training pool (#4659). */

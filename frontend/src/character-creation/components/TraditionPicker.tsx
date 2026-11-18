@@ -16,6 +16,7 @@ import {
   useTraditionPerspectives,
   useTraditions,
 } from '../queries';
+import { NOT_YET_IMPLEMENTED } from '../constants';
 import type { CGExplanations, CharacterDraft, Tradition } from '../types';
 import { SchoolingStances } from './offers/SchoolingStances';
 import { PerspectivesPanel } from './PerspectivesPanel';
@@ -81,7 +82,11 @@ function TeachesWell({ tradition, copy }: { tradition: Tradition; copy?: CGExpla
 }
 
 export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
-  const { data: traditions, isLoading, error } = useTraditions(beginningId);
+  const {
+    data: traditions,
+    isLoading,
+    error,
+  } = useTraditions(beginningId, draft.selected_path?.id);
   const selectTradition = useSelectTradition();
   const { data: perspectives } = useTraditionPerspectives(draft.selected_tradition?.id);
   const { data: copy } = useCGExplanations();
@@ -120,6 +125,7 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
             key={tradition.id}
             name={tradition.name}
             tag={tagFor(tradition)}
+            tags={tradition.not_yet_implemented ? [NOT_YET_IMPLEMENTED] : undefined}
             chosen={isChosen}
             open={isChosen}
             onChoose={() => handleSelect(tradition.id)}

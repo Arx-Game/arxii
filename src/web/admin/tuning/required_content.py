@@ -521,47 +521,19 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
     the gated-technique ids, then the path lists, the tradition listings, the
     paths, the Major Gifts and the active traditions.
     """
-    from world.classes.models import Path, PathStage  # noqa: PLC0415
     from world.magic.admin import GAP_NOT_CASTABLE  # noqa: PLC0415
-    from world.magic.constants import GiftKind  # noqa: PLC0415
-    from world.magic.models import Gift, PathGiftGrant, Tradition  # noqa: PLC0415
-    from world.magic.services.cg_catalog import (  # noqa: PLC0415
-        cg_takeable_techniques,
-        offered_to_tradition,
-        tradition_listings,
-    )
+    from world.magic.services.cg_catalog import cg_gift_offerings  # noqa: PLC0415
 
     link = _technique_gap_link(GAP_NOT_CASTABLE)
-    path_ready: dict[tuple[int, int], set[int]] = {}
-    for path_id, gift_id, technique_id in PathGiftGrant.starter_techniques.through.objects.filter(
-        technique__in=cg_takeable_techniques()
-    ).values_list("pathgiftgrant__path_id", "pathgiftgrant__gift_id", "technique_id"):
-        path_ready.setdefault((path_id, gift_id), set()).add(technique_id)
-    listings = tradition_listings()
-    paths = list(
-        Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
-        .order_by("name")
-        .values_list("id", "name")
-    )
-    gifts = list(Gift.objects.filter(kind=GiftKind.MAJOR).values_list("id", "name"))
-    tradition_ids = list(Tradition.objects.filter(is_active=True).values_list("id", flat=True))
-
-    hidden: list[tuple[str, str]] = []
-    offering: set[tuple[int, int]] = set()
-    for path_id, path_name in paths:
-        for gift_id, gift_name in gifts:
-            ready = path_ready.get((path_id, gift_id), ())
-            offered_to = {
-                tradition_id
-                for tradition_id in tradition_ids
-                if any(
-                    offered_to_tradition(technique_id, tradition_id, listings)
-                    for technique_id in ready
-                )
-            }
-            offering.update((tradition_id, path_id) for tradition_id in offered_to)
-            if not offered_to:
-                hidden.append((path_name, gift_name))
+    # One read, shared with character creation's "Not Yet Implemented" marks (#5197), so the
+    # page and this row report the same gaps.
+    offerings = cg_gift_offerings()
+    path_names = dict(offerings.paths)
+    gift_names = dict(offerings.gifts)
+    hidden = [(path_names[path_id], gift_names[gift_id]) for path_id, gift_id in offerings.hidden]
+    offering = offerings.pairs
+    paths = offerings.paths
+    tradition_ids = offerings.tradition_ids
     empty = len(tradition_ids) * len(paths) - len(offering)
     if not hidden and not empty:
         return ProbeResult(present=True, admin_url=link)
@@ -584,6 +556,40 @@ def _probe_cg_gift_pools_takeable() -> ProbeResult:
             "a new character who picks one at the Gift stage."
         )
     return ProbeResult(present=False, missing=missing, detail=detail, admin_url=link)
+
+
+def _probe_beginnings_have_a_route() -> ProbeResult:
+    """Every active Beginnings has an active route (#5197).
+
+    Consumer: `world/character_creation/validators.py` `get_lineage_errors()`. The route
+    (`OriginTemplate`, "Upbringing" to staff) gives the family path, so a Beginnings with
+    none cannot pass the Lineage stage: the player reads "The family paths for this
+    beginning are not set up yet". Character creation still lists the Beginnings, marked
+    "Not Yet Implemented" (`BeginningsSerializer.not_yet_implemented`, the same test as
+    here); this row is the list of the ones to finish. Two queries.
+    """
+    from world.character_creation.models import Beginnings, OriginTemplate  # noqa: PLC0415
+
+    routed = set(
+        OriginTemplate.objects.filter(is_active=True).values_list("beginning_id", flat=True)
+    )
+    missing = tuple(
+        f"{area} / {name}"
+        for pk, name, area in Beginnings.objects.filter(is_active=True)
+        .order_by("starting_area__name", "name")
+        .values_list("pk", "name", "starting_area__name")
+        if pk not in routed
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        missing=missing,
+        detail=(
+            "Each of these is listed in character creation marked Not Yet Implemented, and "
+            "a draft that picks one cannot finish the Lineage stage."
+        ),
+    )
 
 
 def _probe_tradition_techniques_on_a_path() -> ProbeResult:
@@ -3904,6 +3910,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "every new character who picks them at the Gift stage."
             ),
             probe=CustomProbe(fn=_probe_cg_gift_pools_takeable),
+        ),
+        ContentDependency(
+            key="beginnings-have-a-route",
+            label="Beginnings with no Upbringing",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/character_creation/validators.py get_lineage_errors()",
+            consequence=(
+                "The Beginnings is listed in character creation marked Not Yet "
+                "Implemented, and a draft that picks it cannot finish the Lineage stage."
+            ),
+            probe=CustomProbe(fn=_probe_beginnings_have_a_route),
+            admin_model="OriginTemplate",
         ),
         ContentDependency(
             key="cg-techniques-cast-effect",

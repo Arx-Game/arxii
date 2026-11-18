@@ -217,6 +217,7 @@ class BeginningsSerializer(serializers.ModelSerializer):
     heritage = HeritageAnchorSerializer(read_only=True, allow_null=True)
     art_image = serializers.SerializerMethodField()
     codex_entry_ids = serializers.SerializerMethodField()
+    not_yet_implemented = serializers.SerializerMethodField()
 
     def get_allowed_species_ids(self, obj: Beginnings) -> list[int]:
         """
@@ -246,6 +247,7 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "cg_point_cost",
             "codex_entry_ids",
             "heritage",
+            "not_yet_implemented",
         ]
         # Note: social_rank intentionally NOT included (staff-only)
 
@@ -256,6 +258,13 @@ class BeginningsSerializer(serializers.ModelSerializer):
     def get_codex_entry_ids(self, obj: Beginnings) -> list[int]:
         """Get codex entry IDs granted by this beginnings choice."""
         return [grant.entry_id for grant in obj.cached_codex_grants]
+
+    def get_not_yet_implemented(self, obj: Beginnings) -> bool:
+        """Whether this Beginnings has no active route yet, so Lineage cannot be finished."""
+        # Derived on every read (#5197), so the mark goes when a route is authored. False
+        # where the view gave no list of routed Beginnings (a nested payload).
+        routed = self.context.get("routed_beginning_ids")
+        return routed is not None and obj.pk not in routed
 
 
 class StartingAreaSerializer(serializers.ModelSerializer):
@@ -364,6 +373,7 @@ class PathSerializer(serializers.ModelSerializer):
 
     aspects = serializers.SerializerMethodField()
     codex_entry_ids = serializers.SerializerMethodField()
+    not_yet_implemented = serializers.SerializerMethodField()
 
     class Meta:
         model = Path
@@ -377,7 +387,14 @@ class PathSerializer(serializers.ModelSerializer):
             "icon_name",
             "aspects",
             "codex_entry_ids",
+            "not_yet_implemented",
         ]
+
+    def get_not_yet_implemented(self, obj: Path) -> bool:
+        """Whether no Tradition offers a new character a gift on this Path yet."""
+        # Derived from the catalog on every read (#5197), so the mark goes when a gift is
+        # authored. False where the view gave no catalog (a Path nested in another payload).
+        return obj.pk in self.context.get("unfinished_path_ids", frozenset())
 
     def get_aspects(self, obj: Path) -> list[str]:
         """
@@ -494,6 +511,7 @@ class TraditionSerializer(serializers.ModelSerializer):
     schooling = serializers.SerializerMethodField()
     favored_gift_names = serializers.SerializerMethodField()
     favored_affinity_names = serializers.SerializerMethodField()
+    not_yet_implemented = serializers.SerializerMethodField()
 
     class Meta:
         model = Tradition
@@ -511,8 +529,15 @@ class TraditionSerializer(serializers.ModelSerializer):
             "schooling",
             "favored_gift_names",
             "favored_affinity_names",
+            "not_yet_implemented",
         ]
         read_only_fields = fields
+
+    def get_not_yet_implemented(self, obj: Tradition) -> bool:
+        """Whether this Tradition offers a new character no gift yet on the Path asked about."""
+        # Derived from the catalog on every read (#5197). False where the view gave no
+        # catalog (a Tradition nested in another payload).
+        return obj.pk in self.context.get("unfinished_tradition_ids", frozenset())
 
     def get_codex_entry_ids(self, obj) -> list[int]:
         """Get codex entry IDs granted by this tradition.

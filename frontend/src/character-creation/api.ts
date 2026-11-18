@@ -113,9 +113,11 @@ export async function getSpecies(): Promise<Species[]> {
   return res.json();
 }
 
-export async function getPaths(): Promise<Path[]> {
-  // Fetch active Prospect-stage paths for CG selection
-  const res = await apiFetch(`${BASE_URL}/paths/`);
+export async function getPaths(beginningId?: number): Promise<Path[]> {
+  // Fetch active Prospect-stage paths for CG selection. `beginning_id` never narrows the
+  // list: it tells the server whose Traditions to test each path's gifts against (#5197).
+  const query = beginningId ? `?beginning_id=${beginningId}` : '';
+  const res = await apiFetch(`${BASE_URL}/paths/${query}`);
   if (!res.ok) {
     throw new Error('Failed to load paths');
   }
@@ -783,8 +785,11 @@ export async function createFacet(name: string): Promise<FacetMatch> {
 // Traditions API
 // =============================================================================
 
-export async function getTraditions(beginningId: number): Promise<Tradition[]> {
-  const res = await apiFetch(`${BASE_URL}/traditions/?beginning_id=${beginningId}`);
+export async function getTraditions(beginningId: number, pathId?: number): Promise<Tradition[]> {
+  // `path_id` never narrows the list: it tells the server which Path to test each
+  // Tradition's gifts on (#5197).
+  const path = pathId ? `&path_id=${pathId}` : '';
+  const res = await apiFetch(`${BASE_URL}/traditions/?beginning_id=${beginningId}${path}`);
   if (!res.ok) {
     throw new Error('Failed to load traditions');
   }

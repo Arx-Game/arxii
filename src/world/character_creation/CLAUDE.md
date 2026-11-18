@@ -286,6 +286,21 @@ for the five-branch validation gate this data must satisfy before submission.
   at CG time). Defensive logged skip if the Academy isn't seeded (mirrors
   `seed_beginning_traditions`'s Unbound-tradition skip); `get_or_create`-idempotent.
 
+### Not Yet Implemented marks (#5197)
+A Path, a Tradition or a Beginnings whose content is not written yet is never hidden and
+never blocked (owner ruling 2026-11-18: the gap is an alert to finish the content). Its
+list row carries a derived, read-only `not_yet_implemented`:
+- `PathSerializer`: no Tradition offers a new character a gift on the Path. `?beginning_id=`
+  on `/paths/` tests that Beginning's Traditions; with none, every active Tradition.
+- `TraditionSerializer`: the Tradition offers no gift on the Path named by `?path_id=` on
+  `/traditions/`; with none, on any Path.
+- `BeginningsSerializer`: the Beginnings has no active `OriginTemplate`.
+The first two read `world.magic.services.cg_catalog.cg_gift_offerings()`, the whole-catalog
+form of `get_gift_options`; the view puts the ids in the serializer context, one read per
+list. Neither query param narrows a list. Nothing stores the mark, so it goes when the
+content exists. The Required content dashboard lists the same gaps
+(`cg-gift-pools-takeable`, `beginnings-have-a-route`).
+
 ### `get_accessible_starting_areas(account)`
 Returns StartingArea queryset filtered by account access level.
 

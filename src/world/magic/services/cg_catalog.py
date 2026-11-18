@@ -27,7 +27,7 @@ from django.db.models import Prefetch, Q, QuerySet
 from world.magic.constants import GiftKind
 from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant
 from world.magic.models.techniques import Technique
-from world.magic.types.cg_catalog import TechniqueOptions
+from world.magic.types.cg_catalog import GiftOfferings, TechniqueOptions
 from world.species.models import SpeciesGiftGrant
 
 if TYPE_CHECKING:
@@ -205,6 +205,62 @@ def get_species_technique_options(
     gift_ids = SpeciesGiftGrant.objects.filter(grant_filter).values_list("gift_id", flat=True)
     technique_qs = cg_technique_queryset(include_unready=include_unready)
     return list(technique_qs.filter(gift_id__in=gift_ids).order_by("name", "id"))
+
+
+def cg_gift_offerings() -> GiftOfferings:
+    """Every Tradition and Path pairing that offers a new character a Major Gift (#5197).
+
+    The whole-catalog form of :func:`get_gift_options`, by the same rule: a Major Gift is
+    offered on a Path when the Path's list for it holds a technique
+    ``cg_takeable_techniques`` lets through that is open to the Tradition
+    (``offered_to_tradition``). Read by character creation, which marks a Path or a
+    Tradition with nothing behind it "Not Yet Implemented", and by the Required content
+    dashboard, which lists the same gaps for staff.
+
+    A fixed query count whatever the catalog size: one per requirement type for the
+    gated-technique ids, then the path lists, the tradition listings, the paths, the Major
+    Gifts and the active traditions.
+    """
+    from world.classes.models import Path, PathStage  # noqa: PLC0415
+    from world.magic.models.gifts import Gift, Tradition  # noqa: PLC0415
+
+    path_ready: dict[tuple[int, int], set[int]] = {}
+    for path_id, gift_id, technique_id in PathGiftGrant.starter_techniques.through.objects.filter(
+        technique__in=cg_takeable_techniques()
+    ).values_list("pathgiftgrant__path_id", "pathgiftgrant__gift_id", "technique_id"):
+        path_ready.setdefault((path_id, gift_id), set()).add(technique_id)
+    listings = tradition_listings()
+    paths = tuple(
+        Path.objects.filter(stage=PathStage.PROSPECT, is_active=True)
+        .order_by("name")
+        .values_list("id", "name")
+    )
+    gifts = tuple(Gift.objects.filter(kind=GiftKind.MAJOR).values_list("id", "name"))
+    tradition_ids = tuple(Tradition.objects.filter(is_active=True).values_list("id", flat=True))
+
+    hidden: list[tuple[int, int]] = []
+    pairs: set[tuple[int, int]] = set()
+    for path_id, _path_name in paths:
+        for gift_id, _gift_name in gifts:
+            ready = path_ready.get((path_id, gift_id), ())
+            offered_to = {
+                tradition_id
+                for tradition_id in tradition_ids
+                if any(
+                    offered_to_tradition(technique_id, tradition_id, listings)
+                    for technique_id in ready
+                )
+            }
+            pairs.update((tradition_id, path_id) for tradition_id in offered_to)
+            if not offered_to:
+                hidden.append((path_id, gift_id))
+    return GiftOfferings(
+        pairs=frozenset(pairs),
+        hidden=tuple(hidden),
+        paths=paths,
+        gifts=gifts,
+        tradition_ids=tradition_ids,
+    )
 
 
 def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:

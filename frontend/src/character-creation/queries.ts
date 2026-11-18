@@ -83,7 +83,8 @@ export const characterCreationKeys = {
   genders: () => [...characterCreationKeys.all, 'genders'] as const,
   worshippedBeings: () => [...characterCreationKeys.all, 'worshipped-beings'] as const,
   species: () => [...characterCreationKeys.all, 'species'] as const,
-  paths: () => [...characterCreationKeys.all, 'paths'] as const,
+  paths: (beginningId?: number) =>
+    [...characterCreationKeys.all, 'paths', beginningId ?? null] as const,
   cgBudget: () => [...characterCreationKeys.all, 'cg-budget'] as const,
   draftCGPoints: (draftId: number) =>
     [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
@@ -167,8 +168,8 @@ export const characterCreationKeys = {
   // Facet keys
   facets: () => [...characterCreationKeys.all, 'facets'] as const,
   // Tradition keys
-  traditions: (beginningId: number) =>
-    [...characterCreationKeys.all, 'traditions', beginningId] as const,
+  traditions: (beginningId: number, pathId?: number) =>
+    [...characterCreationKeys.all, 'traditions', beginningId, pathId ?? null] as const,
   // Tarot cards key
   tarotCards: () => [...characterCreationKeys.all, 'tarot-cards'] as const,
   namingRitualConfig: () => [...characterCreationKeys.all, 'naming-ritual-config'] as const,
@@ -220,10 +221,10 @@ export function useSpecies() {
   });
 }
 
-export function usePaths() {
+export function usePaths(beginningId?: number) {
   return useQuery({
-    queryKey: characterCreationKeys.paths(),
-    queryFn: getPaths,
+    queryKey: characterCreationKeys.paths(beginningId),
+    queryFn: () => getPaths(beginningId),
   });
 }
 
@@ -821,10 +822,10 @@ export function useNamingRitualConfig() {
 // Traditions Hooks
 // =============================================================================
 
-export function useTraditions(beginningId: number | undefined) {
+export function useTraditions(beginningId: number | undefined, pathId?: number) {
   return useQuery({
-    queryKey: characterCreationKeys.traditions(beginningId!),
-    queryFn: () => getTraditions(beginningId!),
+    queryKey: characterCreationKeys.traditions(beginningId!, pathId),
+    queryFn: () => getTraditions(beginningId!, pathId),
     enabled: !!beginningId,
   });
 }

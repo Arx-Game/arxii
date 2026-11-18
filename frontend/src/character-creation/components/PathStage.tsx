@@ -38,6 +38,7 @@ import {
 } from '../folio';
 import { useCGExplanations, usePaths, useUpdateDraft } from '../queries';
 import type { CharacterDraft, Path } from '../types';
+import { NOT_YET_IMPLEMENTED } from '../constants';
 import { Stage } from '../types';
 
 interface PathStageProps {
@@ -64,7 +65,7 @@ const ICON_MAP: Record<string, LucideIcon> = {
 };
 
 export function PathStage({ draft }: PathStageProps) {
-  const { data: paths, isLoading, error } = usePaths();
+  const { data: paths, isLoading, error } = usePaths(draft.selected_beginnings?.id);
   const { data: copy } = useCGExplanations();
   const updateDraft = useUpdateDraft();
 
@@ -125,6 +126,7 @@ export function PathStage({ draft }: PathStageProps) {
               name={p.name}
               lead={<Icon />}
               tag={p.aspects.join(' · ') || 'Path'}
+              tags={p.not_yet_implemented ? [NOT_YET_IMPLEMENTED] : undefined}
               chosen={isChosen}
               open={isChosen}
               onChoose={() => choose(p)}

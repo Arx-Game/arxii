@@ -29978,6 +29978,8 @@ export interface components {
       /** @description Get codex entry IDs granted by this beginnings choice. */
       readonly codex_entry_ids: number[];
       readonly heritage: components['schemas']['HeritageAnchor'] | null;
+      /** @description Whether this Beginnings has no active route yet, so Lineage cannot be finished. */
+      readonly not_yet_implemented: boolean;
     };
     /** @description Serializer for Beginnings options. */
     BeginningsRequest: {
@@ -47892,6 +47894,8 @@ export interface components {
        *     Read from ``cached_codex_grants`` populated by the ViewSet prefetch.
        */
       readonly codex_entry_ids: number[];
+      /** @description Whether no Tradition offers a new character a gift on this Path yet. */
+      readonly not_yet_implemented: boolean;
     };
     /** @description Lighter serializer for path lists without nested aspects. */
     PathList: {
@@ -55039,6 +55043,8 @@ export interface components {
       readonly favored_gift_names: string[];
       /** @description The affinities this Tradition teaches well (``favored_affinities``, #4659). */
       readonly favored_affinity_names: string[];
+      /** @description Whether this Tradition offers a new character no gift yet on the Path asked about. */
+      readonly not_yet_implemented: boolean;
     };
     /** @description Read-only serializer for a character's training allocation. */
     TrainingAllocation: {
@@ -62191,7 +62197,9 @@ export interface operations {
   };
   character_creation_paths_list: {
     parameters: {
-      query?: never;
+      query?: {
+        beginning_id?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -62446,6 +62454,7 @@ export interface operations {
     parameters: {
       query?: {
         beginning_id?: number;
+        path_id?: number;
       };
       header?: never;
       path?: never;
@@ -62489,6 +62498,7 @@ export interface operations {
     parameters: {
       query?: {
         beginning_id?: number;
+        path_id?: number;
       };
       header?: never;
       path: {

@@ -268,6 +268,16 @@ template, so every gift was hidden while the old starter-pool row read complete.
   `technique_count`). Inert today because no authored gift has a parent yet; widening it is
   display work that belongs with the content PR that first makes a parented gift visible.
 
+`cg_catalog.cg_gift_offerings()` (#5197) is the whole-catalog form of `get_gift_options`, by
+the same rule and in a fixed number of queries: a `GiftOfferings` holding every
+`(tradition id, path id)` that offers a new character a Major Gift (`pairs`) and every
+`(path id, gift id)` offered to no active Tradition (`hidden`). Two readers share it so they
+cannot disagree. Character creation marks a Path or a Tradition with nothing behind it "Not
+Yet Implemented" (`PathSerializer` / `TraditionSerializer.not_yet_implemented`; the choice
+stays listed and selectable, owner ruling 2026-11-18), and the Required content dashboard's
+`cg-gift-pools-takeable` row lists the same gaps for staff. Nothing stores the mark: it is
+read from the catalog each time, so it goes when a technique is put on the Path's list.
+
 **Authoring:** `parent` is set in `GiftAdmin` (autocomplete) or by natural key in a lore
 fixture (`"parent": ["Khati"]`). `magic.gift` is already in `CONTENT_MODELS` with
 `NaturalKeyMixin(fields=["name"])`, so `parent` exports and loads with no new wiring — but a
