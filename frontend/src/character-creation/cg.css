@@ -1302,7 +1302,9 @@
   margin-top: 0.6rem;
 }
 .interview .stances.grid > li .stance {
-  grid-template-columns: 1.1rem 1fr;
+  /* The text column may shrink below its longest word (#5200): a plain `1fr` keeps the
+     word's width as the column's minimum and pushes the card past its cell. */
+  grid-template-columns: 1.1rem minmax(0, 1fr);
   grid-template-rows: 1fr auto;
   align-items: start;
   border: 1px solid var(--cg-hairline-strong);
@@ -1392,8 +1394,16 @@
 .interview .life .testament {
   max-width: 68ch;
 }
+/* The life's cards are one across in a narrow life and widen with it (#5200). They were two
+   across at any width under 46rem, so on a phone a card was some 150px wide: a name such as
+   "Unremarkable" ran past its own edge into the next card and the page scrolled sideways. */
 .interview .life .stances.grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
+}
+@container (min-width: 30rem) {
+  .interview .life .stances.grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 @container (min-width: 46rem) {
   .interview .life .stances.grid {
@@ -1690,6 +1700,7 @@
 }
 .interview .stance b {
   display: block;
+  overflow-wrap: anywhere;
   font-family: 'Cinzel', serif;
   font-weight: 600;
   letter-spacing: 0.12em;
