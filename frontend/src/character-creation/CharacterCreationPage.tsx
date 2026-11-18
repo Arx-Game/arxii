@@ -69,6 +69,21 @@ export function CharacterCreationPage() {
     };
   }, [selectedArea, setRealmTheme]);
 
+  // A stage opens at its top (#5198). The window kept its scroll position across a stage
+  // change, so Next at the foot of a long stage showed the middle of the next one with its
+  // title off screen. Only a change of stage scrolls: the first stage shown on arrival and
+  // a refetch of the same stage leave the window where it is.
+  const shownStage = draft?.current_stage;
+  const lastShownStage = useRef(shownStage);
+  useEffect(() => {
+    if (shownStage === undefined || lastShownStage.current === shownStage) return;
+    const arrived = lastShownStage.current === undefined;
+    lastShownStage.current = shownStage;
+    if (arrived) return;
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  }, [shownStage]);
+
   // Track beforeLeave callbacks from stages
   const beforeLeaveRef = useRef<(() => Promise<boolean>) | null>(null);
 

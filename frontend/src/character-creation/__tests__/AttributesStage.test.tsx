@@ -142,6 +142,37 @@ describe('AttributesStage', () => {
       const statValues = screen.getAllByText('20');
       expect(statValues.length).toBeGreaterThanOrEqual(12);
     });
+
+    // #5198: the page showed the even spread with no points left while the draft held no
+    // statistics, and the stage read "Missing stats" until a button was pressed.
+    it('saves the spread it shows when the draft holds no statistics, once', () => {
+      const draft: CharacterDraft = { ...mockEmptyDraft, draft_data: {} };
+
+      const view = renderAttributesStage(draft);
+
+      expect(mockUpdateDraftMutate).toHaveBeenCalledTimes(1);
+      expect(mockUpdateDraftMutate).toHaveBeenCalledWith({
+        draftId: draft.id,
+        data: { draft_data: { stats: defaultStats() } },
+      });
+
+      // A render before the save answers (the draft still has none) does not save again.
+      view.rerender(
+        <QueryClientProvider client={createTestQueryClient()}>
+          <AttributesStage draft={{ ...draft }} />
+        </QueryClientProvider>
+      );
+      expect(mockUpdateDraftMutate).toHaveBeenCalledTimes(1);
+    });
+
+    it('saves nothing on arrival when the draft already holds statistics', () => {
+      renderAttributesStage({
+        ...mockEmptyDraft,
+        draft_data: { stats: { ...defaultStats(), strength: 10, agility: 30 } },
+      });
+
+      expect(mockUpdateDraftMutate).not.toHaveBeenCalled();
+    });
   });
 
   describe('Display Values', () => {

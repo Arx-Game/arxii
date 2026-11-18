@@ -8,7 +8,7 @@
  * - Permission checks
  */
 
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import { distinctionKeys } from '@/hooks/useDistinctions';
 import { CharacterCreationPage } from '../CharacterCreationPage';
@@ -397,6 +397,51 @@ describe('CharacterCreationPage', () => {
 
       const nav = screen.getByRole('navigation', { name: /character creation stages/i });
       expect(within(nav).queryByText('Distinctions')).not.toBeInTheDocument();
+    });
+  });
+
+  // #5198: the window kept its scroll position across a stage change, so Next at the foot
+  // of a long stage showed the middle of the next one.
+  describe('A stage opens at its top', () => {
+    it('scrolls the window to the top when the stage changes, and not on arrival', async () => {
+      const scrolledTo: number[] = [];
+      const root = document.documentElement;
+      Object.defineProperty(root, 'scrollTop', {
+        configurable: true,
+        get: () => 0,
+        set: (value: number) => {
+          scrolledTo.push(value);
+        },
+      });
+      try {
+        const queryClient = createTestQueryClient();
+        const seed = (stage: Stage) =>
+          seedCharacterCreationQueries(queryClient, {
+            canCreate: mockCanCreateYes,
+            draft: { ...mockDraftWithArea, current_stage: stage },
+            startingAreas: mockStartingAreas,
+            explanations: mockCGExplanations,
+          });
+        seed(Stage.LINEAGE);
+
+        renderWithCharacterCreationProviders(<CharacterCreationPage />, {
+          queryClient,
+          account: mockPlayerAccount,
+        });
+
+        await screen.findByRole('button', { name: /^next:/i });
+        expect(scrolledTo).toEqual([]);
+
+        act(() => seed(Stage.ORIGIN));
+
+        await waitFor(() => expect(scrolledTo).toEqual([0]));
+
+        // The same stage again (a refetch of the draft) leaves the window alone.
+        act(() => seed(Stage.ORIGIN));
+        expect(scrolledTo).toEqual([0]);
+      } finally {
+        Reflect.deleteProperty(root, 'scrollTop');
+      }
     });
   });
 
