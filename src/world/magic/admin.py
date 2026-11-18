@@ -1014,8 +1014,8 @@ class DistinctionOfferInline(admin.TabularInline):
 class GlimpseTagAdmin(admin.ModelAdmin):
     """Guided glimpse tag catalog (#2427) — lore-repo content model."""
 
-    list_display = ["name", "axis", "affinity", "sort_order", "is_active"]
-    list_filter = ["axis", "is_active", "affinity"]
+    list_display = ["name", "axis", "affinity", "sort_order", "stands_alone", "is_active"]
+    list_filter = ["axis", "is_active", "stands_alone", "affinity"]
     search_fields = ["name", "slug"]
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ["paths"]

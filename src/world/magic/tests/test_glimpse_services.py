@@ -7,6 +7,7 @@ from world.magic.constants import GlimpseState, GlimpseTagAxis
 from world.magic.factories import CharacterAuraFactory, GlimpseTagFactory
 from world.magic.models import CharacterGlimpseTag
 from world.magic.services.glimpse import (
+    keep_stand_alone,
     link_distinction_to_glimpse,
     refresh_glimpse_state,
     set_glimpse_prose,
@@ -60,6 +61,63 @@ class SetGlimpseTagsTests(TestCase):
         set_glimpse_tags(self.aura, [self.tone_a], axis=GlimpseTagAxis.TONE)
         set_glimpse_tags(self.aura, [], axis=GlimpseTagAxis.TONE)
         assert self.aura.glimpse_state == GlimpseState.NOT_STARTED
+
+
+class StandAloneTagTests(TestCase):
+    """A tag that stands alone is the only tag of its axis (#5193)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.aura = CharacterAuraFactory()
+        cls.majestic = GlimpseTagFactory(
+            axis=GlimpseTagAxis.REFLECTION, slug="alone-majestic", name="Majestic", sort_order=1
+        )
+        cls.terrifying = GlimpseTagFactory(
+            axis=GlimpseTagAxis.REFLECTION, slug="alone-terrifying", name="Terrifying", sort_order=2
+        )
+        cls.fugue = GlimpseTagFactory(
+            axis=GlimpseTagAxis.REFLECTION,
+            slug="alone-fugue",
+            name="Fugue",
+            sort_order=3,
+            stands_alone=True,
+        )
+
+    def test_a_tag_does_not_stand_alone_unless_staff_say_so(self):
+        assert self.majestic.stands_alone is False
+
+    def test_a_stand_alone_tag_is_saved_alone(self):
+        set_glimpse_tags(self.aura, [self.fugue], axis=GlimpseTagAxis.REFLECTION)
+        assert list(
+            CharacterGlimpseTag.objects.filter(aura=self.aura).values_list("tag__slug", flat=True)
+        ) == ["alone-fugue"]
+
+    def test_a_stand_alone_tag_beside_another_is_refused_and_nothing_changes(self):
+        set_glimpse_tags(self.aura, [self.majestic], axis=GlimpseTagAxis.REFLECTION)
+        with self.assertRaises(ValidationError) as raised:
+            set_glimpse_tags(self.aura, [self.majestic, self.fugue], axis=GlimpseTagAxis.REFLECTION)
+        assert raised.exception.messages == [
+            "Fugue cannot be chosen with another The Reflection tag."
+        ]
+        assert list(
+            CharacterGlimpseTag.objects.filter(aura=self.aura).values_list("tag__slug", flat=True)
+        ) == ["alone-majestic"]
+
+    def test_the_axis_still_takes_several_ordinary_tags(self):
+        set_glimpse_tags(
+            self.aura, [self.majestic, self.terrifying], axis=GlimpseTagAxis.REFLECTION
+        )
+        assert CharacterGlimpseTag.objects.filter(aura=self.aura).count() == 2
+
+    def test_keep_stand_alone_drops_the_others(self):
+        assert keep_stand_alone([self.majestic, self.fugue, self.terrifying]) == [self.fugue]
+
+    def test_keep_stand_alone_leaves_ordinary_tags_as_given(self):
+        assert keep_stand_alone([self.terrifying, self.majestic]) == [
+            self.terrifying,
+            self.majestic,
+        ]
+        assert keep_stand_alone([]) == []
 
 
 class GlimpseStateTransitionTests(TestCase):

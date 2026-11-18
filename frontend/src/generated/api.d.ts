@@ -30508,6 +30508,8 @@ export interface components {
       readonly sort_order: number;
       /** @description Affinity this tag nudges at CG finalize. Set on TONE and TRIGGER tags to apply a small aura adjustment. Null = no affinity nudge. */
       readonly affinity: number | null;
+      /** @description This tag cannot be chosen with any other tag of its step: choosing it clears the others, and choosing another clears it. For an answer that rules the rest out, on a step that otherwise takes several. */
+      readonly stands_alone: boolean;
       readonly offers: components['schemas']['CGGlimpseTagOffer'][];
     };
     /** @description A ``DistinctionOffer`` embedded on a glimpse tag row (#3675). */

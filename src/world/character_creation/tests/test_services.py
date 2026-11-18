@@ -1769,6 +1769,35 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         assert aura.glimpse_state == GlimpseState.TAGS_ONLY
         assert CharacterGlimpseTag.objects.filter(aura=aura).count() == 2
 
+    def test_finalize_keeps_a_stand_alone_tag_alone(self):
+        """A draft holding a stand-alone tag beside another finalizes with that tag only.
+
+        The draft's list is not checked pick by pick, so finalize must not fail on it
+        (#5193): the stand-alone tag wins and the other answer of its axis is dropped.
+        """
+        from world.magic.constants import GlimpseTagAxis
+        from world.magic.factories import GlimpseTagFactory
+        from world.magic.models import CharacterAura, CharacterGlimpseTag
+
+        majestic = GlimpseTagFactory(
+            axis=GlimpseTagAxis.REFLECTION, slug="fin-majestic", name="Majestic", sort_order=1
+        )
+        fugue = GlimpseTagFactory(
+            axis=GlimpseTagAxis.REFLECTION,
+            slug="fin-fugue",
+            name="Fugue",
+            sort_order=2,
+            stands_alone=True,
+        )
+        tone = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="fin-tone-alone")
+        draft = self._create_draft(glimpse_tag_ids=[majestic.pk, fugue.pk, tone.pk])
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character.sheet_data)
+        assert set(
+            CharacterGlimpseTag.objects.filter(aura=aura).values_list("tag__slug", flat=True)
+        ) == {"fin-fugue", "fin-tone-alone"}
+
     def test_finalize_with_tags_and_prose_is_complete(self):
         """Both tags and prose present should compute COMPLETE glimpse_state."""
         from world.magic.constants import GlimpseState, GlimpseTagAxis

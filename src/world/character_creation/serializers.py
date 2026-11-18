@@ -884,6 +884,7 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
             "example",
             "sort_order",
             "affinity",
+            "stands_alone",
             "offers",
         ]
         read_only_fields = fields

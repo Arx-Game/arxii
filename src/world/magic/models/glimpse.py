@@ -57,6 +57,14 @@ class GlimpseTag(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Shared
     is_active = models.BooleanField(
         default=True, help_text="Inactive tags are hidden from the CG flow."
     )
+    stands_alone = models.BooleanField(
+        default=False,
+        help_text=(
+            "This tag cannot be chosen with any other tag of its step: choosing it "
+            "clears the others, and choosing another clears it. For an answer that "
+            "rules the rest out, on a step that otherwise takes several."
+        ),
+    )
     paths = models.ManyToManyField(
         "arxii.Path",
         blank=True,
