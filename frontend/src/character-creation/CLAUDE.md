@@ -383,6 +383,12 @@ two rails stand at the same two edges whatever the stage holds.
   between the rails. To let a stage use the width, give it a layout that does (columns of
   entries, statistics side by side) and lift its cap; do not stretch a single column,
   which puts a row's name a screen-width from its controls.
+- The life's cards follow the life's own width, not the window's (`.leafwrap > .life` is
+  a container): one across under 30rem of life, two from 30rem, three from 46rem and more
+  above (#5200; they were two across at any width under 46rem, and on a phone a card's
+  name ran out of its box and the page scrolled sideways). A card's text column is
+  `minmax(0, 1fr)` and its name wraps anywhere, so a long name cannot push a card past
+  its cell at any width.
 - Under 74rem of window every stage's panel drops under the leaf, the life page's too.
   From 74rem the panel is sticky; a reading stage lets it scroll away in a short window
   (under 52rem tall), a `railSlot` stage keeps it in view at any height, because the
