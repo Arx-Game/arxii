@@ -6,7 +6,7 @@ doubles as identity anchor and spendable resonance currency.
 """
 
 from decimal import Decimal
-from typing import ClassVar
+from typing import TYPE_CHECKING, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -18,6 +18,9 @@ from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import GlimpseState
 from world.magic.models.affinity import Affinity, Resonance
+
+if TYPE_CHECKING:
+    from world.magic.models.glimpse import CharacterGlimpseTag
 
 
 class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
@@ -81,6 +84,21 @@ class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
         serializer's magic and theming sections.
         """
         return list(self.shares.select_related("affinity"))
+
+    @PrunedCachedProperty
+    def cached_glimpse_tags(self) -> list["CharacterGlimpseTag"]:
+        """This aura's chosen glimpse tags, catalog tag joined, in axis then sort order.
+
+        Cleared by ``set_glimpse_tags`` (the one service that writes these rows) and by
+        any single row's save or delete through ``CharacterGlimpseTag.related_cache_fields``.
+        Fed cold by a ``Prefetch`` landing on this name in the character sheet serializer.
+
+        Until #5193 that prefetch wrote a plain attribute of this name onto the
+        identity-mapped aura and nothing ever cleared it: the sheet kept answering with
+        the tags it first loaded, so the sheet's Glimpse editor never showed a pick it
+        had just saved.
+        """
+        return list(self.glimpse_tags.select_related("tag"))
 
     def percent_for(self, affinity: Affinity) -> Decimal:
         """This affinity's percent of the aura; 0 when there is no row."""

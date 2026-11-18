@@ -92,7 +92,6 @@ from world.magic.factories import (
     TechniqueStyleFactory,
     UltimateTechniqueFactory,
 )
-from world.magic.models import CharacterAura
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
 from world.mechanics.services import create_distinction_modifiers
@@ -1411,13 +1410,6 @@ class TestMagicSectionFull(TestCase):
         CharacterGlimpseTagFactory(aura=self.aura, tag=tag)
         self.aura.glimpse_state = GlimpseState.TAGS_ONLY
         self.aura.save()
-        # self.aura is SharedMemoryModel-identity-mapped and shared (class-scoped)
-        # with every other test in this class; an earlier test's GET already
-        # populated its ``cached_glimpse_tags`` Prefetch(to_attr=...) attribute
-        # (empty, since no CharacterGlimpseTag existed yet) — Django's prefetch
-        # machinery skips re-fetching an attribute that's already present on the
-        # instance, so the stale empty list would otherwise win here.
-        CharacterAura.flush_instance_cache()
 
         magic = self._get_magic()
         assert magic["aura"]["glimpse_state"] == GlimpseState.TAGS_ONLY
@@ -1427,6 +1419,29 @@ class TestMagicSectionFull(TestCase):
         assert tags[0]["axis"] == GlimpseTagAxis.TONE
         assert tags[0]["name"] == tag.name
         assert tags[0]["description"] == tag.description
+
+    def test_aura_glimpse_tags_follow_a_save(self) -> None:
+        """The sheet shows the tags a save just wrote, not the ones it first loaded (#5193).
+
+        The aura is identity-mapped, so the list the sheet reads lives on one shared
+        object. Before #5193 nothing cleared it: the Glimpse editor saved a pick and the
+        sheet went on answering with the old one.
+        """
+        from world.magic.services.glimpse import set_glimpse_tags
+
+        first = GlimpseTagFactory(axis=GlimpseTagAxis.REFLECTION, slug="ms-first", name="First")
+        second = GlimpseTagFactory(axis=GlimpseTagAxis.REFLECTION, slug="ms-second", name="Second")
+
+        set_glimpse_tags(self.aura, [first], axis=GlimpseTagAxis.REFLECTION)
+        before = [tag["name"] for tag in self._get_magic()["aura"]["glimpse_tags"]]
+        set_glimpse_tags(self.aura, [second], axis=GlimpseTagAxis.REFLECTION)
+        after = [tag["name"] for tag in self._get_magic()["aura"]["glimpse_tags"]]
+        set_glimpse_tags(self.aura, [], axis=GlimpseTagAxis.REFLECTION)
+        cleared = [tag["name"] for tag in self._get_magic()["aura"]["glimpse_tags"]]
+
+        assert before == ["First"]
+        assert after == ["Second"]
+        assert cleared == []
 
     def test_aura_can_finish_glimpse_true_for_owner_when_unfinished(self) -> None:
         """Owner sees can_finish_glimpse=True while the glimpse is unfinished (#2427)."""

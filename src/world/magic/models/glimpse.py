@@ -13,14 +13,14 @@ All writes go through ``world.magic.services.glimpse`` so
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
-from evennia_extensions.mixins import CachedPropertiesMixin
+from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import GlimpseTagAxis
 
@@ -120,8 +120,13 @@ class GlimpseTag(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Shared
         return f"{self.get_axis_display()}: {self.name}"
 
 
-class CharacterGlimpseTag(SharedMemoryModel):
+class CharacterGlimpseTag(RelatedCacheClearingMixin, SharedMemoryModel):
     """A character's chosen glimpse tag (#2427). Instance data — never exported."""
+
+    #: A save or delete of one row clears the aura's ``cached_glimpse_tags`` (#5193).
+    #: ``set_glimpse_tags`` writes with a queryset delete and a bulk create, which run
+    #: neither, so it clears that list itself.
+    related_cache_fields: ClassVar[list[str]] = ["aura"]
 
     aura = models.ForeignKey(
         "arxii.CharacterAura",

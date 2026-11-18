@@ -1180,15 +1180,9 @@ def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | No
     except (CharacterAura.DoesNotExist, CharacterSheet.DoesNotExist):
         return None
 
-    tag_rows: list[CharacterGlimpseTag] = getattr(
-        aura,
-        # Suppression justified: mutating prefetch on identity-mapped parent; context-over-cache
-        # (#2401).
-        "cached_glimpse_tags",  # noqa: GETATTR_LITERAL
-        None,
-    )
-    if tag_rows is None:
-        tag_rows = aura.glimpse_tags.select_related("tag")
+    # A PrunedCachedProperty the Prefetch above lands on, cleared by every writer of the
+    # rows (#5193); before that the prefetched attribute went stale on the shared aura.
+    tag_rows: list[CharacterGlimpseTag] = aura.cached_glimpse_tags
     return AuraData(
         id=aura.pk,
         shares=_aura_share_entries(aura),

@@ -66,6 +66,9 @@ def set_glimpse_tags(
 
     CharacterGlimpseTag.objects.filter(aura=aura, tag__axis=axis).delete()
     CharacterGlimpseTag.objects.bulk_create(CharacterGlimpseTag(aura=aura, tag=tag) for tag in tags)
+    # The queryset delete and the bulk create run no row's save() or delete(), so the
+    # aura's cached list is dropped here; the sheet reads it (#5193).
+    aura.__dict__.pop("cached_glimpse_tags", None)
     refresh_glimpse_state(aura)
 
 
