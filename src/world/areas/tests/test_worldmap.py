@@ -561,6 +561,51 @@ class FootprintServiceTests(TestCase):
         read = region_read(self.region)
         assert {t.title_id for t in read.landless_titles} == {old_crown.pk, empire.pk, fresh.pk}
 
+    def test_region_read_asks_the_same_queries_however_many_areas_hold_land(self) -> None:
+        """#5214: the holder of each footprint was looked up area by area, three queries
+        each, so the read grew with the map and every edit waited on it."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.character_creation.factories import RealmFactory
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.almanach import (
+            assign_holder,
+            plant_rung,
+            rung_area_for_title,
+        )
+        from world.societies.houses.constants import TitleTier
+
+        realm = RealmFactory(name="Countland")
+        crown = plant_rung(realm=realm, tier=TitleTier.KINGDOM, name="Count Crown")
+        duchy = plant_rung(realm=realm, tier=TitleTier.DUCHY, name="Dukedom", parent_title=crown)
+        assign_holder(duchy, OrganizationFactory(name="House Duke"))
+
+        def county(index: int) -> None:
+            title = plant_rung(
+                realm=realm, tier=TitleTier.COUNTY, name=f"Shire {index}", parent_title=duchy
+            )
+            assign_holder(title, OrganizationFactory(name=f"House Shire {index}"))
+            set_footprint(area=rung_area_for_title(title), add=[(index, 3)])
+
+        def read_queries() -> tuple[int, dict[str, str]]:
+            with CaptureQueriesContext(connection) as captured:
+                read = region_read(self.region)
+            return len(captured), {f.name: f.holder_name for f in read.footprints}
+
+        county(1)
+        county(2)
+        few, holders = read_queries()
+        assert holders["Shire 1"] == "House Shire 1"  # land: its Domain's owner
+        assert holders["Dukedom"] == "House Duke"  # no Domain: the title's house
+        assert holders["Count Crown"] == ""  # nobody holds the crown
+        for index in range(3, 9):
+            county(index)
+        many, holders = read_queries()
+        assert holders["Shire 8"] == "House Shire 8"
+        assert len(holders) >= 10
+        assert many == few
+
     def test_pips_endpoint_carries_charters_and_landless_titles(self) -> None:
         """The HTTP payload, not only the service read: the view builds the footprint
         dicts by hand, and the live pass found it dropped `charters` (#4984)."""

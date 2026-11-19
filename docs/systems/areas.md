@@ -268,7 +268,9 @@ map is `almanach_plant_rung` then `atlas_carve_footprint`; nothing here mints a 
 the barony its title is seated in; the first barony found inside it when no title stands there
 or the capital holds no pip yet, #5157), and `charters`, the ids of the titles
 whose charters hold this footprint's title; `landless_titles` lists the realm rungs with no land
-on the map, titular and potential crowns, each with `station` and `fief_ids`, #4983),
+on the map, titular and potential crowns, each with `station` and `fief_ids`, #4983; the
+read is a fixed handful of queries however many areas hold land, holders coming from one
+Domain query and the titles already loaded, `_holders_by_area`, #5214),
 `POST .../<id>/upload/`
 (multipart `file`; the one write that is not an action), `GET .../<id>/file/` (the latest
 upload, decompressed, under its original name).
