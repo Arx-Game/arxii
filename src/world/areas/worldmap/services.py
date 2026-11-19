@@ -876,10 +876,7 @@ def region_read(region: RegionMap) -> RegionRead:
         .values_list("area_id", "x", "y")
     )
     holders = {
-        a.pk: a
-        for a in Area.objects.filter(pk__in={r[0] for r in rows}).select_related(
-            "domain_profile__owner_org", "parent"
-        )
+        a.pk: a for a in Area.objects.filter(pk__in={r[0] for r in rows}).select_related("parent")
     }
     # a pip belongs to its holder and to every ancestor of the holder on the ladder
     by_area: dict[int, list[Pip]] = {}
@@ -894,10 +891,11 @@ def region_read(region: RegionMap) -> RegionRead:
     titles = _title_by_area(areas.values())
     seats = _seat_by_area(areas, by_area, titles)
     charters = _charters_by_title({title.pk for title in titles.values()})
+    holding = _holders_by_area(set(areas), titles)
     footprints = []
     for area_id, area_pips in by_area.items():
         area = areas[area_id]
-        org = _holder_of(area)
+        org = holding.get(area.pk)
         title = titles.get(area.pk)
         title_id = title.pk if title is not None else None
         footprints.append(
@@ -986,13 +984,25 @@ def _landless_titles(
     ]
 
 
-def _holder_of(area: Area) -> Organization | None:
-    """The house holding an area's rung, or None for an unclaimed or undecorated area.
-    Land answers from its Domain; a duchy and above, which have none (#5069), from the
-    title standing on them."""
-    from world.societies.houses.almanach import house_holding_area  # noqa: PLC0415
+def _holders_by_area(area_ids: set[int], titles: dict[int, Title]) -> dict[int, Organization]:
+    """The house holding each area's rung, for every area at once; an unclaimed or
+    undecorated area has no entry. The rule is ``house_holding_area``'s: land answers
+    from its Domain's owner; a duchy and above, which have no Domain (#5069), and land
+    whose Domain has no owner, from the title standing on them. Two queries' worth of
+    rows however many areas the map holds: asking area by area was three queries each,
+    which made every edit on the map wait seconds for the re-read (#5214)."""
+    from world.societies.models import Domain  # noqa: PLC0415
 
-    return house_holding_area(area)
+    holding: dict[int, Organization] = {
+        domain.pk: domain.owner_org
+        for domain in Domain.objects.filter(
+            pk__in=area_ids, owner_org__isnull=False
+        ).select_related("owner_org")
+    }
+    for area_id, title in titles.items():
+        if area_id not in holding and title.house is not None:
+            holding[area_id] = title.house
+    return holding
 
 
 def _title_by_area(areas: Iterable[Area]) -> dict[int, Title]:
@@ -1006,7 +1016,7 @@ def _title_by_area(areas: Iterable[Area]) -> dict[int, Title]:
         return {}
     out: dict[int, Title] = {}
     titles: Iterable[Title] = Title.objects.filter(seat_domain__isnull=False).select_related(
-        "seat_domain__area"
+        "seat_domain__area", "house"
     )
     for title in titles:
         level = TIER_TO_AREA_LEVEL.get(title.tier)
