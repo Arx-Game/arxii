@@ -6486,6 +6486,11 @@ paths:
 
         Only returns active Prospect-stage paths.
         Uses Prefetch with to_attr to avoid SharedMemoryModel cache pollution.
+      parameters:
+      - in: query
+        name: beginning_id
+        schema:
+          type: integer
       tags:
       - character-creation
       security:
@@ -6785,6 +6790,10 @@ paths:
         name: beginning_id
         schema:
           type: number
+      - in: query
+        name: path_id
+        schema:
+          type: integer
       tags:
       - character-creation
       security:
@@ -6844,6 +6853,10 @@ paths:
           type: integer
         description: A unique integer value identifying this Tradition.
         required: true
+      - in: query
+        name: path_id
+        schema:
+          type: integer
       tags:
       - character-creation
       security:
@@ -49378,6 +49391,11 @@ components:
           - $ref: '#/components/schemas/HeritageAnchor'
           readOnly: true
           nullable: true
+        not_yet_implemented:
+          type: boolean
+          description: Whether this Beginnings has no active route yet, so Lineage
+            cannot be finished.
+          readOnly: true
       required:
       - allowed_species_ids
       - art_image
@@ -49386,6 +49404,7 @@ components:
       - heritage
       - id
       - name
+      - not_yet_implemented
     BeginningsRequest:
       type: object
       description: Serializer for Beginnings options.
@@ -84324,6 +84343,11 @@ components:
 
             Read from ``cached_codex_grants`` populated by the ViewSet prefetch.
           readOnly: true
+        not_yet_implemented:
+          type: boolean
+          description: Whether no Tradition offers a new character a gift on this
+            Path yet.
+          readOnly: true
       required:
       - aspects
       - codex_entry_ids
@@ -84331,6 +84355,7 @@ components:
       - id
       - minimum_level
       - name
+      - not_yet_implemented
       - stage
     PathList:
       type: object
@@ -99786,6 +99811,11 @@ components:
           description: 'The affinities this Tradition teaches well (``favored_affinities``,
             #4659).'
           readOnly: true
+        not_yet_implemented:
+          type: boolean
+          description: Whether this Tradition offers a new character no gift yet on
+            the Path asked about.
+          readOnly: true
       required:
       - codex_entry_ids
       - description
@@ -99794,6 +99824,7 @@ components:
       - id
       - is_active
       - name
+      - not_yet_implemented
       - own_wording
       - refund
       - schooling

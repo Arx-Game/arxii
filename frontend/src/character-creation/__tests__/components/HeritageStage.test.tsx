@@ -443,5 +443,32 @@ describe('HeritageStage', () => {
       expect((await screen.findAllByText('CG points overspent')).length).toBeGreaterThan(0);
       expect(screen.queryByText('Available')).not.toBeInTheDocument();
     });
+
+    // #5197: a beginning with no route written yet stays in the list, marked.
+    it('marks a beginning with nothing behind it Not Yet Implemented', async () => {
+      const queryClient = createTestQueryClient();
+      seedHeritageStageData(queryClient);
+      const [first, ...rest] = mockBeginningsList;
+      seedQueryData(queryClient, characterCreationKeys.beginnings(mockStartingArea.id), [
+        { ...first, not_yet_implemented: true },
+        ...rest,
+      ]);
+      renderWithCharacterCreationProviders(
+        <HeritageStage
+          draft={{ ...mockDraftWithHeritage, selected_beginnings: null }}
+          onStageSelect={mockOnStageSelect}
+        />,
+        { queryClient }
+      );
+
+      const list = await screen.findByRole('list', { name: 'Beginnings' });
+      const marks = within(list).getAllByText('Not Yet Implemented');
+      expect(marks).toHaveLength(1);
+      expect(marks[0].closest('li')).toHaveTextContent(first.name);
+      // Still selectable: the mark is cosmetic.
+      for (const door of within(list).getAllByRole('button', { name: `Select ${first.name}` })) {
+        expect(door).toBeEnabled();
+      }
+    });
   });
 });

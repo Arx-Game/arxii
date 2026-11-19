@@ -686,6 +686,15 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ## API Endpoints
 
+**Not Yet Implemented (#5197).** The three option lists each carry a derived, read-only
+`not_yet_implemented`: `GET /api/character-creation/paths/` (true when no Tradition offers a
+new character a gift on the Path; `?beginning_id=` tests that Beginning's Traditions, and
+never narrows the list), `GET /api/character-creation/traditions/` (true when the Tradition
+offers no gift on the Path named by `?path_id=`, or on any Path when none is named), and
+`GET /api/character-creation/beginnings/` (true when the Beginnings has no active
+`OriginTemplate`). A marked row is still served and still selectable. The first two read
+`cg_catalog.cg_gift_offerings()` once per list; see `docs/systems/magic.md`.
+
 ### Lookup Data
 - `GET /api/character-creation/starting-areas/` - Starting areas filtered by access level
 - `GET /api/character-creation/beginnings/` - active Beginnings, filtered by `starting_area`

@@ -707,6 +707,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     (nullable FKs → `codex.CodexEntry`) back the expanding-card → lore-modal pattern
     (#2410) on every CG catalog card. Read service (`world/magic/services/cg_catalog.py`):
     `get_gift_options(tradition, path) -> list[Gift]` /
+    `cg_gift_offerings() -> GiftOfferings` (every tradition and path pairing that offers a gift,
+    #5197: the "Not Yet Implemented" marks and the dashboard read it) /
     `get_technique_options(path, gift, tradition) -> TechniqueOptions` (callers pass
     `draft.selected_tradition` / `draft.selected_path`); both filter pools through
     `cg_technique_queryset(*, include_unready, exclude_gated) -> QuerySet[Technique]`,

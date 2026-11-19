@@ -64,6 +64,7 @@ const mockStartingArea: StartingArea = {
 };
 
 const mockBeginnings: Beginnings = {
+  not_yet_implemented: false,
   id: 1,
   name: 'Noble Birth',
   description: 'Born to a great house.',

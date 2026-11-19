@@ -11,6 +11,12 @@ character-creation/
 ├── constants.ts             # MAGIC_SKILL_CATEGORY: Magic skills are spent from the Gift
 │                              #   stage's magical training (read-only group in SkillsSection,
 │                              #   #4457, #4659), never bought with skill points
+│                              #   `NOT_YET_IMPLEMENTED`: the tag on a path, tradition or
+│                              #   beginning whose row says `not_yet_implemented` (#5197).
+│                              #   The choice stays listed and selectable; the server derives
+│                              #   the flag, so no frontend change removes the tag. PathStage
+│                              #   asks `/paths/?beginning_id=`, TraditionPicker
+│                              #   `/traditions/?beginning_id=&path_id=`
 ├── api.ts                   # API fetch functions using apiFetch
 ├── queries.ts               # React Query hooks
 ├── cg.css                   # Scoped under `.interview`; realm is an ink, paper

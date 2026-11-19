@@ -70,21 +70,40 @@ class PronounsFilter(django_filters.FilterSet):
 
 
 class PathFilter(django_filters.FilterSet):
-    """Filter for paths in CG context (currently no specific filters needed)."""
+    """Declares ``beginning_id`` for the CG path list's schema (#5197).
+
+    The list is never narrowed by it. ``PathViewSet.get_serializer_context`` reads it to
+    say which Paths have no gift under that Beginning's Traditions.
+    """
+
+    beginning_id = django_filters.NumberFilter(method="filter_noop")
 
     class Meta:
         model = Path
-        fields = []
+        fields = ["beginning_id"]
+
+    def filter_noop(self, queryset: QuerySet[Path], name: str, value: int) -> QuerySet[Path]:
+        """No-op: the param marks rows in the serializer, it does not filter them."""
+        return queryset
 
 
 class TraditionFilter(django_filters.FilterSet):
     """Filter traditions by beginning."""
 
     beginning_id = django_filters.NumberFilter(field_name="beginning_traditions__beginning_id")
+    # Declared for the schema (#5197): ``TraditionViewSet.get_serializer_context`` reads it
+    # to say which Traditions have no gift on that Path. It never narrows the list.
+    path_id = django_filters.NumberFilter(method="filter_noop")
 
     class Meta:
         model = Tradition
-        fields = ["beginning_id"]
+        fields = ["beginning_id", "path_id"]
+
+    def filter_noop(
+        self, queryset: QuerySet[Tradition], name: str, value: int
+    ) -> QuerySet[Tradition]:
+        """No-op: the param marks rows in the serializer, it does not filter them."""
+        return queryset
 
 
 class CGGiftOptionFilter(django_filters.FilterSet):

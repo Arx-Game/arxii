@@ -129,6 +129,7 @@ from world.magic.models import (
     TraditionGiftGrant,
 )
 from world.magic.services.cg_catalog import (
+    cg_gift_offerings,
     get_gift_options,
     get_species_technique_options,
     get_technique_options,
@@ -234,6 +235,18 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["starting_area"]
+
+    def get_serializer_context(self) -> dict[str, Any]:
+        """Add the ids of the Beginnings that have an active route (#5197).
+
+        A Beginning with none cannot pass the Lineage stage yet; the serializer marks it
+        ``not_yet_implemented``. One query for the whole list.
+        """
+        context = super().get_serializer_context()
+        context["routed_beginning_ids"] = frozenset(
+            OriginTemplate.objects.filter(is_active=True).values_list("beginning_id", flat=True)
+        )
+        return context
 
     def get_queryset(self) -> QuerySet[Beginnings]:
         """Return every active Beginnings, with the list read's prefetches."""
@@ -386,6 +399,28 @@ class PathViewSet(viewsets.ReadOnlyModelViewSet):
             .order_by("sort_order", "name")
         )
 
+    def get_serializer_context(self) -> dict[str, Any]:
+        """Add the ids of the Paths with no gift behind them yet (#5197).
+
+        A Path is unfinished when no Tradition offers a new character a gift on it: the
+        Traditions of the Beginning named by ``?beginning_id=``, or every active Tradition
+        when none is named. One read of the catalog for the whole list.
+        """
+        context = super().get_serializer_context()
+        offerings = cg_gift_offerings()
+        beginning = _beginning_from_query(self)
+        tradition_ids = (
+            [row.tradition_id for row in beginning.cached_beginning_traditions]
+            if beginning is not None
+            else offerings.tradition_ids
+        )
+        context["unfinished_path_ids"] = frozenset(
+            path_id
+            for path_id, _name in offerings.paths
+            if not offerings.path_offers_under(path_id, tradition_ids)
+        )
+        return context
+
 
 def _view_request(view: viewsets.GenericViewSet) -> Request | None:
     """Return ``view.request``, or None during drf-spectacular schema generation.
@@ -394,6 +429,40 @@ def _view_request(view: viewsets.GenericViewSet) -> Request | None:
     param — a single suppression site instead of one per call site.
     """
     return getattr(view, "request", None)  # noqa: GETATTR_LITERAL
+
+
+def _query_int(view: viewsets.GenericViewSet, name: str) -> int | None:
+    """An integer query param of the view's request, or None when absent or not a number."""
+    request = _view_request(view)
+    raw = (
+        request.query_params.get(name)  # noqa: USE_FILTERSET
+        if request is not None
+        else None
+    )
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _beginning_from_query(view: viewsets.GenericViewSet) -> Beginnings | None:
+    """The Beginnings named by ``?beginning_id=``, through the identity map.
+
+    After first load per process, ``Beginnings.objects.get(pk=N)`` is a cache hit (zero
+    queries). The Beginning then owns its per-Beginning cached state, most importantly
+    ``cached_beginning_traditions``, so nothing is cached on a viewset. ``query_params``
+    gives the id as a string and Evennia's identity map keys instances by int pk, so the
+    id is cast first.
+    """
+    beginning_id = _query_int(view, "beginning_id")
+    if beginning_id is None:
+        return None
+    try:
+        return Beginnings.objects.get(pk=beginning_id)
+    except Beginnings.DoesNotExist:
+        return None
 
 
 class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
@@ -412,33 +481,8 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = TraditionFilter
 
     def _get_beginning(self) -> Beginnings | None:
-        """Resolve the request's Beginnings via SharedMemoryModel identity map.
-
-        After first load per process, ``Beginnings.objects.get(pk=N)`` is a
-        cache hit (zero queries). The Beginning then owns all per-Beginning
-        cached state we care about — most importantly
-        ``cached_beginning_traditions`` — which means there's no need (and
-        no place) to cache anything on the viewset itself.
-
-        ``query_params`` returns the id as a string, but Evennia's identity
-        map keys instances by int pk; cast explicitly so the cache hits.
-        """
-        request = _view_request(self)
-        raw = (
-            request.query_params.get("beginning_id")  # noqa: USE_FILTERSET
-            if request is not None
-            else None
-        )
-        if not raw:
-            return None
-        try:
-            beginning_id = int(raw)
-        except (TypeError, ValueError):
-            return None
-        try:
-            return Beginnings.objects.get(pk=beginning_id)
-        except Beginnings.DoesNotExist:
-            return None
+        """Resolve the request's Beginnings (see ``_beginning_from_query``)."""
+        return _beginning_from_query(self)
 
     def get_queryset(self) -> QuerySet[Tradition]:
         beginning = self._get_beginning()
@@ -496,6 +540,19 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
         )
         context["favored_gift_names"] = favored_gift_names_by_tradition(tradition_ids)
         context["favored_affinity_names"] = favored_affinity_names_by_tradition(tradition_ids)
+        # Which of these Traditions has no gift behind it yet (#5197): on the Path the
+        # caller names with ``?path_id=``, or on any Path when none is named.
+        offerings = cg_gift_offerings()
+        path_id = _query_int(self, "path_id")
+        context["unfinished_tradition_ids"] = frozenset(
+            tradition_id
+            for tradition_id in tradition_ids
+            if not (
+                offerings.offers(tradition_id, path_id)
+                if path_id is not None
+                else offerings.tradition_offers_on_some_path(tradition_id)
+            )
+        )
         return context
 
     @extend_schema(responses=PerspectiveEntrySerializer(many=True))

@@ -39,6 +39,7 @@ import type {
 // =============================================================================
 
 export const mockBeginnings: Beginnings = {
+  not_yet_implemented: false,
   id: 1,
   name: 'Normal Upbringing',
   description: 'Raised in the city with a conventional background.',
@@ -57,6 +58,7 @@ export const mockBeginnings: Beginnings = {
 };
 
 export const mockBeginningsUnknownFamily: Beginnings = {
+  not_yet_implemented: false,
   id: 2,
   name: 'Sleeper',
   description: 'Awakened from magical slumber with no memory of origins.',
@@ -1134,6 +1136,7 @@ export const mockGiftDetail: GiftDetail = {
 // =============================================================================
 
 export const mockPath: Path = {
+  not_yet_implemented: false,
   id: 1,
   name: 'The Wanderer',
   description: 'A path of restless travel and self-reliance.',
@@ -1189,6 +1192,7 @@ export const mockSchoolingRows: SchoolingLineRow[] = [
 ];
 
 export const mockTradition: Tradition = {
+  not_yet_implemented: false,
   id: 1,
   name: 'The Whispering Path',
   description: 'A tradition of quiet, patient magic learned through observation.',
@@ -1206,6 +1210,7 @@ export const mockTradition: Tradition = {
 
 /** A self-taught tradition (#3675): no schooling set, a refund on the entry. */
 export const mockSelfTaughtTradition: Tradition = {
+  not_yet_implemented: false,
   id: 2,
   name: 'Unbound',
   description: 'No tradition; you taught yourself, badly and alone.',

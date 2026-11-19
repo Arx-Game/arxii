@@ -35,6 +35,7 @@ import {
   useSpecies,
   useUpdateDraft,
 } from '../queries';
+import { NOT_YET_IMPLEMENTED } from '../constants';
 import type { Beginnings, CharacterDraft, Species } from '../types';
 import { countNoun } from '../utils';
 import { Stage } from '../types';
@@ -259,6 +260,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
               name={b.name}
               gloss={b.station || undefined}
               tag=""
+              tags={b.not_yet_implemented ? [NOT_YET_IMPLEMENTED] : undefined}
               chosen={isChosen}
               open={isChosen}
               onChoose={() => chooseBeginning(b)}
