@@ -277,7 +277,7 @@ class Kinsperson(SharedMemoryModel):
     allowed_genders = models.ManyToManyField(
         _GENDER_FK,
         blank=True,
-        related_name="+",
+        related_name="eligible_kin_slots",
         help_text="Slot constraint: allowed claimant genders. Empty = unconstrained.",
     )
     deferred_definer = models.ForeignKey(
@@ -708,7 +708,7 @@ class KinSlotPool(SharedMemoryModel):
     allowed_genders = models.ManyToManyField(
         _GENDER_FK,
         blank=True,
-        related_name="+",
+        related_name="eligible_kin_slot_pools",
         help_text="Constraint on minted claimants. Empty = unconstrained.",
     )
     age_min = models.PositiveIntegerField(null=True, blank=True)

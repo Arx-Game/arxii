@@ -849,6 +849,22 @@ class OpenSeatsViewTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         return response.data
 
+    def test_slots_and_pools_serialize_allowed_gender_constraints(self) -> None:
+        from world.character_sheets.factories import GenderFactory
+        from world.roster.factories import KinSlotPoolFactory
+
+        seat_gender = GenderFactory()
+        pool_gender = GenderFactory()
+        self.daughter.allowed_genders.add(seat_gender)
+        pool = KinSlotPoolFactory(family=self.katta, count_remaining=1)
+        pool.allowed_genders.add(pool_gender)
+
+        data = self._seats(self.katta)
+        seats = {row["id"]: row["allowed_genders"] for row in data["slots"]}
+        self.assertEqual(seats[self.daughter.pk], [seat_gender.display_name])
+        self.assertEqual(seats[self.nephew.pk], [])
+        self.assertEqual(data["pools"][0]["allowed_genders"], [pool_gender.display_name])
+
     def test_each_seat_says_what_it_is_to_the_title_holder(self) -> None:
         data = self._seats(self.katta)
         self.assertEqual(data["head_name"], "Alarysa")
