@@ -20,6 +20,14 @@ Write focused unit tests only when logic is genuinely fiddly and wouldn't be obs
 
 **Don't assume player omniscience.** E2E journey tests should assert that the game tells the player what to do next, not just that the underlying state changed. If the game should emit a prompt ("use `flourish <resonance>` to declare your entrance"), assert that the caller received it. A journey test that only checks DB state leaves a gap: the player could be left with no idea what action is available to them, and the test wouldn't catch it.
 
+## Bug-fix regression evidence
+
+1. Write the regression test and run it with the unfixed implementation. Record the code revision, test command, and failure output. Check that the failure demonstrates the reported behavior.
+2. Apply the fix. Run the same test unchanged with the same command and relevant environment. Record the fixed revision and passing output.
+3. Include both results in the PR or handoff, with log links when available. Keep sensitive data out of shared logs and excerpts.
+
+If the fix already exists, apply only the test to an isolated checkout of the unfixed revision and record that run. For a PostgreSQL-only regression, capture test-only and fixed runs in the parity CI tier. If the unfixed code passes or fails for an unrelated reason, investigate the reproduction and report the gap. A passing run alone establishes coverage of the tested behavior and leaves the fix unverified.
+
 ## Two-tier model: SQLite for the inner loop, Postgres for parity
 
 Production runs Postgres exclusively. Tests run in TWO tiers:
@@ -34,7 +42,7 @@ Production runs Postgres exclusively. Tests run in TWO tiers:
 - **The Postgres tier runs in CI.** For a PG-only app (magic, scenes, etc.) write the test, read it through, push, and read the result on CI's shard. Locally that leaves out `just test-parity`, `just regression` and `@tag("postgres")` runs.
 - **One app per invocation.** Several apps in one `just test-fast` call turn on `--parallel`, which pegs every core of the shared container.
 - **After a rebase or a conflict fix, push.** CI re-runs everything.
-- **Evidence for a challenge** is CI's log for that test at the PR head, quoted.
+- **CI evidence for a challenge** includes the log at the PR head. For a bug-fix regression, also include the unfixed failure described above.
 
 ### Per-invocation overhead
 
