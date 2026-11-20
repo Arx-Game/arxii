@@ -618,17 +618,27 @@ def protect_blockers() -> list[tuple[type[Model], str, type[Model]]]:
     blockers: list[tuple[type[Model], str, type[Model]]] = []
     for model in apps.get_models():
         for field in model._meta.get_fields():  # noqa: SLF001
-            if not isinstance(field, ForeignKey | OneToOneField):
-                continue
-            if field.remote_field.on_delete not in (PROTECT, RESTRICT):
-                continue
-            target = field.related_model
-            if not isinstance(target, type) or target not in first_delete:
-                continue
-            source_index = first_delete.get(model)
-            if source_index is None or source_index > first_delete[target]:
+            target = _wipe_blocker_target(model, field, first_delete)
+            if target is not None:
                 blockers.append((model, field.name, target))
     return sorted(blockers, key=lambda row: (row[0].__name__, row[1]))
+
+
+def _wipe_blocker_target(
+    model: type[Model], field: object, first_delete: dict[type[Model], int]
+) -> type[Model] | None:
+    """The wiped model a PROTECT/RESTRICT ``field`` on ``model`` would block, else None."""
+    if not isinstance(field, ForeignKey | OneToOneField):
+        return None
+    if field.remote_field.on_delete not in (PROTECT, RESTRICT):
+        return None
+    target = field.related_model
+    if not isinstance(target, type) or target not in first_delete:
+        return None
+    source_index = first_delete.get(model)
+    if source_index is None or source_index > first_delete[target]:
+        return target
+    return None
 
 
 def _first_delete_index() -> dict[type[Model], int]:
