@@ -172,7 +172,11 @@ character-creation/
     │   │                        #   `styleLines.ts`), never its vows; saves
     │   │                        #   selected_combat_style_id. The training step waits on it
     │   ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
-    │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
+    │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name. Each pick is one
+    │   │                        #   dropdown in the Field style (#5220, owner ruling 2026-11-20;
+    │   │                        #   they were a button per statistic and per skill): the
+    │   │                        #   suggested option first, the rest under category headings
+    │   │                        #   (`optgroup`), never a Magic skill
     │   ├── GlimpseSection.tsx   # CG state binder for the Glimpse (#2427): draft reads,
     │   │                        #   updateDraft writes (draft_data.glimpse_tag_ids), the
     │   │                        #   isCollapsed deferral affordance, the copy query. Prose
