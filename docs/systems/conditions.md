@@ -56,7 +56,7 @@ from world.conditions.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty_level`), apply-time resist-check (`resist_check_type`/`resist_difficulty_level`, #1738), combat settings (`affects_turn_order`, `draws_aggro`, and the #4584 reactive fields `forces_attack_on_source`, `source_guards_bearer`, `prevents_knockout`, and #4759's `spares_source`: an NPC carrying it spares the condition's source and that source's wards, read by NPC targeting since #4811), reactive-effect settings (`reactive_anima_cost`, and the strike-back trio `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition`, #4584), display settings, allegiance settings (`sets_allegiance`, `allegiance_break_check_type`, `settle_consequence_pool`, #4091, see below) |
+| `ConditionTemplate` | Condition definition (e.g., Burning, Frozen) | `name`, `category`, `description`, `player_description`, `observer_description`, duration settings, stacking settings, progression flag, removal settings (`cure_check_type`/`cure_difficulty_level`), apply-time resist-check (`resist_check_type`/`resist_difficulty_level`, #1738), combat settings (`affects_turn_order`, `draws_aggro`, and the #4584 reactive fields `forces_attack_on_source`, `source_guards_bearer`, `prevents_knockout`, and #4759's `spares_source`: an NPC carrying it spares the condition's source and that source's wards, read by NPC targeting since #4811), reactive-effect settings (`reactive_anima_cost`, and the strike-back trio `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition`, #4584), the five authored reactive lines (`retaliation_narration`, `guard_narration`, `provoke_narration`, `grace_narration`, `spent_narration`, #4587, see "Narration of reactive moments"), display settings, allegiance settings (`sets_allegiance`, `allegiance_break_check_type`, `settle_consequence_pool`, #4091, see below) |
 | `ConditionStage` | Stage in a progressive condition | `condition`, `stage_order`, `name`, `rounds_to_next`, `resist_check_type`, `resist_difficulty_level`, `severity_multiplier`, `settle_consequence_pool` (#4091, overrides the template's pool at this stage), `intensity_per_round` (#4739, intensity this stage adds to the bearer's combat engagement each round; default 0. `clean()` refuses a positive value when a `SurgeDegreeBand` with an outcome below success level 1 carries the template - emotional conditions come only from a success or a choice; the Required content row `emotional-condition-on-failure-band` lists stored violations, and `world.combat.surge_bands.validate_surge_bands` refuses the band side in the admin; combat feeds it at each round opening through `world.combat.condition_surges.apply_condition_intensity_surges`, one `CONDITION_FED` surge per player character for the plain sum over active, unsuppressed, unresolved instances, ADR-4737 amendment) |
 
 **Charm / Calm content (#1590).** The `Charm` `ConditionCategory` (`alters_behavior=True`) and
@@ -559,7 +559,7 @@ by its field and never by the condition's name:
 | `ConditionTemplate.properties`, `ConditionStage.properties` | `_get_condition_sources` (`world/mechanics/services.py`, #5066) | **Condition marks on capability sources.** Each active condition that raises a capability is its own capability source carrying its template's and current stage's properties, so it reaches an `Application` whose required effect property it carries (`source_matches_application`): a condition marked `aerial` that raises `traversal` lets her fly, and one matching a dodging application dodges, paying physical fatigue in a fight. |
 | `source_guards_bearer` | `_ensure_interpose_challenges` and `_try_interpose` (`world/combat/services/damage/`), through `guardians_by_target` (#4584, ADR-4584-A) | **Standing guard.** The condition's source tries the mundane interpose on every hit on the bearer, through the shared tail `_attempt_guardian_interpose`. It counts as one of her reactions this round (no cap; a harder roll each time, #4676) and against `ABSORPTION_CAP_PER_MOMENT`, and pays interpose fatigue at very low effort, but she still takes her own turn. A guardian who declared any Interpose that round acts only through her declaration. A guardian who cannot act (`can_act`: knocked unconscious, though still ACTIVE) does not step in. A self-cast guard never interposes. PC wards in combat only. |
 | `prevents_knockout` | `_process_knockout_tier` (`world/vitals/services.py`), through `knockout_preventing_instance` (#4584) | **Grace.** The knockout roll is skipped (looked up only after the difficulty and check-type guards, so it is used only when a roll would happen). An `UNTIL_USED` grace stops one knockout and ends; a `ROUNDS` grace stops every knockout while it lasts. `CHARACTER_INCAPACITATED` still fires on entering the band. PCs only: NPC opponents have no knockout roll. |
-| `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition` | `_answer_with_strike_backs` in `_emit_post_damage_events` (`world/combat/services/damage/damage.py`) calls `strike_back` for each instance `retaliating_instances` finds (#4584) | **Strike-back.** After a hit lands on a PC bearer, each ward answers the NPC that dealt it: `retaliation_damage` (typed by `retaliation_damage_type`) through `apply_damage_to_opponent`, and `retaliation_condition` laid with the ward's source as its source (not on an NPC the damage defeated). It is a hard-coded read at the damage seam, not a flow, trigger or seeded row. It answers hits on PC bearers only and strikes `CombatOpponent` attackers only (never a PC, ADR-0023). It pays `reactive_anima_cost` (a fizzle speaks, a success is not narrated: known gap), counts as the caster's threat, as duel interference and as probing, as rampart retaliation does. |
+| `retaliation_damage`, `retaliation_damage_type`, `retaliation_condition` | `_answer_with_strike_backs` in `_emit_post_damage_events` (`world/combat/services/damage/damage.py`) calls `strike_back` for each instance `retaliating_instances` finds (#4584) | **Strike-back.** After a hit lands on a PC bearer, each ward answers the NPC that dealt it: `retaliation_damage` (typed by `retaliation_damage_type`) through `apply_damage_to_opponent`, and `retaliation_condition` laid with the ward's source as its source (not on an NPC the damage defeated). It is a hard-coded read at the damage seam, not a flow, trigger or seeded row. It answers hits on PC bearers only and strikes `CombatOpponent` attackers only (never a PC, ADR-0023). It pays `reactive_anima_cost` (a fizzle speaks, and a success tells the room `retaliation_narration`, #4587), counts as the caster's threat, as duel interference and as probing, as rampart retaliation does. |
 | `default_duration_type = UNTIL_USED` | `spend_condition_use`, `spend_contributing_conditions`, `spend_conditions_by_id` (`world/conditions/services.py`) (#4584) | **Once-only.** Spending is a full removal through `_teardown_removed_condition_instance` plus a synchronous trigger-cache refresh, so a ward spent on the first hit of a round is gone for the second. See "Until used" below. |
 
 The two batched helpers share `_active_template_sum_by_target`: one query for all targets,
@@ -601,6 +601,33 @@ template, so a lasting condition is never spent by use):
   Grip, the Ramparts, and a zone-hazard marker through `create_zone_hazard_on_condition`) is
   spent when its `CONDITION_APPLIED` flow has run, on normal exit of
   the effect only (early returns count; an error does not spend, the apply rolls back).
+
+**Narration of reactive moments (#4587).** Five moments that used to happen in silence now tell
+the room, each with a line staff author on the condition template, beside the field that makes
+the moment happen. `world/conditions/reactive_narration.py` owns the fill, the plain fallback
+and the delivery:
+
+| Moment | Field | Told when | Names it can use |
+| --- | --- | --- | --- |
+| Strike back | `retaliation_narration` | `strike_back` landed its answer | `{bearer}`, `{source}`, `{attacker}` |
+| Guard steps in | `guard_narration` | a standing guard (`source_guards_bearer`) stopped or softened a blow (`_narrate_standing_guard`); a failed roll, a declined attempt and a declared interpose are not told | `{bearer}` (the ward), `{source}` (the guard), `{attacker}` |
+| Provoked foe turns | `provoke_narration` | the provoke actually chose the foe's target at planning: more than one target in the pool, no engagement lock winning, no companion order overriding | `{bearer}` (the foe), `{source}` |
+| Grace holds | `grace_narration` | `_process_knockout_tier` found a grace and skipped the roll | `{bearer}`, `{source}` |
+| Once-only spent | `spent_narration` | `spend_condition_use` ended the condition | `{bearer}`, `{source}` |
+
+An authored line is filled by `fill_reactive_line`, which parses the text and never raises: a
+stray brace, an unknown placeholder, a format spec, or a name the moment cannot supply makes
+the line unusable, and the plain line is told instead (a combat round never fails on staff
+text). `ConditionTemplate.clean` refuses the same mistakes at authoring time, and also a line
+for an effect the template does not have. Names are the presented persona names
+(`persona_names_for_sheets`), never `str(model)`. Delivery is one persisted OUTCOME row through
+`broadcast_action_outcome` (pushed live to web sessions, text to telnet, so the scene log and
+the live push carry the same line) to the bearer's fight. A moment hidden by design is told only
+to the bearer and the source, privately (`narrate_privately`): a template with
+`is_visible_to_others` off, a concealed bearer or source, and any moment outside a fight (a
+once-only condition spent after an out-of-combat roll). `spend_condition_use(narration=...)`
+takes `SpendNarration`: strike back and grace pass `AUTHORED_ONLY` so a plain "is spent" line
+does not repeat the event they just told, and the one-shot marker adapters pass `NONE`.
 
 ### Querying Modifiers
 

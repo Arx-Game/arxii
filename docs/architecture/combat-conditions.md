@@ -296,7 +296,7 @@ resolve_round
        apply_damage_to_participant
          └─ _emit_post_damage_events: DAMAGE_APPLIED, then _answer_with_strike_backs
               ← retaliating_instances → strike_back  retaliation_damage / _damage_type /
-              _condition: NPC attackers only, PC bearers only, not narrated on success
+              _condition: NPC attackers only, PC bearers only, narrated (retaliation_narration)
        vitals _process_knockout_tier ← knockout_preventing_instance   prevents_knockout
          PC only (an NPC opponent has no knockout roll)
 
@@ -314,6 +314,13 @@ guard revisits ADR-0161 (ADR-4584-A): it spends the guardian's reaction. `UNTIL_
 a condition by use: after a real roll it helped, after a ward's successful fire, after a
 knockout it stopped, or when a marker's flow has run. Previews never spend. See
 `docs/systems/conditions.md` ("Condition effects combat reads") for the per-field table.
+
+**Narration (#4587).** Each of the five moments (strike back, a standing guard stepping in, a
+provoked foe turning, a grace holding, a once-only condition spent) tells the fight's room an
+authored `<moment>_narration` line from the template, else a plain one, through
+`narrate_reactive_moment` in `world/conditions/reactive_narration.py`, which delivers it with
+`broadcast_action_outcome` (one OUTCOME row, live push and scene log alike). A hidden or
+concealed moment, or one outside a fight, goes to the bearer and the source privately.
 
 begin_declaration_phase(encounter)  # next round
   ├─ status BETWEEN_ROUNDS → DECLARING; round_number += 1
