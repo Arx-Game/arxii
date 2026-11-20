@@ -10715,14 +10715,18 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `dedicate_temple` / `revoke_temple` (gate: `owner_persona`, the area holder, or its org
   leader), actions `shrine_found`/`shrine_dissolve`/`temple_dedicate`/`temple_revoke`;
   `ConsecrationError` (`SiteNotHeld`, `SiteAlreadyTaken`, `SiteNotFound`). **Prayers**
-  (`worship/prayer_services.py`, #3779): `pray(sheet, being, text)` (log; weekly holy-site
-  devotion via `sites_of` + `site_prayer_capped_this_week`; `dire_straits_for` = Soulfray via
-  `get_soulfray_warning` or health ≤ `KNOCKOUT_HEALTH_THRESHOLD` → `fire_divine_intervention`
-  on NEAR_DEATH narrowed to that being), `send_vision(...)` (spends the pool, VISIONS narrative
+  (`worship/prayer_services.py`, #3779): `pray(sheet, being, text, *, on_behalf_of=None, ap=0)` (log; holy-site
+  favor by the AP spent via `sites_of` + `prayer_ap_left_this_week`, #4349; `dire_straits_for` =
+  Soulfray via `get_soulfray_warning` or health ≤ `KNOCKOUT_HEALTH_THRESHOLD` of the one prayed
+  for → `intervention_services.fire_divine_intervention` on NEAR_DEATH narrowed to that being), `send_vision(...)` (spends the pool, VISIONS narrative
   message, `acquire_clue` for a CODEX clue, episode needs a `StoryParticipation`), actions
   `pray` / `vision_send` (staff), telnet `pray` / `vision`, `GET /api/worship/prayers/`,
-  `GET|POST /api/worship/visions/`; `fire_divine_intervention(sheet, *, trigger, trigger_event,
-  scene, being)` is the shared check `maybe_fire_divine_intervention` now calls. **Deity Editor**
+  `GET|POST /api/worship/visions/`; `intervention_services.fire_divine_intervention(praying, *,
+  trigger, trigger_event, scene, being, target)` is the one graded roll (#4349: backfire, sign,
+  lesser answer, rescue, bigger miracle; spend, owed favor and minimum wait by `FavorOutcomeAward`
+  rows; `DevotionStanding.owed_favor` paid first by `bump_devotion`) that a prayer, a prayer for
+  another and `maybe_fire_divine_intervention` (divine intercession) all call; `GET
+  /api/worship/owed-favor/`; `WorshippedBeing.intervention_pool`, `Miracle.min_outcome_tier`. **Deity Editor**
   (`worship/editor_services.py`, #3780): `BeingPage` + `save_being(page, *, being=None)` (one
   transaction: being, Codex page via `ensure_codex_entry`, quote, `is_public`, the Obscure
   `OrganizationCodexGrant`, satellite sets replaced wholesale), `visibility_of` /

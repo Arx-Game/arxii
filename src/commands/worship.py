@@ -5,7 +5,7 @@ Thin: parsing only, every rule lives in the actions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from world.worship.constants import InvocationPieceSource
@@ -55,7 +55,7 @@ class CmdPray(ArxCommand):
             return
         head, text = (part.strip() for part in raw.split("=", 1))
         switches = {switch.lower() for switch in self.switches}
-        kwargs: dict[str, str] = {}
+        kwargs: dict[str, Any] = {}
         if _SWITCH_AP in switches:
             number, _, head = head.partition(" ")
             kwargs["ap"] = number

@@ -3,7 +3,8 @@
 A character with favor above zero calls on a being before a check. The system
 rolls an invocation check first, and its outcome tier sets the bonus (a
 ``FavorOutcomeAward`` row of kind INVOCATION) added to the check that follows,
-as a labelled ``ModifierContribution`` of kind FAVOR. Favor is never spent; each
+as a labelled ``ModifierContribution`` of kind FAVOR. Invoking never spends favor (a
+divine intervention rescue does, ADR-4349); each
 invocation writes a ``FavorInvocation`` row, which is both the weekly counter and
 the log. Callers (mission options, scene checks, scene actions) own the check the
 bonus lands on and where the lines are delivered.

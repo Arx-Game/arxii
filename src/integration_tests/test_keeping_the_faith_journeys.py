@@ -11,6 +11,9 @@ from integration_tests.harness import JourneyCase
 from world.ceremonies.constants import CeremonyStatus, CeremonyTypeKey, ConversionOfferStatus
 from world.ceremonies.factories import CeremonyTypeFactory
 from world.ceremonies.models import Ceremony, WorshipConversionOffer
+from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
+from world.conditions.factories import ConditionTemplateFactory
 from world.covenants.factories import CovenantRoleFactory, CovenantRoleTechniqueSpecialtyFactory
 from world.items.factories import meaningful_item_for
 from world.items.models import ItemInstance
@@ -22,17 +25,27 @@ from world.magic.factories import (
     TechniqueFunctionTagFactory,
 )
 from world.societies.models import LegendEntry
+from world.traits.services import ensure_canonical_check_outcome
 from world.vitals.constants import CharacterLifeState
 from world.vitals.factories import CharacterVitalsFactory
-from world.worship.constants import RiteTier
+from world.worship.constants import FavorAwardKind, MiracleTrigger, RiteTier
 from world.worship.factories import (
+    DevotionConfigFactory,
+    FavorOutcomeAwardFactory,
     RiteKindFactory,
     ShrineDetailsFactory,
     WorshipDeclarationFactory,
     WorshippedBeingFactory,
     WorshipRiteFactory,
 )
-from world.worship.models import Prayer, Vision, WorshipDeclaration, WorshippedBeing
+from world.worship.models import (
+    DevotionStanding,
+    Miracle,
+    Prayer,
+    Vision,
+    WorshipDeclaration,
+    WorshippedBeing,
+)
 
 
 def staff(case: JourneyCase, character) -> None:
@@ -603,3 +616,78 @@ class AskingTheSphinx(JourneyCase):
         self.assertIn("unanswered.", told)
         self.assertIn("Seek:", told)
         self.assertIn("Ward of Black Quartz", told)
+
+
+class CallingOnTheGodsInDanger(JourneyCase):
+    """Hobb lies at the knees of the field; Ysmay, who keeps the Shepherd, prays for him and
+    then for herself. The roll is forced each way; what each player is told and what the
+    rows hold are read back (#4349)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.field = self.make_room("The Field")
+        RoomProfileFactory(objectdb=self.field)
+        self.ysmay = self.make_player("Ysmay", room=self.field)
+        self.hobb = self.make_player("Hobb", room=self.field)
+        CharacterVitalsFactory(character_sheet=self.ysmay.sheet_data, health=100, max_health=100)
+        CharacterVitalsFactory(character_sheet=self.hobb.sheet_data, health=5, max_health=100)
+        self.shepherd = WorshippedBeingFactory(name="The Shepherd", resonance_pool=500)
+        self.outcomes = {
+            name: ensure_canonical_check_outcome(name)
+            for name in ("Critical Failure", "Failure", "Partial Success", "Success")
+        }
+        config = DevotionConfigFactory(invocation_check_type=CheckTypeFactory(name="Invocation"))
+        for kind, amount in (
+            (FavorAwardKind.INTERVENTION_SPEND, 20),
+            (FavorAwardKind.INTERVENTION_DEBT, 10),
+            (FavorAwardKind.INTERVENTION_WAIT_HOURS, 72),
+        ):
+            FavorOutcomeAwardFactory(
+                config=config, kind=kind, outcome_tier=self.outcomes["Success"], amount=amount
+            )
+        ConditionTemplateFactory(name="Divine Intervention Cooldown")
+        Miracle.objects.create(
+            name="A Hand Closes the Wound",
+            being=self.shepherd,
+            resonance_pool_cost=100,
+            intervention_trigger=MiracleTrigger.NEAR_DEATH,
+            favor_threshold=0,
+            narrative_text="[PLACEHOLDER] A hand closes the wound.",
+        )
+        self.standing = DevotionStanding.objects.create(
+            character_sheet=self.ysmay.sheet_data, being=self.shepherd, favor=75
+        )
+
+    def test_an_ally_prays_for_the_fallen_and_pays_the_price(self) -> None:
+        with force_check_outcome(self.outcomes["Success"]):
+            told = self.telnet(self.ysmay, "pray/for Hobb The Shepherd=Spare him.")
+
+        self.assertIn("You pray to The Shepherd.", told)
+        self.assertIn(
+            "The Shepherd answered your prayer for Hobb (Success); favor spent 20; favor owed 5.",
+            told,
+        )
+        self.standing.refresh_from_db()
+        self.assertEqual((self.standing.favor, self.standing.owed_favor), (55, 5))
+        self.assertEqual(
+            self.shepherd.miracle_performances.get().target_character, self.hobb.sheet_data
+        )
+        # The being now ignores her until the debt is paid: a second call rolls nothing.
+        self.assertNotIn(
+            "answered", self.telnet(self.ysmay, "pray/for Hobb The Shepherd=Again, please.")
+        )
+
+    def test_a_stranger_far_from_the_god_is_told_nothing_on_a_failure(self) -> None:
+        with force_check_outcome(self.outcomes["Failure"]):
+            told = self.telnet(self.ysmay, "pray/for Hobb The Shepherd=Spare him.")
+
+        self.assertEqual(told.count("You pray to The Shepherd."), 1)
+        self.assertNotIn("answered", told)
+        self.standing.refresh_from_db()
+        self.assertEqual((self.standing.favor, self.standing.owed_favor), (75, 0))
+
+    def test_she_cannot_pray_for_someone_who_is_not_in_danger(self) -> None:
+        told = self.telnet(self.hobb, "pray/for Ysmay The Shepherd=Spare her.")
+
+        self.assertIn("They are in no danger a god would answer.", told)
+        self.assertFalse(Prayer.objects.filter(character_sheet=self.hobb.sheet_data).exists())

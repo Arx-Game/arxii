@@ -267,7 +267,9 @@ def apply_anima_ritual_outcome(
     patron_share = 0
     if patronages and patronages[0].favor >= get_chosen_favor_config().anima_recovery_threshold:
         patron_name = patronages[0].being.name
-        patron_share = outcome_award(FavorAwardKind.CHOSEN_ANIMA, outcome) or 0
+        patron_share = (
+            outcome_award(FavorAwardKind.CHOSEN_ANIMA, outcome) or 0  # ty: ignore[invalid-argument-type]
+        )
         budget += patron_share
 
     anima_before = anima.current
