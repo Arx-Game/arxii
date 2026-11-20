@@ -1027,6 +1027,7 @@ class PrayerAdmin(admin.ModelAdmin):
         "prayed_at",
         "character_sheet",
         "being",
+        "ap_spent",
         "devotion_granted",
         "dire_straits",
         "intervention",

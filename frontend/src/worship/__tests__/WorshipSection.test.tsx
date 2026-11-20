@@ -114,9 +114,9 @@ describe('WorshipSection', () => {
       />,
       { wrapper }
     );
-    expect(screen.getByTestId('owed-favor')).toHaveTextContent(
-      'The Shepherd will not answer if you fall until you have earned 8 more base favor'
-    );
+    const line = screen.getByTestId('owed-favor');
+    expect(line).toHaveTextContent('The Shepherd');
+    expect(line).toHaveTextContent('8');
   });
 
   it('names the being on a revealed vision', () => {

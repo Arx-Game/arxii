@@ -210,6 +210,33 @@ class PledgeTestBase(TestCase):
         details.project.save(update_fields=["current_progress"])
 
 
+class ClosingAwardWordsTests(TestCase):
+    """The closing line says where favor went when it paid owed favor first (#4349)."""
+
+    def _closing(self, **fields):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(earning_rate_percent=100, **fields)
+
+    def test_all_of_it_paying_the_debt_is_not_a_bare_zero(self) -> None:
+        from actions.definitions.worship import _closing_award_words
+
+        words = _closing_award_words(
+            self._closing(award_base=0, award=0, award_owed_paid=4), "Ombrin"
+        )
+        self.assertEqual(words, "4 base, 4 paid what you owe.")
+
+    def test_a_part_paying_the_debt_names_both_parts(self) -> None:
+        from actions.definitions.worship import _closing_award_words
+
+        words = _closing_award_words(
+            self._closing(award_base=3, award=3, award_owed_paid=4), "Ombrin"
+        )
+        self.assertEqual(
+            words, "7 base, 4 paid what you owe, 3 left, at 100% = +3 favor with Ombrin."
+        )
+
+
 class TakePledgeTests(PledgeTestBase):
     def test_taking_a_pledge_opens_a_pledge_project_with_a_prayer(self) -> None:
         details = take_pledge(self.sheet, self.pledge, prayer_text="[player-written prayer]")

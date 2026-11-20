@@ -245,11 +245,34 @@ _DIVINE_INTERVENTION_TRIGGER_NAME = "divine_intervention_on_incapacitated"
 COOLDOWN_CONDITION_NAME = "Divine Intervention Cooldown"
 
 
-def _broadcast_miracle_narrative(character, text: str, scene=None) -> None:
+def _tell_room_without_a_scene(character, text: str, *, notify_character: bool) -> None:
+    """The fallback when there is no scene to EMIT into (#4349): the room's other occupants
+    hear ``text`` at once, and with ``notify_character`` the one it concerns is sent it as a
+    stored notice, so an effect that applied is never silent for them."""
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from world.magic.services.soul_tether import send_stored_notice  # noqa: PLC0415
+
+    location = character.location
+    if location is not None:
+        location.msg_contents(text, exclude=[character])
+    if not notify_character:
+        return
+    try:
+        sheet = character.sheet_data
+    except (AttributeError, ObjectDoesNotExist):
+        return
+    send_stored_notice(sheet, text, ooc_note="Divine intervention")
+
+
+def _broadcast_miracle_narrative(
+    character, text: str, scene=None, *, notify_character: bool = True
+) -> None:
     """Broadcast miracle narrative as an EMIT to the active scene.
 
-    No-ops when no scene or no primary persona. Mirrors ``_broadcast_manifestation``
-    in ``world/magic/audere_majora.py``.
+    With no scene (or no primary persona) the room hears it directly and, when
+    ``notify_character``, the character it concerns is sent it too (#4349). Mirrors
+    ``_broadcast_manifestation`` in ``world/magic/audere_majora.py``.
     """
     from world.scenes.constants import InteractionMode  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
@@ -261,11 +284,13 @@ def _broadcast_miracle_narrative(character, text: str, scene=None) -> None:
     if scene is None:
         scene = Scene.objects.active_for_room(character.location).first()
     if scene is None:
+        _tell_room_without_a_scene(character, text, notify_character=notify_character)
         return
 
     try:
         persona = character.sheet_data.primary_persona
     except (AttributeError, Persona.DoesNotExist):
+        _tell_room_without_a_scene(character, text, notify_character=notify_character)
         return
 
     interaction = create_interaction(
@@ -285,7 +310,7 @@ def _broadcast_miracle_narrative(character, text: str, scene=None) -> None:
 def broadcast_prayer_line(character, text: str, scene=None) -> None:
     """Post a prayer's room line as an EMIT to the scene (#4349): an ally praying for a fallen
     character, which onlookers see before the result's own lines."""
-    _broadcast_miracle_narrative(character, text, scene)
+    _broadcast_miracle_narrative(character, text, scene, notify_character=False)
 
 
 def perform_divine_intervention(  # noqa: PLR0913 - the roll's result and the GM's line ride along
@@ -419,6 +444,9 @@ def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: AR
     (the intercession threshold); the fallen character makes the roll at her own odds and
     cost, exactly as if she had prayed. She is told privately what came of it.
     """
+    from django.core.exceptions import ObjectDoesNotExist, ValidationError  # noqa: PLC0415
+    from django.db import DatabaseError  # noqa: PLC0415
+
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.scenes.models import Scene  # noqa: PLC0415
     from world.worship.constants import MiracleTrigger  # noqa: PLC0415
@@ -431,12 +459,20 @@ def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: AR
     if sheet is None:
         return
     scene = Scene.objects.active_for_room(character.location).first()
-    result = fire_divine_intervention(
-        sheet,
-        trigger=MiracleTrigger.INCAPACITATED,
-        trigger_event="character_incapacitated",
-        scene=scene,
-    )
+    try:
+        result = fire_divine_intervention(
+            sheet,
+            trigger=MiracleTrigger.INCAPACITATED,
+            trigger_event="character_incapacitated",
+            scene=scene,
+        )
+    except (DatabaseError, ObjectDoesNotExist, ValidationError, LookupError, ValueError, TypeError):
+        # Authored-data and write failures in the roll or its draw never break incapacitation.
+        # The roll runs in its own transaction, so a failure leaves no half-paid cost behind.
+        logger.exception(
+            "Divine intercession failed for sheet %s; incapacitation goes on (#4349).", sheet.pk
+        )
+        return
     if result.rolled:
         from world.magic.services.soul_tether import send_stored_notice  # noqa: PLC0415
 
@@ -467,10 +503,11 @@ def miracle_ineligibility(
     The eligibility half of a divine intervention (#2360, #4333 design 6), shared
     by the intervention roll (``intervention_services.fire_divine_intervention``) and the
     live answer panel: the intervention cooldown condition is clear, the character's favor
-    with the miracle's being meets the miracle's own threshold, and the being's pool covers
-    the larger of the miracle's cost and the config minimum. The config's favor threshold is
-    not asked here: since #4349 it is the divine intercession threshold, and the prayer gate
-    and owed favor belong to the roll, which a steward's live answer does not obey. The
+    with the miracle's being meets the higher of the prayer favor gate and the miracle's own
+    threshold (the floor a live answer keeps, since new miracles default to 0), and the being's
+    pool covers the larger of the miracle's cost and the config minimum. The config's favor
+    threshold is not asked here: since #4349 it is the divine intercession threshold. Owed
+    favor and the wait belong to the roll, which a steward's live answer does not obey. The
     miracle's trigger is not asked either: a caller that fires on a trigger filters by it.
     ``favor``, ``on_cooldown`` and ``cfg`` let a caller that already holds them skip the
     lookups.
@@ -487,7 +524,7 @@ def miracle_ineligibility(
             character_sheet=character_sheet, being=being
         ).first()
         favor = standing.favor if standing is not None else 0
-    threshold = miracle.favor_threshold
+    threshold = max(cfg.prayer_favor_gate, miracle.favor_threshold)
     if favor < threshold:
         return f"Favor with {being.name} ({favor}) is below this miracle's threshold ({threshold})."
     needed = max(miracle.resonance_pool_cost, cfg.min_pool_for_intervention)
@@ -573,19 +610,6 @@ def active_patronage_for(sheet: "CharacterSheet") -> list[DevotionStanding]:
         .select_related("being")
         .order_by("-favor")
     )
-
-
-def best_patronage_favor(sheet: "CharacterSheet") -> int:
-    """Return the favor of the highest-favor Chosen patronage, or 0.
-
-    Returns 0 when the character is no being's Chosen: a non-Chosen, a Chosen who has
-    lost all their patrons, or a character whose only patron is a pact (#4341). Read by
-    the anima ritual's Chosen bonus.
-    """
-    from world.worship.favor_services import chosen_patronages_for  # noqa: PLC0415
-
-    patronages = chosen_patronages_for(sheet)
-    return patronages[0].favor if patronages else 0
 
 
 def grant_chosen_distinction_to_chosen(config: ChosenFavorConfig) -> ChosenDistinctionGrants:

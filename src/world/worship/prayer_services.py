@@ -111,6 +111,8 @@ class PrayerOutcome:
     intervention: InterventionResult | None = None
     ap_spent: int = 0
     lines: tuple[str, ...] = ()
+    #: Base favor of the prayer that paid owed favor first, so "+0 favor" says where it went.
+    owed_paid: int = 0
 
     @property
     def answered(self) -> bool:
@@ -212,7 +214,7 @@ def _call_on_being(
         PRAYER_FOR_SELF,
         fire_divine_intervention,
         intervention_lines,
-        prayed_for_you_line,
+        prayed_for_you_lines,
         prayer_room_line,
     )
     from world.worship.services import broadcast_prayer_line  # noqa: PLC0415
@@ -233,8 +235,9 @@ def _call_on_being(
         prayer.intervention = result.performance
         prayer.save(update_fields=["intervention"])
     mode = PRAYER_FOR_ANOTHER if for_another else PRAYER_FOR_SELF
-    if for_another and result.answered:
-        send_stored_notice(target, prayed_for_you_line(result), ooc_note="A prayer for you")
+    if for_another:
+        for line in prayed_for_you_lines(result):
+            send_stored_notice(target, line, ooc_note="A prayer for you")
     return result, tuple(intervention_lines(result, mode=mode))
 
 
@@ -304,15 +307,17 @@ def pray(
             ap_spent=spent,
         )
         devotion = 0
+        owed_paid = 0
         base_favor = spent // get_devotion_config().prayer_ap_per_favor
         if base_favor > 0:
             # #4333: the earning rate scales the prayer's favor; record what landed.
-            devotion = bump_devotion(
+            bump = bump_devotion(
                 character_sheet,
                 being,
                 base_favor,
                 source=FavorSource(kind=PledgeCreditSource.PRAYER),
-            ).credited
+            )
+            devotion, owed_paid = bump.credited, bump.owed_paid
             prayer.devotion_granted = devotion
             prayer.save(update_fields=["devotion_granted"])
 
@@ -328,6 +333,7 @@ def pray(
         intervention=result,
         ap_spent=spent,
         lines=lines,
+        owed_paid=owed_paid,
     )
 
 

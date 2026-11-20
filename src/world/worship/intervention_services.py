@@ -461,6 +461,10 @@ def _intervene(  # noqa: PLR0913 - the roll's whole context, keyword-only
                 context_text=context_text,
             )
             spends = True
+            effects = tuple(
+                f"condition applied, {row.condition.name}"
+                for row in miracle.condition_applications.select_related("condition")
+            )
         else:
             drawn, effects = _draw(
                 being=being,
@@ -558,7 +562,7 @@ def _difficulty_words(difficulty: InvocationDifficulty) -> str:
 def _cost_words(cost: InterventionCost) -> str:
     spent = f"favor spent {cost.favor_spent}" if cost.favor_spent else "no favor spent"
     owed = f"favor owed {cost.favor_owed}" if cost.favor_owed else "nothing owed"
-    return f"{spent}; {owed}"
+    return f"{spent}; {owed}; it will not answer again for {cost.wait_hours} hours"
 
 
 def _answer_head(result: InterventionResult, mode: str) -> str:
@@ -591,6 +595,14 @@ def intervention_lines(result: InterventionResult, *, mode: str = PRAYER_FOR_SEL
     if outcome.success_level == SIGN_LEVEL:
         return [_text_of(result.drawn)] if result.drawn is not None else []
     lines = [f"({effect})" for effect in result.effects]
+    if outcome.success_level >= LESSER_LEVEL and not result.answered:
+        # A Success or Partial Success the being had nothing to answer with (no affordable
+        # miracle, no row drawn): it costs its wait, and the player is not told it answered.
+        lines.append(
+            f"Nothing came of your call on {result.being.name} ({outcome.name}); "
+            f"{_cost_words(result.cost)}."
+        )
+        return lines
     lines.append(f"{_answer_head(result, mode)}; {_cost_words(result.cost)}.")
     if result.difficulty is not None:
         lines.append(_difficulty_words(result.difficulty))
@@ -602,10 +614,19 @@ def intercession_lines(result: InterventionResult) -> list[str]:
     return intervention_lines(result, mode=INTERCESSION)
 
 
-def prayed_for_you_line(result: InterventionResult) -> str:
-    """The line the fallen character reads when someone else prayed for them."""
+def prayed_for_you_lines(result: InterventionResult) -> list[str]:
+    """What the fallen character reads when someone else prayed for them: who prayed, then what
+    landed on them (a miracle's or a lesser answer's effects). Nothing on a Failure, a backfire
+    (which landed on the one praying) or a result that gave nothing."""
+    landed = result.performance is not None or (
+        result.drawn is not None and result.outcome.success_level >= LESSER_LEVEL
+    )
+    if not landed:
+        return []
     being = result.being.name if result.being is not None else "a being"
-    return f"{_name(result.praying)} prayed to {being} for you."
+    lines = [f"{_name(result.praying)} prayed to {being} for you."]
+    lines.extend(f"({effect})" for effect in result.effects)
+    return lines
 
 
 def prayer_room_line(

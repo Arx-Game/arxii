@@ -160,8 +160,9 @@ def take_pledge(sheet: CharacterSheet, pledge: Pledge, *, prayer_text: str = "")
     """Open ``pledge`` for ``sheet``: a PLEDGE project and its sidecar.
 
     The favor target is the project's threshold and the span its time limit. A
-    prayer, when given, is logged through ``pray`` after the pledge opens, so a
-    holy-site prayer's devotion already counts toward it.
+    prayer, when given, is logged through ``pray`` after the pledge opens. It spends no action
+    points, so it earns no favor (favor from prayer comes from the AP a character spends
+    praying at a holy site, #4349); that later prayer counts toward the pledge.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
@@ -444,6 +445,7 @@ def close_pledge(
         award_base=award.base if award is not None else 0,
         award=award.credited if award is not None else 0,
         earning_rate_percent=award.earning_rate_percent if award is not None else 0,
+        award_owed_paid=award.owed_paid if award is not None else 0,
         delivery=delivery,
         pact=pact,
         pact_refusal=pact_refusal,
@@ -619,12 +621,14 @@ def sacrifice_calculation(
     base: int,
     rate: int | None = None,
     credited: int | None = None,
+    owed_paid: int = 0,
 ) -> str:
     """How a sacrifice's favor came about, in plain words (#4500).
 
     The offering's signals, their sum, the favored-facet multiplier, the roll's outcome and
-    its base favor; with ``rate`` and ``credited`` the earning rate and the favor paid. It
-    reads the signals snapshotted when the item was given up, never its price.
+    its base favor; with ``rate`` and ``credited`` the earning rate and the favor paid, and
+    with ``owed_paid`` the part of the base that paid owed favor first (``base`` is then what
+    was left). It reads the signals snapshotted when the item was given up, never its price.
     """
     from world.ceremonies.models import get_ceremony_config  # noqa: PLC0415
 
@@ -653,7 +657,11 @@ def sacrifice_calculation(
     effective = points * percent // 100 if offering.facet_id is not None else points
     text += f", eased {effective * get_devotion_config().sacrifice_ease_per_point}"
     outcome = offering.outcome_tier.name if offering.outcome_tier_id is not None else "No roll"
-    text += f". {outcome}: {base} base"
+    text += f". {outcome}: {base + owed_paid} base"
+    if owed_paid:
+        text += f", {owed_paid} paid what you owe"
+        if base > 0:
+            text += f", {base} left"
     if rate is not None and credited is not None and base > 0:
         text += f", at {rate}% = +{credited} favor"
     return text

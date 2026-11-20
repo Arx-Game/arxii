@@ -131,8 +131,10 @@ class FinishRiteCeremonyTests(RiteCeremonyTestBase):
         ceremony = self._open(self.ordeal)
 
         with force_check_outcome(self.success):
-            finish_ceremony(ceremony=ceremony)
+            finished = finish_ceremony(ceremony=ceremony)
 
+        # The officiant is told what their own award credited (#4349).
+        self.assertEqual(finished.officiant_favor.credited, 10)
         performance = WorshipRitePerformance.objects.get(character_sheet=self.sheet)
         self.assertEqual(performance.rite, self.ordeal)
         self.assertEqual(performance.ceremony, ceremony)

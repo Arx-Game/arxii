@@ -50,26 +50,38 @@ class CmdPray(ArxCommand):
         from actions.definitions.worship import PrayAction  # noqa: PLC0415
 
         raw = (self.args or "").strip()
-        if "=" not in raw:
+        switches = {switch.lower() for switch in self.switches}
+        if "=" not in raw or switches - {_SWITCH_AP, _SWITCH_FOR}:
             self.msg(_PRAY_USAGE)
             return
         head, text = (part.strip() for part in raw.split("=", 1))
-        switches = {switch.lower() for switch in self.switches}
         kwargs: dict[str, Any] = {}
         if _SWITCH_AP in switches:
             number, _, head = head.partition(" ")
             kwargs["ap"] = number
             head = head.strip()
         if _SWITCH_FOR in switches:
-            name, _, head = head.partition(" ")
+            name, head = _split_prayed_for(head)
             kwargs["on_behalf_of_name"] = name
-            head = head.strip()
         if not head or not text:
             self.msg(_PRAY_USAGE)
             return
         result = PrayAction().run(actor=self.caller, being_name=head, text=text, **kwargs)
         if result.message:
             self.msg(result.message)
+
+
+def _split_prayed_for(head: str) -> tuple[str, str]:
+    """Split "<character> <being>" where either name may have spaces: the longest being name
+    that is a real active being ends it, else the character is the first word."""
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    words = head.split()
+    for cut in range(1, len(words)):
+        being = " ".join(words[cut:])
+        if WorshippedBeing.objects.filter(name__iexact=being, is_active=True).exists():
+            return " ".join(words[:cut]), being
+    return (words[0], " ".join(words[1:])) if words else ("", "")
 
 
 class CmdVision(ArxCommand):

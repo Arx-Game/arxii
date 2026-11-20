@@ -273,7 +273,7 @@ def _prayer_note(prayer: Prayer) -> str:
         return "answered by a miracle"
     if prayer.dire_straits:
         return f"dire straits ({prayer.get_dire_straits_display().lower()})"
-    if prayer.devotion_granted:
+    if prayer.devotion_granted or prayer.ap_spent:
         return "act of devotion"
     return "plain prayer"
 

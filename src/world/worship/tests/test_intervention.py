@@ -232,6 +232,23 @@ class MissingCostRowsTests(InterventionTestBase):
         self.assertEqual((self._standing().favor, self._standing().owed_favor), (75, 0))
 
 
+class LiveAnswerFloorTests(InterventionTestBase):
+    def test_a_live_answer_still_needs_the_prayer_gate_of_favor(self) -> None:
+        from world.worship.services import miracle_ineligibility
+
+        # The being's miracle has its own threshold of 0, so only the gate (20) stops a
+        # steward sending it to a character with little favor; owed favor does not.
+        self.standing.favor = 10
+        self.standing.save(update_fields=["favor"])
+        refusal = miracle_ineligibility(self.praying, self.rescue)
+        self.assertIn("below this miracle's threshold (20)", refusal)
+
+        self.standing.favor = 20
+        self.standing.owed_favor = 9
+        self.standing.save(update_fields=["favor", "owed_favor"])
+        self.assertEqual(miracle_ineligibility(self.praying, self.rescue), "")
+
+
 class WhenTheBeingWillNotRollTests(InterventionTestBase):
     def test_favor_below_zero_fails_without_a_roll_by_default(self) -> None:
         self.standing.favor = -5
@@ -334,7 +351,7 @@ class PrayerForAnotherTests(InterventionTestBase):
         self.assertEqual(outcome.dire_straits.kind, "near_death")
         self.assertEqual(outcome.intervention.performance.target_character, self.fallen)
         self.assertTrue(_condition_on(self.fallen, "Mending"))
-        self.assertIn("answered your prayer for", outcome.lines[0])
+        self.assertIn("answered your prayer for", " ".join(outcome.lines))
 
     def test_not_here_and_not_in_danger_are_one_refusal(self) -> None:
         healthy = CharacterSheetFactory()
@@ -361,6 +378,54 @@ class PrayerForAnotherTests(InterventionTestBase):
         with self.assertRaises(PrayerForOwnCharacter):
             pray(self.praying, self.being, "Spare him.", on_behalf_of=self.fallen)
 
+    def _notices_for(self, sheet) -> list[str]:
+        from world.narrative.models import NarrativeMessageDelivery
+
+        return [
+            delivery.message.body
+            for delivery in NarrativeMessageDelivery.objects.filter(
+                recipient_character_sheet=sheet
+            ).select_related("message")
+        ]
+
+    def test_the_fallen_character_is_told_who_prayed_and_what_landed_on_them(self) -> None:
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(self.outcomes["Success"]),
+            patch(_NO_BROADCAST),
+        ):
+            pray(self.praying, self.being, "Spare him.", on_behalf_of=self.fallen)
+
+        told = self._notices_for(self.fallen)
+        self.assertEqual(len(told), 2)
+        self.assertIn("prayed to", told[0])
+        self.assertIn("condition applied, Mending", " ".join(told))
+
+    def test_a_failure_tells_the_fallen_character_nothing(self) -> None:
+        with (
+            self.captureOnCommitCallbacks(execute=True),
+            force_check_outcome(self.outcomes["Failure"]),
+            patch(_NO_BROADCAST),
+        ):
+            pray(self.praying, self.being, "Spare him.", on_behalf_of=self.fallen)
+
+        self.assertEqual(self._notices_for(self.fallen), [])
+
+    def test_with_no_scene_and_no_gm_the_text_still_reaches_the_room_and_the_one_it_touches(
+        self,
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        from world.worship.services import route_intervention_text
+
+        self.praying.character.msg = MagicMock()
+        with self.captureOnCommitCallbacks(execute=True):
+            route_intervention_text(self.fallen, "[A hand closes the wound.]", None)
+
+        # The onlooker in the room hears it; the one it touched is sent it as a notice.
+        self.assertTrue(self.praying.character.msg.called)
+        self.assertIn("[A hand closes the wound.]", self._notices_for(self.fallen))
+
     def test_the_gm_prompt_names_who_prayed_and_the_tier(self) -> None:
         with (
             force_check_outcome(self.outcomes["Success"]),
@@ -373,3 +438,55 @@ class PrayerForAnotherTests(InterventionTestBase):
         self.assertIn("prayer for", event.context_text)
         self.assertIn("Success", event.context_text)
         self.assertEqual(event.character_sheet, self.fallen)
+
+
+class DeliveryAndFailureTests(InterventionTestBase):
+    """What each seat is told (#4349), and a failure staying out of incapacitation."""
+
+    def test_a_result_the_being_had_nothing_to_answer_with_is_not_called_an_answer(self) -> None:
+        from world.worship.intervention_services import intervention_lines
+
+        self.being.resonance_pool = 10
+        self.being.intervention_pool = None
+        self.being.save(update_fields=["resonance_pool", "intervention_pool"])
+
+        result = self._fire("Success")
+        lines = intervention_lines(result)
+
+        self.assertFalse(result.answered)
+        self.assertIn("Nothing came of your call on", lines[0])
+        self.assertNotIn("answered you", " ".join(lines))
+        self.assertIn("will not answer again for", lines[0])
+
+    def test_a_config_whose_intercession_threshold_is_below_the_gate_is_refused(self) -> None:
+        from django.core.exceptions import ValidationError
+
+        config = get_divine_intervention_config()
+        config.prayer_favor_gate = 30
+        config.favor_threshold = 20
+        with self.assertRaises(ValidationError) as caught:
+            config.full_clean()
+        self.assertIn("favor_threshold", caught.exception.message_dict)
+
+    def test_a_failure_inside_the_intervention_leaves_incapacitation_alone(self) -> None:
+        with (
+            patch(
+                "world.worship.intervention_services.fire_divine_intervention",
+                side_effect=ValueError("boom"),
+            ),
+            self.assertLogs("world.worship.services", level="ERROR") as logged,
+        ):
+            maybe_fire_divine_intervention(self.praying.character)
+
+        self.assertIn("Divine intercession failed", logged.output[0])
+
+    def test_a_prayed_for_name_may_have_spaces_in_either_part(self) -> None:
+        from commands.worship import _split_prayed_for
+
+        self.being.name = "Old Grey Shepherd"
+        self.being.save(update_fields=["name"])
+
+        self.assertEqual(
+            _split_prayed_for("Wat Tyler Old Grey Shepherd"), ("Wat Tyler", "Old Grey Shepherd")
+        )
+        self.assertEqual(_split_prayed_for("Hobb Nowhere"), ("Hobb", "Nowhere"))

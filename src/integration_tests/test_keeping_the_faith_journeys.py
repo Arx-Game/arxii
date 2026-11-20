@@ -664,7 +664,8 @@ class CallingOnTheGodsInDanger(JourneyCase):
 
         self.assertIn("You pray to The Shepherd.", told)
         self.assertIn(
-            "The Shepherd answered your prayer for Hobb (Success); favor spent 20; favor owed 5.",
+            "The Shepherd answered your prayer for Hobb (Success); favor spent 20; favor owed 5; "
+            "it will not answer again for 36 hours.",
             told,
         )
         self.standing.refresh_from_db()

@@ -379,6 +379,8 @@ class ClosingOutcome:
     award: int
     earning_rate_percent: int
     delivery: AnswerDelivery | None = None
+    #: Base favor of the award that paid owed favor first (#4349).
+    award_owed_paid: int = 0
     pact: CharacterPact | None = None
     pact_refusal: str = ""
 

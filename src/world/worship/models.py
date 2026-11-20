@@ -625,6 +625,15 @@ class DivineInterventionConfig(SharedMemoryModel):
         verbose_name = "Divine Intervention Config"
         verbose_name_plural = "Divine Intervention Config"
 
+    def clean(self) -> None:
+        super().clean()
+        if self.favor_threshold < self.prayer_favor_gate:
+            msg = (
+                "The divine intercession threshold must be at least the prayer favor gate: "
+                "a being cannot step in for someone it would not answer a prayer from."
+            )
+            raise ValidationError({"favor_threshold": msg})
+
     def __str__(self) -> str:
         return f"DivineInterventionConfig(favor>={self.favor_threshold}, cd={self.cooldown_hours}h)"
 
@@ -1583,10 +1592,10 @@ class Prayer(SharedMemoryModel):
     A plain log with no mechanical effect of its own: one of the few freeform
     channels a player has straight to staff. A prayer becomes mechanically
     meaningful only through the qualifying conditions ``pray`` records on it,
-    each independent and stackable: ``devotion_granted`` for the first prayer
-    of the game week made at a shrine or temple of the being, ``dire_straits``
-    plus ``intervention`` when the character prayed in Soulfray or near death
-    and a miracle answered.
+    each independent and stackable: ``ap_spent`` and ``devotion_granted`` for AP
+    spent praying at a shrine or temple of the being, ``dire_straits`` plus
+    ``intervention`` when the one prayed for was in Soulfray or near death and a
+    miracle answered.
     """
 
     character_sheet = models.ForeignKey(

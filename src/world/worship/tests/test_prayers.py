@@ -128,6 +128,24 @@ class HolySitePrayerTests(PrayerTestBase):
         self.assertEqual(self._pool().current, before)
         self.assertEqual(Prayer.objects.count(), 1)
 
+    def test_favor_that_pays_owed_favor_first_says_so(self) -> None:
+        ShrineDetailsFactory(feature_instance__room_profile=self.profile, being=self.being)
+        DevotionStanding.objects.create(
+            character_sheet=self.sheet, being=self.being, favor=0, owed_favor=2
+        )
+
+        outcome = pray(self.sheet, self.being, "Keep this house.", ap=15)
+
+        # 3 base favor: 2 pay the debt first, the remaining 1 is earned.
+        self.assertEqual((outcome.owed_paid, outcome.devotion_granted), (2, 1))
+        standing = DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being)
+        standing.owed_favor = 1
+        standing.save(update_fields=["owed_favor"])
+        result = PrayAction().run(
+            actor=self.sheet.character, being=self.being.pk, text="Again.", ap=5
+        )
+        self.assertIn("paid what you owe", result.message)
+
     def test_another_beings_shrine_or_no_shrine_spends_and_earns_nothing(self) -> None:
         ShrineDetailsFactory(feature_instance__room_profile=self.profile, being=self.other_being)
         before = self._pool().current
@@ -214,7 +232,11 @@ class DireStraitsTests(PrayerTestBase):
                 target=self.sheet.character, condition__name="Divine Intervention Cooldown"
             ).exists()
         )
-        self.assertIn("answered you (Success); favor spent 20; favor owed 5.", outcome.lines[0])
+        self.assertIn(
+            "answered you (Success); favor spent 20; favor owed 5; "
+            "it will not answer again for 36 hours.",
+            outcome.lines[0],
+        )
 
     def test_soulfray_counts_as_dire_straits(self) -> None:
         with _soulfray_on():

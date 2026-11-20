@@ -14,6 +14,19 @@ if TYPE_CHECKING:
     from world.worship.types import ClosingOutcome
 
 
+def _rite_favor_sentences(outcome, being_name: str) -> list[str]:
+    """The rite's favor line: what was credited, any part that paid owed favor first (#4349),
+    or that the being already marked this rite this week."""
+    if outcome.favor_granted or outcome.favor_owed_paid:
+        earned = f"+{outcome.favor_granted} favor with {being_name}"
+        if outcome.favor_owed_paid:
+            earned += f", and {outcome.favor_owed_paid} base favor paid what you owe"
+        return [f"{earned}."]
+    if outcome.favor_capped:
+        return [f"{being_name} has already marked this rite of yours this week."]
+    return []
+
+
 def _resolve_rite(kwargs: dict[str, Any]):
     """(rite, error): a ``rite`` object wins; else ``rite_name`` (+ ``being_name``)."""
     from world.worship.models import WorshipRite  # noqa: PLC0415
@@ -96,10 +109,7 @@ class PerformWorshipRiteAction(Action):
         ]
         if outcome.resonance_granted:
             parts.append(f"+{outcome.resonance_granted} {rite.resonance.resonance.name} resonance.")
-        if outcome.favor_granted:
-            parts.append(f"+{outcome.favor_granted} favor with {rite.being.name}.")
-        elif outcome.favor_capped:
-            parts.append(f"{rite.being.name} has already marked this rite of yours this week.")
+        parts.extend(_rite_favor_sentences(outcome, rite.being.name))
         parts.extend(_gift_sentences(outcome))
         return ActionResult(
             success=True,
@@ -346,10 +356,10 @@ class PrayAction(Action):
             return ActionResult(success=False, message=exc.user_message)
         parts = [f"You pray to {being.name}."]
         if outcome.ap_spent:
-            parts.append(
-                f"You spend {outcome.ap_spent} AP in prayer: +{outcome.devotion_granted} favor "
-                f"with {being.name}."
-            )
+            earned = f"+{outcome.devotion_granted} favor with {being.name}"
+            if outcome.owed_paid:
+                earned += f", and {outcome.owed_paid} base favor paid what you owe"
+            parts.append(f"You spend {outcome.ap_spent} AP in prayer: {earned}.")
         parts.extend(outcome.lines)
         intervention = outcome.intervention
         return ActionResult(
@@ -359,6 +369,7 @@ class PrayAction(Action):
                 "prayer_id": outcome.prayer.pk,
                 "devotion_granted": outcome.devotion_granted,
                 "ap_spent": outcome.ap_spent,
+                "owed_paid": outcome.owed_paid,
                 "at_holy_site": outcome.at_holy_site,
                 "dire_straits": outcome.dire_straits.kind,
                 "answered": outcome.answered,
@@ -370,6 +381,7 @@ class PrayAction(Action):
                 ),
                 "favor_spent": intervention.cost.favor_spent if intervention else 0,
                 "favor_owed": intervention.cost.favor_owed if intervention else 0,
+                "wait_hours": intervention.cost.wait_hours if intervention else 0,
             },
         )
 
@@ -748,6 +760,23 @@ class ClosePledgeAction(Action):
         )
 
 
+def _closing_award_words(outcome: ClosingOutcome, being: str) -> str:
+    """The closing award's calculation; what paid owed favor first is said, never a bare +0."""
+    owed = outcome.award_owed_paid
+    if not owed:
+        return (
+            f"{outcome.award_base} base, at {outcome.earning_rate_percent}% = "
+            f"+{outcome.award} favor with {being}."
+        )
+    paid = f"{outcome.award_base + owed} base, {owed} paid what you owe"
+    if not outcome.award_base:
+        return f"{paid}."
+    return (
+        f"{paid}, {outcome.award_base} left, at {outcome.earning_rate_percent}% = "
+        f"+{outcome.award} favor with {being}."
+    )
+
+
 def _closing_message(outcome: ClosingOutcome, being: str, *, awaiting: bool) -> str:
     """The closer's line: the rite's tier, the award, and the pact accepted or refused."""
     if not outcome.resolved:
@@ -758,9 +787,8 @@ def _closing_message(outcome: ClosingOutcome, being: str, *, awaiting: bool) -> 
     else:
         message = (
             f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}. "
-            f"Closing award for {outcome.outcome_name}: {outcome.award_base} base, at "
-            f"{outcome.earning_rate_percent}% = +{outcome.award} favor with {being}."
-            if outcome.award
+            f"Closing award for {outcome.outcome_name}: {_closing_award_words(outcome, being)}"
+            if outcome.award or outcome.award_owed_paid
             else f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}."
         )
     if awaiting:

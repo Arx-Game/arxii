@@ -1374,7 +1374,7 @@
 - `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony - Decision 12: close the rite awarding nothing; frees the location + ghost window.`
 - `execute_will(character_sheet: 'CharacterSheet') -> None - Execute the deceased's estate — the funeral door of #1985.`
 - `favored_facets_by_item(being: 'WorshippedBeing', item_instances: 'list[ItemInstance]') -> 'dict[int, Facet]' - Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),`
-- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
+- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.services.CeremonyFinish - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
 - `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, reading: world.ceremonies.services.ItemReading, counted: bool, granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and, when it counts, feed ``being``'s pool.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
@@ -12617,7 +12617,6 @@
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
-- `best_patronage_favor(sheet: 'CharacterSheet') -> int - Return the favor of the highest-favor Chosen patronage, or 0.`
 - `broadcast_prayer_line(character, text: str, scene=None) -> None - Post a prayer's room line as an EMIT to the scene (#4349): an ally praying for a fallen`
 - `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int, *, source: 'FavorSource | None' = None) -> world.worship.types.DevotionBump - Upsert the (sheet, being) standing and run the God's Favorite check.`
 - `convert_public_worship(character_sheet: 'CharacterSheet', new_being: world.worship.models.WorshippedBeing, *, is_sincere: bool = True) -> world.worship.models.WorshipDeclaration - Repoint a character's PUBLIC worship declaration (#2361).`

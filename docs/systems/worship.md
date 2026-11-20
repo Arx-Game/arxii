@@ -224,9 +224,10 @@ issue bodies; the model decision is ADR-0132.
   the technique picker, which a pact holder gets too. The Chosen readers use
   `favor_services.chosen_patronage_of(sheet, being)` / `chosen_patronages_for(sheet)`
   instead (#4341).
-- `best_patronage_favor(sheet)` → the highest-favor Chosen patronage's favor, or 0
-  (a pact patronage does not count, #4341). Read by `apply_anima_ritual_outcome` to gate
-  the anima recovery bonus.
+- `best_patronage_favor` is gone (#4349): it read the highest-favor Chosen patronage's favor to
+  gate the anima ritual's Chosen bonus. `apply_anima_ritual_outcome` now reads
+  `favor_services.chosen_patronages_for(sheet)` directly, since it needs the patron's name for
+  the result line as well as its favor (a pact patronage still does not count, #4341).
 - `grant_chosen_distinction(sheet)` / `grant_chosen_distinction_to_chosen(config)` (#4341)
   → grant the designated Chosen distinction at creation / to every Chosen lacking it. A
   Chosen whose distinctions exclude it (`DistinctionExclusionError`) is logged and skipped:
@@ -927,16 +928,16 @@ route. Migration 0248 is schema only.
   miracle is checked by `services.miracle_ineligibility` and performed through
   `perform_divine_intervention` (`trigger_event="live_rite"`; its normal miracle narration
   prompt follows). A live answer obeys none of the intervention roll's rules (#4349): no roll,
-  no owed favor, no prayer gate, no spend; it keeps the cooldown condition, the miracle's own
-  favor threshold and the pool check. The prompt and every sibling copy are locked first: the first answer
+  no owed favor, no spend; it keeps the cooldown condition, the favor floor (the higher of the
+  prayer gate and the miracle's own threshold) and the pool check. The prompt and every sibling copy are locked first: the first answer
   confirms its prompt and dismisses the others, and the limit is asked under the same lock.
 - `dismiss_live_prompt` - dismissing sends nothing (`dismiss_being_answer` routes a prompt
   with a `rite_performance` here); the scene ending closes a still-pending prompt the same way.
   The hourly steward timeout leaves live prompts alone.
 - `services.miracle_ineligibility(sheet, miracle, favor=, on_cooldown=, cfg=)` - the check the
   intervention roll and the live answer share: cooldown condition clear, favor at least the
-  miracle's own threshold (the config's `favor_threshold` is the divine intercession threshold
-  since #4349 and is not asked here), pool at least the larger of the cost and the config
+  higher of `prayer_favor_gate` and the miracle's own threshold (the config's `favor_threshold`
+  is the divine intercession threshold since #4349 and is not asked here), pool at least the larger of the cost and the config
   minimum. It does not ask the miracle's trigger. `intervention_cooldown_active(character)`.
 
 **Surfaces**
@@ -1028,7 +1029,7 @@ Majora crossings.
   thresholds, read before the spend, rounded up. A positive tier that delivered nothing spends
   and owes nothing, and still waits. `bump_devotion` pays `owed_favor` first from the base amount,
   before the earning rate, for every source (`DevotionBump.owed_paid`, `PledgeCredit.owed_paid`).
-  `intervention_lines` builds the one praying's private lines; `prayed_for_you_line` and
+  The fallen character is sent who prayed and what landed on them as stored notices (nothing on a Failure or a backfire); with no scene and no GM prompt the room hears the authored text and the one it touched is sent it too. A failure inside divine intercession at incapacitation is logged and never breaks the incapacitation. `finish_ceremony` returns a `CeremonyFinish` (the ceremony and the officiant's `DevotionBump`). `intervention_lines` builds the one praying's private lines; `prayed_for_you_line` and
   `prayer_room_line` are the fallen character's and the room's. The `MIRACLE` GM prompt
   carries `GMPrompt.context_text` (tier, what was drawn, who prayed).
 - `maybe_fire_divine_intervention(character, payload)` — trigger handler: called by
