@@ -1,4 +1,7 @@
-"""Tests for tools/lint_interaction_visible_to.py (#3751)."""
+"""Tests for tools/lint_interaction_visible_to.py (#3751).
+
+These stay as unit tests: a linter's branches are not reachable from a journey.
+"""
 
 from __future__ import annotations
 

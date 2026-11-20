@@ -22,11 +22,9 @@ from integration_tests.harness import JourneyCase
 from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import NominationTargetType
 from world.roster.factories import RosterTenureFactory
-from world.scenes.block_services import create_block
 from world.scenes.factories import SceneGMParticipationFactory
 from world.scenes.interaction_services import record_interaction
 from world.scenes.models import Interaction, Scene
-from world.scenes.mute_services import set_mute
 from world.scenes.services import record_persona_discovery
 from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 from world.species.factories import LanguageFactory
@@ -155,12 +153,8 @@ class ABlockedFaceIsHiddenEverywhere(PlayReaderJourney):
     """Hobb blocks Ysmay's face: neither sees the other, through any door."""
 
     def block(self) -> None:
-        create_block(
-            blocker_account=self.account_of(self.hobb),
-            blocker_persona=self.hobb.sheet_data.primary_persona,
-            blocked_persona=self.ysmay.sheet_data.primary_persona,
-            reason="Journey block.",
-        )
+        told = self.telnet(self.hobb, "+block Ysmay=Journey block.")
+        self.assertIn("You have blocked Ysmay", told)
 
     def test_the_blocked_face_is_absent_from_every_door_both_ways(self) -> None:
         self.block()
@@ -248,10 +242,7 @@ class AMutedFaceKeepsItsActionsButNotItsText(PlayReaderJourney):
     """Hobb mutes Ysmay's face: her poses stay in the feed with the text blanked."""
 
     def test_the_text_is_blank_on_every_door_until_hobb_opens_the_pose(self) -> None:
-        set_mute(
-            owner=PlayerData.objects.get(account=self.account_of(self.hobb)),
-            muted_persona=self.ysmay.sheet_data.primary_persona,
-        )
+        self.assertIn("Muted Ysmay", self.telnet(self.hobb, "+mute Ysmay"))
         self.telnet(self.ysmay, f"pose {CARAVAN}")
         pose = self.pose_of(self.ysmay, CARAVAN)
         self.reply(self.wat, pose, "asks about the gate.")

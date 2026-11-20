@@ -89,10 +89,11 @@ excluded except for the party themselves):
 ```python
 from world.scenes.models import Interaction
 
-# Single source of truth for interaction read-visibility (was inlined in
-# InteractionViewSet.get_queryset). Preserves any prefetches on the chain. Callers pass
-# the account's CURRENT persona ids (empty for anonymous) and an optional `since` bound.
-Interaction.objects.visible_to(account, persona_ids=persona_ids, since=since)
+# Single source of truth for interaction read-visibility. A player's read goes through
+# `readable_by`, which is `visible_to` plus the viewer's blocks (#3751). Preserves any
+# prefetches on the chain. Callers pass the account's CURRENT persona ids (empty for
+# anonymous) and an optional `since` bound.
+Interaction.objects.readable_by(account, persona_ids=persona_ids, since=since)
 ```
 
 **Consumers:**
@@ -105,9 +106,9 @@ Interaction.objects.visible_to(account, persona_ids=persona_ids, since=since)
   as the sole encounter read-gate: staff bypass OR `scene__in=Scene.objects.viewable_by(user)`.
   The participant union is gone — every encounter carries a required scene, so scene
   visibility subsumes participant membership (`src/world/combat/views.py`).
-- `InteractionViewSet.get_queryset()` calls `Interaction.objects.visible_to(...)`
+- `InteractionViewSet.get_queryset()` calls `Interaction.objects.readable_by(...)`
   (`src/world/scenes/interaction_views.py`).
-- `SceneViewSet.highlight_reel()` calls `Interaction.objects.visible_to(...)` so the reel
+- `SceneViewSet.highlight_reel()` calls `Interaction.objects.readable_by(...)` so the reel
   can never surface a pose the viewer cannot see — not even as a sealed slot (#1241).
 
 ### `InteractionVisibility` tiers
@@ -609,7 +610,7 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   nomination or reaction, ranked by all-time `Nomination` count first (#3738; persists past
   weekly settlement — a pose's standing outlives the week it was posed in; never shown,
   since a nomination is invisible to its nominee), reaction count as tie-break, and
-  recency last, capped at 10. Source set is filtered through `Interaction.objects.visible_to`,
+  recency last, capped at 10. Source set is filtered through `Interaction.objects.readable_by`,
   so hidden poses never appear. Reveal a pose via `GET /api/interactions/{id}/`.
 - `GET /api/scenes/{id}/gm-rail/` - GM story rail (#3434): the running beat's authored
   material + protected subjects + room clue placements, composed per-viewer. View-level
@@ -729,7 +730,7 @@ Read-only listing of a player's pending additional-target consent rows (#1177).
 
 Reader contracts for the play-history workspace (`src/world/scenes/play_views.py`). All six
 endpoints require authentication (`IsAuthenticated`). Five of the six read from the same
-authorized `Interaction` queryset the scene feed itself uses — `InteractionQuerySet.visible_to`
+authorized `Interaction` queryset the scene feed itself uses — `InteractionQuerySet.readable_by`
 (via `InteractionViewSet.get_queryset()`, reused for masking, language comprehension, and
 block/mute rules) — so this surface introduces no separate visibility rule for them.
 `POST /api/play/read/` is the exception: it doesn't gate reads at all — it privately records this

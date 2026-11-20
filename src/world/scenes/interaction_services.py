@@ -942,7 +942,7 @@ def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None
     """The parent chip for a LIVE push, or ``None`` when it cannot be sent safely.
 
     The REST serializer gates this per viewer, against
-    ``Interaction.objects.visible_to(user)`` for the request's own account. A WebSocket
+    ``Interaction.objects.readable_by(user, ...)`` for the request's own account. A WebSocket
     push has no single viewer -- one payload goes to every object in the room -- and
     re-running that queryset once per recipient account would put a query per player in
     the room on every reply. So this gate is structural and evaluated once per push: the
