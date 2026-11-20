@@ -804,7 +804,7 @@ PRIMARY persona is effectively immutable once created, so no write site needs to
 
 `account_attention(*, account, entries) -> AccountAttention` (`world/scenes/attention_services.py`)
 answers what is waiting for each of an account's characters (`CharacterAttention.direct`/`.ambient`,
-keyed by `character_sheet_id`) in five queries total, none per character and none per row. It
+keyed by `character_sheet_id`) in six queries total, none per character and none per row. It
 deliberately never calls `InteractionQuerySet.visible_to` - that queryset's staff/player branches
 return far more than one account's own waiting attention, which would make a badge meaningless and
 disclose volume - and instead builds the count from rows already scoped to the account (directed
@@ -819,6 +819,26 @@ badge that scene produces (Finding 1, #3774 final review). Consumed by
 `has_ambient_unread`/`attention_as_of_id` once per request via serializer context - the frontend's
 `characterAttention()` (`frontend/src/game/attention.ts`) then adds each session's own live delta on
 top of that server baseline.
+
+The badge obeys the same privacy rules as the feed (#3751). A whisper counts only through the
+`InteractionReceiver` row pinned to the account asking (`account=account`), so a character's next
+player never inherits the old player's whispers as a badge. The target side counts only room-heard
+poses (`room_heard_q()`), since a whisper writes a target row beside its receiver row. Faces the
+account's blocks hide (`hidden_persona_ids_for_viewer`, staff bypass) are excluded from all three
+queries, which costs one extra query for the block list.
+
+### The one read gate (`InteractionQuerySet.readable_by`, #3751)
+
+`readable_by(account, persona_ids=, since=)` is `visible_to` minus the faces the viewer's blocks hide,
+and every read of an interaction goes through it: the interaction list and detail
+(`InteractionViewSet.get_queryset`), every `/api/play/` surface built on that queryset (poses,
+search, context, conversation and thread summaries, mark-read), a reply's parent chip
+(`InteractionListSerializer._visible_parents`, so a blocked author's pose never leaks as a chip) and
+the scene highlight reel. Muted faces stay in: their rows come back with the text blanked
+(`get_content`), and the detail endpoint is the one deliberate reveal. The journeys in
+`src/integration_tests/test_play_reader_authorization_journeys.py` hold each rule (block, mute,
+VERY_PRIVATE, language, mask, inherited character) against list, detail, search, context,
+conversation summaries and the top-bar badge.
 
 ---
 

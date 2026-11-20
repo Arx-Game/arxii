@@ -171,6 +171,33 @@ class InteractionQuerySet(ArxSharedMemoryQuerySet):
         visible_ids = public_visible.union(party, present_visible, participated_visible, gm_visible)
         return self.filter(pk__in=visible_ids)
 
+    def readable_by(
+        self,
+        account: AccountDB | None,
+        *,
+        persona_ids: list[int] | None = None,
+        since: str | None = None,
+    ) -> InteractionQuerySet:
+        """``visible_to`` minus the faces the viewer's blocks hide (#1278): what ``account``
+        may actually read.
+
+        The one gate every read of an interaction goes through (the interaction list and
+        detail, play search, context and summaries, a reply's parent chip, the highlight
+        reel), so a blocked face is absent from all of them alike. Muted faces are NOT
+        dropped here: their poses stay in the feed with the text blanked by the serializer
+        (#2087). Staff bypass blocks, as everywhere.
+        """
+        # Local import: block_services imports the scenes models, which import this module.
+        from world.scenes.block_services import hidden_persona_ids_for_viewer  # noqa: PLC0415
+
+        queryset = self.visible_to(account, persona_ids=persona_ids, since=since)
+        if account is None or not account.is_authenticated or account.is_staff:
+            return queryset
+        hidden_persona_ids = hidden_persona_ids_for_viewer(viewer_account=account)
+        if hidden_persona_ids:
+            queryset = queryset.exclude(persona_id__in=hidden_persona_ids)
+        return queryset
+
 
 # Preserve the idmapper-cached .get() by subclassing SharedMemoryManager.
 InteractionManager = GuardedSharedMemoryManager.from_queryset(InteractionQuerySet)
