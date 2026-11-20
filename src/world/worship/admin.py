@@ -412,6 +412,7 @@ class MiraclePerformanceAdmin(admin.ModelAdmin):
         "scene",
         "resonance_spent",
         "trigger_event",
+        "outcome_tier",
         "created_at",
     )
 

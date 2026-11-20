@@ -215,6 +215,23 @@ class NoRollAwardFallbackTests(InterventionTestBase):
         self.assertEqual(outcome_award(FavorAwardKind.OFFICIANT, partial_success_outcome()), 6)
 
 
+class MissingCostRowsTests(InterventionTestBase):
+    def test_with_no_cost_rows_a_rescue_is_free_and_waits_the_default(self) -> None:
+        # The behaviour a missing row means (the Required content page lists it): the rescue
+        # costs no favor, leaves nothing owed, and waits the config's cooldown hours.
+        self.config.outcome_awards.all().delete()
+
+        result = self._fire("Success")
+
+        self.assertIsNotNone(result.performance)
+        cooldown_hours = get_divine_intervention_config().cooldown_hours
+        self.assertEqual(
+            (result.cost.favor_spent, result.cost.favor_owed, result.cost.wait_hours),
+            (0, 0, cooldown_hours),
+        )
+        self.assertEqual((self._standing().favor, self._standing().owed_favor), (75, 0))
+
+
 class WhenTheBeingWillNotRollTests(InterventionTestBase):
     def test_favor_below_zero_fails_without_a_roll_by_default(self) -> None:
         self.standing.favor = -5

@@ -62,6 +62,7 @@ const prayer = {
   being_name: 'The Shepherd',
   text: 'Keep this house.',
   devotion_granted: 1,
+  ap_spent: 5,
   dire_straits: '' as const,
   answered: false,
   prayed_at: new Date().toISOString(),

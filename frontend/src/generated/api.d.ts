@@ -38958,6 +38958,8 @@ export interface components {
       readonly intervention_trigger: components['schemas']['InterventionTriggerEnum'];
       /** @description Minimum favor with the being for this miracle to be a candidate. 0 means only the Divine Intervention Config's prayer favor gate applies. */
       readonly favor_threshold: number;
+      /** @default Success */
+      readonly min_outcome_tier: string;
       /** @description Narrative broadcast (EMIT) when this miracle fires. */
       readonly narrative_text: string;
       readonly is_active: boolean;
@@ -49164,6 +49166,8 @@ export interface components {
       readonly text: string;
       /** @description Favor paid by a holy-site prayer; 0 for every other. */
       readonly devotion_granted: number;
+      /** @description Action points spent praying at a holy site of the being (#4349). The weekly limit is the sum of these for the character, being and game week. */
+      readonly ap_spent: number;
       readonly dire_straits: components['schemas']['DireStraitsEnum'];
       readonly answered: boolean;
       /** Format: date-time */

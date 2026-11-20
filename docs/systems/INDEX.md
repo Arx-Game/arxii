@@ -10595,8 +10595,8 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `TempleDedication` (#3778: the building-level site, FK `Building`, one active per building
   via `dissolved_at`; one shared `consecration_points` for every room under the building's
   area node), `Prayer` (#3779: a character's freeform words to a being, a plain log;
-  `devotion_granted` for the weekly holy-site prayer, `dire_straits` + OneToOne `intervention`
-  when a miracle answered), `Vision` (#3779: GM-sent prose from a being, `reveal_source`,
+  `devotion_granted` (the favor a holy-site prayer's AP earned) and `ap_spent` (#4349),
+  `dire_straits` + OneToOne `intervention` when a miracle answered), `Vision` (#3779: GM-sent prose from a being, `reveal_source`,
   optional `prayer` / CODEX `clue` / `episode`, OneToOne `message` → the VISIONS
   `NarrativeMessage` that delivered it), `ConsecrationTier` (#3778: authored `min_points` → `bonus_percent` ladder per
   scope SHRINE/TEMPLE), `WorshipGrant` (audit ledger),
@@ -10606,8 +10606,9 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   owner/staff-only in the sheet identity serializer).
 - **Favor with beings** (#4333 slice 1, ADR-4333-A): `DevotionConfig` (singleton: default
   `invocation_check_type`, `base_difficulty`, favor ease thresholds/points,
-  `invocations_per_week`), `FavorOutcomeAward` (kind INVOCATION/CLOSING × `CheckOutcome` →
-  amount), `FavorInvocation` (the weekly counter and log; `player_line`; scene / mission /
+  `invocations_per_week`, `prayer_ap_per_favor`, `prayer_weekly_ap_cap`), `FavorOutcomeAward`
+  (kind INVOCATION / CLOSING / SACRIFICE / OFFICIANT / CHOSEN_ANIMA / INTERVENTION_SPEND /
+  INTERVENTION_DEBT / INTERVENTION_WAIT_HOURS × `CheckOutcome` → amount), `FavorInvocation` (the weekly counter and log; `player_line`; scene / mission /
   scene-action links), `WorshippedBeing.invocation_check_type`, `ModifierTarget.target_being`
   with the `favor_invocation`/`favor_earning` categories. The Chosen bonuses (#4341,
   ADR-4341): `ChosenFavorConfig.chosen_distinction` (the distinction every Chosen holds; its

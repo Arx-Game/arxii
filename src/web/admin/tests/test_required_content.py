@@ -2449,3 +2449,18 @@ class TestScaleConfigProbes(TestCase):
         seed_level_tiers()
         for key in ("development-cost-config", "check-scale-config", "level-tier"):
             self.assertTrue(self._dependency(key).probe.resolve(None).present, key)
+
+
+class FavorAwardProbeTests(TestCase):
+    """Every kind of favor outcome award has a probe naming what a missing row means (#4349)."""
+
+    def test_every_favor_award_kind_has_a_probe(self) -> None:
+        from world.worship.constants import FavorAwardKind
+
+        keys = {dep.key for dep in rc._declarations()}
+        for kind in FavorAwardKind:
+            self.assertIn(f"favor-{kind.value.replace('_', '-')}-awards", keys)
+
+    def test_the_invocation_check_type_probe_says_intervention_stops_too(self) -> None:
+        dep = next(d for d in rc._declarations() if d.key == "favor-invocation-check-type")
+        self.assertIn("divine intervention", dep.consequence)

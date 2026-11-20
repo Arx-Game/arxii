@@ -127,7 +127,7 @@ export function WorshipSection({
                   tags={
                     <>
                       {prayer.dire_straits && <Tag>{prayer.dire_straits.replace('_', ' ')}</Tag>}
-                      {prayer.devotion_granted && <Tag>act of devotion</Tag>}
+                      {prayer.ap_spent > 0 && <Tag>act of devotion · {prayer.ap_spent} AP</Tag>}
                       {prayer.answered && <Tag accent>answered</Tag>}
                     </>
                   }

@@ -36,6 +36,9 @@ class MiracleSerializer(serializers.ModelSerializer):
     """Staff-facing miracle catalog serializer (#2360)."""
 
     being_name = serializers.CharField(source="being.name", read_only=True)
+    min_outcome_tier = serializers.CharField(
+        source="min_outcome_tier.name", read_only=True, default="Success"
+    )
 
     class Meta:
         model = Miracle
@@ -47,6 +50,7 @@ class MiracleSerializer(serializers.ModelSerializer):
             "resonance_pool_cost",
             "intervention_trigger",
             "favor_threshold",
+            "min_outcome_tier",
             "narrative_text",
             "is_active",
             "sort_order",
@@ -94,6 +98,7 @@ class PrayerSerializer(serializers.ModelSerializer):
             "being_name",
             "text",
             "devotion_granted",
+            "ap_spent",
             "dire_straits",
             "answered",
             "prayed_at",

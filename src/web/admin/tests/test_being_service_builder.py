@@ -217,6 +217,25 @@ class ServiceBuilderPageTests(ServiceBuilderTestCase):
         self.assertEqual(Pledge.objects.filter(being=self.being).count(), 1)
 
 
+class ServiceBuilderInterventionChecklistTests(ServiceBuilderTestCase):
+    def test_a_being_with_miracles_and_no_intervention_pool_is_warned(self) -> None:
+        from web.admin.being_service import live
+        from world.worship.factories import MiracleFactory
+
+        MiracleFactory(being=self.being)
+
+        lines = live.checks(self.being)
+
+        self.assertIn(
+            (
+                "warn",
+                "Ombrin has miracles but no intervention answers: a roll below Success "
+                "gives nothing.",
+            ),
+            lines,
+        )
+
+
 class ServiceBuilderSaveTests(ServiceBuilderTestCase):
     def test_one_save_writes_resonances_facets_and_pledges(self) -> None:
         self.client.force_login(self.author)

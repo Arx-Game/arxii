@@ -68807,6 +68807,10 @@ components:
           readOnly: true
           description: Minimum favor with the being for this miracle to be a candidate.
             0 means only the Divine Intervention Config's prayer favor gate applies.
+        min_outcome_tier:
+          type: string
+          readOnly: true
+          default: Success
         narrative_text:
           type: string
           readOnly: true
@@ -68824,6 +68828,7 @@ components:
       - id
       - intervention_trigger
       - is_active
+      - min_outcome_tier
       - name
       - narrative_text
       - resonance_pool_cost
@@ -87172,6 +87177,12 @@ components:
           type: integer
           readOnly: true
           description: Favor paid by a holy-site prayer; 0 for every other.
+        ap_spent:
+          type: integer
+          readOnly: true
+          description: Action points spent praying at a holy site of the being (#4349).
+            The weekly limit is the sum of these for the character, being and game
+            week.
         dire_straits:
           allOf:
           - $ref: '#/components/schemas/DireStraitsEnum'
@@ -87185,6 +87196,7 @@ components:
           readOnly: true
       required:
       - answered
+      - ap_spent
       - being
       - being_name
       - character_sheet

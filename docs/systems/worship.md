@@ -326,8 +326,9 @@ three independent, stackable conditions make one count.
 - Actions (`actions/definitions/worship.py`): `PrayAction` (`pray`: `being` /
   `being_name`, `text`), `SendVisionAction` (`vision_send`, staff only: `recipient` /
   `recipient_name`, `being` / `being_name`, `body`, `reveal_source`, `prayer`, `clue`,
-  `episode` ids). Telnet (`commands/worship.py`): `pray <being>=<words>`,
-  `vision[/reveal] <character>/<being>=<prose>`, `vision/prayer <id> ...` (Admin).
+  `episode` ids). Telnet (`commands/worship.py`): `pray[/ap <n>][/for <character>]
+  <being>=<words>` (`/ap` spends AP praying at a holy site; `/for` prays for a character present, named by the
+  face they present), `vision[/reveal] <character>/<being>=<prose>`, `vision/prayer <id> ...` (Admin).
 - Delivery presentation: a VISIONS message is the one narrative category with its own
   tag and colour, `|G[VISION]|n` on telnet (Arx 1's green), and the frame carries
   `category` so the web feed files it as its own `vision` kind; see the narrative doc.

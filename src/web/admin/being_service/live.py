@@ -445,6 +445,14 @@ def checks(being: WorshippedBeing) -> list[tuple[str, str]]:
         lines.append(
             ("warn", "No favored facet: no sacrifice counts double and no worn piece counts.")
         )
+    if being.intervention_pool_id is None and being.miracles.filter(is_active=True).exists():
+        lines.append(
+            (
+                "warn",
+                f"{being.name} has miracles but no intervention answers: a roll below Success "
+                "gives nothing.",
+            )
+        )
     general = Answer.objects.filter(being=being, pledge__isnull=True, is_active=True).exists()
     unanswered = [
         pledge.name
