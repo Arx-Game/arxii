@@ -104,11 +104,14 @@ class InteractionQuerySet(ArxSharedMemoryQuerySet):
         staff -> everything except very-private (#1219); anonymous -> public room-heard
         only; authenticated non-staff -> public room-heard, plus content reaching them as
         a pinned party (writer/receiver), plus room-heard in scenes their current personas
-        were present in or they personally participated in, plus everything (bar
+        were present in during this account's own tenure on the character, or they personally
+        participated in, plus everything (bar
         very-private) in scenes they GM'd.
         """
         # Local imports avoid the managers <-> models import cycle (models imports this module).
+        from world.roster.models import RosterTenure  # noqa: PLC0415
         from world.scenes.models import Interaction, SceneParticipation  # noqa: PLC0415
+        from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
 
         is_authenticated = account is not None and account.is_authenticated
         if is_authenticated and account.is_staff:
@@ -133,14 +136,34 @@ class InteractionQuerySet(ArxSharedMemoryQuerySet):
         account_id = account.pk
         current_persona_ids = persona_ids or []
 
-        # Scenes whose room-heard content this account may read: where one of their CURRENT
-        # characters was present (so a new player inherits the character's full history), or
-        # which they PERSONALLY participated in (so a former player keeps the scenes they did).
-        present_scene_ids = Interaction.objects.filter(
-            models.Q(persona_id__in=current_persona_ids)
-            | models.Q(receivers__persona_id__in=current_persona_ids),
+        # Scenes whose room-heard content this account may read because one of their CURRENT
+        # characters was present. The grant counts only what happened during the account's
+        # OWN tenure on that character: a persona's history from before this account played
+        # it is the previous player's, so a new player of a roster character does not read
+        # the old private-scene poses (#3751). A tenure's start may be unrecorded (null),
+        # which reaches back indefinitely; its end may be open (null).
+        def _in_own_tenure(*, sheet_field: str, time_field: str) -> models.Exists:
+            return models.Exists(
+                RosterTenure.objects.filter(
+                    models.Q(start_date__isnull=True)
+                    | models.Q(start_date__lte=models.OuterRef(time_field)),
+                    models.Q(end_date__isnull=True)
+                    | models.Q(end_date__gte=models.OuterRef(time_field)),
+                    player_data__account_id=account_id,
+                    roster_entry__character_sheet_id=models.OuterRef(sheet_field),
+                )
+            )
+
+        written_scene_ids = Interaction.objects.filter(
+            _in_own_tenure(sheet_field="persona__character_sheet_id", time_field="timestamp"),
+            persona_id__in=current_persona_ids,
             scene__isnull=False,
         ).values("scene_id")
+        received_scene_ids = InteractionReceiver.objects.filter(
+            _in_own_tenure(sheet_field="persona__character_sheet_id", time_field="timestamp"),
+            persona_id__in=current_persona_ids,
+            interaction__scene__isnull=False,
+        ).values("interaction__scene_id")
         participated_scene_ids = SceneParticipation.objects.filter(account_id=account_id).values(
             "scene_id"
         )
@@ -156,7 +179,9 @@ class InteractionQuerySet(ArxSharedMemoryQuerySet):
             **time_bound,
         ).values("pk")
         present_visible = Interaction.objects.filter(
-            room_heard, scene_id__in=present_scene_ids, **time_bound
+            models.Q(scene_id__in=written_scene_ids) | models.Q(scene_id__in=received_scene_ids),
+            room_heard,
+            **time_bound,
         ).values("pk")
         participated_visible = Interaction.objects.filter(
             room_heard, scene_id__in=participated_scene_ids, **time_bound

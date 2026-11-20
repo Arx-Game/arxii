@@ -22,6 +22,7 @@ from integration_tests.harness import JourneyCase
 from world.game_clock.week_services import get_current_game_week
 from world.progression.constants import NominationTargetType
 from world.roster.factories import RosterTenureFactory
+from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import SceneGMParticipationFactory
 from world.scenes.interaction_services import record_interaction
 from world.scenes.models import Interaction, Scene
@@ -411,3 +412,75 @@ class ANewPlayerDoesNotInheritOldWhispers(PlayReaderJourney):
     def test_the_new_players_badge_does_not_count_old_whispers(self) -> None:
         rows = self.badges(self.new_account)
         self.assertEqual([row["unread_direct"] for row in rows], [0])
+
+
+class EveryDoorAgreesOnWhoReadsWhat(PlayReaderJourney):
+    """One table: each viewer reads an interaction through all four doors or through none.
+
+    A closed scene (Private) where Ysmay is the owner, Hobb and Wat pose, and a GM runs it.
+    Hobb's character then passes to a new player. What decides a read is whether the viewer's
+    ACCOUNT was there, never whether a character they now hold was: the new player reads
+    nothing that happened before their own tenure, the account that played Hobb keeps its
+    own history, a participant and the GM read the scene, and a whisper reaches only its
+    parties and the GM.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        # A Private scene cannot be created in a publicly listed room, so the privacy is
+        # written straight onto the running scene.
+        Scene.objects.filter(pk=self.scene.pk).update_with_reason(
+            reason="Journey: a closed scene.", privacy_mode=ScenePrivacyMode.PRIVATE
+        )
+        self.scene.privacy_mode = ScenePrivacyMode.PRIVATE
+        self.telnet(self.wat, "pose leans against the wall.")
+        self.telnet(self.hobb, "pose mutters over the ledger.")
+        self.telnet(self.ysmay, "pose shuts the shutters.")
+        self.telnet(self.ysmay, "whisper Hobb=Secret by the well.")
+        self.hobb_pose = self.pose_of(self.hobb, "mutters over the ledger.")
+        self.ysmay_pose = self.pose_of(self.ysmay, "shuts the shutters.")
+        self.whisper = self.pose_of(self.ysmay, "Secret by the well.")
+
+        self.gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        self.old_player = self.account_of(self.hobb)
+        entry = self.hobb.sheet_data.roster_entry
+        tenure = entry.current_tenure
+        tenure.end_date = timezone.now()
+        tenure.save()
+        self.new_player = AccountFactory()
+        RosterTenureFactory(
+            roster_entry=entry,
+            player_data=PlayerData.objects.get_or_create(account=self.new_player)[0],
+            end_date=None,
+        )
+
+    def test_the_four_doors_agree_for_every_viewer(self) -> None:
+        room_bound = {"conversation": f"scene:{self.scene.pk}"}
+        whisper_bound = {"kind": "whisper"}
+        # (viewer, reads Hobb's room pose, reads Ysmay's room pose, reads the whisper)
+        table = (
+            ("the new player of Hobb", self.new_player, False, False, False),
+            ("the former player of Hobb", self.old_player, True, True, True),
+            ("the scene's GM", self.gm, True, True, True),
+            ("a participant (Wat)", self.account_of(self.wat), True, True, False),
+            ("the author (Ysmay)", self.account_of(self.ysmay), True, True, True),
+        )
+        for name, account, hobb_pose, ysmay_pose, whisper in table:
+            for label, pose, term, bound, reads in (
+                ("Hobb's pose", self.hobb_pose, "ledger", room_bound, hobb_pose),
+                ("Ysmay's pose", self.ysmay_pose, "shutters", room_bound, ysmay_pose),
+                ("the whisper", self.whisper, "well", whisper_bound, whisper),
+            ):
+                with self.subTest(viewer=name, interaction=label):
+                    seen = self.seen_by(account, pose, term=term, bound=bound)
+                    doors = {
+                        "list": bool(seen.listed),
+                        "detail": seen.detail_status == 200,
+                        "search": bool(seen.searched),
+                        "context": seen.context_status == 200,
+                    }
+                    self.assertEqual(doors, dict.fromkeys(doors, reads), seen.bodies)
+        # Public-scene poses by the same character stay readable by everyone (see
+        # the stranger reads in the other journeys); the whisper never named the new player.
+        self.assertEqual(self.badges(self.new_player)[0]["unread_direct"], 0)

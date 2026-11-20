@@ -115,15 +115,15 @@ Interaction.objects.readable_by(account, persona_ids=persona_ids, since=since)
 
 `Interaction.visibility` (`world.scenes.constants.InteractionVisibility`) is a per-row
 privacy override that can only escalate, never reduce. Three tiers, three enforcement
-surfaces per tier: `InteractionQuerySet.visible_to` (queryset reads — the scene log),
-`CanViewInteraction` (`world/scenes/interaction_permissions.py` — REST object-detail
-access), and `can_view_interaction` (`world/scenes/interaction_services.py` — the IC
+surfaces per tier: `InteractionQuerySet.visible_to` and `readable_by` (queryset reads — the scene
+log, search, context and the REST detail, which has no object permission of its own since #3751),
+and `can_view_interaction` (`world/scenes/interaction_services.py` — the IC
 scene-reaction witness gate, "did this persona actually perceive the event").
 
 | Tier | Admits | Enforcement notes |
 |------|--------|--------------------|
 | `DEFAULT` | Room-heard: everyone who could plausibly witness the pose (subject to the usual scene/room read rules) | Baseline — no receiver-row restriction. |
-| `PERCEIVED_ONLY` (#2710, ADR-0170) | Writer + `InteractionReceiver` rows (the personas who actually perceived the event), plus staff, plus — **on the scene-log read only** — a non-staff GM of that scene | `visible_to`'s `gm_visible` branch is the *only* surface that admits a non-staff GM. `CanViewInteraction` and `can_view_interaction` both admit **staff only** for this tier — a non-staff GM is denied on REST object access and on the reaction-witness gate, same as `VERY_PRIVATE`. |
+| `PERCEIVED_ONLY` (#2710, ADR-0170) | Writer + `InteractionReceiver` rows (the personas who actually perceived the event), plus staff, plus — **on the scene-log read only** — a non-staff GM of that scene | `visible_to`'s `gm_visible` branch admits a non-staff GM, and the REST list, search, context and detail all share it. `can_view_interaction` (the reaction-witness gate) admits **staff only** for this tier, so a non-staff GM is still refused there, same as `VERY_PRIVATE`. |
 | `VERY_PRIVATE` | Writer + `InteractionReceiver` rows only | No exception on any of the three surfaces — not even staff. The strictest tier; deliberately not interchangeable with `PERCEIVED_ONLY`. |
 
 `PERCEIVED_ONLY` was introduced for concealed spellcasting (`world.magic.services
@@ -843,7 +843,13 @@ search, context, conversation and thread summaries, mark-read), a reply's parent
 scene highlight reel, the reply-target check (`thread_services`), the nomination check
 (`progression/services/nominations.py`) and the combat outcome detail. `tools/lint_interaction_visible_to.py`
 rejects a bare `.visible_to(` anywhere else, and the `read-gate-reviewer` agent covers the shapes a
-lint cannot see (a count, badge or chip built from its own query). Muted faces stay in: their rows come back with the text blanked
+lint cannot see (a count, badge or chip built from its own query). What decides a read is whether the viewer's account was there. A persona-presence grant (a
+character they now hold was in the scene) counts only for what happened inside the account's own
+`RosterTenure` on that character, so a roster character's next player reads none of the previous
+player's private-scene poses, while an account that was in the scene (a `SceneParticipation` row, a
+pinned writer or receiver) keeps its history. The REST detail has no object permission of its own
+(`CanViewInteraction` was removed), so it opens exactly what the list shows. Muted faces stay in:
+their rows come back with the text blanked
 (`get_content`), and the detail endpoint is the one deliberate reveal. The journeys in
 `src/integration_tests/test_play_reader_authorization_journeys.py` hold each rule (block, mute,
 VERY_PRIVATE, language, mask, inherited character) against list, detail, search, context,

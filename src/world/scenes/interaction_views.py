@@ -44,7 +44,6 @@ from world.scenes.interaction_filters import (
 )
 from world.scenes.interaction_link_services import auto_link_pose_to_actions
 from world.scenes.interaction_permissions import (
-    CanViewInteraction,
     IsInteractionWriter,
     get_account_personas,
     get_account_roster_entries,
@@ -629,8 +628,9 @@ class InteractionViewSet(
             return [AllowAny()]
         if self.action == "destroy":
             return [IsAuthenticated(), IsInteractionWriter()]
-        if self.action == "retrieve":
-            return [IsAuthenticated(), CanViewInteraction()]
+        # No object permission on retrieve: ``get_queryset`` (``readable_by``) is the one
+        # read gate, so the detail opens exactly the rows the list, search and context
+        # show this viewer and never more (#3751).
         return [permission() for permission in self.permission_classes]
 
     @property

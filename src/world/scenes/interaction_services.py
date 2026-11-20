@@ -1477,11 +1477,11 @@ def can_view_interaction(
     """Check if a persona can view an interaction.
 
     This gate governs an IC ACTION (a scene reaction — "did you actually witness
-    this event?"), which is why it exists as a third cascade alongside
-    ``InteractionQuerySet.visible_to`` (read-visibility for the scene log) and
-    ``CanViewInteraction`` (REST object permission) rather than being redundant
-    with either: a reactor whose account can technically read the log is still
-    blocked here if their PERSONA never perceived the event (#2710).
+    this event?"), which is why it exists as a second cascade alongside
+    ``InteractionQuerySet.readable_by`` (read-visibility for the scene log and the
+    REST detail) rather than being redundant with it: a reactor whose account can
+    technically read the log is still blocked here if their PERSONA never
+    perceived the event (#2710).
 
     Visibility cascade:
     1. very_private -> writer + InteractionReceiver check (not staff)
