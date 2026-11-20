@@ -104,10 +104,10 @@ class TestSeededCharacterCreation(TestCase):
         from world.character_creation.factories import make_unknown_upbringing
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
+        from world.character_creation.tests.finalization_fixtures import DEFAULT_STATS
         from world.character_sheets.models import CharacterSheet
         from world.magic.models import Resonance, Tradition
         from world.magic.services.cg_catalog import get_gift_options, get_technique_options
-        from world.seeds.character_creation import DEFAULT_STAT_NAMES
         from world.skills.models import Skill
         from world.tarot.models import TarotCard
         from world.traits.models import Trait, TraitType
@@ -166,7 +166,8 @@ class TestSeededCharacterCreation(TestCase):
         draft_data = {
             "first_name": "Seeded",
             "description": "A character finalized against seeded-only content.",
-            "stats": dict.fromkeys(DEFAULT_STAT_NAMES, 20),
+            # The whole creation budget placed, 350 (#5223).
+            "stats": dict(DEFAULT_STATS),
             "tarot_card_name": tarot.name,
             "tarot_reversed": False,
             "selected_gift_id": gift.id,

@@ -149,18 +149,35 @@ describe('SkillsSection', () => {
     draft_data: { skills: { '1': 20 } },
   };
 
-  it("shows the skill purse in the frame's ledger head", () => {
+  // #5223, owner ruling 2026-11-20: "'Skill points remaining:' just becomes the number
+  // with no header, 50/110". The figure is points spent over the total.
+  it("shows the points spent over the total, with no words, in the frame's ledger head", () => {
     renderSkillsSection(draft);
 
-    const ledger = screen.getByText(/skill points remaining/i).closest('.instr-ledger');
-    expect(ledger).toHaveClass('head');
-    expect(screen.getByText('40')).toBeInTheDocument();
+    const ledger = document.querySelector('.instr-ledger.head');
+    expect(ledger).toHaveTextContent('20/60');
+    expect(screen.queryByText(/skill points remaining/i)).not.toBeInTheDocument();
   });
 
-  it("states the ledger head's left text as a true fact about the budget", () => {
+  it("states the ledger head's left text as the server's specialization threshold", () => {
     renderSkillsSection(draft);
 
-    expect(screen.getByText('Skills rise in steps of ten, to 30')).toBeInTheDocument();
+    expect(screen.getByText('Specialization at 20 in parent skill.')).toBeInTheDocument();
+    expect(screen.queryByText(/steps of ten/i)).not.toBeInTheDocument();
+  });
+
+  it('reports the points spent and the total for the side panel', () => {
+    const onPointsChange = vi.fn();
+    render(
+      <QueryClientProvider client={createTestQueryClient()}>
+        <SkillsSection draft={draft} onPointsChange={onPointsChange} />
+      </QueryClientProvider>
+    );
+
+    expect(onPointsChange).toHaveBeenLastCalledWith(20, 60);
+
+    fireEvent.click(screen.getByRole('button', { name: /raise stealth/i }));
+    expect(onPointsChange).toHaveBeenLastCalledWith(30, 60);
   });
 
   it('gives the raise button a reason when the skill is at its cap', () => {
@@ -341,7 +358,7 @@ describe('SkillsSection', () => {
       renderSkillsSection(legacy);
 
       // The purse counts only the 20 spent on Blades, not the 20 in Occult.
-      expect(screen.getByText('40')).toBeInTheDocument();
+      expect(document.querySelector('.instr-ledger.head')).toHaveTextContent('20/60');
 
       fireEvent.click(screen.getByRole('button', { name: /raise stealth/i }));
       act(() => {

@@ -114,7 +114,7 @@ test.describe('one scale: the stored value everywhere', () => {
     const strength = page.locator('output[aria-labelledby="lbl-strength"]');
     await expect(strength).toBeVisible({ timeout: 15000 });
     await expect(strength).toHaveText('20');
-    await expect(page.getByText('Twelve statistics, 10 to 50 each')).toBeVisible();
+    await expect(page.getByText('Min 10, Max 50')).toBeVisible();
     await shoot(page, testInfo, 'cg-attributes-default.png');
 
     await page.getByRole('button', { name: 'Lower strength' }).click();
@@ -122,9 +122,10 @@ test.describe('one scale: the stored value everywhere', () => {
     await page.getByRole('button', { name: 'Raise agility' }).click();
     const agility = page.locator('output[aria-labelledby="lbl-agility"]');
     await expect(agility).toHaveText('30');
-    // Ten moved from strength to agility: the budget is spent, nothing over, nothing left.
+    // Ten moved from strength to agility: the 110 a new character has to place (350 less
+    // the default spread, #5223) are untouched, nothing over.
     await expect(page.getByText(/Points remaining:/)).toHaveText(
-      /Points remaining:\s*0\s*of\s*240/
+      /Points remaining:\s*110\s*of\s*350/
     );
     await shoot(page, testInfo, 'cg-attributes-moved.png');
 

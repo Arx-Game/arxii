@@ -36,19 +36,20 @@ from world.tarot.constants import ArcanaType
 from world.tarot.models import TarotCard
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
-# Shared stats dict used by all finalization tests (12 stats, 10-50, sum=240)
+# Shared stats dict used by all finalization tests (12 stats, 10-50, sum=350, the
+# creation budget, #5223: eleven at 30 and one at 20).
 DEFAULT_STATS = {
-    "strength": 20,
-    "agility": 20,
-    "stamina": 20,
-    "charm": 20,
-    "presence": 20,
-    "composure": 20,
-    "intellect": 20,
-    "wits": 20,
-    "stability": 20,
-    "luck": 20,
-    "perception": 20,
+    "strength": 30,
+    "agility": 30,
+    "stamina": 30,
+    "charm": 30,
+    "presence": 30,
+    "composure": 30,
+    "intellect": 30,
+    "wits": 30,
+    "stability": 30,
+    "luck": 30,
+    "perception": 30,
     "willpower": 20,
 }
 

@@ -165,7 +165,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
       : undefined;
   const record: { label: string; value?: string; stage: Stage }[] = [
     { label: 'Homeland', value: draft.selected_area?.name, stage: Stage.ORIGIN },
-    { label: 'Beginnings', value: draft.selected_beginnings?.name, stage: Stage.HERITAGE },
+    { label: 'Beginning', value: draft.selected_beginnings?.name, stage: Stage.HERITAGE },
     { label: 'Species', value: draft.selected_species?.name, stage: Stage.HERITAGE },
     { label: 'Gender', value: draft.selected_gender?.display_name, stage: Stage.HERITAGE },
     { label: 'Age', value: draft.age?.toString(), stage: Stage.HERITAGE },

@@ -6,6 +6,7 @@ from evennia.accounts.models import AccountDB
 from world.character_creation.factories import make_unknown_upbringing, single_resonance_weights
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_creation.services import finalize_character
+from world.character_creation.tests.finalization_fixtures import DEFAULT_STATS
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet, Gender
 from world.classes.factories import PathFactory
@@ -103,20 +104,8 @@ class CharacterMagicCheckTypeTests(TestCase):
         self.assertEqual(pre_existing.owner_sheet, self.sheet)
 
 
-_PROVISION_STATS = {
-    "strength": 20,
-    "agility": 20,
-    "stamina": 20,
-    "charm": 20,
-    "presence": 20,
-    "composure": 20,
-    "intellect": 20,
-    "wits": 20,
-    "stability": 20,
-    "luck": 20,
-    "perception": 20,
-    "willpower": 20,
-}
+# A finished draft places the whole creation budget, 350 (#5223).
+_PROVISION_STATS = dict(DEFAULT_STATS)
 
 
 class ProvisionUsesPerCharacterCheckTests(TestCase):

@@ -7,7 +7,7 @@
  * lists the spend; it characterises nothing (Decision 8).
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ChapterLeaf,
   InstrumentFrame,
@@ -38,13 +38,13 @@ function increaseTitleFor(atCap: boolean, out: boolean): string | undefined {
   return undefined;
 }
 
-/** Stat categories; the gloss is the category's plain reading. */
-// PLACEHOLDER: Apostate rewrite
-const STAT_CATEGORIES: { label: string; gloss: string; stats: (keyof Stats)[] }[] = [
-  { label: 'Physical', gloss: 'the body', stats: ['strength', 'agility', 'stamina'] },
-  { label: 'Social', gloss: 'the company', stats: ['charm', 'presence', 'composure'] },
-  { label: 'Mental', gloss: 'the mind', stats: ['intellect', 'wits', 'stability'] },
-  { label: 'Meta', gloss: 'the self', stats: ['luck', 'perception', 'willpower'] },
+/** Stat categories. They carried a gloss each ("the body", "the company"); the owner had
+ *  them removed as unnecessary (#5223, 2026-11-20). */
+const STAT_CATEGORIES: { label: string; stats: (keyof Stats)[] }[] = [
+  { label: 'Physical', stats: ['strength', 'agility', 'stamina'] },
+  { label: 'Social', stats: ['charm', 'presence', 'composure'] },
+  { label: 'Mental', stats: ['intellect', 'wits', 'stability'] },
+  { label: 'Meta', stats: ['luck', 'perception', 'willpower'] },
 ];
 
 export function AttributesStage({ draft }: AttributesStageProps) {
@@ -57,6 +57,14 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   const bonuses = draft.stat_bonuses ?? {};
   const [why, setWhy] = useState<string | null>(null);
   const [announce, setAnnounce] = useState('');
+  // The Skills section owns its own allocation; it reports its totals for the side panel's
+  // "Skills" row (#5223).
+  const [skillPoints, setSkillPoints] = useState<{ spent: number; total: number } | null>(null);
+  const reportSkillPoints = useCallback((spent: number, total: number) => {
+    setSkillPoints((prev) =>
+      prev && prev.spent === spent && prev.total === total ? prev : { spent, total }
+    );
+  }, []);
 
   const descriptions = useMemo(
     () => Object.fromEntries((statDefinitions ?? []).map((s) => [s.name, s.description])),
@@ -100,12 +108,15 @@ export function AttributesStage({ draft }: AttributesStageProps) {
       <RecordRail
         rows={[
           { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Beginnings', value: draft.selected_beginnings?.name },
+          { label: 'Beginning', value: draft.selected_beginnings?.name },
           { label: 'Species', value: draft.selected_species?.name },
           { label: 'Family', value: draft.family?.name },
           { label: 'Path', value: draft.selected_path?.name },
           { label: 'Tradition', value: draft.selected_tradition?.name },
           { label: 'Statistics', value: `${spent} of ${budget} spent` },
+          ...(skillPoints
+            ? [{ label: 'Skills', value: `${skillPoints.spent} of ${skillPoints.total} spent` }]
+            : []),
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />
@@ -141,7 +152,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
       <InstrumentFrame
         label="Statistics"
         ledger={{
-          left: `Twelve statistics, ${STAT_MIN} to ${STAT_MAX} each`,
+          left: `Min ${STAT_MIN}, Max ${STAT_MAX}`,
           right: (
             <>
               Points remaining: <b>{remaining}</b> of <b>{budget}</b>
@@ -152,7 +163,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
         }}
       >
         {STAT_CATEGORIES.map((cat) => (
-          <InstrumentGroup key={cat.label} title={cat.label} gloss={cat.gloss}>
+          <InstrumentGroup key={cat.label} title={cat.label}>
             {cat.stats.map((stat) => {
               const value = stats[stat];
               const atCap = value >= STAT_MAX;
@@ -169,9 +180,11 @@ export function AttributesStage({ draft }: AttributesStageProps) {
                   canDecrease={value > STAT_MIN}
                   canIncrease={!atCap && !out}
                   increaseTitle={increaseTitleFor(atCap, out)}
+                  // Pressing a name shows what it governs in the side panel, and hovering
+                  // shows the same text. No line opens under the row (#5223).
                   onWhy={() => setWhy(stat)}
                   whyOpen={why === stat}
-                  gloss={why === stat ? descriptions[stat] : undefined}
+                  whyTitle={descriptions[stat]}
                 />
               );
             })}
@@ -184,7 +197,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
           <h2 className="section-h" id="skills">
             Skills
           </h2>
-          <SkillsSection draft={draft} />
+          <SkillsSection draft={draft} onPointsChange={reportSkillPoints} />
         </>
       )}
     </ChapterLeaf>

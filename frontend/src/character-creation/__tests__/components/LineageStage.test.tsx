@@ -201,7 +201,7 @@ describe('LineageStage', () => {
       ]);
       expect(rows).toEqual([
         ['Origin', draft.selected_area!.name],
-        ['Beginnings', draft.selected_beginnings!.name],
+        ['Beginning', draft.selected_beginnings!.name],
         ['Species', draft.selected_species?.name ?? 'not yet chosen'],
         ['Gender', draft.selected_gender?.display_name ?? 'not yet chosen'],
         ['CG points', '20 of 100 spent'],

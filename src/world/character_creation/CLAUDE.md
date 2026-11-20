@@ -33,7 +33,11 @@ Character creation is a multi-stage process that guides players through creating
 6. **Gift** - Tradition, Gift + Technique catalog picks, gift resonance, and Anima Check
    stat/skill (renders the `GiftStage` funnel component; #2426 Task 10)
 7. **Attributes & Skills** - Primary stat allocation (cap-aware with distinction/species
-   bonuses) plus skill point allocation (moved in from Path, #2426 Task 9)
+   bonuses) plus skill point allocation (moved in from Path, #2426 Task 9). The statistics
+   budget is `STAT_CREATION_BUDGET`, 350, plus net bonuses (#5223, owner ruling 2026-11-20:
+   "let's make the budget 350, so 110 starts unspent"): the default spread of twelve at 20
+   uses 240, every point has to be placed, and a stat stays within 10 to 50 in steps of 10.
+   Until #5223 the budget was the default spread itself, with nothing to place
 8. **Appearance** - Height, build, form traits (hair/eye color, etc.); its offered
    distinctions in authored sections (`AppearanceSection`, #3709)
 9. **Identity** - Name (shown; asked on Origin), concept, quote, worship

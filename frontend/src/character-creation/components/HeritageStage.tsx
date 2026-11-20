@@ -214,7 +214,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
       <RecordRail
         rows={[
           { label: 'Origin', value: draft.selected_area.name },
-          { label: 'Beginnings', value: draft.selected_beginnings?.name },
+          { label: 'Beginning', value: draft.selected_beginnings?.name },
           { label: 'Species', value: draft.selected_species?.name },
           { label: 'Gender', value: draft.selected_gender?.display_name },
           { label: 'CG points', value: `${draft.cg_points_spent} of ${starting} spent` },

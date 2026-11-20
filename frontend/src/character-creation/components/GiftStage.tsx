@@ -350,7 +350,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       <RecordRail
         rows={[
           { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Beginnings', value: draft.selected_beginnings?.name },
+          { label: 'Beginning', value: draft.selected_beginnings?.name },
           { label: 'Species', value: draft.selected_species?.name },
           { label: 'Path', value: draft.selected_path?.name },
           { label: 'Tradition', value: traditionValue },
