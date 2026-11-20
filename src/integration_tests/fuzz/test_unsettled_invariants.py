@@ -309,6 +309,40 @@ class UnsettledAuraInvariants(HypothesisTestCase):
         past_the_line = self.read_abyssal_growth(*weights, abyssal_settled + 16)
         self.assertGreater(past_the_line.steps_past, 0)
 
+    @given(abyssal_settled=st.integers(0, 15))
+    def test_a_primal_character_reads_the_side_she_does_not_lean_to_at_the_leaned_range(
+        self, abyssal_settled
+    ) -> None:
+        # She leans Celestial (settled 5 above Abyssal), so Abyssal growth is read at
+        # Celestial's own range, here 2, not the general 5.
+        celestial = self.affinities[0]
+        celestial.unsettled_tolerance_percent = 2
+        celestial.save(update_fields=["unsettled_tolerance_percent"])
+        try:
+            self.assertEqual(get_drift_config().unsettled_tolerance_percent, 5)
+            weights = (abyssal_settled + 5, 95 - 2 * abyssal_settled, abyssal_settled)
+            at_the_line = self.read_abyssal_growth(*weights, abyssal_settled + 2)
+            self.assertEqual(at_the_line.main_affinity.name, "Primal")
+            self.assertEqual(at_the_line.steps_past, 0)
+            past_the_line = self.read_abyssal_growth(*weights, abyssal_settled + 3)
+            self.assertGreater(past_the_line.steps_past, 0)
+        finally:
+            celestial.unsettled_tolerance_percent = None
+            celestial.save(update_fields=["unsettled_tolerance_percent"])
+
+    @given(primal_settled=st.integers(0, 10))
+    def test_primal_growth_past_the_range_unsettles_a_celestial_character(
+        self, primal_settled
+    ) -> None:
+        # Celestial is her main affinity, so Primal is read at the general range of 5:
+        # six points past her settled Primal share is past it, five is not.
+        weights = (100 - primal_settled, primal_settled, 0)
+        for grown, unsettled in ((primal_settled + 5, False), (primal_settled + 6, True)):
+            sheet, _aura = self.character((weights, [1000 - grown * 10, 0, grown * 10, 0, 0, 0]))
+            reading = drift_for(sheet)
+            self.assertEqual(reading.main_affinity.name, "Celestial")
+            self.assertEqual(reading.steps_past > 0, unsettled)
+
     @given(side_settled=st.integers(0, 30))
     def test_a_primal_character_with_no_lean_reads_abyssal_at_the_primal_range(
         self, side_settled
