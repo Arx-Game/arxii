@@ -2,9 +2,22 @@
 
 from __future__ import annotations
 
+from unittest import mock
+
 from django.test import TestCase
 
-from world.beta_reset.progress import plan_progress_reset, reset_character_progress
+from evennia_extensions.factories import AccountFactory
+from world.beta_reset.exceptions import (
+    BetaResetDisabledError,
+    IncompleteLedgerError,
+    ReleaseLatchedError,
+)
+from world.beta_reset.models import ReleaseLatch
+from world.beta_reset.progress import (
+    ledger_problems,
+    plan_progress_reset,
+    reset_character_progress,
+)
 from world.beta_reset.services import (
     CG_AUTHORING_ACQUISITION_ORIGINS,
     CG_AUTHORING_DISTINCTION_ORIGINS,
@@ -29,6 +42,7 @@ from world.magic.models import CharacterGift, CharacterTechnique
 from world.progression.models import ClassLevelAdvancement, LevelStatPointSpend
 from world.traits.factories import CharacterTraitValueFactory, SkillTraitFactory, StatTraitFactory
 from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
+from world.vitals.factories import CharacterVitalsFactory
 
 
 def _change(sheet, trait, old, new, source):
@@ -184,3 +198,171 @@ class ResetCharacterProgressTests(TestCase):
 
         self.assertFalse(plan.changes_anything)
         self.assertEqual(self._value(self.stat), 3)
+
+
+class ResetGuardTests(TestCase):
+    """No direct call runs once the constant is off or the latch is written."""
+
+    def test_the_disabled_constant_refuses_and_nothing_changes(self) -> None:
+        sheet = CharacterSheetFactory()
+        technique = CharacterTechniqueFactory(
+            character=sheet, technique=TechniqueFactory(), origin=AcquisitionOrigin.TRAINED
+        )
+
+        with (
+            mock.patch("world.beta_reset.services.BETA_RESET_ENABLED", False),
+            self.assertRaises(BetaResetDisabledError),
+        ):
+            reset_character_progress(sheet)
+
+        self.assertTrue(CharacterTechnique.objects.filter(pk=technique.pk).exists())
+
+    def test_the_release_latch_refuses_and_nothing_changes(self) -> None:
+        sheet = CharacterSheetFactory()
+        technique = CharacterTechniqueFactory(
+            character=sheet, technique=TechniqueFactory(), origin=AcquisitionOrigin.TRAINED
+        )
+        ReleaseLatch.objects.create(released_by=AccountFactory())
+
+        with self.assertRaises(ReleaseLatchedError):
+            reset_character_progress(sheet)
+
+        self.assertTrue(CharacterTechnique.objects.filter(pk=technique.pk).exists())
+
+
+class IncompleteLedgerTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.stat = StatTraitFactory(name="ledger_strength")
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+
+    def _stat_with_chain(self, rows, value) -> None:
+        CharacterTraitValueFactory(character=self.sheet, trait=self.stat, value=value)
+        for old, new, source in rows:
+            _change(self.sheet, self.stat, old, new, source)
+
+    def test_a_whole_ledger_has_no_problems(self) -> None:
+        self._stat_with_chain(
+            [
+                (0, 3, TraitChangeSource.CHARACTER_CREATION),
+                (3, 5, TraitChangeSource.DEVELOPMENT_LEVEL_UP),
+            ],
+            5,
+        )
+
+        self.assertEqual(ledger_problems(self.sheet), ())
+
+    def test_a_broken_chain_is_reported(self) -> None:
+        self._stat_with_chain(
+            [
+                (0, 3, TraitChangeSource.CHARACTER_CREATION),
+                (4, 5, TraitChangeSource.DEVELOPMENT_LEVEL_UP),
+            ],
+            5,
+        )
+
+        (problem,) = ledger_problems(self.sheet)
+        self.assertIn("ledger_strength: the ledger breaks", problem)
+
+    def test_a_ledger_that_ends_short_of_the_value_is_reported(self) -> None:
+        self._stat_with_chain(
+            [
+                (0, 3, TraitChangeSource.CHARACTER_CREATION),
+                (3, 4, TraitChangeSource.DEVELOPMENT_LEVEL_UP),
+            ],
+            6,
+        )
+
+        (problem,) = ledger_problems(self.sheet)
+        self.assertIn("ends at 4 but the value is 6", problem)
+
+    def test_a_ledger_row_whose_value_row_is_gone_is_reported(self) -> None:
+        _change(self.sheet, self.stat, 0, 4, TraitChangeSource.DEVELOPMENT_LEVEL_UP)
+
+        (problem,) = ledger_problems(self.sheet)
+        self.assertIn("trait value row is gone", problem)
+
+    def test_a_level_above_its_receipts_is_reported(self) -> None:
+        klass = CharacterClassFactory()
+        CharacterClassLevelFactory(
+            character=self.sheet, character_class=klass, level=5, is_primary=True
+        )
+        ClassLevelAdvancement.objects.create(
+            character_sheet=self.sheet, character_class=klass, level_before=1, level_after=2
+        )
+
+        (problem,) = ledger_problems(self.sheet)
+        self.assertIn("a rise with no advancement receipt", problem)
+
+    def test_execute_refuses_by_default_names_the_trait_and_changes_nothing(self) -> None:
+        self._stat_with_chain([(4, 5, TraitChangeSource.DEVELOPMENT_LEVEL_UP)], 9)
+
+        with self.assertRaises(IncompleteLedgerError) as raised:
+            reset_character_progress(self.sheet)
+
+        self.assertIn("ledger_strength", str(raised.exception))
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=self.sheet, trait=self.stat).value, 9
+        )
+
+    def test_the_flag_proceeds_past_an_incomplete_ledger(self) -> None:
+        self._stat_with_chain([(4, 5, TraitChangeSource.DEVELOPMENT_LEVEL_UP)], 9)
+
+        reset_character_progress(self.sheet, allow_incomplete_ledger=True)
+
+        self.assertEqual(
+            CharacterTraitValue.objects.get(character=self.sheet, trait=self.stat).value, 8
+        )
+
+
+class ResetKeepsTheProcessHonestTests(TestCase):
+    """Caches and side effects a reset must get right in the same process."""
+
+    def test_techniques_handler_and_max_health_are_right_straight_after(self) -> None:
+        sheet = CharacterSheetFactory()
+        vitals = CharacterVitalsFactory(
+            character_sheet=sheet, base_max_health=50, max_health=999, health=10
+        )
+        kept = CharacterTechniqueFactory(
+            character=sheet,
+            technique=TechniqueFactory(),
+            origin=AcquisitionOrigin.CHARACTER_CREATION,
+        )
+        gone = CharacterTechniqueFactory(
+            character=sheet, technique=TechniqueFactory(), origin=AcquisitionOrigin.TRAINED
+        )
+        self.assertEqual(
+            {t.pk for t in sheet.character.techniques.all()},
+            {kept.technique_id, gone.technique_id},
+        )
+
+        reset_character_progress(sheet)
+
+        self.assertEqual([t.pk for t in sheet.character.techniques.all()], [kept.technique_id])
+        vitals.refresh_from_db()
+        self.assertEqual(vitals.max_health, 50)
+
+    def test_lowering_the_level_runs_no_story_reactivity(self) -> None:
+        sheet = CharacterSheetFactory()
+        klass = CharacterClassFactory()
+        row = CharacterClassLevelFactory(
+            character=sheet, character_class=klass, level=3, is_primary=True
+        )
+        for before in (1, 2):
+            ClassLevelAdvancement.objects.create(
+                character_sheet=sheet,
+                character_class=klass,
+                level_before=before,
+                level_after=before + 1,
+            )
+
+        with mock.patch(
+            "world.stories.services.reactivity.on_character_state_changed"
+        ) as reactivity:
+            reset_character_progress(sheet)
+
+        reactivity.assert_not_called()
+        row.refresh_from_db()
+        self.assertEqual(row.level, 1)
