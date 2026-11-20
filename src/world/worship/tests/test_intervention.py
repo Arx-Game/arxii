@@ -184,7 +184,7 @@ class WhatEachResultDoesTests(InterventionTestBase):
         self.assertEqual(first.cost.favor_spent, 10)
         self.assertEqual(second.performance.miracle, self.rescue)
 
-    def test_an_unaffordable_miracle_falls_back_to_a_lesser_answer_costed_as_one(self) -> None:
+    def test_an_unaffordable_miracle_falls_back_to_a_lesser_answer_costed_by_the_roll(self) -> None:
         self.being.resonance_pool = 10
         self.being.save(update_fields=["resonance_pool"])
 
@@ -192,7 +192,27 @@ class WhatEachResultDoesTests(InterventionTestBase):
 
         self.assertIsNone(result.performance)
         self.assertEqual(result.drawn.label, "A breath of respite")
-        self.assertEqual((result.cost.favor_spent, result.cost.favor_owed), (0, 8))
+        # No favor is spent (spend is for a miracle); the debt and wait are the rolled
+        # Success tier's rows: the 10 owed softened by 50 percent.
+        self.assertEqual((result.cost.favor_spent, result.cost.favor_owed), (0, 5))
+        self.assertEqual(result.cost.wait_hours, soften(72, 50))
+
+
+class NoRollAwardFallbackTests(InterventionTestBase):
+    def test_the_partial_success_tier_is_found_by_name_beside_another_level_zero_tier(self) -> None:
+        from world.worship.invocation_services import outcome_award, partial_success_outcome
+
+        # A game may author its own tier at level 0; the lookup must not take it for Partial.
+        CheckOutcomeFactory(name="AAA Detonation", success_level=0)
+        FavorOutcomeAwardFactory(
+            config=self.config,
+            kind=FavorAwardKind.OFFICIANT,
+            outcome_tier=self.outcomes["Partial Success"],
+            amount=6,
+        )
+
+        self.assertEqual(partial_success_outcome(), self.outcomes["Partial Success"])
+        self.assertEqual(outcome_award(FavorAwardKind.OFFICIANT, partial_success_outcome()), 6)
 
 
 class WhenTheBeingWillNotRollTests(InterventionTestBase):

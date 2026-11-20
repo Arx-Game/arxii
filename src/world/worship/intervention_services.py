@@ -302,7 +302,8 @@ def _miracle_for(candidates: list[Miracle], outcome: CheckOutcome) -> Miracle | 
 
 
 def _lesser_tier(outcome: CheckOutcome) -> CheckOutcome:
-    """The Partial Success tier a lesser answer in place of a miracle is drawn and costed at."""
+    """The Partial Success tier a lesser answer in place of a miracle is drawn from. The cost
+    stays the rolled tier's (debt and wait rows), and nothing is spent."""
     return partial_success_outcome() or outcome
 
 
@@ -437,10 +438,9 @@ def fire_divine_intervention(  # noqa: PLR0913 - one roll, every branch of its r
             )
             spends = True
         else:
-            cost_tier = _lesser_tier(outcome)
             drawn, effects = _draw(
                 being=being,
-                outcome=cost_tier,
+                outcome=_lesser_tier(outcome),
                 check_result=check_result,
                 praying=praying,
                 lands_on=target,

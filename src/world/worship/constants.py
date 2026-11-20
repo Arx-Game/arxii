@@ -181,6 +181,10 @@ class PledgeCreditSource(models.TextChoices):
     OTHER = "other", "Other"
 
 
+#: The name of the Partial Success tier, which a read with no roll falls back to. A name, not
+#: a level: more than one outcome may sit at level 0 (a game may author its own).
+PARTIAL_SUCCESS_NAME = "Partial Success"
+
 #: Resonance grant sources with no character action behind them. Favor with a being
 #: comes only from a character's actions (owner ruling 2026-10-16), so a grant from
 #: one of these earns no pledge deed favor: the daily residence and outfit trickles,

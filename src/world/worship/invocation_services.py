@@ -228,11 +228,12 @@ def outcome_award(kind: str, outcome: CheckOutcome | None) -> int | None:
 
 
 def partial_success_outcome() -> CheckOutcome | None:
-    """The Partial Success tier, which an award read with no roll falls back to."""
+    """The Partial Success tier, which an award read with no roll falls back to; found by its
+    name, since other outcomes may share its level."""
     from world.traits.models import CheckOutcome  # noqa: PLC0415
-    from world.worship.constants import ANSWER_FOLLOW_UP_MIN_SUCCESS_LEVEL  # noqa: PLC0415
+    from world.worship.constants import PARTIAL_SUCCESS_NAME  # noqa: PLC0415
 
-    return CheckOutcome.objects.filter(success_level=ANSWER_FOLLOW_UP_MIN_SUCCESS_LEVEL).first()
+    return CheckOutcome.objects.filter(name=PARTIAL_SUCCESS_NAME).first()
 
 
 def invocations_used(

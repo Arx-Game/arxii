@@ -1018,8 +1018,8 @@ Majora crossings.
   lesser answer (drawn by weight with the resolution wheel, no second roll), Success the
   lowest-priority affordable miracle whose `Miracle.min_outcome_tier` is Success, Critical
   Success the lowest-priority affordable miracle of minimum tier Critical Success, then the
-  Success one, then a lesser answer (a lesser answer in place of a miracle is drawn and costed
-  as Partial Success). Cost by `FavorOutcomeAward` rows: INTERVENTION_SPEND (rescue and bigger
+  Success one, then a lesser answer (drawn from the Partial Success rows, but costed by the
+  rolled tier's debt and wait rows, with nothing spent). Cost by `FavorOutcomeAward` rows: INTERVENTION_SPEND (rescue and bigger
   miracle only, through `bump_devotion` as a negative, uncapped, so favor may go below 0),
   INTERVENTION_DEBT (added to `owed_favor`) and INTERVENTION_WAIT_HOURS (the cooldown
   condition's length; `cooldown_hours` when no row); owed favor and the wait are cut by
