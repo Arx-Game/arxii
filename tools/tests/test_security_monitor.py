@@ -69,7 +69,11 @@ class FakeGh(sm.GhCli):
         if "dependabot/alerts?state=open" in path:
             return "".join(json.dumps(a) + "\n" for a in self.open_alerts)
         if "dependabot/alerts/" in path:
-            return json.dumps(self.by_number[int(path.rsplit("/", 1)[1])]) + "\n"
+            number = int(path.rsplit("/", 1)[1])
+            if number not in self.by_number:
+                msg = "gh api failed: HTTP 404"
+                raise sm.MonitorError(msg)
+            return json.dumps(self.by_number[number]) + "\n"
         return "".join(json.dumps(i) + "\n" for i in self.issues)
 
     def _write(self, args: list[str]) -> str:
@@ -280,10 +284,11 @@ def test_an_agent_with_no_patch_acks_containment_and_the_timer_keeps_running(env
     env.run(at=NOW + timedelta(hours=20))
 
     state = sm.load_state(env.state_dir)
-    assert state.tracks[7].outcome == "containment"
     assert state.tracks[7].escalation_stage == 2
     assert env.gh.issues[0]["state"] == "open"
-    assert "escalation" in [e["kind"] for e in env.notices()]
+    kinds = [(e["kind"], e.get("detail")) for e in env.notices()]
+    assert ("agent_outcome", "containment") in kinds
+    assert ("escalation", "past-deadline") in kinds
 
 
 def test_the_item_closes_only_when_a_fresh_read_says_fixed(env):
@@ -460,3 +465,183 @@ def test_the_state_directory_must_be_outside_the_checkout(env, monkeypatch):
 def test_an_alert_response_without_a_creation_time_is_an_error_not_an_alert():
     with pytest.raises(sm.MonitorError):
         sm.parse_alert({"number": 1, "state": "open"})
+
+
+# --- safeguards: what shows the check is armed, and what shows it is not ------------
+
+
+def test_an_agent_that_ends_without_an_ack_is_reported_and_retried_daily_not_hourly(env):
+    env.gh.add_alert(7, 3)
+    env.run()
+    env.dispatches()
+
+    env.run(at=NOW + timedelta(hours=7))
+    assert "agent_unacknowledged" in [e["kind"] for e in env.notices()]
+    assert len(env.dispatches()) == 1
+
+    env.run(at=NOW + timedelta(hours=25))
+    time.sleep(0.5)
+    assert len(env.dispatches()) == 2
+
+
+def test_a_dispatch_command_that_dies_at_once_is_an_error_and_not_recorded_as_started(
+    env, monkeypatch
+):
+    env.gh.add_alert(7, 3)
+    monkeypatch.setenv(sm.DISPATCH_ENV, f"{sys.executable} -c 'import sys; sys.exit(3)'")
+
+    assert env.run() == sm.EXIT_ERRORS
+
+    track = sm.load_state(env.state_dir).tracks[7]
+    assert track.last_dispatch_at is None
+    assert track.pending_dispatch == "new"
+    assert "failure" in [e["kind"] for e in env.notices()]
+    assert sm.main(["status"], now=NOW) == sm.EXIT_STALE
+
+
+def test_a_partial_failure_sends_one_failure_notice_a_day_and_never_counts_as_success(env):
+    env.gh.add_alert(7, 3)
+    env.gh.add_alert(8, 3)
+    original = env.gh.create_issue
+
+    def flaky(number: int) -> int:
+        if number == 8:
+            msg = "boom"
+            raise sm.MonitorError(msg)
+        return original(number)
+
+    env.gh.create_issue = flaky
+
+    assert env.run() == sm.EXIT_ERRORS
+    assert env.run(at=NOW + timedelta(hours=4)) == sm.EXIT_ERRORS
+
+    assert [e["kind"] for e in env.notices()].count("failure") == 1
+    assert sm.load_state(env.state_dir).last_success_at is None
+    assert 7 in sm.load_state(env.state_dir).tracks
+
+
+def test_one_unreadable_alert_does_not_block_the_others(env):
+    env.gh.add_alert(7, 3)
+    env.gh.add_alert(8, 3)
+    env.run()
+    env.gh.open_alerts[:] = [a for a in env.gh.open_alerts if a["number"] != 8]
+    del env.gh.by_number[8]
+
+    assert env.run(at=NOW + timedelta(hours=4)) == sm.EXIT_ERRORS
+
+    assert 7 in sm.load_state(env.state_dir).tracks
+
+
+def test_a_corrupt_state_file_still_produces_a_failure_notice(env):
+    env.state_dir.mkdir(parents=True)
+    (env.state_dir / "state.json").write_text("{not json")
+
+    assert env.run() == sm.EXIT_FAILED
+
+    assert [e["kind"] for e in env.notices()] == ["failure"]
+    assert (env.state_dir / "state.json").read_text() == "{not json"
+
+
+def test_an_unexpected_crash_is_reported_not_just_a_traceback(env):
+    env.gh.add_alert(7, 3)
+    env.gh.create_issue = lambda _number: int("not a number")
+
+    assert env.run() == sm.EXIT_FAILED
+
+    assert [e["kind"] for e in env.notices()] == ["failure"]
+
+
+def test_status_fails_after_failed_attempts_even_inside_the_nine_hour_window(env):
+    env.gh.add_alert(7, 3)
+    env.run()
+    env.gh.fail_with = "HTTP 500"
+    env.run(at=NOW + timedelta(hours=4))
+    env.run(at=NOW + timedelta(hours=8))
+
+    assert sm.main(["status"], now=NOW + timedelta(hours=8)) == sm.EXIT_STALE
+
+
+def test_status_fails_for_an_overdue_alert_no_agent_ever_started_on(env, monkeypatch):
+    env.gh.add_alert(7, 60)
+    monkeypatch.setenv(sm.DISPATCH_ENV, f"{sys.executable} -c 'import sys; sys.exit(1)'")
+    env.run()
+
+    assert sm.main(["status"], now=NOW) == sm.EXIT_STALE
+
+
+def test_status_probe_proves_the_notification_channel(env, monkeypatch):
+    env.gh.add_alert(7, 3)
+    env.run()
+    assert sm.main(["status", "--probe-notify"], now=NOW + timedelta(hours=1)) == sm.EXIT_OK
+    assert env.notices()[-1]["kind"] == "probe"
+
+    monkeypatch.setenv(sm.NOTIFY_ENV, f"{sys.executable} -c 'import sys; sys.exit(1)'")
+    assert sm.main(["status", "--probe-notify"], now=NOW + timedelta(hours=1)) == sm.EXIT_STALE
+
+
+def test_a_state_directory_lost_while_tracking_items_exist_is_announced(env):
+    env.gh.add_alert(7, 3)
+    env.run()
+    (env.state_dir / "state.json").unlink()
+
+    env.run(at=NOW + timedelta(hours=4))
+
+    assert "state_rebuilt" in [e["kind"] for e in env.notices()]
+
+
+# --- trust boundary ------------------------------------------------------------------
+
+
+def test_the_agent_cannot_record_an_exception(env, monkeypatch):
+    env.gh.add_alert(7, 30)
+    env.run()
+    monkeypatch.setenv("ARX_SECURITY_ALERT", "7")
+
+    assert sm.main(["exception", "7"], now=NOW) == sm.EXIT_FAILED
+    assert sm.load_state(env.state_dir).tracks[7].exception_at is None
+
+
+def test_a_garbled_lock_is_held_until_it_is_older_than_the_lease(env):
+    env.state_dir.mkdir(parents=True)
+    lock = env.state_dir / "monitor.lock"
+    lock.write_text("")
+    assert not sm.RunLock(env.state_dir, datetime.now(UTC)).acquire()
+    assert sm.RunLock(env.state_dir, datetime.now(UTC) + sm.LOCK_TTL * 2).acquire()
+
+
+def test_a_hostile_marker_cannot_crash_the_index_or_name_a_huge_alert(env):
+    env.gh.issues.append(
+        {
+            "number": 5,
+            "state": "open",
+            "body": f"<!-- security-alert-tracking:alert={'9' * 5000} -->",
+        }
+    )
+    env.gh.issues.append(
+        {"number": 6, "state": "open", "body": "<!-- security-alert-tracking:alert=٧ -->"}
+    )
+    env.gh.add_alert(7, 3)
+
+    assert env.run() == sm.EXIT_OK
+    assert env.gh.created == 1
+
+
+def test_a_tampered_dispatch_reason_in_state_is_dropped():
+    track = sm._track_from_json({"pending_dispatch": "; rm -rf"})
+    assert track.pending_dispatch is None
+
+
+def test_only_whitelisted_fields_are_requested_from_the_alert_api(monkeypatch):
+    seen: list[list[str]] = []
+
+    class Recorder(sm.GhCli):
+        def _run(self, args) -> str:
+            seen.append(list(args))
+            return json.dumps({"number": 1, "state": "open", "created_at": _stamp(1)}) + "\n"
+
+    Recorder().list_open_alerts()
+    Recorder().get_alert(1)
+
+    for args in seen:
+        assert args[args.index("--jq") + 1].endswith(sm.ALERT_JQ)
+    assert sm.ALERT_JQ == "{number, state, created_at, updated_at}"

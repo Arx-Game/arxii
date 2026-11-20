@@ -29,6 +29,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 import uuid
 
 from sentry_constants import GH_REPO
@@ -36,7 +37,7 @@ from sentry_constants import GH_REPO
 TRACKING_LABEL = "security-alert"
 TRACKING_TITLE = "Security alert follow-up (alert {number})"
 MARKER_TEMPLATE = "<!-- security-alert-tracking:alert={number} -->"
-MARKER_RE = re.compile(r"<!-- security-alert-tracking:alert=(\d+) -->")
+MARKER_RE = re.compile(r"<!-- security-alert-tracking:alert=(\d{1,9}) -->", re.ASCII)
 ALERT_URL = f"https://github.com/{GH_REPO}/security/dependabot/{{number}}"
 
 CHECK_INTERVAL = timedelta(hours=4)
@@ -49,10 +50,13 @@ RETRY_INTERVAL = timedelta(hours=24)
 EXCEPTION_REMINDER = timedelta(days=7)
 FAILURE_NOTICE_INTERVAL = timedelta(hours=24)
 WORKER_LEASE = timedelta(hours=6)
-LOCK_TTL = timedelta(minutes=30)
+LOCK_TTL = timedelta(hours=2)
+LOCK_WAIT_SECONDS = 120
+DISPATCH_GRACE_SECONDS = 3
 DEFAULT_MAX_DISPATCH = 3
 SUBPROCESS_TIMEOUT = 120
 
+DISPATCH_REASONS = frozenset({None, "new", "reopened", "changed", "escalation", "retry"})
 STATE_ENV = "ARX_SECURITY_MONITOR_DIR"
 NOTIFY_ENV = "ARX_SECURITY_NOTIFY_CMD"
 DISPATCH_ENV = "ARX_SECURITY_DISPATCH_CMD"
@@ -82,6 +86,10 @@ class Kind(StrEnum):
     EXCEPTION_REMINDER = "exception_reminder"
     MISSED_RUNS = "missed_runs"
     FAILURE = "failure"
+    AGENT_UNACKNOWLEDGED = "agent_unacknowledged"
+    AGENT_OUTCOME = "agent_outcome"
+    STATE_REBUILT = "state_rebuilt"
+    PROBE = "probe"
 
 
 class Outcome(StrEnum):
@@ -140,6 +148,8 @@ class Track:
     lease_expires_at: datetime | None = None
     pending_dispatch: str | None = None
     outcome: str | None = None
+    outcome_reported_at: datetime | None = None
+    detected_at: datetime | None = None
     exception_at: datetime | None = None
     exception_by: str | None = None
     issue: int | None = None
@@ -230,6 +240,21 @@ def _lease_live(track: Track, now: datetime) -> bool:
     return track.lease_expires_at is not None and track.lease_expires_at > now
 
 
+def _watch_worker(track: Track, now: datetime, events: list[Event]) -> None:
+    """Say so when an agent run ends without an ack, or ends blocked or containing."""
+    lapsed = track.lease_expires_at is not None and track.lease_expires_at <= now
+    if lapsed and track.outcome is None:
+        # Free the lease and tell the maintainer. The daily retry, not an immediate
+        # redispatch, follows: an agent that works but forgets to ack must not cost a run
+        # every 6 hours.
+        track.lease_expires_at = None
+        events.append(Event(Kind.AGENT_UNACKNOWLEDGED))
+    reportable = track.outcome in (Outcome.BLOCKED, Outcome.CONTAINMENT)
+    if reportable and track.outcome_reported_at is None:
+        track.outcome_reported_at = now
+        events.append(Event(Kind.AGENT_OUTCOME, detail=str(track.outcome)))
+
+
 def _reopen(track: Track) -> None:
     """A fixed alert is open again: the escalation clock restarts against its original age."""
     track.escalation_stage = 0
@@ -237,6 +262,7 @@ def _reopen(track: Track) -> None:
     track.last_dispatch_at = None
     track.lease_expires_at = None
     track.outcome = None
+    track.outcome_reported_at = None
     track.exception_at = None
     track.exception_by = None
     track.pending_dispatch = "reopened"
@@ -259,7 +285,9 @@ def reconcile_alert(
         _observe_existing(alert, track, events)
     track.last_state = alert.state
     track.last_updated_at = alert.updated_at
+    track.detected_at = alert.created_at
     if alert.unresolved and track.exception_at is None:
+        _watch_worker(track, now, events)
         _escalate(track, age, now, events)
         if _retry_due(track, now):
             track.pending_dispatch = track.pending_dispatch or "retry"
@@ -385,6 +413,9 @@ class GhCli:
             match = MARKER_RE.search(raw.get("body") or "")
             if not match:
                 continue
+            if not isinstance(raw.get("number"), int) or not isinstance(raw.get("state"), str):
+                msg = "tracking issue list returned an unexpected shape"
+                raise MonitorError(msg)
             candidate = TrackingIssue(raw["number"], raw["state"])
             alert = int(match.group(1))
             if alert not in found or _prefer(candidate, found[alert]):
@@ -409,9 +440,18 @@ class GhCli:
                 ".number",
             ]
         )
-        return int(out.strip())
+        try:
+            return int(out.strip())
+        except ValueError:
+            msg = "issue creation did not return an issue number"
+            raise MonitorError(msg) from None
 
     def set_issue_state(self, issue: int, state: str, comment: str) -> None:
+        # State first: if the comment then fails, the next run sees a matching state and
+        # does not repeat the change.
+        self._run(
+            ["api", "-X", "PATCH", f"repos/{self.repo}/issues/{issue}", "-f", f"state={state}"]
+        )
         self._run(
             [
                 "api",
@@ -421,9 +461,6 @@ class GhCli:
                 "-f",
                 f"body={comment}",
             ]
-        )
-        self._run(
-            ["api", "-X", "PATCH", f"repos/{self.repo}/issues/{issue}", "-f", f"state={state}"]
         )
 
 
@@ -440,7 +477,8 @@ def tracking_body(number: int) -> str:
         "A repository security alert needs a fix. Details are deliberately not published "
         "here because this repository is public.\n\n"
         f"Protected alert (maintainers only): {ALERT_URL.format(number=number)}\n\n"
-        "This item closes when GitHub reports the alert as fixed."
+        "This item closes when GitHub reports the alert as fixed, "
+        "or when a maintainer pauses tracking."
     )
 
 
@@ -464,6 +502,8 @@ def _track_from_json(data: dict) -> Track:
         if f.name.endswith("_at"):
             value = _parse_time(value)
         setattr(track, f.name, value)
+    if track.pending_dispatch not in DISPATCH_REASONS:
+        track.pending_dispatch = None
     return track
 
 
@@ -473,15 +513,15 @@ def load_state(state_dir: Path) -> State:
         return State()
     try:
         raw = json.loads(path.read_text())
-    except (OSError, json.JSONDecodeError):
+        return State(
+            last_attempt_at=_parse_time(raw.get("last_attempt_at")),
+            last_success_at=_parse_time(raw.get("last_success_at")),
+            last_failure_notice_at=_parse_time(raw.get("last_failure_notice_at")),
+            tracks={int(k): _track_from_json(v) for k, v in raw.get("alerts", {}).items()},
+        )
+    except (OSError, ValueError, AttributeError, TypeError):
         msg = f"state file {path.name} is unreadable; fix or move it, it is never overwritten"
         raise MonitorError(msg) from None
-    return State(
-        last_attempt_at=_parse_time(raw.get("last_attempt_at")),
-        last_success_at=_parse_time(raw.get("last_success_at")),
-        last_failure_notice_at=_parse_time(raw.get("last_failure_notice_at")),
-        tracks={int(k): _track_from_json(v) for k, v in raw.get("alerts", {}).items()},
-    )
 
 
 def save_state(state_dir: Path, state: State) -> None:
@@ -494,8 +534,12 @@ def save_state(state_dir: Path, state: State) -> None:
         "alerts": {str(n): _track_to_json(t) for n, t in sorted(state.tracks.items())},
     }
     tmp = state_dir / f"state.json.{uuid.uuid4().hex}.tmp"
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
-    tmp.replace(state_dir / "state.json")
+    try:
+        tmp.write_text(json.dumps(payload, indent=2, sort_keys=True))
+        tmp.replace(state_dir / "state.json")
+    except OSError as exc:
+        msg = f"state could not be written ({type(exc).__name__})"
+        raise MonitorError(msg) from None
 
 
 class RunLock:
@@ -511,7 +555,8 @@ class RunLock:
             return True
         if not self._expired():
             return False
-        # Move the stale lock aside: the rename succeeds for exactly one racing run.
+        # Move the stale lock aside, then create our own. Two runs finding the same stale
+        # lock at the same instant is possible but needs a crash two hours old.
         try:
             self.path.rename(self.path.with_name(f"monitor.lock.stale.{self.token}"))
         except FileNotFoundError:
@@ -520,21 +565,32 @@ class RunLock:
         return self._create()
 
     def _create(self) -> bool:
+        # Write the contents first, then link into place: the lock never exists empty,
+        # so a racing run cannot read it half-written and mistake it for expired.
+        scratch = self.path.with_name(f"monitor.lock.{self.token}.tmp")
+        expires = self.now + LOCK_TTL
+        scratch.write_text(json.dumps({"token": self.token, "expires_at": expires.isoformat()}))
         try:
-            fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            os.link(scratch, self.path)
         except FileExistsError:
             return False
-        expires = self.now + LOCK_TTL
-        with os.fdopen(fd, "w") as handle:
-            json.dump({"token": self.token, "expires_at": expires.isoformat()}, handle)
+        finally:
+            scratch.unlink(missing_ok=True)
         return True
 
     def _expired(self) -> bool:
         try:
             expires = _parse_time(json.loads(self.path.read_text()).get("expires_at"))
-        except (OSError, json.JSONDecodeError, ValueError):
-            return True
+        except (OSError, ValueError):
+            return self._older_than_ttl()
         return expires is None or expires <= self.now
+
+    def _older_than_ttl(self) -> bool:
+        try:
+            modified = datetime.fromtimestamp(self.path.stat().st_mtime, UTC)
+        except OSError:
+            return True
+        return self.now - modified > LOCK_TTL
 
     def release(self) -> None:
         try:
@@ -585,7 +641,7 @@ def dispatch(cmd: list[str], alert: int, reason: str) -> None:
         "ARX_SECURITY_BRIEF": str(BRIEF_PATH),
     }
     try:
-        subprocess.Popen(  # noqa: S603
+        process = subprocess.Popen(  # noqa: S603
             [*cmd, str(alert), reason],
             env=env,
             stdin=subprocess.DEVNULL,
@@ -596,6 +652,13 @@ def dispatch(cmd: list[str], alert: int, reason: str) -> None:
     except OSError as exc:
         msg = f"dispatch command could not start ({type(exc).__name__})"
         raise MonitorError(msg) from None
+    try:
+        code = process.wait(timeout=DISPATCH_GRACE_SECONDS)
+    except subprocess.TimeoutExpired:
+        return  # still running after the grace period: the agent started
+    if code != 0:
+        msg = f"dispatch command exited {code} straight away"
+        raise MonitorError(msg)
 
 
 # --- The check ----------------------------------------------------------------------
@@ -610,13 +673,22 @@ class Report:
     errors: list[str] = field(default_factory=list)
 
 
-def gather_alerts(gh: GhCli, state: State, index: dict[int, TrackingIssue]) -> list[Alert]:
-    """All open alerts plus a fresh read of every tracked alert that is not in that list."""
+def gather_alerts(
+    gh: GhCli, state: State, index: dict[int, TrackingIssue], errors: list[str]
+) -> list[Alert]:
+    """All open alerts plus a fresh read of every tracked alert that is not in that list.
+
+    The open list must succeed or the run stops. A failed read of one tracked alert is
+    recorded and skipped, so it cannot block the others.
+    """
     open_alerts = {a.number: a for a in gh.list_open_alerts()}
     to_read = {n for n, t in state.tracks.items() if t.last_state != "fixed"}
     to_read |= {n for n, issue in index.items() if issue.state == "open"}
     for number in sorted(to_read - open_alerts.keys()):
-        open_alerts[number] = gh.get_alert(number)
+        try:
+            open_alerts[number] = gh.get_alert(number)
+        except MonitorError as exc:
+            errors.append(f"alert {number}: {exc}")
     return [open_alerts[n] for n in sorted(open_alerts)]
 
 
@@ -634,7 +706,7 @@ def _sync_issue(gh: GhCli, alert: Alert, track: Track, index: dict[int, Tracking
     if wanted == "open":
         gh.set_issue_state(existing.number, "open", "The alert is open again.")
     elif track.exception_at is not None:
-        gh.set_issue_state(existing.number, "closed", "A maintainer recorded an exception.")
+        gh.set_issue_state(existing.number, "closed", "Tracking is paused by a maintainer.")
     else:
         gh.set_issue_state(existing.number, "closed", "GitHub reports the alert as fixed.")
 
@@ -644,8 +716,10 @@ def run_check(gh: GhCli, config: Config, now: datetime, *, dry_run: bool) -> Rep
     state = load_state(config.state_dir)
     state.last_attempt_at = now
     index = gh.list_tracking_issues()
-    alerts = gather_alerts(gh, state, index)
     report = Report(events=missed_run_events(state, now))
+    alerts = gather_alerts(gh, state, index, report.errors)
+    if state.last_success_at is None and index:
+        report.events.append(Event(Kind.STATE_REBUILT, detail="tracking-items-exist"))
     decided: dict[int, tuple[Alert, Track]] = {}
     for alert in alerts:
         track, events = reconcile_alert(alert, state.tracks.get(alert.number), now)
@@ -700,60 +774,78 @@ def _apply(
     index: dict[int, TrackingIssue],
     report: Report,
 ) -> None:
-    gh, config, now = run.gh, run.config, run.now
+    config, now = run.config, run.now
     committed: dict[int, Track] = {}
     for number, (alert, track) in sorted(decided.items()):
         try:
-            _sync_issue(gh, alert, track, index)
+            _sync_issue(run.gh, alert, track, index)
         except MonitorError as exc:
             report.errors.append(f"alert {number}: {exc}")
             report.events = [e for e in report.events if e.alert != number]
             continue
         committed[number] = track
     if report.events:
-        # Nothing is recorded as announced unless the maintainer was actually told.
+        # Nothing is recorded as announced unless the maintainer was actually told. A
+        # broken notification command therefore also holds back the dispatches below.
         notify(config.notify_cmd, report.events)
-    _dispatch_pending(config, committed, now, report)
     state.tracks.update(committed)
+    _dispatch_pending(run, state, committed, report)
     state.last_attempt_at = now
     if not report.errors:
         state.last_success_at = now
         state.last_failure_notice_at = None
     save_state(config.state_dir, state)
+    if report.errors:
+        count = len(report.errors)
+        notify_failure_if_due(config, state, now, f"{count} problem(s) in this check")
 
 
-def _dispatch_pending(
-    config: Config, committed: dict[int, Track], now: datetime, report: Report
-) -> None:
-    budget = config.max_dispatch
+def _dispatch_pending(run: Run, state: State, committed: dict[int, Track], report: Report) -> None:
+    budget = run.config.max_dispatch
     for number, track in sorted(committed.items()):
         if budget <= 0:
             break
-        if not track.pending_dispatch or _lease_live(track, now):
+        if not track.pending_dispatch or _lease_live(track, run.now):
             continue
+        reason = track.pending_dispatch
         try:
-            dispatch(config.dispatch_cmd, number, track.pending_dispatch)
+            dispatch(run.config.dispatch_cmd, number, reason)
         except MonitorError as exc:
             report.errors.append(f"alert {number}: {exc}")
             continue
-        report.lines.append(f"dispatched agent for alert {number} ({track.pending_dispatch})")
-        track.last_dispatch_at = now
-        track.lease_expires_at = now + WORKER_LEASE
+        report.lines.append(f"dispatched agent for alert {number} ({reason})")
+        track.last_dispatch_at = run.now
+        track.lease_expires_at = run.now + WORKER_LEASE
         track.pending_dispatch = None
+        track.outcome = None
+        track.outcome_reported_at = None
         budget -= 1
+        # Saved at once: a crash after a spawn must not make the next run spawn again.
+        save_state(run.config.state_dir, state)
 
 
-def record_failure(config: Config, now: datetime, message: str) -> bool:
-    """Record a failed run and tell the maintainer, at most once per notice interval."""
-    state = load_state(config.state_dir)
-    state.last_attempt_at = now
+def notify_failure_if_due(config: Config, state: State, now: datetime, message: str) -> bool:
+    """Tell the maintainer about a failure at most once per notice interval."""
     last = state.last_failure_notice_at
-    due = last is None or now - last >= FAILURE_NOTICE_INTERVAL
-    if due:
-        notify(config.notify_cmd, [Event(Kind.FAILURE, detail=message)])
-        state.last_failure_notice_at = now
+    if last is not None and now - last < FAILURE_NOTICE_INTERVAL:
+        return False
+    notify(config.notify_cmd, [Event(Kind.FAILURE, detail=message)])
+    state.last_failure_notice_at = now
     save_state(config.state_dir, state)
-    return due
+    return True
+
+
+def record_failure(config: Config, now: datetime, message: str) -> None:
+    """Record a failed run and tell the maintainer, even when the state file is unreadable."""
+    try:
+        state = load_state(config.state_dir)
+    except MonitorError:
+        # A corrupt state file must not make the monitor mute: notify without throttling.
+        notify(config.notify_cmd, [Event(Kind.FAILURE, detail=f"{message}; state unreadable")])
+        return
+    state.last_attempt_at = now
+    if not notify_failure_if_due(config, state, now, message):
+        save_state(config.state_dir, state)
 
 
 # --- Commands -----------------------------------------------------------------------
@@ -776,14 +868,20 @@ def resolve_config(args: argparse.Namespace, *, need_commands: bool) -> Config:
     return Config(state_dir, notify_cmd, dispatch_cmd, args.max_dispatch)
 
 
+def _failed(config: Config, now: datetime, message: str, *, dry_run: bool) -> int:
+    print(f"FAILED: {message}", file=sys.stderr)
+    if not dry_run:
+        record_failure(config, now, message)
+    return EXIT_FAILED
+
+
 def _check_locked(args: argparse.Namespace, now: datetime, gh: GhCli, config: Config) -> int:
     try:
         report = run_check(gh, config, now, dry_run=args.dry_run)
     except MonitorError as exc:
-        print(f"FAILED: {exc}", file=sys.stderr)
-        if not args.dry_run:
-            record_failure(config, now, str(exc))
-        return EXIT_FAILED
+        return _failed(config, now, str(exc), dry_run=args.dry_run)
+    except Exception as exc:  # noqa: BLE001 - an unexpected crash must still be reported
+        return _failed(config, now, f"unexpected {type(exc).__name__}", dry_run=args.dry_run)
     for event in report.events:
         print(f"event: {event.kind}" + (f" alert {event.alert}" if event.alert else ""))
     for line in report.lines:
@@ -801,7 +899,7 @@ def cmd_check(args: argparse.Namespace, now: datetime, gh: GhCli) -> int:
     config = resolve_config(args, need_commands=not args.dry_run)
     if args.dry_run:
         return _check_locked(args, now, gh, config)
-    config.state_dir.mkdir(parents=True, exist_ok=True)
+    config.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock = RunLock(config.state_dir, now)
     if not lock.acquire():
         print("Another check holds the lock; skipping this run.")
@@ -812,28 +910,54 @@ def cmd_check(args: argparse.Namespace, now: datetime, gh: GhCli) -> int:
         lock.release()
 
 
+def _status_problems(state: State, now: datetime) -> list[str]:
+    problems: list[str] = []
+    last, attempt = state.last_success_at, state.last_attempt_at
+    if last is None or now - last > MISSED_RUN_AFTER:
+        problems.append("no successful check within the expected window")
+    elif attempt is not None and attempt > last and now - last > CHECK_INTERVAL * 1.5:
+        problems.append("the latest attempts failed after the last success")
+    for number, track in sorted(state.tracks.items()):
+        unresolved = track.last_state != "fixed" and track.exception_at is None
+        overdue = track.detected_at is not None and now - track.detected_at >= DEADLINE
+        if unresolved and overdue and track.last_dispatch_at is None:
+            problems.append(f"alert {number} is past the deadline and no agent was ever started")
+    return problems
+
+
 def cmd_status(args: argparse.Namespace, now: datetime) -> int:
-    """Prove the scheduler is armed: fails when no good check happened recently."""
+    """Prove the scheduler is armed: fails when no good check or no agent start is seen."""
     config = resolve_config(args, need_commands=False)
     state = load_state(config.state_dir)
-    last = state.last_success_at
     unresolved = [n for n, t in state.tracks.items() if t.last_state != "fixed"]
     excepted = [n for n in unresolved if state.tracks[n].exception_at]
     print(f"last attempt: {_iso(state.last_attempt_at) or 'never'}")
-    print(f"last success: {_iso(last) or 'never'}")
+    print(f"last success: {_iso(state.last_success_at) or 'never'}")
     print(f"tracked unresolved: {len(unresolved)} (excepted: {len(excepted)})")
-    if last is None or now - last > MISSED_RUN_AFTER:
-        print("STALE: no successful check within the expected window", file=sys.stderr)
-        return EXIT_STALE
-    return EXIT_OK
+    problems = _status_problems(state, now)
+    if args.probe_notify:
+        if not config.notify_cmd:
+            problems.append(f"{NOTIFY_ENV} is not set")
+        else:
+            try:
+                notify(config.notify_cmd, [Event(Kind.PROBE, detail="notification probe")])
+            except MonitorError as exc:
+                problems.append(str(exc))
+    for problem in problems:
+        print(f"PROBLEM: {problem}", file=sys.stderr)
+    return EXIT_STALE if problems else EXIT_OK
 
 
 def _edit_track(args: argparse.Namespace, now: datetime, edit: Callable[[Track], None]) -> int:
     config = resolve_config(args, need_commands=False)
+    config.state_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
     lock = RunLock(config.state_dir, now)
-    if not lock.acquire():
-        print("A check is running; retry in a minute.", file=sys.stderr)
-        return EXIT_ERRORS
+    deadline = time.monotonic() + LOCK_WAIT_SECONDS
+    while not lock.acquire():
+        if time.monotonic() >= deadline:
+            print("A check is still running; run this again shortly.", file=sys.stderr)
+            return EXIT_ERRORS
+        time.sleep(2)
     try:
         state = load_state(config.state_dir)
         track = state.tracks.get(args.alert)
@@ -860,6 +984,12 @@ def cmd_ack(args: argparse.Namespace, now: datetime) -> int:
 def cmd_exception(args: argparse.Namespace, now: datetime) -> int:
     """A maintainer records (or clears) an exception. The alert's timer is kept."""
 
+    if os.environ.get("ARX_SECURITY_ALERT"):
+        print(
+            "An exception is a maintainer decision; the agent may not record one.", file=sys.stderr
+        )
+        return EXIT_FAILED
+
     def edit(track: Track) -> None:
         track.exception_at = None if args.clear else now
         track.exception_by = None if args.clear else args.by
@@ -878,7 +1008,8 @@ def build_parser() -> argparse.ArgumentParser:
     check = sub.add_parser("check", help="reconcile alerts once")
     check.add_argument("--dry-run", action="store_true", help="print proposed work, change nothing")
     check.add_argument("--max-dispatch", type=int, default=DEFAULT_MAX_DISPATCH)
-    sub.add_parser("status", help="exit non-zero when no recent successful check exists")
+    status = sub.add_parser("status", help="exit non-zero when the check looks unarmed")
+    status.add_argument("--probe-notify", action="store_true", help="also send a test event")
     ack = sub.add_parser("ack", help="the agent reports its run finished")
     ack.add_argument("alert", type=int)
     ack.add_argument("--outcome", required=True, choices=[o.value for o in Outcome])

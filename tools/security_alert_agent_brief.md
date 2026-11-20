@@ -15,8 +15,11 @@ the protected alert API inside the authenticated development container.
   package; that is expected, so write the PR text generically ("Update a dependency to
   address a security alert") and re-read the diff for anything else that discloses.
 - Never print or store credentials. Use the container's existing `gh` login only.
-- Never dismiss an alert, and never close its tracking issue. The monitor closes the
-  tracking issue only when a fresh read shows the alert as `fixed`.
+- Never dismiss an alert, never close its tracking issue and never run the monitor's
+  `exception` command: the monitor closes the tracking issue only when a fresh read shows
+  the alert as `fixed`, and an exception is a maintainer's decision. Of the monitor's
+  commands, `ack` is the only one you may run.
+- Touch nothing under `.github/`, and push only one branch named `security-alert-<number>`.
 
 ## What to do
 
@@ -25,9 +28,13 @@ the protected alert API inside the authenticated development container.
    (no patched version, a blocked version range, a failing update, an update limit).
    An open or merged PR is not proof the alert is fixed: check the alert's own state on
    the default branch.
-3. Test and propose a fix (a PR through the normal `issue-to-merged-pr` flow, no
-   enqueue without approval), or, when there is no usable patch, work out containment
-   options.
+3. Test and propose a fix, or, when there is no usable patch, work out containment
+   options. Open the PR with a plain `gh pr create`: title "Update a dependency to address
+   a security alert", a body that says only that, and `Closes #<tracking issue>` on its
+   own line (the tracking issue is the one whose body holds this alert's marker; if the
+   alert is still open after the merge the monitor reopens it). Do not file a new issue,
+   write a spec, post test evidence or paste failing test output anywhere public, and do
+   not enqueue the PR.
 4. Report in this private run: what you found, what you did, what is blocked and what a
    maintainer must decide. Say plainly when you could not fix it.
 5. Record that your bounded run finished, which frees the worker lease:

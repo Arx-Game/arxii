@@ -43,11 +43,22 @@ Routine version updates are a separate concern: grouped weekly in
      still open changes nothing.
 5. Applies the public writes (idempotent), then sends the private notification, then
    dispatches (at most `--max-dispatch`, default 3, per run; the rest wait for the next
-   run), then writes state. If the notification fails, state is not written, so the next
-   run repeats the same escalation and nothing is lost.
+   run) and writes state, saving again after each dispatch so a crash never causes a
+   second start. If the notification fails, state is not written, so the next run repeats
+   the same escalation and nothing is lost. The cost of that choice: a broken notification
+   command also holds back the dispatches until it is fixed, and the failure notice goes
+   through the same command, so the visible signs are the exit code and `status`.
+6. A failed read of one tracked alert is recorded as a problem for that alert and the
+   others still progress; a failed read of the open-alert list stops the run.
 
 A run with no new, changed, retryable or due work prints "No change", sends nothing and
 starts no agent.
+
+Events sent privately: `new_alert`, `reopened`, `changed`, `escalation`, `fixed`,
+`exception_reminder`, `agent_unacknowledged` (a lease ended without an `ack`),
+`agent_outcome` (an agent ended `blocked` or `containment`), `missed_runs`,
+`state_rebuilt` (no state file but tracking issues exist: exceptions and the downtime
+signal were lost), `failure` and `probe`.
 
 ## What is public and what is not
 
@@ -64,16 +75,18 @@ tells it to re-read the diff for anything else).
 
 A maintainer can record that an alert is accepted for now:
 `uv run python tools/security_monitor.py exception <alert> --by <name>`. This closes the
-tracking issue and stops dispatch and escalation, **keeps the record and the alert's
-original age**, and restates the unresolved alert in the private report every 7 days. If
-the alert later reads `fixed`, or reopens after being fixed, the exception is dropped.
-`exception <alert> --clear` reverses it and sends the agent back to the alert.
+tracking issue (comment: "Tracking is paused by a maintainer.") and stops dispatch and
+escalation, **keeps the record and the alert's original age**, and restates the unresolved
+alert in the private report every 7 days. If the alert later reads `fixed`, or reopens after
+being fixed, the exception is dropped. `exception <alert> --clear` reverses it and sends
+the agent back to the alert. The command refuses to run inside a dispatched agent
+(`ARX_SECURITY_ALERT` is set there): an exception is a maintainer's decision.
 
 ## Commands
 
 ```text
 uv run python tools/security_monitor.py check [--dry-run] [--max-dispatch N]
-uv run python tools/security_monitor.py status
+uv run python tools/security_monitor.py status [--probe-notify]
 uv run python tools/security_monitor.py ack <alert> --outcome fix-proposed|containment|blocked|no-action
 uv run python tools/security_monitor.py exception <alert> [--by NAME] [--clear]
 ```
@@ -96,17 +109,29 @@ notification, configuration), 3 `status` found no recent successful check.
 ## How you know it ran, and how you know it did not
 
 - Every successful run records `last_success_at`. `status` prints it and exits 3 when it is
-  older than 9 hours (two intervals plus one hour), or when no check ever succeeded. Run
-  it by hand, or from a second scheduler entry that reports a non-zero exit.
+  older than 9 hours (two intervals plus one hour), when no check ever succeeded, when
+  attempts have failed since the last success for more than 6 hours, or when an alert past
+  the deadline never had an agent started on it. `status --probe-notify` also sends a
+  `probe` event, which proves the notification channel works even in a quiet week. Run
+  it by hand, or from a second scheduler entry that reports a non-zero exit (it shares the
+  machine's failure domain, so it is a convenience, not a watchdog).
 - The first successful run after a gap longer than that sends a `missed_runs` event, so a
   machine that was off still reports on return, together with any escalation that came due
   meanwhile. An offline machine cannot warn about itself; nothing in this repository can
   notice it from outside, and there is no independent watchdog.
-- A failed run (API, container, authorization, notification) prints the cause, exits 2 and
-  sends a `failure` event, repeated at most once per 24 hours while it keeps failing. It
-  never closes an issue or reports all-clear.
-- A dispatched agent records its end with `ack`, which frees its lease and stores the
-  outcome. A lease that is never freed expires after 6 hours, and a retry follows.
+- A failed run (API, container, authorization, notification, an unreadable state file, an
+  unexpected crash) prints the cause, exits 2 and sends a `failure` event, repeated at
+  most once per 24 hours while it keeps failing. A run where some alert could not be
+  processed exits 1 and sends the same notice. Neither closes an issue or reports
+  all-clear. A configuration error that stops the run before the state directory is known
+  (for example the scheduler's environment lacks `ARX_SECURITY_MONITOR_DIR`) can only
+  print to the scheduler's own log and exit 2; `status` run from a login shell will not
+  show it either, so check the scheduler's last-run result after changing its environment.
+- A dispatched command that exits non-zero within 3 seconds is a failed dispatch: it is not
+  recorded as started and is retried on the next run. Past that, the monitor cannot see
+  inside the agent: it records its end only when the agent calls `ack`, which frees the
+  lease and stores the outcome. A lease that ends without an `ack` after 6 hours sends
+  `agent_unacknowledged`; the next retry follows within 24 hours of the dispatch.
 - There is no in-repository fast trigger: GitHub Actions has no workflow event for
   Dependabot alerts, so detection waits for the next scheduled check (up to 4 hours). Run
   `check` by hand for an immediate pass.
@@ -126,16 +151,23 @@ live on the maintainer's machine.
 4. Write the notification command (reads the JSON on stdin and delivers it to a channel only
    maintainers see) and set `ARX_SECURITY_NOTIFY_CMD`. Test it by piping a sample event in.
 5. Write the dispatch command (starts a local agent run with `ARX_SECURITY_BRIEF` as its
-   instructions and the alert number as its input, using the container's `gh` login) and
+   instructions and the alert number as its input, using the agent's own `gh` login, see below) and
    set `ARX_SECURITY_DISPATCH_CMD`. Confirm the agent can read an alert, open a PR and run
-   `ack`.
+   `ack`. Use absolute paths for every command in the two variables. Give the agent
+   its own token, not the development container's full one: no Workflows scope, no
+   merge or admin rights, only alert read plus PR and issue write; allow it only the
+   tools it needs; install dependencies with install scripts disabled and without that
+   token in the environment. The agent updates and runs upstream code and reads text
+   written by strangers, so treat everything it reads as untrusted and everything it
+   can reach as exposed.
 6. Run one real check by hand with `--max-dispatch 1`. Confirm the notification arrived,
    the tracking issue text is generic, and the agent's run started. Then confirm no alert
    detail appears in the public issue, any workflow log, artifact, job summary or the PR
    it opens (a dependency diff may name the package; review that deliberately).
 7. Register the operating-system scheduler to run `check` every 4 hours, with the option
    that runs a missed start as soon as the machine is back. After the first scheduled run,
-   run `status` and confirm exit 0.
+   run `status` and confirm exit 0. Optionally add a second daily entry running
+   `status --probe-notify` and have it report a non-zero exit.
 8. Confirm in the repository security settings that Dependabot alerts and Dependabot
    security updates are on (this change does not touch settings).
 
