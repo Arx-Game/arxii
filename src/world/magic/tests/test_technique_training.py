@@ -251,6 +251,156 @@ class ResolveTrainingCheckTest(TestCase):
 
         self.assertGreater(difficulties[1], difficulties[0])
 
+    def _academy_progress(self, instruction_bonus: int) -> TechniqueProgress:
+        """The meter an Academy TRAIN offer opens, as ``run_train_offer`` stores it."""
+        self.progress.source = "academy_training"
+        self.progress.instruction_bonus = instruction_bonus
+        self.progress.save()
+        return self.progress
+
+    def _roll_calls(self, progress: TechniqueProgress) -> dict:
+        """Run one session and return the kwargs and the result of the roll it made."""
+        from world.checks.services import perform_check_with_modifiers as real_roll
+
+        seen: dict = {}
+
+        def recording_roll(character, check_type, **kwargs):
+            result = real_roll(character, check_type, **kwargs)
+            seen.update(kwargs, total_points=result.total_points)
+            return result
+
+        with (
+            force_check_outcome(self.outcomes["Success"]),
+            patch(
+                "world.magic.services.technique_training.perform_check_with_modifiers",
+                side_effect=recording_roll,
+            ),
+        ):
+            resolve_training_check(self.sheet, progress, ap_to_invest=1)
+        return seen
+
+    def test_academy_instruction_adds_its_bonus_to_the_roll_once(self):
+        """A meter's bonus raises the roll's points by exactly that bonus, labelled."""
+        without = self._roll_calls(self._academy_progress(0))
+        with_bonus = self._roll_calls(self._academy_progress(12))
+
+        self.assertEqual(with_bonus["total_points"] - without["total_points"], 12)
+        self.assertEqual(without["extra_contributions"], [])
+        (line,) = with_bonus["extra_contributions"]
+        self.assertEqual((line.source_label, line.value), ("Academy instruction", 12))
+
+    def test_academy_instruction_lifts_the_self_study_penalty(self):
+        """Paying for instruction means the roll is no harder than a taught one, even at 0."""
+        self_study = self._roll_calls(self.progress)
+        academy = self._roll_calls(self._academy_progress(0))
+
+        self.assertLess(academy["target_difficulty"], self_study["target_difficulty"])
+
+    def test_a_bonus_on_a_meter_the_academy_did_not_open_is_ignored(self):
+        """Only an Academy meter carries instruction; every other meter keeps today's rules."""
+        self.progress.instruction_bonus = 9
+        self.progress.save()
+        plain = self._roll_calls(self.progress)
+        self.assertEqual(plain["extra_contributions"], [])
+
+        academy = self._roll_calls(self._academy_progress(9))
+        self.assertGreater(plain["target_difficulty"], academy["target_difficulty"])
+
+    def _style_skill(self, name: str):
+        from world.skills.factories import MagicSkillFactory
+
+        return MagicSkillFactory(name=name)
+
+    def _technique_in_style(self, skill):
+        from world.magic.factories import GiftFactory, TechniqueStyleFactory
+
+        style = TechniqueStyleFactory(name=f"{skill.name} style", skill=skill)
+        return TechniqueFactory(gift=GiftFactory(style=style))
+
+    def test_learning_adds_the_techniques_style_skill(self):
+        from world.magic.services.magic_skills import technique_learning_terms
+
+        steel = self._style_skill("Steelwork")
+        technique = self._technique_in_style(steel)
+        terms = technique_learning_terms(
+            self.sheet.character, technique, self._training_check_type()
+        )
+
+        self.assertEqual([(t.trait.pk, t.weight) for t in terms], [(steel.pk, Decimal("1.00"))])
+
+    def test_a_style_skill_staff_already_mapped_counts_once(self):
+        from world.magic.constants import MagicActivity
+        from world.magic.factories import MagicActivitySkillFactory
+        from world.magic.services.magic_skills import technique_learning_terms
+
+        steel = self._style_skill("Steelwork")
+        MagicActivitySkillFactory(
+            activity=MagicActivity.TECHNIQUE_LEARNING, skill=steel, weight=Decimal("0.50")
+        )
+        terms = technique_learning_terms(
+            self.sheet.character, self._technique_in_style(steel), self._training_check_type()
+        )
+
+        self.assertEqual([(t.trait.pk, t.weight) for t in terms], [(steel.pk, Decimal("0.50"))])
+
+    def test_a_style_skill_the_check_type_already_weights_counts_once(self):
+        from world.checks.models import CheckTypeTrait
+        from world.magic.services.magic_skills import technique_learning_terms
+
+        steel = self._style_skill("Steelwork")
+        check_type = self._training_check_type()
+        CheckTypeTrait.objects.create(check_type=check_type, trait=steel, weight=Decimal("1.0"))
+
+        terms = technique_learning_terms(
+            self.sheet.character, self._technique_in_style(steel), check_type
+        )
+
+        self.assertEqual(terms, ())
+
+    def test_the_teacher_is_rated_on_the_terms_the_learner_rolls(self):
+        """A present player teacher and the learner's roll read one set of skill terms."""
+        steel = self._style_skill("Steelwork")
+        progress = TechniqueProgress.objects.create(
+            character_sheet=self.sheet,
+            technique=self._technique_in_style(steel),
+            total_required=50,
+            source="gift_acquisition",
+        )
+        teacher = type("MockTeacher", (), {"character": CharacterSheetFactory().character})()
+        seen: dict = {}
+
+        def rating(character, check_type, **kwargs):
+            seen["rated"] = kwargs["extra_traits"]
+            return 0
+
+        def roll(character, check_type, **kwargs):
+            seen["rolled"] = kwargs["extra_traits"]
+            raise RuntimeError
+
+        with (
+            patch("world.magic.services.technique_training.compute_check_rating", rating),
+            patch("world.magic.services.technique_training.perform_check_with_modifiers", roll),
+            self.assertRaises(RuntimeError),
+        ):
+            resolve_training_check(self.sheet, progress, ap_to_invest=1, teacher=teacher)
+
+        self.assertEqual([t.trait.pk for t in seen["rolled"]], [steel.pk])
+        self.assertEqual(seen["rated"], seen["rolled"])
+
+    def test_a_technique_with_no_style_skill_adds_nothing(self):
+        from world.magic.services.magic_skills import technique_learning_terms
+
+        terms = technique_learning_terms(
+            self.sheet.character, self.technique, self._training_check_type()
+        )
+
+        self.assertEqual(terms, ())
+
+    def _training_check_type(self):
+        from world.checks.models import CheckType
+
+        return CheckType.objects.get(name="Technique Training")
+
 
 class ResolveTrainingCheckMissingCheckTypeTest(TestCase):
     """#3043: no silent objects.first() fallback when "Technique Training" is unauthored.

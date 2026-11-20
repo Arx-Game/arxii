@@ -104,7 +104,7 @@ class LoanOfferDetailsAdmin(admin.ModelAdmin):
 class TrainOfferDetailsAdmin(admin.ModelAdmin):
     """#3831 - one teachable technique on a kind=TRAIN offer."""
 
-    list_display = ["offer", "technique", "learn_ap_cost", "gold_cost"]
+    list_display = ["offer", "technique", "learn_ap_cost", "gold_cost", "instruction_bonus"]
     search_fields = ["offer__label", "technique__name"]
     list_select_related = ["offer", "technique"]
     autocomplete_fields = ["offer", "technique"]

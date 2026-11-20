@@ -14,6 +14,8 @@ from evennia.utils.ansi import strip_ansi
 from evennia_extensions.factories import RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.action_points.models import ActionPointPool
+from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import PathFactory
 from world.currency.models import FavorTokenDetails
 from world.currency.services import (
@@ -31,7 +33,7 @@ from world.magic.factories import (
     ResonanceFactory,
     TechniqueFactory,
 )
-from world.magic.models import CharacterTechnique, TechniqueProgress
+from world.magic.models import CharacterTechnique, TechniqueProgress, TrainingOutcomeAward
 from world.npc_services.constants import OfferKind
 from world.npc_services.factories import (
     FunctionaryFactory,
@@ -42,10 +44,14 @@ from world.npc_services.factories import (
 from world.progression.factories import CharacterPathHistoryFactory
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.societies.factories import OrganizationFactory
+from world.traits.factories import ensure_level_ladder
+from world.traits.models import CheckOutcome
 
 # What staff priced the training at: 2 gold and 5 silver, written in coppers.
 PRICE = 250
 STARTING_AP = 200
+# What staff set the trainer's instruction at, in check points.
+INSTRUCTION_BONUS = 12
 # The trainer's menu line: the coin and Hare paid now, then training sized by learn_ap_cost.
 MENU_LINE = "2g 5s · 1 Golden Hare · 5 points of training or more, paid in AP"
 
@@ -78,8 +84,12 @@ class TrainingAtTheAcademy(JourneyCase):
         self.offer = NPCServiceOfferFactory(
             role=self.role, kind=OfferKind.TRAIN, label="Learn a technique", is_final=True
         )
-        TrainOfferDetailsFactory(
-            offer=self.offer, technique=self.technique, learn_ap_cost=5, gold_cost=PRICE
+        self.details = TrainOfferDetailsFactory(
+            offer=self.offer,
+            technique=self.technique,
+            learn_ap_cost=5,
+            gold_cost=PRICE,
+            instruction_bonus=INSTRUCTION_BONUS,
         )
 
         self.ysmay = self._learner("Ysmay", coppers=90)
@@ -191,3 +201,40 @@ class TrainingAtTheAcademy(JourneyCase):
                 "display": MENU_LINE,
             },
         )
+
+    def _staff_author_training_check(self) -> None:
+        """The content a session rolls on: the Technique Training check and its Success payout."""
+        ensure_level_ladder()
+        CheckTypeFactory(name="Technique Training")
+        success, _ = CheckOutcome.objects.get_or_create(
+            name="Success", defaults={"success_level": 1}
+        )
+        TrainingOutcomeAward.objects.update_or_create(
+            outcome_tier=success, defaults={"dev_point_multiplier": 1}
+        )
+
+    def test_the_meter_carries_the_trainers_instruction_into_every_later_session(self) -> None:
+        self._staff_author_training_check()
+        self._ask_to_be_taught(self.hobb)
+        sheet = self.hobb.sheet_data
+        meter = TechniqueProgress.objects.get(character_sheet=sheet, technique=self.technique)
+        self.assertEqual(meter.instruction_bonus, INSTRUCTION_BONUS)
+
+        # Staff retune the offer afterwards; the meter she already holds keeps its own value,
+        # and a restart (a cold identity map) reads it back from the row.
+        self.details.instruction_bonus = 3
+        self.details.save()
+        TechniqueProgress.flush_instance_cache()
+        meter = TechniqueProgress.objects.get(character_sheet=sheet, technique=self.technique)
+        self.assertEqual(meter.instruction_bonus, INSTRUCTION_BONUS)
+
+        # The trainer is never in the hall, yet she is not self-studying, by telnet or web.
+        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+            told = strip_ansi(self.telnet(self.hobb, f"train {self.technique.name}=2"))
+        self.assertIn(f"You train {self.technique.name} (Success)", told)
+        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+            result = self.web(self.hobb, "train_technique", technique_id=self.technique.pk)
+        self.assertTrue(result.detail.success, result.detail.message)
+        self.assertFalse(result.detail.data["self_study"])
+        meter.refresh_from_db()
+        self.assertGreater(meter.points_accumulated, 0)

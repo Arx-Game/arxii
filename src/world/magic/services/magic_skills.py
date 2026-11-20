@@ -107,6 +107,32 @@ def technique_skill_term(
     return _skill_term(style.skill if style is not None else None)
 
 
+def technique_learning_terms(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM — Evennia character
+    technique: Technique,
+    check_type: CheckType,
+) -> tuple[ExtraTraitTerm, ...]:
+    """The skill terms a roll to learn ``technique`` adds to ``check_type`` (#2740).
+
+    The skills staff mapped to technique learning, then the skill the technique is cast
+    with (its own skill, else its casting style's, :func:`technique_skill_term`), so a
+    technique is learned with the skill it is worked with. The technique skill is never
+    added on top of itself: it is left out when it is already one of the mapped skills or
+    one of the check type's own traits. A mapped skill the check type also weights is
+    staff's own doing and still counts twice (the Required content dashboard lists those
+    check types). Nothing here names a skill.
+    """
+    mapped = activity_skill_terms(MagicActivity.TECHNIQUE_LEARNING)
+    technique_term = technique_skill_term(character, technique)
+    if technique_term is None:
+        return mapped
+    already_counted = {term.trait.pk for term in mapped}
+    already_counted.update(check_type.traits.values_list("trait_id", flat=True))  # type: ignore[attr-defined]
+    if technique_term.trait.pk in already_counted:
+        return mapped
+    return (*mapped, technique_term)
+
+
 def cast_check_type(personal_check: CheckType | None, technique: Technique) -> CheckType | None:
     """The check type a cast of ``technique`` rolls, given the caster's personal check.
 
