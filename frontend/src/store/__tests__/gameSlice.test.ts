@@ -24,7 +24,7 @@ import {
   minimizeFeedItems,
   dismissFeedItems,
   restoreAllFeed,
-  setSessionCommands,
+  setSessionCommandNames,
   setSessionRoom,
   setSessionScene,
   markThreadSeen,
@@ -42,7 +42,6 @@ import type {
   SceneSummary,
 } from '@/hooks/types';
 import { GAME_MESSAGE_TYPE } from '@/hooks/types';
-import type { CommandSpec } from '@/game/types';
 
 const reducer = gameSlice.reducer;
 
@@ -70,7 +69,6 @@ interface Session {
   minimizedFeed: string[];
   dismissedFeed: string[];
   unread: number;
-  commands: CommandSpec[];
   commandNames: string[];
   room: RoomData | null;
   scene: SceneSummary | null;
@@ -95,7 +93,6 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   minimizedFeed: [],
   dismissedFeed: [],
   unread: 0,
-  commands: [],
   commandNames: [],
   room: null,
   scene: null,
@@ -158,17 +155,6 @@ const createSceneSummary = (
   description,
   is_owner,
   has_unseen_observer,
-});
-
-const createCommandSpec = (
-  action: string,
-  prompt: string,
-  icon: string = 'default'
-): CommandSpec => ({
-  action,
-  prompt,
-  params_schema: {},
-  icon,
 });
 
 const createStateWithSession = (
@@ -268,7 +254,6 @@ describe('gameSlice', () => {
           minimizedFeed: [],
           dismissedFeed: [],
           unread: 0,
-          commands: [],
           commandNames: [],
           room: null,
           scene: null,
@@ -321,13 +306,13 @@ describe('gameSlice', () => {
         const existingMessages = [{ ...createGameMessage('Hello'), id: '123' }];
         const existingRoom = createRoomData(1, 'Test Room');
         const existingScene = createSceneSummary(1, 'Test Scene');
-        const existingCommands = [createCommandSpec('look', 'Look around')];
+        const existingCommandNames = ['look'];
 
         const initialState = createStateWithSession('TestCharacter', {
           isConnected: true,
           messages: existingMessages,
           unread: 5,
-          commands: existingCommands,
+          commandNames: existingCommandNames,
           room: existingRoom,
           scene: existingScene,
         });
@@ -336,7 +321,7 @@ describe('gameSlice', () => {
 
         expect(result.sessions['TestCharacter'].isConnected).toBe(true);
         expect(result.sessions['TestCharacter'].messages).toEqual(existingMessages);
-        expect(result.sessions['TestCharacter'].commands).toEqual(existingCommands);
+        expect(result.sessions['TestCharacter'].commandNames).toEqual(existingCommandNames);
         expect(result.sessions['TestCharacter'].room).toEqual(existingRoom);
         expect(result.sessions['TestCharacter'].scene).toEqual(existingScene);
       });
@@ -1079,106 +1064,30 @@ describe('gameSlice', () => {
     });
   });
 
-  describe('setSessionCommands', () => {
-    describe('setting commands', () => {
-      it('sets commands for existing session', () => {
-        const initialState = createStateWithSession('TestCharacter', {});
-        const commands = [
-          createCommandSpec('look', 'Look around'),
-          createCommandSpec('say', 'Say something'),
-        ];
-
-        const result = reducer(
-          initialState,
-          setSessionCommands({ character: 'TestCharacter', commands, commandNames: [] })
-        );
-
-        expect(result.sessions['TestCharacter'].commands).toEqual(commands);
+  describe('setSessionCommandNames', () => {
+    it('replaces the names the character can type (#4346)', () => {
+      const initialState = createStateWithSession('TestCharacter', {
+        commandNames: ['desc', 'who'],
       });
 
-      it('replaces existing commands', () => {
-        const oldCommands = [createCommandSpec('old', 'Old command')];
-        const initialState = createStateWithSession('TestCharacter', {
-          commands: oldCommands,
-        });
-        const newCommands = [createCommandSpec('new', 'New command')];
+      const result = reducer(
+        initialState,
+        setSessionCommandNames({ character: 'TestCharacter', commandNames: ['who'] })
+      );
 
-        const result = reducer(
-          initialState,
-          setSessionCommands({
-            character: 'TestCharacter',
-            commands: newCommands,
-            commandNames: [],
-          })
-        );
-
-        expect(result.sessions['TestCharacter'].commands).toEqual(newCommands);
-      });
-
-      it('can set empty commands array', () => {
-        const commands = [createCommandSpec('look', 'Look')];
-        const initialState = createStateWithSession('TestCharacter', { commands });
-
-        const result = reducer(
-          initialState,
-          setSessionCommands({ character: 'TestCharacter', commands: [], commandNames: [] })
-        );
-
-        expect(result.sessions['TestCharacter'].commands).toEqual([]);
-      });
-
-      it('replaces the names the character can type along with the commands (#4346)', () => {
-        const initialState = createStateWithSession('TestCharacter', {
-          commandNames: ['desc', 'who'],
-        });
-
-        const result = reducer(
-          initialState,
-          setSessionCommands({ character: 'TestCharacter', commands: [], commandNames: ['who'] })
-        );
-
-        expect(result.sessions['TestCharacter'].commandNames).toEqual(['who']);
-      });
+      expect(result.sessions['TestCharacter'].commandNames).toEqual(['who']);
     });
 
-    describe('non-existent session', () => {
-      it('does nothing if session does not exist', () => {
-        const initialState = createStateWithSession('ExistingCharacter', {});
-        const commands = [createCommandSpec('look', 'Look')];
+    it('does nothing if session does not exist', () => {
+      const initialState = createStateWithSession('ExistingCharacter', {});
 
-        const result = reducer(
-          initialState,
-          setSessionCommands({ character: 'NonExistent', commands, commandNames: [] })
-        );
+      const result = reducer(
+        initialState,
+        setSessionCommandNames({ character: 'NonExistent', commandNames: ['look'] })
+      );
 
-        expect(result.sessions['NonExistent']).toBeUndefined();
-        expect(result).toEqual(initialState);
-      });
-    });
-
-    describe('command spec preservation', () => {
-      it('preserves full command spec structure', () => {
-        const initialState = createStateWithSession('TestCharacter', {});
-        const command: CommandSpec = {
-          action: 'complex',
-          prompt: 'Complex action',
-          params_schema: {
-            target: { type: 'string', required: true },
-            modifier: { type: 'number', required: false },
-          },
-          icon: 'complex-icon',
-          name: 'Complex Command',
-          category: 'Combat',
-          help: 'Perform a complex action',
-        };
-
-        const result = reducer(
-          initialState,
-          setSessionCommands({ character: 'TestCharacter', commands: [command], commandNames: [] })
-        );
-
-        expect(result.sessions['TestCharacter'].commands[0]).toEqual(command);
-      });
+      expect(result.sessions['NonExistent']).toBeUndefined();
+      expect(result).toEqual(initialState);
     });
   });
 
@@ -1507,7 +1416,6 @@ describe('gameSlice', () => {
             minimizedFeed: [],
             dismissedFeed: [],
             unread: 10,
-            commands: [createCommandSpec('attack', 'Attack')],
             commandNames: ['attack'],
             room: createRoomData(
               1,
@@ -1553,10 +1461,9 @@ describe('gameSlice', () => {
       state = reducer(state, setSessionConnectionStatus({ character: 'Hero', status: true }));
       expect(state.sessions['Hero'].isConnected).toBe(true);
 
-      // Receive commands
-      const commands = [createCommandSpec('look', 'Look around')];
-      state = reducer(state, setSessionCommands({ character: 'Hero', commands, commandNames: [] }));
-      expect(state.sessions['Hero'].commands).toEqual(commands);
+      // Receive command names
+      state = reducer(state, setSessionCommandNames({ character: 'Hero', commandNames: ['look'] }));
+      expect(state.sessions['Hero'].commandNames).toEqual(['look']);
 
       // Enter room
       const room = createRoomData(1, 'Starting Room');
