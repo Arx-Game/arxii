@@ -838,8 +838,11 @@ queries, which costs one extra query for the block list.
 and every read of an interaction goes through it: the interaction list and detail
 (`InteractionViewSet.get_queryset`), every `/api/play/` surface built on that queryset (poses,
 search, context, conversation and thread summaries, mark-read), a reply's parent chip
-(`InteractionListSerializer._visible_parents`, so a blocked author's pose never leaks as a chip) and
-the scene highlight reel. Muted faces stay in: their rows come back with the text blanked
+(`InteractionListSerializer._visible_parents`, so a blocked author's pose never leaks as a chip), the
+scene highlight reel, the reply-target check (`thread_services`), the nomination check
+(`progression/services/nominations.py`) and the combat outcome detail. `tools/lint_interaction_visible_to.py`
+rejects a bare `.visible_to(` anywhere else, and the `read-gate-reviewer` agent covers the shapes a
+lint cannot see (a count, badge or chip built from its own query). Muted faces stay in: their rows come back with the text blanked
 (`get_content`), and the detail endpoint is the one deliberate reveal. The journeys in
 `src/integration_tests/test_play_reader_authorization_journeys.py` hold each rule (block, mute,
 VERY_PRIVATE, language, mask, inherited character) against list, detail, search, context,
