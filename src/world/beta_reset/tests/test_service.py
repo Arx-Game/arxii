@@ -47,8 +47,10 @@ from world.magic.factories import (
     CharacterTechniqueFactory,
     GiftFactory,
     TechniqueFactory,
+    ThreadFactory,
+    ThreadLevelUnlockFactory,
 )
-from world.magic.models import CharacterGift, CharacterTechnique
+from world.magic.models import CharacterGift, CharacterTechnique, Thread, ThreadLevelUnlock
 from world.npc_services.factories import NPCStandingFactory
 from world.npc_services.models import NPCStanding
 from world.progression.factories import CharacterXPTransactionFactory
@@ -361,6 +363,18 @@ class PlayStateRowsBlockingTheWipeTests(TestCase):
         self.assertFalse(LegendHonor.objects.filter(pk=honor.pk).exists())
         self.assertFalse(JournalEntry.objects.filter(pk=capstone_entry.pk).exists())
         self.assertFalse(JournalEntry.objects.filter(pk=honor.journal_entry_id).exists())
+
+    def test_a_thread_anchored_on_a_capstone_goes_and_other_threads_stay(self) -> None:
+        capstone_thread = ThreadFactory(as_capstone_thread=True)
+        unlock = ThreadLevelUnlockFactory(thread=capstone_thread)
+        trait_thread = ThreadFactory()
+
+        self._wipe()
+
+        self.assertFalse(Thread.objects.filter(pk=capstone_thread.pk).exists())
+        self.assertFalse(ThreadLevelUnlock.objects.filter(pk=unlock.pk).exists())
+        self.assertFalse(RelationshipCapstone.objects.exists())
+        self.assertTrue(Thread.objects.filter(pk=trait_thread.pk).exists())
 
     def test_a_listener_harvest_does_not_block_the_secret_wipe(self) -> None:
         asset = NPCAssetFactory()

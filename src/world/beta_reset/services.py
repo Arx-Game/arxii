@@ -91,6 +91,10 @@ numbers on a *kept* character's sheet consistent again.
   but they block the spec-named "scenes" wipe from running at all).
 - ``LegendHonor.journal_entry`` and ``RelationshipCapstone.journal_entry`` are ``PROTECT``
   against ``JournalEntry`` — both are deleted before it.
+- ``Thread.target_capstone`` is ``PROTECT`` against ``RelationshipCapstone`` — the threads
+  anchored on a capstone (and their ``ThreadLevelUnlock`` receipts, ``PROTECT`` against
+  ``Thread``) are deleted before it. No other thread is touched, and this is not a ruling
+  that threads are wiped (``ScopeEntry.unblocker_only``).
 - ``ListenerHarvest.secret`` is ``PROTECT`` against ``Secret`` — deleted before it.
 - ``EventGrandeurContribution.transfer`` is ``PROTECT`` against ``CurrencyTransfer`` —
   deleted before it.
@@ -150,7 +154,13 @@ from world.justice.models import (
     PersonaHeat,
 )
 from world.magic.constants import AcquisitionOrigin
-from world.magic.models import CharacterGift, CharacterTechnique, ResonanceGrant
+from world.magic.models import (
+    CharacterGift,
+    CharacterTechnique,
+    ResonanceGrant,
+    Thread,
+    ThreadLevelUnlock,
+)
 from world.npc_services.models import NPCStanding
 from world.progression.models import CharacterXPTransaction, ClassLevelAdvancement
 from world.relationships.models import RelationshipCapstone
@@ -261,6 +271,10 @@ class ScopeEntry:
     model: type[Model]
     filter_kwargs: dict[str, Any] | None
     note: str
+    #: True when the entry exists only to clear a PROTECT foreign key and is NOT a ruling
+    #: that the model is play-state. ``classification`` does not count such an entry as the
+    #: model being wiped.
+    unblocker_only: bool = False
 
 
 #: The single source of truth for what this wipe touches, in explicit dependency-safe
@@ -338,6 +352,20 @@ SCOPE_TABLE: list[ScopeEntry] = [
         None,
         "PROTECT-unblocker: LegendHonor.journal_entry is PROTECT against JournalEntry. The "
         "honor is a legend-ledger row, wiped with the rest of the legend ledger.",
+    ),
+    ScopeEntry(
+        ThreadLevelUnlock,
+        {"thread__target_capstone__isnull": False},
+        "PROTECT-unblocker: ThreadLevelUnlock.thread is PROTECT against Thread. Only the "
+        "receipts of capstone-anchored threads go, as those threads are deleted next.",
+        unblocker_only=True,
+    ),
+    ScopeEntry(
+        Thread,
+        {"target_capstone__isnull": False},
+        "PROTECT-unblocker: Thread.target_capstone is PROTECT against RelationshipCapstone. "
+        "Only threads anchored on a capstone go; a thread with any other anchor is untouched.",
+        unblocker_only=True,
     ),
     ScopeEntry(
         RelationshipCapstone,
