@@ -330,6 +330,12 @@ def make_dodge(participant: CombatParticipant, dodge: Dodge) -> Dodge | None:
 def dodge_label(dodge: Dodge) -> str:
     """The defense roll's "Dodge" line: what answered, what its roll gave, what it cost."""
     use = dodge.use
+    if use is not None and use.technique is None and use.anima_paid:
+        # A worn item's power (#5074): no roll, a flat strength and an anima cost.
+        parts = [f"strength {use.strength}", f"{use.anima_paid} anima"]
+        if use.soulfray_added:
+            parts.append(f"Soulfray +{use.soulfray_added}")
+        return f"Dodge ({dodge.source.name}: {', '.join(parts)})"
     if use is None or use.technique is None:
         return f"Dodge ({dodge.source.name})" if dodge.source.name else "Dodge"
     parts = [f"strength {use.strength}"]
@@ -368,10 +374,16 @@ def movement_use_cost(character: ObjectDB, movement: MovementSource, *, in_fight
     """What one use of ``movement`` costs now, e.g. "4 anima" or "1 fatigue" (#5066).
 
     A technique's own cast cost, priced as ``use_technique`` charges it (out of a fight her
-    control often brings it to 0); anything else costs physical fatigue in a fight and
-    nothing outside one. A dodge and a turn move with the same source cost the same.
+    control often brings it to 0); a worn item's condition costs its per-use anima always
+    (#5074); anything else costs physical fatigue in a fight and nothing outside one. A
+    dodge and a turn move with the same source cost the same.
     """
     if movement.technique_id is None:
+        from world.combat.services.movement_use import gear_condition_with_cost  # noqa: PLC0415
+
+        gear = gear_condition_with_cost(movement)
+        if gear is not None:
+            return f"{gear.condition.reactive_anima_cost} anima"
         if not in_fight:
             return FREE_USE
         return f"{reaction_tuning().dodge_fatigue_cost} fatigue"

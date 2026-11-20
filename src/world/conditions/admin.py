@@ -504,6 +504,7 @@ class ConditionInstanceAdmin(admin.ModelAdmin):
         "detected_by",
         "source_character",
         "source_technique",
+        "source_item",
         "target",
     ]
     readonly_fields = ["applied_at"]
@@ -539,6 +540,7 @@ class ConditionInstanceAdmin(admin.ModelAdmin):
                 "fields": [
                     "source_character",
                     "source_technique",
+                    "source_item",
                     "source_description",
                 ],
             },

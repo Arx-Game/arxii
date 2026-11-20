@@ -1432,6 +1432,7 @@ def _blink_entries(
         reach_for_strength,
         turn_movement_sources,
     )
+    from world.combat.services.movement_use import gear_condition_with_cost  # noqa: PLC0415
     from world.combat.services.reactions import FREE_USE, movement_use_cost  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
 
@@ -1444,7 +1445,8 @@ def _blink_entries(
     met, reasons = context.move_met, [] if context.move_met else [context.move_reason]
     for movement in turn_movement_sources(character, CreatureTraversal.BLINKS):
         cost = movement_use_cost(character, movement, in_fight=in_fight)
-        warning = stage_warning if movement.technique_id is not None else None
+        spends_anima = movement.technique_id is not None or gear_condition_with_cost(movement)
+        warning = stage_warning if spends_anima else None
         free = cost in (FREE_USE, "0 anima")  # noqa: STRING_LITERAL - a zero-cost cast
         reach = reach_for_strength(movement.standing_strength)
         for place in blink_landings(character, reach):

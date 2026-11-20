@@ -607,7 +607,9 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     reactive_anima_cost = models.PositiveIntegerField(
         default=0,
         help_text="Anima spent each time this condition's reactive effect fires "
-        "(a dodge/reflect/absorb); can't pay → the effect fizzles. 0 = free.",
+        "(a dodge/reflect/absorb); can't pay → the effect fizzles. 0 = free. A condition "
+        "an item gives (worn gear) instead overspends into Soulfray when the wearer "
+        "cannot pay, and charges this per use of its movement and dodge powers.",
     )
     retaliation_damage = models.PositiveIntegerField(
         default=0,
@@ -1767,6 +1769,20 @@ class ConditionInstance(SharedMemoryModel):
             "the bounded team-damage-percent lane's read "
             "(``world.magic.services.techniques._team_lane_delta``): contributions "
             "sharing one vow diminish; distinct vows stack fully."
+        ),
+    )
+    source_item = models.ForeignKey(
+        "arxii.ItemInstance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="worn_conditions_applied",
+        help_text=(
+            "The worn item that put this condition on its wearer (#5074), set only by "
+            "``reconcile_worn_conditions``, which touches only conditions gear owns. "
+            "Shown to the wearer as the source, never to onlookers. Set null, not "
+            "cascaded, so the instance's own teardown still runs; an item is unequipped "
+            "(and the condition removed) before it is destroyed."
         ),
     )
     source_description = models.CharField(

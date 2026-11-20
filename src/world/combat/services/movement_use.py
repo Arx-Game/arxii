@@ -10,6 +10,9 @@ dodge's bonus on her defense roll and, through the shared bands
 (``traversal.reach_for_strength``), how far she may go. Nothing lasts past the use: the
 standing capability is never raised (ADR-0248 stands).
 
+A condition a worn item gives (#5074) with a per-use anima cost pays that anima on every
+use, in a fight or out of one, and never fizzles for lack of it: an overspend goes through
+the deficit and Soulfray path like a cast's, whatever her dodge plan's Soulfray box says.
 Any other source (trained ability, a condition, species, a distinction) pays physical
 fatigue in a fight (``MovementConfig.dodge_fatigue_cost``) and nothing outside one, as
 walking; its strength is its value.
@@ -36,6 +39,7 @@ if TYPE_CHECKING:
     from world.areas.positioning.traversal import MovementSource
     from world.checks.types import CheckResult
     from world.combat.models import CombatParticipant
+    from world.conditions.models import ConditionInstance
     from world.magic.models import Technique, TechniqueCapabilityGrant
     from world.magic.types.magic_skills import CastCheck
     from world.magic.types.power_ledger import PowerLedger
@@ -169,6 +173,14 @@ def use_movement_source(  # noqa: PLR0913 - one use and its two consent answers
     dodge, a softened blow): for a player not connected it runs non-lethal.
     """
     if movement.technique_id is None:
+        gear = gear_condition_with_cost(movement)
+        if gear is not None:
+            return _use_gear_power(
+                character,
+                movement,
+                gear,
+                lethal=lethal and (chosen_by_player or player_is_present(character)),
+            )
         return _use_non_technique(character, movement, participant=participant, category=category)
     lethal = lethal and (chosen_by_player or player_is_present(character))
     return _cast_technique(
@@ -177,6 +189,64 @@ def use_movement_source(  # noqa: PLR0913 - one use and its two consent answers
         participant=participant,
         lethal=lethal,
         confirm_soulfray_risk=confirm_soulfray_risk,
+    )
+
+
+def gear_condition_with_cost(movement: MovementSource) -> ConditionInstance | None:
+    """The condition a worn item gave her that is this movement's source, when staff set it
+    a per-use anima cost (#5074); None for any other source."""
+    from world.conditions.models import ConditionInstance  # noqa: PLC0415
+    from world.mechanics.constants import CapabilitySourceType  # noqa: PLC0415
+
+    if movement.source.source_type != CapabilitySourceType.CONDITION:
+        return None
+    return (
+        ConditionInstance.objects.filter(
+            pk=movement.source.source_id,
+            source_item__isnull=False,
+            condition__reactive_anima_cost__gt=0,
+        )
+        .select_related("condition")
+        .first()
+    )
+
+
+def _use_gear_power(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the user's game object, as use_technique
+    movement: MovementSource,
+    instance: ConditionInstance,
+    *,
+    lethal: bool,
+) -> MovementUse:
+    """One use of a power a worn item's condition gives: its anima cost, overspent into
+    Soulfray when she cannot pay, never refused (#5074 decision 1).
+
+    A character with no anima pool at all pays fatigue instead, as any other non-technique
+    source does.
+    """
+    from world.magic.models import CharacterAnima  # noqa: PLC0415
+    from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
+    from world.magic.services.anima import deduct_anima  # noqa: PLC0415
+    from world.magic.services.soulfray import accumulate_soulfray  # noqa: PLC0415
+
+    anima = CharacterAnima.objects.filter(character_id=character.pk).first()
+    if anima is None:
+        return MovementUse(went_off=True, strength=movement.standing_strength)
+    cost = instance.condition.reactive_anima_cost
+    deficit = deduct_anima(character, cost, lethal=lethal)
+    soulfray = accumulate_soulfray(
+        character=character,
+        anima=anima,
+        deficit=deficit,
+        soulfray_config=SoulfrayConfig.objects.cached_singleton(),
+        check_result=None,
+        lethal=lethal,
+    )
+    return MovementUse(
+        went_off=True,
+        strength=movement.standing_strength,
+        anima_paid=cost,
+        soulfray_added=soulfray.severity_added if soulfray is not None else 0,
     )
 
 
