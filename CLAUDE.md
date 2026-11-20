@@ -543,6 +543,8 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 
 ## Testing
 
+For bug fixes with a new or updated regression test, follow the [regression evidence workflow](tools/skills/running-tests/SKILL.md#bug-fix-regression-evidence). Run the test on unfixed code and capture the relevant failure before implementing the fix, then capture the same test passing with the fix. The focused baseline run precedes implementation even when longer suites run after committing.
+
 **Unit tests alone are not proof that a change works** (ADR-4246). Before a PR,
 operate the change through the interface a person or caller uses, against isolated
 data, and report in plain words what you did, expected, saw, and where the evidence
