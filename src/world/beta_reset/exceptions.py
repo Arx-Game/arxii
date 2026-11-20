@@ -86,3 +86,11 @@ class AlreadyReleasedError(BetaResetError):
         ),
     ) -> None:
         super().__init__(user_message)
+
+
+class CarryOverError(BetaResetError):
+    """Raised when a character named for carry-over cannot be carried over.
+
+    The operator named it with ``--carry-over``; the message says which character and why,
+    and nothing was touched.
+    """
