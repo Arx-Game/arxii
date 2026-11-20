@@ -538,7 +538,12 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
         rows = [(label, difficulty, odds) for label, difficulty, odds in rows if odds is not None]
         if not rows:
             return "No result charts are authored for this roller."
-        names = [line.outcome_name for line in rows[0][2].lines]
+        # Charts differ in which outcomes they hold, so the columns are every outcome any row
+        # has, lowest first, and a chart without one reads 0%.
+        levels = {
+            line.outcome_name: line.success_level for _, _, odds in rows for line in odds.lines
+        }
+        names = sorted(levels, key=lambda name: levels[name])
         head = format_html_join("", "<th>{}</th>", ((name,) for name in names))
         body = format_html_join(
             "",
@@ -547,7 +552,19 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
                 (
                     label,
                     difficulty,
-                    format_html_join("", "<td>{}%</td>", ((line.percent,) for line in odds.lines)),
+                    format_html_join(
+                        "",
+                        "<td>{}%</td>",
+                        (
+                            (
+                                next(
+                                    (line.percent for line in odds.lines if line.outcome_name == n),
+                                    0,
+                                ),
+                            )
+                            for n in names
+                        ),
+                    ),
                 )
                 for label, difficulty, odds in rows
             ),

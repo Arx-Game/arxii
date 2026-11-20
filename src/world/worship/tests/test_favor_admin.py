@@ -87,10 +87,17 @@ class DevotionConfigAdminTests(TestCase):
             CheckRankFactory(rank=rank, min_points=points, name=f"Rank {rank}")
         # Reference roller 48 (rank 1). At the example settings the bands roll at 45 (high
         # favor, rank 1, gap 0), 60 (low band, rank 2, gap -1) and 75 (below, rank 3, gap -2).
+        botch = CheckOutcomeFactory(name="Critical Failure", success_level=-2)
         for gap, success_width in ((-2, 10), (-1, 30), (0, 60)):
             chart = ResultChartFactory(rank_difference=gap)
+            fail_from = 6 if gap == -2 else 1
+            if gap == -2:
+                # Only the hardest chart has a botch band; the others read 0% in its column.
+                ResultChartOutcome.objects.create(
+                    chart=chart, min_roll=1, max_roll=5, outcome=botch
+                )
             ResultChartOutcome.objects.create(
-                chart=chart, min_roll=1, max_roll=100 - success_width, outcome=self.failure
+                chart=chart, min_roll=fail_from, max_roll=100 - success_width, outcome=self.failure
             )
             ResultChartOutcome.objects.create(
                 chart=chart, min_roll=101 - success_width, max_roll=100, outcome=self.success
@@ -103,9 +110,9 @@ class DevotionConfigAdminTests(TestCase):
         ).content.decode()
 
         self.assertIn("Odds at these settings", body)
-        self.assertIn("<td>60 or more</td><td>45</td><td>40%</td><td>60%</td>", body)
-        self.assertIn("<td>30 to 59</td><td>60</td><td>70%</td><td>30%</td>", body)
-        self.assertIn("<td>below 30</td><td>75</td><td>90%</td><td>10%</td>", body)
+        self.assertIn("<td>60 or more</td><td>45</td><td>0%</td><td>40%</td><td>60%</td>", body)
+        self.assertIn("<td>30 to 59</td><td>60</td><td>0%</td><td>70%</td><td>30%</td>", body)
+        self.assertIn("<td>below 30</td><td>75</td><td>5%</td><td>85%</td><td>10%</td>", body)
 
     def test_odds_table_is_read_from_the_result_charts(self) -> None:
         from world.traits.factories import CheckRankFactory, ResultChartFactory
