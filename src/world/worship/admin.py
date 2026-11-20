@@ -435,6 +435,7 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
     readonly_fields = (
         "roll_rule",
         "owing_favor_now",
+        "intervention_odds",
         "miracles_above_the_gate",
         "beings_without_answers",
     )
@@ -462,6 +463,7 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
                 )
             },
         ),
+        ("Odds at these settings (read only)", {"fields": ("intervention_odds",)}),
         (
             "Context",
             {"fields": ("miracles_above_the_gate", "beings_without_answers")},
@@ -522,6 +524,40 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
         return " | ".join(
             f"{row['being__name']}: {row['characters']} characters, {row['owed']} favor owed"
             for row in rows
+        )
+
+    @admin.display(description="Odds by favor")
+    def intervention_odds(self, obj: DivineInterventionConfig) -> SafeString | str:
+        """The chance of each result for the reference roller, by favor band, read from the
+        real result charts at the invocation difficulty (never listed here, #4349)."""
+        from world.worship.sacrifice_services import sacrifice_odds  # noqa: PLC0415
+
+        del obj
+        cases = intervention_odds_cases()
+        rows = [(label, difficulty, sacrifice_odds(difficulty)) for label, difficulty in cases]
+        rows = [(label, difficulty, odds) for label, difficulty, odds in rows if odds is not None]
+        if not rows:
+            return "No result charts are authored for this roller."
+        names = [line.outcome_name for line in rows[0][2].lines]
+        head = format_html_join("", "<th>{}</th>", ((name,) for name in names))
+        body = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td>{}</tr>",
+            (
+                (
+                    label,
+                    difficulty,
+                    format_html_join("", "<td>{}%</td>", ((line.percent,) for line in odds.lines)),
+                )
+                for label, difficulty, odds in rows
+            ),
+        )
+        return format_html(
+            "<table><tr><th>Favor</th><th>Difficulty</th>{}</tr>{}</table>"
+            "<p>For a {} roller, at the invocation difficulty in Devotion config.</p>",
+            head,
+            body,
+            rows[0][2].reference_rank_name,
         )
 
     @admin.display(description="Miracles whose own favor threshold is above the gate")
@@ -929,6 +965,32 @@ class DevotionConfigAdmin(admin.ModelAdmin):
         return super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
         )
+
+
+def intervention_odds_cases() -> list[tuple[str, int]]:
+    """The favor bands the Divine Intervention Config's odds table reads, each with the
+    invocation difficulty in points a character in it rolls at: the base difficulty eased by
+    the favor band, and by the Chosen distinction's favor invocation modifier where one is
+    designated."""
+    from world.mechanics.constants import FAVOR_INVOCATION_CATEGORY_NAME  # noqa: PLC0415
+    from world.worship.favor_services import chosen_distinction_patron_value  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    config = get_devotion_config()
+    base = DIFFICULTY_VALUES[config.base_difficulty]
+    chosen = chosen_distinction_patron_value(FAVOR_INVOCATION_CATEGORY_NAME)
+    high = f"{config.favor_ease_high_threshold} or more"
+    low = f"{config.favor_ease_low_threshold} to {config.favor_ease_high_threshold - 1}"
+    below = f"below {config.favor_ease_low_threshold}"
+    cases = []
+    if chosen:
+        cases.append(
+            (f"{high}, with the Chosen's +{chosen}", base - config.favor_ease_high_points - chosen)
+        )
+    cases.append((high, base - config.favor_ease_high_points))
+    cases.append((low, base - config.favor_ease_low_points))
+    cases.append((below, base))
+    return [(label, max(points, MIN_DIFFICULTY_POINTS)) for label, points in cases]
 
 
 def sacrifice_odds_rows() -> list[tuple[str, str, str, str]]:

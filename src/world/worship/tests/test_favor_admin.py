@@ -78,6 +78,35 @@ class DevotionConfigAdminTests(TestCase):
         ):
             self.assertIn(text, body, text)
 
+    def test_divine_intervention_config_shows_odds_by_favor_band(self) -> None:
+        from world.traits.factories import CheckRankFactory, ResultChartFactory
+        from world.traits.models import ResultChart, ResultChartOutcome
+        from world.worship.services import get_divine_intervention_config
+
+        for rank, points in ((0, 0), (1, 25), (2, 50), (3, 75)):
+            CheckRankFactory(rank=rank, min_points=points, name=f"Rank {rank}")
+        # Reference roller 48 (rank 1). At the example settings the bands roll at 45 (high
+        # favor, rank 1, gap 0), 60 (low band, rank 2, gap -1) and 75 (below, rank 3, gap -2).
+        for gap, success_width in ((-2, 10), (-1, 30), (0, 60)):
+            chart = ResultChartFactory(rank_difference=gap)
+            ResultChartOutcome.objects.create(
+                chart=chart, min_roll=1, max_roll=100 - success_width, outcome=self.failure
+            )
+            ResultChartOutcome.objects.create(
+                chart=chart, min_roll=101 - success_width, max_roll=100, outcome=self.success
+            )
+        ResultChart.clear_cache()
+        config = get_divine_intervention_config()
+
+        body = self.client.get(
+            reverse("admin:arxii_divineinterventionconfig_change", args=(config.pk,))
+        ).content.decode()
+
+        self.assertIn("Odds at these settings", body)
+        self.assertIn("<td>60 or more</td><td>45</td><td>40%</td><td>60%</td>", body)
+        self.assertIn("<td>30 to 59</td><td>60</td><td>70%</td><td>30%</td>", body)
+        self.assertIn("<td>below 30</td><td>75</td><td>90%</td><td>10%</td>", body)
+
     def test_odds_table_is_read_from_the_result_charts(self) -> None:
         from world.traits.factories import CheckRankFactory, ResultChartFactory
         from world.traits.models import ResultChart, ResultChartOutcome
