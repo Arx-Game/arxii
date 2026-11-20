@@ -579,6 +579,30 @@ def _technique_personalization_errors(
     )
 
 
+def _affinity_picks_error(affinities: list[str], require_full_spread: bool) -> str | None:
+    """Why these picks' affinity names are not one Primal feeling plus at most one other (#5231).
+
+    The other pick is for what the character does to others and must be Celestial or Abyssal.
+    A draft being saved partway (``require_full_spread`` false) may hold no Primal pick yet.
+    """
+    from world.magic.constants import (  # noqa: PLC0415
+        AFFINITY_ABYSSAL,
+        AFFINITY_CELESTIAL,
+        AFFINITY_PRIMAL,
+    )
+
+    primal_count = affinities.count(AFFINITY_PRIMAL)
+    if primal_count > 1:
+        return "Pick one feeling."
+    others = [name for name in affinities if name != AFFINITY_PRIMAL]
+    outward = (AFFINITY_CELESTIAL, AFFINITY_ABYSSAL)
+    if len(others) > 1 or any(name not in outward for name in others):
+        return "Pick one resonance for what you do to others, or none."
+    if primal_count == 0 and require_full_spread:
+        return "Pick the feeling that gives you strength."
+    return None
+
+
 def resonance_weights_error(
     raw: object, weights: list[ResonanceWeight], *, require_full_spread: bool = True
 ) -> str | None:
@@ -586,6 +610,10 @@ def resonance_weights_error(
 
     ``require_full_spread=False`` lets a draft that is still being spread through (fewer
     than all the points placed) pass; spending more than the points is refused either way.
+    It also lets a draft hold no Primal pick yet, since a second pick may be made first.
+
+    A character draws strength from one Primal feeling, and may add one Celestial or
+    Abyssal resonance for what she does to others (#5231).
     """
     from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.drift import get_drift_config  # noqa: PLC0415
@@ -597,8 +625,14 @@ def resonance_weights_error(
     ids = [pick.resonance_id for pick in weights]
     if len(set(ids)) != len(ids):
         return "Pick each resonance once"
-    if Resonance.objects.filter(pk__in=ids).count() != len(ids):
+    picked = list(Resonance.objects.filter(pk__in=ids).select_related("affinity"))
+    if len(picked) != len(ids):
         return "Select a gift resonance"
+    affinity_error = _affinity_picks_error(
+        [resonance.affinity.name for resonance in picked], require_full_spread
+    )
+    if affinity_error:
+        return affinity_error
     if any(pick.weight < 1 for pick in weights):
         return "Give every resonance you pick at least 1 point"
     points = get_drift_config().creation_points
@@ -623,7 +657,9 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:  # noqa: C901
        available technique without an action template is rejected as unfinished.
     4. Must have ``gift_resonance_weights`` (anchors the latent GIFT thread, #1620): distinct
        resonances that exist, each weighted at least 1, the weights summing to
-       ``DriftConfig.creation_points`` (#5123).
+       ``DriftConfig.creation_points`` (#5123), exactly one of them Primal and at most
+       one more, Celestial or Abyssal (#5231). A draft saved under the old rule reads
+       incomplete with that reason.
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
        valid anima_check_skill_id (an active Skill outside the magic category, which
        magical rolls add as terms) — the character's Anima Check.

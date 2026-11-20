@@ -49,11 +49,11 @@ from world.magic.factories import (
     BinaryEffectTypeFactory,
     GiftFactory,
     PathGiftGrantFactory,
-    ResonanceFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    primal_resonance,
 )
 from world.magic.models import CharacterAnima, Resonance
 from world.magic.seeds_cast import get_standalone_cast_template
@@ -450,7 +450,7 @@ class MagicTrainingAllocationJourney(JourneyCase):
         technique = gift.techniques.first()
         cls.skills = [SkillFactory(category=TraitCategory.MAGIC) for _ in range(3)]
         cls.account = AccountFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         cls.path, cls.tradition = path, tradition
         cls.draft_data = {
             "distinctions": [{"distinction_id": training.pk, "rank": 1}],

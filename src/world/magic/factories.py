@@ -343,6 +343,17 @@ class ResonanceFactory(factory.django.DjangoModelFactory):
         self.properties.add(*extracted)
 
 
+def primal_resonance(**kwargs: object) -> Resonance:
+    """A Resonance on the canonical Primal affinity (test data only, #5231).
+
+    Character creation takes one Primal feeling, so a creation test that needs a valid
+    ``gift_resonance_weights`` pick builds its resonance here.
+    """
+    from world.magic.constants import AFFINITY_PRIMAL
+
+    return ResonanceFactory(affinity=AffinityFactory(name=AFFINITY_PRIMAL), **kwargs)
+
+
 class ResonanceTierFactory(factory.django.DjangoModelFactory):
     """Factory for ResonanceTier."""
 

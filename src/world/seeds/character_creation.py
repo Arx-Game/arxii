@@ -330,6 +330,26 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # name, so an authored override can name the tradition without a static
     # seed value trying to reproduce it itself.
     "gift_schooling_label": "How you came to {tradition}",
+    # The Gift stage's "where your strength comes from" step (#5231): one Primal feeling,
+    # and at most one Celestial or Abyssal resonance for what the character does to
+    # others. `{points}` in the skipped line is the creation points, filled by the stage.
+    "gift_strength_heading": "Where your strength comes from",
+    "gift_strength_intro": "Resonance is what powers your magic.",
+    "gift_strength_feeling_question": "Which feeling gives you strength",
+    "gift_strength_others_question": "Does what you do to other people give you strength",
+    "gift_strength_outward_question": "Which of these gives you strength",
+    "gift_strength_balance_question": "Which gives you more strength",
+    "gift_strength_answer_helping": "Helping them",
+    "gift_strength_answer_hurting": "Hurting them",
+    "gift_strength_answer_neither": "Neither",
+    "gift_strength_slider_feeling": "What you feel",
+    "gift_strength_slider_others": "What you do to others",
+    "gift_strength_skipped": (
+        "With no second pick there is nothing to balance. All {points} points go to the feeling."
+    ),
+    "gift_strength_aura_all_feeling": "All your strength comes from what you feel.",
+    "gift_strength_aura_mostly_feeling": "Most of your strength comes from what you feel.",
+    "gift_strength_aura_mostly_others": "Most of your strength comes from what you do to others.",
     # The Glimpse's own offered distinctions (#3675 fix round 1), one
     # sub-block per chosen tag, and the CG-only axis layout's own copy.
     # Only an axis that takes several answers is marked (#5191); "choose one"

@@ -42,6 +42,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.models import CharacterTechnique
 from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, get_standalone_cast_template
@@ -130,7 +131,7 @@ class CastUsesPerCharacterCheckTests(TestCase):
         TechniqueStyleFactory()
         EffectTypeFactory()
         ResonanceFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         cls.tradition = TraditionFactory()
         # Skill so provision_player_anima_ritual finds a default and doesn't skip.
         cls.skill = SkillFactory(name="CastPCRitualism")

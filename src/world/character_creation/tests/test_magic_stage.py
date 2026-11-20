@@ -39,6 +39,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.models import CharacterAnima
 from world.magic.seeds_cast import get_standalone_cast_template
@@ -95,7 +96,7 @@ class MagicStageValidationTest(TestCase):
         # the tradition technique set — outside the (path, gift, tradition) availability set.
         cls.unavailable_technique = TechniqueFactory(gift=cls.gift)
 
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         cls.stat_trait = StatTraitFactory(name="strength")
         cls.other_trait = SkillTraitFactory(name="not a stat")
         cls.skill = SkillFactory()
@@ -448,7 +449,7 @@ class GiftGrantNotificationTest(TestCase):
     def _make_draft_and_sheet(self):
         gift = GiftFactory(name="Umbral Sight")
         technique = TechniqueFactory(gift=gift, name="Phantom Step")
-        resonance = ResonanceFactory()
+        resonance = primal_resonance()
         sheet = CharacterSheetFactory()
         draft = CharacterDraftFactory(
             selected_tradition=TraditionFactory(),

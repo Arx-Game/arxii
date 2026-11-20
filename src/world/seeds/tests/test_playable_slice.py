@@ -106,6 +106,7 @@ class TestSeededCharacterCreation(TestCase):
         from world.character_creation.services import finalize_character
         from world.character_creation.tests.finalization_fixtures import DEFAULT_STATS
         from world.character_sheets.models import CharacterSheet
+        from world.magic.constants import AFFINITY_PRIMAL
         from world.magic.models import Resonance, Tradition
         from world.magic.services.cg_catalog import get_gift_options, get_technique_options
         from world.skills.models import Skill
@@ -155,7 +156,7 @@ class TestSeededCharacterCreation(TestCase):
         technique = available_techniques[0]
         # The CONTENT REPO supplies resonances, never the magic cluster -- no
         # seeder may create one since #2967 (the stub root authors three).
-        resonance = Resonance.objects.first()
+        resonance = Resonance.objects.filter(affinity__name=AFFINITY_PRIMAL).first()
         self.assertIsNotNone(resonance, "the content repo must author a resonance")
         stat = Trait.objects.filter(trait_type=TraitType.STAT).first()
         self.assertIsNotNone(stat, "character-creation cluster must seed STAT traits")

@@ -35,6 +35,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.roster.seeds import ensure_rosters
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
@@ -1227,8 +1228,8 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         from world.traits.factories import StatTraitFactory
 
         cls.tradition = TraditionFactory()
-        cls.resonance = ResonanceFactory()
-        cls.other_resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
+        cls.other_resonance = primal_resonance()
         cls.gift = GiftFactory(name="Shadow Majesty")
         cls.gift.resonances.add(cls.resonance, cls.other_resonance)
         cls.technique_one = TechniqueFactory(gift=cls.gift, name="Umbral Step")

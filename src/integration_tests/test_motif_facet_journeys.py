@@ -27,6 +27,7 @@ from world.magic.factories import (
     FacetFactory,
     ResonanceFactory,
     TechniqueFactory,
+    primal_resonance,
 )
 from world.magic.models import (
     FacetAlias,
@@ -339,7 +340,7 @@ class PickingFacetsInCreation(JourneyCase):
         )
 
         ensure_canonical_affinities()
-        self.frost = ResonanceFactory(name="Frost")
+        self.frost = primal_resonance(name="Frost")
         self.wolf = FacetFactory(name="Wolf")
         self.silk = FacetFactory(name="Silk")
         gift = GiftFactory(name="Ember")

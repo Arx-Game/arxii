@@ -59,7 +59,7 @@ def seed_motif_facet_spec(*, username: str) -> MotifFacetSeed:
     from world.magic.factories import (  # noqa: PLC0415
         CharacterResonanceFactory,
         FacetFactory,
-        ResonanceFactory,
+        primal_resonance,
     )
     from world.magic.models import CharacterResonance, Facet, Resonance  # noqa: PLC0415
     from world.roster.factories import (  # noqa: PLC0415
@@ -74,7 +74,7 @@ def seed_motif_facet_spec(*, username: str) -> MotifFacetSeed:
 
     resonance = Resonance.objects.filter(name=FACET_SPEC_RESONANCE).first()
     if resonance is None:
-        resonance = ResonanceFactory(name=FACET_SPEC_RESONANCE)
+        resonance = primal_resonance(name=FACET_SPEC_RESONANCE)
     for name in FACET_SPEC_FACETS:
         if not Facet.objects.filter(name=name).exists():
             FacetFactory(name=name)

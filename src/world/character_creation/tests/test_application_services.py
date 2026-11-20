@@ -38,11 +38,11 @@ from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
     PathGiftGrantFactory,
-    ResonanceFactory,
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.seeds_cast import get_standalone_cast_template
 from world.roster.seeds import ensure_rosters
@@ -728,7 +728,7 @@ class ApproveApplicationIntegrationTests(TestCase):
             minimum_level=1,
         )
         cls.effect_type = EffectTypeFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         cls.tradition = TraditionFactory()
 
         # Gift-stage validator fixtures (#2426): a gift available for (tradition, path)

@@ -19,6 +19,7 @@ from world.magic.factories import (
     TechniqueVariantFactory,
     TraditionFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.models import CharacterTechnique
 from world.magic.services.creation_personalization import (
@@ -32,7 +33,7 @@ class _Catalog:
     @classmethod
     def _make_catalog(cls) -> None:
         cls.gift = GiftFactory(name="Ember")
-        cls.frost = ResonanceFactory(name="Frost")
+        cls.frost = primal_resonance(name="Frost")
         cls.other_resonance = ResonanceFactory(name="Ash")
         cls.technique = TechniqueFactory(gift=cls.gift, name="Scorch Lash", level=1)
         cls.flourish = SignatureMotifBonusFactory(
