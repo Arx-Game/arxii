@@ -2077,7 +2077,8 @@ class CharacterDraft(SharedMemoryModel):
     def calculate_points_remaining(self) -> int:
         """Budget minus allocated points. 0 = fully allocated."""
         budget = self.calculate_stat_budget()
-        stats = self.draft_data.get("stats", {})
+        # `or {}`: a client that clears the key leaves it holding None (#5199).
+        stats = self.draft_data.get("stats") or {}
         if not stats:
             return budget - (STAT_DEFAULT_VALUE * len(REQUIRED_STATS))
         spent = sum(stats.values())
@@ -2314,7 +2315,8 @@ class CharacterDraft(SharedMemoryModel):
 
     def calculate_final_stats(self) -> dict[str, int]:
         """Return allocated stats (stored units, 10-50). No bonuses applied on top."""
-        stats = self.draft_data.get("stats", {})
+        # `or {}`: a client that clears the key leaves it holding None (#5199).
+        stats = self.draft_data.get("stats") or {}
         return {name: stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS}
 
     def _is_attributes_complete(self) -> bool:

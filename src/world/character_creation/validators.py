@@ -434,7 +434,8 @@ def stat_value_error(stat_name: str, value: int) -> str | None:
 def get_attributes_errors(draft: CharacterDraft) -> list[str]:
     """Return validation errors for the Attributes & Skills stage."""
     errors: list[str] = [*get_skill_allocation_errors(draft)]
-    stats = draft.draft_data.get("stats", {})
+    # `or {}`: a client that clears the key leaves it holding None (#5199).
+    stats = draft.draft_data.get("stats") or {}
 
     # All 12 stats must exist
     missing = [s for s in REQUIRED_STATS if s not in stats]

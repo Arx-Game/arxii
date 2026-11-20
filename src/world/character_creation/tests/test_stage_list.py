@@ -204,3 +204,32 @@ class SurnameTests(TestCase):
         client.force_authenticate(draft.account)
         body = client.get(f"/api/character-creation/drafts/{draft.pk}/").json()
         assert body["surname"] == "Turris"
+
+
+class ClearedStatisticsTests(TestCase):
+    """A draft whose statistics were cleared still reads (#5199).
+
+    The draft serializer merges ``draft_data`` key by key, so ``{"stats": null}`` leaves
+    the key in place holding ``None``. The Attributes validator took that for a dict, and
+    every read of the draft answered 500 from then on.
+    """
+
+    def setUp(self) -> None:
+        self.account = AccountFactory()
+        self.draft = CharacterDraftFactory(account=self.account)
+        self.client = APIClient()
+        self.client.force_authenticate(self.account)
+        self.url = f"/api/character-creation/drafts/{self.draft.pk}/"
+
+    def test_a_draft_with_its_statistics_set_to_null_reads_and_asks_for_them(self):
+        saved = self.client.patch(self.url, {"draft_data": {"stats": None}}, format="json")
+        assert saved.status_code == 200, saved.content
+        body = self.client.get(self.url).json()
+        assert "Set your statistics" in body["stage_errors"][str(int(Stage.ATTRIBUTES))]
+        # The budget less the default spread, as for a draft that never saved any.
+        fresh = CharacterDraftFactory()
+        assert body["stats_points_remaining"] == fresh.calculate_points_remaining()
+
+    def test_the_final_statistics_of_such_a_draft_are_the_defaults(self):
+        self.draft.draft_data = {"stats": None}
+        assert set(self.draft.calculate_final_stats().values()) == {20}
