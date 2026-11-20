@@ -25,7 +25,8 @@ design. This agent catches it in the diff the design turned into.
 
 ## What to read
 
-1. The diff (`git diff origin/main...HEAD`, or whatever the dispatch prompt names).
+1. The diff. When the dispatch prompt names a commit, a branch or a PR, review that
+   (`git show <sha>` for one commit). Otherwise it is `git diff origin/main...HEAD`.
 2. For every new helper, class, option, wrapper or abstraction in it: the code
    that already sits next to it, its callers in the diff, and the repo-wide search
    for something that already does the same job.
@@ -47,7 +48,10 @@ design. This agent catches it in the diff the design turned into.
    subclass, a wrapper that only forwards, an option or setting nobody sets, a
    backwards-compatibility shim or dual-format path (`django_notes.md` rules these
    out, with the exception that data is never discarded).
-5. **Merge.** Near-copies that must change together. Name both places.
+5. **Merge.** Near-copies that must change together. Name both places. A batch form
+   written beside a single-item form on purpose (one query for many rows, say) is
+   not a merge finding unless one can sit on top of the other at no extra cost. When
+   it cannot, it is at most a question for the author.
 6. **Split.** One function doing several unrelated jobs, so it is hard to read or
    test. Split by job, never by line count, and never into helpers that exist only
    to make a function shorter.
@@ -87,6 +91,8 @@ design. This agent catches it in the diff the design turned into.
   caller really is absent, the option really is never set (search fixtures, admin
   forms, seeds and settings, not only Python callers).
 - Name the smallest fix that works, and say how many lines it removes or adds.
+- A diff with nothing to report is a good result. Never stretch a maintenance
+  worry into a finding so that the report has one.
 
 ## Report
 
@@ -99,7 +105,10 @@ the findings, numbered, each with:
 - **Smallest fix:** what to delete, call or merge instead, with the net line change.
 
 Group them as **Fix before the PR opens** (code that should not exist, a reuse that
-is a plain duplicate) and **Worth doing** (a smaller form, a merge). Skip an empty
-group. Then one line, `Net: about -<N> lines possible`, when there are findings.
+is a plain duplicate), **Worth doing** (a smaller form, a merge) and **Questions for
+the author** (a surface whose role you could not establish, or a deliberate
+near-copy). A question has Where, What this is and the question itself, and no fix.
+Skip an empty group. Then one line when there are findings: `Net: about -<N> lines
+possible`, or `Net: no lines to remove` when the findings are only questions.
 Nothing found: say what the diff does, then `No lean findings`, and one line on
 what you searched.
