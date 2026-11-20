@@ -433,6 +433,8 @@ class DraftStageVisitInline(admin.TabularInline):
 
     model = DraftStageVisit
     extra = 0
+    # One row per draft and stage: a doubled row gets the shared formset's plain message.
+    formset = OneRowPerFormSet
 
 
 @admin.register(CharacterDraft)
