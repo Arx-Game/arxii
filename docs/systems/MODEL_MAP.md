@@ -1378,7 +1378,7 @@
 - `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, reading: world.ceremonies.services.ItemReading, counted: bool, granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and, when it counts, feed ``being``'s pool.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
-- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held,`
+- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - Pending offers for characters currently held by the account, on open rites.`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
 - `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None', being: 'WorshippedBeing | None' = None, request: 'RequestedItem | None' = None) -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
@@ -3258,6 +3258,7 @@
   - source_character -> evennia.ObjectDB [FK] (nullable)
   - source_technique -> magic.Technique [FK] (nullable)
   - source_vow -> covenants.CovenantRole [FK] (nullable)
+  - source_item -> items.ItemInstance [FK] (nullable)
   - cast_destination -> areas.Position [FK] (nullable)
   - cast_position_a -> areas.Position [FK] (nullable)
   - cast_position_b -> areas.Position [FK] (nullable)
@@ -3381,6 +3382,7 @@
   - species_gift_drawbacks <- species.SpeciesGiftGrant
   - species_gift_benefits <- species.SpeciesGiftGrant
   - alternate_self_emergences <- forms.AlternateSelf
+  - worn_on_items <- items.ItemWornCondition
   - ward_reactions <- room_features.RoomWardDetails
   - defense_progression_projects <- room_features.DefenseProgressionDetails
   - miracleappliedcondition_applied <- worship.MiracleAppliedCondition
@@ -3479,7 +3481,7 @@
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult - Increment a condition's severity and advance stage if threshold crossed.`
 - `advance_condition_stage(*, payload: object, condition_name: str) -> int | None - Advance the bearer's condition by one stage *now*, on this event (#3416).`
 - `aggro_priority_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - Total aggro priority per target from active draws_aggro conditions (#4572).`
-- `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
+- `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '', source_item: 'ItemInstance | None' = None) -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
 - `apply_condition_by_name(*, payload: object, condition_name: str) -> None - Apply a named condition to the character carried by the event payload.`
 - `apply_stage_entry_aftermath(payload: flows.events.payloads.ConditionStageChangedPayload) -> None - On ascending stage changes, apply the stage's on_entry_conditions.`
 - `attempt_break_free(instance: world.conditions.models.ConditionInstance, *, extra_modifiers: int = 0, helper_bonus: int = 0, in_combat_tick: bool = False, level_override: int | None = None) -> world.conditions.types.BreakFreeResult - Resolve a single break-free attempt against an applied condition.`
@@ -5237,6 +5239,7 @@
   - image -> evennia_extensions.Media [FK] (nullable)
   - legend_deeds -> societies.LegendEntry [M2M]
 **Pointed to by:**
+  - worn_conditions_applied <- conditions.ConditionInstance
   - building_permit_details <- buildings.BuildingPermitDetails
   - placed_as_decoration <- buildings.RoomDecoration
   - clues_about <- clues.Clue
@@ -5257,6 +5260,7 @@
   - recycle_requests <- items.RecycleRequest
   - item_facets <- items.ItemFacet
   - item_styles <- items.ItemStyle
+  - worn_conditions <- items.ItemWornCondition
   - stored_outfits <- items.Outfit
   - outfit_slots <- items.OutfitSlot
   - showcases <- items.ShowcaseState
@@ -5362,6 +5366,11 @@
 **Foreign Keys:**
   - item_template -> items.ItemTemplate [FK]
   - property -> mechanics.Property [FK]
+
+### ItemWornCondition
+**Foreign Keys:**
+  - item_instance -> items.ItemInstance [FK]
+  - condition -> conditions.ConditionTemplate [FK]
 
 ### Keepsake
 **Foreign Keys:**
@@ -5756,7 +5765,7 @@
 ### Service Functions
 - `attach_facet_to_item(*, crafter: 'AccountDB', item_instance: 'ItemInstance', facet: 'Facet', attachment_quality_tier: 'QualityTier') -> 'ItemFacet' - Attach ``facet`` to ``item_instance``.`
 - `consume_item_charges(*, item_instance: 'ItemInstance', amount: 'int' = 1) -> 'ItemInstance' - Spend ``amount`` charges atomically (row-locked). Logs ACTIVATED; at 0`
-- `equip_item(*, character_sheet: 'object', item_instance: 'ItemInstance', body_region: 'str', equipment_layer: 'str') -> 'EquippedItem' - Place ``item_instance`` on ``character_sheet``'s slot.`
+- `equip_item(*, character_sheet: 'CharacterSheet', item_instance: 'ItemInstance', body_region: 'str', equipment_layer: 'str') -> 'EquippedItem' - Place ``item_instance`` on ``character_sheet``'s slot.`
 - `get_max_cleared_mantle_level(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'int' - Return the highest cleared level for (sheet, mantle), or 0 if none.`
 - `grant_mantle_clearance(sheet: 'CharacterSheet', mantle: 'Mantle', level: 'int') -> 'MantleLevelClearance' - Staff override: record a clearance at ``level`` without the codex check.`
 - `record_mantle_clearances(sheet: 'CharacterSheet', mantle: 'Mantle') -> 'list[MantleLevelClearance]' - Idempotently record codex-gated mantle clearances for ``sheet``.`
@@ -11331,7 +11340,7 @@
 
 ### Service Functions
 - `advance_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int) -> world.conditions.types.SeverityAdvanceResult - Increment a condition's severity and advance stage if threshold crossed.`
-- `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '') -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
+- `apply_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, severity: int = 1, duration_rounds: int | None = None, source_character: 'ObjectDB | None' = None, source_technique: 'Technique | None' = None, source_description: str = '', source_item: 'ItemInstance | None' = None) -> world.conditions.types.ApplyConditionResult - Apply a condition to a target, handling stacking and interactions.`
 - `decay_condition_severity(instance: world.conditions.models.ConditionInstance, amount: int, *, _skip_corruption_sync: bool = False) -> world.conditions.types.SeverityDecayResult - Inverse of advance_condition_severity. Walks stage down if threshold crossed.`
 - `ensure_round_for_acute_condition(character_sheet: 'CharacterSheet') -> 'SceneRound | None' - Ensure an active scene round exists for the character's room and enrol all present`
 - `has_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, include_suppressed: bool = False) -> bool - Check if target has a specific condition.`

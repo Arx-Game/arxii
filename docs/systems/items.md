@@ -177,6 +177,48 @@ theft tracking, and provenance queries for items that matter.
 
 ---
 
+## Worn conditions: magical gear puts a condition on its wearer (#5074) [BUILT & WIRED]
+
+`ItemWornCondition` (`world/items/models.py`, next to `ItemStyle`) is a plain row: this
+item gives its wearer this `ConditionTemplate` (`item_instance`, `condition` PROTECT,
+nullable `mantle_level`, unique per item and condition). The condition carries everything
+the item does (check bonuses, resistances, capabilities, and the properties that reach
+applications), so gear has no capability path of its own. Staff author the rows in an inline
+on the item's admin page. Armor, crafted bonuses, facets and mantle passives keep their own
+paths and stay free while worn.
+
+- **Reconcile.** `reconcile_worn_conditions(sheet, apply_rows=())`
+  (`world/items/services/worn_conditions.py`) is called by `equip_item` (naming the rows of
+  the item just put on), `unequip_item` (naming none), `spend_resonance_for_imbuing` when a
+  MANTLE thread's level rises (naming the rows whose mantle level the raise crossed), and the
+  item admin when a row is saved or deleted while the item is worn. It removes a gear
+  condition no worn item gives any more, repoints one whose item came off while another worn
+  item gives it, and applies only the rows the caller names, and only when she does not
+  already hold the condition from any source. It runs inside the caller's transaction with
+  no broad catch (unlike the sun reconcile).
+- **Source.** `ConditionInstance.source_item` (SET_NULL) records which item gave the
+  condition; the reconcile touches only instances with it set. The wearer's condition list
+  reads the item's name from it (`ConditionInstanceSerializer`, shown only where the
+  serializer context carries `show_gear_source`: the bearer's own list, and combat's owner,
+  GM and staff view); an onlooker never sees it.
+- **Mantle levels.** A row's `mantle_level` is a mantle level (1 to `Mantle.max_level`), met
+  when the wearer's MANTLE thread has reached it: `thread_rung(thread.level)` (a thread's
+  stored level runs ten to one with a mantle's levels). Another wearer, with no thread, gets
+  nothing from a gated row.
+- **Dispelled or lapsed.** A dispelled condition leaves no instance, and nothing re-applies
+  it except a named row, so it stays off until she takes the item off and puts it back on.
+  Staff untick `can_be_dispelled` where it should never come off.
+- **One source per condition.** The admin refuses an item row for a condition any
+  `TechniqueAppliedCondition` names, and a technique row for a condition an item gives
+  (`clean()` on both).
+- **Delete paths.** `release_worn_conditions(item)` runs before a hard delete
+  (`hard_delete_item_instance`) and in the admin's delete and bulk delete, which cascade
+  equipped rows without unequipping. The soft-delete purge skips an item carrying a worn
+  condition row (it is authored design).
+- **Per-use cost.** See conditions.md "Gear conditions": movement and dodge powers charge
+  the condition's `reactive_anima_cost` and overspend into Soulfray; a zero cost pays
+  fatigue as any non-technique source.
+
 ## Context menus for items and targets (#4032)
 
 The web game wraps inventory-item cards/details, room objects, exits, places, and safe visible worn-item rows in the shared `frontend/src/game/target-menu/TargetMenu.tsx` context menu. Right-click and the context-menu keyboard gesture request server-composed actions; ordinary left-click behavior remains unchanged. The read endpoint is `GET /api/actions/characters/<actor_id>/<items|objects|exits|places>/<target_id>/menu/` (`src/actions/target_menu_views.py`). It resolves a typed target inside the viewer's current scope and uses shared action availability checks; it does not execute actions. Dispatch rechecks current rules.
