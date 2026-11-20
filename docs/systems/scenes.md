@@ -777,7 +777,12 @@ PRIMARY persona is effectively immutable once created, so no write site needs to
   reference (optionally narrowed by `conversation`), plus `before`/`after` cursors so a client can
   page further in either direction without re-deriving the boundary. A missing or unauthorized
   reference returns an identical 404 (`"This pose is no longer available."`) — the two are never
-  distinguished.
+  distinguished. Frontend (#3751): `GamePage`'s historical reference is a `useInfiniteQuery`
+  (`play-reference`) whose first page is this window (or the conversation's latest page) and whose
+  `before`/`after` cursors feed "Load earlier history" and "Load later history" in
+  `ThreadedNarrativeReader`, repeating the first request's filters because the cursor is bound to
+  them. A failed earlier or later page leaves the passage already read on screen; only a reference
+  with nothing loaded shows the unavailable or retry states.
 - `GET /api/play/search/` (#3759) - Case-insensitive substring search over authorized,
   already-rendered content. Requires a 2-200 character query AND at least one of `conversation`/
   `kind`/`from`/`to`/`until`/`participant` (an unbounded scan is rejected with 400); cursor-paginated

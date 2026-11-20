@@ -363,6 +363,9 @@ interface ThreadedNarrativeReaderProps {
   notes?: FeedNote[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
+  /** Only a historical reference has a later page; the live feed ends at now. */
+  hasLaterPage?: boolean;
+  fetchLaterPage?: () => void;
   retention?: { retained: number; evicted: number; warning: boolean; gap: boolean };
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   onAddTarget?: (name: string) => void;
@@ -445,6 +448,8 @@ export function ThreadedNarrativeReader({
   notes = NO_NOTES,
   hasNextPage,
   fetchNextPage,
+  hasLaterPage,
+  fetchLaterPage,
   retention,
   onAvatarClick,
   onAddTarget,
@@ -1746,15 +1751,26 @@ export function ThreadedNarrativeReader({
             No more local "Jump to latest": since every thread is always
             visible and each has its own window, there's no longer a single
             local window to jump back from. */}
-        {hasNextPage && (
+        {(hasNextPage || (hasLaterPage && fetchLaterPage)) && (
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={fetchNextPage}
-              className="flex-1 rounded border px-3 py-2 text-sm"
-            >
-              Load earlier history
-            </button>
+            {hasNextPage && (
+              <button
+                type="button"
+                onClick={fetchNextPage}
+                className="flex-1 rounded border px-3 py-2 text-sm"
+              >
+                Load earlier history
+              </button>
+            )}
+            {hasLaterPage && fetchLaterPage && (
+              <button
+                type="button"
+                onClick={fetchLaterPage}
+                className="flex-1 rounded border px-3 py-2 text-sm"
+              >
+                Load later history
+              </button>
+            )}
           </div>
         )}
       </div>

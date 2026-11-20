@@ -35,6 +35,7 @@ import { dreamKeys } from '@/dreams/queries';
 import { emitActionResult } from '@/hooks/actionResultBus';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fetchPlayContext } from './playQueries';
+import { wsPayloadToInteraction } from '@/scenes/hooks/useSceneInteractions';
 import * as playQueries from './playQueries';
 import type { EncounterDetail } from '@/combat/types';
 
@@ -2297,6 +2298,105 @@ describe('GamePage', () => {
           })
         );
       });
+    });
+  });
+
+  describe('historical reference paging (#3751)', () => {
+    const referenceUrl =
+      '/game?referenceKind=scene&referenceKey=scene:100&referencePose=5' +
+      '&referenceTimestamp=2026-01-15T10%3A05%3A00.000Z';
+    const pose = (id: number, content: string) =>
+      wsPayloadToInteraction({
+        id,
+        persona: { id: 7, name: 'Mirelle', thumbnail_url: '' },
+        content,
+        mode: 'pose',
+        timestamp: `2026-01-15T10:0${id}:00Z`,
+        scene_id: 100,
+        place_id: null,
+        place_name: null,
+        receiver_persona_ids: [],
+        target_persona_ids: [],
+      });
+
+    it('loads earlier and later passages with the server cursors, keeping what is already read', async () => {
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      vi.mocked(fetchPlayContext)
+        .mockResolvedValueOnce({
+          results: [pose(5, 'The middle passage.')],
+          before: 'cursor-before',
+          after: 'cursor-after',
+          threadId: null,
+        })
+        .mockResolvedValueOnce({
+          results: [pose(3, 'An earlier passage.')],
+          before: null,
+          after: null,
+          threadId: null,
+        })
+        .mockResolvedValueOnce({
+          results: [pose(8, 'A later passage.')],
+          before: null,
+          after: null,
+          threadId: null,
+        });
+      renderWithProviders(<GamePage />, { initialEntries: [referenceUrl] });
+      const user = userEvent.setup();
+
+      await screen.findByText('The middle passage.');
+      await user.click(await screen.findByRole('button', { name: /load earlier history/i }));
+      await screen.findByText('An earlier passage.');
+      expect(fetchPlayContext).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          id: '5',
+          conversation: 'scene:100',
+          timestamp: '2026-01-15T10:05:00.000Z',
+          before: 'cursor-before',
+        })
+      );
+      await user.click(await screen.findByRole('button', { name: /load later history/i }));
+      await screen.findByText('A later passage.');
+      expect(fetchPlayContext).toHaveBeenLastCalledWith(
+        expect.objectContaining({ id: '5', after: 'cursor-after' })
+      );
+
+      const text = document.body.textContent ?? '';
+      expect(text.indexOf('An earlier passage.')).toBeLessThan(text.indexOf('The middle passage.'));
+      expect(text.indexOf('The middle passage.')).toBeLessThan(text.indexOf('A later passage.'));
+      // The ends are reached: neither control is left.
+      expect(screen.queryByRole('button', { name: /load earlier history/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /load later history/i })).toBeNull();
+    });
+
+    it('keeps the passage on screen when an earlier page fails and tries again from the button', async () => {
+      dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      vi.mocked(fetchPlayContext)
+        .mockResolvedValueOnce({
+          results: [pose(5, 'The middle passage.')],
+          before: 'cursor-before',
+          after: null,
+          threadId: null,
+        })
+        .mockRejectedValueOnce(new Error('network down'))
+        .mockResolvedValueOnce({
+          results: [pose(3, 'An earlier passage.')],
+          before: null,
+          after: null,
+          threadId: null,
+        });
+      renderWithProviders(<GamePage />, { initialEntries: [referenceUrl] });
+      const user = userEvent.setup();
+
+      await screen.findByText('The middle passage.');
+      await user.click(await screen.findByRole('button', { name: /load earlier history/i }));
+      await waitFor(() => expect(fetchPlayContext).toHaveBeenCalledTimes(2));
+
+      expect(screen.getByText('The middle passage.')).toBeInTheDocument();
+      await user.click(await screen.findByRole('button', { name: /load earlier history/i }));
+      await screen.findByText('An earlier passage.');
+      expect(screen.getByText('The middle passage.')).toBeInTheDocument();
     });
   });
 
