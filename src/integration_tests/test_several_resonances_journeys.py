@@ -502,12 +502,12 @@ def _aura_payload(client, character) -> dict:
 
 
 class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase):
-    """Flow 1: Fury 6, Wonder 1, Domination 3 (Fury and Wonder are Primal, Domination Abyssal).
+    """Flow 1: Fury 7 (Primal) and Domination 3 (Abyssal), the two picks creation allows.
 
     Hand-worked from the shipped creation numbers (10 points, 10 lifetime per point): the
-    picks seed 60 Fury, 10 Wonder and 30 Domination lifetime, so the aura is Primal 70 and
-    Abyssal 30, and she begins settled exactly there. The spec's halo reads "a third
-    abyssal" for 30 percent. No balance is granted by the seed.
+    picks seed 70 Fury and 30 Domination lifetime, so the aura is Primal 70 and Abyssal 30,
+    and she begins settled exactly there. The spec's halo reads "a third abyssal" for 30
+    percent. No balance is granted by the seed.
     """
 
     @classmethod
@@ -517,7 +517,6 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
         cls.staff = AccountFactory(is_staff=True)
         cls.celestial, cls.primal, cls.abyssal = ensure_canonical_affinities()
         cls.fury = ResonanceFactory(name="Fury", affinity=cls.primal)
-        cls.wonder = ResonanceFactory(name="Wonder", affinity=cls.primal)
         cls.domination = ResonanceFactory(name="Domination", affinity=cls.abyssal)
 
     def _finalized_with(self, picks: list[tuple[Resonance, int]]):
@@ -545,7 +544,7 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
         return ObjectDB.objects.get(pk=added.json()["character_id"])
 
     def test_the_halo_the_resonances_and_the_gift_thread_all_follow_the_picks(self) -> None:
-        character = self._finalized_with([(self.fury, 6), (self.wonder, 1), (self.domination, 3)])
+        character = self._finalized_with([(self.fury, 7), (self.domination, 3)])
         client = self.api(self.staff)
 
         payload = _aura_payload(client, character)
@@ -571,7 +570,7 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
                 row["resonance_name"]: (row["lifetime_earned"], row["balance"])
                 for row in held.json()
             },
-            {"Fury": (60, 0), "Wonder": (10, 0), "Domination": (30, 0)},
+            {"Fury": (70, 0), "Domination": (30, 0)},
         )
 
         threads = client.get(f"{THREADS}?owner={character.pk}&target_kind=GIFT")
@@ -584,15 +583,15 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
                 (row["resonance_name"], row["amount"], row["leads"])
                 for row in gift_thread["resonances"]
             ],
-            [("Fury", 0, True), ("Domination", 0, False), ("Wonder", 0, False)],
+            [("Fury", 0, True), ("Domination", 0, False)],
         )
 
     def test_one_resonance_picks_make_a_wholly_that_affinity_aura(self) -> None:
-        character = self._finalized_with([(self.domination, 10)])
+        character = self._finalized_with([(self.fury, 10)])
 
         payload = _aura_payload(self.api(self.staff), character)
 
-        self.assertEqual(_share_rows(payload), {"Abyssal": (Decimal(100), Decimal(100))})
+        self.assertEqual(_share_rows(payload), {"Primal": (Decimal(100), Decimal(100))})
         self.assertIs(payload["unsettled"], False)
 
 
