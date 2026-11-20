@@ -14,6 +14,12 @@ from world.traits.constants import STAT_POINT_VALUE, PrimaryStat
 STAT_MIN_VALUE = 10  # Minimum stat value
 STAT_MAX_VALUE = 50  # Maximum stat value during character creation
 STAT_DEFAULT_VALUE = 20  # Default starting value
+# The points a new character has to place across the twelve statistics, before any
+# bonus or penalty a species or distinction gives (owner ruling 2026-11-20, #5223: "let's
+# make the budget 350, so 110 starts unspent"). The default spread, twelve at
+# STAT_DEFAULT_VALUE, uses 240 of them. Until #5223 the budget was the default spread
+# itself, which left nothing to place.
+STAT_CREATION_BUDGET = 350
 STAT_ALLOCATION_STEP = STAT_POINT_VALUE
 
 # Age constraints for character creation

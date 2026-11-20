@@ -139,6 +139,12 @@ draft.get_starting_room()               # Beginnings override -> area default ->
 draft.get_stage_completion()            # Dict[int, bool] for all stages
 draft.can_submit()                      # True if all stages (except Review) complete
 draft.calculate_cg_points_remaining()   # starting_budget - total_spent
+draft.calculate_stat_budget()           # STAT_CREATION_BUDGET (350, #5223) + net stat bonuses
+                                         # from species and distinctions. The default spread
+                                         # (twelve at STAT_DEFAULT_VALUE, 240) leaves 110 to
+                                         # place; the stage is complete only at 0 remaining
+draft.calculate_points_remaining()      # that budget less the stats placed (less the default
+                                         # spread while none are saved)
 draft.calculate_cg_points_breakdown()   # itemized [{category, item, cost}, ...]:
                                          # "heritage" (Beginnings.cg_point_cost),
                                          # "upbringing" (OriginTemplate.cg_point_cost +

@@ -127,7 +127,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
     <RecordRail
       rows={[
         { label: 'Origin', value: draft.selected_area.name },
-        { label: 'Beginnings', value: draft.selected_beginnings.name },
+        { label: 'Beginning', value: draft.selected_beginnings.name },
         { label: 'Species', value: draft.selected_species?.name },
         { label: 'Gender', value: draft.selected_gender?.display_name },
         {

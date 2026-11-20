@@ -39,6 +39,7 @@ from world.character_creation.constants import (
     REPUTATION_SEED_MIN,
     REQUIRED_STATS,
     STARTING_TECHNIQUE_PICKS_TARGET,
+    STAT_CREATION_BUDGET,
     STAT_DEFAULT_VALUE,
     STAT_POINT_VALUE,
     TECHNIQUE_PERSONALIZATIONS_KEY,
@@ -2028,11 +2029,10 @@ class CharacterDraft(SharedMemoryModel):
         )
 
     def calculate_stat_budget(self) -> int:
-        """Total stat points = default * stat_count + net bonuses."""
+        """Total stat points: the creation budget plus net bonuses (#5223)."""
         bonuses = self.get_all_stat_bonuses()
-        base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
         net_bonus = sum(bonuses.values())
-        return base + net_bonus
+        return STAT_CREATION_BUDGET + net_bonus
 
     def calculate_points_remaining(self) -> int:
         """Budget minus allocated points. 0 = fully allocated."""
