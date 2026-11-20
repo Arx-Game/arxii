@@ -124,6 +124,26 @@ class PendingReactionWindowTests(APITestCase):
         assert response.status_code == status.HTTP_200_OK
         assert response.data["results"] == []
 
+    def test_a_window_on_a_blocked_authors_deed_is_not_listed(self) -> None:
+        """The pending list reads the deed through the same gate as the feed (#3751)."""
+        from world.scenes.block_services import create_block
+
+        _author_account, author_persona, _tenure = _account_with_selected_persona(self.scene)
+        witness_account, witness_persona, _witness_tenure = _account_with_selected_persona(
+            self.scene
+        )
+        window = self._open_window(InteractionFactory(persona=author_persona, scene=self.scene))
+        assert window.pk in self._ids(self._get_pending(witness_account))
+
+        create_block(
+            blocker_account=witness_account,
+            blocker_persona=witness_persona,
+            blocked_persona=author_persona,
+            reason="Test block.",
+        )
+
+        assert window.pk not in self._ids(self._get_pending(witness_account))
+
     def _open_window(self, interaction):
         return open_reaction_window(interaction=interaction, kind=ReactionWindowKind.WITNESS)
 
