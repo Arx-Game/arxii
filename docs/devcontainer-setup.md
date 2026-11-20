@@ -447,6 +447,10 @@ To enable:
      | Commit Statuses | ✓ | — |
      | Dependabot alerts | ✓ | — |
 
+     `Dependabot alerts: read` is what `tools/security_monitor.py` uses
+     (`docs/operations/security-alert-triage.md`); `Issues: write` lets it keep the
+     generic tracking issues.
+
      `Workflows: write` is needed because CI fixes occasionally touch
      `.github/workflows/*.yml`. `Actions: read` + `Commit Statuses: read`
      together cover what `gh pr checks` needs (GitHub's fine-grained

@@ -1,4 +1,5 @@
 # Security updates are alert-triggered and remain independent of this schedule.
+# Alert triage and the 48 hour target: docs/operations/security-alert-triage.md.
 # Version-update limits do not change GitHub's separate security PR limit.
 version: 2
 updates:
