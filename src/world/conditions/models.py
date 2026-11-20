@@ -37,6 +37,7 @@ from world.conditions.constants import (
     ControlLossFiresOn,
     DamageTickTiming,
     DurationType,
+    ReactiveMoment,
     StackBehavior,
     TreatmentTargetKind,
 )
@@ -639,6 +640,65 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         ),
     )
 
+    # === Authored narration for the reactive moments (#4587) ===
+    # One line per moment, each beside the field that makes the moment happen. Read through
+    # world.conditions.reactive_narration; validated in clean() with the same placeholder
+    # rule that code applies when it fills the line.
+    retaliation_narration = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        verbose_name="Strike-back line",
+        help_text=(
+            "Told to the room when this condition strikes back at a foe that hit its bearer. "
+            "You can use {bearer}, {source} (who put the condition on the bearer) and "
+            "{attacker} (the foe). Leave blank for a plain line."
+        ),
+    )
+    guard_narration = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        verbose_name="Guard line",
+        help_text=(
+            "Told to the room when the condition's source steps in and stops or softens a "
+            "blow meant for the bearer. You can use {bearer} (the one guarded), {source} "
+            "(the guard) and {attacker} (the foe). Leave blank for a plain line."
+        ),
+    )
+    provoke_narration = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        verbose_name="Provoked line",
+        help_text=(
+            "Told to the room when a foe carrying this condition turns on its source instead "
+            "of its usual target. You can use {bearer} (the provoked foe) and {source} (who "
+            "provoked it). Leave blank for a plain line."
+        ),
+    )
+    grace_narration = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        verbose_name="Grace line",
+        help_text=(
+            "Told when this condition keeps its bearer from being knocked out. You can use "
+            "{bearer} and {source} (who put the condition on the bearer). Leave blank for a "
+            "plain line."
+        ),
+    )
+    spent_narration = models.CharField(
+        max_length=300,
+        blank=True,
+        default="",
+        verbose_name="Spent line",
+        help_text=(
+            "Told when a once-only condition is used up. You can use {bearer} and {source} "
+            "(who put the condition on the bearer). Leave blank for a plain line."
+        ),
+    )
+
     # === Corruption (Scope 7) ===
     corruption_resonance = models.ForeignKey(
         "arxii.Resonance",
@@ -681,6 +741,28 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             raise ValidationError(
                 {"default_duration_type": "A held-breath condition lasts a number of rounds."}
             )
+        self._clean_reactive_narration()
+
+    def _clean_reactive_narration(self) -> None:
+        """Reject a reactive line that names an unknown placeholder or narrates an effect
+        this condition does not have (#4587).
+
+        A line for a moment the condition can never reach would sit unread, so staff are
+        told here instead of discovering it in a fight.
+        """
+        from world.conditions.reactive_narration import (  # noqa: PLC0415
+            line_field,
+            reactive_line_problem,
+        )
+
+        errors: dict[str, str] = {}
+        for moment in ReactiveMoment:
+            field = line_field(moment)
+            problem = reactive_line_problem(self, moment)
+            if problem:
+                errors[field] = problem
+        if errors:
+            raise ValidationError(errors)
 
     @classmethod
     def get_by_name(cls, name: str) -> ConditionTemplate:

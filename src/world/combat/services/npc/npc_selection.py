@@ -60,6 +60,7 @@ from world.scenes.constants import RoundStatus
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
     from world.combat.types import MovementProfile, TacticsInputs
+    from world.conditions.models import ConditionInstance
 
 
 @dataclass
@@ -81,6 +82,7 @@ class NpcRoundContext:
     active_locks_by_opponent: dict[int, int]
     shield_participant_ids: set[int]
     provokers: dict[int, int]
+    provoking_instances: dict[int, ConditionInstance]  # the instance behind each provoke (#4587)
     untargetable_by_opponent: dict[int, set[int]]  # concealed or spared PCs (#4811)
     unmatured_windup_opponent_ids: set[int]
     tactics: TacticsInputs
@@ -159,6 +161,7 @@ def _build_npc_round_context(
 
     _apply_aggro_conditions(opponents, active_participants, threat_maps, shield_participant_ids)
 
+    provokers, provoking_instances = _provoking_participant_ids(opponents, active_participants)
     return NpcRoundContext(
         encounter=encounter,
         opponents=opponents,
@@ -170,7 +173,8 @@ def _build_npc_round_context(
         threat_maps=threat_maps,
         active_locks_by_opponent=active_locks_by_opponent,
         shield_participant_ids=shield_participant_ids,
-        provokers=_provoking_participant_ids(opponents, active_participants),
+        provokers=provokers,
+        provoking_instances=provoking_instances,
         untargetable_by_opponent=untargetable_participant_ids(opponents, active_participants),
         unmatured_windup_opponent_ids=_unmatured_windup_opponent_ids(encounter, opponents),
         tactics=build_tactics_inputs(encounter, opponents, all_active, entries_by_pool),
@@ -319,26 +323,53 @@ def _apply_aggro_conditions(
 def _provoking_participant_ids(
     opponents: list[CombatOpponent],
     active_participants: list[CombatParticipant],
-) -> dict[int, int]:
+) -> tuple[dict[int, int], dict[int, ConditionInstance]]:
     """Map each provoked opponent to the participant that provoked it (#4584).
 
-    One query for every opponent. The condition's source is mapped through
+    Returns ``(participant id by opponent pk, provoking instance by opponent pk)``, from one
+    query for every opponent. The condition's source is mapped through
     ``active_participants``, so a source that is down, out of the fight or
-    not a player character is simply absent, and the opponent chooses as it normally would.
+    not a player character is simply absent from both maps, and the opponent chooses as it
+    normally would. The instance carries the template whose ``provoke_narration`` is told
+    when the provoke changes the opponent's choice (#4587).
     """
-    from world.conditions.services import provoking_source_by_target  # noqa: PLC0415
+    from world.conditions.services import provoking_instances_by_target  # noqa: PLC0415
 
     bearers = [o.objectdb for o in opponents if o.objectdb_id is not None]
-    source_by_bearer = provoking_source_by_target(bearers)
-    if not source_by_bearer:
-        return {}
+    instance_by_bearer = provoking_instances_by_target(bearers)
+    if not instance_by_bearer:
+        return {}, {}
     participant_by_character = {p.character_sheet.character.pk: p.pk for p in active_participants}
-    return {
-        o.pk: participant_by_character[source_by_bearer[o.objectdb_id]]
+    provoked = [
+        o
         for o in opponents
-        if o.objectdb_id in source_by_bearer
-        and source_by_bearer[o.objectdb_id] in participant_by_character
+        if o.objectdb_id in instance_by_bearer
+        and instance_by_bearer[o.objectdb_id].source_character_id in participant_by_character
+    ]
+    participants = {
+        o.pk: participant_by_character[instance_by_bearer[o.objectdb_id].source_character_id]
+        for o in provoked
     }
+    instances = {o.pk: instance_by_bearer[o.objectdb_id] for o in provoked}
+    return participants, instances
+
+
+def _provoke_decided(
+    target_pool: list[CombatParticipant],
+    locked_participant_id: int | None,
+    provoker_participant_id: int | None,
+) -> bool:
+    """True when the provoke, not a lock and not a lone target, chose this opponent's target.
+
+    The same precedence ``_narrow_to_locked_or_provoker`` applies: a lock whose participant
+    is in the pool wins, and the provoker narrows only a pool that had other choices in it.
+    """
+    if provoker_participant_id is None or len(target_pool) < 2:  # noqa: PLR2004 - a choice
+        return False
+    ids = {p.pk for p in target_pool}
+    if locked_participant_id in ids:
+        return False
+    return provoker_participant_id in ids
 
 
 def _narrow_to_locked_or_provoker(
@@ -387,8 +418,10 @@ def plan_opponent_round(
     ``ctx.provokers`` maps an opponent to the participant whose forces_attack_on_source
     condition sits on it (#4584). It narrows the pool to that participant after the lock
     check: an engagement lock that narrowed the pool wins, and a provoker outside the pool
-    leaves it as it was. Player characters ignore the flag because PCs choose their own
-    targets; charmed, turned and summoned opponents ignore it because they do not target the
+    leaves it as it was. When a provoke does choose the target (more than one in the pool, no
+    lock winning, no companion order overriding), the room is told in the declaring phase
+    (``provoke_narration``, #4587). Player characters ignore the flag because PCs choose their
+    own targets; charmed, turned and summoned opponents ignore it because they do not target the
     PC side (``targeting_participants`` is false).
 
     ``ctx.untargetable_by_opponent`` (#4811) drops concealed participants, and the source
@@ -511,12 +544,12 @@ def _round_target_pool(opponent: CombatOpponent, ctx: NpcRoundContext) -> tuple[
         untargetable=ctx.untargetable_by_opponent.get(opponent.pk, set()),
     )
     # Lock narrowing: if an active EngagementLock exists, narrow to the locked PC (#2020).
+    provoked = False
     if targeting_participants:
-        target_pool = _narrow_to_locked_or_provoker(
-            target_pool,
-            ctx.active_locks_by_opponent.get(opponent.pk),
-            ctx.provokers.get(opponent.pk),
-        )
+        locked_id = ctx.active_locks_by_opponent.get(opponent.pk)
+        provoker_id = ctx.provokers.get(opponent.pk)
+        provoked = _provoke_decided(target_pool, locked_id, provoker_id)
+        target_pool = _narrow_to_locked_or_provoker(target_pool, locked_id, provoker_id)
     # --- Companion order integration (#1921) ---
     # An ALLY summon with a CompanionOrder may override its target or skip.
     companion_result = _apply_companion_order(opponent, ctx.encounter.round_number, target_pool)
@@ -524,7 +557,26 @@ def _round_target_pool(opponent: CombatOpponent, ctx: NpcRoundContext) -> tuple[
         return None
     if isinstance(companion_result, list):
         target_pool = companion_result
+    if provoked and companion_result is None:
+        _narrate_provoke(opponent, ctx)
     return target_pool, targeting_participants
+
+
+def _narrate_provoke(opponent: CombatOpponent, ctx: NpcRoundContext) -> None:
+    """Tell the room that a provoked opponent turned on the condition's source (#4587).
+
+    Told in the declaring phase, as the opponent picks its target, the way a wind-up is
+    telegraphed. The provoke condition's ``provoke_narration``, else a plain line.
+    """
+    from world.conditions.constants import ReactiveMoment  # noqa: PLC0415
+    from world.conditions.reactive_narration import narrate_reactive_moment  # noqa: PLC0415
+
+    narrate_reactive_moment(
+        ctx.provoking_instances[opponent.pk],
+        ReactiveMoment.PROVOKE,
+        bearer_name=opponent.name,
+        encounter=ctx.encounter,
+    )
 
 
 def _attack_count(opponent: CombatOpponent, targets_in_reach: int) -> int:

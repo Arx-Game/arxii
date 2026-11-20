@@ -673,6 +673,8 @@ def _attempt_guardian_interpose(
             # attempted failure. Leave both budgets untouched for fallback.
             return False
 
+    if pre_payload.amount < amount_before and action is None:
+        _narrate_standing_guard(guardian, interposer, protected, pre_payload)
     if pre_payload.amount < amount_before:
         source_action = action if action is not None else _own_round_action(guardian)
         if source_action is not None:
@@ -689,6 +691,38 @@ def _attempt_guardian_interpose(
     if technique_action is None:
         _charge_interpose_fatigue(guardian, action, reactions_before=reactions_before)
     return True
+
+
+def _narrate_standing_guard(
+    guardian: CombatParticipant,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM - the guardian's own character
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM - the ward's own character
+    pre_payload: DamagePreApplyPayload,
+) -> None:
+    """Tell the room that a standing guard stepped in and stopped or softened a blow (#4587).
+
+    A standing guard has no declaration, so unlike a declared interpose nothing else said
+    she moved. The line is the guard condition's ``guard_narration``, else a plain one.
+    Only a guard that reduced the blow is told: a failed roll changed nothing, and a
+    declined attempt stays the guardian's private line (ADR-0161). A declared interpose
+    is not told here, since its caster declared it in the round's own narration.
+    """
+    from world.conditions.constants import ReactiveMoment  # noqa: PLC0415
+    from world.conditions.reactive_narration import (  # noqa: PLC0415
+        attacker_name_of,
+        narrate_reactive_moment,
+    )
+    from world.conditions.services import standing_guard_instance  # noqa: PLC0415
+
+    instance = standing_guard_instance(protected, interposer)
+    if instance is None:
+        return
+    narrate_reactive_moment(
+        instance,
+        ReactiveMoment.GUARD,
+        attacker=attacker_name_of(pre_payload.source.ref),
+        encounter=guardian.encounter,
+    )
 
 
 def _own_round_action(guardian: CombatParticipant) -> CombatRoundAction | None:

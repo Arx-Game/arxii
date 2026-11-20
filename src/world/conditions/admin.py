@@ -288,6 +288,25 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Reactive narration",
+            {
+                "fields": [
+                    "retaliation_narration",
+                    "guard_narration",
+                    "provoke_narration",
+                    "grace_narration",
+                    "spent_narration",
+                ],
+                "description": (
+                    "One line for each moment a reactive condition fires, told to the room "
+                    "(or only to the bearer and source when the condition is hidden or either "
+                    "is concealed). Leave a line blank for a plain system line. Each line "
+                    "names the placeholders it can use."
+                ),
+                "classes": ["collapse"],
+            },
+        ),
+        (
             "Allegiance",
             {
                 "fields": [

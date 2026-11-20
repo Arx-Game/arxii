@@ -21,7 +21,9 @@ from world.areas.positioning.services import (
     position_of,
 )
 from world.character_sheets.models import CharacterSheet
+from world.conditions.constants import ReactiveMoment, SpendNarration
 from world.conditions.models import ConditionInstance
+from world.conditions.reactive_narration import narrate_reactive_moment
 from world.conditions.services import spend_condition_use
 from world.magic.models.anima import CharacterAnima
 from world.magic.services.soulfray import accumulate_soulfray
@@ -130,7 +132,7 @@ def _spend_marker(payload: Any) -> None:
     """
     instance = _marker_instance(payload)
     if instance is not None:
-        spend_condition_use(instance)
+        spend_condition_use(instance, narration=SpendNarration.NONE)
 
 
 # ---------------------------------------------------------------------------
@@ -408,7 +410,10 @@ def strike_back(*, payload: Any, instance: ConditionInstance) -> None:
     defeated. ``bypass_pre_apply=True``, and the opponent damage path never emitting
     DAMAGE_APPLIED, end any retaliation loop. A once-only (``UNTIL_USED``) ward is spent
     through ``spend_condition_use`` once it has struck, so a second hit in the same round
-    finds it gone (``retaliating_instances`` queries afresh per hit).
+    finds it gone (``retaliating_instances`` queries afresh per hit). Each strike is told
+    (#4587): the template's ``retaliation_narration``, else a plain line, to the fight's room
+    (privately when the ward is hidden or its bearer or source concealed); the spend then
+    adds only an authored ``spent_narration``, never a second plain line.
     """
     if payload.amount_dealt <= 0 or instance.pk is None:
         return  # nothing landed, or the ward was spent earlier this round
@@ -441,7 +446,13 @@ def strike_back(*, payload: Any, instance: ConditionInstance) -> None:
         defeated = result.defeated
     if template.retaliation_condition is not None and opponent.objectdb_id and not defeated:
         apply_condition(opponent.objectdb, template.retaliation_condition, source_character=payer)
-    spend_condition_use(instance)
+    narrate_reactive_moment(
+        instance,
+        ReactiveMoment.RETALIATION,
+        attacker=opponent.name,
+        encounter=opponent.encounter,
+    )
+    spend_condition_use(instance, narration=SpendNarration.AUTHORED_ONLY)
 
 
 def _sheet_of(
