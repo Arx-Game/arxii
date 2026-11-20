@@ -4278,7 +4278,7 @@ GM at a given level may author (#2000, ADR-0097).
   [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md),
   [../adr/0141-story-room-access-is-player-side-join.md](../adr/0141-story-room-access-is-player-side-join.md)
 
-### Beta Reset (#3055 PR 2)
+### Beta Reset (#3055 PR 2, PR 3)
 Guarded management command that wipes every play-provenance row back to a pristine
 CG/authoring-only baseline at the alpha→beta cutover, filtering on the acquisition-
 provenance ledger (ADR-0206). Never an admin surface; four independent guards (hardcoded
@@ -4289,11 +4289,19 @@ must all pass before `--execute` touches a row; defaults to a dry-run.
 - **Services:** `world.beta_reset.services.wipe_pristine_world` /
   `preview_pristine_world_wipe` / `mark_released`; `SCOPE_TABLE` is the introspectable
   per-model delete/filter list (wholesale vs provenance-filtered)
-- **Commands:** `arx manage beta_reset [--execute --confirm "..." --backup-verified-at ...]`,
+- **Cutover policy (PR 3):** `world.beta_reset.cutover.run_beta_cutover` / `plan_cutover`
+  (roster characters, reserved original characters and `--carry-over` characters are released
+  to Available and progress-reset, then the wipe runs, one transaction);
+  `world.beta_reset.progress.reset_character_progress` / `plan_progress_reset`;
+  `world.beta_reset.classification` (`KEPT_WITH_REASON`, `UNDECIDED_AWAITING_RULING`,
+  `wiped_models`, `protect_blockers`); `world.roster.services.activity.is_reserved_against` /
+  `end_all_tenures_to_available`; `world.distinctions.services.delete_character_distinction`
+- **Commands:** `arx manage beta_reset [--execute --confirm "..." --backup-verified-at ...
+  --carry-over <sheet id>]`,
   `arx manage mark_beta_release --released-by <username>`
 - **Source:** `src/world/beta_reset/`, `src/world/management/commands/beta_reset.py`,
   `src/world/management/commands/mark_beta_release.py`
-- **Details:** [beta_reset.md](beta_reset.md) · ADR-0206 · ADR-0207
+- **Details:** [beta_reset.md](beta_reset.md) · ADR-0206 · ADR-0207 · ADR-3055
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social

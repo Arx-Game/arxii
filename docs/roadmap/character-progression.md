@@ -108,9 +108,15 @@ The central spine connecting every system in the game. Characters develop throug
   `docs/systems/INDEX.md`'s progression entry.
 - **Guarded beta-reset wipe (#3055 PR 2, built):** `arx manage beta_reset` performs the
   pristine-world wipe the ledger above derives from — hardcoded-constant + one-way DB
-  latch + typed confirmation + verified-fresh-backup guards, dry-run by default. PR 3
-  (roster characters progress-reset via this same ledger) is the remaining piece — see
-  `docs/systems/beta_reset.md` and ADR-0206/ADR-0207.
+  latch + typed confirmation + verified-fresh-backup guards, dry-run by default.
+- **Beta cutover policy layer (#3055 PR 3, built):** the same command first ends every
+  roster tenure, returns held roster characters to Available and progress-resets each
+  (`reset_character_progress`, reading the ledger), keeps player original characters
+  reserved to their creator (only that account may apply again), and carries over named
+  characters (`--carry-over`). Still open, awaiting owner rulings: which of the
+  `UNDECIDED_AWAITING_RULING` tables the wipe covers, how `CharacterCodexKnowledge` resets,
+  who deletes alpha characters in none of those kinds, and whether organisation treasuries
+  survive. See `docs/systems/beta_reset.md` and ADR-0206/ADR-0207/ADR-3055.
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP

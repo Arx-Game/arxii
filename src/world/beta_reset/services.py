@@ -43,16 +43,14 @@ introspectable by tests and by PR 3. Two shapes:
 **PR 2 / PR 3 boundary — read this before touching derived values.** This service does
 **NOT** step ``CharacterTraitValue`` back down after deleting a play-time
 ``CharacterTraitChange`` row, even though that row recorded the exact delta. That
-"replay the ledger backwards to restore a derived value" logic is **PR 3's roster
-progress-reset** scope (the spec: "roster characters progress-reset (via the ledger)" is
-explicitly PR 3), which needs to be careful and precise because PR 3 operates on
-characters that are *kept*. PR 2's own characters — the alpha test population — are
-**deleted wholesale at cutover by a separate step outside this command** (not by
-``wipe_pristine_world`` — this service never touches ``CharacterSheet``, ``Persona``,
-``RosterEntry``, or ``RosterTenure`` at all), so any derived-value drift this wipe leaves
-behind on a surviving ledger is moot for them. This wipe is reusable general-purpose
-"strip play-state, keep provenance-tagged CG rows" plumbing; PR 3 is what makes the
-numbers on a *kept* character's sheet consistent again.
+"replay the ledger backwards" logic lives in ``world.beta_reset.progress`` and runs for
+each KEPT character (roster characters, reserved original characters, carried-over
+characters) from ``world.beta_reset.cutover.run_beta_cutover``, which runs it BEFORE this
+wipe because it reads the rows this wipe deletes. Characters outside those three kinds are
+not touched by ``wipe_pristine_world`` at all (it never touches ``CharacterSheet``,
+``Persona``, ``RosterEntry`` or ``RosterTenure``), so any derived-value drift on them is
+the unruled deletion step's concern. This wipe is reusable general-purpose "strip
+play-state, keep provenance-tagged CG rows" plumbing.
 
 **What this does NOT touch, and why:**
 
