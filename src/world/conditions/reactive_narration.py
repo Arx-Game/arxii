@@ -32,8 +32,9 @@ from world.conditions.constants import DurationType, ReactiveMoment
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.combat.models import CombatEncounter
+    from world.combat.models import CombatEncounter, CombatOpponent
     from world.conditions.models import ConditionInstance, ConditionTemplate
+    from world.scenes.models import Scene
 
 BEARER = "bearer"
 SOURCE = "source"
@@ -206,18 +207,23 @@ def narrate_reactive_moment(  # noqa: PLR0913 - one moment's names and audience
     """Tell the audience that ``instance``'s reactive moment just happened.
 
     ``bearer_name`` overrides the presented name for a bearer that is an opponent (its
-    ``CombatOpponent.name``, not its object's key). ``attacker`` is the foe's name for the
-    moments that have one. ``encounter`` is the fight the moment happened in; without it
-    the bearer's own active combat participation is used, and with neither the moment is told
-    privately. ``plain_fallback=False`` says nothing when the template has no usable
-    authored line (the caller has already narrated this event in its own words).
+    ``CombatOpponent.name``, not its object's key); left out for an opponent, it is read
+    from the opponent row. ``attacker`` is the foe's name for the moments that have one.
+    ``encounter`` is the fight the moment happened in; without it the bearer's own fight is
+    found (a player character's active participation, an opponent's own encounter), and with
+    none the moment is told privately. ``plain_fallback=False`` says nothing when the template
+    has no usable authored line (the caller has already narrated this event in its own words).
     """
+    from world.conditions.serializers import condition_display_name  # noqa: PLC0415
+
     template = instance.condition
     bearer = instance.target
     source = instance.source_character
     people = [bearer] if source is None or source.pk == bearer.pk else [bearer, source]
+    opponent = _opponent_of(bearer)
+    fight = encounter or _fight_of(bearer, opponent)
     presented = presented_names(people)
-    names = {BEARER: bearer_name or presented[bearer.pk]}
+    names = {BEARER: bearer_name or (opponent.name if opponent else presented[bearer.pk])}
     if source is not None:
         names[SOURCE] = presented[source.pk]
     if attacker:
@@ -227,36 +233,39 @@ def narrate_reactive_moment(  # noqa: PLR0913 - one moment's names and audience
     if line is None:
         if not plain_fallback:
             return
-        line = plain_reactive_line(moment, ward=template.name, names=names)
+        line = plain_reactive_line(moment, ward=condition_display_name(instance), names=names)
 
-    room = _room_encounter(instance, encounter)
-    if room is None:
-        _tell_privately(people, line)
-    else:
+    if fight is not None and not _hidden(instance):
         from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
-        broadcast_action_outcome(encounter=room, narration=line)
+        broadcast_action_outcome(encounter=fight, narration=line)
+    else:
+        _tell_privately(people, line, scene=fight.scene if fight is not None else None)
 
 
-def _room_encounter(
-    instance: ConditionInstance, encounter: CombatEncounter | None
+def _opponent_of(
+    bearer: ObjectDB,  # noqa: OBJECTDB_PARAM - a bearer may be any object, an NPC included
+) -> CombatOpponent | None:
+    """The bearer's opponent row in a fight still going on, or None for anyone else."""
+    from world.combat.models import CombatOpponent  # noqa: PLC0415
+    from world.scenes.constants import RoundStatus  # noqa: PLC0415
+
+    return (
+        CombatOpponent.objects.filter(objectdb_id=bearer.pk)
+        .exclude(encounter__status=RoundStatus.COMPLETED)
+        .select_related("encounter")
+        .order_by("-pk")
+        .first()
+    )
+
+
+def _fight_of(
+    bearer: ObjectDB,  # noqa: OBJECTDB_PARAM - a bearer may be any object, an NPC included
+    opponent: CombatOpponent | None,
 ) -> CombatEncounter | None:
-    """The fight whose room hears the line, or None when the moment is hidden or out of combat.
-
-    Hidden by design: the template is not visible to others, or the bearer or the source
-    carries a concealing condition (a room line naming them would give them away).
-    """
-    from world.conditions.services import is_concealed  # noqa: PLC0415
-
-    template = instance.condition
-    bearer = instance.target
-    source = instance.source_character
-    if not template.is_visible_to_others or is_concealed(bearer):
-        return None
-    if source is not None and source.pk != bearer.pk and is_concealed(source):
-        return None
-    if encounter is not None:
-        return encounter
+    """The fight the bearer is in: its opponent row's encounter, else its active participation."""
+    if opponent is not None:
+        return opponent.encounter
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
     from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
@@ -264,17 +273,38 @@ def _room_encounter(
     try:
         sheet = bearer.sheet_data
     except (AttributeError, ObjectDoesNotExist):
-        return None  # an object with no sheet (an NPC) is in no one's fight but its own
+        return None
     context = resolve_combat_round_context(sheet)
     return context.participant.encounter if context is not None else None
+
+
+def _hidden(instance: ConditionInstance) -> bool:
+    """True when a room line would give the moment away.
+
+    Hidden by design: the template is not visible to others, or the bearer or the source
+    carries a concealing condition (a room line naming them would give them away).
+    """
+    from world.conditions.services import is_concealed  # noqa: PLC0415
+
+    bearer = instance.target
+    source = instance.source_character
+    if not instance.condition.is_visible_to_others or is_concealed(bearer):
+        return True
+    return source is not None and source.pk != bearer.pk and is_concealed(source)
 
 
 def _tell_privately(
     people: list[ObjectDB],  # noqa: OBJECTDB_PARAM - the bearer and the source, any character
     line: str,
+    *,
+    scene: Scene | None,
 ) -> None:
-    """Whisper the line, as the Narrator, to each person it names (web and telnet)."""
+    """Whisper the line, as the Narrator, to each person it names (web and telnet).
+
+    ``scene`` is the fight's own scene when there is one, so the private row is kept in the
+    scene the moment happened in and a refetch of that scene's log finds it.
+    """
     from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
 
     for person in people:
-        narrate_privately(person, line)
+        narrate_privately(person, line, scene=scene)

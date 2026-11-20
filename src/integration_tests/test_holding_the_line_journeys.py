@@ -532,7 +532,6 @@ class _TheGuardedYard(_TheYard):
             self._round()
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class BrennaStandsGuard(_TheGuardedYard):
     """Brenna's standing guard over Cassian: she steps into the brute's swing without declaring."""
 

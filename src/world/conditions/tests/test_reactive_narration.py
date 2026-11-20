@@ -1,8 +1,9 @@
 """The fill rule for authored reactive lines (#4587): a bad line never raises.
 
 The journeys in ``integration_tests/test_reactive_moment_narration_journeys.py`` carry the
-moments themselves; these cover only what a round cannot reach cheaply, the lines staff
-could type wrong.
+moments themselves, with a good line and with a blank one. These stay as unit tests because
+the fill rule is a pure function with many refusal branches, and the validation tests map
+error paths a staff member would have to hit one authored mistake at a time.
 """
 
 from django.core.exceptions import ValidationError
@@ -50,6 +51,8 @@ class FillReactiveLineTests(SimpleTestCase):
 
 
 class ReactiveLineValidationTests(TestCase):
+    """``ConditionTemplate.clean`` refuses a reactive line staff wrote wrongly."""
+
     def _problems(self, **fields: object) -> dict[str, list[str]]:
         template = ConditionTemplateFactory(**fields)
         try:
@@ -84,4 +87,4 @@ class ReactiveLineValidationTests(TestCase):
             spent_narration="{bearer}'s blessing from {source} is used up.",
         )
 
-        self.assertNotIn("spent_narration", problems)
+        self.assertEqual(problems, {})

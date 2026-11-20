@@ -43,8 +43,8 @@ from world.conditions.factories import (
     DamageTypeFactory,
     UnconsciousConditionFactory,
 )
-from world.conditions.models import ConditionTemplate
-from world.conditions.services import apply_condition
+from world.conditions.models import ConditionInstance, ConditionTemplate
+from world.conditions.services import apply_condition, spend_condition_use
 from world.scenes.constants import InteractionMode, PersonaType
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Interaction
@@ -88,6 +88,14 @@ class _TheYardWatched(_TheYard):
         """The scene log holds ``line`` once, and Dara was pushed that same line live."""
         self.assertEqual(self._lines_since(since).count(line), 1, self._lines_since(since))
         self.assertShownRow(self.dara, line)
+
+    def assertToldInFightScene(self, line: str) -> None:  # noqa: N802
+        """A private whisper of ``line`` sits in the fight's own scene, where a refetch finds it."""
+        self.assertTrue(
+            Interaction.objects.filter(
+                content=line, mode=InteractionMode.WHISPER, scene=self.encounter.scene
+            ).exists()
+        )
 
     def assertNotInRoomFeed(self, line: str, since: int) -> None:  # noqa: N802
         """``line`` is in no OUTCOME row since ``since`` and Dara was never pushed it."""
@@ -147,6 +155,7 @@ class StrikeBackIsNarrated(_TheYardWatched):
         self.assertNotInRoomFeed(line, mark)
         self.assertShownRow(self.cassian, line)
         self.assertShownRow(self.brenna, line)
+        self.assertToldInFightScene(line)
 
     def test_a_concealed_source_is_told_only_to_the_bearer_and_the_source(self) -> None:
         unseen = ConditionTemplateFactory(
@@ -161,6 +170,7 @@ class StrikeBackIsNarrated(_TheYardWatched):
         self.assertNotInRoomFeed(line, mark)
         self.assertShownRow(self.cassian, line)
         self.assertShownRow(self.brenna, line)
+        self.assertToldInFightScene(line)
 
 
 class GuardIsNarrated(_TheYardWatched, _TheGuardedYard):
@@ -280,3 +290,16 @@ class SpentIsNarrated(_TheYardWatched):
         mark = self._mark()
         self._round()
         self.assertRoomHeard("Brenna's Steadying Word is spent.", mark)
+
+    def test_a_once_only_ward_on_the_brute_is_told_to_the_room_by_the_brutes_name(self) -> None:
+        # The brute has no character sheet, so its fight and its name come from its opponent row.
+        ward = ConditionTemplateFactory(
+            name="Stone Skin", default_duration_type=DurationType.UNTIL_USED
+        )
+        apply_condition(self.brute.objectdb, ward, source_character=self.brenna)
+        instance = ConditionInstance.objects.get(target=self.brute.objectdb, condition=ward)
+
+        mark = self._mark()
+        spend_condition_use(instance)
+
+        self.assertRoomHeard(f"{BRUTE}'s Stone Skin is spent.", mark)
