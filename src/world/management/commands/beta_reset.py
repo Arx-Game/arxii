@@ -83,6 +83,16 @@ class Command(BaseCommand):
             ),
         )
 
+        parser.add_argument(
+            "--allow-incomplete-ledger",
+            action="store_true",
+            default=False,
+            help=(
+                "Proceed past kept characters whose provenance ledger is incomplete. By "
+                "default --execute refuses and names them; the dry-run lists them."
+            ),
+        )
+
     def handle(self, *_args: Any, **options: Any) -> None:
         execute: bool = options["execute"]
         confirm: str | None = options["confirm"]
@@ -102,6 +112,7 @@ class Command(BaseCommand):
                 confirm=confirm,
                 backup_verified_at=backup_verified_at,
                 carry_over_sheet_ids=options["carry_over"],
+                allow_incomplete_ledger=options["allow_incomplete_ledger"],
             )
         except BetaResetError as exc:
             raise CommandError(exc.user_message) from exc
@@ -117,10 +128,27 @@ class Command(BaseCommand):
         if report.plan.carry_over_already_covered:
             names = ", ".join(report.plan.carry_over_already_covered)
             self.stdout.write(f"  Already covered by policy, no --carry-over needed: {names}")
+        findings = report.plan.ledger_findings()
+        if findings:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{len(findings)} kept character(s) have an incomplete provenance ledger: "
+                    + ", ".join(findings)
+                    + ". --execute refuses these unless --allow-incomplete-ledger is given."
+                )
+            )
         self.stdout.write(
-            f"Not touched, awaiting a ruling: {report.undecided_models} character-linked "
-            "table(s) listed in world.beta_reset.classification.UNDECIDED_AWAITING_RULING."
+            f"{report.undecided_models} character-linked table(s) are awaiting a ruling "
+            "(world.beta_reset.classification.UNDECIDED_AWAITING_RULING) and are left "
+            "untouched by this command."
         )
+        if not report.executed:
+            self.stdout.write(
+                "The wipe counts below are computed BEFORE the policy steps run, so rows the "
+                "steps remove from kept characters (play-time techniques, gifts, distinctions, "
+                "trait changes) are counted here too. A real run reports what the wipe itself "
+                "deleted after the steps."
+            )
         for count in report.wipe.counts:
             if count.would_delete:
                 self.stdout.write(f"  {verb} {count.would_delete} {count.label} row(s).")

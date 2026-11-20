@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from io import StringIO
+from unittest import mock
 
 from django.core.management import call_command
 from django.core.management.base import CommandError
@@ -11,17 +12,39 @@ from django.utils import timezone
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, EmailAddressFactory
+from world.assets.factories import CluePoolEntryFactory
 from world.beta_reset.constants import CutoverPolicy
-from world.beta_reset.cutover import plan_cutover, run_beta_cutover
-from world.beta_reset.exceptions import CarryOverError, ConfirmationPhraseMismatchError
+from world.beta_reset.cutover import execute_cutover, plan_cutover, run_beta_cutover
+from world.beta_reset.exceptions import (
+    BetaResetDisabledError,
+    CarryOverError,
+    ConfirmationPhraseMismatchError,
+    IncompleteLedgerError,
+    ReleaseLatchedError,
+    WipeBlockedError,
+)
+from world.beta_reset.models import ReleaseLatch
 from world.beta_reset.services import CONFIRMATION_PHRASE
 from world.character_sheets.factories import CharacterSheetFactory
-from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
+from world.clues.constants import ClueTargetKind
+from world.clues.factories import ClueFactory
+from world.items.tests.test_natural_weapon_refusals import clawed_gift
+from world.magic.constants import AcquisitionOrigin
+from world.magic.factories import CharacterGiftFactory, ThreadFactory
+from world.magic.models import CharacterGift
+from world.roster.factories import (
+    PlayerDataFactory,
+    RosterApplicationFactory,
+    RosterEntryFactory,
+    RosterTenureFactory,
+)
 from world.roster.models import RosterEntry, RosterTenure
 from world.roster.models.choices import CreationProvenance, RosterType
 from world.roster.seeds import ensure_rosters
+from world.secrets.factories import SecretFactory
 from world.traits.factories import CharacterTraitValueFactory, StatTraitFactory
 from world.traits.models import CharacterTraitChange, CharacterTraitValue, TraitChangeSource
+from world.vitals.factories import CharacterVitalsFactory
 
 LONG_MESSAGE = "I would like to play this character because they seem interesting."
 
@@ -69,6 +92,16 @@ class CutoverTestBase(TestCase):
             RosterTenureFactory(player_data=holder, roster_entry=entry, end_date=None)
         _raised_stat(entry.character_sheet, self.stat, authored=3, now=5)
         return entry
+
+    def _set_value(self, entry, trait, value: int) -> None:
+        row = CharacterTraitValue.objects.get(character=entry.character_sheet, trait=trait)
+        row.value = value
+        row.save()
+
+    def _db_stat(self, entry) -> int | None:
+        return CharacterTraitValue.objects.values_list("value", flat=True).get(
+            character_id=entry.character_sheet_id, trait=self.stat
+        )
 
     def _stat(self, entry) -> int | None:
         row = CharacterTraitValue.objects.filter(
@@ -235,3 +268,173 @@ class CutoverCommandTests(CutoverTestBase):
         entry = RosterEntry.objects.get(pk=roster_char.pk)
         self.assertEqual(entry.roster.roster_type, RosterType.AVAILABLE)
         self.assertEqual(self._stat(entry), 3)
+
+
+class DryRunReportTests(CutoverTestBase):
+    def test_the_dry_run_reports_reservation_removed_rows_weapons_rivals_and_warnings(
+        self,
+    ) -> None:
+        original = self._entry(
+            CreationProvenance.PLAYER, holder=self.tester_data, author=self.tester
+        )
+        sheet = original.character_sheet
+        CharacterTraitValueFactory(
+            character=sheet, trait=StatTraitFactory(name="cutover_wit"), value=7
+        )
+        CharacterTraitChange.objects.create(
+            character_sheet=sheet,
+            trait=StatTraitFactory(name="cutover_wit"),
+            old_value=0,
+            new_value=7,
+            source=TraitChangeSource.DEVELOPMENT_LEVEL_UP,
+        )
+        CharacterGiftFactory(character=sheet, gift=clawed_gift(), origin=AcquisitionOrigin.TRAINED)
+        RosterApplicationFactory(player_data=self.other_data, character=sheet)
+        # A second kept character whose ledger does not add up.
+        broken = self._entry(CreationProvenance.STAFF, holder=self.other_data)
+        self._set_value(broken, self.stat, 9)
+        out = StringIO()
+
+        call_command("beta_reset", stdout=out)
+
+        output = out.getvalue()
+        self.assertIn(f"reserved to {self.tester.username}", output)
+        self.assertIn("rows removed: cutover_wit", output)
+        self.assertIn("natural weapon", output)
+        self.assertIn("1 pending application(s) from other accounts", output)
+        self.assertIn(
+            "LEDGER WARNING: cutover_strength: the ledger ends at 5 but the value is 9", output
+        )
+        self.assertIn("1 kept character(s) have an incomplete provenance ledger", output)
+        self.assertIn("left untouched by this command", output)
+        self.assertIn("computed BEFORE the policy steps", output)
+        self.assertEqual(CharacterGift.objects.filter(character=sheet).count(), 1)
+
+
+class CutoverGuardTests(CutoverTestBase):
+    def test_a_direct_execute_call_is_refused_when_disabled_or_released(self) -> None:
+        roster_char = self._entry(CreationProvenance.STAFF, holder=self.tester_data)
+        plan = plan_cutover()
+
+        with (
+            mock.patch("world.beta_reset.services.BETA_RESET_ENABLED", False),
+            self.assertRaises(BetaResetDisabledError),
+        ):
+            execute_cutover(plan)
+        ReleaseLatch.objects.create(released_by=self.tester)
+        with self.assertRaises(ReleaseLatchedError):
+            execute_cutover(plan)
+
+        self.assertEqual(self._stat(roster_char), 5)
+        self.assertTrue(roster_char.tenures.filter(end_date__isnull=True).exists())
+
+
+class IncompleteLedgerCutoverTests(CutoverTestBase):
+    def _broken_roster_character(self):
+        entry = self._entry(CreationProvenance.STAFF, holder=self.tester_data)
+        self._set_value(entry, self.stat, 9)
+        return entry
+
+    def test_execute_refuses_and_names_the_character_and_trait(self) -> None:
+        entry = self._broken_roster_character()
+
+        with self.assertRaises(IncompleteLedgerError) as raised:
+            self._execute()
+
+        self.assertIn("cutover_strength", str(raised.exception))
+        self.assertIn(entry.character_sheet.character.db_key, str(raised.exception))
+        self.assertEqual(self._stat(entry), 9)
+        self.assertTrue(entry.tenures.filter(end_date__isnull=True).exists())
+
+    def test_the_command_raises_a_command_error_and_the_flag_proceeds(self) -> None:
+        entry = self._broken_roster_character()
+        arguments = {"confirm": CONFIRMATION_PHRASE, "stdout": StringIO()}
+
+        with self.assertRaises(CommandError) as raised:
+            call_command(
+                "beta_reset",
+                "--execute",
+                backup_verified_at=timezone.now().isoformat(),
+                **arguments,
+            )
+        self.assertIn("--allow-incomplete-ledger", str(raised.exception))
+
+        call_command(
+            "beta_reset",
+            "--execute",
+            "--allow-incomplete-ledger",
+            backup_verified_at=timezone.now().isoformat(),
+            **arguments,
+        )
+        self.assertEqual(self._stat(entry), 7)
+
+
+class CutoverRollbackTests(CutoverTestBase):
+    def _blocked_world(self):
+        """A kept character with progress, and a Secret whose clue has a pool entry."""
+        entry = self._entry(CreationProvenance.STAFF, holder=self.tester_data)
+        clue = ClueFactory(
+            target_kind=ClueTargetKind.SECRET,
+            target_codex_entry=None,
+            target_secret=SecretFactory(),
+        )
+        CluePoolEntryFactory(clue=clue)
+        return entry
+
+    def test_a_protected_error_after_the_policy_steps_rolls_everything_back(self) -> None:
+        entry = self._blocked_world()
+
+        with self.assertRaises(WipeBlockedError) as raised:
+            self._execute()
+
+        self.assertEqual(raised.exception.blocking_models, ["CluePoolEntry"])
+        # Read the database, not the identity-mapped instance: the rollback restored the rows
+        # but this process still holds the instance the policy step changed.
+        shelf = RosterEntry.objects.values_list("roster__roster_type", flat=True).get(pk=entry.pk)
+        self.assertEqual(shelf, RosterType.ACTIVE)
+        self.assertTrue(
+            RosterTenure.objects.filter(roster_entry_id=entry.pk, end_date__isnull=True).exists()
+        )
+        self.assertEqual(self._db_stat(entry), 5)
+        self.assertEqual(
+            CharacterTraitChange.objects.filter(
+                character_sheet=entry.character_sheet,
+                source=TraitChangeSource.DEVELOPMENT_LEVEL_UP,
+            ).count(),
+            1,
+        )
+
+    def test_the_command_names_the_blocking_model_not_a_traceback(self) -> None:
+        self._blocked_world()
+
+        with self.assertRaises(CommandError) as raised:
+            call_command(
+                "beta_reset",
+                "--execute",
+                confirm=CONFIRMATION_PHRASE,
+                backup_verified_at=timezone.now().isoformat(),
+                stdout=StringIO(),
+            )
+
+        self.assertIn("CluePoolEntry", str(raised.exception))
+        self.assertIn("rolled back", str(raised.exception))
+
+
+class AfterTheWipeTests(CutoverTestBase):
+    def test_the_thread_cache_and_max_health_are_right_in_the_same_process(self) -> None:
+        entry = self._entry(CreationProvenance.STAFF, holder=self.tester_data)
+        sheet = entry.character_sheet
+        vitals = CharacterVitalsFactory(
+            character_sheet=sheet, base_max_health=50, max_health=999, health=10
+        )
+        capstone_thread = ThreadFactory(owner=sheet, as_capstone_thread=True)
+        kept_thread = ThreadFactory(owner=sheet)
+        self.assertEqual(
+            {t.pk for t in sheet.character.threads.all()}, {capstone_thread.pk, kept_thread.pk}
+        )
+
+        self._execute()
+
+        self.assertEqual([t.pk for t in sheet.character.threads.all()], [kept_thread.pk])
+        vitals.refresh_from_db()
+        self.assertEqual(vitals.max_health, 50)
