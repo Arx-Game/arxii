@@ -380,16 +380,6 @@ def own_affinity(sheet: CharacterSheet) -> Affinity | None:
     return _main_affinity(sheet.aura_or_none)
 
 
-def earn_rate_percent(sheet: CharacterSheet) -> int:
-    """The earn rate of the character's main affinity, as a percentage (#5181).
-
-    100 when the sheet has no aura or no main affinity. Reads the cached aura shares, so it adds
-    no query on a warm cache.
-    """
-    affinity = own_affinity(sheet)
-    return 100 if affinity is None else affinity.earn_rate_percent
-
-
 def learn_rate_percent(sheet: CharacterSheet) -> int:
     """The learn rate of the character's main affinity, as a percentage (#5181).
 

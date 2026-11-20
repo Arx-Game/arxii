@@ -208,11 +208,9 @@ def grant_resonance(  # noqa: PLR0913
             amount = int(amount * (1 + earn_rate_bonus / Decimal(100)))
 
     if source not in AFFINITY_RATE_EXEMPT_SOURCES:
-        from world.magic.services.drift import earn_rate_percent  # noqa: PLC0415
-
-        # The character's main affinity sets how fast they earn (#5181). A deed worth at least 1
-        # is never scaled down to nothing, so its ledger row always exists.
-        scaled = amount * earn_rate_percent(character_sheet) // 100
+        # The resonance earned sets how fast it grows (#5231). A deed worth at least 1 is never
+        # scaled down to nothing, so its ledger row always exists.
+        scaled = amount * resonance.affinity.earn_rate_percent // 100
         amount = max(scaled, 1)
 
     # Peek, don't read: character_sheet.cached_resonances would force a query
