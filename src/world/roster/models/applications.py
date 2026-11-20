@@ -74,6 +74,20 @@ class RosterApplication(SharedMemoryModel):
 
         entry = self.character.roster_entry
 
+        # An original character may only be seated for the account that created it
+        # (#3055). Checked here, not only when an application is filed, so a rival
+        # application filed before the beta cutover cannot be approved onto it.
+        from world.roster.services.activity import (
+            ReservedForCreatorError,
+            is_reserved_against,
+        )
+
+        if is_reserved_against(entry, self.player_data.account_id):
+            msg = f"Entry {entry.pk} is reserved to another account."
+            raise ReservedForCreatorError(
+                msg, user_message="This character is reserved for the player who created it."
+            )
+
         # Character slots (#3996): the player may have taken another character
         # since applying, so approval re-checks with this application left out of
         # the count. Raises SlotsFullError for the caller to show the reviewer.

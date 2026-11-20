@@ -16,7 +16,7 @@ from world.roster.models import (
     ValidationMessages,
 )
 from world.roster.models.choices import ActivityRequirement
-from world.roster.services.activity import is_reserved_against
+from world.roster.services.activity import ReservedForCreatorError, is_reserved_against
 from world.roster.services.slots import SlotsFullError, assert_slot_available
 
 
@@ -296,7 +296,7 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
         if action == ApplicationAction.APPROVE:
             try:
                 result = application.approve(request.user.player_data)
-            except SlotsFullError as exc:
+            except (SlotsFullError, ReservedForCreatorError) as exc:
                 raise serializers.ValidationError(
                     {"code": exc.code, "message": exc.user_message},
                 ) from exc

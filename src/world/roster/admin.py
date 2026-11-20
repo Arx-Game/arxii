@@ -580,12 +580,13 @@ class RosterApplicationAdmin(admin.ModelAdmin):
             )
             return
 
+        from world.roster.services.activity import ReservedForCreatorError  # noqa: PLC0415
         from world.roster.services.slots import SlotsFullError  # noqa: PLC0415
 
         for application in queryset.filter(status="pending"):
             try:
                 approved = application.approve(staff_player_data)
-            except SlotsFullError as exc:
+            except (SlotsFullError, ReservedForCreatorError) as exc:
                 self.message_user(
                     request,
                     f"Application {application.pk} not approved: {exc.user_message}",

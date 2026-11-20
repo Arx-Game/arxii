@@ -60,6 +60,17 @@ class ReleaseError(InactivityServiceError):
     """A player-initiated give-up is invalid."""
 
 
+class ReservedForCreatorError(InactivityServiceError):
+    """An original character is reserved to the account that created it (#3055).
+
+    Raised by ``RosterApplication.approve`` so every approval path (staff API, GM queue,
+    admin action) refuses a rival application, including one filed before the reservation
+    began. ``code`` and ``user_message`` match ``SlotsFullError`` so callers handle both alike.
+    """
+
+    code = "reserved_for_creator"
+
+
 def current_roster_entry(sheet: CharacterSheet) -> RosterEntry | None:
     """The RosterEntry for this sheet, or None when one doesn't exist.
 
