@@ -1840,6 +1840,17 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
         related_name="+",
         help_text="The ally's resonance a Rally names (#5124); null for any other action.",
     )
+    cast_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The resonance the declared cast is worked in (#5231); null works it in the "
+            "default one."
+        ),
+    )
     maneuver = models.CharField(
         max_length=20,
         choices=CombatManeuver.choices,

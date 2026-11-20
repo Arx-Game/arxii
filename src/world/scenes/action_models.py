@@ -243,6 +243,17 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         related_name="+",
         help_text="Optional resonance filter from ritual check spec at fire time",
     )
+    cast_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The resonance the requested cast is worked in (#5231), stored when the request "
+            "is made and used when it resolves; null works it in the default one."
+        ),
+    )
     snapshot_check_type = models.ForeignKey(
         "arxii.CheckType",
         on_delete=models.SET_NULL,

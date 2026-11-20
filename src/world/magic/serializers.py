@@ -188,7 +188,15 @@ class ResonanceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Resonance
-        fields = ["id", "name", "affinity", "affinity_name", "description", "codex_entry_id"]
+        fields = [
+            "id",
+            "name",
+            "affinity",
+            "affinity_name",
+            "description",
+            "codex_entry_id",
+            "color_hex",
+        ]
         read_only_fields = fields
 
 

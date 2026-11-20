@@ -161,6 +161,13 @@ class KindledStrengthTier(NaturalKeyMixin, SharedMemoryModel):
     earn_percent = models.PositiveSmallIntegerField(
         default=0, help_text="Percent of a kindled deed's award this strength earns."
     )
+    cast_power = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Power a cast gains when it is worked in a resonance kindled this strongly and "
+            "pulls no thread."
+        ),
+    )
 
     objects = KindledStrengthTierManager()
 
