@@ -550,7 +550,7 @@ class RosterTenureAdmin(admin.ModelAdmin):
 class RosterApplicationAdmin(admin.ModelAdmin):
     list_display = ["player_data", "character", "status", "applied_date", "reviewed_by"]
     list_filter = ["status", "applied_date", "reviewed_date"]
-    search_fields = ["player_data__account__username", "character__name"]
+    search_fields = ["player_data__account__username", "character__character__db_key"]
     readonly_fields = ["applied_date", "reviewed_date"]
     date_hierarchy = "applied_date"
 

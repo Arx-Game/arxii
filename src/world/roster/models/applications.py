@@ -210,7 +210,7 @@ class RosterApplication(SharedMemoryModel):
     def __str__(self) -> str:
         return (
             f"{self.player_data.account.username} applying for "
-            f"{self.character.name} ({self.status})"
+            f"{self.character.character.db_key} ({self.status})"
         )
 
     class Meta:
