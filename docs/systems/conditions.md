@@ -623,11 +623,12 @@ for an effect the template does not have. Names are the presented persona names
 (`persona_names_for_sheets`), never `str(model)`. Delivery is one persisted OUTCOME row through
 `broadcast_action_outcome` (pushed live to web sessions, text to telnet, so the scene log and
 the live push carry the same line) to the bearer's fight. A moment hidden by design is told only
-to the bearer and the source, privately (`narrate_privately`): a template with
+to the bearer and the source, privately (`narrate_privately`, kept in the fight's own scene when there is one): a template with
 `is_visible_to_others` off, a concealed bearer or source, and any moment outside a fight (a
 once-only condition spent after an out-of-combat roll). `spend_condition_use(narration=...)`
 takes `SpendNarration`: strike back and grace pass `AUTHORED_ONLY` so a plain "is spent" line
 does not repeat the event they just told, and the one-shot marker adapters pass `NONE`.
+A bearer with no sheet (an opponent whose once-only ward is spent) is found through its `CombatOpponent` row, which gives both its fight and its name.
 
 ### Querying Modifiers
 
