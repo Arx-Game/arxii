@@ -19,6 +19,8 @@ from django.utils import timezone
 from evennia_extensions.factories import AccountFactory
 from evennia_extensions.models import PlayerData
 from integration_tests.harness import JourneyCase
+from world.game_clock.week_services import get_current_game_week
+from world.progression.constants import NominationTargetType
 from world.roster.factories import RosterTenureFactory
 from world.scenes.block_services import create_block
 from world.scenes.factories import SceneGMParticipationFactory
@@ -26,7 +28,7 @@ from world.scenes.interaction_services import record_interaction
 from world.scenes.models import Interaction, Scene
 from world.scenes.mute_services import set_mute
 from world.scenes.services import record_persona_discovery
-from world.scenes.thread_services import ReplyTarget
+from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 from world.species.factories import LanguageFactory
 from world.traits.factories import CharacterTraitValueFactory
 from world.traits.models import Trait, TraitCategory, TraitType
@@ -195,6 +197,24 @@ class ABlockedFaceIsHiddenEverywhere(PlayReaderJourney):
         self.assertEqual(seen.detail_status, 200)
         self.assertIsNone(seen.listed[reply.pk]["reply_to"])
         self.assertIsNone(seen.context[reply.pk]["reply_to"])
+
+    def test_a_blocked_pose_can_be_neither_answered_nor_nominated(self) -> None:
+        # Both checks used to run through visible_to alone: a refusal that differs from
+        # success tells Hobb the pose exists, and a nomination names its writer.
+        get_current_game_week()
+        self.telnet(self.ysmay, f"pose {CARAVAN}")
+        pose = self.pose_of(self.ysmay, CARAVAN)
+        self.block()
+
+        with self.assertRaises(InteractionThreadError):
+            self.reply(self.hobb, pose, "answers a pose he cannot see.")
+        nominated = self.api(self.account_of(self.hobb)).post(
+            "/api/progression/nominations/",
+            {"target_type": NominationTargetType.INTERACTION, "target_id": pose.pk},
+            format="json",
+        )
+        self.assertEqual(nominated.status_code, 400, nominated.content)
+        self.assertNotIn("Ysmay", nominated.content.decode())
 
     def test_unread_counts_and_badges_ignore_the_blocked_face(self) -> None:
         # Ysmay's whisper and pose are written first: a block refuses new whispers, but
