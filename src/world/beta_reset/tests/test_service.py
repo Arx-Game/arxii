@@ -11,9 +11,10 @@ from unittest import mock
 from django.test import TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.achievements.factories import CharacterAchievementFactory, DiscoveryFactory
 from world.achievements.models import CharacterAchievement, Discovery
+from world.assets.factories import NPCAssetFactory
 from world.beta_reset.exceptions import (
     AlreadyReleasedError,
     BackupNotVerifiedError,
@@ -34,6 +35,9 @@ from world.currency.models import CharacterPurse, CurrencyTransfer
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.distinctions.models import CharacterDistinction
 from world.distinctions.types import DistinctionOrigin
+from world.events.constants import GrandeurCategory
+from world.events.factories import EventFactory
+from world.events.models import EventGrandeurContribution
 from world.gm.factories import GMProfileFactory
 from world.journals.factories import JournalEntryFactory, WeeklyJournalXPFactory
 from world.journals.models import JournalEntry, WeeklyJournalXP
@@ -49,11 +53,16 @@ from world.npc_services.factories import NPCStandingFactory
 from world.npc_services.models import NPCStanding
 from world.progression.factories import CharacterXPTransactionFactory
 from world.progression.models import CharacterXPTransaction
+from world.relationships.factories import RelationshipCapstoneFactory
+from world.relationships.models import RelationshipCapstone
+from world.scenes.factories import PersonaFactory
 from world.scenes.models import Scene
 from world.secrets.factories import SecretFactory
 from world.secrets.models import Secret
-from world.societies.factories import LegendEntryFactory
-from world.societies.models import LegendEntry
+from world.societies.factories import LegendEntryFactory, LegendHonorFactory
+from world.societies.models import LegendEntry, LegendHonor
+from world.tasking.listener_services import create_listener_post
+from world.tasking.models import ListenerHarvest
 from world.traits.factories import TraitFactory
 from world.traits.models import CharacterTraitChange, TraitChangeSource
 
@@ -327,3 +336,55 @@ class ProtectOrderingTests(TestCase):
         self.assertTrue(report.executed)
         self.assertFalse(CombatEncounter.objects.filter(pk=encounter.pk).exists())
         self.assertFalse(Scene.objects.filter(pk=scene_pk).exists())
+
+
+class PlayStateRowsBlockingTheWipeTests(TestCase):
+    """Rows whose PROTECT foreign keys point at wiped tables must not stop the wipe."""
+
+    def _wipe(self) -> None:
+        wipe_pristine_world(
+            execute=True,
+            confirm=CONFIRMATION_PHRASE,
+            backup_verified_at=timezone.now(),
+        )
+
+    def test_journal_capstones_and_legend_honors_do_not_block_the_journal_wipe(self) -> None:
+        capstone_entry = JournalEntryFactory()
+        capstone = RelationshipCapstoneFactory(
+            journal_entry=capstone_entry, is_ritual_capstone=False
+        )
+        honor = LegendHonorFactory()
+
+        self._wipe()
+
+        self.assertFalse(RelationshipCapstone.objects.filter(pk=capstone.pk).exists())
+        self.assertFalse(LegendHonor.objects.filter(pk=honor.pk).exists())
+        self.assertFalse(JournalEntry.objects.filter(pk=capstone_entry.pk).exists())
+        self.assertFalse(JournalEntry.objects.filter(pk=honor.journal_entry_id).exists())
+
+    def test_a_listener_harvest_does_not_block_the_secret_wipe(self) -> None:
+        asset = NPCAssetFactory()
+        post = create_listener_post(asset, RoomProfileFactory(), asset.promoter_persona)
+        secret = SecretFactory()
+        harvest = ListenerHarvest.objects.create(post=post, secret=secret)
+
+        self._wipe()
+
+        self.assertFalse(ListenerHarvest.objects.filter(pk=harvest.pk).exists())
+        self.assertFalse(Secret.objects.filter(pk=secret.pk).exists())
+
+    def test_an_event_grandeur_spend_does_not_block_the_currency_transfer_wipe(self) -> None:
+        purse = CharacterPurse.objects.create(character_sheet=CharacterSheetFactory(), balance=50)
+        transfer = CurrencyTransfer.objects.create(amount=5, reason="grandeur", from_purse=purse)
+        contribution = EventGrandeurContribution.objects.create(
+            event=EventFactory(),
+            category=GrandeurCategory.values[0],
+            contributed_by=PersonaFactory(),
+            amount_spent=5,
+            transfer=transfer,
+        )
+
+        self._wipe()
+
+        self.assertFalse(EventGrandeurContribution.objects.filter(pk=contribution.pk).exists())
+        self.assertFalse(CurrencyTransfer.objects.filter(pk=transfer.pk).exists())

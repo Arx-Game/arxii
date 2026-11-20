@@ -89,6 +89,11 @@ numbers on a *kept* character's sheet consistent again.
 - ``CombatEncounter.scene`` and ``TreatmentAttempt.scene`` are both ``PROTECT`` against
   ``scenes.Scene`` — both must be deleted before ``Scene`` (they're not spec-named by app,
   but they block the spec-named "scenes" wipe from running at all).
+- ``LegendHonor.journal_entry`` and ``RelationshipCapstone.journal_entry`` are ``PROTECT``
+  against ``JournalEntry`` — both are deleted before it.
+- ``ListenerHarvest.secret`` is ``PROTECT`` against ``Secret`` — deleted before it.
+- ``EventGrandeurContribution.transfer`` is ``PROTECT`` against ``CurrencyTransfer`` —
+  deleted before it.
 - ``NPCStanding.persona`` / ``.npc_persona`` are ``PROTECT`` against ``scenes.Persona`` —
   irrelevant in practice since this wipe never deletes ``Persona``, but ``NPCStanding`` is
   deleted anyway as its own wholesale play-state row (per-PC-NPC disposition).
@@ -127,6 +132,7 @@ from world.currency.models import (
 )
 from world.distinctions.models import CharacterDistinction
 from world.distinctions.types import DistinctionOrigin
+from world.events.models import EventGrandeurContribution
 from world.journals.models import JournalEntry, WeeklyJournalXP
 from world.justice.models import (
     AccusationCrimeClaim,
@@ -147,6 +153,7 @@ from world.magic.constants import AcquisitionOrigin
 from world.magic.models import CharacterGift, CharacterTechnique, ResonanceGrant
 from world.npc_services.models import NPCStanding
 from world.progression.models import CharacterXPTransaction, ClassLevelAdvancement
+from world.relationships.models import RelationshipCapstone
 from world.scenes.models import (
     DecisiveCheckMarker,
     Interaction,
@@ -167,7 +174,8 @@ from world.scenes.models import (
     SceneUnseenObserver,
 )
 from world.secrets.models import Secret
-from world.societies.models import LegendEntry, LegendEvent, refresh_legend_views
+from world.societies.models import LegendEntry, LegendEvent, LegendHonor, refresh_legend_views
+from world.tasking.models import ListenerHarvest
 from world.traits.models import CharacterTraitChange, TraitChangeSource
 
 # =============================================================================
@@ -325,6 +333,18 @@ SCOPE_TABLE: list[ScopeEntry] = [
     ScopeEntry(DecisiveCheckMarker, None, "Pre-declared decisive-check markers."),
     ScopeEntry(SceneRound, None, "Non-combat round/turn structures."),
     ScopeEntry(Scene, None, "The scene containers themselves."),
+    ScopeEntry(
+        LegendHonor,
+        None,
+        "PROTECT-unblocker: LegendHonor.journal_entry is PROTECT against JournalEntry. The "
+        "honor is a legend-ledger row, wiped with the rest of the legend ledger.",
+    ),
+    ScopeEntry(
+        RelationshipCapstone,
+        None,
+        "PROTECT-unblocker: RelationshipCapstone.journal_entry is PROTECT against "
+        "JournalEntry. The capstone receipt is a play-time tier-claim record.",
+    ),
     ScopeEntry(JournalEntry, None, "Journal entries (JournalTag cascades with it)."),
     ScopeEntry(WeeklyJournalXP, None, "Weekly journal-XP award tracker."),
     # --- Justice (explicit spec scope): FrameJobDetails before CrimeEvidence (PROTECT). ---
@@ -351,10 +371,22 @@ SCOPE_TABLE: list[ScopeEntry] = [
     # off Secret). No CG-vs-play split exists on Secret.provenance (SecretProvenance is a
     # canonicity spectrum, not an acquisition-time discriminator — see the module docstring
     # of world.secrets.constants.SecretProvenance) — every Secret row is play-state. ---
+    ScopeEntry(
+        ListenerHarvest,
+        None,
+        "PROTECT-unblocker: ListenerHarvest.secret is PROTECT against Secret. A harvest "
+        "is a play-time catch awaiting collection.",
+    ),
     ScopeEntry(Secret, None, "Every secret and its cascading child rows."),
     # --- NPC standing (explicit spec scope) ---
     ScopeEntry(NPCStanding, None, "Per-(PC persona, NPC persona) disposition rows."),
     # --- Economy ledgers (explicit spec scope: "currency contracts/debts" are IN scope) ---
+    ScopeEntry(
+        EventGrandeurContribution,
+        None,
+        "PROTECT-unblocker: EventGrandeurContribution.transfer is PROTECT against "
+        "CurrencyTransfer. A grandeur spend is a play-time money sink row.",
+    ),
     ScopeEntry(CurrencyTransfer, None, "Money-movement audit trail."),
     ScopeEntry(Contract, None, "Consent-gated economic agreements (ContractTerm cascades)."),
     ScopeEntry(DebtInstrument, None, "Standing org-to-org debts."),
