@@ -97,6 +97,25 @@ the Available shelf, `reset_character_progress` runs):
   no roster entry is progress-reset in place; a roster character, a story NPC or a missing id
   is refused (`CarryOverError`) before anything is touched.
 
+Safeguards added on review: `execute_cutover` and `reset_character_progress` check the
+enabled constant and the release latch themselves, so no direct call runs after release (the
+typed phrase and backup precheck stay on the command path). Before `--execute` changes anything
+it checks every kept character's ledger (`progress.ledger_problems`: each trait's rows chain and
+end at the current value, a ledger row's value row still exists, the class-level receipts chain
+up to the level); a character that fails is listed in the dry-run and refused by `--execute`,
+which names it, unless `--allow-incomplete-ledger` is given. The policy steps and the wipe run in
+one transaction, so a `ProtectedError` rolls everything back and the command raises a
+`CommandError` naming the blocking model (`WipeBlockedError`). After the wipe the thread handler
+is invalidated for every character that owned a capstone-anchored thread and max health is
+recomputed for each kept character. The reset lowers the class level directly instead of through
+`apply_class_level_advance`, which would re-run story auto-beats and could notify players.
+`RosterApplication.approve` refuses an application onto an original character reserved to
+another account (`ReservedForCreatorError`), so a rival application filed before the cutover
+cannot be approved by any path; the dry-run counts those pending applications. The dry-run also
+names the account each reserved character is reserved to, the trait rows that would be removed,
+natural weapons that would go with their gifts, and states that its wipe counts are computed
+before the policy steps run.
+
 Alpha accounts and their kudos, blocks, mutes and friendships are never touched. An original
 character with no recorded author that nobody names for carry-over is left exactly as it is.
 
