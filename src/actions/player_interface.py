@@ -1445,7 +1445,9 @@ def _blink_entries(
     met, reasons = context.move_met, [] if context.move_met else [context.move_reason]
     for movement in turn_movement_sources(character, CreatureTraversal.BLINKS):
         cost = movement_use_cost(character, movement, in_fight=in_fight)
-        spends_anima = movement.technique_id is not None or gear_condition_with_cost(movement)
+        spends_anima = movement.technique_id is not None or gear_condition_with_cost(
+            character, movement
+        )
         warning = stage_warning if spends_anima else None
         free = cost in (FREE_USE, "0 anima")  # noqa: STRING_LITERAL - a zero-cost cast
         reach = reach_for_strength(movement.standing_strength)

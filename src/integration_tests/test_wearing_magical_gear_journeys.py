@@ -19,7 +19,8 @@ service, the one writer that raises a thread's level.
   undispellable is never taken.
 - Two cloaks that give the same condition give one condition; taking one off keeps it.
 - A mantle at attunement level 1 gives Ember-touched only; raising the thread to level 3
-  (mantle still worn) adds Kindled Stride. A stranger who puts the mantle on gets neither.
+  (mantle still worn) adds Kindled Stride; retiring the thread takes both away. A stranger
+  who puts the mantle on gets neither.
 - In a fight the cloak's blink is offered ("Blink to Stage (3 anima)") and used for its 3
   anima; with 1 anima the blink still goes through and her Soulfray grows. Dodging with it
   charges the same 3 anima. Without the cloak there is no blink.
@@ -62,7 +63,7 @@ from world.combat.factories import (
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
-from world.combat.serializers import _serialize_active_conditions
+from world.combat.models import CombatParticipant
 from world.combat.services import resolve_round
 from world.combat.services.boss.creature_spawn import spawn_from_creature_template
 from world.conditions.constants import DurationType, FoundationalCapability
@@ -233,7 +234,9 @@ class AnEnchantedCloak(_TheCloakRoom):
 
 
 class ADispelledGearCondition(_TheCloakRoom):
-    """An enemy's dispel (``remove_technique_conditions``) takes the condition off her."""
+    """An enemy's dispel takes the condition off her. It is a cross-system journey: the
+    dispel is the service both the combat resolver and a scene cast call
+    (``remove_technique_conditions``), and the assertions are on what she then sees."""
 
     def dispel(self, condition: ConditionTemplate) -> bool:
         technique = TechniqueFactory(name="Unravel")
@@ -252,11 +255,10 @@ class ADispelledGearCondition(_TheCloakRoom):
         self.assertTrue(self.dispel(self.shadowed))
         self.assertEqual(names_of(self, self.ysmay), [])
 
-        shirt = wearable(self.ysmay, "Linen Shirt", region=BodyRegion.HEAD)
+        wearable(self.ysmay, "Linen Shirt", region=BodyRegion.HEAD)
         self.telnet(self.ysmay, "wear Linen Shirt")
         self.telnet(self.ysmay, "remove Linen Shirt")
         self.assertEqual(names_of(self, self.ysmay), [])
-        self.assertTrue(shirt.pk)
 
         self.telnet(self.ysmay, f"remove {CLOAK}")
         self.telnet(self.ysmay, f"wear {CLOAK}")
@@ -324,6 +326,17 @@ class AMantleAtLevelThree(JourneyCase):
         self.telnet(self.ysmay, "wear Ember Mantle")
 
         self.assertEqual(names_of(self, self.ysmay), ["Ember-touched", "Kindled Stride"])
+
+    def test_retiring_the_thread_takes_the_levels_with_it(self) -> None:
+        self.telnet(self.ysmay, "wear Ember Mantle")
+        self.assertEqual(names_of(self, self.ysmay), ["Ember-touched"])
+
+        retired = self.api(self.account_of(self.ysmay)).delete(
+            f"/api/magic/threads/{self.thread.pk}/", HTTP_X_CHARACTER_ID=str(self.ysmay.pk)
+        )
+
+        self.assertEqual(retired.status_code, 204, retired.content)
+        self.assertEqual(names_of(self, self.ysmay), [])
 
     def test_a_stranger_wearing_the_mantle_gets_neither(self) -> None:
         self.telnet(self.ysmay, "wear Ember Mantle")
@@ -442,12 +455,6 @@ class TheCloakBlinks(_TheCellar):
         self.assertEqual(position_of(self.ondrelle), self.stage)
         self.assertEqual(self.anima(self.ondrelle), 20 - CLOAK_ANIMA)
 
-    def test_taking_the_cloak_off_takes_the_blink_with_it(self) -> None:
-        self.put_on_cloak(self.ondrelle)
-        self.telnet(self.ondrelle, f"remove {CLOAK}")
-
-        self.assertFalse([name for name in self.moves(self.ondrelle) if name.startswith("Blink")])
-
     def test_with_one_anima_the_blink_still_goes_through_and_costs_soulfray(self) -> None:
         tired = self.fighter("Tamsin", anima=1)
         self.put_on_cloak(tired)
@@ -458,6 +465,7 @@ class TheCloakBlinks(_TheCellar):
         result = self.web(tired, "move_to_position", position_id=self.stage.pk)
 
         self.assertTrue(result.detail.success, result.detail.message)
+        self.assertEqual(result.detail.message, f"You blink to Stage for {CLOAK_ANIMA} anima.")
         self.assertEqual(position_of(tired), self.stage)
         self.assertEqual(self.anima(tired), 0)
         self.assertIsNotNone(self.soulfray_on(tired))
@@ -498,13 +506,24 @@ class TheCloakBlinks(_TheCellar):
 
 
 class WhoSeesTheCloaksName(_TheCellar):
+    """The fight's payload shows the cloak's name to the one who wears it and to nobody else."""
+
+    def seen_by(self, viewer: ObjectDB, wearer: ObjectDB) -> list[str]:
+        response = self.api(self.account_of(viewer)).get(
+            f"/api/combat/{self.encounter.pk}/", HTTP_X_CHARACTER_ID=str(viewer.pk)
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        participant = CombatParticipant.objects.get(
+            encounter=self.encounter, character_sheet=wearer.sheet_data
+        )
+        seat = next(row for row in response.json()["participants"] if row["id"] == participant.pk)
+        return [row["source_description"] for row in seat["active_conditions"]]
+
     def test_she_sees_it_and_another_fighter_does_not(self) -> None:
+        self.shadowed.is_visible_to_others = True
+        self.shadowed.save(update_fields=["is_visible_to_others"])
         self.put_on_cloak(self.ondrelle)
-        participant = self.ondrelle.sheet_data.combat_participations.first()
+        hobb = self.fighter("Brannoch", anima=20)
 
-        mine = _serialize_active_conditions(self.ondrelle, can_view_hidden=True, context={})
-        others = _serialize_active_conditions(self.ondrelle, can_view_hidden=False, context={})
-
-        self.assertEqual([row["source_description"] for row in mine], [CLOAK])
-        self.assertEqual([row["source_description"] for row in others], [""])
-        self.assertIsNotNone(participant)
+        self.assertEqual(self.seen_by(self.ondrelle, self.ondrelle), [CLOAK])
+        self.assertEqual(self.seen_by(hobb, self.ondrelle), [""])

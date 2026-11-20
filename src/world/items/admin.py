@@ -571,22 +571,6 @@ class KeepsakeAdmin(admin.ModelAdmin):
     def subject_name(self, obj: Keepsake) -> str:
         return obj.subject_name
 
-    def delete_model(self, request: HttpRequest, obj: ItemInstance) -> None:
-        """A staff delete takes off the conditions the item gave its wearer first (#5074):
-        the cascade removes the equipped rows without unequipping."""
-        from world.items.services.worn_conditions import release_worn_conditions  # noqa: PLC0415
-
-        release_worn_conditions(obj)
-        super().delete_model(request, obj)
-
-    def delete_queryset(self, request: HttpRequest, queryset: QuerySet[ItemInstance]) -> None:
-        """The bulk delete does the same for every item chosen (#5074)."""
-        from world.items.services.worn_conditions import release_worn_conditions  # noqa: PLC0415
-
-        for item in queryset:
-            release_worn_conditions(item)
-        super().delete_queryset(request, queryset)
-
     def render_change_form(  # noqa: PLR0913 - Django's own signature
         self,
         request: HttpRequest,
@@ -727,6 +711,22 @@ class ItemInstanceAdmin(admin.ModelAdmin):
         if saved or formset.deleted_objects:
             reconcile_item_wearers(form.instance, apply_rows=saved)
 
+    def delete_model(self, request: HttpRequest, obj: ItemInstance) -> None:
+        """A staff delete takes off the conditions the item gave its wearer first (#5074):
+        the cascade removes the equipped rows without unequipping."""
+        from world.items.services.worn_conditions import release_worn_conditions  # noqa: PLC0415
+
+        release_worn_conditions(obj)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request: HttpRequest, queryset: QuerySet[ItemInstance]) -> None:
+        """The bulk delete does the same for every item chosen (#5074)."""
+        from world.items.services.worn_conditions import release_worn_conditions  # noqa: PLC0415
+
+        for item in queryset:
+            release_worn_conditions(item)
+        super().delete_queryset(request, queryset)
+
     def render_change_form(  # noqa: PLR0913 - Django's own signature
         self,
         request: HttpRequest,
@@ -787,6 +787,31 @@ class EquippedItemAdmin(admin.ModelAdmin):
     list_filter = ["body_region", "equipment_layer"]
     list_select_related = ["character", "item_instance"]
     raw_id_fields = ["character", "item_instance"]
+
+    def save_model(
+        self, request: HttpRequest, obj: EquippedItem, form: ModelForm, change: bool
+    ) -> None:
+        """A staff-added slot puts the item on: its worn conditions follow (#5074)."""
+        from world.items.models import ItemWornCondition  # noqa: PLC0415
+        from world.items.services.worn_conditions import reconcile_worn_conditions  # noqa: PLC0415
+
+        super().save_model(request, obj, form, change)
+        obj.character.character.equipped_items.invalidate()
+        rows = [] if change else ItemWornCondition.objects.filter(item_instance=obj.item_instance)
+        reconcile_worn_conditions(obj.character, apply_rows=rows)
+
+    def delete_model(self, request: HttpRequest, obj: EquippedItem) -> None:  # noqa: ARG002 - Django's signature
+        """A staff delete takes the item off through the canonical service (#5074)."""
+        from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+        unequip_item(equipped_item=obj)
+
+    def delete_queryset(self, request: HttpRequest, queryset: QuerySet[EquippedItem]) -> None:  # noqa: ARG002 - Django signature
+        """The bulk delete takes each chosen item off the same way (#5074)."""
+        from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+        for equipped in queryset.select_related("character"):
+            unequip_item(equipped_item=equipped)
 
 
 @admin.register(OwnershipEvent)

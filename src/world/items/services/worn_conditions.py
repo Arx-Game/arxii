@@ -152,9 +152,24 @@ def release_worn_conditions(item_instance: ItemInstance) -> None:
 
     A hard delete or a staff delete cascades the item's equipped rows without going through
     ``unequip_item``; ``source_item`` would then be set null and the condition, permanent
-    and no longer tied to anything, could never be removed. Called by every delete path.
+    and no longer tied to anything, could never be removed. Called by every delete path. A
+    condition another worn item also gives stays, repointed to that item.
     """
     for instance in ConditionInstance.objects.filter(source_item=item_instance).select_related(
         "condition", "target"
     ):
-        remove_condition(instance.target, instance.condition, include_suppressed=True)
+        sheet = CharacterSheet.objects.filter(character_id=instance.target_id).first()
+        others = (
+            [
+                item
+                for item in _granting_items(sheet)[0].get(instance.condition_id, [])
+                if item.pk != item_instance.pk
+            ]
+            if sheet is not None
+            else []
+        )
+        if others:
+            instance.source_item = others[0]
+            instance.save(update_fields=["source_item"])
+        else:
+            remove_condition(instance.target, instance.condition, include_suppressed=True)

@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 from world.areas.positioning.constants import ReactionReach
 from world.areas.positioning.traversal import reach_for_strength
 from world.combat.constants import ActionCategory
+from world.magic.models import CharacterAnima
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -173,7 +174,7 @@ def use_movement_source(  # noqa: PLR0913 - one use and its two consent answers
     dodge, a softened blow): for a player not connected it runs non-lethal.
     """
     if movement.technique_id is None:
-        gear = gear_condition_with_cost(movement)
+        gear = gear_condition_with_cost(character, movement)
         if gear is not None:
             return _use_gear_power(
                 character,
@@ -192,13 +193,19 @@ def use_movement_source(  # noqa: PLR0913 - one use and its two consent answers
     )
 
 
-def gear_condition_with_cost(movement: MovementSource) -> ConditionInstance | None:
+def gear_condition_with_cost(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the user's game object, as use_technique
+    movement: MovementSource,
+) -> ConditionInstance | None:
     """The condition a worn item gave her that is this movement's source, when staff set it
-    a per-use anima cost (#5074); None for any other source."""
+    a per-use anima cost (#5074); None for any other source, and for a character with no
+    anima pool, who pays fatigue as any other non-technique source does."""
     from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.mechanics.constants import CapabilitySourceType  # noqa: PLC0415
 
     if movement.source.source_type != CapabilitySourceType.CONDITION:
+        return None
+    if not CharacterAnima.objects.filter(character_id=character.pk).exists():
         return None
     return (
         ConditionInstance.objects.filter(
@@ -221,17 +228,12 @@ def _use_gear_power(
     """One use of a power a worn item's condition gives: its anima cost, overspent into
     Soulfray when she cannot pay, never refused (#5074 decision 1).
 
-    A character with no anima pool at all pays fatigue instead, as any other non-technique
-    source does.
     """
-    from world.magic.models import CharacterAnima  # noqa: PLC0415
     from world.magic.models.soulfray import SoulfrayConfig  # noqa: PLC0415
     from world.magic.services.anima import deduct_anima  # noqa: PLC0415
     from world.magic.services.soulfray import accumulate_soulfray  # noqa: PLC0415
 
-    anima = CharacterAnima.objects.filter(character_id=character.pk).first()
-    if anima is None:
-        return MovementUse(went_off=True, strength=movement.standing_strength)
+    anima = CharacterAnima.objects.get(character_id=character.pk)
     cost = instance.condition.reactive_anima_cost
     deficit = deduct_anima(character, cost, lethal=lethal)
     soulfray = accumulate_soulfray(

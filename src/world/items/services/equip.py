@@ -64,6 +64,7 @@ def equip_item(
         for s in template_slots
     ):
         raise SlotIncompatible
+    already_worn = EquippedItem.objects.filter(item_instance=item_instance).exists()
     equipped = EquippedItem.objects.create(
         character=character_sheet,
         item_instance=item_instance,
@@ -73,7 +74,9 @@ def equip_item(
     char_obj.equipped_items.invalidate()
     _recompute_body_persona_items_prestige(character_sheet)
     _reconcile_sun_exposure(char_obj)
-    _reconcile_worn_conditions(character_sheet, put_on=item_instance)
+    # A second slot of an item already worn is not putting it on: a condition dispelled
+    # since stays off until the item comes off and goes back on (#5074 decision 4).
+    _reconcile_worn_conditions(character_sheet, put_on=None if already_worn else item_instance)
     _close_opened_layers(character_sheet, body_region)
     return equipped
 

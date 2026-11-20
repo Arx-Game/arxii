@@ -362,7 +362,7 @@ def get_active_conditions(
             # category/condition/suppressed filters don't need re-applying.
             surviving_pks = [inst.pk for inst in instances if inst not in expired]
             qs = ConditionInstance.objects.filter(pk__in=surviving_pks).select_related(
-                "condition", "condition__category", "current_stage"
+                "condition", "condition__category", "current_stage", "source_item__template"
             )
 
     return qs

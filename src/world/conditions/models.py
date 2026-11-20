@@ -608,8 +608,8 @@ class ConditionTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=0,
         help_text="Anima spent each time this condition's reactive effect fires "
         "(a dodge/reflect/absorb); can't pay → the effect fizzles. 0 = free. A condition "
-        "an item gives (worn gear) instead overspends into Soulfray when the wearer "
-        "cannot pay, and charges this per use of its movement and dodge powers.",
+        "an item gives (worn gear) charges this per use of the movement and dodge powers it "
+        "gives, and the wearer overspends into Soulfray instead of being refused.",
     )
     retaliation_damage = models.PositiveIntegerField(
         default=0,
@@ -1781,8 +1781,8 @@ class ConditionInstance(SharedMemoryModel):
             "The worn item that put this condition on its wearer (#5074), set only by "
             "``reconcile_worn_conditions``, which touches only conditions gear owns. "
             "Shown to the wearer as the source, never to onlookers. Set null, not "
-            "cascaded, so the instance's own teardown still runs; an item is unequipped "
-            "(and the condition removed) before it is destroyed."
+            "cascaded, so the instance's own teardown still runs; every way an item is "
+            "removed unequips it or releases the conditions it gave first."
         ),
     )
     source_description = models.CharField(

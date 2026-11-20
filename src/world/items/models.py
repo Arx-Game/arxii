@@ -1393,6 +1393,9 @@ class ItemInstance(SharedMemoryModel):
         # the crafter as designer on every crafted item (the purge spares it, cleanup.py).
         if self.silhouette_id or self.dedicated_at is not None or self.item_styles.exists():
             return True
+        # A condition staff authored for the item (#5074) is part of its design too.
+        if self.worn_conditions.exists():
+            return True
         if self.lineage.exists():
             return True
         if self.has_facet_history:
@@ -2119,6 +2122,21 @@ class ItemStyle(ItemAttachment):
         return f"{self.item_instance} ← {self.style}"
 
 
+def _effect_applies_condition(condition_id: int) -> bool:
+    """Whether any applied-condition row (a technique's, a variant's, a miracle's, a draft's)
+    names this condition template. Walks every concrete ``AbstractAppliedCondition``
+    subclass, so a new kind of applier is covered without editing this list."""
+    from django.apps import apps  # noqa: PLC0415
+
+    from world.magic.models.techniques import AbstractAppliedCondition  # noqa: PLC0415
+
+    return any(
+        model.objects.filter(condition_id=condition_id).exists()
+        for model in apps.get_models()
+        if issubclass(model, AbstractAppliedCondition)
+    )
+
+
 class ItemWornCondition(SharedMemoryModel):
     """A condition this item puts on whoever wears it (#5074).
 
@@ -2183,13 +2201,11 @@ class ItemWornCondition(SharedMemoryModel):
                 errors["mantle_level"] = (
                     f"This mantle has {mantle.max_level} levels; choose one of them."
                 )
-        if self.condition_id is not None:
-            from world.magic.models import TechniqueAppliedCondition  # noqa: PLC0415
-
-            if TechniqueAppliedCondition.objects.filter(condition_id=self.condition_id).exists():
-                errors["condition"] = (
-                    "A technique applies this condition. Choose one that only gear gives."
-                )
+        if self.condition_id is not None and _effect_applies_condition(self.condition_id):
+            errors["condition"] = (
+                "A technique, variant or miracle applies this condition. "
+                "Choose one that only gear gives."
+            )
         if errors:
             raise ValidationError(errors)
 
