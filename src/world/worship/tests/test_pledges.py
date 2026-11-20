@@ -826,7 +826,16 @@ class PledgeApiTests(PledgeTestBase):
         self.assertEqual(terms["lines"][0]["amount"], "100% of amount")
         self.assertIn("Silk facet count x2", terms["lines"][2]["label"])
         self.assertEqual(
-            sites, [{"being_id": self.being.pk, "being_name": "Ombrin", "site": "shrine"}]
+            sites,
+            [
+                {
+                    "being_id": self.being.pk,
+                    "being_name": "Ombrin",
+                    "site": "shrine",
+                    "ap_left": 30,
+                    "ap_cap": 30,
+                }
+            ],
         )
 
     def test_the_owner_reads_their_pledge_card_and_a_stranger_does_not(self) -> None:

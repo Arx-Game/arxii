@@ -792,14 +792,19 @@ def holy_sites_here(sheet: CharacterSheet) -> list[HolySite]:
     """The beings holy where ``sheet`` stands: the room's shrine, then the temple
     over it. Empty anywhere else."""
     from world.worship.consecration_services import shrine_at, temple_over  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.prayer_services import prayer_ap_left_this_week  # noqa: PLC0415
 
+    cap = get_devotion_config().prayer_weekly_ap_cap
     location = sheet.character.location
     room = location.room_profile_or_none if location is not None else None
     sites: list[HolySite] = []
     shrine = shrine_at(room)
     if shrine is not None and shrine.being.is_active:
-        sites.append(HolySite(being=shrine.being, site=SITE_SHRINE))
+        left = prayer_ap_left_this_week(sheet, shrine.being)
+        sites.append(HolySite(being=shrine.being, site=SITE_SHRINE, ap_left=left, ap_cap=cap))
     temple = temple_over(room)
     if temple is not None and temple.being.is_active:
-        sites.append(HolySite(being=temple.being, site=SITE_TEMPLE))
+        left = prayer_ap_left_this_week(sheet, temple.being)
+        sites.append(HolySite(being=temple.being, site=SITE_TEMPLE, ap_left=left, ap_cap=cap))
     return sites

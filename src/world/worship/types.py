@@ -422,10 +422,13 @@ class SacrificeOutcome:
 @dataclass(frozen=True)
 class HolySite:
     """A being holy where a character stands: its shrine in the room ("shrine") or
-    the temple over it ("temple")."""
+    the temple over it ("temple"). ``ap_left`` of ``ap_cap`` is what the character may still
+    spend praying here this game week (#4349)."""
 
     being: WorshippedBeing
     site: str
+    ap_left: int = 0
+    ap_cap: int = 0
 
     @property
     def being_id(self) -> int:

@@ -15,6 +15,7 @@ from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 from world.worship.exceptions import VisionError
 from world.worship.models import (
+    DevotionStanding,
     Miracle,
     Pledge,
     PledgeDetails,
@@ -28,6 +29,7 @@ from world.worship.serializers import (
     HolySiteSerializer,
     InvocationOptionsSerializer,
     MiracleSerializer,
+    OwedFavorSerializer,
     PledgeCardSerializer,
     PledgeSerializer,
     PrayerSerializer,
@@ -310,6 +312,22 @@ class PrayerViewSet(ReadOnlyModelViewSet):
         if self.request.user.is_staff:
             return qs
         return qs.filter(character_sheet_id__in=_own_sheet_ids(self.request))
+
+
+class OwedFavorViewSet(ReadOnlyModelViewSet):
+    """The beings a character owes favor to (#4349): the owner reads their own, staff anyone's."""
+
+    serializer_class = OwedFavorSerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["character_sheet"]
+
+    def get_queryset(self):
+        qs = DevotionStanding.objects.filter(owed_favor__gt=0).select_related("being")
+        if not self.request.user.is_staff:
+            qs = qs.filter(character_sheet_id__in=_own_sheet_ids(self.request))
+        return qs.order_by("being__name")
 
 
 class VisionViewSet(

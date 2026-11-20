@@ -9,7 +9,7 @@
  */
 
 import { formatRelativeTime } from '@/lib/relativeTime';
-import { usePactCards, usePledgeCards, usePrayers, useVisions } from '../queries';
+import { useOwedFavor, usePactCards, usePledgeCards, usePrayers, useVisions } from '../queries';
 import { PactCard } from './PactCard';
 import { PledgeCard } from './PledgeCard';
 import { PledgeDialog } from './PledgeDialog';
@@ -52,6 +52,7 @@ export function WorshipSection({
   const { data: prayers } = usePrayers(sheetId, isStaff);
   const { data: pledgeCards } = usePledgeCards(sheetId, privileged);
   const { data: pactCards } = usePactCards(sheetId, privileged);
+  const { data: owedFavor } = useOwedFavor(sheetId, privileged);
   const recentPrayers = (prayers ?? []).slice(0, RECENT_PRAYERS);
   // The open pledge, else the one that resolved most recently (#4333).
   const pledgeCard = (pledgeCards ?? [])[0] ?? null;
@@ -63,6 +64,13 @@ export function WorshipSection({
         {publicWorship ? `Keeps faith with ${publicWorship.name}.` : 'No declared faith.'}
         {pledgeCard && ` Favor with ${pledgeCard.terms.being_name}: ${pledgeCard.favor}.`}
       </p>
+      {privileged &&
+        (owedFavor ?? []).map((owed) => (
+          <p key={owed.id} className="refsheet-ledger" data-testid="owed-favor">
+            {owed.being_name} will not answer if you fall until you have earned {owed.owed_favor}{' '}
+            more base favor with them. Calling on them for a check bonus still works.
+          </p>
+        ))}
       {(isMyCharacter || isStaff) && (
         <div className="refsheet-doors">
           {isMyCharacter && (

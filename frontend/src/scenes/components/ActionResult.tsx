@@ -106,6 +106,12 @@ function AnimaRecoveryPanel({ data }: { data: AnimaRecoveryData }) {
       <Sparkles className="h-4 w-4 shrink-0 text-indigo-400" />
       <span className="text-indigo-300">
         Recovered {data.recovered} anima
+        {data.patron_bonus ? (
+          <span className="text-indigo-200" data-testid="anima-patron-share">
+            {' '}
+            (+{data.patron_bonus} from {data.patron_name})
+          </span>
+        ) : null}
         {data.soulfray_reduced > 0 && (
           <span className="ml-2 text-emerald-400">· {data.soulfray_reduced} soulfray reduced</span>
         )}

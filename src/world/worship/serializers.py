@@ -12,7 +12,15 @@ from world.clues.models import Clue
 from world.items.types import MeaningSignal
 from world.pacts.serializers import PactOfferSummarySerializer
 from world.stories.models import Episode
-from world.worship.models import Miracle, Pledge, Prayer, Vision, WorshippedBeing, WorshipRite
+from world.worship.models import (
+    DevotionStanding,
+    Miracle,
+    Pledge,
+    Prayer,
+    Vision,
+    WorshippedBeing,
+    WorshipRite,
+)
 from world.worship.types import InvocationDifficulty
 
 
@@ -385,3 +393,18 @@ class HolySiteSerializer(serializers.Serializer):
     being_id = serializers.IntegerField()
     being_name = serializers.CharField()
     site = serializers.CharField()
+    ap_left = serializers.IntegerField()
+    ap_cap = serializers.IntegerField()
+
+
+class OwedFavorSerializer(serializers.ModelSerializer):
+    """Favor a character owes a being after a weaker answer (#4349): while any is owed the
+    being ignores their calls for intervention."""
+
+    being_id = serializers.IntegerField()
+    being_name = serializers.CharField(source="being.name")
+
+    class Meta:
+        model = DevotionStanding
+        fields = ["id", "being_id", "being_name", "owed_favor"]
+        read_only_fields = fields
