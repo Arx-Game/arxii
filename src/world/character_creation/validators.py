@@ -83,7 +83,7 @@ def get_heritage_errors(draft: CharacterDraft) -> list[str]:
     """Return validation errors for the Heritage stage."""
     errors: list[str] = []
     if not draft.selected_beginnings:
-        errors.append("Select a beginnings path")
+        errors.append("Select a beginning")
     if not draft.selected_species:
         errors.append("Select a species")
     if not draft.selected_gender:
@@ -93,10 +93,11 @@ def get_heritage_errors(draft: CharacterDraft) -> list[str]:
     if draft.selected_beginnings and draft.selected_species:
         available_species = draft.selected_beginnings.get_available_species()
         if draft.selected_species not in available_species:
-            errors.append("Selected species is not allowed for this beginnings path")
+            errors.append("Selected species is not allowed for this beginning")
 
-    # Lineage must be complete (family or tarot card)
-    errors.extend(get_lineage_errors(draft))
+    # Lineage's errors are Lineage's own row in the stage table (#5199). They were
+    # repeated here from when the family was chosen on this stage (#313), which made
+    # Heritage ask for a surname it has no way to give.
 
     # CG points must not be over budget
     remaining = draft.calculate_cg_points_remaining()
@@ -183,6 +184,11 @@ def get_lineage_errors(draft: CharacterDraft) -> list[str]:
     errors.extend(_get_heredity_species_errors(draft))
 
     template = draft.selected_origin_template
+    if template is None and draft.selected_beginnings_id is None:
+        # No beginning yet, so no route to be missing (#5199): say what comes first.
+        # PLACEHOLDER: Apostate rewrite
+        errors.append("Choose a beginning on Heritage first")
+        return errors
     if template is None:
         # The route is the beginning's own, assigned with it (#4395); none authored yet
         # is a staff gap the player cannot close.
@@ -433,7 +439,9 @@ def get_attributes_errors(draft: CharacterDraft) -> list[str]:
     # All 12 stats must exist
     missing = [s for s in REQUIRED_STATS if s not in stats]
     if missing:
-        errors.append(f"Missing stats: {', '.join(missing)}")
+        # Plain words, never the list of field names (#5199).
+        # PLACEHOLDER: Apostate rewrite
+        errors.append("Set your statistics")
         return errors  # Can't validate values if stats are missing
 
     # Validate each stat value

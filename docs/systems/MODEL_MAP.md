@@ -1378,7 +1378,7 @@
 - `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, reading: world.ceremonies.services.ItemReading, counted: bool, granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and, when it counts, feed ``being``'s pool.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
-- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held,`
+- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - Pending offers for characters currently held by the account, on open rites.`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
 - `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None', being: 'WorshippedBeing | None' = None, request: 'RequestedItem | None' = None) -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
@@ -1531,6 +1531,7 @@
   - build -> forms.Build [FK] (nullable)
   - target_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
+  - stage_visits <- character_creation.DraftStageVisit
   - markings <- character_creation.DraftMarking
   - application <- character_creation.DraftApplication
   - house_claim <- societies.HouseClaim
@@ -1576,6 +1577,10 @@
   - author -> evennia.AccountDB [FK] (nullable)
 
 ### DraftMarking
+**Foreign Keys:**
+  - draft -> character_creation.CharacterDraft [FK]
+
+### DraftStageVisit
 **Foreign Keys:**
   - draft -> character_creation.CharacterDraft [FK]
 

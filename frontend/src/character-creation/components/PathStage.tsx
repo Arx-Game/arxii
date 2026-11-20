@@ -40,6 +40,7 @@ import { useCGExplanations, usePaths, useUpdateDraft } from '../queries';
 import type { CharacterDraft, Path } from '../types';
 import { NOT_YET_IMPLEMENTED } from '../constants';
 import { Stage } from '../types';
+import { cgRecord } from '../cgRecord';
 
 interface PathStageProps {
   draft: CharacterDraft;
@@ -68,6 +69,7 @@ export function PathStage({ draft }: PathStageProps) {
   const { data: paths, isLoading, error } = usePaths(draft.selected_beginnings?.id);
   const { data: copy } = useCGExplanations();
   const updateDraft = useUpdateDraft();
+  const record = cgRecord(draft);
 
   const choose = (path: Path | null) => {
     updateDraft.mutate({
@@ -87,12 +89,7 @@ export function PathStage({ draft }: PathStageProps) {
   const rail = (
     <>
       <RecordRail
-        rows={[
-          { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Beginnings', value: draft.selected_beginnings?.name },
-          { label: 'Species', value: draft.selected_species?.name },
-          { label: 'Path', value: draft.selected_path?.name },
-        ]}
+        rows={[...record.head, record.points]}
         ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-path">

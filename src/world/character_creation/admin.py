@@ -21,6 +21,7 @@ from world.character_creation.models import (
     DraftApplication,
     DraftApplicationComment,
     DraftMarking,
+    DraftStageVisit,
     EnemyReason,
     LifeBeat,
     LifeBeatExclusion,
@@ -427,10 +428,17 @@ class DraftMarkingInline(admin.TabularInline):
     extra = 0
 
 
+class DraftStageVisitInline(admin.TabularInline):
+    """The stages the draft has been opened on (#5199); written by the page, read here."""
+
+    model = DraftStageVisit
+    extra = 0
+
+
 @admin.register(CharacterDraft)
 class CharacterDraftAdmin(admin.ModelAdmin):
     autocomplete_fields = ["account"]
-    inlines = [DraftMarkingInline]
+    inlines = [DraftMarkingInline, DraftStageVisitInline]
     list_display = [
         "__str__",
         "account",

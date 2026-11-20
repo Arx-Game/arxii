@@ -505,6 +505,14 @@ export interface CharacterDraft {
   draft_data: DraftData;
   stage_completion: Record<Stage, boolean>;
   stage_errors: Partial<Record<Stage, string[]>>;
+  /** The surname so far (#5199): the claimed family's name, the new family's, or the one
+   *  the drawn tarot card gives; '' until there is one. Worked out by the server. */
+  surname: string;
+  /** The stages this draft has been opened on (#5199); the stage list shows a to-do for
+   *  these only. Kept by the server, written when `current_stage` changes. */
+  visited_stages: Stage[];
+  /** The stages that ask nothing (#5199); the stage list reads "optional" for them. */
+  optional_stages: Stage[];
   has_existing_characters: boolean;
   stats_points_remaining: number;
   stats_budget: number;

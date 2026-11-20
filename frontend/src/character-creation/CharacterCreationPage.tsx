@@ -253,6 +253,8 @@ export function CharacterCreationPage() {
           currentStage={draft.current_stage}
           stageCompletion={draft.stage_completion}
           stageErrors={draft.stage_errors ?? {}}
+          visitedStages={draft.visited_stages ?? []}
+          optionalStages={draft.optional_stages ?? []}
           onStageSelect={handleStageSelect}
           restartSlot={restartDoor}
         />

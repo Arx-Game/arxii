@@ -21,6 +21,7 @@ import { useCGExplanations, useStatDefinitions, useUpdateDraft } from '../querie
 import { getDefaultStats, Stage } from '../types';
 import type { CharacterDraft, Stats } from '../types';
 import { SkillsSection } from './SkillsSection';
+import { cgRecord } from '../cgRecord';
 
 interface AttributesStageProps {
   draft: CharacterDraft;
@@ -51,6 +52,7 @@ export function AttributesStage({ draft }: AttributesStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
   const { data: statDefinitions, isLoading } = useStatDefinitions();
+  const record = cgRecord(draft);
   const stats: Stats = draft.draft_data.stats ?? getDefaultStats();
   const remaining = draft.stats_points_remaining;
   const budget = draft.stats_budget;
@@ -99,13 +101,9 @@ export function AttributesStage({ draft }: AttributesStageProps) {
     <>
       <RecordRail
         rows={[
-          { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Beginnings', value: draft.selected_beginnings?.name },
-          { label: 'Species', value: draft.selected_species?.name },
-          { label: 'Family', value: draft.family?.name },
-          { label: 'Path', value: draft.selected_path?.name },
-          { label: 'Tradition', value: draft.selected_tradition?.name },
+          ...record.head,
           { label: 'Statistics', value: `${spent} of ${budget} spent` },
+          record.points,
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />

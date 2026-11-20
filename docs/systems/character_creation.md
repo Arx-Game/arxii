@@ -137,6 +137,12 @@ draft.get_starting_room()               # Beginnings override -> area default ->
                                          # Character.at_pre_puppet also lands a character
                                          # with no location and no home there.
 draft.get_stage_completion()            # Dict[int, bool] for all stages
+draft.visited_stages()                  # the stages the draft has been opened on (#5199),
+                                         # from DraftStageVisit rows plus the current stage;
+                                         # the stage list shows a to-do for these only
+draft.record_stage_visit(stage)         # written when current_stage changes (serializer)
+draft.surname()                         # claimed family's name, the new family's, or the
+                                         # drawn tarot card's on a route with no family
 draft.can_submit()                      # True if all stages (except Review) complete
 draft.calculate_cg_points_remaining()   # starting_budget - total_spent
 draft.calculate_cg_points_breakdown()   # itemized [{category, item, cost}, ...]:

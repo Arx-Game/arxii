@@ -95,6 +95,14 @@ class Stage(models.IntegerChoices):
     REVIEW = 11, "Review"
 
 
+# The stages that ask nothing of the player (#5199, owner ruling 2026-11-18 on #5205: a
+# stage that asks nothing says "optional"). Identity's validator returns no error for any
+# draft, and Final Touches' only error is the purse being overspent, which no choice on
+# that stage is needed to avoid. The stage list reads "optional" for these in place of
+# "complete". `test_stage_list.py` holds that an empty draft has no error on either.
+OPTIONAL_STAGES: tuple[Stage, ...] = (Stage.IDENTITY, Stage.FINAL_TOUCHES)
+
+
 class TraditionState(models.TextChoices):
     """How a tradition on a Beginning's slate reads at the tradition step (#3675).
 
