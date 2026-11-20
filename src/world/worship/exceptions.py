@@ -99,12 +99,11 @@ class PrayerForOwnCharacter(PrayerError):
     user_message = "You cannot pray for another of your own characters."
 
 
-class PrayerTargetNotHere(PrayerError):
-    user_message = "They are not here."
+class PrayerTargetUnavailable(PrayerError):
+    """One refusal for every reason a prayer for another cannot be made (not here, not seen,
+    not in danger), so neither a disguise nor a danger state can be probed (#4349)."""
 
-
-class PrayerTargetNotInDanger(PrayerError):
-    user_message = "They are in no danger a god would answer."
+    user_message = "There is no one here you can pray for."
 
 
 class PrayerApInsufficient(PrayerError):

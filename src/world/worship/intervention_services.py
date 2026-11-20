@@ -30,6 +30,8 @@ from __future__ import annotations
 import dataclasses
 from typing import TYPE_CHECKING
 
+from django.db import transaction
+
 from world.checks.constants import BOTCH_SUCCESS_LEVEL_MAX
 from world.scenes.action_constants import DIFFICULTY_VALUES
 from world.worship.constants import (
@@ -389,14 +391,36 @@ def fire_divine_intervention(  # noqa: PLR0913 - one roll, every branch of its r
     on ``praying``. ``trigger`` picks the miracles that can answer and ``trigger_event`` is
     recorded on a miracle's audit row. Returns what happened in an ``InterventionResult``; when
     nothing rolled its ``status`` says why.
+
+    The refusal checks, the roll and the cost run under a lock on the character's standing
+    with the being, so two calls at once cannot both pass the wait and owed-favor checks.
     """
     target = target if target is not None else praying
-    cfg = get_divine_intervention_config()
-    config = get_devotion_config()
     if being is None:
-        being = intercession_being(praying, cfg)
+        being = intercession_being(praying, get_divine_intervention_config())
     if being is None:
         return InterventionResult(InterventionStatus.NO_BEING, praying, target)
+    with transaction.atomic():
+        DevotionStanding.objects.select_for_update().filter(
+            character_sheet=praying, being=being
+        ).first()
+        return _intervene(
+            praying, target, being, trigger=trigger, trigger_event=trigger_event, scene=scene
+        )
+
+
+def _intervene(  # noqa: PLR0913 - the roll's whole context, keyword-only
+    praying: CharacterSheet,
+    target: CharacterSheet,
+    being: WorshippedBeing,
+    *,
+    trigger: str,
+    trigger_event: str,
+    scene: Scene | None,
+) -> InterventionResult:
+    """The body of ``fire_divine_intervention``, run under its lock."""
+    cfg = get_divine_intervention_config()
+    config = get_devotion_config()
     status, reason = _refusal_status(praying, being, cfg)
     if status:
         return InterventionResult(status, praying, target, being=being, refusal=reason)

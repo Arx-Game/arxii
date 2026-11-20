@@ -27,7 +27,7 @@ from world.worship.constants import (
     InterventionStatus,
     MiracleTrigger,
 )
-from world.worship.exceptions import PrayerForOwnCharacter
+from world.worship.exceptions import PrayerForOwnCharacter, PrayerTargetUnavailable
 from world.worship.factories import (
     DevotionConfigFactory,
     FavorOutcomeAwardFactory,
@@ -318,6 +318,22 @@ class PrayerForAnotherTests(InterventionTestBase):
         self.assertEqual(outcome.intervention.performance.target_character, self.fallen)
         self.assertTrue(_condition_on(self.fallen, "Mending"))
         self.assertIn("answered your prayer for", outcome.lines[0])
+
+    def test_not_here_and_not_in_danger_are_one_refusal(self) -> None:
+        healthy = CharacterSheetFactory()
+        healthy.character.db_location = self.room
+        healthy.character.save(update_fields=["db_location"])
+        CharacterVitalsFactory(character_sheet=healthy, health=100, max_health=100)
+        faraway = CharacterSheetFactory()
+        CharacterVitalsFactory(character_sheet=faraway, health=5, max_health=100)
+
+        messages = set()
+        for target in (healthy, faraway):
+            with self.assertRaises(PrayerTargetUnavailable) as caught:
+                pray(self.praying, self.being, "Spare them.", on_behalf_of=target)
+            messages.add(caught.exception.user_message)
+
+        self.assertEqual(len(messages), 1)
 
     def test_praying_for_another_of_your_own_characters_is_refused(self) -> None:
         player = PlayerDataFactory()

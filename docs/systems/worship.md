@@ -306,7 +306,7 @@ three independent, stackable conditions make one count.
   danger is in straits, `intervention_services.fire_divine_intervention` rolls on the
   `NEAR_DEATH` trigger narrowed to the being prayed to, outside the prayer's transaction. The
   one in danger is the character, or `on_behalf_of`: a character in the same room who is in
-  straits (`PrayerTargetNotHere`, `PrayerTargetNotInDanger`) and not played by the same account
+  straits (`PrayerTargetUnavailable`: one refusal for not here, not seen and not in danger) and not played by the same account
   (`PrayerForOwnCharacter`). The performance's `trigger_event` is `prayer_soulfray` /
   `prayer_near_death`. `prayer_ap_left_this_week` and `HolySite.ap_left`/`ap_cap` feed the web
   dialog; `GET /api/worship/owed-favor/` lists what a character owes (owner and staff only).

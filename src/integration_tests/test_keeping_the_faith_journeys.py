@@ -689,5 +689,5 @@ class CallingOnTheGodsInDanger(JourneyCase):
     def test_she_cannot_pray_for_someone_who_is_not_in_danger(self) -> None:
         told = self.telnet(self.hobb, "pray/for Ysmay The Shepherd=Spare her.")
 
-        self.assertIn("They are in no danger a god would answer.", told)
+        self.assertIn("There is no one here you can pray for.", told)
         self.assertFalse(Prayer.objects.filter(character_sheet=self.hobb.sheet_data).exists())

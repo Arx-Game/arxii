@@ -38,8 +38,7 @@ from world.worship.exceptions import (
     PrayerEmpty,
     PrayerError,
     PrayerForOwnCharacter,
-    PrayerTargetNotHere,
-    PrayerTargetNotInDanger,
+    PrayerTargetUnavailable,
     PrayerTooLong,
     VisionClueNotFact,
     VisionEmpty,
@@ -154,23 +153,24 @@ def _room_profile_of(character_sheet: CharacterSheet) -> RoomProfile | None:
 
 
 def _check_prayer_for_another(praying: CharacterSheet, target: CharacterSheet) -> DireStraits:
-    """Refuse a prayer for ``target`` unless it is for someone else's character who is here and
-    in dire straits; return their straits.
+    """Refuse a prayer for ``target`` unless it is for someone the one praying can see here who
+    is in dire straits and is not another of their own characters; return their straits.
 
-    A player never benefits from play between their own characters, so a prayer for another
-    character of the same account is refused.
+    Not here, not seen and not in danger are one refusal (``PrayerTargetUnavailable``), so a
+    disguise or a danger state cannot be probed. A player never benefits from play between
+    their own characters, so a prayer for another character of the same account is refused.
     """
+    from world.conditions.services import can_perceive  # noqa: PLC0415
     from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
 
+    if praying.pk == target.pk or not can_perceive(praying.character, target.character):
+        raise PrayerTargetUnavailable
+    straits = dire_straits_for(target)
+    if not straits.any:
+        raise PrayerTargetUnavailable
     own_account = account_for_sheet(praying)
     if own_account is not None and own_account == account_for_sheet(target):
         raise PrayerForOwnCharacter
-    location = praying.character.location
-    if location is None or target.character.db_location_id != location.pk:
-        raise PrayerTargetNotHere
-    straits = dire_straits_for(target)
-    if not straits.any:
-        raise PrayerTargetNotInDanger
     return straits
 
 
@@ -179,11 +179,15 @@ def _spend_prayer_ap(character_sheet: CharacterSheet, being: WorshippedBeing, ap
     weekly limit or the character's action points."""
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
 
+    pool = ActionPointPool.get_or_create_for_character(character_sheet.character)
+    if pool is None:
+        raise PrayerApInsufficient
+    # Locked while the week's AP is counted, so two prayers at once cannot both fit under the cap.
+    ActionPointPool.objects.select_for_update().get(pk=pool.pk)
     left = prayer_ap_left_this_week(character_sheet, being)
     if ap > left:
         raise PrayerApLimit(being.name, left)
-    pool = ActionPointPool.get_or_create_for_character(character_sheet.character)
-    if pool is None or not pool.spend(ap):
+    if not pool.spend(ap):
         raise PrayerApInsufficient
 
 

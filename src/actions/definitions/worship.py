@@ -388,31 +388,42 @@ def _prayer_ap(kwargs: dict[str, Any]):
     return ap, None
 
 
+_NO_ONE_TO_PRAY_FOR = "There is no one here you can pray for."
+
+
 def _prayed_for(actor: ObjectDB, kwargs: dict[str, Any]):
-    """(the character prayed for, error): None when the prayer is for oneself."""
-    from actions.target_resolution import resolve_persona_pk_to_character  # noqa: PLC0415
-    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    """(the character prayed for, error): None when the prayer is for oneself.
+
+    The target is found only among the characters here, by the face each presents now: a
+    persona pk (the web) must be that face, a typed name (telnet) is matched against it. The
+    service then checks that the actor can see them and that they are in danger; every miss
+    is the same refusal.
+    """
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
     persona_id = kwargs.get("on_behalf_of_persona_id")
-    if persona_id not in (None, ""):
-        character = resolve_persona_pk_to_character(persona_id)
-        if character is None:
-            return None, ActionResult(success=False, message="They are not here.")
-        return _sheet_of(character), None
-    name = (kwargs.get("on_behalf_of_name") or "").strip()
-    if not name:
+    name = (kwargs.get("on_behalf_of_name") or "").strip().lower()
+    if persona_id in (None, "") and not name:
         return None, None
+    refusal = ActionResult(success=False, message=_NO_ONE_TO_PRAY_FOR)
     location = actor.location
-    sheet = (
-        CharacterSheet.objects.filter(
-            character__db_key__iexact=name, character__db_location=location
-        ).first()
-        if location is not None
-        else None
-    )
-    if sheet is None:
-        return None, ActionResult(success=False, message="They are not here.")
-    return sheet, None
+    if location is None:
+        return None, refusal
+    for occupant in location.contents:
+        sheet = _sheet_of(occupant)
+        if sheet is None:
+            continue
+        try:
+            face = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            continue
+        if persona_id not in (None, ""):
+            if str(face.pk) == str(persona_id):
+                return sheet, None
+        elif face.name.lower() == name:
+            return sheet, None
+    return None, refusal
 
 
 def _resolve_recipient(kwargs: dict[str, Any]):
