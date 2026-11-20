@@ -31,6 +31,7 @@ if TYPE_CHECKING:
 
     from world.achievements.models import Achievement
     from world.character_sheets.models import CharacterSheet
+    from world.traits.models import CheckOutcome
     from world.worship.models import DivineInterventionConfig, Miracle, MiraclePerformance
     from world.worship.types import FavorSource
 
@@ -136,17 +137,24 @@ def bump_devotion(
     from world.worship.favor_services import earning_rate  # noqa: PLC0415
     from world.worship.pledge_services import record_pledge_credit  # noqa: PLC0415
 
+    earned = amount > 0
     base = amount
     rate = 100
-    if amount > 0:
-        rate = earning_rate(character_sheet, being)
-        amount = amount * rate // 100
+    owed_paid = 0
     standing, _ = DevotionStanding.objects.get_or_create(
         character_sheet=character_sheet, being=being
     )
+    if earned:
+        # Owed favor (#4349) is paid first, from the base amount, before the earning rate:
+        # only the rest is scaled, added to favor and counted toward an open pledge.
+        owed_paid = min(standing.owed_favor, base)
+        standing.owed_favor -= owed_paid
+        base -= owed_paid
+        rate = earning_rate(character_sheet, being)
+        amount = base * rate // 100
     standing.favor += amount
     standing.lifetime_favor += max(amount, 0)
-    standing.save(update_fields=["favor", "lifetime_favor"])
+    standing.save(update_fields=["favor", "lifetime_favor", "owed_favor"])
 
     top_other = (
         (
@@ -171,9 +179,15 @@ def bump_devotion(
         remove_divine_intervention_trigger(character_sheet, being)
 
     pledge_credit = None
-    if amount > 0:
+    if earned:
         pledge_credit = record_pledge_credit(
-            character_sheet, being, base=base, rate=rate, credited=amount, source=source
+            character_sheet,
+            being,
+            base=base,
+            rate=rate,
+            credited=amount,
+            source=source,
+            owed_paid=owed_paid,
         )
         # A write the pledge credit already counts takes nothing more from the deed cap.
         record_pact_credit(
@@ -188,6 +202,7 @@ def bump_devotion(
         credited=amount,
         pledge_credit=pledge_credit,
         earning_rate_percent=rate,
+        owed_paid=owed_paid,
     )
 
 
@@ -227,7 +242,7 @@ def spend_worship_pool(being: WorshippedBeing, amount: int, *, reason: str = "")
 # =============================================================================
 
 _DIVINE_INTERVENTION_TRIGGER_NAME = "divine_intervention_on_incapacitated"
-_DIVINE_INTERVENTION_COOLDOWN_NAME = "Divine Intervention Cooldown"
+COOLDOWN_CONDITION_NAME = "Divine Intervention Cooldown"
 
 
 def _broadcast_miracle_narrative(character, text: str, scene=None) -> None:
@@ -267,19 +282,30 @@ def _broadcast_miracle_narrative(character, text: str, scene=None) -> None:
     )
 
 
-def perform_divine_intervention(
+def broadcast_prayer_line(character, text: str, scene=None) -> None:
+    """Post a prayer's room line as an EMIT to the scene (#4349): an ally praying for a fallen
+    character, which onlookers see before the result's own lines."""
+    _broadcast_miracle_narrative(character, text, scene)
+
+
+def perform_divine_intervention(  # noqa: PLR0913 - the roll's result and the GM's line ride along
     character_sheet: "CharacterSheet",
     being: WorshippedBeing,
     miracle: "Miracle",
     *,
     scene=None,
     trigger_event: str = "character_incapacitated",
+    outcome_tier: "CheckOutcome | None" = None,
+    context_text: str = "",
 ) -> "MiraclePerformance":
     """Commit seam for a divine intervention: spend pool, apply conditions, audit.
 
-    Called by ``fire_divine_intervention``. Assumes eligibility is already
-    verified (favor threshold, pool sufficient, cooldown clear). ``trigger_event``
+    Called by ``fire_divine_intervention`` (the intervention roll) and by the steward's live
+    answer. Assumes eligibility is already verified (favor threshold, pool sufficient,
+    cooldown clear). ``character_sheet`` is the one the miracle lands on. ``trigger_event``
     names what fired it on the audit row (the combat event, or a prayer's straits).
+    ``outcome_tier`` is the intervention roll's result, recorded on the audit row (a live
+    answer passes none); ``context_text`` is the GM's line for the ``MIRACLE`` prompt.
     """
     from django.db import transaction  # noqa: PLC0415
 
@@ -309,16 +335,28 @@ def perform_divine_intervention(
             scene=scene,
             resonance_spent=miracle.resonance_pool_cost,
             trigger_event=trigger_event,
+            outcome_tier=outcome_tier,
         )
 
-    _route_miracle(character_sheet, miracle.narrative_text, scene)
+    _route_miracle(character_sheet, miracle.narrative_text, scene, context_text=context_text)
 
     return performance
 
 
-def _route_miracle(character_sheet: "CharacterSheet", text: str, scene=None) -> None:
+def route_intervention_text(
+    character_sheet: "CharacterSheet", text: str, scene=None, *, context_text: str = ""
+) -> None:
+    """Route a lesser answer's or backfire's authored text the way a miracle's is: to the scene
+    GM as a ``MIRACLE`` prompt when one is present, else as a room line (#4349)."""
+    _route_miracle(character_sheet, text, scene, context_text=context_text)
+
+
+def _route_miracle(
+    character_sheet: "CharacterSheet", text: str, scene=None, *, context_text: str = ""
+) -> None:
     """Prompt the scene GM with the miracle, or broadcast its authored text as today (#4101).
 
+    ``context_text`` is the GM-only line (result tier, what was drawn, who prayed, #4349).
     Follows the shape of ``_announce_surge``/``_route_ultimate_chosen``/``_route_crossing``
     (``world/magic/audere.py`` et al.): the scene lookup and ``route_narratable_event``
     call run inside the same ``transaction.atomic()``, so a ``DatabaseError`` raised
@@ -341,7 +379,8 @@ def _route_miracle(character_sheet: "CharacterSheet", text: str, scene=None) -> 
     character = character_sheet.character
 
     def _deliver() -> None:
-        _broadcast_miracle_narrative(character, text, scene)
+        if text.strip():
+            _broadcast_miracle_narrative(character, text, scene)
 
     try:
         with transaction.atomic():
@@ -356,6 +395,7 @@ def _route_miracle(character_sheet: "CharacterSheet", text: str, scene=None) -> 
                     scene=routed_scene,
                     character_sheet=character_sheet,
                     room_text=text,
+                    context_text=context_text,
                 ),
             )
     except DatabaseError:
@@ -370,26 +410,38 @@ def _route_miracle(character_sheet: "CharacterSheet", text: str, scene=None) -> 
 
 
 def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: ARG001
-    """Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.
+    """Trigger handler: divine intercession, a being stepping in for a fallen character (#4349).
 
     Called by the ``divine_intervention_on_incapacitated`` TriggerDefinition's
     ``CALL_SERVICE_FUNCTION`` flow step. The ``payload`` is a
     ``CharacterIncapacitatedPayload`` (unused — the character is the trigger's ``obj``).
+    The trigger is installed once favor reaches ``DivineInterventionConfig.favor_threshold``
+    (the intercession threshold); the fallen character makes the roll at her own odds and
+    cost, exactly as if she had prayed. She is told privately what came of it.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.scenes.models import Scene  # noqa: PLC0415
     from world.worship.constants import MiracleTrigger  # noqa: PLC0415
+    from world.worship.intervention_services import (  # noqa: PLC0415
+        fire_divine_intervention,
+        intercession_lines,
+    )
 
     sheet = CharacterSheet.objects.filter(character=character).first()
     if sheet is None:
         return
     scene = Scene.objects.active_for_room(character.location).first()
-    fire_divine_intervention(
+    result = fire_divine_intervention(
         sheet,
         trigger=MiracleTrigger.INCAPACITATED,
         trigger_event="character_incapacitated",
         scene=scene,
     )
+    if result.rolled:
+        from world.magic.services.soul_tether import send_stored_notice  # noqa: PLC0415
+
+        for line in intercession_lines(result):
+            send_stored_notice(sheet, line, ooc_note="Divine intercession")
 
 
 def intervention_cooldown_active(character) -> bool:
@@ -398,7 +450,7 @@ def intervention_cooldown_active(character) -> bool:
 
     return ConditionInstance.objects.filter(
         target=character,
-        condition__name=_DIVINE_INTERVENTION_COOLDOWN_NAME,
+        condition__name=COOLDOWN_CONDITION_NAME,
     ).exists()
 
 
@@ -413,13 +465,15 @@ def miracle_ineligibility(
     """Why ``miracle`` cannot be performed for ``character_sheet`` now, or "" when it can.
 
     The eligibility half of a divine intervention (#2360, #4333 design 6), shared
-    by :func:`fire_divine_intervention` (the trigger's automatic path) and the
-    live answer panel: the intervention cooldown condition is clear, the
-    character's favor with the miracle's being meets both the config threshold and
-    the miracle's own, and the being's pool covers the larger of the miracle's cost
-    and the config minimum. The miracle's trigger is not asked here: a caller that
-    fires on a trigger filters by it. ``favor``, ``on_cooldown`` and ``cfg`` let a
-    caller that already holds them skip the lookups.
+    by the intervention roll (``intervention_services.fire_divine_intervention``) and the
+    live answer panel: the intervention cooldown condition is clear, the character's favor
+    with the miracle's being meets the miracle's own threshold, and the being's pool covers
+    the larger of the miracle's cost and the config minimum. The config's favor threshold is
+    not asked here: since #4349 it is the divine intercession threshold, and the prayer gate
+    and owed favor belong to the roll, which a steward's live answer does not obey. The
+    miracle's trigger is not asked either: a caller that fires on a trigger filters by it.
+    ``favor``, ``on_cooldown`` and ``cfg`` let a caller that already holds them skip the
+    lookups.
     """
     if cfg is None:
         cfg = get_divine_intervention_config()
@@ -433,83 +487,13 @@ def miracle_ineligibility(
             character_sheet=character_sheet, being=being
         ).first()
         favor = standing.favor if standing is not None else 0
-    threshold = max(cfg.favor_threshold, miracle.favor_threshold)
+    threshold = miracle.favor_threshold
     if favor < threshold:
         return f"Favor with {being.name} ({favor}) is below this miracle's threshold ({threshold})."
     needed = max(miracle.resonance_pool_cost, cfg.min_pool_for_intervention)
     if being.resonance_pool < needed:
         return f"{being.name}'s worship pool ({being.resonance_pool}) cannot pay {needed}."
     return ""
-
-
-def fire_divine_intervention(
-    character_sheet: "CharacterSheet",
-    *,
-    trigger: str,
-    trigger_event: str,
-    scene=None,
-    being: WorshippedBeing | None = None,
-) -> "MiraclePerformance | None":
-    """The divine-intervention check: the highest-priority qualifying miracle fires.
-
-    Shared by the incapacitation trigger (#2360) and the dire-straits prayer
-    (#3779). A miracle qualifies when its ``intervention_trigger`` is
-    ``trigger``, the character's favor with its being meets both the config
-    threshold and the miracle's own, and the being's pool covers the larger of
-    the miracle's cost and the config minimum. ``being`` narrows the candidates
-    to one god (a prayer is to someone). Returns None when nothing fires: no
-    candidate, or the per-character cooldown condition is still on.
-    """
-    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
-    from world.conditions.services import apply_condition as _apply  # noqa: PLC0415
-    from world.worship.models import Miracle  # noqa: PLC0415
-
-    character = character_sheet.character
-    cfg = get_divine_intervention_config()
-
-    if intervention_cooldown_active(character):
-        return None
-
-    standings = DevotionStanding.objects.filter(
-        character_sheet=character_sheet, favor__gte=cfg.favor_threshold
-    ).select_related("being")
-    if being is not None:
-        standings = standings.filter(being=being)
-
-    candidates: list[tuple[DevotionStanding, Miracle]] = []
-    for standing in standings:
-        miracles = Miracle.objects.filter(
-            being=standing.being,
-            intervention_trigger=trigger,
-            is_active=True,
-        )
-        candidates.extend(
-            (standing, miracle)
-            for miracle in miracles
-            if not miracle_ineligibility(
-                character_sheet, miracle, favor=standing.favor, on_cooldown=False, cfg=cfg
-            )
-        )
-    if not candidates:
-        return None
-
-    # Highest priority first (lowest sort_order).
-    candidates.sort(key=lambda pair: pair[1].sort_order)
-    standing, miracle = candidates[0]
-    performance = perform_divine_intervention(
-        character_sheet, standing.being, miracle, scene=scene, trigger_event=trigger_event
-    )
-
-    cooldown_template = ConditionTemplate.objects.filter(
-        name=_DIVINE_INTERVENTION_COOLDOWN_NAME,
-    ).first()
-    if cooldown_template is not None:
-        _apply(
-            target=character,
-            condition=cooldown_template,
-            duration_rounds=cfg.cooldown_hours * 60,
-        )
-    return performance
 
 
 def install_divine_intervention_trigger(

@@ -308,6 +308,10 @@ class PrayAction(Action):
     kwargs:
         being / being_name: whom the prayer is to.
         text: the words.
+        ap: at a shrine or temple of the being, the action points to spend praying (#4349);
+            favor is earned by the points, up to the weekly limit.
+        on_behalf_of_persona_id (web) / on_behalf_of_name (telnet): a character here in dire
+            straits to pray for. The roll and its cost are yours; the help lands on them.
     """
 
     key: str = "pray"
@@ -328,26 +332,87 @@ class PrayAction(Action):
         sheet = _sheet_of(actor)
         if sheet is None:
             return ActionResult(success=False, message="You have no character sheet to pray with.")
+        ap, error = _prayer_ap(kwargs)
+        if error is not None:
+            return error
+        for_sheet, error = _prayed_for(actor, kwargs)
+        if error is not None:
+            return error
         try:
-            outcome = pray(sheet, being, str(kwargs.get("text") or ""))
+            outcome = pray(
+                sheet, being, str(kwargs.get("text") or ""), on_behalf_of=for_sheet, ap=ap
+            )
         except PrayerError as exc:
             return ActionResult(success=False, message=exc.user_message)
         parts = [f"You pray to {being.name}."]
-        if outcome.devotion_granted:
-            parts.append(f"An act of devotion: +{outcome.devotion_granted} favor.")
-        if outcome.intervention is not None:
-            parts.append(f"{being.name} answers.")
+        if outcome.ap_spent:
+            parts.append(
+                f"You spend {outcome.ap_spent} AP in prayer: +{outcome.devotion_granted} favor "
+                f"with {being.name}."
+            )
+        parts.extend(outcome.lines)
+        intervention = outcome.intervention
         return ActionResult(
             success=True,
             message=" ".join(parts),
             data={
                 "prayer_id": outcome.prayer.pk,
                 "devotion_granted": outcome.devotion_granted,
+                "ap_spent": outcome.ap_spent,
                 "at_holy_site": outcome.at_holy_site,
                 "dire_straits": outcome.dire_straits.kind,
-                "answered": outcome.intervention is not None,
+                "answered": outcome.answered,
+                "intervention_status": intervention.status if intervention else "",
+                "intervention_outcome": (
+                    intervention.outcome.name
+                    if intervention is not None and intervention.outcome is not None
+                    else ""
+                ),
+                "favor_spent": intervention.cost.favor_spent if intervention else 0,
+                "favor_owed": intervention.cost.favor_owed if intervention else 0,
             },
         )
+
+
+def _prayer_ap(kwargs: dict[str, Any]):
+    """(action points to spend praying, error): telnet sends a string, the web a number."""
+    raw = kwargs.get("ap")
+    if raw in (None, ""):
+        return 0, None
+    try:
+        ap = int(raw)
+    except (TypeError, ValueError):
+        return 0, ActionResult(success=False, message="Spend a whole number of action points.")
+    if ap < 0:
+        return 0, ActionResult(success=False, message="Spend a whole number of action points.")
+    return ap, None
+
+
+def _prayed_for(actor: ObjectDB, kwargs: dict[str, Any]):
+    """(the character prayed for, error): None when the prayer is for oneself."""
+    from actions.target_resolution import resolve_persona_pk_to_character  # noqa: PLC0415
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    persona_id = kwargs.get("on_behalf_of_persona_id")
+    if persona_id not in (None, ""):
+        character = resolve_persona_pk_to_character(persona_id)
+        if character is None:
+            return None, ActionResult(success=False, message="They are not here.")
+        return _sheet_of(character), None
+    name = (kwargs.get("on_behalf_of_name") or "").strip()
+    if not name:
+        return None, None
+    location = actor.location
+    sheet = (
+        CharacterSheet.objects.filter(
+            character__db_key__iexact=name, character__db_location=location
+        ).first()
+        if location is not None
+        else None
+    )
+    if sheet is None:
+        return None, ActionResult(success=False, message="They are not here.")
+    return sheet, None
 
 
 def _resolve_recipient(kwargs: dict[str, Any]):

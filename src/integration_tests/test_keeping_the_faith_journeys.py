@@ -432,7 +432,7 @@ class PrayingAndTheVision(JourneyCase):
         ShrineDetailsFactory(feature_instance__room_profile=chapel_profile, being=self.shepherd)
 
     def test_prayers_at_the_shrine_and_away_from_it(self) -> None:
-        usage = "Usage: pray <being>=<your words>"
+        usage = "Usage: pray[/ap <n>][/for <character>] <being>=<your words>"
         self.assertIn(usage, self.telnet(self.ysmay, "pray"))
         self.assertIn(usage, self.telnet(self.ysmay, "pray The Shepherd"))
         self.assertIn(usage, self.telnet(self.ysmay, "pray The Shepherd="))
@@ -441,31 +441,37 @@ class PrayingAndTheVision(JourneyCase):
         )
         self.assertFalse(Prayer.objects.exists())
 
-        told = self.telnet(self.ysmay, "pray The Shepherd=keep us whole")
+        # Time given at the shrine earns favor: 15 AP at 5 AP a favor is 3.
+        told = self.telnet(self.ysmay, "pray/ap 15 The Shepherd=keep us whole")
         self.assertIn("You pray to The Shepherd.", told)
-        self.assertIn("An act of devotion: +1 favor.", told)
+        self.assertIn("You spend 15 AP in prayer: +3 favor with The Shepherd.", told)
         prayer = Prayer.objects.get()
         self.assertEqual(prayer.text, "keep us whole")
         self.assertEqual(prayer.room_profile_id, self.chapel.pk)
-        self.assertEqual(prayer.devotion_granted, 1)
+        self.assertEqual((prayer.ap_spent, prayer.devotion_granted), (15, 3))
 
-        # The week's devotion is paid once.
-        told = self.telnet(self.ysmay, "pray The Shepherd=and keep us still")
+        # The weekly limit refuses what would pass it, and nothing is spent or logged.
+        told = self.telnet(self.ysmay, "pray/ap 20 The Shepherd=and keep us still")
+        self.assertIn(
+            "You can spend 15 more action points praying to The Shepherd this week.", told
+        )
+        self.assertEqual(Prayer.objects.filter(character_sheet=self.ysmay.sheet_data).count(), 1)
+
+        # A prayer with no AP is still heard, and earns nothing.
+        told = self.telnet(self.ysmay, "pray The Shepherd=amen")
         self.assertIn("You pray to The Shepherd.", told)
-        self.assertNotIn("devotion", told)
-        self.assertEqual(Prayer.objects.filter(character_sheet=self.ysmay.sheet_data).count(), 2)
+        self.assertNotIn("favor", told)
         self.assertIn(
             "That prayer is too long.",
             self.telnet(self.ysmay, "pray The Shepherd=" + "o" * 2001),
         )
 
-        # Away from any holy site a prayer is heard and pays nothing.
-        told = self.telnet(self.hobb, "pray The Shepherd=a word from the gallery")
+        # Away from any holy site a prayer is heard, spends nothing and pays nothing.
+        told = self.telnet(self.hobb, "pray/ap 10 The Shepherd=a word from the gallery")
         self.assertIn("You pray to The Shepherd.", told)
-        self.assertNotIn("devotion", told)
-        self.assertEqual(
-            Prayer.objects.get(character_sheet=self.hobb.sheet_data).devotion_granted, 0
-        )
+        self.assertNotIn("favor", told)
+        hobbs = Prayer.objects.get(character_sheet=self.hobb.sheet_data)
+        self.assertEqual((hobbs.ap_spent, hobbs.devotion_granted), (0, 0))
 
     def test_staff_answer_a_prayer_with_a_vision(self) -> None:
         self.telnet(self.hobb, "pray The Shepherd=show me the road")

@@ -219,14 +219,19 @@ def record_pledge_credit(  # noqa: PLR0913 - the calculation's parts are keyword
     rate: int,
     credited: int,
     source: FavorSource | None,
+    owed_paid: int = 0,
 ) -> PledgeCredit | None:
     """Credit ``credited`` favor to the character's pledge to ``being``, if any.
 
     Called by ``bump_devotion`` for every positive favor write. An open pledge
     to ``being`` gains the amount on ``Project.current_progress`` and a
     ``PledgeCredit`` row; a closing or lapse award names its pledge on
-    ``source`` and is recorded without adding progress.
+    ``source`` and is recorded without adding progress. ``owed_paid`` is the base favor
+    the write paid toward owed favor first (#4349); it is recorded on the row and adds no
+    progress, so a write that went entirely to the debt still shows on the card.
     """
+    if credited <= 0 and owed_paid <= 0:
+        return None
     source = source or FavorSource()
     details = source.pledge_details or open_pledge_for(sheet)
     if details is None or details.pledge.being_id != being.pk:
@@ -243,6 +248,7 @@ def record_pledge_credit(  # noqa: PLR0913 - the calculation's parts are keyword
         base=max(base, 0),
         earning_rate_percent=rate,
         credited=credited,
+        owed_paid=owed_paid,
         game_week=get_current_game_week(),
         resonance_grant=source.resonance_grant,
         offering=source.offering,
@@ -701,13 +707,14 @@ def credit_lines(details: PledgeDetails) -> list[PledgeCreditLine]:
         "rite_performance__outcome_tier",
     ).prefetch_related("offering__signals"):  # noqa: PREFETCH_STRING - read as .signals.all()
         label, before_rate = _credit_label(credit)
+        owed = f"{credit.owed_paid} to owed favor, " if credit.owed_paid else ""
         lines.append(
             PledgeCreditLine(
                 id=credit.pk,
                 source=credit.source,
                 label=label,
                 calculation=(
-                    f"{before_rate}, at {credit.earning_rate_percent}% = +{credit.credited}"
+                    f"{owed}{before_rate}, at {credit.earning_rate_percent}% = +{credit.credited}"
                 ),
                 credited=credit.credited,
                 counts_toward_progress=credit.source not in _RESOLUTION_SOURCES,

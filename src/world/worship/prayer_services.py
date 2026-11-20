@@ -4,11 +4,11 @@ A prayer is a character's freeform words to a being: a plain log, one of the
 few freeform channels a player has straight to staff, with no mechanical
 effect of its own. Three independent, stackable conditions make one prayer
 mechanically meaningful: dire straits (Soulfray active, or health in the
-knockout band) invokes the divine-intervention check on the NEAR_DEATH trigger;
-the first prayer per game week made at a shrine or temple of the being pays a
-little devotion; and a GM may answer any prayer with a vision. A vision is the
-GM's prose, delivered through the narrative message system in its own
-category, spending the sending being's pool.
+knockout band, for the one praying or the character prayed for, #4349) rolls the
+divine-intervention check on the NEAR_DEATH trigger; action points spent praying at a
+shrine or temple of the being earn favor, up to a weekly limit (#4349); and a GM may
+answer any prayer with a vision. A vision is the GM's prose, delivered through the
+narrative message system in its own category, spending the sending being's pool.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db import transaction
+from django.db.models import Sum
 
 from world.magic.services.soulfray import get_soulfray_warning
 from world.narrative.constants import NarrativeCategory
@@ -25,16 +26,20 @@ from world.vitals.constants import KNOCKOUT_HEALTH_THRESHOLD, CharacterLifeState
 from world.vitals.models import CharacterVitals
 from world.worship.constants import (
     PRAYER_INTERVENTION_EVENT_PREFIX,
-    PRAYER_SITE_DEVOTION_AMOUNT,
     PRAYER_TEXT_MAX_LENGTH,
     VISION_RESONANCE_POOL_COST,
     DireStraitsKind,
     MiracleTrigger,
 )
 from world.worship.exceptions import (
+    PrayerApInsufficient,
+    PrayerApLimit,
     PrayerBeingInactive,
     PrayerEmpty,
     PrayerError,
+    PrayerForOwnCharacter,
+    PrayerTargetNotHere,
+    PrayerTargetNotInDanger,
     PrayerTooLong,
     VisionClueNotFact,
     VisionEmpty,
@@ -43,7 +48,7 @@ from world.worship.exceptions import (
     VisionPrayerMismatch,
     VisionRecipientUnrostered,
 )
-from world.worship.models import Answer, MiraclePerformance, Prayer, Vision, WorshippedBeing
+from world.worship.models import Answer, Prayer, Vision, WorshippedBeing
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -53,6 +58,7 @@ if TYPE_CHECKING:
     from world.clues.models import Clue
     from world.game_clock.models import GameWeek
     from world.stories.models import Episode
+    from world.worship.types import InterventionResult
 
 
 @dataclass(frozen=True)
@@ -92,31 +98,49 @@ def dire_straits_for(character_sheet: CharacterSheet) -> DireStraits:
 
 @dataclass(frozen=True)
 class PrayerOutcome:
+    """What one prayer did: the log row, the holy-site favor and the intervention call.
+
+    ``intervention`` is the divine intervention call made when the one in danger (the one
+    praying, or the character prayed for) was in dire straits, rolled or not; None when no call
+    was made. ``lines`` are the private lines the one praying reads about it.
+    """
+
     prayer: Prayer
     at_holy_site: bool
     devotion_granted: int
     dire_straits: DireStraits
-    intervention: MiraclePerformance | None
+    intervention: InterventionResult | None = None
+    ap_spent: int = 0
+    lines: tuple[str, ...] = ()
+
+    @property
+    def answered(self) -> bool:
+        return self.intervention is not None and self.intervention.answered
 
 
-def site_prayer_capped_this_week(
+def prayer_ap_used_this_week(
     character_sheet: CharacterSheet, being: WorshippedBeing, *, game_week: GameWeek | None = None
-) -> bool:
-    """Whether a holy-site prayer to ``being`` already paid devotion this game week."""
+) -> int:
+    """Action points ``character_sheet`` has spent praying at holy sites of ``being`` this game
+    week, the number the weekly limit counts (#4349)."""
     if game_week is None:
         from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
 
         game_week = get_current_game_week()
-    return _week_prayers(character_sheet, being, game_week).exists()
+    total = Prayer.objects.filter(
+        character_sheet=character_sheet, being=being, game_week=game_week
+    ).aggregate(total=Sum("ap_spent"))["total"]
+    return total or 0
 
 
-def _week_prayers(character_sheet: CharacterSheet, being: WorshippedBeing, game_week: GameWeek):
-    return Prayer.objects.filter(
-        character_sheet=character_sheet,
-        being=being,
-        game_week=game_week,
-        devotion_granted__gt=0,
-    )
+def prayer_ap_left_this_week(
+    character_sheet: CharacterSheet, being: WorshippedBeing, *, game_week: GameWeek | None = None
+) -> int:
+    """How many more action points ``character_sheet`` may spend praying to ``being`` this week."""
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+    cap = get_devotion_config().prayer_weekly_ap_cap
+    return max(cap - prayer_ap_used_this_week(character_sheet, being, game_week=game_week), 0)
 
 
 def _room_profile_of(character_sheet: CharacterSheet) -> RoomProfile | None:
@@ -129,18 +153,112 @@ def _room_profile_of(character_sheet: CharacterSheet) -> RoomProfile | None:
     return RoomProfile.objects.filter(pk=location.pk).first()
 
 
-def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> PrayerOutcome:
+def _check_prayer_for_another(praying: CharacterSheet, target: CharacterSheet) -> DireStraits:
+    """Refuse a prayer for ``target`` unless it is for someone else's character who is here and
+    in dire straits; return their straits.
+
+    A player never benefits from play between their own characters, so a prayer for another
+    character of the same account is refused.
+    """
+    from world.magic.services.gain import account_for_sheet  # noqa: PLC0415
+
+    own_account = account_for_sheet(praying)
+    if own_account is not None and own_account == account_for_sheet(target):
+        raise PrayerForOwnCharacter
+    location = praying.character.location
+    if location is None or target.character.db_location_id != location.pk:
+        raise PrayerTargetNotHere
+    straits = dire_straits_for(target)
+    if not straits.any:
+        raise PrayerTargetNotInDanger
+    return straits
+
+
+def _spend_prayer_ap(character_sheet: CharacterSheet, being: WorshippedBeing, ap: int) -> None:
+    """Spend ``ap`` praying at a holy site, refusing before anything is spent when it passes the
+    weekly limit or the character's action points."""
+    from world.action_points.models import ActionPointPool  # noqa: PLC0415
+
+    left = prayer_ap_left_this_week(character_sheet, being)
+    if ap > left:
+        raise PrayerApLimit(being.name, left)
+    pool = ActionPointPool.get_or_create_for_character(character_sheet.character)
+    if pool is None or not pool.spend(ap):
+        raise PrayerApInsufficient
+
+
+def _call_on_being(
+    prayer: Prayer,
+    being: WorshippedBeing,
+    target: CharacterSheet,
+    straits: DireStraits,
+    *,
+    for_another: bool,
+) -> tuple[InterventionResult, tuple[str, ...]]:
+    """Roll the divine intervention a prayer in dire straits calls for (#4349) and tell
+    everyone what they are due: onlookers the prayer for another, the one praying the result,
+    the fallen character who prayed for them.
+
+    Returns the result and the one praying's private lines.
+    """
+    from world.magic.services.soul_tether import send_stored_notice  # noqa: PLC0415
+    from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+    from world.worship.intervention_services import (  # noqa: PLC0415
+        PRAYER_FOR_ANOTHER,
+        PRAYER_FOR_SELF,
+        fire_divine_intervention,
+        intervention_lines,
+        prayed_for_you_line,
+        prayer_room_line,
+    )
+    from world.worship.services import broadcast_prayer_line  # noqa: PLC0415
+
+    praying = prayer.character_sheet
+    scene = get_active_scene(praying.character.location)
+    if for_another:
+        broadcast_prayer_line(praying.character, prayer_room_line(praying, target, being), scene)
+    result = fire_divine_intervention(
+        praying,
+        trigger=MiracleTrigger.NEAR_DEATH,
+        trigger_event=f"{PRAYER_INTERVENTION_EVENT_PREFIX}{straits.kind}",
+        scene=scene,
+        being=being,
+        target=target,
+    )
+    if result.performance is not None:
+        prayer.intervention = result.performance
+        prayer.save(update_fields=["intervention"])
+    mode = PRAYER_FOR_ANOTHER if for_another else PRAYER_FOR_SELF
+    if for_another and result.answered:
+        send_stored_notice(target, prayed_for_you_line(result), ooc_note="A prayer for you")
+    return result, tuple(intervention_lines(result, mode=mode))
+
+
+def pray(
+    character_sheet: CharacterSheet,
+    being: WorshippedBeing,
+    text: str,
+    *,
+    on_behalf_of: CharacterSheet | None = None,
+    ap: int = 0,
+) -> PrayerOutcome:
     """Log a prayer, then apply whichever qualifying conditions hold.
 
-    The log row is written first and stands on its own. The holy-site devotion
-    joins it in one transaction. The intervention check runs after, outside it:
-    a miracle is its own committed act with its own broadcast, and a prayer that
-    went unanswered is still a prayer.
+    The log row is written first and stands on its own. At a holy site of the being, ``ap``
+    action points spent praying earn base favor (``DevotionConfig.prayer_ap_per_favor`` per
+    point, rounded down, then the earning rate), up to the weekly limit; the spend and the
+    favor join the row in one transaction. When the one in danger is in dire straits, the
+    intervention roll runs after, outside it: a miracle is its own committed act with its
+    own broadcast, and a prayer that went unanswered is still a prayer. ``on_behalf_of`` names
+    a character present who is in dire straits (a prayer for another): the roll, its cost and
+    its wait are the one praying's, and the help lands on them.
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.worship.consecration_services import sites_of  # noqa: PLC0415
     from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
-    from world.worship.services import bump_devotion, fire_divine_intervention  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.services import bump_devotion  # noqa: PLC0415
+    from world.worship.steward_services import stewarded_refusal  # noqa: PLC0415
     from world.worship.types import FavorSource  # noqa: PLC0415
 
     words = text.strip()
@@ -150,19 +268,28 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
         raise PrayerTooLong
     if not being.is_active:
         raise PrayerBeingInactive
-    from world.worship.steward_services import stewarded_refusal  # noqa: PLC0415
-
     refusal = stewarded_refusal(character_sheet, being)
     if refusal:
         raise PrayerError(refusal)
+    if ap < 0:
+        raise PrayerApInsufficient
 
+    for_another = on_behalf_of is not None and on_behalf_of.pk != character_sheet.pk
+    target = on_behalf_of if for_another else character_sheet
+    straits = (
+        _check_prayer_for_another(character_sheet, target)
+        if for_another
+        else dire_straits_for(character_sheet)
+    )
     week = get_current_game_week()
     room_profile = _room_profile_of(character_sheet)
     sites = sites_of(room_profile, being)
     at_site = sites.shrine is not None or sites.temple is not None
-    straits = dire_straits_for(character_sheet)
+    spent = ap if at_site else 0
 
     with transaction.atomic():
+        if spent:
+            _spend_prayer_ap(character_sheet, being, spent)
         prayer = Prayer.objects.create(
             character_sheet=character_sheet,
             being=being,
@@ -170,44 +297,33 @@ def pray(character_sheet: CharacterSheet, being: WorshippedBeing, text: str) -> 
             room_profile=room_profile,
             game_week=week,
             dire_straits=straits.kind,
+            ap_spent=spent,
         )
         devotion = 0
-        # Locked while deciding, so two prayers landing together cannot both pay.
-        already_paid = (
-            at_site and _week_prayers(character_sheet, being, week).select_for_update().exists()
-        )
-        if at_site and not already_paid:
-            # #4333: the earning rate scales the prayer's devotion; record what landed.
+        base_favor = spent // get_devotion_config().prayer_ap_per_favor
+        if base_favor > 0:
+            # #4333: the earning rate scales the prayer's favor; record what landed.
             devotion = bump_devotion(
                 character_sheet,
                 being,
-                PRAYER_SITE_DEVOTION_AMOUNT,
+                base_favor,
                 source=FavorSource(kind=PledgeCreditSource.PRAYER),
             ).credited
             prayer.devotion_granted = devotion
             prayer.save(update_fields=["devotion_granted"])
 
-    intervention = None
+    result, lines = None, ()
     if straits.any:
-        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
-
-        intervention = fire_divine_intervention(
-            character_sheet,
-            trigger=MiracleTrigger.NEAR_DEATH,
-            trigger_event=f"{PRAYER_INTERVENTION_EVENT_PREFIX}{straits.kind}",
-            scene=get_active_scene(character_sheet.character.location),
-            being=being,
-        )
-        if intervention is not None:
-            prayer.intervention = intervention
-            prayer.save(update_fields=["intervention"])
+        result, lines = _call_on_being(prayer, being, target, straits, for_another=for_another)
 
     return PrayerOutcome(
         prayer=prayer,
         at_holy_site=at_site,
         devotion_granted=devotion,
         dire_straits=straits,
-        intervention=intervention,
+        intervention=result,
+        ap_spent=spent,
+        lines=lines,
     )
 
 

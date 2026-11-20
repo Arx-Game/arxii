@@ -72,7 +72,7 @@ class DevotionConfigAdminTests(TestCase):
             "Favor ease low threshold",
             "Invocations per week",
             "Earning rate",
-            "Favor outcome awards: one table, two kinds",
+            "Favor outcome awards: one table, eight kinds",
             "Resulting invocation difficulty",
             "Invocations last week",
         ):
@@ -156,6 +156,8 @@ class DevotionConfigAdminTests(TestCase):
                 "rite_items_counted": "3",
                 "requested_item_max_points": "4",
                 "requested_item_max_value": "5",
+                "prayer_ap_per_favor": "5",
+                "prayer_weekly_ap_cap": "30",
                 "outcome_awards-TOTAL_FORMS": "1",
                 "outcome_awards-INITIAL_FORMS": "0",
                 "outcome_awards-MIN_NUM_FORMS": "0",
@@ -262,7 +264,6 @@ class ChosenAndBeingAdminTests(TestCase):
             reverse("admin:arxii_chosenfavorconfig_change", args=(config.pk,)),
             {
                 "anima_recovery_threshold": config.anima_recovery_threshold,
-                "anima_recovery_bonus": config.anima_recovery_bonus,
                 "ceremony_edge_threshold": config.ceremony_edge_threshold,
                 "ceremony_edge_bonus": config.ceremony_edge_bonus,
                 "chosen_distinction": distinction.pk,
@@ -302,7 +303,6 @@ class ChosenAndBeingAdminTests(TestCase):
             reverse("admin:arxii_chosenfavorconfig_change", args=(config.pk,)),
             {
                 "anima_recovery_threshold": config.anima_recovery_threshold,
-                "anima_recovery_bonus": config.anima_recovery_bonus,
                 "ceremony_edge_threshold": config.ceremony_edge_threshold,
                 "ceremony_edge_bonus": config.ceremony_edge_bonus,
                 "chosen_distinction": distinction.pk,

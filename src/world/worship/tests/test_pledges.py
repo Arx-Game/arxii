@@ -218,9 +218,8 @@ class TakePledgeTests(PledgeTestBase):
         self.assertEqual(project.kind, ProjectKind.PLEDGE)
         self.assertEqual(project.status, ProjectStatus.ACTIVE)
         self.assertEqual(project.threshold_target, 20)
-        # Pledging at the shrine with a prayer is the week's holy-site prayer: 1 base
-        # at 200% counts toward the pledge it was made with.
-        self.assertEqual(project.current_progress, 2)
+        # The pledge's prayer spends no action points, so it earns no favor (#4349).
+        self.assertEqual(project.current_progress, 0)
         self.assertAlmostEqual(
             project.time_limit - project.started_at, timedelta(days=14), delta=timedelta(seconds=1)
         )

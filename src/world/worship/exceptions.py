@@ -95,6 +95,33 @@ class PrayerBeingInactive(PrayerError):
     user_message = "No one answers to that name."
 
 
+class PrayerForOwnCharacter(PrayerError):
+    user_message = "You cannot pray for another of your own characters."
+
+
+class PrayerTargetNotHere(PrayerError):
+    user_message = "They are not here."
+
+
+class PrayerTargetNotInDanger(PrayerError):
+    user_message = "They are in no danger a god would answer."
+
+
+class PrayerApInsufficient(PrayerError):
+    user_message = "You do not have the action points to pray that long."
+
+
+class PrayerApLimit(PrayerError):
+    """A holy-site prayer would pass the week's action point limit for one being."""
+
+    def __init__(self, being_name: str, left: int) -> None:
+        if left > 0:
+            message = f"You can spend {left} more action points praying to {being_name} this week."
+        else:
+            message = f"You have prayed to {being_name} as long as you can this week."
+        super().__init__(message)
+
+
 class VisionError(Exception):
     """A vision could not be sent. ``user_message`` is safe to show the GM (#3779)."""
 

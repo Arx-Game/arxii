@@ -212,6 +212,28 @@ def invocation_bonus_for(outcome: CheckOutcome | None) -> int:
     return award.amount if award is not None else 0
 
 
+def outcome_award(kind: str, outcome: CheckOutcome | None) -> int | None:
+    """The ``FavorOutcomeAward`` amount of ``kind`` for ``outcome``, or None when there is no
+    outcome or no such row (#4349). A caller whose rule is "a missing row pays 0" reads
+    ``outcome_award(...) or 0``."""
+    from world.worship.models import FavorOutcomeAward  # noqa: PLC0415
+
+    if outcome is None:
+        return None
+    row = FavorOutcomeAward.objects.filter(
+        config=get_devotion_config(), kind=kind, outcome_tier=outcome
+    ).first()
+    return row.amount if row is not None else None
+
+
+def partial_success_outcome() -> CheckOutcome | None:
+    """The Partial Success tier, which an award read with no roll falls back to."""
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+    from world.worship.constants import ANSWER_FOLLOW_UP_MIN_SUCCESS_LEVEL  # noqa: PLC0415
+
+    return CheckOutcome.objects.filter(success_level=ANSWER_FOLLOW_UP_MIN_SUCCESS_LEVEL).first()
+
+
 def invocations_used(
     sheet: CharacterSheet, being: WorshippedBeing, *, game_week: GameWeek | None = None
 ) -> int:

@@ -19,21 +19,31 @@ _SWITCH_REVEAL = "reveal"
 _SWITCH_PRAYER = "prayer"
 
 
+_PRAY_USAGE = "Usage: pray[/ap <n>][/for <character>] <being>=<your words>"
+_SWITCH_AP = "ap"
+_SWITCH_FOR = "for"
+
+
 class CmdPray(ArxCommand):
     """Pray to a being in your own words.
 
     Usage:
         pray <being>=<your words>
+        pray/ap <n> <being>=<your words>
+        pray/for <character> <being>=<your words>
 
-    A prayer is a message, not a mechanic: staff read them, and a god may
-    answer one with a vision. Praying at a shrine or temple of the being once a
-    week counts as an act of devotion; praying in dire straits may be answered
-    at once.
+    A prayer is a message: staff read them, and a god may answer one with a
+    vision. At a shrine or temple of the being, /ap spends action points
+    praying and earns favor, up to a weekly limit. Praying in dire straits
+    calls on the being to save you, one roll at your own odds. /for prays that
+    way for a character here who is in dire straits: you roll and pay, and the
+    help lands on them.
     """
 
     key = "pray"
     locks = "cmd:all()"
     help_category = "Social"
+    takes_switches = True
     action = None
 
     def func(self) -> None:
@@ -41,13 +51,23 @@ class CmdPray(ArxCommand):
 
         raw = (self.args or "").strip()
         if "=" not in raw:
-            self.msg("Usage: pray <being>=<your words>")
+            self.msg(_PRAY_USAGE)
             return
-        being_name, text = (part.strip() for part in raw.split("=", 1))
-        if not being_name or not text:
-            self.msg("Usage: pray <being>=<your words>")
+        head, text = (part.strip() for part in raw.split("=", 1))
+        switches = {switch.lower() for switch in self.switches}
+        kwargs: dict[str, str] = {}
+        if _SWITCH_AP in switches:
+            number, _, head = head.partition(" ")
+            kwargs["ap"] = number
+            head = head.strip()
+        if _SWITCH_FOR in switches:
+            name, _, head = head.partition(" ")
+            kwargs["on_behalf_of_name"] = name
+            head = head.strip()
+        if not head or not text:
+            self.msg(_PRAY_USAGE)
             return
-        result = PrayAction().run(actor=self.caller, being_name=being_name, text=text)
+        result = PrayAction().run(actor=self.caller, being_name=head, text=text, **kwargs)
         if result.message:
             self.msg(result.message)
 

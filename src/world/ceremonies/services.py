@@ -607,9 +607,6 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
-    from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
-    from world.worship.services import bump_devotion  # noqa: PLC0415
-    from world.worship.types import FavorSource  # noqa: PLC0415
 
     config = get_ceremony_config()
     officiant_sheet = ceremony.officiant.character_sheet
@@ -666,12 +663,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
                 officiant_sheet,
                 f"Officiated a {ceremony.ceremony_type.name.lower()} PLACEHOLDER",
             )
-    bump_devotion(
-        officiant_sheet,
-        ceremony.being,
-        config.devotion_officiant,
-        source=FavorSource(kind=PledgeCreditSource.CEREMONY),
-    )
+    _pay_officiant_favor(officiant_sheet, ceremony.being, rites_outcome)
     _pay_rite_award(ceremony, officiant_sheet, rites_outcome, rite_award)
 
     _run_type_specific_finish(ceremony, honorees)
@@ -682,6 +674,32 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     ceremony.save(update_fields=["quality_level", "status", "finished_at"])
     revoke_seance_manifestations(ceremony)
     return ceremony
+
+
+def _pay_officiant_favor(officiant_sheet: "CharacterSheet", being, rites_outcome) -> None:
+    """The officiant's favor with the ceremony's being, by their Rites result (#4349).
+
+    The OFFICIANT ``FavorOutcomeAward`` row for ``rites_outcome`` is the base favor, scaled by
+    the officiant's earning rate in ``bump_devotion``. With no Rites roll (the check type is not
+    seeded) the Partial Success row is used; a missing row pays 0.
+    """
+    from world.worship.constants import FavorAwardKind, PledgeCreditSource  # noqa: PLC0415
+    from world.worship.invocation_services import (  # noqa: PLC0415
+        outcome_award,
+        partial_success_outcome,
+    )
+    from world.worship.services import bump_devotion  # noqa: PLC0415
+    from world.worship.types import FavorSource  # noqa: PLC0415
+
+    outcome = rites_outcome if rites_outcome is not None else partial_success_outcome()
+    amount = outcome_award(FavorAwardKind.OFFICIANT, outcome) or 0
+    if amount > 0:
+        bump_devotion(
+            officiant_sheet,
+            being,
+            amount,
+            source=FavorSource(kind=PledgeCreditSource.CEREMONY),
+        )
 
 
 def _resolve_rite_award(ceremony: Ceremony, rites_outcome):

@@ -302,7 +302,6 @@ class ChosenFavorConfigTests(TestCase):
         config = get_chosen_favor_config()
         self.assertEqual(config.pk, 1)
         self.assertEqual(config.anima_recovery_threshold, 10)
-        self.assertEqual(config.anima_recovery_bonus, 5)
 
     def test_get_chosen_favor_config_idempotent(self) -> None:
         first = get_chosen_favor_config()

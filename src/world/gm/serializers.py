@@ -1072,6 +1072,7 @@ class GMPromptSerializer(serializers.ModelSerializer):
             "resolution_note",
             "room_text",
             "private_text",
+            "context_text",
             "prepared_for_character",
             "created_at",
         ]

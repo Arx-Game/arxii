@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 
     from world.ceremonies.models import CeremonyOffering
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import Consequence
     from world.checks.types import CheckResult, ModifierContribution
     from world.items.models import ItemInstance
     from world.items.types import ItemMeaning
@@ -46,6 +47,58 @@ class DevotionBump:
     credited: int
     pledge_credit: PledgeCredit | None = None
     earning_rate_percent: int = 100
+    #: Base favor of this write that paid owed favor first (#4349), before the earning rate.
+    owed_paid: int = 0
+
+
+@dataclass(frozen=True)
+class InterventionCost:
+    """What one divine intervention cost the one praying (#4349).
+
+    ``favor_spent`` came off their favor (a rescue or bigger miracle), ``favor_owed`` was
+    added to what they owe the being, and ``wait_hours`` is how long the being will not
+    consider them again. Each is already softened by their favor and rounded up.
+    """
+
+    favor_spent: int = 0
+    favor_owed: int = 0
+    wait_hours: int = 0
+
+
+@dataclass(frozen=True)
+class InterventionResult:
+    """How a divine intervention call ended (#4349): the one graded roll and what followed.
+
+    ``status`` is ``InterventionStatus.ROLLED`` when the check rolled; any other value means no
+    roll was made and ``refusal`` says why in words the one praying may read. ``outcome`` is the
+    rolled result tier. ``performance`` is the miracle that fired (a rescue or bigger miracle);
+    ``drawn`` is the consequence drawn from the being's intervention pool (a backfire, a sign
+    or a lesser answer) and ``effects`` the lines of what it applied. ``praying`` rolled and
+    paid; ``target`` is the one in danger, the same character for a prayer for oneself or for
+    divine intercession.
+    """
+
+    status: str
+    praying: CharacterSheet
+    target: CharacterSheet
+    being: WorshippedBeing | None = None
+    difficulty: InvocationDifficulty | None = None
+    outcome: CheckOutcome | None = None
+    performance: MiraclePerformance | None = None
+    drawn: Consequence | None = None
+    effects: tuple[str, ...] = ()
+    cost: InterventionCost = InterventionCost()
+    refusal: str = ""
+
+    @property
+    def rolled(self) -> bool:
+        return self.outcome is not None
+
+    @property
+    def answered(self) -> bool:
+        """True when the being did something: a miracle fired or a lesser answer or
+        backfire was drawn."""
+        return self.performance is not None or self.drawn is not None
 
 
 @dataclass(frozen=True)
