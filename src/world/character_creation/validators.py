@@ -579,7 +579,7 @@ def _technique_personalization_errors(
     )
 
 
-def _affinity_picks_error(affinities: list[str], require_full_spread: bool) -> str | None:
+def _affinity_picks_error(affinities: list[str], *, require_full_spread: bool) -> str | None:
     """Why these picks' affinity names are not one Primal feeling plus at most one other (#5231).
 
     The other pick is for what the character does to others and must be Celestial or Abyssal.
@@ -629,7 +629,8 @@ def resonance_weights_error(
     if len(picked) != len(ids):
         return "Select a gift resonance"
     affinity_error = _affinity_picks_error(
-        [resonance.affinity.name for resonance in picked], require_full_spread
+        [resonance.affinity.name for resonance in picked],
+        require_full_spread=require_full_spread,
     )
     if affinity_error:
         return affinity_error

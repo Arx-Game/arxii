@@ -114,6 +114,12 @@ class ChoosingWhatGivesACharacterStrength(FinalizationTestMixin, JourneyCase):
 
         self.assertEqual(self._gift_errors(draft), [TOO_MANY_OTHERS])
 
+        # The commonest old draft: two Primal picks. It loads and reads incomplete too.
+        draft.draft_data["gift_resonance_weights"] = self._weights((self.fury, 5), (self.wonder, 5))
+        draft.save(update_fields=["draft_data"])
+
+        self.assertEqual(self._gift_errors(draft), [TWO_FEELINGS])
+
     # -- what finalize writes -------------------------------------------------
 
     def test_an_even_split_finalizes_primal(self) -> None:
