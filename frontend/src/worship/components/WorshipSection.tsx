@@ -68,7 +68,7 @@ export function WorshipSection({
         (owedFavor ?? []).map((owed) => (
           <p key={owed.id} className="refsheet-ledger" data-testid="owed-favor">
             {owed.being_name} will not answer if you fall until you have earned {owed.owed_favor}{' '}
-            more base favor with them.
+            more base favor with them; calling on them for a check bonus still works.
           </p>
         ))}
       {(isMyCharacter || isStaff) && (

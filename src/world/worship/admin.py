@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.contrib import admin, messages
 from django.db.models import Count, Sum
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
@@ -49,6 +51,9 @@ from world.worship.models import (
     WorshipRiteTierAward,
     WorshipTradition,
 )
+
+if TYPE_CHECKING:
+    from world.checks.models import ConsequenceEffect
 
 
 @admin.register(WorshipTradition)
@@ -109,6 +114,13 @@ class BeingStewardInline(admin.StackedInline):
         return f"{table_context_line(obj.table, being=obj.being)} {sign_text}"
 
 
+def _effect_words(effect: ConsequenceEffect) -> str:
+    """One effect of an answer in words: its kind, then the condition it names, if any."""
+    kind = effect.get_effect_type_display()
+    template = effect.condition_template
+    return f"{kind}: {template.name}" if template is not None else kind
+
+
 def intervention_pool_summary(being: WorshippedBeing) -> SafeString | str:
     """A table of ``being``'s intervention pool rows by tier (#4349), or why there is none."""
     from actions.services import get_effective_consequences  # noqa: PLC0415
@@ -127,7 +139,7 @@ def intervention_pool_summary(being: WorshippedBeing) -> SafeString | str:
                 row.outcome_tier.name,
                 row.label,
                 row.weight,
-                ", ".join(e.get_effect_type_display() for e in row.consequence.effects.all())
+                ", ".join(_effect_words(e) for e in row.consequence.effects.all())
                 or "None (text only)",
             )
             for row in rows
@@ -156,11 +168,73 @@ class WorshippedBeingAdmin(admin.ModelAdmin):
     # intervention_pool (#4349): the consequence pool a divine intervention draws backfires,
     # signs and lesser answers from, with its rows summarised below it.
     autocomplete_fields = ("codex_entry", "invocation_check_type", "intervention_pool")
-    readonly_fields = ("intervention_pool_rows",)
+    readonly_fields = ("intervention_pool_rows", "intervention_miracles")
     filter_horizontal = ("ultimate_techniques",)
     # The tarot link carries an orientation (#4198), so it is a row, not a multi-select.
     # The steward (#4333 slice 4) is a stacked row with its context beside it.
     inlines = (BeingTarotCardInline, BeingStewardInline)
+
+    def get_form(self, request: HttpRequest, obj=None, change: bool = False, **kwargs):
+        kwargs["labels"] = {"intervention_pool": "Intervention answers"}
+        kwargs["help_texts"] = {
+            "intervention_pool": (
+                "The consequence pool drawn from when this being's intervention roll lands "
+                "below Success. Critical Failure rows are backfires, Failure rows are signs "
+                "with no aid, Partial Success rows are lesser answers. One row is drawn by "
+                "weight."
+            )
+        }
+        return super().get_form(request, obj, change=change, **kwargs)
+
+    def get_fieldsets(self, request: HttpRequest, obj=None):
+        """The intervention fields sit together in their own fieldset, after the rest."""
+        own = ("intervention_pool", "intervention_pool_rows", "intervention_miracles")
+        rest = [
+            (name, {**options, "fields": [f for f in options["fields"] if f not in own]})
+            for name, options in super().get_fieldsets(request, obj)
+        ]
+        return [*rest, ("Divine intervention", {"fields": own})]
+
+    @admin.display(description="Miracles")
+    def intervention_miracles(self, obj: WorshippedBeing) -> SafeString | str:
+        """The being's active miracles by the lowest result that can bring them."""
+        if obj.pk is None:
+            return "Save the being to see its miracles."
+        miracles = list(
+            Miracle.objects.filter(being=obj, is_active=True)
+            .select_related("min_outcome_tier")
+            .order_by("sort_order", "pk")
+        )
+        if not miracles:
+            return "No miracles."
+        tiers: dict[str, list[Miracle]] = {}
+        for miracle in miracles:
+            name = miracle.min_outcome_tier.name if miracle.min_outcome_tier_id else "Success"
+            tiers.setdefault(name, []).append(miracle)
+        parts = format_html_join(
+            " ",
+            "{}: {}.",
+            (
+                (
+                    tier,
+                    format_html_join(
+                        ", ",
+                        '<a href="{}">{}</a>',
+                        (
+                            (reverse("admin:arxii_miracle_change", args=[m.pk]), m.name)
+                            for m in group
+                        ),
+                    ),
+                )
+                for tier, group in tiers.items()
+            ),
+        )
+        return format_html(
+            '{} <a href="{}?being__id__exact={}">Edit</a>',
+            parts,
+            reverse("admin:arxii_miracle_changelist"),
+            obj.pk,
+        )
 
     @admin.display(description="What the pool holds")
     def intervention_pool_rows(self, obj: WorshippedBeing) -> SafeString | str:
@@ -357,6 +431,14 @@ class MiracleAdmin(admin.ModelAdmin):
     list_filter = ("being", "intervention_trigger", "is_active")
     search_fields = ("name",)
     readonly_fields = ("tier_list",)
+
+    def get_form(self, request: HttpRequest, obj=None, change: bool = False, **kwargs):
+        kwargs["labels"] = {"resonance_pool_cost": "Worship pool cost"}
+        kwargs["help_texts"] = {
+            "resonance_pool_cost": ("Taken from the being's worship pool when this miracle fires.")
+        }
+        return super().get_form(request, obj, change=change, **kwargs)
+
     inlines = [
         MiracleAppliedConditionInline,
         MiracleDamageProfileInline,
@@ -432,6 +514,30 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
         "cooldown_hours",
         "min_pool_for_intervention",
     )
+
+    def get_form(self, request: HttpRequest, obj=None, change: bool = False, **kwargs):
+        from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+        config = get_devotion_config()
+        kwargs["labels"] = {"favor_threshold": "Divine intercession threshold"}
+        kwargs["help_texts"] = {
+            "debt_softening_low_percent": (
+                "Owed favor and the minimum wait are cut by this percent when the character's "
+                "favor is at or above the low favor-ease threshold (Devotion config, "
+                f"{config.favor_ease_low_threshold})."
+            ),
+            "debt_softening_high_percent": (
+                "Used instead at or above the high favor-ease threshold "
+                f"({config.favor_ease_high_threshold}). Favor spent, favor owed and the "
+                "minimum wait per result are the Intervention spend, Intervention debt and "
+                "Intervention wait rows in Devotion config."
+            ),
+            "min_pool_for_intervention": (
+                "A being's worship pool must hold at least this to perform any miracle."
+            ),
+        }
+        return super().get_form(request, obj, change=change, **kwargs)
+
     readonly_fields = (
         "roll_rule",
         "owing_favor_now",
@@ -544,14 +650,16 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
             line.outcome_name: line.success_level for _, _, odds in rows for line in odds.lines
         }
         names = sorted(levels, key=lambda name: levels[name])
-        head = format_html_join("", "<th>{}</th>", ((name,) for name in names))
+        head = format_html_join(
+            "", "<th>{}</th>", ((_RESULT_WORDS.get(levels[name], name),) for name in names)
+        )
         body = format_html_join(
             "",
-            "<tr><td>{}</td><td>{}</td>{}</tr>",
+            "<tr><td>{} ({})</td>{}</tr>",
             (
                 (
                     label,
-                    difficulty,
+                    _difficulty_words(difficulty),
                     format_html_join(
                         "",
                         "<td>{}%</td>",
@@ -570,7 +678,7 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
             ),
         )
         return format_html(
-            "<table><tr><th>Favor</th><th>Difficulty</th>{}</tr>{}</table>"
+            "<table><tr><th>Favor</th>{}</tr>{}</table>"
             "<p>For a {} roller, at the invocation difficulty in Devotion config.</p>",
             head,
             body,
@@ -908,6 +1016,25 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                 ),
             },
         ),
+        (
+            "What the favor outcome award rows pay",
+            {
+                "description": (
+                    "Officiant: base favor the officiant earns at ceremony finish for their "
+                    "Rites result (Partial Success when the officiant made no Rites roll). "
+                    "Chosen anima: anima a Chosen's patron adds to their anima ritual for its "
+                    "result, when patron favor meets the Chosen favor config threshold; a "
+                    "Critical Success ritual already refills anima, so a row for it has no "
+                    "effect. Intervention spend: favor a rescue or bigger miracle costs. "
+                    "Intervention debt: favor owed after the result, reduced at higher favor "
+                    "and rounded up, paid from base favor before the earning rate; the being "
+                    "ignores that character's intervention rolls until it is paid (invoking "
+                    "still works). Intervention wait: the minimum hours before the next "
+                    "intervention roll, reduced at higher favor. A missing row pays 0."
+                ),
+                "fields": (),
+            },
+        ),
     )
 
     @admin.display(description="Eases")
@@ -982,6 +1109,20 @@ class DevotionConfigAdmin(admin.ModelAdmin):
         return super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
         )
+
+
+#: What each result tier is called on the odds table, by its success level.
+_RESULT_WORDS = {
+    -2: "Backfire",
+    -1: "Unanswered",
+    0: "Lesser answer",
+    1: "Rescue",
+    2: "Bigger miracle",
+}
+
+
+def _difficulty_words(points: int) -> str:
+    return f"{_band_label(points)} {points}"
 
 
 def intervention_odds_cases() -> list[tuple[str, int]]:

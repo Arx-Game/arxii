@@ -110,9 +110,43 @@ class DevotionConfigAdminTests(TestCase):
         ).content.decode()
 
         self.assertIn("Odds at these settings", body)
-        self.assertIn("<td>60 or more</td><td>45</td><td>0%</td><td>40%</td><td>60%</td>", body)
-        self.assertIn("<td>30 to 59</td><td>60</td><td>0%</td><td>70%</td><td>30%</td>", body)
-        self.assertIn("<td>below 30</td><td>75</td><td>5%</td><td>85%</td><td>10%</td>", body)
+        self.assertIn("<th>Backfire</th><th>Unanswered</th><th>Rescue</th>", body)
+        self.assertIn("Divine intercession threshold", body)
+        self.assertIn("(Devotion config, 30)", body)
+        self.assertIn("<td>60 or more (Normal 45)</td><td>0%</td><td>40%</td><td>60%</td>", body)
+        self.assertIn("<td>30 to 59 (Hard 60)</td><td>0%</td><td>70%</td><td>30%</td>", body)
+        self.assertIn("<td>below 30 (Daunting 75)</td><td>5%</td><td>85%</td><td>10%</td>", body)
+
+    def test_staff_pages_carry_the_demo_labels_and_notes(self) -> None:
+        from world.ceremonies.models import CeremonyConfig
+        from world.worship.factories import MiracleFactory, WorshippedBeingFactory
+
+        config = get_devotion_config()
+        body = self.client.get(
+            reverse("admin:arxii_devotionconfig_change", args=(config.pk,))
+        ).content.decode()
+        self.assertIn("What the favor outcome award rows pay", body)
+        self.assertIn("a Critical Success ritual already refills anima", body)
+
+        ceremony = CeremonyConfig.objects.create()
+        body = self.client.get(
+            reverse("admin:arxii_ceremonyconfig_change", args=(ceremony.pk,))
+        ).content.decode()
+        self.assertIn("Devotion officiant (removed)", body)
+        self.assertIn("See the Officiant award rows", body)
+
+        being = WorshippedBeingFactory()
+        miracle = MiracleFactory(being=being)
+        body = self.client.get(
+            reverse("admin:arxii_worshippedbeing_change", args=(being.pk,))
+        ).content.decode()
+        self.assertIn("Divine intervention", body)
+        self.assertIn("Intervention answers", body)
+        self.assertIn(miracle.name, body)
+        body = self.client.get(
+            reverse("admin:arxii_miracle_change", args=(miracle.pk,))
+        ).content.decode()
+        self.assertIn("Worship pool cost", body)
 
     def test_odds_table_is_read_from_the_result_charts(self) -> None:
         from world.traits.factories import CheckRankFactory, ResultChartFactory

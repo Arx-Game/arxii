@@ -165,8 +165,10 @@ export function PrayDialog({
                 max={site.apLeft}
                 value={ap}
                 onChange={(event) => setAp(event.target.value)}
-                placeholder={`${site.apLeft} of ${site.apCap} left this week`}
               />
+              <p className="text-xs text-muted-foreground" data-testid="pray-ap-left">
+                {site.apLeft} of {site.apCap} left this week
+              </p>
             </div>
           )}
           <div className="space-y-2">
