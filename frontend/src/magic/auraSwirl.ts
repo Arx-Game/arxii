@@ -295,7 +295,7 @@ export function massFrame(a: Oklch, b: Oklch | null, q: number): MassFrame {
   const avg = a[0] * (1 - q) + (b ? b[0] * q : 0);
   const lit = lift(b && b[0] < a[0] ? b : a);
   return {
-    bloomBackground: `radial-gradient(circle closest-side, ${oklchCss(gB > gA ? (b as Oklch) : a, Math.max(gA, gB))} 55%, transparent 100%)`,
+    bloomBackground: `radial-gradient(circle closest-side, ${oklchCss(b && gB > gA ? b : a, Math.max(gA, gB))} 55%, transparent 100%)`,
     rimBorderColor: oklchCss(lit, 1),
     rimBoxShadow: `0 0 1rem ${oklchCss(lit, 0.9)}, inset 0 0 0.5rem ${oklchCss(lit, 0.5)}`,
     rimOpacity: Number(clamp((0.5 - avg) / 0.28, 0, 1).toFixed(2)),

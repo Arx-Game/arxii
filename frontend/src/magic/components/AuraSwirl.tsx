@@ -33,14 +33,31 @@ const LAYER: CSSProperties = {
   borderRadius: '50%',
 };
 
+/** The neutral grey drawn for a colour the server sent that is not `#RRGGBB`. */
+const NEUTRAL_HEX = '#8C8C8C';
+
+function parseOrNeutral(hex: string): Oklch {
+  try {
+    return hexToOklch(hex);
+  } catch {
+    return hexToOklch(NEUTRAL_HEX);
+  }
+}
+
 function shareOf(secondary: Oklch | null, secondShare: number): number {
-  return secondary ? Math.max(0, Math.min(1, secondShare)) : 0;
+  if (!secondary || !Number.isFinite(secondShare)) return 0;
+  return Math.max(0, Math.min(1, secondShare));
 }
 
 export function AuraSwirl({ primaryHex, secondaryHex, secondShare, className }: AuraSwirlProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const primary = useMemo(() => hexToOklch(primaryHex), [primaryHex]);
-  const secondary = useMemo(() => (secondaryHex ? hexToOklch(secondaryHex) : null), [secondaryHex]);
+  /** The running clock in seconds; a redraw after a prop change keeps this phase. */
+  const clockRef = useRef(0);
+  const primary = useMemo(() => parseOrNeutral(primaryHex), [primaryHex]);
+  const secondary = useMemo(
+    () => (secondaryHex ? parseOrNeutral(secondaryHex) : null),
+    [secondaryHex]
+  );
   const q = shareOf(secondary, secondShare);
   const frame = useMemo(() => massFrame(primary, secondary, q), [primary, secondary, q]);
 
@@ -55,11 +72,12 @@ export function AuraSwirl({ primaryHex, secondaryHex, secondShare, className }: 
     }
     let last = 0;
     let handle = 0;
-    drawMass(canvas, primary, secondary, q, 0);
+    drawMass(canvas, primary, secondary, q, clockRef.current);
     const tick = (ts: number) => {
       if (ts - last > FRAME_MS && !document.hidden) {
         last = ts;
-        drawMass(canvas, primary, secondary, q, ts / 1000);
+        clockRef.current = ts / 1000;
+        drawMass(canvas, primary, secondary, q, clockRef.current);
       }
       handle = requestAnimationFrame(tick);
     };

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { cloud, hexToOklch, oklchToHex, ramp, swirlThreshold, type Oklch } from '@/magic/auraSwirl';
+import {
+  cloud,
+  hexToOklch,
+  noise,
+  oklchToHex,
+  ramp,
+  swirlThreshold,
+  type Oklch,
+} from '@/magic/auraSwirl';
 
 function cloudSamples(count: number): Float32Array {
   const side = Math.sqrt(count);
@@ -48,5 +56,12 @@ describe('ramp', () => {
     const steps = ramp([0.68, 0.19, 45], [0.22, 0.1, 20]);
     expect(steps).toHaveLength(33);
     expect(steps[0][0]).toBeGreaterThan(steps[32][0]);
+  });
+});
+
+describe('noise', () => {
+  it('matches the approved demo at a fixed point', () => {
+    // 0.3189504 is the demo's own noise(3.3, 9.7), run from its <script> with its seed 20261120.
+    expect(noise(3.3, 9.7)).toBeCloseTo(0.3189504, 9);
   });
 });
