@@ -189,7 +189,9 @@ UNDECIDED_AWAITING_RULING: dict[str, str] = _merge(
     ),
     _notes(
         "Progression balances and receipts with no ledger: XP balance, unlock receipts, "
-        "path history, development points, weekly usage, stat-point and maturation spends.",
+        "path history, development points, weekly usage, stat-point and maturation spends "
+        "(the per-character progress reset deletes the two spend tables, the global wipe "
+        "does not).",
         "CharacterXP",
         "CharacterUnlock",
         "CharacterPathHistory",

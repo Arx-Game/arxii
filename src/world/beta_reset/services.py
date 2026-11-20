@@ -107,7 +107,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.db.models import Model
@@ -188,6 +188,9 @@ from world.societies.models import LegendEntry, LegendEvent, LegendHonor, refres
 from world.tasking.models import ListenerHarvest
 from world.traits.models import CharacterTraitChange, TraitChangeSource
 
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+
 # =============================================================================
 # Guard 1: hardcoded source constant
 # =============================================================================
@@ -230,6 +233,18 @@ PLAY_TIME_ACQUISITION_ORIGINS = frozenset(
         AcquisitionOrigin.ORGANIZATION_GRANT,
         AcquisitionOrigin.ALTERNATE_SELF_GRANT,
         AcquisitionOrigin.GM_GRANT,
+        # A Critical Success trial's "grant outright" (#4501): earned in play.
+        AcquisitionOrigin.TRIAL,
+    }
+)
+
+#: The other half of the split. ``test_provenance_sets`` fails when an enum member is in
+#: neither half, so a new origin cannot be added without choosing a side.
+CG_AUTHORING_ACQUISITION_ORIGINS = frozenset(
+    {
+        AcquisitionOrigin.CHARACTER_CREATION,
+        AcquisitionOrigin.SPECIES_GRANT,
+        AcquisitionOrigin.AUTHORED,
     }
 )
 
@@ -241,6 +256,17 @@ PLAY_TIME_TRAIT_CHANGE_SOURCES = frozenset(
         TraitChangeSource.MATURATION,
         TraitChangeSource.LEVEL_STAT_POINT,
         TraitChangeSource.GM_GRANT,
+        # XP spent to clear a language or skill breakthrough (#4090): earned in play.
+        TraitChangeSource.XP_BREAKTHROUGH,
+    }
+)
+
+#: Staff edit mode (#4221) and NPC statline presets are authoring acts, not play.
+CG_AUTHORING_TRAIT_CHANGE_SOURCES = frozenset(
+    {
+        TraitChangeSource.CHARACTER_CREATION,
+        TraitChangeSource.NPC_PRESET,
+        TraitChangeSource.STAFF_EDIT,
     }
 )
 
@@ -255,6 +281,15 @@ PLAY_TIME_DISTINCTION_ORIGINS = frozenset(
         DistinctionOrigin.CONSEQUENCE_POOL,
         DistinctionOrigin.ENDORSEMENT_THRESHOLD,
         DistinctionOrigin.UNLOCK_PURCHASE,
+    }
+)
+
+#: Staff edit mode (#4221) is staff building or repairing a sheet, an authoring act.
+CG_AUTHORING_DISTINCTION_ORIGINS = frozenset(
+    {
+        DistinctionOrigin.CHARACTER_CREATION,
+        DistinctionOrigin.SPECIES,
+        DistinctionOrigin.STAFF,
     }
 )
 
@@ -452,6 +487,20 @@ class WipeReport:
         return sum(c.would_delete for c in self.counts)
 
 
+def scope_entry_for(model: type[Model]) -> ScopeEntry:
+    """The ``SCOPE_TABLE`` entry for a provenance-filtered ``model``.
+
+    The per-character progress reset reads its play-time filter from here, so "what counts
+    as play provenance" has one definition. Raises ``LookupError`` for a model with no
+    entry, and for one whose entry is not a provenance split.
+    """
+    for entry in SCOPE_TABLE:
+        if entry.model is model and entry.filter_kwargs and not entry.unblocker_only:
+            return entry
+    msg = f"{model.__name__} has no provenance-filtered SCOPE_TABLE entry."
+    raise LookupError(msg)
+
+
 def _scope_queryset(entry: ScopeEntry):
     qs = entry.model.objects.all()
     if entry.filter_kwargs:
@@ -459,19 +508,24 @@ def _scope_queryset(entry: ScopeEntry):
     return qs
 
 
-def _deprovision_wiped_natural_weapons() -> None:
-    """A play-time gift the wipe deletes takes its natural weapon with it (#4898).
+def deprovision_play_time_natural_weapons(sheet: CharacterSheet | None = None) -> None:
+    """A play-time gift that goes takes its natural weapon with it (#4898).
 
     The weapon carries its gift as ``ItemInstance.natural_weapon_gift`` and can never be
     removed by any other path, so a wiped gift would otherwise leave claws nobody can
-    take off. Runs before the ``CharacterGift`` rows go, inside the wipe's transaction.
+    take off. Runs before the ``CharacterGift`` rows go, inside the caller's transaction.
+    ``sheet=None`` covers every character (the wipe); a sheet covers just that character
+    (the progress reset).
     """
     from world.items.services.natural_weapons import deprovision_natural_weapon  # noqa: PLC0415
 
     wiped = CharacterGift.objects.filter(
         origin__in=list(PLAY_TIME_ACQUISITION_ORIGINS),
         gift__natural_weapon_template__isnull=False,
-    ).select_related("character", "gift")
+    )
+    if sheet is not None:
+        wiped = wiped.filter(character=sheet)
+    wiped = wiped.select_related("character", "gift")
     for row in wiped:
         deprovision_natural_weapon(row.character, row.gift)
 
@@ -564,7 +618,7 @@ def wipe_pristine_world(
 
     counts: list[ScopeCount] = []
     with transaction.atomic():
-        _deprovision_wiped_natural_weapons()
+        deprovision_play_time_natural_weapons()
         for entry in SCOPE_TABLE:
             qs = _scope_queryset(entry)
             deleted, _ = qs.delete()
