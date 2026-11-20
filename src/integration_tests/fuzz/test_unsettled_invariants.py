@@ -13,6 +13,11 @@ grant, an atone (moving lifetime from one resonance to another) or an accept. Af
 - an accept leaves her with ``steps_past == 0``, whoever she was, and refuses when she was not
   unsettled.
 
+Drift reads by side (#5231). A tie in the main affinity goes to Primal. Primal growth never
+raises ``steps_past`` for a character whose main affinity is Primal or Abyssal, and an Abyssal
+character is never unsettled by it. A Primal character leaning to a side reads her own side at
+``DriftConfig.own_side_tolerance_percent``; with no lean the Primal range applies.
+
 The rite of settling disowning her Ruin (``perform_settling_rite``, the service the web dialog
 and ``aura settle`` reach) is fuzzed too: whatever the cap lets her convert, she converts
 exactly the least of the cap, what she holds of Ruin and what stands past who she is, and total
@@ -229,6 +234,93 @@ class UnsettledAuraInvariants(HypothesisTestCase):
     @given(aura_spec=auras(), history=st.lists(steps, max_size=5))
     def test_any_history_keeps_the_aura_sound(self, aura_spec, history) -> None:
         self.run_history(aura_spec, history)
+
+    @given(aura_spec=auras())
+    @example(aura_spec=((5, 5, 0), [0, 0, 0, 0, 0, 0]))
+    def test_a_tie_in_the_main_affinity_goes_to_primal(self, aura_spec) -> None:
+        sheet, aura = self.character(aura_spec)
+        settled = {
+            share.affinity.name: share.settled_percent
+            for share in CharacterAuraShare.objects.filter(aura=aura).select_related("affinity")
+        }
+        main = drift_for(sheet).main_affinity
+        self.assertIsNotNone(main)
+        # Shares rounded to cents can break a tie in the weights, so read the stored shares.
+        if settled.get("Primal", Decimal(0)) == max(settled.values()):
+            self.assertEqual(main.name, "Primal")
+
+    @given(
+        aura_spec=auras(),
+        primal_index=st.sampled_from([2, 3]),
+        amount=st.integers(1, 500),
+    )
+    def test_primal_growth_unsettles_only_a_celestial_character(
+        self, aura_spec, primal_index, amount
+    ) -> None:
+        sheet, _aura = self.character(aura_spec)
+        before = drift_for(sheet)
+        grant_resonance(sheet, self.resonances[primal_index], amount, source=GainSource.STAFF_GRANT)
+        after = drift_for(sheet)
+        # A Celestial main may be unsettled by Primal growth; no other main may be.
+        if before.main_affinity.name in ("Primal", "Abyssal"):
+            self.assertLessEqual(after.steps_past, before.steps_past)
+
+    @given(
+        primal_settled=st.integers(0, 5),
+        primal_held=st.lists(st.integers(0, 300), min_size=2, max_size=2),
+        abyssal_held=st.lists(st.integers(0, 300), min_size=2, max_size=2),
+        primal_index=st.sampled_from([2, 3]),
+        amount=st.integers(1, 800),
+    )
+    def test_an_abyssal_character_is_never_unsettled_by_primal(
+        self, primal_settled, primal_held, abyssal_held, primal_index, amount
+    ) -> None:
+        # Abyssal is her main affinity (settled 6 to 10 more than Primal); she holds no
+        # Celestial, so Primal growth is the only thing that could have unsettled her.
+        sheet, _aura = self.character(
+            ((0, primal_settled, primal_settled + 10), [0, 0, *primal_held, *abyssal_held])
+        )
+        before = drift_for(sheet)
+        self.assertEqual(before.main_affinity.name, "Abyssal")
+        grant_resonance(sheet, self.resonances[primal_index], amount, source=GainSource.STAFF_GRANT)
+        after = drift_for(sheet)
+        self.assertEqual(after.steps_past, before.steps_past)
+        self.assertEqual(after.steps_past, 0)
+
+    def read_abyssal_growth(self, celestial: int, primal: int, abyssal: int, abyssal_pct: int):
+        """A Primal-led character who holds ``abyssal_pct`` percent of 1000 lifetime in Abyssal."""
+        sheet, _aura = self.character(
+            ((celestial, primal, abyssal), [0, 0, 1000 - abyssal_pct * 10, 0, abyssal_pct * 10, 0])
+        )
+        return drift_for(sheet)
+
+    @given(abyssal_settled=st.integers(10, 40))
+    def test_a_primal_character_leaning_abyssal_reads_her_own_side_at_the_own_side_range(
+        self, abyssal_settled
+    ) -> None:
+        config = get_drift_config()
+        config.own_side_tolerance_percent = 15
+        config.save(update_fields=["own_side_tolerance_percent"])
+        # Settled Celestial 5, Abyssal above it (she leans Abyssal), Primal the rest.
+        weights = (5, 95 - abyssal_settled, abyssal_settled)
+        at_the_line = self.read_abyssal_growth(*weights, abyssal_settled + 15)
+        self.assertEqual(at_the_line.main_affinity.name, "Primal")
+        self.assertEqual(at_the_line.steps_past, 0)
+        past_the_line = self.read_abyssal_growth(*weights, abyssal_settled + 16)
+        self.assertGreater(past_the_line.steps_past, 0)
+
+    @given(side_settled=st.integers(0, 30))
+    def test_a_primal_character_with_no_lean_reads_abyssal_at_the_primal_range(
+        self, side_settled
+    ) -> None:
+        # Celestial and Abyssal are settled equal (both 0 included): no lean, so Abyssal
+        # growth is read at the general range of 5.
+        weights = (side_settled, 100 - 2 * side_settled, side_settled)
+        at_the_line = self.read_abyssal_growth(*weights, side_settled + 5)
+        self.assertEqual(at_the_line.main_affinity.name, "Primal")
+        self.assertEqual(at_the_line.steps_past, 0)
+        past_the_line = self.read_abyssal_growth(*weights, side_settled + 6)
+        self.assertGreater(past_the_line.steps_past, 0)
 
 
 # --- the atone rite on a Sineater ---------------------------------------------------------

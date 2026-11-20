@@ -16,7 +16,7 @@ from django.db.models import Prefetch
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
-from world.magic.constants import GlimpseState
+from world.magic.constants import AFFINITY_PRIMAL, GlimpseState
 from world.magic.models.affinity import Affinity, Resonance
 
 if TYPE_CHECKING:
@@ -109,14 +109,21 @@ class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
 
     @property
     def dominant_affinity(self) -> Affinity:
-        """The affinity with the highest percent; ties go to the lowest Affinity pk.
+        """The affinity with the highest percent; ties go to Primal, then the lowest Affinity id.
 
         Raises ValueError for an aura with no shares (not yet formed).
         """
         if not self.cached_shares:
             msg = "This aura holds no affinity shares."
             raise ValueError(msg)
-        best = min(self.cached_shares, key=lambda share: (-share.percent, share.affinity_id))
+        best = min(
+            self.cached_shares,
+            key=lambda share: (
+                -share.percent,
+                share.affinity.name != AFFINITY_PRIMAL,
+                share.affinity_id,
+            ),
+        )
         return best.affinity
 
 
