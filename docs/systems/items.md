@@ -209,12 +209,19 @@ paths and stay free while worn.
   it except a named row, so it stays off until she takes the item off and puts it back on.
   Staff untick `can_be_dispelled` where it should never come off.
 - **One source per condition.** The admin refuses an item row for a condition any
-  `TechniqueAppliedCondition` names, and a technique row for a condition an item gives
-  (`clean()` on both).
+  applied-condition row names (every concrete `AbstractAppliedCondition` subclass: technique,
+  variant, miracle, draft), and any such row for a condition an item gives
+  (`AbstractAppliedCondition.clean()`).
+- **Other writers.** Retiring a MANTLE thread (`ThreadViewSet.destroy`) reconciles the owner.
+  A second slot of an item already worn is not "putting it on", so it never brings back a
+  dispelled condition. `EquippedItemAdmin` saves and deletes through the same reconcile and
+  `unequip_item`.
 - **Delete paths.** `release_worn_conditions(item)` runs before a hard delete
-  (`hard_delete_item_instance`) and in the admin's delete and bulk delete, which cascade
-  equipped rows without unequipping. The soft-delete purge skips an item carrying a worn
-  condition row (it is authored design).
+  (`hard_delete_item_instance`), in `Object.at_object_delete` for an item's game object, and
+  in the item admin's delete and bulk delete, which cascade equipped rows without
+  unequipping. A condition another worn item also gives is repointed to it. The soft-delete
+  purge skips an item carrying a worn condition row, and `differs_from_template` counts one
+  (it is authored design).
 - **Per-use cost.** See conditions.md "Gear conditions": movement and dodge powers charge
   the condition's `reactive_anima_cost` and overspend into Soulfray; a zero cost pays
   fatigue as any non-technique source.
