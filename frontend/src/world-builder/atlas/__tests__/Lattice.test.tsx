@@ -752,7 +752,7 @@ describe('Lattice — the map view (zoom and pan)', () => {
   it('starts at 100% with the canvas unmoved', () => {
     renderLattice({ tiles: [makeTile({ id: 1 })] });
     expect(screen.getByTestId('lattice-viewport')).toHaveAttribute('data-zoom', '1.00');
-    expect(transformOf()).toBe('translate(0px, 0px) scale(1)');
+    expect(transformOf()).toMatch(/^translate\(0px(?:, 0px)?\) scale\(1\)$/);
   });
 
   it('the wheel zooms out and in around the cursor, within the clamp', () => {
@@ -801,7 +801,7 @@ describe('Lattice — the map view (zoom and pan)', () => {
   it('pressing on a tile is still a tile drag, never a pan', async () => {
     const { runAction } = renderLattice({ tiles: [makeTile({ id: 1 })] });
     await drag(screen.getByTestId('lattice-tile-1'), screen.getByTestId('lattice-cell-1-0'));
-    expect(transformOf()).toBe('translate(0px, 0px) scale(1)');
+    expect(transformOf()).toMatch(/^translate\(0px(?:, 0px)?\) scale\(1\)$/);
     expect(runAction).toHaveBeenCalledWith(
       'staff_place_room',
       expect.objectContaining({ room_id: 1, grid_x: 1, grid_y: 0 })
