@@ -307,6 +307,20 @@ manage *args:
 migrate:
     uv run arx manage migrate
 
+# --- Migration number conflicts (ADR-4879) -----------------------------------
+
+# Do by hand what the migration-conflict-rebase bot does (#4879, #5254): merge
+# origin/main, renumber this branch's migrations after main's tip, update the docs
+# that name them, prove the result, and commit it under YOUR git identity. Use it
+# when max_migration.txt is the PR's only conflict and the bot has not run. Clean
+# tree, on the PR's branch. A review-evidence report on the PR is carried across the
+# merge, because the evidence check rebuilds the same tree. Where it refuses, use
+# `arx manage rebase_migration arxii` instead, and refresh any visual review.
+#   just migration-rebase-like-bot
+migration-rebase-like-bot:
+    git fetch origin main
+    uv run python tools/auto_rebase_migration.py --main-ref origin/main
+
 # --- Migration chain regeneration (ADR-0276) ----------------------------------
 
 # Regenerate the arxii migration chain to its floor. Replaces Django's

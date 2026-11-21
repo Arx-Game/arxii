@@ -4,9 +4,16 @@ import os
 from pathlib import Path
 import subprocess
 
-from auto_rebase_migration import RefusalError, run
+from auto_rebase_migration import RefusalError, main as rebase_main, run
 import pytest
-from review_evidence_revision import BOT_EMAIL, BOT_NAME, BOT_SUBJECT, reviewed_revision
+from review_evidence_revision import (
+    BOT_EMAIL,
+    BOT_NAME,
+    BOT_SUBJECT,
+    is_migration_update,
+    reviewed_revision,
+    verify_migration_update,
+)
 
 
 def sh(repo: Path, *args: str) -> str:
@@ -416,3 +423,60 @@ def test_hand_merge_of_something_main_does_not_contain_is_refused(repo: Path):
     old_main = sh(repo, "rev-parse", "main^1").strip()
     with pytest.raises(RefusalError, match="cannot verify update"):
         reviewed_revision(repo, head, old_main, anchor=anchor)
+
+
+def as_ordinary_author(repo: Path) -> None:
+    sh(repo, "config", "user.name", "Ordinary Author")
+    sh(repo, "config", "user.email", "author@example.com")
+
+
+def formatted_feature_migration(repo: Path) -> str:
+    """Give the branch's migration the multi-line dependency list that ruff format writes."""
+    path = repo / "src/world/migrations/0002_feature.py"
+    path.write_text(
+        "from django.db import migrations\n\n\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [\n        ("arxii", "0001_initial"),\n    ]\n\n'
+        "    operations = []\n"
+    )
+    commit(repo, "format the migration as ruff does")
+    sh(repo, "update-ref", "refs/remotes/origin/main", "main")
+    return sh(repo, "rev-parse", "HEAD").strip()
+
+
+def test_local_rebase_command_run_by_a_person_carries_the_report(repo: Path):
+    as_ordinary_author(repo)
+    anchor = formatted_feature_migration(repo)
+    assert (
+        rebase_main(["--repo", str(repo), "--main-ref", "origin/main", "--skip-graph-check"]) == 0
+    )
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    assert len(sh(repo, "show", "-s", "--format=%P", head).split()) == 2
+    assert sh(repo, "log", "-1", "--format=%an", head).strip() == "Ordinary Author"
+    assert not is_migration_update(repo, head)  # carried by the rebuild, not by the bot's name
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def test_hand_renumbering_with_a_one_line_dependency_list_is_refused(repo: Path):
+    as_ordinary_author(repo)
+    anchor = formatted_feature_migration(repo)
+    merge = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", "main"], cwd=repo, check=False
+    )
+    assert merge.returncode != 0  # max_migration.txt conflicts
+    directory = repo / "src/world/migrations"
+    sh(repo, "mv", "src/world/migrations/0002_feature.py", "src/world/migrations/0003_feature.py")
+    (directory / "0003_feature.py").write_text(
+        "from django.db import migrations\n\n\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("arxii", "0002_main")]\n\n'
+        "    operations = []\n"
+    )
+    (directory / "max_migration.txt").write_text("0003_feature\n")
+    sh(repo, "add", "-A")
+    sh(repo, "commit", "-qm", "Merge main by hand (rebase_migration)")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="differs from the reproduced tree"):
+        verify_migration_update(repo, head, "main")  # only the one-line list differs
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
