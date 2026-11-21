@@ -16,7 +16,7 @@ from world.conditions.constants import DurationType
 from world.conditions.factories import ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
 from world.conditions.services import has_condition
-from world.items.admin import ItemInstanceAdmin, ItemWornConditionInline
+from world.items.admin import EquippedItemAdmin, ItemInstanceAdmin, ItemWornConditionInline
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
     ItemInstanceFactory,
@@ -25,7 +25,7 @@ from world.items.factories import (
     MantleFactory,
     TemplateSlotFactory,
 )
-from world.items.models import ItemInstance, ItemWornCondition
+from world.items.models import EquippedItem, ItemInstance, ItemWornCondition
 from world.items.services.equip import equip_item
 from world.items.services.usage import destroy_consumed_item_instance, hard_delete_item_instance
 from world.magic.factories import TechniqueAppliedConditionFactory
@@ -170,6 +170,26 @@ class WornItemTests(TestCase):
 
         instance = ConditionInstance.objects.get(target=self.character, condition=self.warding)
         self.assertEqual(instance.source_item, hood)
+
+    def test_a_second_slot_staff_add_for_a_worn_item_does_not_bring_back_a_dispelled_condition(
+        self,
+    ) -> None:
+        self.wear()
+        ConditionInstance.objects.filter(target=self.character).delete()
+        request, _ = self.admin_request()
+        slot_admin = EquippedItemAdmin(EquippedItem, site)
+        second = EquippedItem(
+            character=self.sheet,
+            item_instance=self.ring,
+            body_region=BodyRegion.HEAD,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+        form = slot_admin.get_form(request, second)(instance=second)
+        form.changed_data = ["item_instance"]
+
+        slot_admin.save_model(request, second, form, False)
+
+        self.assertFalse(has_condition(self.character, self.warding))
 
     def admin_request(self):
         request = RequestFactory().post("/")

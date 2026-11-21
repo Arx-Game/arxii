@@ -792,13 +792,19 @@ class EquippedItemAdmin(admin.ModelAdmin):
     def save_model(
         self, request: HttpRequest, obj: EquippedItem, form: ModelForm, change: bool
     ) -> None:
-        """A staff-added slot puts the item on: its worn conditions follow (#5074)."""
+        """A slot staff add, or move to another item, puts that item on: its worn conditions
+        follow (#5074). A second slot for an item already worn is not putting it on, as in
+        ``equip_item``, so a condition dispelled since stays off."""
         from world.items.models import ItemWornCondition  # noqa: PLC0415
         from world.items.services.worn_conditions import reconcile_worn_conditions  # noqa: PLC0415
 
         super().save_model(request, obj, form, change)
         obj.character.character.equipped_items.invalidate()
-        rows = [] if change else ItemWornCondition.objects.filter(item_instance=obj.item_instance)
+        already_worn = (
+            EquippedItem.objects.filter(item_instance=obj.item_instance).exclude(pk=obj.pk).exists()
+        )
+        puts_on = (not change or "item_instance" in form.changed_data) and not already_worn  # noqa: STRING_LITERAL - a form field name
+        rows = ItemWornCondition.objects.filter(item_instance=obj.item_instance) if puts_on else []
         reconcile_worn_conditions(obj.character, apply_rows=rows)
 
     def delete_model(self, request: HttpRequest, obj: EquippedItem) -> None:  # noqa: ARG002 - Django's signature
