@@ -165,3 +165,6 @@ tools/skills/workflow-friction-audit/secret-patterns.txt
 
 # Written by `arx manage squashmigrations arxii` for the PR body (ADR-0276); never committed.
 regeneration-report.md
+
+# Output of `just mutate` (tools/mutation_run.py, #4248): session databases and reports.
+.mutation/

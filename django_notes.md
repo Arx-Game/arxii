@@ -210,8 +210,11 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 journey per thing a player does, driven on the real seam through
 `integration_tests.harness.JourneyCase` and asserting what the player was told;
 fuzz at those seams with Hypothesis; cross-system integration where one app's
-change breaks another. A unit test is kept only when a journey cannot reach the
-logic (a parser with branches, an error-path mapping, a pure function's edge).
+change breaks another. A unit test is written only as the evidence of a bug fix
+(failing before the fix, passing after), marked `@tag("regression")` with a
+docstring beginning `Regression for #<issue>.`. A rule a journey cannot reach
+gets a Hypothesis property in `integration_tests/fuzz/`, stated from a spec, a
+docstring or a ruling (ADR-4248).
 
 - ✅ **Test**: the story a player lives through, on the seam they reach it by
 - ❌ **Don't Test**: Django's built-in functionality (save(), delete(), field
@@ -286,12 +289,14 @@ class APlayerOffersTheirStoryToAGM(JourneyCase):
     def test_an_offer_to_a_non_gm_is_refused_with_a_reason(self) -> None: ...
 
 
-class OfferParsing(TestCase):
-    """U-keep: the one parser branch the journey cannot reach."""
+@tag("regression")
+class OfferParsingKeepsTheTrailingNote(TestCase):
+    """Regression for #<issue>. An offer whose text ends in a note is not cut short."""
 ```
 
-A journey lives in `src/integration_tests/` (PostgreSQL-only); a `U-keep` unit
-stays in the app's `tests/`. The PR's Verification names the journey row in
+A journey lives in `src/integration_tests/` (PostgreSQL-only); a marked
+regression test stays in the app's `tests/`, and the parser's branches get a
+property in `integration_tests/fuzz/`. The PR's Verification names the journey row in
 `docs/testing/journeys.md` that covers the change.
 
 ### Test Naming Convention
