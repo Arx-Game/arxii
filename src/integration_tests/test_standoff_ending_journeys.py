@@ -162,6 +162,7 @@ class TheEndingPaysByTheResult(StandoffEndingBase):
         self.assertEqual(self.earned(), 5)
         self.assertFalse(self.deeds().exists())
         self.assertShownRow(self.corin, "their name carries further")
+        self.assertTold(self.ysmay, "You earned 5 Mercy resonance (journey)")
 
     def test_an_unwitnessed_ending_pays_resonance_and_renown_but_writes_no_deed(self) -> None:
         # Only the actor and the system narrator (who wrote her press line) are on the
@@ -171,6 +172,7 @@ class TheEndingPaysByTheResult(StandoffEndingBase):
         self.assertEqual(self.earned(), 15)
         self.assertFalse(self.deeds().exists())
         self.assertShownRow(self.corin, "their name carries further")
+        self.assertTold(self.ysmay, "You earned 15 Mercy resonance (journey)")
 
     def test_a_result_with_no_row_pays_nothing(self) -> None:
         self.witness()
