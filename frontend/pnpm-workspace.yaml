@@ -33,6 +33,7 @@ overrides:
   'mdast-util-to-hast@13': '13.2.1'
   'minimatch@3': '3.1.5'
   'minimatch@5': '5.1.8'
+  # These two ranges have no patched release on their original majors.
   'minimatch@9': '11.0.1'
   'minimatch@10': '11.0.1'
   'picomatch@4': '4.0.4'
