@@ -1,8 +1,19 @@
 /**
  * The contents rail (#3540): progress as a table of contents, never a stepper.
- * The ten stages with complete / current / not-yet-started state, the
- * validation reason after a hyphen (#4022), and the restart door beneath. Free
- * navigation is preserved (every stage is a link). Replaces StageStepper.
+ * The ten stages, the restart door beneath, and free navigation (every stage is a
+ * link). Replaces StageStepper.
+ *
+ * What a row says about its stage (#5199, owner rulings 2026-11-18):
+ * - A stage the draft has not been opened on is its name alone. What it will ask is
+ *   not printed before the player has seen the stage.
+ * - A stage that has been opened and still asks something shows the first thing it
+ *   asks after a hyphen (#4022).
+ * - A stage with nothing left to ask is marked complete, opened or not.
+ * - A stage that asks nothing at all reads "optional" and is never marked complete,
+ *   so a new draft does not open with two stages already done. If it has an error all
+ *   the same (the points overspent, on Final Touches) and has been opened, the error
+ *   shows in place of "optional".
+ * The stage the draft stands on always counts as opened.
  */
 
 import type { ReactNode } from 'react';
@@ -41,29 +52,68 @@ interface ContentsRailProps {
   currentStage: Stage;
   stageCompletion: Record<Stage, boolean>;
   stageErrors: Partial<Record<Stage, string[]>>;
+  /** The stages the draft has been opened on, from the server (`visited_stages`). */
+  visitedStages: readonly Stage[];
+  /** The stages that ask nothing, from the server (`optional_stages`). */
+  optionalStages: readonly Stage[];
   onStageSelect: (stage: Stage) => void;
   /** The restart door (a button that opens the confirm), rendered under the list. */
   restartSlot?: ReactNode;
 }
 
-function stateOf(stage: Stage, current: Stage, done: boolean): 'current' | 'done' | 'later' {
-  if (stage === current) return 'current';
-  if (done) return 'done';
-  return 'later';
+type RowState = 'current' | 'done' | 'optional' | 'todo' | 'unopened';
+
+interface RowFacts {
+  current: boolean;
+  done: boolean;
+  optional: boolean;
+  opened: boolean;
 }
 
-const STATE_CLASS = { current: 'toc-current', done: 'toc-done', later: 'toc-later' } as const;
-const STATE_MARK = { current: '¶', done: '◆', later: '' } as const;
-const STATE_SR = {
+function stateOf({ current, done, optional, opened }: RowFacts): RowState {
+  if (current) return 'current';
+  if (optional) return 'optional';
+  if (done) return 'done';
+  return opened ? 'todo' : 'unopened';
+}
+
+const STATE_CLASS: Record<RowState, string> = {
+  current: 'toc-current',
+  done: 'toc-done',
+  optional: 'toc-later',
+  todo: 'toc-later',
+  unopened: 'toc-later',
+};
+const STATE_MARK: Record<RowState, string> = {
+  current: '¶',
+  done: '◆',
+  optional: '',
+  todo: '',
+  unopened: '',
+};
+// "optional" is printed in the row, so it needs no hidden text of its own.
+const STATE_SR: Record<RowState, string> = {
   current: ', current stage',
   done: ', complete',
-  later: ', not yet started',
-} as const;
+  optional: '',
+  todo: ', not finished',
+  unopened: ', not yet opened',
+};
+
+/** The note after a stage's name: what it still asks, "optional", or nothing. */
+function noteFor(facts: RowFacts, errors: string[]): string | null {
+  const opened = facts.opened || facts.current;
+  if (opened && errors.length > 0 && !facts.done) return `- ${errors[0]}`;
+  if (facts.optional) return 'optional';
+  return null;
+}
 
 export function ContentsRail({
   currentStage,
   stageCompletion,
   stageErrors,
+  visitedStages,
+  optionalStages,
   onStageSelect,
   restartSlot,
 }: ContentsRailProps) {
@@ -78,9 +128,16 @@ export function ContentsRail({
         <ol className="toc-list">
           {CHAPTERS.map(({ stage }, index) => {
             const numeral = String(index + 1);
-            const state = stateOf(stage, currentStage, stageCompletion[stage]);
             // Review is never "incomplete" of itself; its reasons are the other chapters'.
             const errors = stage === Stage.REVIEW ? [] : (stageErrors[stage] ?? []);
+            const facts: RowFacts = {
+              current: stage === currentStage,
+              done: stageCompletion[stage],
+              optional: optionalStages.includes(stage),
+              opened: visitedStages.includes(stage),
+            };
+            const state = stateOf(facts);
+            const note = noteFor(facts, errors);
             return (
               <li key={stage} className={STATE_CLASS[state]}>
                 <a
@@ -97,9 +154,7 @@ export function ContentsRail({
                   <span className="toc-num">{numeral}</span>
                   <span className="toc-label">{STAGE_LABELS[stage]}</span>
                   <span className="vh">{STATE_SR[state]}</span>
-                  {state !== 'done' && errors.length > 0 && (
-                    <span className="toc-note">- {errors[0]}</span>
-                  )}
+                  {note && <span className="toc-note">{note}</span>}
                 </a>
               </li>
             );

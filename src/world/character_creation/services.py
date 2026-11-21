@@ -1781,7 +1781,8 @@ def _create_stat_values(
     from world.character_creation.sheet_writers import set_stat_values  # noqa: PLC0415
     from world.traits.models import TraitChangeSource  # noqa: PLC0415
 
-    stats = draft.draft_data.get("stats", {})
+    # `or {}`: a client that clears the key leaves it holding None (#5199).
+    stats = draft.draft_data.get("stats") or {}
     if not stats:
         return
     traits_by_name = {

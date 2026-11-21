@@ -5,9 +5,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0464_glimpsetag_stands_alone"),
-    ]
+    dependencies = [("arxii", "0465_draft_stage_visit")]
 
     operations = [
         migrations.RemoveField(

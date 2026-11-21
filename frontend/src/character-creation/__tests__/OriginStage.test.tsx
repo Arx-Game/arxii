@@ -59,7 +59,18 @@ describe('OriginStage', () => {
     // The field sits before the realms, and the rail lists the name first.
     const realms = screen.getByRole('list', { name: 'Starting realms' });
     expect(name.compareDocumentPosition(realms) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getAllByRole('term').map((dt) => dt.textContent)).toEqual(['Name', 'Origin']);
+    // The same record as every other stage (#5199).
+    expect(screen.getAllByRole('term').map((dt) => dt.textContent)).toEqual([
+      'Name',
+      'Origin',
+      'Beginning',
+      'Species',
+      'Gender',
+      'Family',
+      'Path',
+      'Tradition',
+      'CG points',
+    ]);
     // Leaving it unchanged saves nothing; a new name saves alone, trimmed.
     await user.click(name);
     await user.tab();

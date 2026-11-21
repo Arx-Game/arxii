@@ -61,6 +61,7 @@ import {
   PRESTIGE_STORY_MAX_LENGTH,
   Stage,
 } from '../types';
+import { cgRecord } from '../cgRecord';
 
 interface FinalTouchesStageProps {
   draft: CharacterDraft;
@@ -373,6 +374,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   const { data: domains, isLoading: domainsLoading, error: domainsError } = useGoalDomains();
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
+  const record = cgRecord(draft);
   const draftData = draft.draft_data;
 
   // --- local state: the three answers, the goals, the enemy, the Introductions -------
@@ -661,8 +663,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
     <>
       <RecordRail
         rows={[
-          { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Path', value: draft.selected_path?.name },
+          ...record.head,
           {
             label: 'Goals',
             value: `${goals.length} goals, ${usedPoints} of ${BASE_GOAL_POINTS} points`,
@@ -671,6 +672,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             label: 'Enemy',
             value: enemyLine ? `${enemyLine} · ${awardLabel(enemyAward)}` : undefined,
           },
+          record.points,
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />

@@ -29,6 +29,7 @@ import { useCGExplanations, useStartingAreas, useUpdateDraft } from '../queries'
 import { Stage, STAGE_LABELS } from '../types';
 import type { CharacterDraft, StartingArea } from '../types';
 import { getRealmTheme } from '../utils';
+import { cgRecord } from '../cgRecord';
 
 /** Letters only (any script), 2 to 20 of them. */
 const FIRST_NAME_PATTERN = /^\p{L}{2,20}$/u;
@@ -43,6 +44,7 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
   const { data: copy } = useCGExplanations();
   const updateDraft = useUpdateDraft();
   const { setRealmTheme } = useRealmTheme();
+  const record = cgRecord(draft);
   const [pending, setPending] = useState<StartingArea | null>(null);
 
   const chosen = draft.selected_area;
@@ -105,11 +107,7 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
           // No marginal note about changing realm: the confirm dialog already says it,
           // and the player is never warned twice.
           <RecordRail
-            rows={[
-              // Absent (not "not yet chosen") until a first name exists (#3630).
-              ...(firstName ? [{ label: 'Name', value: firstName }] : []),
-              { label: 'Origin', value: chosen?.name },
-            ]}
+            rows={[...record.head, record.points]}
             ledger={stageEyebrow(draft.current_stage)}
           />
         }

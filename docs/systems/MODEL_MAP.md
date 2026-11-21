@@ -1531,6 +1531,7 @@
   - build -> forms.Build [FK] (nullable)
   - target_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
+  - stage_visits <- character_creation.DraftStageVisit
   - markings <- character_creation.DraftMarking
   - application <- character_creation.DraftApplication
   - house_claim <- societies.HouseClaim
@@ -1576,6 +1577,10 @@
   - author -> evennia.AccountDB [FK] (nullable)
 
 ### DraftMarking
+**Foreign Keys:**
+  - draft -> character_creation.CharacterDraft [FK]
+
+### DraftStageVisit
 **Foreign Keys:**
   - draft -> character_creation.CharacterDraft [FK]
 

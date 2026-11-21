@@ -1749,6 +1749,32 @@ class CharacterDraft(SharedMemoryModel):
             return FamilyPath.NAMED
         return ""
 
+    def surname(self) -> str:
+        """The surname this draft has so far, or '' (#5199).
+
+        By family path: the claimed family's name, the name typed for a new family, or
+        the surname the drawn tarot card gives a character with no family. The side
+        panel shows it on every stage, so it no longer reads "Family: not yet chosen"
+        after the card is drawn.
+        """
+        path = self.resolve_family_path()
+        if path == FamilyPath.NAMED:
+            return str(self.draft_data.get("new_family_name", "")).strip()
+        if path == FamilyPath.NONE:
+            return self._tarot_surname()
+        return self.family.name if self.family else ""
+
+    def _tarot_surname(self) -> str:
+        from world.tarot.models import TarotCard  # noqa: PLC0415
+
+        card_name = self.draft_data.get("tarot_card_name")
+        if not card_name:
+            return ""
+        card = TarotCard.objects.filter(name=card_name).first()
+        if card is None:
+            return ""
+        return card.get_surname(bool(self.draft_data.get("tarot_reversed", False)))
+
     def resolve_family_template(self) -> HouseTemplate | None:
         """The Family Template the name path builds from (#3648): the only one, else the pick."""
         template = self.selected_origin_template
@@ -1871,6 +1897,20 @@ class CharacterDraft(SharedMemoryModel):
             self.pk,
         )
         return None
+
+    def record_stage_visit(self, stage: int) -> None:
+        """Remember that this draft has been opened on *stage* (#5199)."""
+        DraftStageVisit.objects.get_or_create(draft=self, stage=stage)
+
+    def visited_stages(self) -> list[int]:
+        """The stages this draft has been opened on, in order (#5199).
+
+        The stage it stands on now always counts: a new draft has no row yet and is
+        open on Origin.
+        """
+        visited = set(self.stage_visits.values_list("stage", flat=True))
+        visited.add(self.current_stage)
+        return sorted(visited)
 
     def get_stage_completion(self) -> dict[int, bool]:
         """
@@ -2038,7 +2078,8 @@ class CharacterDraft(SharedMemoryModel):
     def calculate_points_remaining(self) -> int:
         """Budget minus allocated points. 0 = fully allocated."""
         budget = self.calculate_stat_budget()
-        stats = self.draft_data.get("stats", {})
+        # `or {}`: a client that clears the key leaves it holding None (#5199).
+        stats = self.draft_data.get("stats") or {}
         if not stats:
             return budget - (STAT_DEFAULT_VALUE * len(REQUIRED_STATS))
         spent = sum(stats.values())
@@ -2309,7 +2350,8 @@ class CharacterDraft(SharedMemoryModel):
 
     def calculate_final_stats(self) -> dict[str, int]:
         """Return allocated stats (stored units, 10-50). No bonuses applied on top."""
-        stats = self.draft_data.get("stats", {})
+        # `or {}`: a client that clears the key leaves it holding None (#5199).
+        stats = self.draft_data.get("stats") or {}
         return {name: stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS}
 
     def _is_attributes_complete(self) -> bool:
@@ -2435,6 +2477,36 @@ class CharacterDraft(SharedMemoryModel):
 
 
 SOFT_DELETE_DAYS = 14
+
+
+class DraftStageVisit(SharedMemoryModel):
+    """One stage a draft has been opened on (#5199).
+
+    The stage list shows what a stage still asks only once the player has opened that
+    stage (owner ruling 2026-11-18); until then the row is the stage's name alone. The
+    visits are kept here so a reload or another device shows the same list. A row per
+    stage, like ``DraftMarking``, and not a key in ``draft_data`` (ADR-0007): the client
+    merges ``draft_data`` on every save and must not be able to write this.
+
+    Written by ``CharacterDraft.record_stage_visit`` when the draft's ``current_stage``
+    changes. Play state: the rows go with the draft.
+    """
+
+    draft = models.ForeignKey(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="stage_visits",
+    )
+    stage = models.PositiveSmallIntegerField(choices=Stage.choices)
+
+    class Meta:
+        ordering = ["stage"]
+        constraints = [
+            models.UniqueConstraint(fields=["draft", "stage"], name="draftstagevisit_unique")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.draft} opened on {self.get_stage_display()}"
 
 
 class DraftMarking(SharedMemoryModel):

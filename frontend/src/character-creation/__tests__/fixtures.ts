@@ -786,6 +786,10 @@ export const mockEmptyDraft: CharacterDraft = {
   } as Record<Stage, boolean>,
   has_existing_characters: false,
   stage_errors: {},
+  // Origin; Identity and Final Touches (the enum is imported here as a type only).
+  surname: '',
+  visited_stages: [1] as Stage[],
+  optional_stages: [9, 10] as Stage[],
   stats_points_remaining: 5,
   stats_budget: 5,
   starting_technique_picks: 1,

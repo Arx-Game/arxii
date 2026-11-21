@@ -17,6 +17,7 @@ import { useCGExplanations, useUpdateDraft, useWorshippedBeings } from '../queri
 import type { CharacterDraft } from '../types';
 import { Stage } from '../types';
 import { composeFullName } from '../utils';
+import { cgRecord } from '../cgRecord';
 
 interface IdentityStageProps {
   draft: CharacterDraft;
@@ -32,6 +33,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
   const { data: beings } = useWorshippedBeings();
+  const record = cgRecord(draft);
   const draftData = draft.draft_data;
 
   const handleWorshipChange = (
@@ -88,13 +90,10 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
     <>
       <RecordRail
         rows={[
-          { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Species', value: draft.selected_species?.name },
-          { label: 'Family', value: draft.family?.name },
-          // Absent (not "not yet chosen") until a first name exists (#3630).
-          ...(fullNamePreview ? [{ label: 'Name', value: fullNamePreview }] : []),
+          ...record.head,
           { label: 'Public worship', value: draft.public_worship?.name },
           { label: 'Secret worship', value: draft.secret_worship?.name },
+          record.points,
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />

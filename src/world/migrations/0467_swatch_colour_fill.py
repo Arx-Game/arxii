@@ -1,9 +1,9 @@
 """Give the colour options production already holds a first-pass colour value (#5241).
 
-0465 added ``FormTraitOption.swatch_hex``, blank on every row. The Appearance stage
-draws that value beside a colour's name. The owner, asked on 2026-11-21 who supplies
-the values for the 62 single-colour options, chose a first pass written here that
-staff then correct on the option's admin page.
+The migration before this one added ``FormTraitOption.swatch_hex``, blank on every
+row. The Appearance stage draws that value beside a colour's name. The owner, asked
+on 2026-11-21 who supplies the values for the 62 single-colour options, chose a first
+pass written here that staff then correct on the option's admin page.
 
 This migration creates no row. It writes one column on rows the database already
 holds, matched by the trait's and the option's own keys, and only where the value is
@@ -109,11 +109,10 @@ def fill_blank_swatches(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0465_feature_qualities_and_swatch_colour"),
-    ]
+    dependencies = [("arxii", "0466_feature_qualities_and_swatch_colour")]
 
     operations = [
-        # Going back, 0465's reverse drops the column, so there is nothing to undo here.
+        # Going back, the reverse of the migration before this one drops the column, so
+        # there is nothing to undo here.
         migrations.RunPython(fill_blank_swatches, migrations.RunPython.noop),
     ]

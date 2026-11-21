@@ -40,6 +40,7 @@ import { MarkingsEditor } from './MarkingsEditor';
 import { TraitBlock } from './appearance/TraitBlock';
 import { Stage } from '../types';
 import type { CharacterDraft, FormTraitOption, HeightBand } from '../types';
+import { cgRecord } from '../cgRecord';
 
 interface AppearanceStageProps {
   draft: CharacterDraft;
@@ -102,6 +103,8 @@ export function AppearanceStage({
   // The picks as the page shows them (#5141): a click on a tier shows at once, so
   // the feature it lands on opens at once and the points lines move with it.
   const shown = useShownPicks(draft);
+  // The rows every stage's side panel shares (#5199), with the points as shown.
+  const record = cgRecord(draft, { points: shown });
   // Which traits hold a tier of any quality (#5241). That is what opens the widened
   // palette and the description field; the server reads the same thing off the
   // draft's own entries (`offers.opened_features`).
@@ -309,8 +312,7 @@ export function AppearanceStage({
     <>
       <RecordRail
         rows={[
-          { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Species', value: draft.selected_species?.name },
+          ...record.head,
           { label: 'Age', value: draft.age !== null ? String(draft.age) : undefined },
           { label: 'Birthday', value: birthdayWords },
           {
@@ -332,6 +334,7 @@ export function AppearanceStage({
                 },
               ]
             : []),
+          record.points,
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />
