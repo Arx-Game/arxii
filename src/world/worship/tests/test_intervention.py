@@ -324,6 +324,42 @@ class IntercessionTests(InterventionTestBase):
         self.assertEqual(standing.favor, 70)
         self.assertEqual(self.being.miracle_performances.get().target_character, self.fallen)
 
+    def test_the_incapacitation_event_reaches_the_handler_through_its_flow(self) -> None:
+        """The flow step hands the handler only the event's payload; the character is read
+        from it (a live fight found the handler raising for want of a ``character`` argument)."""
+        from django.test import override_settings
+
+        from flows.constants import EventName
+        from flows.emit import emit_event
+        from flows.events.payloads import CharacterIncapacitatedPayload
+        from world.worship.factories import wire_miracle_content
+        from world.worship.services import install_divine_intervention_trigger
+
+        with override_settings(SEED_SAMPLE_CONTENT=True):
+            wire_miracle_content()
+        DevotionStanding.objects.create(character_sheet=self.fallen, being=self.being, favor=90)
+        install_divine_intervention_trigger(self.fallen, self.being)
+        room = ObjectDBFactory(db_key="Chapel", db_typeclass_path="typeclasses.rooms.Room")
+        self.fallen.character.db_location = room
+        self.fallen.character.save(update_fields=["db_location"])
+        Miracle.objects.create(
+            name="Raised From the Dust",
+            being=self.being,
+            resonance_pool_cost=100,
+            intervention_trigger=MiracleTrigger.INCAPACITATED,
+            favor_threshold=0,
+            narrative_text="[PLACEHOLDER] Raised from the dust.",
+        )
+
+        with force_check_outcome(self.outcomes["Success"]), patch(_NO_BROADCAST):
+            emit_event(
+                EventName.CHARACTER_INCAPACITATED,
+                CharacterIncapacitatedPayload(character=self.fallen.character, source_event=None),
+                location=room,
+            )
+
+        self.assertTrue(self.being.miracle_performances.exists())
+
     def test_below_the_threshold_nobody_steps_in(self) -> None:
         DevotionStanding.objects.create(character_sheet=self.fallen, being=self.being, favor=60)
 

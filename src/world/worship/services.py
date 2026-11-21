@@ -434,7 +434,7 @@ def _route_miracle(
         _deliver()
 
 
-def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: ARG001
+def maybe_fire_divine_intervention(character=None, payload=None) -> None:
     """Trigger handler: divine intercession, a being stepping in for a fallen character (#4349).
 
     Called by the ``divine_intervention_on_incapacitated`` TriggerDefinition's
@@ -447,6 +447,7 @@ def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: AR
     from django.core.exceptions import ObjectDoesNotExist, ValidationError  # noqa: PLC0415
     from django.db import DatabaseError  # noqa: PLC0415
 
+    from flows.object_states.base_state import BaseState  # noqa: PLC0415
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.scenes.models import Scene  # noqa: PLC0415
     from world.worship.constants import MiracleTrigger  # noqa: PLC0415
@@ -455,6 +456,14 @@ def maybe_fire_divine_intervention(character, payload=None) -> None:  # noqa: AR
         intercession_lines,
     )
 
+    if isinstance(character, BaseState):
+        # A flow step hands a game object over as its state (CALL_SERVICE_FUNCTION resolves an
+        # "@owner" reference that way): the character is the state's object.
+        character = character.obj
+    if character is None and payload is not None:
+        character = payload.character
+    if character is None:
+        return
     sheet = CharacterSheet.objects.filter(character=character).first()
     if sheet is None:
         return

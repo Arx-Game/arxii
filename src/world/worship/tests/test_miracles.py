@@ -179,7 +179,7 @@ class TriggerLifecycleTests(TestCase):
                 flow=flow,
                 action=FlowActionChoices.CALL_SERVICE_FUNCTION,
                 variable_name="world.worship.services.maybe_fire_divine_intervention",
-                parameters={"payload": "{{payload}}"},
+                parameters={"character": "@owner"},
             )
         TriggerDefinition.objects.create(
             name="divine_intervention_on_incapacitated",
