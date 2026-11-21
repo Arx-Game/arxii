@@ -181,6 +181,10 @@ class SineatingJourneyCase(JourneyCase):
             ritual_components=[],
             sineater_resonance=self.primal,
         )
+        # The tether installs the Sinner's reactive triggers (the Hollow's absorption), and
+        # the handler drops its cache only on commit, which a test's transaction never
+        # reaches: re-read now, as a real commit would, so a cast later in the test sees them.
+        sinner.trigger_handler.refresh()
         thread = Thread.objects.get(
             owner=sinner.sheet_data,
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
