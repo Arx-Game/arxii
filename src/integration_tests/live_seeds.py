@@ -1194,3 +1194,437 @@ def seed_life_points_spec(*, username: str) -> LifePointsSeed:
         paying_price=LIFE_POINTS_PAYING_PRICE,
         later_card=LIFE_POINTS_LATER_CARD,
     )
+
+
+@dataclass(frozen=True)
+class StrengthSpecSeed:
+    """What `frontend/e2e/strength-and-cast-resonance.spec.ts` reads back (#5231)."""
+
+    draft_id: int
+    #: The feeling the creation picks start from, the second pick and the other one the
+    #: step's slider is moved to, and the feeling whose colour the admin step changes.
+    feeling_name: str
+    second_feeling_name: str
+    outward_name: str
+    second_outward_name: str
+    admin_feeling_id: int
+    admin_feeling_name: str
+    caster_id: int
+    scene_id: int
+    scene_name: str
+    technique_name: str
+    usual_name: str
+    kindled_name: str
+    #: The caster's resonance rows, so staff can read her corruption in admin.
+    usual_row_id: int
+    kindled_row_id: int
+    staff_username: str
+    staff_password: str
+
+
+#: The eight Primal, eight Celestial and eight Abyssal resonances of the approved demo, each
+#: with its one-word description and colour. Invented scaffolding for a throwaway database.
+STRENGTH_SPEC_PRIMAL = (
+    ("Arderi", "burning", "#F3680F"),
+    ("Sereni", "serene", "#67C0D5"),
+    ("Audax", "bold", "#F14445"),
+    ("Medita", "contemplative", "#7973CA"),
+    # Fera keeps the default grey: the admin step gives it a colour of its own.
+    ("Fera", "wild", None),
+    ("Civitas", "civil", "#CDA448"),
+    ("Firma", "steadfast", "#9B673B"),
+    ("Vola", "restless", "#0DCBC3"),
+)
+STRENGTH_SPEC_CELESTIAL = (
+    ("Bene", "giving", "#FFEFB1"),
+    ("Liberare", "freeing", "#BCF8FE"),
+    ("Fidelis", "faithful", "#D2E9FF"),
+    ("Misera", "merciful", "#FFDBF1"),
+    ("Fortis", "brave", "#FFE897"),
+    ("Honoris", "honourable", "#F6F3DC"),
+    ("Verax", "truthful", "#E8F8FF"),
+    ("Copperi", "renewing", "#C0FDCC"),
+)
+STRENGTH_SPEC_ABYSSAL = (
+    ("Praedari", "preying", "#3D0005"),
+    ("Dominari", "dominating", "#1D0638"),
+    ("Perfidus", "betraying", "#00280B"),
+    ("Maligna", "malicious", "#2F0118"),
+    ("Tremora", "terrifying", "#03102C"),
+    ("Saevus", "cruel", "#490000"),
+    ("Insidia", "deceiving", "#002225"),
+    ("Despari", "despairing", "#080B14"),
+)
+STRENGTH_SPEC_CASTER = "Ysmay Vale"
+STRENGTH_SPEC_ROOM = "The Ember Hall"
+STRENGTH_SPEC_SCENE = "Embers in the Hall"
+STRENGTH_SPEC_TECHNIQUE = "Ember Veil"
+STRENGTH_SPEC_STAFF = "strength_staff"
+
+
+def _strength_spec_resonances() -> None:
+    """The 24 resonances, each named once under its own affinity (idempotent by name)."""
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    celestial, primal, abyssal = _canonical_affinities()
+    for affinity, rows in (
+        (primal, STRENGTH_SPEC_PRIMAL),
+        (celestial, STRENGTH_SPEC_CELESTIAL),
+        (abyssal, STRENGTH_SPEC_ABYSSAL),
+    ):
+        for name, description, colour in rows:
+            defaults = {"description": description, "affinity": affinity}
+            if colour is not None:
+                defaults["color_hex"] = colour
+            resonance, _ = Resonance.objects.get_or_create(name=name, defaults=defaults)
+            if resonance.affinity_id != affinity.pk:
+                msg = f"Resonance {name!r} exists under {resonance.affinity.name}."
+                raise ValueError(msg)
+
+
+def _canonical_affinities() -> tuple[object, object, object]:
+    from world.magic.factories import ensure_canonical_affinities  # noqa: PLC0415
+
+    return ensure_canonical_affinities()
+
+
+def _strength_spec_draft(account: AccountDB) -> int:
+    """The account's creation draft at the Gift stage, tradition, gift and techniques chosen.
+
+    Everything the stages before the resonance step ask for is filled, and the anima check is
+    picked, so the draft's only open question is the resonance. Its picks are cleared on every
+    run, so a second run starts the step from nothing.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.character_creation.constants import Stage  # noqa: PLC0415
+    from world.character_creation.factories import (  # noqa: PLC0415
+        make_unknown_upbringing,
+    )
+    from world.character_creation.models import (  # noqa: PLC0415
+        Beginnings,
+        CharacterDraft,
+        StartingArea,
+    )
+    from world.character_creation.tests.finalization_fixtures import DEFAULT_STATS  # noqa: PLC0415
+    from world.character_sheets.models import Gender  # noqa: PLC0415
+    from world.classes.factories import PathFactory  # noqa: PLC0415
+    from world.classes.models import PathStage  # noqa: PLC0415
+    from world.forms.models import Build, HeightBand  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        EffectTypeFactory,
+        GiftFactory,
+        PathGiftGrantFactory,
+        TechniqueFactory,
+        TraditionFactory,
+        TraditionGiftGrantFactory,
+    )
+    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+    from world.realms.models import Realm  # noqa: PLC0415
+    from world.roster.seeds import ensure_rosters  # noqa: PLC0415
+    from world.seeds.modifier_values import seed_pool_and_cap_lanes  # noqa: PLC0415
+    from world.skills.factories import SkillFactory  # noqa: PLC0415
+    from world.species.models import Species  # noqa: PLC0415
+    from world.tarot.constants import ArcanaType  # noqa: PLC0415
+    from world.tarot.models import TarotCard  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
+    draft = CharacterDraft.objects.filter(account=account).first()
+    if draft is not None and "selected_gift_id" in draft.draft_data:
+        draft.current_stage = Stage.GIFT
+        draft.draft_data = {
+            key: value for key, value in draft.draft_data.items() if key != "gift_resonance_weights"
+        }
+        draft.save()
+        return draft.pk
+
+    ensure_rosters()
+    seed_pool_and_cap_lanes()
+    realm = Realm.objects.create(name="Strength Realm", description="A place to begin.")
+    area = StartingArea.objects.create(
+        name="Strength Area",
+        description="A place to begin.",
+        realm=realm,
+        access_level=StartingArea.AccessLevel.ALL,
+    )
+    species = Species.objects.create(name="Strength Species", description="People.")
+    gender, _ = Gender.objects.get_or_create(
+        key="strength_gender", defaults={"display_name": "Strength Gender"}
+    )
+    tarot = TarotCard.objects.create(
+        name="Strength Fool", arcana_type=ArcanaType.MAJOR, rank=0, latin_name="Fatui"
+    )
+    beginnings = Beginnings.objects.create(
+        name="Strength Beginnings", description="A start.", starting_area=area, is_active=True
+    )
+    beginnings.allowed_species.add(species)
+    upbringing = make_unknown_upbringing(beginnings)
+    band = HeightBand.objects.create(
+        name="strength_band",
+        display_name="Strength Band",
+        min_inches=700,
+        max_inches=800,
+        weight_min=None,
+        weight_max=None,
+        is_cg_selectable=True,
+    )
+    build = Build.objects.create(
+        name="strength_build",
+        display_name="Strength Build",
+        weight_factor=Decimal("1.0"),
+        is_cg_selectable=True,
+    )
+    stats = dict(DEFAULT_STATS)
+    for stat_name in stats:
+        Trait.objects.get_or_create(
+            name=stat_name, defaults={"trait_type": TraitType.STAT, "description": stat_name}
+        )
+    path = PathFactory(name="Strength Path", stage=PathStage.PROSPECT, minimum_level=1)
+    tradition = TraditionFactory(name="Strength Tradition")
+    gift = GiftFactory(name="Strength Gift")
+    path_grant = PathGiftGrantFactory(path=path, gift=gift)
+    technique = TechniqueFactory(
+        name="Strength Pool Technique",
+        gift=gift,
+        effect_type=EffectTypeFactory(name="Strength Effect Type"),
+        action_template=get_standalone_cast_template(),
+    )
+    path_grant.starter_techniques.set([technique])
+    TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+    skill = SkillFactory(name="Strength Skill")
+
+    draft = CharacterDraft.objects.create(
+        account=account,
+        selected_area=area,
+        selected_beginnings=beginnings,
+        selected_origin_template=upbringing,
+        selected_species=species,
+        selected_gender=gender,
+        selected_path=path,
+        selected_tradition=tradition,
+        age=25,
+        birthday_month=6,
+        birthday_day=12,
+        height_band=band,
+        height_inches=750,
+        build=build,
+        current_stage=Stage.GIFT,
+        draft_data={
+            "first_name": "Strength",
+            "description": "A character who draws on a feeling.",
+            "stats": stats,
+            "tarot_card_name": tarot.name,
+            "tarot_reversed": False,
+            "selected_gift_id": gift.pk,
+            "selected_technique_ids": [technique.pk],
+            "anima_check_stat_id": Trait.objects.get(name="strength").pk,
+            "anima_check_skill_id": skill.pk,
+        },
+    )
+    return draft.pk
+
+
+def seed_strength_spec(*, username: str) -> StrengthSpecSeed:  # noqa: PLR0915 - draft and caster
+    """A Gift-stage creation draft and a kindled Abyssal caster, both *username*'s (#5231).
+
+    The 24 resonances of the approved demo exist, Fera with the default grey colour. The
+    account's draft is at the Gift stage with its tradition, gift and techniques chosen and
+    no resonance picked. The account also plays Ysmay Vale, in the Ember Hall with a scene
+    running. Her aura is 80 percent Primal and 20 percent Abyssal. Her Gift's thread holds
+    Sereni (Primal, leading, her usual resonance) and Praedari (Abyssal), and Praedari is
+    kindled at the third strength row. Numbers set here: Abyssal's kindled boost 150 and earn
+    rate 150, the third strength row's cast power 6, light corruption 10 percent below an
+    Abyssal share of 50. Her technique is tier 1 at intensity 20 and control 40.
+
+    Worked by hand from those numbers (the expectations of the live spec):
+
+    * Power: a kindled cast adds cast power times the boost percent over 100, rounded down,
+      6 * 150 // 100 = 9, so a cast worked in Praedari lists a kindled line of 9 and one
+      worked in Sereni lists none.
+    * Corruption: a cast worked in a resonance puts its whole intensity (20) on it, then
+      20 * (Abyssal coefficient 10 / 10) * (tier 1 coefficient 10 / 10) = 20. She is 20
+      percent Abyssal, under the 50 share, so she takes the light 10 percent, 20 * 10 / 100 =
+      2, which is already whole. A cast worked in Sereni (coefficient 0) adds none.
+
+    A staff account is made for the admin half: the colour of a resonance and her corruption.
+    """
+    from allauth.account.models import EmailAddress  # noqa: PLC0415
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+    from evennia.utils import create  # noqa: PLC0415
+
+    from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
+    from world.conditions.factories import (  # noqa: PLC0415
+        ConditionStageFactory,
+        ConditionTemplateFactory,
+    )
+    from world.magic.factories import (  # noqa: PLC0415
+        CharacterAnimaFactory,
+        CharacterAuraFactory,
+        CharacterResonanceFactory,
+        CharacterTechniqueFactory,
+        GiftFactory,
+        KindlingConfigFactory,
+        ensure_conversion_pairs,
+        kindle_resonance,
+    )
+    from world.magic.models import (  # noqa: PLC0415
+        Affinity,
+        CharacterResonance,
+        KindledDeedAward,
+        KindledStrengthTier,
+        Resonance,
+        Technique,
+    )
+    from world.magic.services.corruption import get_corruption_config  # noqa: PLC0415
+    from world.magic.specialization.services import provision_latent_gift_thread  # noqa: PLC0415
+    from world.roster.factories import (  # noqa: PLC0415
+        RosterEntryFactory,
+        RosterTenureFactory,
+    )
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.roster.services.selection import set_selected_entry  # noqa: PLC0415
+    from world.scenes.factories import (  # noqa: PLC0415
+        SceneFactory,
+        SceneParticipationFactory,
+    )
+    from world.scenes.models import Scene  # noqa: PLC0415
+    from world.scenes.tests.cast_test_helpers import (  # noqa: PLC0415
+        grant_technique,
+        make_benign_castable_technique,
+    )
+    from world.traits.factories import CheckSystemSetupFactory  # noqa: PLC0415
+    from world.traits.models import CheckOutcome, ResultChart  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    staff_password = secrets.token_urlsafe(18)
+    staff = AccountDB.objects.filter(username=STRENGTH_SPEC_STAFF).first()
+    if staff is None:
+        staff = create.create_account(
+            STRENGTH_SPEC_STAFF, "strength_staff@example.com", staff_password
+        )
+    staff.set_password(staff_password)
+    staff.is_staff = True
+    staff.is_superuser = True
+    staff.save()
+    EmailAddress.objects.update_or_create(
+        user=staff,
+        email="strength_staff@example.com",
+        defaults={"primary": True, "verified": True},
+    )
+
+    account = AccountDB.objects.get(username=username)
+    with transaction.atomic():
+        _strength_spec_resonances()
+        draft_id = _strength_spec_draft(account)
+
+        if not ResultChart.objects.exists():
+            CheckSystemSetupFactory.create()
+        player_data, _ = PlayerData.objects.get_or_create(account=account)
+        _celestial, primal, abyssal = ensure_conversion_pairs()
+        for affinity, boost, rate, coefficient in (
+            (primal, 100, 100, 0),
+            (abyssal, 150, 150, 10),
+        ):
+            affinity.kindled_boost_percent = boost
+            affinity.earn_rate_percent = rate
+            affinity.corruption_coefficient = coefficient
+            affinity.save()
+        Affinity.objects.clear_cache()
+        corruption = get_corruption_config()
+        corruption.tier_1_coefficient = 10
+        corruption.light_corruption_percent = 10
+        corruption.full_corruption_from_share = 50
+        corruption.save()
+        usual = Resonance.objects.get(name="Sereni")
+        kindled = Resonance.objects.get(name="Praedari")
+
+        entry = RosterEntry.objects.filter(
+            character_sheet__character__db_key=STRENGTH_SPEC_CASTER
+        ).first()
+        if entry is None:
+            blazing = KindledStrengthTier.objects.get(rank=3)
+            blazing.cast_power = 6
+            blazing.earn_percent = 100
+            blazing.save()
+            success = CheckOutcome.objects.filter(name="Success").first()
+            if success is not None:
+                KindledDeedAward.objects.update_or_create(
+                    outcome_tier=success, defaults={"amount": 10}
+                )
+            KindlingConfigFactory(instant_percent=100, claim_percent=50)
+            template = ConditionTemplateFactory(
+                name="Corruption (Praedari)",
+                has_progression=True,
+                corruption_resonance=kindled,
+            )
+            for order, threshold in enumerate([50, 200, 500, 1000, 1500], start=1):
+                ConditionStageFactory(
+                    condition=template, stage_order=order, severity_threshold=threshold
+                )
+
+            room = create.create_object("typeclasses.rooms.Room", key=STRENGTH_SPEC_ROOM)
+            character = CharacterFactory(db_key=STRENGTH_SPEC_CASTER, location=room)
+            sheet = CharacterSheetFactory(character=character)
+            entry = RosterEntryFactory(character_sheet=sheet)
+            RosterTenureFactory(roster_entry=entry, player_data=player_data, end_date=None)
+            character.db_account = account
+            character.save()
+            CharacterAnimaFactory(character=sheet, current=50, maximum=50)
+            CharacterVitals.objects.create(
+                character_sheet=sheet, health=50, max_health=50, base_max_health=50
+            )
+            CharacterAuraFactory(character=sheet, celestial="0", primal="80", abyssal="20")
+            CharacterResonanceFactory(
+                character_sheet=sheet, resonance=usual, balance=10, lifetime_earned=80
+            )
+            CharacterResonanceFactory(
+                character_sheet=sheet, resonance=kindled, balance=10, lifetime_earned=20
+            )
+            gift = GiftFactory(name="Cinderheart")
+            technique = make_benign_castable_technique()
+            technique.name = STRENGTH_SPEC_TECHNIQUE
+            technique.gift = gift
+            technique.anima_cost = 1
+            technique.intensity = 20
+            technique.control = 40
+            technique.save()
+            if technique.tier != 1:
+                msg = f"The technique is tier {technique.tier}; the hand-worked numbers are tier 1."
+                raise ValueError(msg)
+            grant_technique(sheet.primary_persona, technique)
+            CharacterTechniqueFactory(character=sheet, technique=technique)
+            # Sereni is listed first, so it leads the Gift's thread.
+            provision_latent_gift_thread(sheet, gift, resonances=[usual, kindled])
+            kindle_resonance(sheet, kindled, blazing)
+            scene = SceneFactory(room=room, is_active=True, name=STRENGTH_SPEC_SCENE)
+            SceneParticipationFactory(scene=scene, account=account, is_gm=True, is_owner=True)
+        character = entry.character_sheet.character
+        set_selected_entry(player_data, entry)
+        sheet = entry.character_sheet
+        scene = Scene.objects.get(name=STRENGTH_SPEC_SCENE)
+        technique = Technique.objects.get(name=STRENGTH_SPEC_TECHNIQUE)
+        usual_row = CharacterResonance.objects.get(character_sheet=sheet, resonance=usual)
+        kindled_row = CharacterResonance.objects.get(character_sheet=sheet, resonance=kindled)
+
+    return StrengthSpecSeed(
+        draft_id=draft_id,
+        feeling_name="Arderi",
+        second_feeling_name="Audax",
+        outward_name="Praedari",
+        second_outward_name="Dominari",
+        admin_feeling_id=Resonance.objects.get(name="Fera").pk,
+        admin_feeling_name="Fera",
+        caster_id=character.pk,
+        scene_id=scene.pk,
+        scene_name=scene.name,
+        technique_name=technique.name,
+        usual_name=usual.name,
+        kindled_name=kindled.name,
+        usual_row_id=usual_row.pk,
+        kindled_row_id=kindled_row.pk,
+        staff_username=STRENGTH_SPEC_STAFF,
+        staff_password=staff_password,
+    )
