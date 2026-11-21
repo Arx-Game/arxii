@@ -6,8 +6,8 @@ default as the first entry when it is not on that thread (a worn alternate self'
 The default is read from ``cast_resonance_for`` and the kindled strength from the one kindling
 read the caller hands in, so the picker can never disagree with the cast that follows it. The
 strength an entry is ranked by is ``kindled_cast_strength``, the number the kindled cast power
-term would add for it; a pull is not chosen yet when this list is shown, so it reports the
-strength a cast with no pull gets.
+term adds for it, whether or not the cast pulls. A caster with no thread on the Gift gets only
+the default entry.
 
 A caller listing several techniques reads the kindling once with ``kindling_by_resonance`` and
 passes it to each call, so the list costs no kindling queries per technique.
