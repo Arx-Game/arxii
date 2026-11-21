@@ -98,7 +98,7 @@ class PointsToPowerHoldsItsContract(unittest.TestCase):
             self.assertEqual(points_to_power(reached, curve, cap=cap), min(power, cap))
 
     @given(curve_with_totals(), caps)
-    # One point, and minus one point, on a curve whose first row is at one point.
+    # These two cases check one point and minus one point, on a curve whose first row is at one.
     @example(([(1, 1)], 1, 1), 1)
     @example(([(1, 1)], -1, -1), 1)
     def test_between_rows_it_is_the_straight_line(self, curve_and_totals, cap) -> None:

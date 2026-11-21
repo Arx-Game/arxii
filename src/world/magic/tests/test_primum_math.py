@@ -1,7 +1,9 @@
-"""The pure Primum reads (#5125): steps, a place's amount, the power curve, the split.
+"""The pure Primum reads (#5125): steps, a place's amount, and the sources of a cast.
 
 These are unit tests because maths and a clock cannot be reached by a journey; casting is
-wired to them (and journey-tested) in a later task.
+wired to them (and journey-tested) in a later task. The power curve and the split of power
+across sources are held by the properties in
+``integration_tests/fuzz/test_primum_curve_fuzz.py`` (#4248).
 """
 
 from datetime import timedelta
@@ -16,7 +18,6 @@ from world.items.factories import EquippedItemFactory, ItemInstanceFactory, Item
 from world.locations.constants import KeyType, LocationParentType, StatKey
 from world.locations.factories import LocationValueModifierFactory
 from world.magic.constants import (
-    STARTER_POWER_CURVE,
     STARTER_PRIMUM_STEPS,
     GiftKind,
     PrimumLineKind,
@@ -33,17 +34,13 @@ from world.magic.factories import (
     seed_primum_tuning,
 )
 from world.magic.services.primum import (
-    apportion_power,
     cast_points,
     gift_substance,
     place_amount,
-    points_to_power,
     room_substance_amounts,
     step_for,
-    total_points,
 )
 from world.magic.services.primum_perception import perceived_substance_ids
-from world.magic.types.primum import SourcePoints
 
 TRACE_STARTS_AT = STARTER_PRIMUM_STEPS[0][2]
 TRACE_NAME = STARTER_PRIMUM_STEPS[0][1]
@@ -56,13 +53,6 @@ HIGHEST_STARTS_AT = STARTER_PRIMUM_STEPS[-1][2]
 
 def _room():
     return ObjectDBFactory(db_typeclass_path="typeclasses.rooms.Room")
-
-
-def _lines(*points: int) -> list[SourcePoints]:
-    return [
-        SourcePoints(kind=PrimumLineKind.PLACE, label=str(i), points=p, substance_id=i)
-        for i, p in enumerate(points)
-    ]
 
 
 class StepAndPlaceAmountTests(TestCase):
@@ -144,42 +134,6 @@ class StepAndPlaceAmountTests(TestCase):
         )
         early = timezone.now() - timedelta(days=30)
         self.assertEqual(place_amount(refilling, self.fire, now=early), 4)
-
-
-class PowerCurveTests(TestCase):
-    def test_points_to_power_interpolates_caps_and_mirrors(self) -> None:
-        curve = list(STARTER_POWER_CURVE)
-        self.assertEqual(points_to_power(3, curve, cap=12), 3)
-        self.assertEqual(points_to_power(-3, curve, cap=12), -3)
-        self.assertEqual(points_to_power(500, curve, cap=12), STARTER_POWER_CURVE[-1][1])
-        self.assertEqual(points_to_power(500, curve, cap=5), 5)
-        self.assertEqual(points_to_power(5, [], cap=12), 0)
-
-    def test_apportion_sums_exactly_and_is_zero_safe(self) -> None:
-        shares = apportion_power(_lines(7, 4, 4), 10, positive_power=10)
-        self.assertEqual(sum(shares), 10)
-        self.assertEqual(len(shares), 3)
-        self.assertEqual(apportion_power(_lines(0, 0), 0, positive_power=0), [0, 0])
-        self.assertEqual(apportion_power([], 0, positive_power=0), [])
-        self.assertEqual(total_points(_lines(7, -2)), 5)
-
-    def test_apportion_keeps_each_lines_sign_when_one_opposes(self) -> None:
-        curve = list(STARTER_POWER_CURVE)
-        lines = _lines(8, -4)
-        positive = points_to_power(8, curve, cap=12)
-        total = points_to_power(total_points(lines), curve, cap=12)
-        self.assertEqual(apportion_power(lines, total, positive_power=positive), [6, -2])
-
-    def test_apportion_net_negative_keeps_signs_and_sums_exactly(self) -> None:
-        curve = list(STARTER_POWER_CURVE)
-        lines = _lines(2, -8)
-        positive = points_to_power(2, curve, cap=12)
-        total = points_to_power(total_points(lines), curve, cap=12)
-        self.assertEqual(total, -5)
-        shares = apportion_power(lines, total, positive_power=positive)
-        self.assertEqual(sum(shares), total)
-        self.assertGreaterEqual(shares[0], 0)
-        self.assertLessEqual(shares[1], 0)
 
 
 class SubstanceReadAndCastPointsTests(TestCase):
