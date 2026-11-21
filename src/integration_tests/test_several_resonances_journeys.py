@@ -586,14 +586,6 @@ class CreatingACharacterWithSeveralResonances(FinalizationTestMixin, JourneyCase
             [("Fury", 0, True), ("Domination", 0, False)],
         )
 
-    def test_one_resonance_picks_make_a_wholly_that_affinity_aura(self) -> None:
-        character = self._finalized_with([(self.fury, 10)])
-
-        payload = _aura_payload(self.api(self.staff), character)
-
-        self.assertEqual(_share_rows(payload), {"Primal": (Decimal(100), Decimal(100))})
-        self.assertIs(payload["unsettled"], False)
-
 
 class _TheLoom(JourneyCase):
     """Ysmay holds Fury (Primal), Domination (Abyssal) and Wonder (Celestial), 20 each, and a

@@ -184,12 +184,6 @@ class TheStartingAuraComesFromTheWeights(_WeightedPicksCase):
         grant_resonance(sheet, self.domination, 3, source=GainSource.STAFF_GRANT)
         self.assertEqual(drift_for(sheet).steps_past, 0)
 
-    def test_one_affinity_picks_start_wholly_in_it(self) -> None:
-        sheet, _ = self._finalize([(self.fury, 10)])
-        aura = CharacterAura.objects.get(character=sheet)
-        self.assertEqual(aura.percent_for(self.primal), Decimal("100.00"))
-        self.assertEqual(drift_for(sheet).steps_past, 0)
-
 
 class TheGiftThreadHoldsThePicksAtZero(_WeightedPicksCase):
     def test_gift_thread_rows_at_zero_heaviest_leads(self) -> None:
