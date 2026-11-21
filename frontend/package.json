@@ -62,7 +62,7 @@
     "react-router-dom": "^7.18.5",
     "react-select": "^5.10.2",
     "remark-gfm": "^4.0.1",
-    "sonner": "^1.4.2",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
