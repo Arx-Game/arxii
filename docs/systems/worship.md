@@ -1061,8 +1061,10 @@ ConditionTemplate, example Miracle rows per seeded being. Called from
 beside the being's intervention pool), `MiraclePerformanceAdmin` (read-only audit),
 `DivineInterventionConfigAdmin` (a singleton change form: the prayer favor gate, the divine
 intercession threshold, the below-zero rule, the wait default, the two softening percentages,
-and read-only context: who owes favor, the odds of each result by favor band (read from the
-result charts at the invocation difficulty for the reference roller, `intervention_odds`),
+and read-only context: who owes favor, the odds of each result for four example characters, each row stating its
+favor, invocation modifier and difficulty (`world.worship.intervention_tables.odds_rows`, read from the
+result charts for the reference roller), the cost of each result with the favor softening applied
+(`cost_rows`, from the award rows),
 miracles whose own threshold is above the gate, beings with miracles and no pool, a warning with no invocation check type), `WorshippedBeingAdmin`
 (`intervention_pool` with a summary of its rows by tier).
 
