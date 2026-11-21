@@ -24,7 +24,11 @@ from world.magic.services.kindling import (
     kindling_context_for,
 )
 from world.magic.services.power_terms import kindled_cast_strength
-from world.magic.specialization.services import cast_resonance_for, gift_resonances_for
+from world.magic.specialization.services import (
+    cast_resonance_for,
+    gift_resonances_for,
+    gift_threads_for,
+)
 from world.magic.types.techniques import CastResonanceOption
 
 if TYPE_CHECKING:
@@ -78,8 +82,9 @@ def cast_resonance_options(
 ) -> list[CastResonanceOption]:
     """Every resonance a cast of ``technique`` may be worked in, the default first if off-thread.
 
-    Empty for a technique with no Gift and for a caster with no character sheet. The thread's
-    resonances follow in order, leading first. An entry is kindled only when she holds the
+    Empty for a technique with no Gift and for a caster with no character sheet. A caster with
+    no thread on the Gift gets only her default entry. The thread's resonances follow in order,
+    leading first. An entry is kindled only when she holds the
     resonance, the test the cast itself applies. ``stronger`` is true for the single entry
     with the highest kindled cast power, when that is above the default entry's; a tie for the
     highest marks none.
@@ -96,7 +101,10 @@ def cast_resonance_options(
     if sheet is None:
         return []
     default = cast_resonance_for(character, technique)
-    resonances = list(gift_resonances_for(character, technique.gift))
+    # A caster with no thread on the Gift has no choice to make (#5231): her only entry is the
+    # default, so no picker shows and nothing offered would be refused.
+    has_thread = bool(gift_threads_for(character, technique.gift))
+    resonances = list(gift_resonances_for(character, technique.gift)) if has_thread else []
     # A worn alternate self's resonance is the default without being on the Gift's thread: it is
     # its own entry, first, because choosing it is the same as naming nothing.
     if default is not None and all(resonance.pk != default.pk for resonance in resonances):

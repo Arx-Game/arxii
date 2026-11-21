@@ -13,7 +13,13 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import AcquisitionOrigin, TargetKind
+from world.magic.constants import (
+    AFFINITY_ABYSSAL,
+    AFFINITY_CELESTIAL,
+    AFFINITY_PRIMAL,
+    AcquisitionOrigin,
+    TargetKind,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -419,19 +425,49 @@ def _effective_variant_resonance(sheet, thread, preferred_resonance):
     return thread.resonance if resonance is None else resonance
 
 
+def _threads_the_forms_come_from(
+    # the thread handler takes the character
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+) -> list[Thread]:
+    """The threads this caster's forms of ``technique`` come from (#5231, WB2).
+
+    The Gift's thread (``_gift_thread_for_variant``, lineage-aware) and every thread
+    ``technique_forms._candidate_threads`` lists, the one list the form picker reads: for a
+    technique a covenant role granted that is the role's thread.
+    """
+    # technique_forms imports this module at call time; the import here is lazy for the cycle.
+    from world.magic.services.technique_forms import _candidate_threads  # noqa: PLC0415
+
+    threads: list[Thread] = []
+    gift_thread = _gift_thread_for_variant(character, technique)
+    if gift_thread is not None:
+        threads.append(gift_thread)
+    threads.extend(
+        thread
+        for thread in _candidate_threads(
+            character, technique, character.techniques.hold_for(technique)
+        )
+        if thread not in threads
+    )
+    return threads
+
+
 def resonance_on_gift_thread(
     # the thread handler and sheet lookups take the character
     character: ObjectDB,  # noqa: OBJECTDB_PARAM
     technique: Technique,
     resonance: Resonance | None,
 ) -> Resonance | None:
-    """The named ``resonance`` when this caster's thread on the Gift holds a row for it (#5231).
+    """The named ``resonance`` when a thread this caster's forms come from holds a row for it.
 
-    None when nothing is named, the technique has no Gift, the caster has no thread on the
-    Gift (a sheetless NPC included), or the thread holds no row for the resonance. It is the
-    one test behind every refusal and every fall-back: ``cast_resonance_for`` refuses a named
-    resonance for which this returns None, and a stored choice for which it returns None is
-    cast in the default resonance instead.
+    None when nothing is named, the technique has no Gift, the caster has no such thread (a
+    sheetless NPC included), or no such thread holds a row for the resonance. The threads are
+    the Gift's thread and the one a covenant role's technique lists its forms from
+    (``_threads_the_forms_come_from``), so picking a form the screen offers is never refused.
+    It is the one test behind every refusal and every fall-back: ``cast_resonance_for``
+    refuses a named resonance for which this returns None, and a stored choice for which it
+    returns None is cast in the default resonance instead (#5231).
     """
     from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
 
@@ -439,10 +475,32 @@ def resonance_on_gift_thread(
         return None
     if _get_character_sheet(character) is None:
         return None
-    thread = _gift_thread_for_variant(character, technique)
-    if thread is None or character.threads.amount_of(thread, resonance) is None:
+    for thread in _threads_the_forms_come_from(character, technique):
+        if character.threads.amount_of(thread, resonance) is not None:
+            return resonance
+    return None
+
+
+_NO_THREAD_AFFINITY_ORDER = (AFFINITY_PRIMAL, AFFINITY_CELESTIAL, AFFINITY_ABYSSAL)
+
+
+def _first_unthreaded_resonance(gift: Gift) -> Resonance | None:
+    """The Gift's own first resonance for a caster with no thread on it: Primal, then
+    Celestial, then Abyssal, the Gift's own order within an affinity (#5231, WB3).
+
+    Nobody is corrupted by a default she did not pick, so the Abyssal one is last.
+    """
+    resonances = gift.cached_resonances
+    if not resonances:
         return None
-    return resonance
+    return min(
+        resonances,
+        key=lambda r: (
+            _NO_THREAD_AFFINITY_ORDER.index(r.affinity.name)
+            if r.affinity.name in _NO_THREAD_AFFINITY_ORDER
+            else len(_NO_THREAD_AFFINITY_ORDER)
+        ),
+    )
 
 
 def cast_resonance_for(
@@ -457,12 +515,13 @@ def cast_resonance_for(
 
     The named ``preferred`` resonance, else the worn alternate self's, else the leading
     resonance of the Gift's thread (``_effective_variant_resonance``'s own order). A named
-    resonance the Gift's thread holds no row for raises ``ResonanceNotOnGiftThread`` while
-    ``refuse_off_thread`` is set, and is ignored (the default is used) when it is not.
-    A caster with no thread on the Gift, a sheetless NPC included, works the Gift's own
-    first resonance; a named resonance is then refused or ignored the same way. A technique
-    with no Gift, or a Gift with no resonances, is worked in none. Choosing the base form
-    does not change the answer: the form and the resonance are separate choices.
+    resonance that no thread her forms come from holds a row for (``resonance_on_gift_thread``)
+    raises ``ResonanceNotOnGiftThread`` while ``refuse_off_thread`` is set, and is ignored (the
+    default is used) when it is not. A caster with no thread on the Gift, a sheetless NPC
+    included, works the resonance she named if a role thread holds it, else the Gift's own
+    first one in the order Primal, Celestial, Abyssal (``_first_unthreaded_resonance``). A
+    technique with no Gift, or a Gift with no resonances, is worked in none. Choosing the base
+    form does not change the answer: the form and the resonance are separate choices.
     """
     from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
     from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
@@ -475,8 +534,7 @@ def cast_resonance_for(
     sheet = _get_character_sheet(character)
     thread = _gift_thread_for_variant(character, technique) if sheet is not None else None
     if thread is None:
-        resonances = gift_resonances_for(character, technique.gift)
-        return resonances[0] if resonances else None
+        return named if named is not None else _first_unthreaded_resonance(technique.gift)
     return _effective_variant_resonance(sheet, thread, named)
 
 
