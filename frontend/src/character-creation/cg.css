@@ -2168,55 +2168,184 @@
   outline-color: rgb(var(--cg-night-glow));
 }
 
-/* Distinctive physical features (#3739). A feature block is a short list of
-   ordinary `.stance` rows: the one-point unlock, then the three presence axes
-   it opens. `.opened` indents the axes under the unlock that paid for them, so
-   the dependency reads at a glance; `.tiers` is the bought-tier gauge. */
-.interview .feature-buy {
-  margin: 0.35rem 0 1.1rem;
-}
-.interview .feature-buy > li.opened {
-  margin-left: 1.6rem;
-  border-left: 1px solid var(--cg-hairline);
-  padding-left: 0.8rem;
-}
-.interview .stance.ax {
-  cursor: default;
-  padding-top: 0.55rem;
-  padding-bottom: 0.55rem;
-}
-.interview .stance.ax b {
+/* The Appearance stage's compact controls (#5241, owner rulings 2026-11-21). */
+
+/* Short fields side by side: age and birthday, height and build, a marking's name,
+   kind and region. A field keeps its own label; the row only lays them out, and
+   wraps them one under another where the column is too narrow. */
+.interview .field-row {
   display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 0 1.6rem;
+}
+.interview .field-row > .field {
+  flex: 1 1 9rem;
+  min-width: 0;
+}
+.interview .field-row > .field.narrow {
+  flex: 0 0 5.5rem;
+}
+/* The birthday is two numbers under one label, read back in words beside them. */
+.interview .field-row > .field.birthday {
+  flex: 1 1 16rem;
+}
+.interview .birthday .birthday-inputs {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+}
+.interview .birthday .birthday-inputs input {
+  flex: 0 0 4.5rem;
+  width: 4.5rem;
+}
+.interview .birthday .birthday-words {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 1.1rem;
+  color: var(--cg-text);
+}
+
+/* The features, two across; a colour's swatches take the whole width. */
+.interview .feature-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 1.8rem;
+}
+.interview .feature-grid > .trait-colour {
+  grid-column: 1 / -1;
+}
+@media (max-width: 34rem) {
+  .interview .feature-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.interview .trait {
+  margin-top: 1.5rem;
+}
+.interview .trait > .field {
+  margin-top: 0;
+}
+.interview .trait > .field + .field,
+.interview .trait > .qualities + .field {
+  margin-top: 0.9rem;
+}
+/* A colour feature's name, set like a field's label, with the chosen colour's name
+   after it in the body face. */
+.interview .trait-h {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0 0.8rem;
+  margin: 0 0 0.55rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.8125rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--cg-label);
+}
+.interview .trait-h .trait-chosen {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 400;
+  font-size: 1.1rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--cg-text);
+}
+/* One swatch per colour. `--swatch` is the option's own colour, set on the button. */
+.interview .swatch-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+.interview .swatch {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 50%;
+  background: var(--swatch);
+  cursor: pointer;
+}
+/* No single colour (Prismatic, Mismatched) or none set yet: striped, so it is still
+   a swatch and still told apart from its neighbours. */
+.interview .swatch.no-hue {
+  background: repeating-linear-gradient(
+    135deg,
+    var(--cg-bg) 0 0.28rem,
+    var(--cg-hairline-strong) 0.28rem 0.44rem
+  );
+}
+/* A colour the species does not list, reachable because the feature is distinctive
+   (#3739): drawn apart. */
+.interview .swatch.beyond {
+  border-style: dashed;
+  border-width: 2px;
+}
+.interview .swatch:hover {
+  border-color: var(--cg-accent);
+}
+.interview .swatch[aria-pressed='true'] {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 2px;
+}
+
+/* A feature's qualities (#3739, #5241): Alluring, Menacing and Majestic on one thin
+   line under the feature, each with its tiers as round buttons. Always on the page:
+   they were behind a "Make it distinctive" row and could not be found. */
+.interview .qualities {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 1.2rem;
+  margin: 0.6rem 0 0;
+  padding: 0;
+}
+.interview .quality {
+  display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  color: var(--cg-muted);
+}
+/* A quality the feature holds a tier of names itself in the accent. */
+.interview .quality.held {
+  color: var(--cg-accent);
+}
+.interview .quality-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+/* A marking's name is the long one of its three fields. */
+.interview .field-row.marking-row {
+  gap: 0 1.2rem;
+}
+.interview .marking-row > .field:first-child {
+  flex: 2 1 12rem;
 }
 .interview .tiers {
   display: inline-flex;
-  gap: 0.22rem;
+  gap: 0.3rem;
 }
 .interview .tiers .tier {
-  width: 0.42rem;
-  height: 0.42rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  padding: 0;
   border: 1px solid var(--cg-hairline-strong);
   border-radius: 50%;
-  display: inline-block;
+  background: transparent;
+  cursor: pointer;
 }
 .interview .tiers .tier.on {
   background: var(--cg-accent);
   border-color: var(--cg-accent);
 }
-.interview .per {
-  margin: 0.2rem 0 0;
-  font-family: 'Cinzel', serif;
-  font-size: 0.72rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--cg-muted);
+.interview .tiers .tier:hover:not(:disabled) {
+  border-color: var(--cg-accent);
 }
-/* An option the species does not list, reachable only because this feature was
-   made distinctive (#3739): drawn apart so the point that opened it is visible. */
-.interview .choice-row button.beyond {
-  border-style: dashed;
+.interview .tiers .tier:disabled {
+  cursor: progress;
 }
 
 /* The Gift stage's resonance step (#5231): a feeling, a side and a balance. Cards in the

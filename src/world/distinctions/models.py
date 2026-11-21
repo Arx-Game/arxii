@@ -223,32 +223,19 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Whether this distinction is available for selection.",
     )
-    # A distinctive physical feature (#3739). ``taken_per_feature`` rows are held once
-    # per feature (a trait row or a marking) rather than once per character; the
-    # ``opens_feature`` row is the one-point "Make it distinctive" pick that opens a
-    # feature's description, every option of its trait and the axis rows; a
-    # ``requires_feature_opened`` row (Alluring, Menacing, Majestic) may be held on a
-    # feature only where an ``opens_feature`` row is held. ``cg_max_rank`` caps the
-    # rank character creation allows below ``max_rank`` (3 in CG, higher in play).
+    # A quality of a physical feature (#3739, #5241). ``taken_per_feature`` rows
+    # (Alluring, Menacing, Majestic) are held once per feature (a trait row or a
+    # marking) rather than once per character. Holding any of them on a feature makes
+    # that feature distinctive: its description opens and its trait reaches every
+    # option it carries. There is no pick before them (owner ruling 2026-11-21; the
+    # one-point "Make it distinctive" row and its two flags are gone). ``cg_max_rank``
+    # caps the rank character creation allows below ``max_rank`` (3 in CG, higher in
+    # play).
     taken_per_feature = models.BooleanField(
         default=False,
         help_text=(
             "Held once per feature (a trait row or a marking), not once per character; "
             "offered on every feature row of the Appearance chapter (#3739)."
-        ),
-    )
-    opens_feature = models.BooleanField(
-        default=False,
-        help_text=(
-            "The one-point 'Make it distinctive' pick: holding it on a feature opens the "
-            "feature's description, every option of its trait, and the axis rows (#3739)."
-        ),
-    )
-    requires_feature_opened = models.BooleanField(
-        default=False,
-        help_text=(
-            "May be held on a feature only where the opens_feature row is held on the "
-            "same feature (the Alluring / Menacing / Regal axes, #3739)."
         ),
     )
     cg_max_rank = models.PositiveIntegerField(

@@ -22,6 +22,14 @@ STAT_DEFAULT_VALUE = 20  # Default starting value
 STAT_CREATION_BUDGET = 350
 STAT_ALLOCATION_STEP = STAT_POINT_VALUE
 
+# Feature qualities (#5241, owner ruling 2026-11-21: "I would just give someone 10 free
+# points of making any features have bonuses"). The qualities a draft holds on its
+# features (Alluring, Menacing, Majestic: the ``taken_per_feature`` distinctions) cost
+# nothing up to this many points in all; past it they cost CG points at the quality's
+# own ``cost_per_rank`` (the owner, asked the same day: "Yes, with CG points"). Points
+# of the allowance left unspent are lost.
+FEATURE_FREE_POINTS = 10
+
 # Age constraints for character creation
 AGE_MIN = 18
 AGE_MAX = 65

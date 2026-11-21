@@ -171,6 +171,8 @@ function buildDraft(upbringing: typeof CRADLE | typeof TAKEN_IN) {
     selected_tradition: null,
     cg_points_spent: 0,
     cg_points_remaining: 100,
+    feature_points_spent: 0,
+    feature_points_free: 10,
     stat_bonuses: {},
     draft_data: { family_template_id: 30 },
     stage_completion: completion,

@@ -1,9 +1,9 @@
-"""Distinctive physical features: one point per feature, then the axes (#3739).
+"""Feature qualities: a tier on any feature, ten points of them free (#3739, #5241).
 
-Three layers, per the project's test policy: the offer/reconcile rules, the sync
-endpoint's validation, and one end-to-end journey from an unlocked feature to
-the ``CharacterDistinction`` rows and the widened palette a finalized character
-carries.
+Three layers, per the project's test policy: the offer/reconcile rules and the free
+allowance, the sync endpoint's validation, and one end-to-end journey from a
+distinctive feature to the ``CharacterDistinction`` rows and the widened palette a
+finalized character carries.
 """
 
 from django.contrib.auth import get_user_model
@@ -13,7 +13,7 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
-from world.character_creation.constants import OfferChapter
+from world.character_creation.constants import FEATURE_FREE_POINTS, OfferChapter
 from world.character_creation.factories import (
     AppearanceSectionFactory,
     BeginningsFactory,
@@ -39,6 +39,19 @@ from world.forms.services import get_cg_form_options
 from world.species.models import Species
 
 
+def _quality(name):
+    """A feature quality as the walkthrough authors it: 1 a tier, 3 tiers in CG."""
+    return DistinctionFactory(
+        name=name, cost_per_rank=1, max_rank=5, cg_max_rank=3, taken_per_feature=True
+    )
+
+
+def _feature_offer(distinction):
+    return DistinctionOfferFactory(
+        distinction=distinction, chapter=OfferChapter.APPEARANCE, feature_rows=True
+    )
+
+
 class FeatureOfferTests(TestCase):
     """``offers_for`` and ``reconcile_offer_picks`` on the per-feature rows."""
 
@@ -46,51 +59,29 @@ class FeatureOfferTests(TestCase):
     def setUpTestData(cls):
         cls.account = AccountFactory()
         cls.beginning = BeginningsFactory()
-        cls.opener = DistinctionFactory(
-            name="Make It Distinctive",
-            cost_per_rank=1,
-            max_rank=1,
-            taken_per_feature=True,
-            opens_feature=True,
-        )
-        cls.alluring = DistinctionFactory(
-            name="Alluring",
-            cost_per_rank=2,
-            max_rank=5,
-            cg_max_rank=3,
-            taken_per_feature=True,
-            requires_feature_opened=True,
-        )
-        cls.opener_offer = DistinctionOfferFactory(
-            distinction=cls.opener, chapter=OfferChapter.APPEARANCE, feature_rows=True
-        )
-        cls.alluring_offer = DistinctionOfferFactory(
-            distinction=cls.alluring, chapter=OfferChapter.APPEARANCE, feature_rows=True
-        )
+        cls.alluring = _quality("Alluring")
+        cls.menacing = _quality("Menacing")
+        cls.alluring_offer = _feature_offer(cls.alluring)
+        cls.menacing_offer = _feature_offer(cls.menacing)
 
     def _draft(self, **data):
         return CharacterDraftFactory(
             account=self.account, selected_beginnings=self.beginning, draft_data=data
         )
 
-    def _entry(self, distinction, *, trait="", marking=0, rank=1, offer=None):
+    def _entry(self, distinction, *, trait="", marking=0, rank=1):
+        offer = self.alluring_offer if distinction is self.alluring else self.menacing_offer
         return build_distinction_entry(
-            distinction,
-            rank,
-            offer=offer or (self.opener_offer if distinction is self.opener else None),
-            feature_trait=trait,
-            feature_marking=marking,
+            distinction, rank, offer=offer, feature_trait=trait, feature_marking=marking
         )
 
     def test_a_feature_rows_line_is_open_with_no_section(self):
         """The chapter itself opens it: it is offered on every feature (#3739)."""
         offers = offers_for(self._draft(), OfferChapter.APPEARANCE)
         by_id = {o.offer_id: o for o in offers}
-        assert set(by_id) == {self.opener_offer.id, self.alluring_offer.id}
-        assert by_id[self.opener_offer.id].opener_key == "feature"
-        assert by_id[self.opener_offer.id].taken_per_feature is True
-        assert by_id[self.opener_offer.id].opens_feature is True
-        assert by_id[self.alluring_offer.id].requires_feature_opened is True
+        assert set(by_id) == {self.alluring_offer.id, self.menacing_offer.id}
+        assert by_id[self.alluring_offer.id].opener_key == "feature"
+        assert by_id[self.alluring_offer.id].taken_per_feature is True
         assert by_id[self.alluring_offer.id].cg_max_rank == 3
 
     def test_a_sectioned_line_and_a_feature_line_both_show(self):
@@ -107,16 +98,16 @@ class FeatureOfferTests(TestCase):
 
     def test_a_per_feature_line_is_never_marked_held_elsewhere(self):
         """It is offered on every feature at once, so "held" is per feature (#3739)."""
-        draft = self._draft(distinctions=[self._entry(self.opener, trait="hair_color")])
+        draft = self._draft(distinctions=[self._entry(self.alluring, trait="hair_color")])
         offers = {o.offer_id: o for o in offers_for(draft, OfferChapter.APPEARANCE)}
-        assert offers[self.opener_offer.id].held is False
+        assert offers[self.alluring_offer.id].held is False
 
     def test_the_same_distinction_is_held_once_per_feature(self):
-        """Two features, two entries, two prices — the point of the feature key."""
+        """Two features, two entries, two prices: the point of the feature key."""
         draft = self._draft(
             distinctions=[
-                self._entry(self.opener, trait="hair_color"),
-                self._entry(self.opener, trait="eye_color"),
+                self._entry(self.alluring, trait="hair_color"),
+                self._entry(self.alluring, trait="eye_color", rank=2),
             ]
         )
         reconcile_offer_picks(draft)
@@ -124,36 +115,21 @@ class FeatureOfferTests(TestCase):
         entries = draft.draft_data["distinctions"]
         assert len(entries) == 2
         assert {e["feature_trait"] for e in entries} == {"hair_color", "eye_color"}
-        assert [e["cost"] for e in entries] == [1, 1]
+        assert sorted(e["cost"] for e in entries) == [1, 2]
 
-    def test_an_axis_is_dropped_when_its_feature_is_no_longer_distinctive(self):
-        """Refund the unlock and the axes bought under it go with it (#3739)."""
-        draft = self._draft(
-            distinctions=[
-                self._entry(self.alluring, trait="hair_color", rank=2, offer=self.alluring_offer)
-            ]
-        )
+    def test_a_quality_needs_no_pick_before_it(self):
+        """A lone tier on a feature survives reconcile: there is no unlock (#5241)."""
+        draft = self._draft(distinctions=[self._entry(self.alluring, trait="hair_color", rank=2)])
         changed = reconcile_offer_picks(draft)
         draft.refresh_from_db()
-        assert draft.draft_data["distinctions"] == []
-        assert "Alluring" in changed
-
-    def test_an_axis_survives_alongside_its_unlock(self):
-        draft = self._draft(
-            distinctions=[
-                self._entry(self.opener, trait="hair_color"),
-                self._entry(self.alluring, trait="hair_color", rank=2, offer=self.alluring_offer),
-            ]
-        )
-        reconcile_offer_picks(draft)
-        draft.refresh_from_db()
-        assert len(draft.draft_data["distinctions"]) == 2
+        assert len(draft.draft_data["distinctions"]) == 1
+        assert "Alluring" not in changed
 
     def test_a_pick_on_a_deleted_marking_is_dropped(self):
         """A marking the player removed takes its per-feature picks with it (#3739)."""
         draft = self._draft()
         marking = draft.markings.create(body_region="face", kind="scar", name="Burn")
-        draft.draft_data["distinctions"] = [self._entry(self.opener, marking=marking.pk)]
+        draft.draft_data["distinctions"] = [self._entry(self.alluring, marking=marking.pk)]
         draft.save()
         reconcile_offer_picks(draft)
         draft.refresh_from_db()
@@ -164,14 +140,89 @@ class FeatureOfferTests(TestCase):
         draft.refresh_from_db()
         assert draft.draft_data["distinctions"] == []
 
-    def test_opened_feature_traits_names_only_unlocked_rows(self):
+    def test_any_quality_on_a_trait_makes_it_distinctive(self):
+        """A trait with a tier is opened; a marking is not a trait row (#5241)."""
         draft = self._draft(
             distinctions=[
-                self._entry(self.opener, trait="hair_color"),
-                self._entry(self.opener, marking=7),
+                self._entry(self.menacing, trait="hair_color"),
+                self._entry(self.alluring, marking=7),
             ]
         )
         assert opened_feature_traits(draft.draft_data) == {"hair_color"}
+
+    def test_a_plain_distinction_makes_no_feature_distinctive(self):
+        plain = DistinctionFactory(name="Broad Shouldered")
+        draft = self._draft(distinctions=[build_distinction_entry(plain)])
+        assert opened_feature_traits(draft.draft_data) == set()
+
+
+class FeatureAllowanceTests(TestCase):
+    """The first ``FEATURE_FREE_POINTS`` of qualities cost no CG points (#5241)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.account = AccountFactory()
+        cls.alluring = _quality("Alluring")
+        cls.menacing = _quality("Menacing")
+        cls.majestic = _quality("Majestic")
+        cls.offers = {d.id: _feature_offer(d) for d in (cls.alluring, cls.menacing, cls.majestic)}
+        cls.plain = DistinctionFactory(name="Broad Shouldered", cost_per_rank=4)
+
+    def _draft(self, entries):
+        return CharacterDraftFactory(account=self.account, draft_data={"distinctions": entries})
+
+    def _tiers(self, distinction, trait, rank):
+        return build_distinction_entry(
+            distinction, rank, offer=self.offers[distinction.id], feature_trait=trait
+        )
+
+    def _nine_tiers(self):
+        return [
+            self._tiers(self.alluring, "hair_color", 3),
+            self._tiers(self.menacing, "hair_color", 3),
+            self._tiers(self.majestic, "hair_color", 3),
+        ]
+
+    def test_the_allowance_is_ten(self):
+        assert FEATURE_FREE_POINTS == 10
+
+    def test_tiers_within_the_allowance_cost_no_cg_points(self):
+        draft = self._draft(self._nine_tiers())
+        base = self._draft([]).calculate_cg_points_spent()
+        assert draft.feature_points_spent() == 9
+        assert draft.calculate_cg_points_spent() == base
+
+    def test_the_tenth_tier_is_free_and_the_eleventh_costs_one(self):
+        base = self._draft([]).calculate_cg_points_spent()
+        ten = self._draft([*self._nine_tiers(), self._tiers(self.alluring, "eye_color", 1)])
+        assert ten.feature_points_spent() == 10
+        assert ten.calculate_cg_points_spent() == base
+        eleven = self._draft([*self._nine_tiers(), self._tiers(self.alluring, "eye_color", 2)])
+        assert eleven.feature_points_spent() == 11
+        assert eleven.calculate_cg_points_spent() == base + 1
+
+    def test_the_allowance_never_pays_for_anything_else(self):
+        """An ordinary distinction costs its price whether or not tiers are held."""
+        base = self._draft([]).calculate_cg_points_spent()
+        entries = [build_distinction_entry(self.plain), self._tiers(self.alluring, "hair_color", 2)]
+        draft = self._draft(entries)
+        assert draft.feature_points_spent() == 2
+        assert draft.calculate_cg_points_spent() == base + 4
+
+    def test_the_breakdown_names_the_free_points(self):
+        draft = self._draft(self._nine_tiers())
+        lines = {line["item"]: line["cost"] for line in draft.calculate_cg_points_breakdown()}
+        assert lines["Free feature points"] == -9
+
+    def test_the_draft_api_reports_both_figures(self):
+        user = get_user_model().objects.create_user(username="featpoints", password="pw")
+        draft = CharacterDraftFactory(account=user, draft_data={"distinctions": self._nine_tiers()})
+        client = APIClient()
+        client.force_authenticate(user=user)
+        resp = client.get(f"/api/character-creation/drafts/{draft.id}/")
+        assert resp.status_code == status.HTTP_200_OK
+        assert resp.data["feature_points_spent"] == 9
+        assert resp.data["feature_points_free"] == 10
 
 
 class FeatureSyncTests(TestCase):
@@ -184,28 +235,9 @@ class FeatureSyncTests(TestCase):
         cls.draft = CharacterDraftFactory(account=cls.user)
         cls.trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
         FormTraitOptionFactory(trait=cls.trait, name="black", display_name="Black")
-        cls.opener = DistinctionFactory(
-            name="Make It Distinctive",
-            cost_per_rank=1,
-            max_rank=1,
-            taken_per_feature=True,
-            opens_feature=True,
-        )
-        cls.alluring = DistinctionFactory(
-            name="Alluring",
-            cost_per_rank=2,
-            max_rank=5,
-            cg_max_rank=3,
-            taken_per_feature=True,
-            requires_feature_opened=True,
-        )
+        cls.alluring = _quality("Alluring")
         cls.plain = DistinctionFactory(name="Broad Shouldered")
-        cls.opener_offer = DistinctionOfferFactory(
-            distinction=cls.opener, chapter=OfferChapter.APPEARANCE, feature_rows=True
-        )
-        cls.alluring_offer = DistinctionOfferFactory(
-            distinction=cls.alluring, chapter=OfferChapter.APPEARANCE, feature_rows=True
-        )
+        cls.alluring_offer = _feature_offer(cls.alluring)
         cls.plain_offer = DistinctionOfferFactory(
             distinction=cls.plain, chapter=OfferChapter.APPEARANCE
         )
@@ -221,60 +253,38 @@ class FeatureSyncTests(TestCase):
             format="json",
         )
 
-    def _unlock(self, **extra):
+    def _tier(self, **extra):
         return {
-            "id": self.opener.id,
+            "id": self.alluring.id,
             "rank": 1,
-            "offer_id": self.opener_offer.id,
+            "offer_id": self.alluring_offer.id,
             "feature_trait": "hair_color",
             **extra,
         }
 
-    def test_unlock_and_axis_on_one_feature(self):
-        resp = self._sync(
-            [
-                self._unlock(),
-                {
-                    "id": self.alluring.id,
-                    "rank": 3,
-                    "offer_id": self.alluring_offer.id,
-                    "feature_trait": "hair_color",
-                },
-            ]
-        )
+    def test_a_quality_is_taken_directly_on_a_feature(self):
+        """No pick before it: the payload holds the quality alone (#5241)."""
+        resp = self._sync([self._tier(rank=3)])
         assert resp.status_code == status.HTTP_200_OK
         entries = {e["distinction_id"]: e for e in resp.data["distinctions"]}
         assert entries[self.alluring.id]["rank"] == 3
-        assert entries[self.alluring.id]["cost"] == 6
+        assert entries[self.alluring.id]["cost"] == 3
         # The source is the feature's own display name, not the generic opener word.
         assert entries[self.alluring.id]["sources"] == ["Hair Color"]
 
-    def test_an_axis_without_its_unlock_is_refused(self):
-        resp = self._sync(
-            [
-                {
-                    "id": self.alluring.id,
-                    "rank": 1,
-                    "offer_id": self.alluring_offer.id,
-                    "feature_trait": "hair_color",
-                }
-            ]
-        )
-        assert resp.status_code == status.HTTP_400_BAD_REQUEST
-
     def test_a_per_feature_pick_must_name_exactly_one_feature(self):
-        assert self._sync([self._unlock(feature_trait="")]).status_code == 400
-        both = self._unlock(feature_marking=5)
+        assert self._sync([self._tier(feature_trait="")]).status_code == 400
+        both = self._tier(feature_marking=5)
         assert self._sync([both]).status_code == 400
 
     def test_an_unknown_trait_is_refused(self):
-        resp = self._sync([self._unlock(feature_trait="not_a_trait")])
+        resp = self._sync([self._tier(feature_trait="not_a_trait")])
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_another_drafts_marking_is_refused(self):
         other = CharacterDraftFactory(account=AccountFactory())
         marking = other.markings.create(body_region="face", kind="scar", name="Theirs")
-        resp = self._sync([self._unlock(feature_trait="", feature_marking=marking.pk)])
+        resp = self._sync([self._tier(feature_trait="", feature_marking=marking.pk)])
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_a_plain_distinction_may_not_name_a_feature(self):
@@ -290,24 +300,14 @@ class FeatureSyncTests(TestCase):
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
-    def test_an_axis_stops_at_the_cg_ceiling(self):
+    def test_a_quality_stops_at_the_cg_ceiling(self):
         """Rank 5 exists in play; character creation stops at 3 (#3739)."""
-        resp = self._sync(
-            [
-                self._unlock(),
-                {
-                    "id": self.alluring.id,
-                    "rank": 4,
-                    "offer_id": self.alluring_offer.id,
-                    "feature_trait": "hair_color",
-                },
-            ]
-        )
+        resp = self._sync([self._tier(rank=4)])
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
     def test_one_distinction_on_two_features_is_two_entries(self):
         FormTraitFactory(name="eye_color", display_name="Eye Color")
-        resp = self._sync([self._unlock(), self._unlock(feature_trait="eye_color")])
+        resp = self._sync([self._tier(), self._tier(feature_trait="eye_color")])
         assert resp.status_code == status.HTTP_200_OK
         assert len(resp.data["distinctions"]) == 2
         assert sum(e["cost"] for e in resp.data["distinctions"]) == 2
@@ -322,27 +322,10 @@ class FeatureFinalizeTests(FinalizationTestMixin, TestCase):
         self._setup_finalization_base(self, prefix="Feature Test", height_min=700, height_max=800)
         self.trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
         self.option = FormTraitOptionFactory(trait=self.trait, name="black", display_name="Black")
-        self.opener = DistinctionFactory(
-            name="Make It Distinctive",
-            cost_per_rank=1,
-            max_rank=1,
-            taken_per_feature=True,
-            opens_feature=True,
-        )
-        self.alluring = DistinctionFactory(
-            name="Alluring",
-            cost_per_rank=2,
-            max_rank=5,
-            cg_max_rank=3,
-            taken_per_feature=True,
-            requires_feature_opened=True,
-        )
-        self.opener_offer = DistinctionOfferFactory(
-            distinction=self.opener, chapter=OfferChapter.APPEARANCE, feature_rows=True
-        )
-        self.alluring_offer = DistinctionOfferFactory(
-            distinction=self.alluring, chapter=OfferChapter.APPEARANCE, feature_rows=True
-        )
+        self.alluring = _quality("Alluring")
+        self.menacing = _quality("Menacing")
+        self.alluring_offer = _feature_offer(self.alluring)
+        self.menacing_offer = _feature_offer(self.menacing)
 
     def _entry(self, distinction, offer, *, trait="", marking=0, rank=1):
         return build_distinction_entry(
@@ -357,9 +340,9 @@ class FeatureFinalizeTests(FinalizationTestMixin, TestCase):
         marking = draft.markings.create(body_region="face", kind="scar", name="Burn")
         draft.draft_data["form_traits"] = {"hair_color": self.option.id}
         draft.draft_data["distinctions"] = [
-            self._entry(self.opener, self.opener_offer, trait="hair_color"),
+            self._entry(self.menacing, self.menacing_offer, trait="hair_color"),
             self._entry(self.alluring, self.alluring_offer, trait="hair_color", rank=2),
-            self._entry(self.opener, self.opener_offer, marking=marking.pk),
+            self._entry(self.menacing, self.menacing_offer, marking=marking.pk),
             self._entry(self.alluring, self.alluring_offer, marking=marking.pk, rank=1),
         ]
         draft.save()
@@ -385,14 +368,14 @@ class FeatureFinalizeTests(FinalizationTestMixin, TestCase):
 
         draft = self._create_base_draft(first_name="Ghost", stats=DEFAULT_STATS)
         draft.draft_data["distinctions"] = [
-            self._entry(self.opener, self.opener_offer, marking=999),
+            self._entry(self.alluring, self.alluring_offer, marking=999),
         ]
         draft.save()
 
         character = finalize_character(draft, add_to_roster=True)
 
         assert not CharacterDistinction.objects.filter(
-            character=character.sheet_data, distinction=self.opener
+            character=character.sheet_data, distinction=self.alluring
         ).exists()
 
 
@@ -414,33 +397,40 @@ class FeaturePaletteTests(TestCase):
             species=cls.species, trait=cls.trait, is_available_in_cg=True
         )
         link.allowed_options.set([cls.allowed])
-        cls.opener = DistinctionFactory(
-            name="Make It Distinctive", taken_per_feature=True, opens_feature=True
-        )
-        cls.opener_offer = DistinctionOfferFactory(
-            distinction=cls.opener, chapter=OfferChapter.APPEARANCE, feature_rows=True
-        )
+        cls.alluring = _quality("Alluring")
+        cls.alluring_offer = _feature_offer(cls.alluring)
 
     def _draft(self, **data):
         return CharacterDraftFactory(
             account=self.account, selected_species=self.species, draft_data=data
         )
 
-    def test_an_off_palette_option_is_an_error_without_the_unlock(self):
+    def test_an_off_palette_option_is_an_error_on_a_feature_with_no_quality(self):
         draft = self._draft(form_traits={"hair_color": self.unnatural.id})
         errors = _get_form_trait_errors(draft)
         assert any("not available" in e for e in errors)
 
-    def test_the_unlock_makes_every_option_legal_on_that_trait(self):
+    def test_a_quality_makes_every_option_legal_on_that_trait(self):
         draft = self._draft(
             form_traits={"hair_color": self.unnatural.id},
             distinctions=[
                 build_distinction_entry(
-                    self.opener, offer=self.opener_offer, feature_trait="hair_color"
+                    self.alluring, offer=self.alluring_offer, feature_trait="hair_color"
                 )
             ],
         )
         assert _get_form_trait_errors(draft) == []
+
+    def test_a_quality_on_another_trait_opens_nothing_here(self):
+        draft = self._draft(
+            form_traits={"hair_color": self.unnatural.id},
+            distinctions=[
+                build_distinction_entry(
+                    self.alluring, offer=self.alluring_offer, feature_trait="eye_color"
+                )
+            ],
+        )
+        assert any("not available" in e for e in _get_form_trait_errors(draft))
 
     def test_the_unnatural_option_is_never_in_the_cg_palette(self):
         """It is reached through the widened list, never offered as a species value."""
@@ -456,16 +446,8 @@ class MarkingDeletionRefundTests(TestCase):
         User = get_user_model()
         cls.user = User.objects.create_user(username="markingrefund", password="pw")
         cls.draft = CharacterDraftFactory(account=cls.user)
-        cls.opener = DistinctionFactory(
-            name="Make It Distinctive",
-            cost_per_rank=1,
-            max_rank=1,
-            taken_per_feature=True,
-            opens_feature=True,
-        )
-        cls.opener_offer = DistinctionOfferFactory(
-            distinction=cls.opener, chapter=OfferChapter.APPEARANCE, feature_rows=True
-        )
+        cls.alluring = _quality("Alluring")
+        cls.alluring_offer = _feature_offer(cls.alluring)
 
     def setUp(self):
         self.client = APIClient()
@@ -475,7 +457,7 @@ class MarkingDeletionRefundTests(TestCase):
         marking = self.draft.markings.create(body_region="face", kind="scar", name="Seam")
         self.draft.draft_data["distinctions"] = [
             build_distinction_entry(
-                self.opener, offer=self.opener_offer, feature_marking=marking.pk
+                self.alluring, offer=self.alluring_offer, feature_marking=marking.pk
             )
         ]
         self.draft.save()

@@ -12,4 +12,5 @@ export { ConfirmDialog } from './ConfirmDialog';
 export { CodexWord } from './CodexWord';
 export { CodexLine } from './CodexLine';
 export { ChoiceRow } from './ChoiceRow';
+export { SwatchRow } from './SwatchRow';
 export { Field } from './Field';

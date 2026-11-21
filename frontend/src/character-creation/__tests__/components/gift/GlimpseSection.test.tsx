@@ -173,8 +173,6 @@ function visibleOffer(tag: GlimpseTagOption, overrides: Partial<VisibleOffer> = 
     held: false,
     effect_line: '',
     taken_per_feature: false,
-    opens_feature: false,
-    requires_feature_opened: false,
     cg_max_rank: 0,
     group: '',
     asks_figure_name: false,

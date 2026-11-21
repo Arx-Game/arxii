@@ -19,6 +19,7 @@ import {
 } from '../folio';
 import { ChoiceRow } from '../folio/ChoiceRow';
 import { Field } from '../folio/Field';
+import { SwatchRow } from '../folio/SwatchRow';
 import { Stage } from '../types';
 import { mockCodexEntry } from './fixtures';
 import {
@@ -309,7 +310,82 @@ describe('ChoiceRow', () => {
   });
 });
 
+describe('SwatchRow', () => {
+  const options = [
+    { value: 1, label: 'Auburn', hex: '#7a3220' },
+    { value: 2, label: 'Prismatic', hex: '' },
+    { value: 3, label: 'Blue', hex: '#3a6ea8', beyond: true },
+    // Not a colour value: never written into a style.
+    { value: 4, label: 'Broken', hex: 'red; background: url(x)' },
+  ];
+
+  it('draws each option in its own colour and names it', () => {
+    render(
+      <>
+        <h3 id="hair">Hair colour</h3>
+        <SwatchRow labelledBy="hair" options={options} value={1} onChange={vi.fn()} />
+      </>
+    );
+    const group = screen.getByRole('group', { name: 'Hair colour' });
+    const auburn = within(group).getByRole('button', { name: 'Auburn' });
+    expect(auburn).toHaveAttribute('aria-pressed', 'true');
+    expect(auburn).toHaveAttribute('title', 'Auburn');
+    expect(auburn.style.getPropertyValue('--swatch')).toBe('#7a3220');
+    const prismatic = within(group).getByRole('button', { name: 'Prismatic' });
+    expect(prismatic).toHaveClass('no-hue');
+    expect(prismatic.style.getPropertyValue('--swatch')).toBe('');
+    expect(within(group).getByRole('button', { name: 'Blue' })).toHaveClass('beyond');
+    const broken = within(group).getByRole('button', { name: 'Broken' });
+    expect(broken).toHaveClass('no-hue');
+    expect(broken.getAttribute('style')).toBeNull();
+  });
+
+  it('reports a pick, clears only when clearable, and previews the name under the pointer', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const onPreview = vi.fn();
+    const { rerender } = render(
+      <>
+        <h3 id="hair">Hair colour</h3>
+        <SwatchRow
+          labelledBy="hair"
+          options={options}
+          value={1}
+          onChange={onChange}
+          onPreview={onPreview}
+        />
+      </>
+    );
+    await user.hover(screen.getByRole('button', { name: 'Blue' }));
+    expect(onPreview).toHaveBeenLastCalledWith('Blue');
+    await user.unhover(screen.getByRole('button', { name: 'Blue' }));
+    expect(onPreview).toHaveBeenLastCalledWith(null);
+    await user.click(screen.getByRole('button', { name: 'Blue' }));
+    expect(onChange).toHaveBeenCalledWith(3);
+    onChange.mockClear();
+    await user.click(screen.getByRole('button', { name: 'Auburn' }));
+    expect(onChange).not.toHaveBeenCalled();
+    rerender(
+      <>
+        <h3 id="hair">Hair colour</h3>
+        <SwatchRow labelledBy="hair" options={options} value={1} onChange={onChange} clearable />
+      </>
+    );
+    await user.click(screen.getByRole('button', { name: 'Auburn' }));
+    expect(onChange).toHaveBeenCalledWith(null);
+  });
+});
+
 describe('Field', () => {
+  it('takes a width class beside its own (#5241)', () => {
+    const { container } = render(
+      <Field id="n" label="Age" className="narrow">
+        <input id="n" type="number" />
+      </Field>
+    );
+    expect(container.firstChild).toHaveClass('field', 'narrow');
+  });
+
   it('labels its control and shows the hint', () => {
     render(
       <Field id="f" label="Concept" hint="One line.">

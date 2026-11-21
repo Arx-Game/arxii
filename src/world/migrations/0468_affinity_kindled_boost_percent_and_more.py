@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0465_draft_stage_visit")]
+    dependencies = [("arxii", "0467_swatch_colour_fill")]
 
     operations = [
         migrations.AddField(

@@ -90,14 +90,19 @@ a check constraint that a row never names both a trait and a marking. See
 
 ## Distinctive features — a distinction held per feature (#3739)
 
-Four flags on `Distinction` carry the shape:
+Two fields on `Distinction` carry the shape:
 
 | Field | Meaning |
 |-------|---------|
 | `taken_per_feature` | Held once per feature (a trait row or a marking), not once per character. Offered on every feature row of the Appearance chapter, via a `DistinctionOffer` whose opener is `feature_rows` rather than a section. |
-| `opens_feature` | The one-point "Make It Distinctive" pick. Holding it on a feature opens that feature's description, every option of its trait, and the axis rows. |
-| `requires_feature_opened` | May be held on a feature only where an `opens_feature` row is held on the same feature: the Alluring / Menacing / Regal axes. |
-| `cg_max_rank` | The rank ceiling character creation applies when lower than `max_rank` (`Distinction.cg_ceiling`). The axes reach 5 in play and stop at 3 in CG. |
+| `cg_max_rank` | The rank ceiling character creation applies when lower than `max_rank` (`Distinction.cg_ceiling`). The qualities reach 5 in play and stop at 3 in CG. |
+
+The `taken_per_feature` rows are the **qualities**: Alluring, Menacing, Majestic. A
+feature takes one directly, with no pick before it, and a feature that holds any tier is
+distinctive (#5241, ADR-5241: `opens_feature`, `requires_feature_opened` and the
+one-point "Make It Distinctive" row they served were removed). The first
+`FEATURE_FREE_POINTS` (10) a draft's qualities cost are free; see
+[character_creation.md](character_creation.md), "Feature qualities".
 
 Because a per-feature distinction is held several times over, the draft entry list
 is keyed by **`world.distinctions.types.feature_key`** — `(distinction_id, trait
@@ -106,11 +111,10 @@ name, draft marking id)` — everywhere it used to be keyed by distinction id:
 point preview, and `_create_distinctions` at finalize. A distinction that is not
 per-feature keys as `(id, "", 0)` and behaves exactly as it did before.
 
-Two refunds keep a pick from outliving what it names, both through
-`reconcile_offer_picks` (`offers._drop_vanished_features`): dropping the unlock
-drops the axes bought under it, and deleting a marking drops everything bought on
-it (the draft-marking viewset's `perform_destroy` reconciles, so the budget is
-right immediately rather than at the next sync).
+One refund keeps a pick from outliving what it names, through
+`reconcile_offer_picks` (`offers._drop_vanished_features`): deleting a marking drops
+everything held on it (the draft-marking viewset's `perform_destroy` reconciles, so the
+budget is right immediately rather than at the next sync).
 
 The three axes are the same `ModifierTarget` rows item accents use (#2886), so a
 feature and a garment push on one number. A feature is worth more on purpose: an
