@@ -1037,7 +1037,10 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   `appearance_section`, `feature_rows`, `beat`, and since #4846 `unlocked_by`, the
   Final Touches chapter's card; the Identity chapter, #5255, accepts none, so its row
   shows no opener and the "not opened by anything" check skips it; a card has one line
-  there and it is always a choice, both refused by the model (cards that already exist
+  there and it is always a choice, both refused by the model; the Builder's offers
+  formset (`BaseDistinctionOfferFormSet`) counts the Identity rows itself, because an
+  inline formset leaves the parent key out of each row's validation and the unique
+  constraint would otherwise surface as an `IntegrityError` page (cards that already exist
   are placed there many at once by the Distinction list's "Offer on the Identity stage"
   action, `authoring.offers.offer_on_identity`: superusers only, credited to the operator
   with a contributor linked on the spot as the paste does, one log entry per card; a card

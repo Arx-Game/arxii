@@ -401,6 +401,49 @@ class BuilderSaveTest(BuilderTestCase):
         assert not DistinctionEffect.objects.filter(pk=extra_effect.pk).exists()
         assert DistinctionEffect.objects.filter(pk=self.effect.pk).exists()
 
+    def test_a_second_identity_row_is_refused_with_a_message_and_writes_nothing(self):
+        """#5255: a card has one line on the Identity stage. The database refuses a second;
+        the page has to say so in the form, never answer with a server error. Found on the
+        live pass, where the save raised ``IntegrityError``."""
+        from world.character_creation.factories import DistinctionOfferFactory
+
+        offer = DistinctionOfferFactory(
+            distinction=self.distinction,
+            chapter=OfferChapter.IDENTITY,
+            arrives_as=OfferArrival.CHOICE,
+        )
+        self.client.force_login(self.author)
+        row = {
+            "arrives_as": OfferArrival.CHOICE,
+            "name": "",
+            "player_line": "",
+            "schooling_line": "",
+            "glimpse_tag": "",
+            "origin_choice": "",
+            "sort_order": "0",
+            "chapter": OfferChapter.IDENTITY,
+        }
+        data = self._post_data(
+            **{
+                "offers-TOTAL_FORMS": "2",
+                "offers-INITIAL_FORMS": "1",
+                "offers-0-id": str(offer.pk),
+                **{f"offers-0-{key}": value for key, value in row.items()},
+                "offers-0-name": offer.name,
+                "offers-1-id": "",
+                **{f"offers-1-{key}": value for key, value in row.items()},
+            }
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 200
+        assert "already placed on the Identity stage" in resp.content.decode()
+        lines = DistinctionOffer.objects.filter(
+            distinction=self.distinction, chapter=OfferChapter.IDENTITY
+        )
+        assert [line.pk for line in lines] == [offer.pk]
+
     def test_delete_checkbox_removes_the_offer(self):
         from world.character_creation.factories import DistinctionOfferFactory
 
