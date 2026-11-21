@@ -44,6 +44,7 @@ class ActionDispatchError(Exception):
     LETHAL_RISK_UNACKNOWLEDGED = "lethal_risk_unacknowledged"
     CAST_INTO_STRIKE = "cast_into_strike"
     RESONANCE_NOT_ON_GIFT_THREAD = "resonance_not_on_gift_thread"
+    RESONANCE_NOT_FOUND = "resonance_not_found"
 
     _SAFE_MESSAGES = {
         TECHNIQUE_NOT_COMBAT_READY: "That technique cannot be used in combat.",
@@ -75,6 +76,7 @@ class ActionDispatchError(Exception):
         LETHAL_RISK_UNACKNOWLEDGED: ("Acknowledge the lethal risk of this duel before acting."),
         CAST_INTO_STRIKE: "That technique enchants a Strike: pick Strike, then enchant with it.",
         RESONANCE_NOT_ON_GIFT_THREAD: ResonanceNotOnGiftThread.user_message,
+        RESONANCE_NOT_FOUND: "Resonance not found.",
     }
     _FALLBACK = "That action could not be completed."
 

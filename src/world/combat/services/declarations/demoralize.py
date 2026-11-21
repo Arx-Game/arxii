@@ -57,6 +57,7 @@ def declare_demoralize(
             "social_passive": None,
             "mental_passive": None,
             "combo_upgrade": None,
+            "cast_resonance": None,  # a re-declaration drops the last cast's resonance (#5231)
             "is_ready": True,
         },
     )

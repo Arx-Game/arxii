@@ -160,6 +160,10 @@ class CastTechniqueAction(Action):
                         "use_base_form": use_base_form,
                         "cast_openly": cast_openly,
                         "strain_commitment": strain_commitment,
+                        # A pull declared with the cast was not charged (the cast stopped
+                        # before it); the confirmed cast carries it, as the combat
+                        # path's replay carries the pull's own kwargs.
+                        **({"cast_pull": cast_pull} if cast_pull is not None else {}),
                         **kwargs,
                     },
                 ),
@@ -218,9 +222,13 @@ class CastTechniqueAction(Action):
         if not isinstance(ctx, CombatRoundContext) or technique_id is None:
             return None
 
-        # Soulfray gate — BEFORE committing the cast pull so no resonance/anima is
-        # charged for a declaration the player then declines.
-        gate = self._combat_soulfray_gate(ctx, technique_id, kwargs)
+        # A named resonance the Gift's thread lacks is refused first: nothing is recorded,
+        # charged or offered for a cast that cannot be declared (#5231). Then the Soulfray
+        # gate, BEFORE committing the cast pull so no resonance/anima is charged for a
+        # declaration the player then declines.
+        gate = self._combat_resonance_refusal(
+            ctx, technique_id, kwargs
+        ) or self._combat_soulfray_gate(ctx, technique_id, kwargs)
         if gate is not None:
             return gate
         fury_refusal = self._combat_fury_cap_refusal(ctx, kwargs)
@@ -278,6 +286,39 @@ class CastTechniqueAction(Action):
         # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
         # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs
+
+    @staticmethod
+    def _combat_resonance_refusal(
+        ctx: Any, technique_id: int, kwargs: dict[str, Any]
+    ) -> ActionResult | None:
+        """Refuse a named cast resonance the Gift's thread holds no row for (#5231).
+
+        The focused cast only: a passive names no resonance. Runs before the cast pull is
+        committed and before the Soulfray gate, so a refused choice is never charged.
+        """
+        from actions.constants import CombatActionSlot  # noqa: PLC0415
+
+        preferred_resonance_id = kwargs.get("preferred_resonance_id")
+        if preferred_resonance_id is None:
+            return None
+        if kwargs.get("action_slot", CombatActionSlot.FOCUSED) != CombatActionSlot.FOCUSED:
+            return None
+        from world.magic.models import Resonance, Technique  # noqa: PLC0415
+        from world.magic.specialization.services import resonance_on_gift_thread  # noqa: PLC0415
+
+        try:
+            resonance = Resonance.objects.get(pk=int(preferred_resonance_id))
+        except (TypeError, ValueError, Resonance.DoesNotExist):
+            return ActionResult(success=False, message="Resonance not found.")
+        technique = Technique.objects.filter(pk=technique_id).first()
+        if technique is None or technique.gift_id is None:
+            return None
+        character = ctx.participant.character_sheet.character
+        if resonance_on_gift_thread(character, technique, resonance) is None:
+            from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
+
+            return ActionResult(success=False, message=ResonanceNotOnGiftThread.user_message)
+        return None
 
     @staticmethod
     def _combat_fury_cap_refusal(ctx: Any, kwargs: dict[str, Any]) -> ActionResult | None:

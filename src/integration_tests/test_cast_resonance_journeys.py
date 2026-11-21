@@ -19,6 +19,7 @@ import math
 from unittest.mock import MagicMock
 
 from django.urls import reverse
+from django.utils import timezone
 
 from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
@@ -33,6 +34,7 @@ from world.combat.factories import (
 from world.combat.models import CombatRoundAction
 from world.combat.services import add_participant, begin_declaration_phase, resolve_round
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
+from world.magic.constants import TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
@@ -44,7 +46,13 @@ from world.magic.factories import (
     TechniqueFactory,
     ensure_canonical_affinities,
 )
-from world.magic.models import Affinity, CharacterAnima, CharacterResonance, ThreadResonance
+from world.magic.models import (
+    Affinity,
+    CharacterAnima,
+    CharacterResonance,
+    Thread,
+    ThreadResonance,
+)
 from world.magic.seeds_cast import ensure_technique_cast_content
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.scenes.action_constants import ConsentDecision
@@ -384,3 +392,96 @@ class WorkingACombatCastInAChosenResonance(_AYsmayWithATwoResonanceGift):
         self.assertNotIn("not part of this Gift's thread", self.said(self.ysmay))
         self.assertEqual(self.corruption(self.ysmay), before)
         self.assertEqual(self.declared().cast_resonance, self.ruin)
+
+    def test_the_gifts_first_resonance_she_named_still_casts_when_the_thread_is_retired(
+        self,
+    ) -> None:
+        # Ruin is the Gift's own first resonance, which is also what a caster with no thread
+        # on the Gift is worked in: the default equals what she named, and no thread row is
+        # left to hold it.
+        self.gift.resonances.add(self.ruin)
+        told = self.telnet(self.ysmay, f"cast Ember Lash at Gristle variant={self.ruin.name}")
+        self.assertNotIn("Could not", told)
+        self.assertEqual(self.declared().cast_resonance, self.ruin)
+        before = self.corruption(self.ysmay)
+        for thread in Thread.objects.filter(
+            owner=self.ysmay.sheet_data, target_kind=TargetKind.GIFT, target_gift=self.gift
+        ):
+            thread.retired_at = timezone.now()
+            thread.save(update_fields=["retired_at"])
+        self.ysmay.threads.invalidate()
+
+        resolve_round(self.encounter, offense_check_fn=_clean_cast)
+
+        # The cast went off in the default, Ruin, and added Abyssal corruption.
+        after = self.corruption(self.ysmay)
+        self.assertGreaterEqual(after["Ruin"] - before["Ruin"], 1)
+        self.assertEqual(after["Warmth"], before["Warmth"])
+        self.assertNotIn("not part of this Gift's thread", self.said(self.ysmay))
+
+    # -- the web client's declarations ------------------------------------------
+
+    def dispatch(self, **kwargs):
+        with self.captureOnCommitCallbacks(execute=True):
+            return self.api(self.account_of(self.ysmay)).post(
+                f"/api/actions/characters/{self.ysmay.pk}/dispatch/",
+                {
+                    "ref": {
+                        "backend": "combat",
+                        "technique_id": self.strike.pk,
+                        "action_slot": "focused",
+                    },
+                    "kwargs": {
+                        "effort_level": "medium",
+                        "focused_opponent_target_id": self.gristle.pk,
+                        **kwargs,
+                    },
+                },
+                format="json",
+            )
+
+    def test_a_declaration_from_the_web_stores_the_resonance_she_chose(self) -> None:
+        response = self.dispatch(preferred_resonance_id=self.ruin.pk)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self.declared().cast_resonance, self.ruin)
+
+    def test_a_declaration_from_the_web_with_no_choice_stores_none(self) -> None:
+        self.assertEqual(self.dispatch(preferred_resonance_id=self.ruin.pk).status_code, 200)
+
+        response = self.dispatch()
+
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIsNone(self.declared().cast_resonance)
+
+    def test_a_resonance_not_on_the_thread_is_refused_from_the_web_and_nothing_is_recorded(
+        self,
+    ) -> None:
+        anima_before = CharacterAnima.objects.get(character=self.ysmay.sheet_data).current
+
+        response = self.dispatch(preferred_resonance_id=self.stray.pk)
+
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertEqual(response.data["detail"], NOT_ON_THREAD)
+        self.assertFalse(CombatRoundAction.objects.exists())
+        self.assertEqual(
+            CharacterAnima.objects.get(character=self.ysmay.sheet_data).current, anima_before
+        )
+
+    def test_a_resonance_the_web_names_that_does_not_exist_reads_not_found(self) -> None:
+        for named in (987654, "ruin"):
+            with self.subTest(named=named):
+                response = self.dispatch(preferred_resonance_id=named)
+
+                self.assertEqual(response.status_code, 400, response.data)
+                self.assertEqual(response.data["detail"], "Resonance not found.")
+                self.assertFalse(CombatRoundAction.objects.exists())
+
+    def test_a_different_declaration_in_the_same_round_drops_the_resonance_of_the_cast(
+        self,
+    ) -> None:
+        self.assertEqual(self.dispatch(preferred_resonance_id=self.ruin.pk).status_code, 200)
+
+        self.web(self.ysmay, "combat_flee")
+
+        self.assertIsNone(self.declared().cast_resonance)

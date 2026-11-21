@@ -877,21 +877,13 @@ def _stored_cast_resonance_still_held(action_request: SceneActionRequest) -> Res
     can lose that resonance in between. The cast then resolves in the default resonance:
     a player is never left unable to cast.
     """
-    from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
-    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+    from world.magic.specialization.services import resonance_on_gift_thread  # noqa: PLC0415
 
-    stored = action_request.cast_resonance
-    if stored is None:
-        return None
-    try:
-        cast_resonance_for(
-            action_request.initiator_persona.character_sheet.character,
-            action_request.technique,
-            stored,
-        )
-    except ResonanceNotOnGiftThread:
-        return None
-    return stored
+    return resonance_on_gift_thread(
+        action_request.initiator_persona.character_sheet.character,
+        action_request.technique,
+        action_request.cast_resonance,
+    )
 
 
 def resolve_accepted_cast(

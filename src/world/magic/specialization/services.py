@@ -419,6 +419,32 @@ def _effective_variant_resonance(sheet, thread, preferred_resonance):
     return thread.resonance if resonance is None else resonance
 
 
+def resonance_on_gift_thread(
+    # the thread handler and sheet lookups take the character
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+    resonance: Resonance | None,
+) -> Resonance | None:
+    """The named ``resonance`` when this caster's thread on the Gift holds a row for it (#5231).
+
+    None when nothing is named, the technique has no Gift, the caster has no thread on the
+    Gift (a sheetless NPC included), or the thread holds no row for the resonance. It is the
+    one test behind every refusal and every fall-back: ``cast_resonance_for`` refuses a named
+    resonance for which this returns None, and a stored choice for which it returns None is
+    cast in the default resonance instead.
+    """
+    from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
+
+    if resonance is None or technique.gift_id is None:
+        return None
+    if _get_character_sheet(character) is None:
+        return None
+    thread = _gift_thread_for_variant(character, technique)
+    if thread is None or character.threads.amount_of(thread, resonance) is None:
+        return None
+    return resonance
+
+
 def cast_resonance_for(
     # the thread handler and sheet lookups take the character
     character: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -443,19 +469,15 @@ def cast_resonance_for(
 
     if technique.gift_id is None:
         return None
+    named = resonance_on_gift_thread(character, technique, preferred)
+    if preferred is not None and named is None and refuse_off_thread:
+        raise ResonanceNotOnGiftThread
     sheet = _get_character_sheet(character)
     thread = _gift_thread_for_variant(character, technique) if sheet is not None else None
-    named_is_held = (
-        thread is not None
-        and preferred is not None
-        and character.threads.amount_of(thread, preferred) is not None
-    )
-    if preferred is not None and not named_is_held and refuse_off_thread:
-        raise ResonanceNotOnGiftThread
     if thread is None:
         resonances = gift_resonances_for(character, technique.gift)
         return resonances[0] if resonances else None
-    return _effective_variant_resonance(sheet, thread, preferred if named_is_held else None)
+    return _effective_variant_resonance(sheet, thread, named)
 
 
 def _prefer_early_form(character, technique, resonance, variant):

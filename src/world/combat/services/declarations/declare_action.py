@@ -34,17 +34,18 @@ def _refuse_resonance_off_thread(
     participant: CombatParticipant, technique: Technique | None, resonance: Resonance | None
 ) -> None:
     """Refuse a declared cast resonance the Gift's thread holds no row for (#5231)."""
-    if technique is None or resonance is None:
-        return
-    from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
-    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+    from world.magic.specialization.services import resonance_on_gift_thread  # noqa: PLC0415
 
-    try:
-        cast_resonance_for(participant.character_sheet.character, technique, resonance)
-    except ResonanceNotOnGiftThread as exc:
+    if technique is None or resonance is None or technique.gift_id is None:
+        return
+    character = participant.character_sheet.character
+    if resonance_on_gift_thread(character, technique, resonance) is None:
+        from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
+
         raise DeclarationRefusedError(
-            exc.user_message, code=ActionDispatchError.RESONANCE_NOT_ON_GIFT_THREAD
-        ) from exc
+            ResonanceNotOnGiftThread.user_message,
+            code=ActionDispatchError.RESONANCE_NOT_ON_GIFT_THREAD,
+        )
 
 
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields

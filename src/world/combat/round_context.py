@@ -166,6 +166,22 @@ def _keep_pull_rows(participant: CombatParticipant, kwargs: dict[str, Any]) -> C
     return guard
 
 
+def _named_cast_resonance(resonance_id: Any) -> Resonance | None:
+    """The Resonance a cast names by id, None when it names none (#5231).
+
+    An id that is not a number or matches no resonance reads "Resonance not found.", the
+    same line telnet gives for a resonance name it cannot find, never a server error.
+    """
+    if resonance_id is None:
+        return None
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    try:
+        return Resonance.objects.get(pk=int(resonance_id))
+    except (TypeError, ValueError, Resonance.DoesNotExist) as exc:
+        raise ActionDispatchError(ActionDispatchError.RESONANCE_NOT_FOUND) from exc
+
+
 class CombatRoundContext(RoundContext):
     """``RoundContext`` backed by a live ``CombatParticipant`` + ``CombatEncounter``.
 
@@ -520,12 +536,7 @@ class CombatRoundContext(RoundContext):
         # The resonance the cast is to be worked in (#5231): the web body key and telnet's
         # variant= both arrive as preferred_resonance_id. declare_action refuses one the
         # Gift's thread does not hold, before anything is recorded or charged.
-        cast_resonance = None
-        preferred_resonance_id = kwargs.get("preferred_resonance_id")
-        if preferred_resonance_id is not None:
-            from world.magic.models import Resonance  # noqa: PLC0415
-
-            cast_resonance = Resonance.objects.filter(pk=preferred_resonance_id).first()
+        cast_resonance = _named_cast_resonance(kwargs.get("preferred_resonance_id"))
 
         # The web dispatch reaches here without the cast's round_declaration hook, so the
         # strength's depth cap is enforced again before anything is charged (#4738).

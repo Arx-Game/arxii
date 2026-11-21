@@ -200,9 +200,10 @@ class CastTechniqueActionTests(TestCase):
         self.assertEqual(pending.technique_id, self.technique.pk)
 
     def test_a_confirmed_cast_keeps_every_choice_she_made(self) -> None:
-        """The pending cast carries resonance, form, openness and strain to the confirmed cast."""
+        """The pending cast carries resonance, form, openness, strain and pull on confirm."""
         from world.magic.factories import ResonanceFactory
         from world.magic.specialization.services import provision_latent_gift_thread
+        from world.magic.types.pull import CastPullDeclaration
 
         resonance = ResonanceFactory()
         provision_latent_gift_thread(
@@ -211,6 +212,7 @@ class CastTechniqueActionTests(TestCase):
         warning = self._make_soulfray_warning()
         sheet_pk = self.persona.character_sheet.pk
         pop_pending(sheet_pk)
+        pull = CastPullDeclaration(tier=1, threads=())
         with patch(
             "world.magic.services.soulfray.get_soulfray_warning",
             return_value=warning,
@@ -219,6 +221,7 @@ class CastTechniqueActionTests(TestCase):
                 actor=self.character,
                 technique_id=self.technique.pk,
                 confirm_soulfray_risk=False,
+                cast_pull=pull,
                 preferred_resonance_id=resonance.pk,
                 use_base_form=True,
                 cast_openly=True,
@@ -241,6 +244,7 @@ class CastTechniqueActionTests(TestCase):
         self.assertTrue(sent["use_base_form"])
         self.assertTrue(sent["cast_openly"])
         self.assertEqual(sent["strain_commitment"], 1)
+        self.assertIs(sent["cast_pull"], pull)
 
     def test_soulfray_gate_does_not_deduct_anima(self) -> None:
         """When soulfray gate fires, anima is NOT deducted."""
