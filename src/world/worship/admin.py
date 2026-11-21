@@ -581,8 +581,11 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
     )
 
     def has_add_permission(self, request: HttpRequest) -> bool:
+        """Never: the changelist creates the one row on first open (``changelist_view``), and
+        every admin page asks this for its sidebar's add link, so an existence check here would
+        cost a query on every admin page."""
         del request
-        return not DivineInterventionConfig.objects.exists()
+        return False
 
     def has_delete_permission(
         self, request: HttpRequest, obj: DivineInterventionConfig | None = None
