@@ -1755,7 +1755,7 @@ def seed_strength_fight_spec(*, username: str) -> StrengthFightSeed:  # noqa: PL
         CombatOpponentFactory,
         CombatParticipantFactory,
     )
-    from world.combat.models import CombatParticipant  # noqa: PLC0415
+    from world.combat.models import CombatParticipant, ThreatPool  # noqa: PLC0415
     from world.combat.services import begin_declaration_phase  # noqa: PLC0415
     from world.conditions.factories import (  # noqa: PLC0415
         ConditionInstanceFactory,
@@ -1864,7 +1864,11 @@ def seed_strength_fight_spec(*, username: str) -> StrengthFightSeed:  # noqa: PL
                 intensity=20,
                 control=40,
                 effect_type=EffectTypeFactory(name="Cinder effect", base_power=10),
-                action_template=ActionTemplateFactory(check_type=magic_check),
+                # Named: a template is found by its name, and the factory's counter names
+                # ("Template0") are shared with every other seed's first template.
+                action_template=ActionTemplateFactory(
+                    name="Cinder Lance cast", check_type=magic_check
+                ),
             )
             CharacterTechniqueFactory(character=sheet, technique=technique)
             provision_latent_gift_thread(sheet, gift, resonances=[usual, kindled])
@@ -1888,8 +1892,13 @@ def seed_strength_fight_spec(*, username: str) -> StrengthFightSeed:  # noqa: PL
             CombatParticipantFactory(
                 encounter=encounter, character_sheet=sheet, status=ParticipantStatus.ACTIVE
             )
+            # Its own pool by name: the factory's default pool is named by a per-process
+            # counter ("Threat Pool 0"), which the thrown-strike seed's archer already took in
+            # this database, and a pool's name is unique.
+            drover_pool, _ = ThreatPool.objects.get_or_create(name="Ember Yard Drover Pool")
             drover = CombatOpponentFactory(
                 encounter=encounter,
+                threat_pool=drover_pool,
                 name=STRENGTH_FIGHT_OPPONENT,
                 health=200,
                 max_health=200,
