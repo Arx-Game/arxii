@@ -374,12 +374,21 @@ class FinishCeremonyAction(Action):
         # already recorded it). Defaults to sincere when unspecified.
         sincere = kwargs.get("sincere")
         try:
-            finish_ceremony(ceremony=ceremony, sincere=None if sincere is None else bool(sincere))
+            finished = finish_ceremony(
+                ceremony=ceremony, sincere=None if sincere is None else bool(sincere)
+            )
         except CeremonyError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(
-            success=True, message="The rite concludes; its honors are spoken and recorded."
-        )
+        message = "The rite concludes; its honors are spoken and recorded."
+        favor = finished.officiant_favor
+        data: dict[str, Any] = {"officiant_favor": 0, "owed_paid": 0}
+        if favor is not None:
+            data = {"officiant_favor": favor.credited, "owed_paid": favor.owed_paid}
+            earned = f"+{favor.credited} favor with {ceremony.being.name}"
+            if favor.owed_paid:
+                earned += f", and {favor.owed_paid} base favor paid what you owe"
+            message += f" As officiant you earn {earned}."
+        return ActionResult(success=True, message=message, data=data)
 
 
 @dataclass

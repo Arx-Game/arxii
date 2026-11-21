@@ -69,6 +69,8 @@ class RiteOutcome:
     #: How many given items meant something but did not count (past the rite's item limit
     #: or the week's sacrifice limit).
     items_uncounted: int = 0
+    #: Base favor of the award that paid owed favor first (#4349), so "+0" says where it went.
+    favor_owed_paid: int = 0
 
 
 def rite_ap_cost(rite: WorshipRite) -> int:
@@ -223,14 +225,16 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
             if resonance_amount != performance.resonance_granted:
                 performance.resonance_granted = resonance_amount
                 performance.save(update_fields=["resonance_granted"])
+        owed_paid = 0
         if favor_amount > 0:
             # #4333: the earning rate scales the award; record what was credited.
-            favor_amount = bump_devotion(
+            bump = bump_devotion(
                 character_sheet,
                 rite.being,
                 favor_amount,
                 source=FavorSource(kind=PledgeCreditSource.RITE, rite_performance=performance),
-            ).credited
+            )
+            favor_amount, owed_paid = bump.credited, bump.owed_paid
             performance.favor_granted = favor_amount
             performance.save(update_fields=["favor_granted"])
         grow_consecration(sites, rite)
@@ -242,6 +246,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
         favor_capped=capped,
         multiplier_percent=percent,
         consecration_bonus_percent=site_bonus,
+        favor_owed_paid=owed_paid,
     )
 
 

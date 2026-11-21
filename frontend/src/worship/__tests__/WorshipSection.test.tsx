@@ -16,6 +16,7 @@ vi.mock('../queries', () => ({
   useSendVision: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   usePledgeCards: vi.fn(() => ({ data: [] })),
   usePactCards: vi.fn(() => ({ data: [] })),
+  useOwedFavor: vi.fn(() => ({ data: [] })),
   useRenouncePact: vi.fn(() => ({ mutate: vi.fn(), isPending: false })),
   usePledges: vi.fn(() => ({ data: [] })),
   useServiceTerms: vi.fn(() => ({ data: undefined })),
@@ -61,6 +62,7 @@ const prayer = {
   being_name: 'The Shepherd',
   text: 'Keep this house.',
   devotion_granted: 1,
+  ap_spent: 5,
   dire_straits: '' as const,
   answered: false,
   prayed_at: new Date().toISOString(),
@@ -95,6 +97,26 @@ describe('WorshipSection', () => {
     expect(screen.queryByTestId('pledge-card')).not.toBeInTheDocument();
     expect(screen.queryByTestId('send-vision-button')).not.toBeInTheDocument();
     expect(screen.queryByTestId('prayers-list')).not.toBeInTheDocument();
+  });
+
+  it('says which being is ignoring the owner and what is owed', () => {
+    arm([], []);
+    vi.mocked(queries.useOwedFavor).mockReturnValueOnce({
+      data: [{ id: 9, being_id: 1, being_name: 'The Shepherd', owed_favor: 8 }],
+    } as never);
+    render(
+      <WorshipSection
+        sheetId={3}
+        characterName="Alaric"
+        isMyCharacter
+        isStaff={false}
+        publicWorship={null}
+      />,
+      { wrapper }
+    );
+    const line = screen.getByTestId('owed-favor');
+    expect(line).toHaveTextContent('The Shepherd');
+    expect(line).toHaveTextContent('8');
   });
 
   it('names the being on a revealed vision', () => {

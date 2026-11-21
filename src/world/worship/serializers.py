@@ -12,7 +12,15 @@ from world.clues.models import Clue
 from world.items.types import MeaningSignal
 from world.pacts.serializers import PactOfferSummarySerializer
 from world.stories.models import Episode
-from world.worship.models import Miracle, Pledge, Prayer, Vision, WorshippedBeing, WorshipRite
+from world.worship.models import (
+    DevotionStanding,
+    Miracle,
+    Pledge,
+    Prayer,
+    Vision,
+    WorshippedBeing,
+    WorshipRite,
+)
 from world.worship.types import InvocationDifficulty
 
 
@@ -28,6 +36,9 @@ class MiracleSerializer(serializers.ModelSerializer):
     """Staff-facing miracle catalog serializer (#2360)."""
 
     being_name = serializers.CharField(source="being.name", read_only=True)
+    min_outcome_tier = serializers.CharField(
+        source="min_outcome_tier.name", read_only=True, default="Success"
+    )
 
     class Meta:
         model = Miracle
@@ -39,6 +50,7 @@ class MiracleSerializer(serializers.ModelSerializer):
             "resonance_pool_cost",
             "intervention_trigger",
             "favor_threshold",
+            "min_outcome_tier",
             "narrative_text",
             "is_active",
             "sort_order",
@@ -86,6 +98,7 @@ class PrayerSerializer(serializers.ModelSerializer):
             "being_name",
             "text",
             "devotion_granted",
+            "ap_spent",
             "dire_straits",
             "answered",
             "prayed_at",
@@ -385,3 +398,18 @@ class HolySiteSerializer(serializers.Serializer):
     being_id = serializers.IntegerField()
     being_name = serializers.CharField()
     site = serializers.CharField()
+    ap_left = serializers.IntegerField()
+    ap_cap = serializers.IntegerField()
+
+
+class OwedFavorSerializer(serializers.ModelSerializer):
+    """Favor a character owes a being after a weaker answer (#4349): while any is owed the
+    being ignores their calls for intervention."""
+
+    being_id = serializers.IntegerField()
+    being_name = serializers.CharField(source="being.name")
+
+    class Meta:
+        model = DevotionStanding
+        fields = ["id", "being_id", "being_name", "owed_favor"]
+        read_only_fields = fields

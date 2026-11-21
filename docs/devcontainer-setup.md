@@ -519,16 +519,62 @@ together — they need to match.
 
 ## Phone access (optional)
 
-You can drive the container from your phone using the Claude mobile app's remote
-control feature. Inside the container (from `just dc-shell`):
+Claude Code's Remote Control lets the Claude mobile app (or claude.ai/code in a
+browser) drive a Claude Code session that runs inside this container. The session,
+its files and its tools stay in the container; the phone is only a window onto it.
+A phone that sleeps or loses signal therefore costs nothing: the session keeps
+working and the app picks it up again when you reopen it. What takes a session
+offline is the host PC sleeping or the `claude` process dying, so the setup below
+is about those two. Upstream reference:
+<https://code.claude.com/docs/en/remote-control>.
 
-```bash
-claude remote-control
+Remote Control needs Claude Code logged in with a claude.ai account on a paid plan
+(`/login` inside the container). An API key login does not support it. It makes
+outbound HTTPS requests only and opens no inbound port, so it needs no port
+forward, and the egress firewall's existing allowlist already covers it.
+
+**One-time setup:**
+
+1. On the phone, install the Claude app, sign in with the same account Claude Code
+   uses in the container, and allow notifications. On Android, exempt the app from
+   battery optimization. On iOS, check that a Focus mode is not silencing it.
+2. On the host, stop Windows from sleeping while plugged in (and set the lid-close
+   action to "Do nothing" on a laptop). Docker Desktop has to stay running. A host
+   that does sleep pauses the session, and the session reconnects when it wakes.
+3. In any Claude Code session in the container, run `/config` and turn on **Push
+   when actions required** and **Push when Claude decides**. The phone then buzzes
+   when Claude finishes or needs an answer, which is what makes a sleeping phone
+   workable. Permission prompts and questions wait until you answer them.
+
+**Each time you want a session on the phone,** start it inside a zellij session
+(see "Persistent sessions" above) so that a closed terminal does not take it
+offline:
+
+```powershell
+just dc-attach phone
 ```
 
-Scan the QR code with the Claude mobile app. You get the same isolated environment on
-your phone. The machine running the container must stay running and connected for the
-session to persist.
+```bash
+claude --rc arxii
+```
+
+Detach with `Ctrl-o d`. On the phone, open the Code tab in the Claude app and pick
+the session named `arxii`, or scan the QR code the terminal shows. A session that
+is already running joins the same way when you type `/rc` in it. To make every
+session reachable without the flag, set **Enable Remote Control for all sessions**
+to on in `/config`.
+
+Use `claude --rc` (or `/rc`) and not `claude remote-control`. The second form is a
+server mode that exits after about ten minutes without a network connection, where
+an interactive session keeps retrying for as long as the outage lasts.
+
+**Limits from the phone:** the app offers the Manual, Accept edits, Plan and Auto
+permission modes but cannot select bypass-permissions, and terminal-only commands
+such as `/resume` and `/plugin` do not run from it.
+
+**Recovery:** if the session reports that it could not reach the Remote Control
+server, run `/rc` in it again. If the `claude` process itself died, reattach with
+`just dc-attach phone` and run `claude --continue`.
 
 ## Running tests
 

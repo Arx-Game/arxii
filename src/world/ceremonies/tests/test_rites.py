@@ -24,9 +24,10 @@ from world.magic.models.grant import ResonanceGrant
 from world.roster.factories import grant_test_tenure
 from world.scenes.factories import PersonaFactory
 from world.traits.factories import CheckOutcomeFactory
-from world.worship.constants import BeingResonanceTier, RiteTier
+from world.worship.constants import BeingResonanceTier, FavorAwardKind, RiteTier
 from world.worship.factories import (
     BeingFacetFactory,
+    FavorOutcomeAwardFactory,
     RiteKindFactory,
     WorshipFeastDayFactory,
     WorshippedBeingFactory,
@@ -121,11 +122,19 @@ class OpenRiteCeremonyTests(RiteCeremonyTestBase):
 
 class FinishRiteCeremonyTests(RiteCeremonyTestBase):
     def test_finish_pays_the_tier_three_award_off_the_rites_roll(self) -> None:
+        FavorOutcomeAwardFactory(
+            config=get_devotion_config(),
+            kind=FavorAwardKind.OFFICIANT,
+            outcome_tier=self.success,
+            amount=10,
+        )
         ceremony = self._open(self.ordeal)
 
         with force_check_outcome(self.success):
-            finish_ceremony(ceremony=ceremony)
+            finished = finish_ceremony(ceremony=ceremony)
 
+        # The officiant is told what their own award credited (#4349).
+        self.assertEqual(finished.officiant_favor.credited, 10)
         performance = WorshipRitePerformance.objects.get(character_sheet=self.sheet)
         self.assertEqual(performance.rite, self.ordeal)
         self.assertEqual(performance.ceremony, ceremony)
@@ -134,9 +143,9 @@ class FinishRiteCeremonyTests(RiteCeremonyTestBase):
         self.assertEqual(performance.favor_granted, 9)
         grant = ResonanceGrant.objects.get(source=GainSource.WORSHIP_RITE)
         self.assertEqual(grant.source_worship_rite_performance, performance)
-        config = CeremonyConfig.objects.get()
         standing = DevotionStanding.objects.get(character_sheet=self.sheet, being=self.being)
-        self.assertEqual(standing.favor, config.devotion_officiant + 9)
+        # The officiant's own Success award (10) and the rite's tier 3 award (9).
+        self.assertEqual(standing.favor, 10 + 9)
 
     def test_a_second_rite_ceremony_the_same_week_pays_resonance_but_no_favor(self) -> None:
         with force_check_outcome(self.success):

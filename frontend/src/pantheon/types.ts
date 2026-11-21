@@ -110,6 +110,8 @@ export interface StaffPrayer {
   character_name: string;
   text: string;
   devotion_granted: number;
+  /** AP spent praying at a holy site (#4349). */
+  ap_spent: number;
   dire_straits: string;
   answered: boolean;
   place: string;

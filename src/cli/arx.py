@@ -1,6 +1,8 @@
 # scripts/arx.py
+from dataclasses import dataclass
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -421,17 +423,208 @@ def _kill_process(pid: int) -> bool:
         return False
 
 
+_MAX_ANCESTOR_DEPTH = 8
+_ZOMBIE_STATE = "Z"  # /proc/<pid>/stat state letter of a process that exited but is not reaped
+_DEFUNCT_MARKER = "<defunct>"  # what ps prints as the command of the same
+# A checkout nests its worktrees here; a path under this prefix is the worktree's, not ours.
+_NESTED_WORKTREES = (".claude", "worktrees")
+# `evennia test ...`, `arx test ...`, `manage.py test ...`, with optional flags before `test`.
+_TEST_RUN_PATTERN = re.compile(
+    r"(?:evennia|arx|manage\.py)(?:\.exe)?[\"']?(?:\s+-\S+)*\s+test(?:\s|$)"
+)
+
+
+@dataclass(frozen=True)
+class _ProcessInfo:
+    """What the cleanup knows about one candidate process.
+
+    ``cwd`` and ``interpreter`` are None where the platform does not let us read them
+    (Windows, macOS, or a process that exited or belongs to another user).
+    """
+
+    pid: int
+    cmdline: str
+    state: str = ""
+    cwd: Path | None = None
+    interpreter: Path | None = None
+    ancestor_cmdlines: tuple[str, ...] = ()
+    is_this_start: bool = False
+
+
+@dataclass(frozen=True)
+class _CleanupVerdict:
+    """Whether the cleanup kills a process, and the reason printed beside it."""
+
+    kill: bool
+    reason: str
+
+
+def _is_test_run(cmdline: str) -> bool:
+    """Check if a command line is a test run (`evennia test`, `arx test`)."""
+    return _TEST_RUN_PATTERN.search(cmdline) is not None
+
+
+def _inside_checkout(path: Path | None, root: Path) -> bool:
+    """Check if a path lies in this checkout and not in a worktree nested under it."""
+    if path is None:
+        return False
+    try:
+        relative = path.relative_to(root)
+    except ValueError:
+        return False
+    return relative.parts[: len(_NESTED_WORKTREES)] != _NESTED_WORKTREES
+
+
+def _cleanup_verdict(proc: _ProcessInfo, checkout_root: Path) -> _CleanupVerdict:
+    """Decide whether the start-up cleanup kills a process of this checkout.
+
+    The cleanup exists to remove this checkout's own stale server and portal after a
+    crash. It leaves test runs, dead processes and anything from another checkout alone.
+    The working directory names the checkout when it can be read, because a server's
+    working directory is its checkout's ``src``; the launched interpreter path
+    (``<checkout>/.venv/bin/python``) names it only when the working directory cannot be
+    read, so a process whose two paths disagree is never taken for this checkout's.
+    Where neither can be read, the checkout cannot be told and the process is treated
+    as stale, as it was before.
+    """
+    if proc.is_this_start:
+        return _CleanupVerdict(False, "this start command or what launched it")
+    if proc.state == _ZOMBIE_STATE or _DEFUNCT_MARKER in proc.cmdline:
+        return _CleanupVerdict(False, "already dead (defunct)")
+    if _is_test_run(proc.cmdline):
+        return _CleanupVerdict(False, "a test run")
+    if any(_is_test_run(parent) for parent in proc.ancestor_cmdlines):
+        return _CleanupVerdict(False, "started by a test run")
+    where = proc.cwd if proc.cwd is not None else proc.interpreter
+    if where is None:
+        return _CleanupVerdict(True, "checkout unknown, treated as stale")
+    if _inside_checkout(where, checkout_root):
+        return _CleanupVerdict(True, "belongs to this checkout")
+    return _CleanupVerdict(False, f"belongs to another checkout ({where})")
+
+
+def _read_proc_stat(pid: int) -> tuple[str, int] | None:
+    """Return (state letter, parent pid) from /proc/<pid>/stat, or None if unreadable."""
+    try:
+        raw = Path(f"/proc/{pid}/stat").read_text(encoding="utf-8", errors="replace")
+        # The fields after the ")" that closes the command name are: state, parent pid, ...
+        state, parent_pid, *_rest = raw.rpartition(")")[2].split()
+        return state, int(parent_pid)
+    except (OSError, ValueError):
+        return None
+
+
+def _read_proc_argv(pid: int) -> list[str]:
+    """Return the argument vector from /proc/<pid>/cmdline, or [] if unreadable."""
+    try:
+        raw = Path(f"/proc/{pid}/cmdline").read_bytes()
+    except OSError:
+        return []
+    return [part.decode("utf-8", errors="replace") for part in raw.split(b"\0") if part]
+
+
+def _read_proc_cwd(pid: int) -> Path | None:
+    """Return the resolved working directory of a process, or None if unreadable."""
+    try:
+        return Path(f"/proc/{pid}/cwd").readlink().resolve()
+    except OSError:
+        return None
+
+
+def _interpreter_path(argv: list[str], cwd: Path | None) -> Path | None:
+    """Return the interpreter path as launched, with its directory resolved.
+
+    /proc/<pid>/exe is no use here: every venv's python resolves to the same shared
+    interpreter outside any checkout. The launched path (``<checkout>/.venv/bin/python``)
+    is what names the checkout, so only its directory is resolved and the final
+    symlink is kept.
+    """
+    if not argv:
+        return None
+    launched = Path(argv[0])
+    if not launched.is_absolute():
+        if cwd is None:
+            return None
+        launched = cwd / launched
+    return launched.parent.resolve() / launched.name
+
+
+def _ancestor_pids(pid: int) -> tuple[int, ...]:
+    """Return the pids of a process's parents, nearest first, stopping at init."""
+    found: list[int] = []
+    stat = _read_proc_stat(pid)
+    for _ in range(_MAX_ANCESTOR_DEPTH):
+        if stat is None or stat[1] <= 1:
+            break
+        found.append(stat[1])
+        stat = _read_proc_stat(stat[1])
+    return tuple(found)
+
+
+def _ancestor_cmdlines(pid: int) -> tuple[str, ...]:
+    """Return the command lines of a process's parents, nearest first.
+
+    A daemonized server is reparented to init, so this only protects processes that
+    still have a living parent, such as the workers a test run forks.
+    """
+    return tuple(" ".join(_read_proc_argv(parent)) for parent in _ancestor_pids(pid))
+
+
+def _this_start_lineage() -> frozenset[int]:
+    """Return the pids of this ``arx start`` and the shells and tools that launched it."""
+    return frozenset({os.getpid(), *_ancestor_pids(os.getpid())})
+
+
+def _describe_process(proc: dict, this_start: frozenset[int] = frozenset()) -> _ProcessInfo:
+    """Build a _ProcessInfo for a discovered process, reading /proc where it exists."""
+    pid = proc["pid"]
+    stat = _read_proc_stat(pid)
+    cwd = _read_proc_cwd(pid)
+    argv = _read_proc_argv(pid)
+    return _ProcessInfo(
+        pid=pid,
+        # /proc holds the whole argument vector; ps and wmic text may be cut short.
+        cmdline=" ".join(argv) or proc["cmdline"],
+        state=stat[0] if stat else "",
+        cwd=cwd,
+        interpreter=_interpreter_path(argv, cwd),
+        ancestor_cmdlines=_ancestor_cmdlines(pid),
+        is_this_start=pid in this_start,
+    )
+
+
+def _process_role(cmdline: str) -> str:
+    """Name what a process is for the cleanup report: server, portal, test run or other."""
+    if _is_test_run(cmdline):
+        return "test run"
+    for role in ("portal", "server"):
+        if f"{role}.py" in cmdline:
+            return role
+    return "evennia process"
+
+
 def _cleanup_stale_processes() -> int:
-    """Find and kill any stale Evennia processes. Returns count of killed processes."""
-    processes = _find_evennia_processes()
+    """Kill this checkout's stale Evennia processes. Returns count of killed processes.
+
+    Prints one line per candidate: what was killed and what was left alone and why, so a
+    developer can see that another checkout's server or test run was not touched.
+    """
+    this_start = _this_start_lineage()
+    processes = [_describe_process(proc, this_start) for proc in _find_evennia_processes()]
     if not processes:
         return 0
 
-    typer.echo(f"Found {len(processes)} stale Evennia process(es), cleaning up...")
     killed = 0
     for proc in processes:
-        if _kill_process(proc["pid"]):
+        verdict = _cleanup_verdict(proc, PROJECT_ROOT)
+        role = _process_role(proc.cmdline)
+        if not verdict.kill:
+            typer.echo(f"  left alone: pid {proc.pid} ({role}): {verdict.reason}")
+        elif _kill_process(proc.pid):
             killed += 1
+            typer.echo(f"  killed: pid {proc.pid} ({role}): {verdict.reason}")
+        else:
+            typer.echo(f"  could not kill: pid {proc.pid} ({role}): {verdict.reason}")
 
     if killed:
         typer.echo(f"Killed {killed} stale process(es).")
@@ -463,12 +656,13 @@ def _cleanup_pid_files() -> list[str]:
 def start():
     """Start the Evennia server.
 
-    Automatically cleans up any stale Evennia processes before starting
-    to prevent duplicate portal/server instances.
+    Automatically cleans up this checkout's stale Evennia server and portal
+    processes before starting to prevent duplicate instances. Test runs and
+    processes of other checkouts or worktrees are left alone.
     """
     setup_env()
 
-    # Auto-cleanup: kill any stale Evennia processes before starting
+    # Auto-cleanup: kill this checkout's stale Evennia processes before starting
     _cleanup_stale_processes()
 
     cmd = ["evennia", "start"]

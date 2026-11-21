@@ -27,7 +27,6 @@ from world.worship.models import (
 )
 from world.worship.services import (
     active_patronage_for,
-    best_patronage_favor,
     bump_devotion,
     convert_public_worship,
     establish_patronage,
@@ -222,7 +221,7 @@ class EstablishPatronageTests(TestCase):
 
 
 class ActivePatronageTests(TestCase):
-    """active_patronage_for and best_patronage_favor (#2550)."""
+    """active_patronage_for and the Chosen reader ``chosen_patronages_for`` (#2550, #4341)."""
 
     @classmethod
     def setUpTestData(cls) -> None:
@@ -250,29 +249,34 @@ class ActivePatronageTests(TestCase):
         self.assertEqual(patronages[0].being, self.being_b)
         self.assertEqual(patronages[1].being, self.being_a)
 
-    def test_best_patronage_favor_returns_highest(self) -> None:
+    def _chosen_favors(self) -> list[int]:
+        from world.worship.favor_services import chosen_patronages_for
+
+        return [standing.favor for standing in chosen_patronages_for(self.sheet)]
+
+    def test_the_chosen_reader_returns_the_highest_first(self) -> None:
         make_chosen(self.sheet, self.being_a)
         bump_devotion(self.sheet, self.being_a, 20)
         # #4333: the Chosen earn at 200% (100% + the Chosen distinction's 100%, #4341).
-        self.assertEqual(best_patronage_favor(self.sheet), 40)
+        self.assertEqual(self._chosen_favors(), [40])
 
-    def test_best_patronage_favor_ignores_a_pact(self) -> None:
-        """#4341: the anima ritual's Chosen favor reads Chosen patronages only."""
+    def test_the_chosen_reader_ignores_a_pact(self) -> None:
+        """#4341: the anima ritual's Chosen share reads Chosen patronages only."""
         establish_patronage(self.sheet, self.being_a, valence=PatronageValence.PACT)
         bump_devotion(self.sheet, self.being_a, 20)
-        self.assertEqual(best_patronage_favor(self.sheet), 0)
+        self.assertEqual(self._chosen_favors(), [])
         self.assertEqual(len(active_patronage_for(self.sheet)), 1)
 
-    def test_best_patronage_favor_zero_when_no_patronage(self) -> None:
-        self.assertEqual(best_patronage_favor(self.sheet), 0)
+    def test_the_chosen_reader_is_empty_with_no_patronage(self) -> None:
+        self.assertEqual(self._chosen_favors(), [])
 
-    def test_best_patronage_favor_excludes_released(self) -> None:
+    def test_the_chosen_reader_excludes_released(self) -> None:
         standing = establish_patronage(
             self.sheet, self.being_a, valence=PatronageValence.DEVOTIONAL
         )
         bump_devotion(self.sheet, self.being_a, 20)
         release_patronage(standing)
-        self.assertEqual(best_patronage_favor(self.sheet), 0)
+        self.assertEqual(self._chosen_favors(), [])
 
 
 class ReleasePatronageTests(TestCase):
@@ -302,7 +306,6 @@ class ChosenFavorConfigTests(TestCase):
         config = get_chosen_favor_config()
         self.assertEqual(config.pk, 1)
         self.assertEqual(config.anima_recovery_threshold, 10)
-        self.assertEqual(config.anima_recovery_bonus, 5)
 
     def test_get_chosen_favor_config_idempotent(self) -> None:
         first = get_chosen_favor_config()

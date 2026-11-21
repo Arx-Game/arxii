@@ -73,8 +73,10 @@ from somewhere else: a CI run, a run on a larger machine, or the maintainer.
 ## 2. Choose the form, then start it
 
 There are two forms. Check which one you can use, by process, not only by
-port: `arx start` kills every process whose command line names `evennia`,
-`twistd`, `server.py` or `portal.py`, on any port.
+port: `arx start` kills only the stale server and portal of its own checkout and
+leaves test runs and other worktrees' processes alone (#5240), but every
+checkout shares ports 4001 and 4002, so another worktree's server still blocks
+yours.
 
 Run these as two separate commands (a compound command is refused):
 
@@ -101,8 +103,9 @@ on the PATH.
 Use it when :4001 or :4002 is already in use, on the small machine, or on the
 solo laptop. Something listening there is almost always another session's
 server, running another worktree's code, not yours. **Do not run
-`just start`, and never `uv run arx stop --hard`**: `arx start` and
-`arx stop --hard` kill every Evennia process in the container. Do not operate
+`just start`, and never `uv run arx stop --hard`**: `arx stop --hard` kills
+every Evennia process in the container, and `just stop` stops whichever server
+holds the shared ports. Do not operate
 your change through that server either; it does not have your code.
 
 Write a short test that drives the real URL, view, serializer and service
@@ -164,8 +167,8 @@ the server would use `arxiidev`.
    container.
 3. Start, with the busy check and the start in **one script file** run as one
    command. A check from an earlier call is stale: another session can start
-   between it and your start, and `arx start` then kills that session's server
-   or test run (#4670). The harness refuses a compound command, so write the
+   between it and your start, and your server then fights that session's for the
+   ports (#4670; before #5240 `arx start` also killed that session's test run). The harness refuses a compound command, so write the
    script, then run it:
 
    ```bash

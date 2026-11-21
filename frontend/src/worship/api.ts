@@ -12,6 +12,7 @@ import { dispatchCanvasAction, type DispatchResult } from '@/map-canvas/dispatch
 import type {
   HolySite,
   InvocationOptions,
+  OwedFavor,
   PactCard,
   Pledge,
   PledgeCard,
@@ -54,9 +55,34 @@ export async function sendVision(payload: VisionCreate): Promise<Vision> {
   return (await res.json()) as Vision;
 }
 
-/** Dispatch `pray` as `characterId`: `{ being: id, text }`. */
-export function pray(characterId: number, being: number, text: string): Promise<DispatchResult> {
-  return dispatchCanvasAction(characterId, 'pray', { being, text });
+/** What a prayer can carry beyond its words (#4349). */
+export interface PrayOptions {
+  /** Action points spent praying at a holy site of the being; earns favor. */
+  ap?: number;
+  /** The persona of a character present in dire straits, prayed for. */
+  onBehalfOfPersonaId?: number;
+}
+
+/** Dispatch `pray` as `characterId`: `{ being: id, text, ap?, on_behalf_of_persona_id? }`. */
+export function pray(
+  characterId: number,
+  being: number,
+  text: string,
+  options: PrayOptions = {}
+): Promise<DispatchResult> {
+  const payload: Record<string, unknown> = { being, text };
+  if (options.ap) payload.ap = options.ap;
+  if (options.onBehalfOfPersonaId != null) {
+    payload.on_behalf_of_persona_id = options.onBehalfOfPersonaId;
+  }
+  return dispatchCanvasAction(characterId, 'pray', payload);
+}
+
+/** GET /api/worship/owed-favor/ (#4349): the beings a character owes favor to. */
+export async function fetchOwedFavor(sheetId: number): Promise<OwedFavor[]> {
+  const res = await apiFetch(`/api/worship/owed-favor/?character_sheet=${sheetId}`);
+  if (!res.ok) await throwApiError(res, 'Failed to load what you owe.');
+  return unwrap((await res.json()) as Paginated<OwedFavor> | OwedFavor[]);
 }
 
 /**
