@@ -638,7 +638,8 @@ class WorkingACombatCastInAChosenResonance(_AYsmayWithATwoResonanceGift):
 
         fled = self.web(self.ysmay, "combat_flee")
 
-        self.assertTrue(fled.deferred)
+        # A registry action runs at once and records the declaration; it is never "deferred".
+        self.assertTrue(fled.detail.success, fled.detail.message)
         self.assertIsNone(self.declared().cast_resonance)
 
     def test_a_passive_declared_after_the_thread_lost_her_pick_goes_through(self) -> None:
