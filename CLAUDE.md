@@ -122,9 +122,12 @@ back from the creating command's own stdout.
   sequence, one `max_migration.txt`). CI fixes the routine case: when the PR's only
   conflict is `max_migration.txt` and its migrations are one linear chain, the
   `migration-conflict-rebase` workflow renumbers them after main's tip, proves it,
-  pushes and re-arms the queue (#4879, ADR-4879). Pull its commit. When it
-  refuses (its PR comment says why), fix the collision with
-  `arx manage rebase_migration arxii`
+  pushes and re-arms the queue (#4879, ADR-4879). Pull its commit. If it has not
+  run and `max_migration.txt` is the only conflict, run `just
+  migration-rebase-like-bot`: the same transform under your own identity, so a
+  review report on the PR still carries forward (#5254). When it refuses (its PR
+  comment says why), fix the collision with `arx manage rebase_migration arxii`,
+  then refresh any visual review
   (leave `max_migration.txt`'s conflict markers IN - the tool reads them, and it
   renames YOUR side: it reads `MERGE_HEAD` to tell a merge from a rebase and
   swaps the sides itself, so never swap them by hand; a hand swap double-flips

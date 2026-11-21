@@ -32,7 +32,12 @@ nothing is pushed.
 no longer trusts the bot's name to carry a visual review across a renumbering merge. It tries
 the same independent rebuild on any two-parent merge of an ancestor of main that is not a
 clean merge, for any author, and carries the report only when the whole tree is identical. A
-hand merge that matches the rebuild passes, and one with any other change is refused.
+hand merge that matches the rebuild passes, and one with any other change is refused,
+including a change of formatting. The same transform runs by hand as `just
+migration-rebase-like-bot`, which commits under the caller's own identity and so takes
+this path. `arx manage rebase_migration` writes the dependency list in a different layout,
+so a merge made with it stays refused and needs a fresh review. The comparison stays
+byte-identical on purpose: making it tolerant of formatting would widen what it vouches for.
 
 **Why:** the single-app collapse (ADR-0195) made every pair of migration-bearing PRs
 collide. Each merge then dropped the next PR from the queue until someone ran the manual

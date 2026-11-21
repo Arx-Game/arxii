@@ -79,7 +79,10 @@ files, frontend `__tests__/` directories), documents (`docs/` and any `*.md`
 file) or `.github/`. They also include clean main merges the gate reproduces, and
 merges of main that renumber the branch's migrations, whether the migration bot or
 a person made them, when the gate rebuilds the identical tree from the trusted
-transformer. A commit that touches any other path changes application code and
+transformer. A person gets that tree by running `just migration-rebase-like-bot`
+when `max_migration.txt` is the only conflict; a merge made with
+`arx manage rebase_migration arxii` is not byte-identical to it and needs a fresh
+review. A commit that touches any other path changes application code and
 requires a fresh review and an updated report, as does a merge of main whose
 conflict resolution is anything beyond that renumbering. Changing the revision in
 a report is not a substitute for review.

@@ -493,7 +493,10 @@ red, so do not treat it as cleanup to get to later:
    renders: commits that touch only test files, documents or `.github/`; clean
    main merges that it reproduces; and merges of main that renumber the
    branch's migrations, whether the bot or a person made them, provided the
-   gate rebuilds the same tree from main. Test files are `src/integration_tests/`,
+   gate rebuilds the same tree from main (`just migration-rebase-like-bot` makes
+   that merge by hand under your own identity; `arx manage rebase_migration`
+   does not produce the same bytes, so a merge made with it needs a fresh
+   review). Test files are `src/integration_tests/`,
    any `tests/` directory under `src/` or `tools/`, `frontend/e2e/`,
    `frontend/src/test/`, frontend `*.test.ts` and `*.test.tsx` files, and
    frontend `__tests__/` directories. Documents are `docs/` and any `*.md`
