@@ -140,6 +140,7 @@ import { StaffApplicationsPage } from './staff/pages/StaffApplicationsPage';
 import { StaffRosterApplicationsPage } from './staff/pages/StaffRosterApplicationsPage';
 import { StaffRosterApplicationDetailPage } from './staff/pages/StaffRosterApplicationDetailPage';
 import { StaffInvitesPage } from './staff/pages/StaffInvitesPage';
+import { GameClockPage } from './staff/clock/GameClockPage';
 import { StaffApplicationDetailPage } from './staff/pages/StaffApplicationDetailPage';
 import { StaffFeedbackPage } from './staff/pages/StaffFeedbackPage';
 import { StaffFeedbackDetailPage } from './staff/pages/StaffFeedbackDetailPage';
@@ -885,6 +886,14 @@ function App() {
             element={
               <StaffRoute>
                 <StaffRosterApplicationDetailPage />
+              </StaffRoute>
+            }
+          />
+          <Route
+            path="/staff/clock"
+            element={
+              <StaffRoute>
+                <GameClockPage />
               </StaffRoute>
             }
           />
