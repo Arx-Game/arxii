@@ -476,6 +476,10 @@ class IdentityOpenerTest(PasteTestCase):
         assert headed.offers[0].group == "Temperament"
         (long,) = parse_table(LAP + "identity:" + "x" * 61)
         assert long.status == "error"
+        # A card has one line on the Identity stage.
+        (twice,) = parse_table(LAP + "identity; identity:Temperament")
+        assert twice.status == "error"
+        assert "once" in twice.notes[0]
 
     def test_create_makes_the_identity_line_with_its_heading_and_credit(self):
         self.client.force_login(self.author)

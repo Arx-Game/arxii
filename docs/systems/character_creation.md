@@ -269,14 +269,20 @@ readers (see "The Final Touches chapter" below). `IDENTITY` (#5255, owner ruling
 2026-11-21) is the chapter the Identity stage's Personality block reads: it is its own
 opener, so a line there sets no opener field (`DistinctionOffer.chapter_opener_fields` is
 empty and `clean()` refuses any), every active line shows to every draft, and its
-`opener_label` is the chapter's own name. A line's `group` is the heading its card is
+`opener_label` is the chapter's own name. Because every line is open to everyone, a line
+there is always a choice (`clean()` refuses bundled and carried), and a card has at most
+one (the partial unique constraint `distinctionoffer_one_identity_line`; with no opener a
+second line would be the same line, drawn twice and sharing one natural key). A line's `group` is the heading its card is
 listed under. Staff place cards there three ways: a row on the Distinction Builder, the
 paste table's `identity` or `identity:<heading>` token for a new card, and, for cards that
 already exist, the Distinction list's "Offer on the Identity stage" action
-(`web.admin.authoring.offers.offer_on_identity`: one line per selected card, a card
-already placed left as it is, the lines credited to the operator). No migration places
-them: an offer line is authored content. The Required content row
-`character_creation.identity_cards` flags a stage with no active line.
+(`web.admin.authoring.offers.offer_on_identity`, superusers only like the Builder and the
+paste: one line per selected card; a card already placed, one whose line is switched off
+and one that is not active are left as they are and named; the lines are credited to the
+operator, who is linked to a contributor on the spot when they have none; one admin log
+entry per card). No migration places them: an offer line is authored content. The
+Required content row `character_creation.identity_cards` flags a stage with no active
+line a player can choose.
 
 ```python
 from world.character_creation.offers import (
@@ -485,7 +491,9 @@ Distinction Builder; the leaf heads it with that card's name and reads the gate 
 draft's `final_touches_prompts`. On the server `enemies.enemy_is_open(draft)` is the gate
 and `enemies.enemy_answer(draft)` the one read of `draft_data.enemy`: with no such card
 held it returns nothing, so the saved enemy is not priced, opens no reason or degree offer
-(`offers._context`) and is not written at finalize. The saved answer itself is kept and
+(`offers._context`) and is not written at finalize. `reconcile_offer_picks` repeats its
+pass while the held cards keep changing (`_RECONCILE_ROUNDS`), so a pass that drops the
+enemy card (its Glimpse tag unpicked) also drops the mark the enemy's degree bundled. The saved answer itself is kept and
 counts again when a card asks for it. `draft_data.enemy` is `{kind, organization_id, name, power_tier,
 degree, why, public_line}`. `enemy_offers(draft)` assembles what may be picked: every
 visible answered GROUP question's organization and every PERSON question's figure from the

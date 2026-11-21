@@ -3,7 +3,12 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import AccountFactory
-from world.character_creation.constants import OfferArrival, OfferChapter, TraditionState
+from world.character_creation.constants import (
+    FinalTouchesPrompt,
+    OfferArrival,
+    OfferChapter,
+    TraditionState,
+)
 from world.character_creation.factories import (
     AppearanceSectionFactory,
     BeginningsFactory,
@@ -216,6 +221,45 @@ class OffersForTests(TestCase):
         reconcile_offer_picks(draft)
         assert draft.draft_data["distinctions"] == []
         assert draft.draft_data["enemy"]["degree"] == "ruined"
+
+    def test_the_degree_mark_leaves_in_the_same_pass_that_drops_the_enemy_card(self):
+        """#5255: the card is held through a Glimpse line, and the player unpicks the tag.
+        The pass that drops the card also drops the mark its enemy's degree bundled; the
+        mark is not left for the next request to tidy."""
+        grudge = DistinctionFactory(
+            name="Old Grudge", cost_per_rank=0, final_touches_prompt=FinalTouchesPrompt.ENEMY
+        )
+        grudge_line = DistinctionOfferFactory(
+            distinction=grudge, chapter=OfferChapter.GLIMPSE, glimpse_tag=self.mark
+        )
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Marked", cost_per_rank=0),
+            chapter=OfferChapter.ENEMY,
+            arrives_as=OfferArrival.BUNDLED,
+            enemy_degree="ruined",
+        )
+        held = {
+            "distinction_id": grudge.pk,
+            "distinction_name": grudge.name,
+            "rank": 1,
+            "cost": 0,
+            "offer_ids": [grudge_line.pk],
+            "sources": ["Mark"],
+            "arrivals": ["choice"],
+        }
+        draft = self._draft(
+            glimpse_tag_ids=[self.mark.id],
+            enemy={"kind": "group", "degree": "ruined"},
+            distinctions=[held],
+        )
+        reconcile_offer_picks(draft)
+        names = sorted(e["distinction_name"] for e in draft.draft_data["distinctions"])
+        assert names == ["Marked", "Old Grudge"]
+
+        draft.draft_data["glimpse_tag_ids"] = []
+        dropped = reconcile_offer_picks(draft)
+        assert draft.draft_data["distinctions"] == []
+        assert sorted(dropped) == ["Marked", "Old Grudge"]
 
     def test_an_identity_line_shows_to_every_draft(self):
         """#5255: the Identity chapter is its own opener, and a switched-off line is absent."""

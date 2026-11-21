@@ -1036,10 +1036,13 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   `origin_choice`, `prompt`, `enemy_reason`, `enemy_degree`,
   `appearance_section`, `feature_rows`, `beat`, and since #4846 `unlocked_by`, the
   Final Touches chapter's card; the Identity chapter, #5255, accepts none, so its row
-  shows no opener and the "not opened by anything" check skips it (cards that already
-  exist are placed there many at once by the Distinction list's "Offer on the Identity
-  stage" action, `authoring.offers.offer_on_identity`, a card already placed left as it
-  is; tests `tests/test_offer_on_identity.py`); since #4872 each row also carries `group`, the heading a
+  shows no opener and the "not opened by anything" check skips it; a card has one line
+  there and it is always a choice, both refused by the model (cards that already exist
+  are placed there many at once by the Distinction list's "Offer on the Identity stage"
+  action, `authoring.offers.offer_on_identity`: superusers only, credited to the operator
+  with a contributor linked on the spot as the paste does, one log entry per card; a card
+  already placed, switched off there, or not active is left as it is and named; tests
+  `tests/test_offer_on_identity.py`); since #4872 each row also carries `group`, the heading a
   Backgrounds answer is listed under, and the "More" fieldset `asks_figure_name`) and
   `page.html`'s cascade shows the one(s) the row's
   chapter accepts (`live.opener_field_map` is chapter -> list now; the enemy
@@ -1062,7 +1065,8 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   immune:Target`, offered under as `rules|devotions|fears|reason:<name>|
   degree:ruined|degree:destroy|appearance:<section>|glimpse:<tag>|
   lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>|unlocked:<card>|identity|
-  identity:<heading>` (a card picked on the Identity stage, #5255), first look for
+  identity:<heading>` (a card picked on the Identity stage, #5255; one such token per
+  row), first look for
   as Beginning names; a `beat:` token (#4655) looks up an existing Life beat by
   life stage and name and creates the Backgrounds answer on it, never the beat; an
   a leading star on a first-look name (`*Reavers`, #4865) also marks that pin as part of the

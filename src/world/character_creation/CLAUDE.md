@@ -49,8 +49,9 @@ Character creation is a multi-stage process that guides players through creating
    `forms.FormTraitOption.color_hex` for the page's swatches
 9. **Identity** - Name (shown; asked on Origin), concept, quote, the Personality cards
    (#5255, ADR-5255: `OfferChapter.IDENTITY` lines, a chapter that takes no opener, so
-   every active line shows; staff place cards there on the Distinction Builder, or many
-   at once with the Distinction list's "Offer on the Identity stage" action), worship
+   every active line shows, a line is always a choice and a card has one; staff place
+   cards there on the Distinction Builder, or many at once with the Distinction list's
+   "Offer on the Identity stage" action), worship
 10. **Final Touches** - The Background (#5178, ADR-5178: one free text,
     `draft_data.background`, written to `Profile.background` word for word at finalize;
     it replaced the per-stage notes and Recent History, whose keys the draft serializer
@@ -60,7 +61,9 @@ Character creation is a multi-stage process that guides players through creating
     reason and degree open offers, asked only of a draft holding a card that starts the
     character with an enemy (#5255, ADR-5255: `FinalTouchesPrompt.ENEMY` on the card;
     `enemies.enemy_answer` is the one read of `draft_data.enemy` and is empty without
-    such a card, so the enemy is then not priced, opens no offer and is not written),
+    such a card, so the enemy is then not priced, opens no offer and is not written;
+    `reconcile_offer_picks` repeats its pass while the held cards keep changing, so the
+    degree's mark leaves in the pass that drops the card),
     the Officially dead door (#4396, opened by a held
     Presumed Dead since #4856), the card-unlocked
     chapter (#4846: `OfferChapter.FINAL_TOUCHES` lines opened by `unlocked_by`, and the

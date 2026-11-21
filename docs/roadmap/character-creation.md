@@ -16,8 +16,9 @@ rest under "See N more", or every card under its heading once staff group the li
 reads a new offer chapter, Identity, which takes no opener, and the Distinction Builder
 and its paste table (`identity`, `identity:<heading>`) place cards there; for cards that
 already exist, the Distinction list has an "Offer on the Identity stage" action that
-places every selected card at once. Migration `identity_chapter_and_enemy_prompt` changes
-choices and help text only. The Required content page gains a row for an Identity stage
+places every selected card at once. A card has one line there and it is always a choice.
+Migration `identity_chapter_and_enemy_prompt` changes choices and help text and adds the
+one-line-per-card constraint; it writes no row. The Required content page gains a row for an Identity stage
 with no card, and its row for enemy reasons is a gap only once a card asks for an enemy.
 See ADR-5255, which supersedes ADR-0279 in part.
 

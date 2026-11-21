@@ -17,6 +17,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from django import forms
+from django.contrib.admin.models import CHANGE, LogEntry
 from django.db import transaction
 
 from web.admin.authoring.copy import price_text
@@ -99,37 +100,58 @@ def preview_from_offers(offers: Iterable[DistinctionOffer]) -> PreviewLine | Non
     )
 
 
+@dataclass(frozen=True)
+class IdentityPlacement:
+    """What ``offer_on_identity`` did with the cards it was given (#5255)."""
+
+    created: list[DistinctionOffer]
+    #: Cards with an active Identity line already.
+    already: list[Distinction]
+    #: Cards whose Identity line staff switched off; left off.
+    switched_off: list[Distinction]
+    #: Cards that are not active; a player could not take one, so it is not placed.
+    inactive: list[Distinction]
+
+
 def offer_on_identity(
-    distinctions: Iterable[Distinction], contributor: ContentContributor | None
-) -> tuple[list[DistinctionOffer], list[Distinction]]:
-    """Place each card on the Identity stage, and say which already were (#5255).
+    distinctions: Iterable[Distinction], contributor: ContentContributor, user_id: int
+) -> IdentityPlacement:
+    """Place each card on the Identity stage, and say which were left as they were (#5255).
 
     The Identity chapter takes no opener, so placing a card there is one offer line with
     nothing else to choose; this is the many-at-once form of adding that row on the
     Distinction Builder, for the Distinction list's "Offer on the Identity stage" action.
-    A card with an Identity line already, active or switched off, is left as it is and
-    returned in the second list. New lines are taken by choice, sorted after the lines
-    already there in the order given, and credited to ``contributor`` when there is one.
+    A card with an Identity line already is left as it is, a switched-off line included
+    (running the action is no way round a line staff turned off), and so is a card that
+    is not active. New lines are taken by choice, sorted after the lines already there in
+    the order given, credited to ``contributor``, and logged once per card under
+    ``user_id``. One transaction; the model's own constraint refuses a second line if
+    two operators run this at once.
     """
     cards = list(distinctions)
-    placed = set(
-        DistinctionOffer.objects.filter(
-            chapter=OfferChapter.IDENTITY, distinction__in=cards
-        ).values_list("distinction_id", flat=True)
-    )
-    last = (
-        DistinctionOffer.objects.filter(chapter=OfferChapter.IDENTITY)
-        .order_by("-sort_order")
-        .values_list("sort_order", flat=True)
-        .first()
-    )
-    next_order = 0 if last is None else last + 1
     created: list[DistinctionOffer] = []
     already: list[Distinction] = []
+    switched_off: list[Distinction] = []
+    inactive: list[Distinction] = []
     with transaction.atomic():
+        placed = dict(
+            DistinctionOffer.objects.filter(
+                chapter=OfferChapter.IDENTITY, distinction__in=cards
+            ).values_list("distinction_id", "is_active")
+        )
+        last = (
+            DistinctionOffer.objects.filter(chapter=OfferChapter.IDENTITY)
+            .order_by("-sort_order")
+            .values_list("sort_order", flat=True)
+            .first()
+        )
+        next_order = 0 if last is None else last + 1
         for card in cards:
             if card.pk in placed:
-                already.append(card)
+                (already if placed[card.pk] else switched_off).append(card)
+                continue
+            if not card.is_active:
+                inactive.append(card)
                 continue
             offer = DistinctionOffer.objects.create(
                 distinction=card,
@@ -138,7 +160,13 @@ def offer_on_identity(
                 sort_order=next_order,
             )
             next_order += 1
-            if contributor is not None:
-                stamp_written(offer, contributor)
+            stamp_written(offer, contributor)
             created.append(offer)
-    return created, already
+        if created:
+            LogEntry.objects.log_actions(
+                user_id,
+                [offer.distinction for offer in created],
+                CHANGE,
+                change_message="Offered on the Identity stage (#5255)",
+            )
+    return IdentityPlacement(created, already, switched_off, inactive)

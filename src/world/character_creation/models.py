@@ -2974,7 +2974,16 @@ class DistinctionOffer(
                     }
                 ),
                 name="distinctionoffer_at_most_one_opener",
-            )
+            ),
+            # Identity takes no opener (#5255), so nothing else tells two of a card's
+            # lines there apart: the card would be drawn twice, and the two rows would
+            # share one natural key. A partial unique index, PostgreSQL and SQLite both.
+            models.UniqueConstraint(
+                fields=["distinction"],
+                condition=models.Q(chapter=OfferChapter.IDENTITY),
+                name="distinctionoffer_one_identity_line",
+                violation_error_message="This card is already placed on the Identity stage.",
+            ),
         ]
 
     class NaturalKeyConfig:
@@ -3084,6 +3093,12 @@ class DistinctionOffer(
             raise ValidationError({"enemy_degree": "Only ruined and destroy mark the character."})
         if self.unlocked_by_id is not None and self.unlocked_by_id == self.distinction_id:
             raise ValidationError({"unlocked_by": "A card does not unlock itself."})
+        if self.chapter == OfferChapter.IDENTITY and self.arrives_as != OfferArrival.CHOICE:
+            # Every Identity line is open to every draft (#5255), so a bundled or carried
+            # one would hand the card to every character there is.
+            raise ValidationError(
+                {"arrives_as": "A card on the Identity stage is always a choice."}
+            )
 
 
 class OfferFirstLook(SharedMemoryModel):

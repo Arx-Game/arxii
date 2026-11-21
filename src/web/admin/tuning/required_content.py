@@ -4969,13 +4969,14 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.REQUIRED,
             consumer="IdentityStage's Personality block (#5255): the Identity chapter's offers",
             consequence=(
-                "The Identity stage shows no Personality block, so a personality card can "
-                "be taken nowhere in character creation. Select the cards on the "
-                'Distinction list and run "Offer on the Identity stage".'
+                "The Identity stage shows no Personality block, so the cards meant to be "
+                "picked there cannot be. Select the cards on the Distinction list and run "
+                '"Offer on the Identity stage".'
             ),
             probe=FilteredRowProbe(
                 label="DistinctionOffer",
-                filters=(("chapter", "identity"), ("is_active", True)),
+                # The same three things the page asks of a line it lists.
+                filters=(("chapter", "identity"), ("is_active", True), ("arrives_as", "choice")),
                 absent_detail="No active offer line is on the Identity chapter.",
             ),
             admin_model="Distinction",

@@ -331,6 +331,11 @@ def _parse_offers(raw: str, row: RowSpec) -> None:
         spec, why = _opener_spec(kind.strip().lower(), value.strip(), token)
         if spec is None:
             row.fail(why)
+        elif spec.chapter == OfferChapter.IDENTITY and any(
+            o.chapter == OfferChapter.IDENTITY for o in row.offers
+        ):
+            # A card has one line on the Identity stage (#5255); a second would draw it twice.
+            row.fail("a card is placed on the Identity stage once")
         else:
             row.offers.append(spec)
 

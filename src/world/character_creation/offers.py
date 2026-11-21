@@ -1365,15 +1365,17 @@ def _drop_empty_and_reprice(
     return kept, changed
 
 
-def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
-    """Apply carried and bundled offers, drop picks whose offer has gone, reprice.
+#: How many times ``reconcile_offer_picks`` may go round. A pass can change which cards
+#: are held, and a held card opens chapters of its own (a Final Touches line, the enemy's
+#: reason and degree lines, #5255), so the pass repeats until the held cards stop
+#: changing. Two rounds settle every shape there is today; the bound stops a cycle.
+_RECONCILE_ROUNDS = 4
 
-    Called after every draft patch that could change which offers are open (a
-    Glimpse tag pick, a Lineage answer, a tradition select). Returns the
-    distinction names dropped or repriced. Saves ``draft_data`` when anything
-    changed.
-    """
-    original = draft.draft_data.get("distinctions", [])
+
+def _reconcile_pass(
+    draft: CharacterDraft, original: list[DraftDistinctionEntry]
+) -> tuple[list[DraftDistinctionEntry], list[str]]:
+    """One round of ``reconcile_offer_picks`` over ``original``: what is kept, what moved."""
     entries: list[DraftDistinctionEntry] = list(original)
     visible = visible_offers(draft)
     # Carried and bundled offers are never per-feature (#3739), so they index by
@@ -1391,6 +1393,34 @@ def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
     changed += dropped_features
     kept, repriced = _drop_empty_and_reprice(entries)
     changed += repriced
+    return kept, changed
+
+
+def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
+    """Apply carried and bundled offers, drop picks whose offer has gone, reprice.
+
+    Called after every draft patch that could change which offers are open (a
+    Glimpse tag pick, a Lineage answer, a tradition select). Returns the
+    distinction names dropped or repriced. Saves ``draft_data`` when anything
+    changed.
+
+    A round that changes which cards are held is followed by another (#5255): a held
+    card opens lines of its own, so a card dropped in one round (its Glimpse tag
+    unpicked) takes the mark its enemy's degree bundled with it in the next, in this
+    same call and not at the next request.
+    """
+    original = draft.draft_data.get("distinctions", [])
+    kept: list[DraftDistinctionEntry] = original
+    changed: list[str] = []
+    for _ in range(_RECONCILE_ROUNDS):
+        before = kept
+        kept, moved = _reconcile_pass(draft, before)
+        changed += moved
+        if kept != before:
+            # The next round reads the held cards from the draft itself.
+            draft.draft_data["distinctions"] = kept
+        if {e["distinction_id"] for e in kept} == {e["distinction_id"] for e in before}:
+            break
 
     if kept != original or changed:
         draft.draft_data["distinctions"] = kept

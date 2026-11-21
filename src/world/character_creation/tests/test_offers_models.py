@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_creation.constants import OfferArrival, OfferChapter, TraditionState
@@ -137,6 +138,29 @@ class OfferModelTests(TestCase):
         offer.prompt = "never_do"
         with self.assertRaises(ValidationError):
             offer.full_clean()
+
+    def test_an_identity_offer_is_a_choice_and_a_card_has_one(self):
+        """#5255: every Identity line is open to every draft, so a bundled one would hand
+        the card to everyone; and with no opener a second line would be the same line."""
+        indolent = DistinctionFactory(name="Indolent")
+        bundled = DistinctionOffer(
+            distinction=indolent, chapter=OfferChapter.IDENTITY, arrives_as=OfferArrival.BUNDLED
+        )
+        with self.assertRaises(ValidationError) as refused:
+            bundled.full_clean()
+        assert "arrives_as" in refused.exception.message_dict
+
+        DistinctionOfferFactory(distinction=indolent, chapter=OfferChapter.IDENTITY)
+        second = DistinctionOffer(
+            distinction=indolent, chapter=OfferChapter.IDENTITY, arrives_as=OfferArrival.CHOICE
+        )
+        with self.assertRaises(ValidationError) as refused:
+            second.full_clean()
+        assert "already placed on the Identity stage" in str(refused.exception)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            second.save()
+        # The same card is still free to be offered in another chapter.
+        DistinctionOfferFactory(distinction=indolent, chapter=OfferChapter.ACTORS_SHEET)
 
     def test_offer_name_defaults_to_distinction_name(self):
         offer = DistinctionOfferFactory(distinction=DistinctionFactory(name="Impoverished"))
