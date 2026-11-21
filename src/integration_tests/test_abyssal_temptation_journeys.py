@@ -40,6 +40,8 @@ Hand-worked from the spec:
 
 from __future__ import annotations
 
+from django.urls import reverse
+
 from actions.factories import ActionTemplateFactory
 from commands import pending_actions
 from integration_tests.harness import JourneyCase
@@ -84,6 +86,8 @@ from world.magic.models import (
     ResonanceGrant,
 )
 from world.magic.services.corruption import get_corruption_config
+from world.magic.services.drift import get_drift_config
+from world.magic.services.thread_rows import add_to_resonance_row, refresh_leading_resonance
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.mechanics.factories import CharacterEngagementFactory
 from world.scenes.constants import RoundStatus
@@ -496,3 +500,133 @@ class TheAbyssalTemptationInAFight(JourneyCase):
         # cast nothing, so it takes nothing: 6 * 150 // 100 = 9 stays.
         self.assertEqual(self.pull_lines(entries), [])
         self.assertEqual(self.line(entries, KINDLED_LINE), 9)
+
+
+PREVIEW_URL = "magic:thread-pull-preview"
+
+
+class TheKindledPull(JourneyCase):
+    """Ysmay pulls a thread that holds a feeling (Warmth, Primal) and a deed (Praedari, Abyssal).
+
+    Numbers this journey sets: the thread reads 25 (a multiplier of 2), Warmth is authored a
+    flat perk of 2, and a thread level multiplier is the level divided by ten, rounded down.
+    Warmth is kindled at a strength worth 10 pull levels and Praedari at one worth 12; Primal's
+    kindled boost is 100 percent and Abyssal's is 150. A resonance that is not the leader reads
+    20 levels lower (the second-resonance step is set to 20, so Praedari reads 5).
+
+    Hand-worked from the spec:
+
+    * Nothing kindled: the thread reads 25, a multiplier of 2, and the perk is 2 * 2 = 4.
+    * Only Warmth kindled: it adds 10 * 100 // 100 = 10, the thread reads 35, a multiplier of 3,
+      and the perk is 2 * 3 = 6.
+    * Both kindled, Praedari being 30 of the 100 imbued: Praedari's boost is
+      12 * 150 // 100 = 18, and 18 * 30 // 100 = 5 of it counts. The thread reads
+      25 + 10 + 5 = 40, a multiplier of 4, and the perk is 2 * 4 = 8.
+    * The stronger payer: with both kindled, Warmth reads 40 and Praedari, reading 5, adds its
+      own 18 and 10 * 70 // 100 = 7 of Warmth's, so 30. Warmth is strictly the highest and above
+      its own 25, so it alone is marked. With nothing kindled nobody is marked.
+    * Nothing imbued (both rows at 0): the second boost is 0 whatever is kindled, so Warmth
+      reads 35 and its perk is 6 with Praedari kindled or not.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        _celestial, self.primal, self.abyssal = ensure_conversion_pairs()
+        for affinity, boost in ((self.primal, 100), (self.abyssal, 150)):
+            affinity.kindled_boost_percent = boost
+            affinity.save()
+        Affinity.objects.clear_cache()
+        drift = get_drift_config()
+        drift.second_resonance_level_step = 20
+        drift.save()
+        self.warm_tier = KindledStrengthTier.objects.get(rank=1)
+        self.warm_tier.pull_levels = 10
+        self.warm_tier.save()
+        self.blazing = KindledStrengthTier.objects.get(rank=3)
+        self.blazing.pull_levels = 12
+        self.blazing.save()
+
+        self.warmth = ResonanceFactory(name="Warmth", affinity=self.primal)
+        self.praedari = ResonanceFactory(name="Praedari", affinity=self.abyssal)
+        self.ysmay = self.make_player("Ysmay", room=self.make_room("The Lantern"))
+        self.sheet = self.ysmay.sheet_data
+        CharacterAuraFactory(character=self.sheet, celestial="0", primal="80", abyssal="20")
+        for resonance in (self.warmth, self.praedari):
+            CharacterResonanceFactory(character_sheet=self.sheet, resonance=resonance, balance=10)
+        technique = TechniqueFactory(gift=GiftFactory())
+        CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=self.warmth,
+            tier=1,
+            min_thread_level=0,
+            effect_kind=EffectKind.FLAT_BONUS,
+            flat_bonus_amount=2,
+        )
+        self.thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.warmth,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=technique,
+            level=25,
+            name="Lantern Strand",
+        )
+
+    def imbue_the_rows(self, warmth: int, praedari: int) -> None:
+        """The thread's rows hold what was imbued: Warmth leads unless Praedari has more."""
+        add_to_resonance_row(self.thread, self.warmth, warmth)
+        add_to_resonance_row(self.thread, self.praedari, praedari)
+        refresh_leading_resonance(self.thread)
+        self.ysmay.threads.invalidate()
+
+    def options(self) -> dict[str, dict]:
+        """What the Pull threads dialog lists for the thread: one option per paying resonance."""
+        response = self.api(self.account_of(self.ysmay)).post(
+            reverse(PREVIEW_URL),
+            {"character_sheet_id": self.sheet.pk, "tier": 1, "thread_ids": [self.thread.pk]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        (pulled,) = response.json()["per_thread"]
+        return {row["resonance_name"]: row for row in pulled["options"]}
+
+    @staticmethod
+    def perks(option: dict) -> list[int]:
+        return [effect["scaled_value"] for effect in option["effects"]]
+
+    def test_a_thread_pulled_with_both_resonances_kindled_previews_larger_perks(self) -> None:
+        self.imbue_the_rows(warmth=70, praedari=30)
+
+        plain = self.options()
+        self.assertEqual(self.perks(plain["Warmth"]), [4])
+        self.assertEqual([row["stronger"] for row in plain.values()], [False, False])
+
+        kindle_resonance(self.sheet, self.warmth, self.warm_tier)
+        feeling = self.options()
+        self.assertEqual(feeling["Warmth"]["kindled_strength"], self.warm_tier.name)
+        self.assertEqual(self.perks(feeling["Warmth"]), [6])
+        self.assertTrue(feeling["Warmth"]["stronger"])
+        self.assertFalse(feeling["Praedari"]["stronger"])
+
+        kindle_resonance(self.sheet, self.praedari, self.blazing)
+        both = self.options()
+        self.assertEqual(both["Praedari"]["kindled_strength"], self.blazing.name)
+        self.assertEqual(self.perks(both["Warmth"]), [8])
+        self.assertGreater(self.perks(both["Warmth"])[0], self.perks(feeling["Warmth"])[0])
+        # The thread's own read is unchanged: players never see the boosts.
+        self.assertEqual(both["Warmth"]["level_read"], 25)
+        self.assertTrue(both["Warmth"]["stronger"])
+        self.assertFalse(both["Praedari"]["stronger"])
+
+    def test_a_thread_with_nothing_imbued_adds_no_second_boost(self) -> None:
+        self.imbue_the_rows(warmth=0, praedari=0)
+        kindle_resonance(self.sheet, self.warmth, self.warm_tier)
+
+        feeling_only = self.options()
+        kindle_resonance(self.sheet, self.praedari, self.blazing)
+        both = self.options()
+
+        self.assertEqual(self.perks(feeling_only["Warmth"]), [6])
+        self.assertEqual(self.perks(both["Warmth"]), self.perks(feeling_only["Warmth"]))

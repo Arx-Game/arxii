@@ -89,6 +89,10 @@ class CharacterThreadHandler:
         """The resonances ``thread`` holds a row for (at any amount), leading first."""
         return [resonance for resonance, _amount in self._rows_by_thread.get(thread.pk, [])]
 
+    def rows_of(self, thread: Thread) -> list[tuple[Resonance, int]]:
+        """``thread``'s ``(resonance, amount)`` rows, leading first (empty when it has none)."""
+        return self._rows_by_thread.get(thread.pk, [])
+
     def amount_of(self, thread: Thread, resonance: Resonance) -> int | None:
         """How much of ``resonance`` ``thread`` holds, or None when it holds no row for it."""
         for held, amount in self._rows_by_thread.get(thread.pk, []):

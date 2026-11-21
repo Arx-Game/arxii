@@ -12,6 +12,7 @@ from django.db import transaction
 
 from world.magic.constants import (
     ACCELERATED_GAIN_SOURCES,
+    AFFINITY_PRIMAL,
     AFFINITY_RATE_EXEMPT_SOURCES,
     EffectKind,
     GainSource,
@@ -1110,20 +1111,69 @@ def _beseeched_level(
     return level_read
 
 
-def _kindled_level(
-    level: int, payer: ResonanceModel, kindled: Mapping[int, KindledStrengthTier] | None
+def kindled_boost_levels(
+    resonance: ResonanceModel, kindled: Mapping[int, KindledStrengthTier] | None
 ) -> int:
-    """Return ``level``, plus the pull levels of the payer's kindled strength (#5124).
+    """The thread levels ``resonance``'s kindled strength adds on a pull, 0 when not kindled.
 
-    ``pull_levels`` is in thread levels as a player reads them (a thread's displayed level,
-    like a skill's), so ten of them are one step of ``thread_level_multiplier``. That curve
-    dips below level 10, so a boost that would read lower than ``level`` is not applied: a
-    kindled payer never reads lower than an unkindled one (the guard ``payer_level_read`` has).
+    The strength's ``pull_levels`` scaled by the resonance's affinity's
+    ``kindled_boost_percent`` and rounded down (#5231), so an Abyssal strength can add more
+    than a Primal one of the same row.
     """
-    tier = kindled.get(payer.pk) if kindled else None
+    tier = kindled.get(resonance.pk) if kindled else None
     if tier is None:
-        return level
-    boosted = level + tier.pull_levels
+        return 0
+    return tier.pull_levels * resonance.affinity.kindled_boost_percent // 100
+
+
+def _second_resonance_boost(
+    payer: ResonanceModel, kindled: Mapping[int, KindledStrengthTier] | None, thread: Thread
+) -> int:
+    """The largest boost a second kindled resonance on ``thread`` adds to ``payer``'s read.
+
+    A second resonance qualifies when the thread holds a row for it, it is kindled, and it is
+    Primal where the payer is not, or the reverse. It adds its own boost scaled by its share of
+    everything imbued into the thread (Decision 23: the largest addition counts, so two
+    qualifying resonances never stack). Nothing counts while nothing is imbued.
+    """
+    if not kindled:
+        return 0
+    rows = thread.owner.character.threads.rows_of(thread)
+    total = sum(amount for _resonance, amount in rows)
+    if total == 0:
+        return 0
+    payer_is_primal = payer.affinity.name == AFFINITY_PRIMAL
+    best = 0
+    for resonance, amount in rows:
+        if resonance.pk == payer.pk or resonance.pk not in kindled:
+            continue
+        if (resonance.affinity.name == AFFINITY_PRIMAL) == payer_is_primal:
+            continue
+        best = max(best, kindled_boost_levels(resonance, kindled) * amount // total)
+    return best
+
+
+def _kindled_level(
+    level: int,
+    payer: ResonanceModel,
+    kindled: Mapping[int, KindledStrengthTier] | None,
+    thread: Thread,
+) -> int:
+    """Return ``level``, plus what the payer's kindling and a second resonance's add (#5231).
+
+    The payer adds its own boost (``kindled_boost_levels``), and the largest boost of a second
+    kindled resonance of the other kind on the thread adds on top, scaled by its share of what
+    was imbued (``_second_resonance_boost``); the second applies whether or not the payer is
+    kindled. Boosts are in thread levels as a player reads them, so ten are one step of
+    ``thread_level_multiplier``. That curve dips below level 10, so a sum that would read lower
+    than ``level`` is not applied: a kindled payer never reads lower than an unkindled one
+    (the guard ``payer_level_read`` has).
+    """
+    boosted = (
+        level
+        + kindled_boost_levels(payer, kindled)
+        + _second_resonance_boost(payer, kindled, thread)
+    )
     return boosted if thread_level_multiplier(boosted) >= thread_level_multiplier(level) else level
 
 
@@ -1218,6 +1268,7 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
                 _beseeched_level(t, level_read, beseech_bonus_thread_id, beseech_bonus),
                 payer,
                 kindled,
+                t,
             )
         )
         first_tier = 0 if payer.pk == t.resonance_id else 1
@@ -1540,22 +1591,52 @@ def _payer_options_per_thread(  # noqa: PLR0913 - one preview's whole resolution
     return [
         ThreadPayerPreview(
             thread_id=thread.pk,
-            options=[
-                PayerOption(
-                    resonance=cr.resonance,
-                    cost=each,
-                    balance=cr.balance,
-                    affordable=cr.balance >= each,
-                    effects=_effects_if_paid_by(
-                        character_sheet, tier, thread, cr.resonance, in_combat, target, kindled
-                    ),
-                    level_read=_option_level_read(thread, cr.resonance),
-                    kindled_strength=kindled.get(cr.resonance_id),
-                )
-                for cr in held
-            ],
+            options=_options_for_thread(
+                character_sheet, tier, thread, held, each, in_combat, target, kindled
+            ),
         )
         for thread in threads
+    ]
+
+
+def _options_for_thread(  # noqa: PLR0913 - one preview row's whole resolution context
+    character_sheet: CharacterSheet,
+    tier: int,
+    thread: Thread,
+    held: list[CharacterResonance],
+    each: int,
+    in_combat: bool,
+    target: ObjectDB | None,
+    kindled: Mapping[int, KindledStrengthTier],
+) -> list[PayerOption]:
+    """One thread's payer options, the stronger one marked (#5231).
+
+    Each option reads the thread at its own level and, kindled, at the boosted level
+    ``_kindled_level`` gives it. The option whose boosted level is strictly the highest, and
+    above its own unboosted level, is the stronger one; a tie marks none.
+    """
+    reads = [_option_level_read(thread, cr.resonance) for cr in held]
+    boosted = [
+        _kindled_level(read, cr.resonance, kindled, thread)
+        for cr, read in zip(held, reads, strict=True)
+    ]
+    top = max(boosted, default=0)
+    leaders = [i for i, level in enumerate(boosted) if level == top]
+    stronger = leaders[0] if len(leaders) == 1 and top > reads[leaders[0]] else None
+    return [
+        PayerOption(
+            resonance=cr.resonance,
+            cost=each,
+            balance=cr.balance,
+            affordable=cr.balance >= each,
+            effects=_effects_if_paid_by(
+                character_sheet, tier, thread, cr.resonance, in_combat, target, kindled
+            ),
+            level_read=reads[i],
+            kindled_strength=kindled.get(cr.resonance_id),
+            stronger=i == stronger,
+        )
+        for i, cr in enumerate(held)
     ]
 
 
