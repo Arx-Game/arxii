@@ -94,6 +94,11 @@ def _announce(participant: CombatParticipant, line: str, outcome: StandoffAction
             encounter=participant.encounter,
             narration=outcome.morale_line,
         )
+    if outcome.credit_line:
+        broadcast_action_outcome(
+            encounter=participant.encounter,
+            narration=outcome.credit_line,
+        )
     for cause_line in outcome.cause_lines:
         broadcast_action_outcome(
             encounter=participant.encounter,

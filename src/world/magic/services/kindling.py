@@ -1070,13 +1070,14 @@ def _set_aside_for_claim(row: CharacterResonance, amount: int) -> None:
     )[0]
 
 
-def award_kindled_deeds(
+def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and its surroundings
     sheet: CharacterSheet,
     *,
     act: KindlingAct,
     outcome: CheckOutcome | None,
     resolution: object | None = None,
     mission: MissionInstance | None = None,
+    context: KindlingContext | None = None,
 ) -> list[ResonanceGrant]:
     """Earn each resonance ``act`` feeds, scaled by the roll's ``outcome`` (#5124).
 
@@ -1092,9 +1093,12 @@ def award_kindled_deeds(
     Non-player characters earn nothing.
 
     With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
-    are read. Each grant is told to the actor alone ("You earned ...") once the surrounding
-    transaction commits, through a private narrative message that reports the amount the ledger
-    recorded after the earn rate and how much was set aside. Returns the grants written.
+    are read. A caller that knows its surroundings and has no round (a standoff is a
+    negotiation, round zero) passes ``context``, which is used as it stands, a ``None``
+    resolution included. Each grant is told to the actor alone ("You earned ...") once the
+    surrounding transaction commits, through a private narrative message that reports the
+    amount the ledger recorded after the earn rate and how much was set aside. Returns the
+    grants written.
     """
     from django.db import transaction  # noqa: PLC0415
 
@@ -1107,8 +1111,9 @@ def award_kindled_deeds(
     award = KindledDeedAward.objects.filter(outcome_tier=outcome).first()
     if award is None or not is_player_character(sheet):
         return []
-    if resolution is None and mission is None:
+    if context is None and resolution is None and mission is None:
         context = kindling_context_for(sheet)
+    if context is not None:
         resolution, mission = context.resolution, context.mission
     config = get_kindling_config()
     grants: list[ResonanceGrant] = []

@@ -10,6 +10,7 @@ from world.standoffs.models import (
     StandoffApproach,
     StandoffCauseGloss,
     StandoffConfig,
+    StandoffEndingAward,
     StandoffReactionLine,
     StandoffTerms,
 )
@@ -141,3 +142,15 @@ class StandoffCauseGlossAdmin(admin.ModelAdmin):
     """One player-facing line per cause, shown under it once a read reveals it."""
 
     list_display = ("cause", "text")
+
+
+@admin.register(StandoffEndingAward)
+class StandoffEndingAwardAdmin(admin.ModelAdmin):
+    """What the terms that end a standoff pay at each roll result (#4323).
+
+    One row per result. The moment type carries the resonance amount and renown, so a
+    critical can pay more than a partial; a result with no row pays nothing.
+    """
+
+    list_display = ("outcome_tier", "moment_type", "legend_value")
+    autocomplete_fields = ("moment_type",)
