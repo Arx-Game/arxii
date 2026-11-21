@@ -531,7 +531,9 @@ def _is_bare_star(change: Change, lines: Sequence[str]) -> bool:
     cosmic-ray reads that ``*`` as a multiplication and turns it into ``//``, which is a
     syntax error. The text at the change must be a single ``*`` and the next character after
     it that is not a space must be a comma or a closing bracket. A real multiplication is
-    never followed directly by either, so no real operator is dropped.
+    never followed directly by either, so no real operator is dropped. Only the character after
+    the position is checked for a second star, because no change is ever recorded at the second
+    star of ``**``: the position of the power operator is its first star.
     """
     line = lines[change.row - 1] if 0 < change.row <= len(lines) else ""
     if line[change.col : change.col + 1] != "*" or line[change.col + 1 : change.col + 2] == "*":
@@ -717,7 +719,7 @@ def _unit_test_tallies(rows: Sequence[Row]) -> dict[str, tuple[int, int]]:
             continue
         for test in row.units.failing:
             caught, missed = tallies.get(test, (0, 0))
-            tallies[test] = (caught + 1, missed + (row.category != "guarded"))
+            tallies[test] = (caught + 1, missed + (1 if row.category != "guarded" else 0))
     return tallies
 
 
@@ -833,7 +835,8 @@ def _write_report(
         out.append("")
     out += [
         "A class-level set-up failure in the units group is counted against every test in "
-        "that class.",
+        'that class. A change listed under "Units only" with no test named was caught only by '
+        "a class-level set-up failure in a class that has no listed test.",
         "",
     ]
     silent = sorted(measured.baseline_ids - set(tallies))
@@ -908,7 +911,9 @@ def _exec_session(group: str, config: Path, session: Path) -> None:
 
 def _job_ids_with_empty_output(session: Path) -> list[str]:
     with closing(sqlite3.connect(session)) as con:
-        rows = con.execute("SELECT job_id FROM work_results WHERE output = ''").fetchall()
+        rows = con.execute(
+            "SELECT job_id FROM work_results WHERE output = '' OR output IS NULL"
+        ).fetchall()
     return [job for (job,) in rows]
 
 
