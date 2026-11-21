@@ -1305,10 +1305,12 @@ rows, read through `world.character_creation.offers` (`offers_for`/
   potency, #1834; `DistinctionResonanceRankThreshold` — the reverse direction, #2037; both
   sidecar models live in `world.magic` per ADR-0010 — see below and
   [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
-- **Per-feature distinctions (#3739):** `Distinction.taken_per_feature` /
-  `opens_feature` / `requires_feature_opened` / `cg_max_rank` (`cg_ceiling`) make a
+- **Per-feature distinctions (#3739, #5241):** `Distinction.taken_per_feature` /
+  `cg_max_rank` (`cg_ceiling`) make a
   distinction one a character holds **once per feature** (a `FormTrait` row or a
-  `FormMarking`) rather than once. `CharacterDistinction.feature_trait` /
+  `FormMarking`) rather than once. These are the qualities (Alluring, Menacing, Majestic);
+  a feature takes one directly and is distinctive while it holds any tier, and the first
+  `FEATURE_FREE_POINTS` (10) of them cost no CG points (ADR-5241). `CharacterDistinction.feature_trait` /
   `feature_marking` name it; `world.distinctions.types.feature_key` is the key every
   draft-entry reader uses in place of the distinction id. See
   [distinctions.md](distinctions.md) "Distinctive features" and

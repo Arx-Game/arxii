@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0465_draft_stage_visit"),
+        ("arxii", "0467_swatch_colour_fill"),
     ]
 
     operations = [

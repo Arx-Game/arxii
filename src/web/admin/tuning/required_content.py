@@ -2808,23 +2808,41 @@ def _realms_without_nobiliary_particles() -> ProbeResult:
 
 
 def _probe_feature_distinctions() -> ProbeResult:
-    """The four per-feature Appearance rows exist and are active (#3739, #4104).
+    """The three feature quality rows exist and are active (#3739, #4104, #5241).
 
-    Consumer: the Appearance stage's distinctive-feature path. Without the opener
-    nothing can be made distinctive; without an axis row the Alluring / Menacing /
-    Majestic purchases on a feature do not exist. The seed only invents these under
-    SEED_SAMPLE_CONTENT, so a production database has to author them.
+    Consumer: the Appearance stage's feature qualities. Without a row, that quality
+    (Alluring, Menacing or Majestic) cannot be put on a feature; with none of the
+    three the stage shows no qualities at all and nothing can be made distinctive.
+    The seed only invents these under SEED_SAMPLE_CONTENT, so a production database
+    has to author them.
     """
+    from world.character_creation.constants import OfferChapter  # noqa: PLC0415
     from world.distinctions.models import Distinction  # noqa: PLC0415
     from world.seeds.distinctive_features import FEATURE_ROW_NAMES  # noqa: PLC0415
 
-    active = set(
-        Distinction.objects.filter(name__in=FEATURE_ROW_NAMES, is_active=True).values_list(
-            "name", flat=True
+    # A quality shows on the page only when all of this holds, so the probe asks for
+    # all of it (#5241): the row is active and taken per feature, and it has an active
+    # Appearance offer on the feature rows. Names are matched without regard to case,
+    # since staff capitalise authored names as they see fit.
+    showing = {
+        name.lower()
+        for name in Distinction.objects.filter(
+            is_active=True,
+            taken_per_feature=True,
+            offers__is_active=True,
+            offers__chapter=OfferChapter.APPEARANCE,
+            offers__feature_rows=True,
+        ).values_list("name", flat=True)
+    }
+    missing = tuple(name for name in FEATURE_ROW_NAMES if name.lower() not in showing)
+    detail = (
+        ""
+        if not missing
+        else (
+            f"No active, per-feature distinction with an active Appearance offer on the "
+            f"feature rows is named: {', '.join(missing)}."
         )
     )
-    missing = tuple(name for name in FEATURE_ROW_NAMES if name not in active)
-    detail = "" if not missing else f"Missing or inactive feature row(s): {', '.join(missing)}."
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
@@ -4932,11 +4950,11 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="distinctions.feature_rows",
             label="Per-feature Appearance distinctions",
             tier=DependencyTier.REQUIRED,
-            consumer="AppearanceStage distinctive features (#3739, #3756)",
+            consumer="AppearanceStage feature qualities (#3739, #3756, #5241)",
             consequence=(
-                "Nothing can be made distinctive and Alluring, Menacing and Majestic cannot "
-                "be bought on a feature; the seed only invents these rows under "
-                "SEED_SAMPLE_CONTENT."
+                "A missing quality (Alluring, Menacing or Majestic) cannot be put on a "
+                "feature, and with none of the three nothing can be made distinctive; the "
+                "seed only invents these rows under SEED_SAMPLE_CONTENT."
             ),
             probe=CustomProbe(fn=_probe_feature_distinctions),
             admin_model="Distinction",
