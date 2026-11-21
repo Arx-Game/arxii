@@ -29,6 +29,7 @@ import argparse
 import ast
 from collections import Counter
 from collections.abc import Sequence
+from contextlib import closing
 import csv
 from dataclasses import dataclass
 import os
@@ -102,11 +103,15 @@ _OUT_FILES = (
     "report.md",
 )
 
+# SQLite leaves these beside a database that a killed process was writing.
+_SQLITE_SIDE_FILES = ("-journal", "-wal", "-shm")
 _LABEL_RE = re.compile(r"^[\w.]+$")
 _NAME_RE = re.compile(r"^\w+$")
 _LINES_RE = re.compile(r"^(\d+)-(\d+)$")
 _TEST_ID_RE = re.compile(r"^test\w* \(([\w.]+)\)", re.MULTILINE)
-_FAILING_RE = re.compile(r"^(?:FAIL|ERROR): \w+ \(([\w.]+)\)", re.MULTILINE)
+_FAILING_RE = re.compile(r"^(?:FAIL|ERROR): (\w+) \(([\w.]+)\)", re.MULTILINE)
+# A failure with one of these method names ran no test of its own: the class failed to set up.
+_CLASS_LEVEL_METHODS = frozenset({"setUpClass", "setUpTestData", "tearDownClass"})
 _RAN_RE = re.compile(r"^Ran (\d+) tests?\b", re.MULTILINE)
 
 # cosmic-ray records exactly this text as the output of a test run that it had to stop.
@@ -154,7 +159,7 @@ class Refusal(Exception):
 
 
 class _Parser(argparse.ArgumentParser):
-    def error(self, message: str) -> None:  # type: ignore[override]
+    def error(self, message: str) -> None:  # ty: ignore[invalid-method-override]
         raise Refusal(f"Fix the command line: {message}.")
 
 
@@ -183,7 +188,10 @@ class Change:
 
 @dataclass(frozen=True)
 class GroupOutcome:
-    state: str  # caught, missed, timeout or broken
+    """How one test group fared against one change."""
+
+    # The state is one of caught, missed, timeout or broken.
+    state: str
     failing: tuple[str, ...]
 
 
@@ -201,6 +209,21 @@ class Row:
 class Baseline:
     seconds: float
     output: str
+
+
+@dataclass(frozen=True)
+class Measured:
+    """Everything the two groups produced, read back before the source file is restored."""
+
+    out: Path
+    changes: list[Change]
+    dropped: dict[str, int]
+    generated: int
+    kept_seconds: float
+    units_seconds: float
+    marked: set[str]
+    baseline_ids: set[str]
+    results: dict[str, dict[str, RawResult]]
 
 
 # ---------------------------------------------------------------------------
@@ -350,8 +373,15 @@ def _kill_everything() -> None:
 
 
 def _on_signal(signum: int, _frame: FrameType | None) -> None:
+    """Raise KeyboardInterrupt for the first signal and ignore every later one.
+
+    A later signal can arrive while the first is unwinding toward the cleanup. Raising again
+    there could skip the restore of the source file, so it is dropped.
+    """
+    first = not _received_signal
     _received_signal.append(signum)
-    raise KeyboardInterrupt
+    if first:
+        raise KeyboardInterrupt
 
 
 # ---------------------------------------------------------------------------
@@ -410,21 +440,24 @@ def _test_command(tier: str, labels: Sequence[str], extra: Sequence[str] = ()) -
     return f"echo yes | {shlex.join(parts)} 2>&1"
 
 
+def _print_tail(output: str) -> None:
+    """Show the last lines of a runner's output, which is where its failure reads."""
+    print("\n".join(output.splitlines()[-_TAIL_LINES:]), file=sys.stderr)
+
+
 def _baseline(command: str, name: str, timeout_seconds: float, *, must_pass: bool) -> Baseline:
     started = time.monotonic()
     returncode, output = _run_captured(["sh", "-c", command], timeout_seconds)
     seconds = time.monotonic() - started
     if must_pass:
         if returncode != 0:
-            tail = "\n".join(output.splitlines()[-_TAIL_LINES:])
-            print(tail, file=sys.stderr)
+            _print_tail(output)
             raise Refusal(
                 f"The {name} group fails on unchanged code; fix its labels or its tests first."
             )
         ran = _RAN_RE.search(output)
         if not ran or int(ran.group(1)) == 0:
-            tail = "\n".join(output.splitlines()[-_TAIL_LINES:])
-            print(tail, file=sys.stderr)
+            _print_tail(output)
             raise Refusal(f"The {name} group ran no tests; check its labels.")
     return Baseline(seconds=seconds, output=output)
 
@@ -455,7 +488,11 @@ def _toml_string(text: str) -> str:
 
 
 def _annotation_spans(source: str) -> list[tuple[int, int, int, int]]:
-    """Spans (row, column) of every type annotation, in cosmic-ray's own coordinates."""
+    """Return the (row, column) start and end of every type annotation in the source.
+
+    The rows count from 1 and the columns count characters from 0, the same coordinates
+    cosmic-ray records. The ``ast`` module counts UTF-8 bytes, so each column is converted.
+    """
     lines = source.split("\n")
 
     def column(row: int, byte_offset: int) -> int:
@@ -486,7 +523,7 @@ def _in_annotation(change: Change, spans: Sequence[tuple[int, int, int, int]]) -
 
 
 def _read_changes(session: Path) -> list[Change]:
-    with sqlite3.connect(session) as con:
+    with closing(sqlite3.connect(session)) as con:
         rows = con.execute(
             "SELECT job_id, operator_name, start_pos_row, start_pos_col, definition_name, "
             "occurrence FROM mutation_specs"
@@ -557,7 +594,24 @@ def _filter_changes(
     return remaining, dropped, len(generated)
 
 
-def _classify(result: RawResult | None) -> GroupOutcome:
+def _failing_ids(output: str, unit_ids: Sequence[str] | None) -> tuple[str, ...]:
+    """Read the failing test ids from a runner's output.
+
+    A class-level failure (the class could not set up) names the class, not a test. For the
+    units group, ``unit_ids`` is every test id of the baseline, and the class id is replaced
+    by each baseline id inside that class, because none of them ran. A class with no baseline
+    id is dropped. For the kept group ``unit_ids`` is None and the class id stays as shown.
+    """
+    found: list[str] = []
+    for method, dotted in _FAILING_RE.findall(output):
+        if unit_ids is not None and method in _CLASS_LEVEL_METHODS:
+            found.extend(test for test in unit_ids if test.startswith(f"{dotted}."))
+        else:
+            found.append(dotted)
+    return tuple(dict.fromkeys(found))
+
+
+def _classify(result: RawResult | None, unit_ids: Sequence[str] | None = None) -> GroupOutcome:
     """Turn one recorded result into caught, missed, timeout or broken."""
     if result is None:
         return GroupOutcome("broken", ())
@@ -567,7 +621,7 @@ def _classify(result: RawResult | None) -> GroupOutcome:
         return GroupOutcome("broken", ())
     if test_outcome == "KILLED" and output == _TIMEOUT_MARKER:
         return GroupOutcome("timeout", ())
-    failing = tuple(dict.fromkeys(_FAILING_RE.findall(output)))
+    failing = _failing_ids(output, unit_ids)
     if not _RAN_RE.search(output) or any("_FailedTest" in name for name in failing):
         return GroupOutcome("broken", failing)
     if test_outcome == "KILLED":
@@ -580,7 +634,7 @@ def _classify(result: RawResult | None) -> GroupOutcome:
 def _read_results(
     session: Path,
 ) -> dict[str, RawResult]:
-    with sqlite3.connect(session) as con:
+    with closing(sqlite3.connect(session)) as con:
         rows = con.execute(
             "SELECT job_id, worker_outcome, output, test_outcome, diff FROM work_results"
         ).fetchall()
@@ -635,17 +689,19 @@ def _write_changes_csv(path: Path, rows: Sequence[Row]) -> None:
 
 
 def _unit_test_tallies(rows: Sequence[Row]) -> dict[str, tuple[int, int]]:
-    """For each unit test that failed on a change outside ``apart``: (caught, kept missed)."""
-    tallies: dict[str, list[int]] = {}
+    """Count, for each unit test that failed on a change outside ``apart``, two numbers.
+
+    The first is how many such changes the test caught. The second is how many of those
+    the kept group did not catch.
+    """
+    tallies: dict[str, tuple[int, int]] = {}
     for row in rows:
         if row.category == "apart":
             continue
         for test in row.units.failing:
-            entry = tallies.setdefault(test, [0, 0])
-            entry[0] += 1
-            if row.category != "guarded":
-                entry[1] += 1
-    return {test: (caught, missed) for test, (caught, missed) in tallies.items()}
+            caught, missed = tallies.get(test, (0, 0))
+            tallies[test] = (caught + 1, missed + (row.category != "guarded"))
+    return tallies
 
 
 def _write_unit_tests_csv(
@@ -745,6 +801,11 @@ def _write_report(
         members = [row for row in rows if row.category == category]
         out += [_list_line(row, category) for row in members] or ["none"]
         out.append("")
+    out += [
+        "A class-level set-up failure in the units group is counted against every test in "
+        "that class.",
+        "",
+    ]
     silent = sorted(measured.baseline_ids - set(tallies))
     out += [
         "## Unit tests that caught no change",
@@ -768,29 +829,19 @@ def _prepare_out(args: Args, source: Path) -> Path:
     out.mkdir(parents=True, exist_ok=True)
     for name in _OUT_FILES:
         (out / name).unlink(missing_ok=True)
+        if name.endswith(".sqlite"):
+            for suffix in _SQLITE_SIDE_FILES:
+                (out / f"{name}{suffix}").unlink(missing_ok=True)
     return out
-
-
-@dataclass(frozen=True)
-class Measured:
-    """Everything the two groups produced, read back before the source file is restored."""
-
-    out: Path
-    changes: list[Change]
-    dropped: dict[str, int]
-    generated: int
-    kept_seconds: float
-    units_seconds: float
-    marked: set[str]
-    baseline_ids: set[str]
-    results: dict[str, dict[str, RawResult]]
 
 
 def _baselines(args: Args, limit: int) -> tuple[Baseline, Baseline, Baseline, Baseline]:
     """Run each group once on unchanged code: kept, units timed, units ids, marked ids.
 
-    The timed units run uses the default verbosity, which is what every graded run uses.
-    It also warms the runner's schema cache, because a cache miss at verbosity 2 costs
+    The kept group runs first, so it takes any cold schema-cache miss of the runner and its
+    timing can read high. That only makes the estimate and the timeouts conservative. The
+    timed units run uses the default verbosity, which is what every graded run uses. It also
+    warms the cache before the verbosity 2 runs, because a cache miss at verbosity 2 costs
     minutes where a miss at the default verbosity costs under one.
     """
     print("Baseline: kept group on unchanged code.", file=sys.stderr)
@@ -862,11 +913,12 @@ def _measure(args: Args, source: Path, original: bytes, max_minutes: int) -> Mea
 
 def _grade(measured: Measured) -> list[Row]:
     rows: list[Row] = []
+    unit_ids = sorted(measured.baseline_ids)
     for change in measured.changes:
         kept_result = measured.results["kept"].get(change.job_id)
         units_result = measured.results["units"].get(change.job_id)
         kept = _classify(kept_result)
-        units = _classify(units_result)
+        units = _classify(units_result, unit_ids)
         diff = (kept_result or units_result or ("", "", "", ""))[3]
         before, after = _diff_lines(diff)
         category = _categorise(kept, units, measured.marked)
