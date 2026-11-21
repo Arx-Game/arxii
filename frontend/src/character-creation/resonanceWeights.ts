@@ -46,7 +46,7 @@ export function affinityOfLean(lean: 'give' | 'take'): OutwardAffinity {
 }
 
 /** The points placed so far across every pick. */
-export function placedPoints(weights: ResonanceWeightPick[]): number {
+function placedPoints(weights: ResonanceWeightPick[]): number {
   return weights.reduce((sum, pick) => sum + pick.weight, 0);
 }
 

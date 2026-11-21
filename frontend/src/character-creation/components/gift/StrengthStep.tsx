@@ -11,6 +11,7 @@
  */
 
 import { useId } from 'react';
+import { NEUTRAL_HEX } from '@/magic/auraSwirl';
 import { AuraSwirl } from '@/magic/components/AuraSwirl';
 import type { CGExplanations, Resonance, ResonanceWeightPick } from '../../types';
 import {
@@ -31,9 +32,6 @@ interface StrengthStepProps {
   copy: CGExplanations | undefined;
   onChange: (weights: ResonanceWeightPick[]) => void;
 }
-
-/** The grey drawn for the feeling that has not been chosen yet. */
-const NEUTRAL_HEX = '#8C8C8C';
 
 const LEANS: { lean: Lean; key: string; fallback: string }[] = [
   { lean: 'give', key: 'gift_strength_answer_helping', fallback: 'Helping them' },

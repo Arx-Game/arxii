@@ -14,6 +14,9 @@
 export type Oklch = [number, number, number];
 export type Rgb = [number, number, number];
 
+/** The neutral grey: the colour a resonance starts with, and the aura's for an unreadable one. */
+export const NEUTRAL_HEX = '#8C8C8C';
+
 /** Steps in a colour ramp, from the first colour to the second. */
 const RAMP_STEPS = 32;
 /** Histogram bins for the share cut. */

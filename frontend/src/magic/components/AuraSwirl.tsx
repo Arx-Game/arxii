@@ -10,7 +10,7 @@
  */
 
 import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
-import { drawMass, hexToOklch, massFrame, type Oklch } from '@/magic/auraSwirl';
+import { NEUTRAL_HEX, drawMass, hexToOklch, massFrame, type Oklch } from '@/magic/auraSwirl';
 
 /** Pixels per side of the drawing buffer. */
 const CANVAS_SIZE = 168;
@@ -32,9 +32,6 @@ const LAYER: CSSProperties = {
   transform: 'translate(-50%, -50%)',
   borderRadius: '50%',
 };
-
-/** The neutral grey drawn for a colour the server sent that is not `#RRGGBB`. */
-const NEUTRAL_HEX = '#8C8C8C';
 
 function parseOrNeutral(hex: string): Oklch {
   try {
