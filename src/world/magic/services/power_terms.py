@@ -16,6 +16,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from world.magic.services.kindled_math import scale_by_kindled_boost
+
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import (
@@ -725,7 +727,7 @@ def kindled_cast_strength(resonance: Resonance, tier: KindledStrengthTier | None
     """
     if tier is None:
         return 0
-    return tier.cast_power * resonance.affinity.kindled_boost_percent // 100
+    return scale_by_kindled_boost(resonance, tier.cast_power)
 
 
 def kindled_cast_power_term(ctx: PowerTermContext) -> int:

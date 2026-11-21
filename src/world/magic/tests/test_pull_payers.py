@@ -33,6 +33,10 @@ from world.magic.types.pull import CastPullDeclaration
 
 
 class PullPayerTests(TestCase):
+    """These are unit tests because a journey cannot reach a payer whose row on the thread is
+    at zero or a tie between two payers: the amounts that decide them are set by writing rows
+    directly, which no screen a player uses does."""
+
     @classmethod
     def setUpTestData(cls) -> None:
         cls.sheet = CharacterSheetFactory()

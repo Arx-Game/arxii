@@ -35,6 +35,7 @@ from world.magic.models import (
     ThreadCrossingThreshold,
     ThreadLevelUnlock,
 )
+from world.magic.services.kindled_math import scale_by_kindled_boost, stronger_marks
 from world.magic.services.pull_effects import get_pull_effects_for_thread
 from world.magic.services.thread_rows import payer_level_read
 from world.magic.services.threads import (
@@ -1123,7 +1124,7 @@ def kindled_boost_levels(
     tier = kindled.get(resonance.pk) if kindled else None
     if tier is None:
         return 0
-    return tier.pull_levels * resonance.affinity.kindled_boost_percent // 100
+    return scale_by_kindled_boost(resonance, tier.pull_levels)
 
 
 def _second_resonance_boost(
@@ -1620,14 +1621,11 @@ def _options_for_thread(  # noqa: PLR0913 - one preview row's whole resolution c
     reads = [thread.level if level is None else level for level in perk_levels]
     # Only a payer that brings perks competes for the mark: one the thread holds no row for,
     # or a row of nothing, reads the thread's own level but gives nothing to read higher.
-    boosted = {
-        i: _kindled_level(read, cr.resonance, kindled, thread)
-        for i, (cr, read, perk_level) in enumerate(zip(held, reads, perk_levels, strict=True))
-        if perk_level is not None
-    }
-    top = max(boosted.values(), default=0)
-    leaders = [i for i, level in boosted.items() if level == top]
-    stronger = leaders[0] if len(leaders) == 1 and top > reads[leaders[0]] else None
+    boosted = [
+        _kindled_level(read, cr.resonance, kindled, thread) if perk_level is not None else None
+        for cr, read, perk_level in zip(held, reads, perk_levels, strict=True)
+    ]
+    stronger = stronger_marks(boosted, reads)
     return [
         PayerOption(
             resonance=cr.resonance,
@@ -1639,7 +1637,7 @@ def _options_for_thread(  # noqa: PLR0913 - one preview row's whole resolution c
             ),
             level_read=reads[i],
             kindled_strength=kindled.get(cr.resonance_id),
-            stronger=i == stronger,
+            stronger=stronger[i],
         )
         for i, cr in enumerate(held)
     ]

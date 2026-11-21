@@ -98,36 +98,6 @@ def _raw_tick(  # noqa: PLR0913
     return base_tick * Fraction(d * m * a * hasty_fall_multiplier, 10000)
 
 
-def _compute_tick(  # noqa: PLR0913
-    *,
-    involvement: int,
-    affinity_coef: int,
-    tier_coef: int,
-    deficit_multiplier: int,
-    mishap_multiplier: int,
-    audere_multiplier: int,
-    was_deficit: bool,
-    was_mishap: bool,
-    was_audere: bool,
-    hasty_fall_multiplier: int = 10,
-) -> int:
-    """The corruption tick of ``_raw_tick``, rounded up to a whole number."""
-    return math.ceil(
-        _raw_tick(
-            involvement=involvement,
-            affinity_coef=affinity_coef,
-            tier_coef=tier_coef,
-            deficit_multiplier=deficit_multiplier,
-            mishap_multiplier=mishap_multiplier,
-            audere_multiplier=audere_multiplier,
-            was_deficit=was_deficit,
-            was_mishap=was_mishap,
-            was_audere=was_audere,
-            hasty_fall_multiplier=hasty_fall_multiplier,
-        )
-    )
-
-
 def cast_corruption_part(caster_sheet: CharacterSheet, config: CorruptionConfig) -> int:
     """The percent of a cast's ordinary corruption the caster takes (#5231).
 

@@ -15,9 +15,10 @@ passes it to each call, so the list costs no kindling queries per technique.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+from world.magic.services.kindled_math import stronger_marks
 from world.magic.services.kindling import (
     active_mission_for,
     kindled_resonances,
@@ -58,19 +59,6 @@ def kindling_by_resonance(
         answer.resonance.pk: answer
         for answer in kindled_resonances(sheet, resolution=resolution, mission=mission)
     }
-
-
-def stronger_marks(strengths: Sequence[int], default_index: int | None) -> list[bool]:
-    """Which entry, if any, is marked stronger: a list of flags, at most one of them true.
-
-    The entry is marked when its strength is the single highest of the list and strictly above
-    the default entry's (0 when there is no default entry). A tie for the highest marks none.
-    """
-    default_strength = strengths[default_index] if default_index is not None else 0
-    top = max(strengths, default=0)
-    leaders = [i for i, strength in enumerate(strengths) if strength == top]
-    stronger = leaders[0] if len(leaders) == 1 and top > default_strength else None
-    return [i == stronger for i in range(len(strengths))]
 
 
 def cast_resonance_options(
@@ -136,7 +124,8 @@ def _options_for(
         (i for i, resonance in enumerate(resonances) if default and resonance.pk == default.pk),
         None,
     )
-    stronger = stronger_marks(strengths, default_index)
+    default_strength = strengths[default_index] if default_index is not None else 0
+    stronger = stronger_marks(strengths, [default_strength] * len(strengths))
     return [
         CastResonanceOption(
             resonance=resonance,
