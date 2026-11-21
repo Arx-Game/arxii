@@ -46,7 +46,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   (#4520): Worn piece, Resonance fed; and the slice 4 terms (#4530): Requested item, Relic
   ease; and the being pact terms (#4341, ADR-4341; code in `world/pacts`): Pact (being pact,
   follower pact), Pact offer, Pact commitment, Holder, Pact period, Patronage, Chosen, Patron
-  target (_Avoid_: bond, compact, contract, terms, obligation, vow, oath, tithe, debt, deal)
+  target (_Avoid_: bond, compact, contract, terms, obligation, vow, oath, tithe, debt, deal); and the #4349 intervention terms (ADR-4349): Divine Intervention (one graded roll),
+  Backfire, Lesser answer, Intervention pool, Owed favor, Minimum wait
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide and own standing (#4601; the hopeless pin was removed by #4723); and modifier level, size, value table, level baseline, taper and lane (#4594), and size fraction, level width, level tier and tier bonus (#5093), with worn items' level from quality (#4628) and distinctions' from their holder (#4638); the stat lane (#4726); niche and botch immunity (#4386)

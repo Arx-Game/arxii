@@ -162,7 +162,7 @@ def wire_miracle_content() -> None:
                 FlowStepDefinition,
                 {
                     "action": FlowActionChoices.CALL_SERVICE_FUNCTION,
-                    "parameters": {"payload": "{{payload}}"},
+                    "parameters": {"character": "@owner"},
                 },
                 flow=flow,
                 variable_name="world.worship.services.maybe_fire_divine_intervention",

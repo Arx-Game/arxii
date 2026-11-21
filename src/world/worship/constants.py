@@ -89,7 +89,6 @@ class DireStraitsKind(models.TextChoices):
 
 # Freeform prayer (#3779). Every magnitude is PLACEHOLDER.
 PRAYER_TEXT_MAX_LENGTH = 2000
-PRAYER_SITE_DEVOTION_AMOUNT = 1  # the weekly holy-site prayer, below a tier 1 rite
 VISION_RESONANCE_POOL_COST = 10  # what a being spends to send one vision
 PRAYER_INTERVENTION_EVENT_PREFIX = "prayer_"  # MiraclePerformance.trigger_event
 
@@ -115,12 +114,44 @@ class FavorAwardKind(models.TextChoices):
     INVOCATION is the bonus, in check points, an invocation check's outcome tier
     adds to the check it was declared on. CLOSING is the base favor a pledge's
     closing rite pays for its outcome tier; pledges read it (#4333 slice 2). SACRIFICE is
-    the base favor a sacrifice's check pays for its outcome tier (#4500).
+    the base favor a sacrifice's check pays for its outcome tier (#4500). The rest are
+    #4349: OFFICIANT is the base favor an officiant earns at ceremony finish for their Rites
+    result, CHOSEN_ANIMA the anima a Chosen's patron adds to their anima ritual for its result,
+    and the three INTERVENTION kinds are the cost of a divine intervention by result: favor
+    spent, favor owed and the minimum wait in hours.
     """
 
     INVOCATION = "invocation", "Invocation bonus (check points)"
     CLOSING = "closing", "Closing award (base favor)"
     SACRIFICE = "sacrifice", "Sacrifice award (base favor)"
+    OFFICIANT = "officiant", "Officiant award (base favor)"
+    CHOSEN_ANIMA = "chosen_anima", "Chosen anima (anima points)"
+    INTERVENTION_SPEND = "intervention_spend", "Intervention spend (favor)"
+    INTERVENTION_DEBT = "intervention_debt", "Intervention debt (favor owed)"
+    INTERVENTION_WAIT_HOURS = "intervention_wait", "Intervention wait (hours)"
+
+
+class BelowZeroRule(models.TextChoices):
+    """What a prayer for intervention does while favor with the being is below 0 (#4349)."""
+
+    AUTOMATIC_FAILURE = "automatic_failure", "Automatic failure"
+    MUCH_HARDER = "much_harder", "Much harder roll"
+
+
+class InterventionStatus(models.TextChoices):
+    """How a divine intervention call ended (#4349), for the caller's lines.
+
+    ``ROLLED`` means the check rolled and its result tier decided the answer; every other
+    value is the reason no roll was made.
+    """
+
+    ROLLED = "rolled", "Rolled"
+    NO_CHECK_TYPE = "no_check_type", "No invocation check type is set"
+    WAITING = "waiting", "The being is still waiting"
+    OWED = "owed", "Favor is owed"
+    BELOW_ZERO = "below_zero", "Favor is below 0"
+    BELOW_GATE = "below_gate", "Favor is below the gate"
+    NO_BEING = "no_being", "No being to call on"
 
 
 #: The longest one-line description a player may attach to an invocation (#4333).
@@ -149,6 +180,10 @@ class PledgeCreditSource(models.TextChoices):
     LAPSE = "lapse", "Lapse award"
     OTHER = "other", "Other"
 
+
+#: The name of the Partial Success tier, which a read with no roll falls back to. A name, not
+#: a level: more than one outcome may sit at level 0 (a game may author its own).
+PARTIAL_SUCCESS_NAME = "Partial Success"
 
 #: Resonance grant sources with no character action behind them. Favor with a being
 #: comes only from a character's actions (owner ruling 2026-10-16), so a grant from

@@ -414,7 +414,7 @@ def assign_interaction_thread(
         raise _unavailable() from None
 
     target_queryset = (
-        Interaction.objects.visible_to(account)
+        Interaction.objects.readable_by(account)
         .filter(pk=reply_target.interaction_id, timestamp=reply_target.timestamp)
         .select_for_update()
     )

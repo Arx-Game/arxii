@@ -66,6 +66,7 @@
   - mishap_tiers <- magic.MishapPoolTier
   - situation_guides <- gm.ConsequencePoolGuide
   - traps <- room_features.Trap
+  - intervention_for_beings <- worship.WorshippedBeing
   - being_answers <- worship.Answer
   - success_beats <- stories.Beat
   - failure_beats <- stories.Beat
@@ -1373,7 +1374,7 @@
 - `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony - Decision 12: close the rite awarding nothing; frees the location + ghost window.`
 - `execute_will(character_sheet: 'CharacterSheet') -> None - Execute the deceased's estate — the funeral door of #1985.`
 - `favored_facets_by_item(being: 'WorshippedBeing', item_instances: 'list[ItemInstance]') -> 'dict[int, Facet]' - Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),`
-- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
+- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.services.CeremonyFinish - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
 - `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, reading: world.ceremonies.services.ItemReading, counted: bool, granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and, when it counts, feed ``being``'s pool.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
@@ -12409,6 +12410,7 @@
 ### Miracle
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
+  - min_outcome_tier -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
   - condition_applications <- worship.MiracleAppliedCondition
   - damage_profiles <- worship.MiracleDamageProfile
@@ -12430,6 +12432,7 @@
   - being -> worship.WorshippedBeing [FK]
   - target_character -> character_sheets.CharacterSheet [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
   - answered_prayer <- worship.Prayer
 
@@ -12458,6 +12461,7 @@
   - resonance_grant -> magic.ResonanceGrant [OneToOne] (nullable)
   - offering -> ceremonies.CeremonyOffering [OneToOne] (nullable)
   - rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
 
 ### PledgeDetails
 **Foreign Keys:**
@@ -12582,6 +12586,7 @@
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - invocation_check_type -> checks.CheckType [FK] (nullable)
+  - intervention_pool -> actions.ConsequencePool [FK] (nullable)
   - tarot_cards -> tarot.TarotCard [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
@@ -12620,11 +12625,10 @@
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
-- `best_patronage_favor(sheet: 'CharacterSheet') -> int - Return the favor of the highest-favor Chosen patronage, or 0.`
+- `broadcast_prayer_line(character, text: str, scene=None) -> None - Post a prayer's room line as an EMIT to the scene (#4349): an ally praying for a fallen`
 - `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int, *, source: 'FavorSource | None' = None) -> world.worship.types.DevotionBump - Upsert the (sheet, being) standing and run the God's Favorite check.`
 - `convert_public_worship(character_sheet: 'CharacterSheet', new_being: world.worship.models.WorshippedBeing, *, is_sincere: bool = True) -> world.worship.models.WorshipDeclaration - Repoint a character's PUBLIC worship declaration (#2361).`
 - `establish_patronage(sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, valence: world.worship.models.PatronageValence) -> world.worship.models.DevotionStanding - Get-or-create a DevotionStanding and mark it as a patronage.`
-- `fire_divine_intervention(character_sheet: 'CharacterSheet', *, trigger: str, trigger_event: str, scene=None, being: world.worship.models.WorshippedBeing | None = None) -> 'MiraclePerformance | None' - The divine-intervention check: the highest-priority qualifying miracle fires.`
 - `get_chosen_favor_config() -> world.worship.models.ChosenFavorConfig - Lazy-create the ChosenFavorConfig singleton (pk=1).`
 - `get_divine_intervention_config() -> 'DivineInterventionConfig' - Lazy-create the singleton (pk=1) divine intervention config (#2360).`
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
@@ -12634,9 +12638,10 @@
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
 - `intervention_cooldown_active(character) -> bool - Whether the divine intervention cooldown condition is on ``character``.`
 - `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
-- `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
+- `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: divine intercession, a being stepping in for a fallen character (#4349).`
 - `miracle_ineligibility(character_sheet: 'CharacterSheet', miracle: 'Miracle', *, favor: int | None = None, on_cooldown: bool | None = None, cfg: 'DivineInterventionConfig | None' = None) -> str - Why ``miracle`` cannot be performed for ``character_sheet`` now, or "" when it can.`
-- `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None, trigger_event: str = 'character_incapacitated') -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
+- `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None, trigger_event: str = 'character_incapacitated', outcome_tier: 'CheckOutcome | None' = None, context_text: str = '') -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`
 - `remove_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Remove the divine intervention trigger when favor drops below threshold.`
+- `route_intervention_text(character_sheet: 'CharacterSheet', text: str, scene=None, *, context_text: str = '') -> None - Route a lesser answer's or backfire's authored text the way a miracle's is: to the scene`
 - `spend_worship_pool(being: world.worship.models.WorshippedBeing, amount: int, *, reason: str = '') -> bool - Deduct ``amount`` from ``being.resonance_pool`` (the spend counterpart to ``grant_worship``).`

@@ -4299,7 +4299,7 @@ GM at a given level may author (#2000, ADR-0097).
   [../adr/0097-gm-trust-is-gmprofile-level.md](../adr/0097-gm-trust-is-gmprofile-level.md),
   [../adr/0141-story-room-access-is-player-side-join.md](../adr/0141-story-room-access-is-player-side-join.md)
 
-### Beta Reset (#3055 PR 2)
+### Beta Reset (#3055 PR 2, PR 3)
 Guarded management command that wipes every play-provenance row back to a pristine
 CG/authoring-only baseline at the alpha→beta cutover, filtering on the acquisition-
 provenance ledger (ADR-0206). Never an admin surface; four independent guards (hardcoded
@@ -4310,11 +4310,18 @@ must all pass before `--execute` touches a row; defaults to a dry-run.
 - **Services:** `world.beta_reset.services.wipe_pristine_world` /
   `preview_pristine_world_wipe` / `mark_released`; `SCOPE_TABLE` is the introspectable
   per-model delete/filter list (wholesale vs provenance-filtered)
-- **Commands:** `arx manage beta_reset [--execute --confirm "..." --backup-verified-at ...]`,
+- **Cutover policy (PR 3):** `world.beta_reset.cutover.run_beta_cutover` / `plan_cutover`
+  (roster characters, reserved original characters and `--carry-over` characters are released
+  to Available and progress-reset, then the wipe runs, one transaction);
+  `world.beta_reset.progress.reset_character_progress` / `plan_progress_reset`;
+  `world.roster.services.activity.is_reserved_against` /
+  `end_all_tenures_to_available`; `world.distinctions.services.delete_character_distinction`
+- **Commands:** `arx manage beta_reset [--execute --confirm "..." --backup-verified-at ...
+  --carry-over <sheet id>]`,
   `arx manage mark_beta_release --released-by <username>`
 - **Source:** `src/world/beta_reset/`, `src/world/management/commands/beta_reset.py`,
   `src/world/management/commands/mark_beta_release.py`
-- **Details:** [beta_reset.md](beta_reset.md) · ADR-0206 · ADR-0207
+- **Details:** [beta_reset.md](beta_reset.md) · ADR-0206 · ADR-0207 · ADR-3055
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
@@ -10616,8 +10623,8 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `TempleDedication` (#3778: the building-level site, FK `Building`, one active per building
   via `dissolved_at`; one shared `consecration_points` for every room under the building's
   area node), `Prayer` (#3779: a character's freeform words to a being, a plain log;
-  `devotion_granted` for the weekly holy-site prayer, `dire_straits` + OneToOne `intervention`
-  when a miracle answered), `Vision` (#3779: GM-sent prose from a being, `reveal_source`,
+  `devotion_granted` (the favor a holy-site prayer's AP earned) and `ap_spent` (#4349),
+  `dire_straits` + OneToOne `intervention` when a miracle answered), `Vision` (#3779: GM-sent prose from a being, `reveal_source`,
   optional `prayer` / CODEX `clue` / `episode`, OneToOne `message` → the VISIONS
   `NarrativeMessage` that delivered it), `ConsecrationTier` (#3778: authored `min_points` → `bonus_percent` ladder per
   scope SHRINE/TEMPLE), `WorshipGrant` (audit ledger),
@@ -10627,8 +10634,9 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   owner/staff-only in the sheet identity serializer).
 - **Favor with beings** (#4333 slice 1, ADR-4333-A): `DevotionConfig` (singleton: default
   `invocation_check_type`, `base_difficulty`, favor ease thresholds/points,
-  `invocations_per_week`), `FavorOutcomeAward` (kind INVOCATION/CLOSING × `CheckOutcome` →
-  amount), `FavorInvocation` (the weekly counter and log; `player_line`; scene / mission /
+  `invocations_per_week`, `prayer_ap_per_favor`, `prayer_weekly_ap_cap`), `FavorOutcomeAward`
+  (kind INVOCATION / CLOSING / SACRIFICE / OFFICIANT / CHOSEN_ANIMA / INTERVENTION_SPEND /
+  INTERVENTION_DEBT / INTERVENTION_WAIT_HOURS × `CheckOutcome` → amount), `FavorInvocation` (the weekly counter and log; `player_line`; scene / mission /
   scene-action links), `WorshippedBeing.invocation_check_type`, `ModifierTarget.target_being`
   with the `favor_invocation`/`favor_earning` categories. The Chosen bonuses (#4341,
   ADR-4341): `ChosenFavorConfig.chosen_distinction` (the distinction every Chosen holds; its
@@ -10736,14 +10744,18 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `dedicate_temple` / `revoke_temple` (gate: `owner_persona`, the area holder, or its org
   leader), actions `shrine_found`/`shrine_dissolve`/`temple_dedicate`/`temple_revoke`;
   `ConsecrationError` (`SiteNotHeld`, `SiteAlreadyTaken`, `SiteNotFound`). **Prayers**
-  (`worship/prayer_services.py`, #3779): `pray(sheet, being, text)` (log; weekly holy-site
-  devotion via `sites_of` + `site_prayer_capped_this_week`; `dire_straits_for` = Soulfray via
-  `get_soulfray_warning` or health ≤ `KNOCKOUT_HEALTH_THRESHOLD` → `fire_divine_intervention`
-  on NEAR_DEATH narrowed to that being), `send_vision(...)` (spends the pool, VISIONS narrative
+  (`worship/prayer_services.py`, #3779): `pray(sheet, being, text, *, on_behalf_of=None, ap=0)` (log; holy-site
+  favor by the AP spent via `sites_of` + `prayer_ap_left_this_week`, #4349; `dire_straits_for` =
+  Soulfray via `get_soulfray_warning` or health ≤ `KNOCKOUT_HEALTH_THRESHOLD` of the one prayed
+  for → `intervention_services.fire_divine_intervention` on NEAR_DEATH narrowed to that being), `send_vision(...)` (spends the pool, VISIONS narrative
   message, `acquire_clue` for a CODEX clue, episode needs a `StoryParticipation`), actions
   `pray` / `vision_send` (staff), telnet `pray` / `vision`, `GET /api/worship/prayers/`,
-  `GET|POST /api/worship/visions/`; `fire_divine_intervention(sheet, *, trigger, trigger_event,
-  scene, being)` is the shared check `maybe_fire_divine_intervention` now calls. **Deity Editor**
+  `GET|POST /api/worship/visions/`; `intervention_services.fire_divine_intervention(praying, *,
+  trigger, trigger_event, scene, being, target)` is the one graded roll (#4349: backfire, sign,
+  lesser answer, rescue, bigger miracle; spend, owed favor and minimum wait by `FavorOutcomeAward`
+  rows; `DevotionStanding.owed_favor` paid first by `bump_devotion`) that a prayer, a prayer for
+  another and `maybe_fire_divine_intervention` (divine intercession) all call; `GET
+  /api/worship/owed-favor/`; `WorshippedBeing.intervention_pool`, `Miracle.min_outcome_tier`. **Deity Editor**
   (`worship/editor_services.py`, #3780): `BeingPage` + `save_being(page, *, being=None)` (one
   transaction: being, Codex page via `ensure_codex_entry`, quote, `is_public`, the Obscure
   `OrganizationCodexGrant`, satellite sets replaced wholesale), `visibility_of` /
@@ -11281,7 +11293,7 @@ Thin telnet compatibility layer that delegates to Actions.
 
 - **Key Classes:** `ArxCommand` (base with `action` + `resolve_action_args()`), `FrontendMetadataMixin` (for non-action commands)
 - **Pattern:** Telnet text → `command.func()` → `resolve_action_args()` → `action.run()`. Web bypasses commands entirely.
-- **Frontend Integration:** `ArxCommand.to_payload()` builds descriptors from action metadata. `serialize_cmdset()` aggregates for room state.
+- **Frontend Integration:** `ArxCommand.to_payload()` builds descriptors from action metadata. `serialize_cmdset()` aggregates them into the `commands` frame the server pushes on puppet and on every cmdset change. The web client keeps only the frame's `names` (`Session.commandNames`, read by the composer) and ignores the descriptors: it renders no form for a telnet command (ADR-4034, #4034).
 - **Non-action commands:** CmdIC, CmdCharacters, CmdAccount, CmdSheet, CmdPage, builder commands
 - **Dispatch families (#1337):** `DispatchCommand` (Family 1 → `dispatch_player_action()`),
   consent commands `ConsentRequestCommand`/`CmdAccept`/`CmdDeny` (Family 2 → consent

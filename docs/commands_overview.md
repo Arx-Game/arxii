@@ -23,6 +23,10 @@ their ``type``. Some dispatchers provide extra hints. For example,
 be a searchable object in the caller's current context. Custom dispatchers may
 set other ``match`` values to narrow the search criteria.
 
+The web client does not read these descriptors: it renders no form for a telnet
+command and keeps only the command names from the same frame (ADR-4034). See
+`docs/frontend/command_descriptor.md`.
+
 ## Permission Checks
 
 Handlers delegate permission logic to the caller's current state. Each state

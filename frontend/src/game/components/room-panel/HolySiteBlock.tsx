@@ -10,6 +10,7 @@ import { PledgeDialog } from '@/worship/components/PledgeDialog';
 import { PrayDialog } from '@/worship/components/PrayDialog';
 import { SacrificeDialog } from '@/worship/components/SacrificeDialog';
 import { useHolySites } from '@/worship/queries';
+import type { PrayerTarget } from '@/worship/types';
 
 interface HolySiteBlockProps {
   /** The active puppet's ObjectDB/CharacterSheet pk, or null/undefined with none active. */
@@ -17,9 +18,11 @@ interface HolySiteBlockProps {
   /** The viewer's active RosterEntry pk: the character the site is read for. */
   viewerEntryId?: number | null;
   roomId: number;
+  /** Characters here who can be prayed for. */
+  others?: PrayerTarget[];
 }
 
-export function HolySiteBlock({ characterId, viewerEntryId, roomId }: HolySiteBlockProps) {
+export function HolySiteBlock({ characterId, viewerEntryId, roomId, others }: HolySiteBlockProps) {
   const { data: sites = [] } = useHolySites({
     entryId: viewerEntryId ?? undefined,
     roomId,
@@ -39,7 +42,12 @@ export function HolySiteBlock({ characterId, viewerEntryId, roomId }: HolySiteBl
             {site.being_name}&apos;s {site.site}
           </span>
           <span className="ml-auto flex flex-wrap gap-1">
-            <PrayDialog characterId={characterId} defaultBeingId={site.being_id} />
+            <PrayDialog
+              characterId={characterId}
+              defaultBeingId={site.being_id}
+              site={{ apLeft: site.ap_left, apCap: site.ap_cap }}
+              others={others}
+            />
             <SacrificeDialog
               characterId={characterId}
               beingId={site.being_id}

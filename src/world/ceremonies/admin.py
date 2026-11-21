@@ -1,5 +1,7 @@
 from django.contrib import admin
 from django.http import HttpRequest
+from django.urls import reverse
+from django.utils.html import format_html
 
 from world.admin_utils import OneRowPerFormSet
 from world.ceremonies.models import (
@@ -88,3 +90,22 @@ class CeremonyAdmin(admin.ModelAdmin):
 @admin.register(CeremonyConfig)
 class CeremonyConfigAdmin(admin.ModelAdmin):
     list_display = ("pk", "officiant_cut_percent", "base_honoree_prestige")
+    readonly_fields = ("devotion_officiant_rows",)
+
+    def get_form(self, request: HttpRequest, obj=None, change: bool = False, **kwargs):
+        kwargs["help_texts"] = {
+            "devotion_per_offering_point": (
+                "Unchanged by this issue. To be replaced by the symbolic-item weighting."
+            ),
+            "offering_favored_facet_multiplier_percent": "Unchanged by this issue.",
+        }
+        return super().get_form(request, obj, change=change, **kwargs)
+
+    @admin.display(description="Devotion officiant (removed)")
+    def devotion_officiant_rows(self, obj: CeremonyConfig) -> str:
+        """Where the officiant's favor is authored now: the Officiant award rows by Rites result."""
+        del obj
+        return format_html(
+            'See the Officiant award rows in the <a href="{}">Devotion config</a> award table.',
+            reverse("admin:arxii_devotionconfig_changelist"),
+        )

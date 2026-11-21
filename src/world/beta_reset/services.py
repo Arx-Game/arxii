@@ -43,16 +43,14 @@ introspectable by tests and by PR 3. Two shapes:
 **PR 2 / PR 3 boundary — read this before touching derived values.** This service does
 **NOT** step ``CharacterTraitValue`` back down after deleting a play-time
 ``CharacterTraitChange`` row, even though that row recorded the exact delta. That
-"replay the ledger backwards to restore a derived value" logic is **PR 3's roster
-progress-reset** scope (the spec: "roster characters progress-reset (via the ledger)" is
-explicitly PR 3), which needs to be careful and precise because PR 3 operates on
-characters that are *kept*. PR 2's own characters — the alpha test population — are
-**deleted wholesale at cutover by a separate step outside this command** (not by
-``wipe_pristine_world`` — this service never touches ``CharacterSheet``, ``Persona``,
-``RosterEntry``, or ``RosterTenure`` at all), so any derived-value drift this wipe leaves
-behind on a surviving ledger is moot for them. This wipe is reusable general-purpose
-"strip play-state, keep provenance-tagged CG rows" plumbing; PR 3 is what makes the
-numbers on a *kept* character's sheet consistent again.
+"replay the ledger backwards" logic lives in ``world.beta_reset.progress`` and runs for
+each KEPT character (roster characters, reserved original characters, carried-over
+characters) from ``world.beta_reset.cutover.run_beta_cutover``, which runs it BEFORE this
+wipe because it reads the rows this wipe deletes. Characters outside those three kinds are
+not touched by ``wipe_pristine_world`` at all (it never touches ``CharacterSheet``,
+``Persona``, ``RosterEntry`` or ``RosterTenure``), so any derived-value drift on them is
+the unruled deletion step's concern. This wipe is reusable general-purpose "strip
+play-state, keep provenance-tagged CG rows" plumbing.
 
 **What this does NOT touch, and why:**
 
@@ -89,6 +87,14 @@ numbers on a *kept* character's sheet consistent again.
 - ``CombatEncounter.scene`` and ``TreatmentAttempt.scene`` are both ``PROTECT`` against
   ``scenes.Scene`` — both must be deleted before ``Scene`` (they're not spec-named by app,
   but they block the spec-named "scenes" wipe from running at all).
+- ``LegendHonor.journal_entry`` and ``RelationshipCapstone.journal_entry`` are ``PROTECT``
+  against ``JournalEntry`` — both are deleted before it.
+- ``Thread.target_capstone`` is ``PROTECT`` against ``RelationshipCapstone`` — the threads
+  anchored on a capstone (and their ``ThreadLevelUnlock`` receipts, ``PROTECT`` against
+  ``Thread``) are deleted before it. No other thread is touched.
+- ``ListenerHarvest.secret`` is ``PROTECT`` against ``Secret`` — deleted before it.
+- ``EventGrandeurContribution.transfer`` is ``PROTECT`` against ``CurrencyTransfer`` —
+  deleted before it.
 - ``NPCStanding.persona`` / ``.npc_persona`` are ``PROTECT`` against ``scenes.Persona`` —
   irrelevant in practice since this wipe never deletes ``Persona``, but ``NPCStanding`` is
   deleted anyway as its own wholesale play-state row (per-PC-NPC disposition).
@@ -98,7 +104,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
 from django.db.models import Model
@@ -127,6 +133,7 @@ from world.currency.models import (
 )
 from world.distinctions.models import CharacterDistinction
 from world.distinctions.types import DistinctionOrigin
+from world.events.models import EventGrandeurContribution
 from world.journals.models import JournalEntry, WeeklyJournalXP
 from world.justice.models import (
     AccusationCrimeClaim,
@@ -144,9 +151,16 @@ from world.justice.models import (
     PersonaHeat,
 )
 from world.magic.constants import AcquisitionOrigin
-from world.magic.models import CharacterGift, CharacterTechnique, ResonanceGrant
+from world.magic.models import (
+    CharacterGift,
+    CharacterTechnique,
+    ResonanceGrant,
+    Thread,
+    ThreadLevelUnlock,
+)
 from world.npc_services.models import NPCStanding
 from world.progression.models import CharacterXPTransaction, ClassLevelAdvancement
+from world.relationships.models import RelationshipCapstone
 from world.scenes.models import (
     DecisiveCheckMarker,
     Interaction,
@@ -167,8 +181,12 @@ from world.scenes.models import (
     SceneUnseenObserver,
 )
 from world.secrets.models import Secret
-from world.societies.models import LegendEntry, LegendEvent, refresh_legend_views
+from world.societies.models import LegendEntry, LegendEvent, LegendHonor, refresh_legend_views
+from world.tasking.models import ListenerHarvest
 from world.traits.models import CharacterTraitChange, TraitChangeSource
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 # =============================================================================
 # Guard 1: hardcoded source constant
@@ -212,6 +230,18 @@ PLAY_TIME_ACQUISITION_ORIGINS = frozenset(
         AcquisitionOrigin.ORGANIZATION_GRANT,
         AcquisitionOrigin.ALTERNATE_SELF_GRANT,
         AcquisitionOrigin.GM_GRANT,
+        # A Critical Success trial's "grant outright" (#4501): earned in play.
+        AcquisitionOrigin.TRIAL,
+    }
+)
+
+#: The other half of the split. ``test_provenance_sets`` fails when an enum member is in
+#: neither half, so a new origin cannot be added without choosing a side.
+CG_AUTHORING_ACQUISITION_ORIGINS = frozenset(
+    {
+        AcquisitionOrigin.CHARACTER_CREATION,
+        AcquisitionOrigin.SPECIES_GRANT,
+        AcquisitionOrigin.AUTHORED,
     }
 )
 
@@ -223,6 +253,17 @@ PLAY_TIME_TRAIT_CHANGE_SOURCES = frozenset(
         TraitChangeSource.MATURATION,
         TraitChangeSource.LEVEL_STAT_POINT,
         TraitChangeSource.GM_GRANT,
+        # XP spent to clear a language or skill breakthrough (#4090): earned in play.
+        TraitChangeSource.XP_BREAKTHROUGH,
+    }
+)
+
+#: Staff edit mode (#4221) and NPC statline presets are authoring acts, not play.
+CG_AUTHORING_TRAIT_CHANGE_SOURCES = frozenset(
+    {
+        TraitChangeSource.CHARACTER_CREATION,
+        TraitChangeSource.NPC_PRESET,
+        TraitChangeSource.STAFF_EDIT,
     }
 )
 
@@ -237,6 +278,15 @@ PLAY_TIME_DISTINCTION_ORIGINS = frozenset(
         DistinctionOrigin.CONSEQUENCE_POOL,
         DistinctionOrigin.ENDORSEMENT_THRESHOLD,
         DistinctionOrigin.UNLOCK_PURCHASE,
+    }
+)
+
+#: Staff edit mode (#4221) is staff building or repairing a sheet, an authoring act.
+CG_AUTHORING_DISTINCTION_ORIGINS = frozenset(
+    {
+        DistinctionOrigin.CHARACTER_CREATION,
+        DistinctionOrigin.SPECIES,
+        DistinctionOrigin.STAFF,
     }
 )
 
@@ -325,6 +375,30 @@ SCOPE_TABLE: list[ScopeEntry] = [
     ScopeEntry(DecisiveCheckMarker, None, "Pre-declared decisive-check markers."),
     ScopeEntry(SceneRound, None, "Non-combat round/turn structures."),
     ScopeEntry(Scene, None, "The scene containers themselves."),
+    ScopeEntry(
+        LegendHonor,
+        None,
+        "PROTECT-unblocker: LegendHonor.journal_entry is PROTECT against JournalEntry. The "
+        "honor is a legend-ledger row, wiped with the rest of the legend ledger.",
+    ),
+    ScopeEntry(
+        ThreadLevelUnlock,
+        {"thread__target_capstone__isnull": False},
+        "PROTECT-unblocker: ThreadLevelUnlock.thread is PROTECT against Thread. Only the "
+        "receipts of capstone-anchored threads go, as those threads are deleted next.",
+    ),
+    ScopeEntry(
+        Thread,
+        {"target_capstone__isnull": False},
+        "PROTECT-unblocker: Thread.target_capstone is PROTECT against RelationshipCapstone. "
+        "Only threads anchored on a capstone go; a thread with any other anchor is untouched.",
+    ),
+    ScopeEntry(
+        RelationshipCapstone,
+        None,
+        "PROTECT-unblocker: RelationshipCapstone.journal_entry is PROTECT against "
+        "JournalEntry. The capstone receipt is a play-time tier-claim record.",
+    ),
     ScopeEntry(JournalEntry, None, "Journal entries (JournalTag cascades with it)."),
     ScopeEntry(WeeklyJournalXP, None, "Weekly journal-XP award tracker."),
     # --- Justice (explicit spec scope): FrameJobDetails before CrimeEvidence (PROTECT). ---
@@ -351,10 +425,22 @@ SCOPE_TABLE: list[ScopeEntry] = [
     # off Secret). No CG-vs-play split exists on Secret.provenance (SecretProvenance is a
     # canonicity spectrum, not an acquisition-time discriminator — see the module docstring
     # of world.secrets.constants.SecretProvenance) — every Secret row is play-state. ---
+    ScopeEntry(
+        ListenerHarvest,
+        None,
+        "PROTECT-unblocker: ListenerHarvest.secret is PROTECT against Secret. A harvest "
+        "is a play-time catch awaiting collection.",
+    ),
     ScopeEntry(Secret, None, "Every secret and its cascading child rows."),
     # --- NPC standing (explicit spec scope) ---
     ScopeEntry(NPCStanding, None, "Per-(PC persona, NPC persona) disposition rows."),
     # --- Economy ledgers (explicit spec scope: "currency contracts/debts" are IN scope) ---
+    ScopeEntry(
+        EventGrandeurContribution,
+        None,
+        "PROTECT-unblocker: EventGrandeurContribution.transfer is PROTECT against "
+        "CurrencyTransfer. A grandeur spend is a play-time money sink row.",
+    ),
     ScopeEntry(CurrencyTransfer, None, "Money-movement audit trail."),
     ScopeEntry(Contract, None, "Consent-gated economic agreements (ContractTerm cascades)."),
     ScopeEntry(DebtInstrument, None, "Standing org-to-org debts."),
@@ -392,6 +478,20 @@ class WipeReport:
         return sum(c.would_delete for c in self.counts)
 
 
+def scope_entry_for(model: type[Model]) -> ScopeEntry:
+    """The ``SCOPE_TABLE`` entry for a provenance-filtered ``model``.
+
+    The per-character progress reset reads its play-time filter from here, so "what counts
+    as play provenance" has one definition. Raises ``LookupError`` for a model with no
+    entry, and for one whose entry is not a provenance split.
+    """
+    for entry in SCOPE_TABLE:
+        if entry.model is model and entry.filter_kwargs:
+            return entry
+    msg = f"{model.__name__} has no provenance-filtered SCOPE_TABLE entry."
+    raise LookupError(msg)
+
+
 def _scope_queryset(entry: ScopeEntry):
     qs = entry.model.objects.all()
     if entry.filter_kwargs:
@@ -399,19 +499,24 @@ def _scope_queryset(entry: ScopeEntry):
     return qs
 
 
-def _deprovision_wiped_natural_weapons() -> None:
-    """A play-time gift the wipe deletes takes its natural weapon with it (#4898).
+def deprovision_play_time_natural_weapons(sheet: CharacterSheet | None = None) -> None:
+    """A play-time gift that goes takes its natural weapon with it (#4898).
 
     The weapon carries its gift as ``ItemInstance.natural_weapon_gift`` and can never be
     removed by any other path, so a wiped gift would otherwise leave claws nobody can
-    take off. Runs before the ``CharacterGift`` rows go, inside the wipe's transaction.
+    take off. Runs before the ``CharacterGift`` rows go, inside the caller's transaction.
+    ``sheet=None`` covers every character (the wipe); a sheet covers just that character
+    (the progress reset).
     """
     from world.items.services.natural_weapons import deprovision_natural_weapon  # noqa: PLC0415
 
     wiped = CharacterGift.objects.filter(
         origin__in=list(PLAY_TIME_ACQUISITION_ORIGINS),
         gift__natural_weapon_template__isnull=False,
-    ).select_related("character", "gift")
+    )
+    if sheet is not None:
+        wiped = wiped.filter(character=sheet)
+    wiped = wiped.select_related("character", "gift")
     for row in wiped:
         deprovision_natural_weapon(row.character, row.gift)
 
@@ -504,7 +609,7 @@ def wipe_pristine_world(
 
     counts: list[ScopeCount] = []
     with transaction.atomic():
-        _deprovision_wiped_natural_weapons()
+        deprovision_play_time_natural_weapons()
         for entry in SCOPE_TABLE:
             qs = _scope_queryset(entry)
             deleted, _ = qs.delete()

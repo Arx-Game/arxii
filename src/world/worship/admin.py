@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.contrib import admin, messages
-from django.db.models import Count
+from django.db.models import Count, Sum
 from django.http import HttpRequest, HttpResponse, HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html, format_html_join
@@ -49,6 +51,9 @@ from world.worship.models import (
     WorshipRiteTierAward,
     WorshipTradition,
 )
+
+if TYPE_CHECKING:
+    from world.checks.models import ConsequenceEffect
 
 
 @admin.register(WorshipTradition)
@@ -109,6 +114,54 @@ class BeingStewardInline(admin.StackedInline):
         return f"{table_context_line(obj.table, being=obj.being)} {sign_text}"
 
 
+def _effect_words(effect: ConsequenceEffect) -> str:
+    """One effect of an answer in words: its kind, then the condition it names, if any."""
+    kind = effect.get_effect_type_display()
+    template = effect.condition_template
+    return f"{kind}: {template.name}" if template is not None else kind
+
+
+def intervention_pool_summary(being: WorshippedBeing) -> SafeString | str:
+    """A table of ``being``'s intervention pool rows by tier (#4349), or why there is none."""
+    from actions.services import get_effective_consequences  # noqa: PLC0415
+
+    pool = being.intervention_pool if being.pk else None
+    if pool is None:
+        return "No intervention answers: a roll below Success gives nothing."
+    rows = sorted(
+        get_effective_consequences(pool), key=lambda row: (row.outcome_tier.success_level, row.pk)
+    )
+    from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+
+    # Every row's effects and their condition templates in one read, grouped by consequence.
+    effects: dict[int, list[ConsequenceEffect]] = {}
+    for effect in ConsequenceEffect.objects.filter(
+        consequence_id__in=[row.consequence.pk for row in rows]
+    ).select_related("condition_template"):
+        effects.setdefault(effect.consequence_id, []).append(effect)
+    body = format_html_join(
+        "",
+        "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+        (
+            (
+                row.outcome_tier.name,
+                row.label,
+                row.weight,
+                ", ".join(_effect_words(e) for e in effects.get(row.consequence.pk, []))
+                or "None (text only)",
+            )
+            for row in rows
+        ),
+    )
+    link = reverse("admin:arxii_consequencepool_change", args=[pool.pk])
+    return format_html(
+        "<table><tr><th>Tier</th><th>Row</th><th>Weight</th><th>Effects</th></tr>{}</table>"
+        '<p><a href="{}">Edit pool</a></p>',
+        body,
+        link,
+    )
+
+
 @admin.register(WorshippedBeing)
 class WorshippedBeingAdmin(admin.ModelAdmin):
     list_display = ("name", "tradition", "resonance_pool", "lifetime_worship", "is_active")
@@ -120,11 +173,82 @@ class WorshippedBeingAdmin(admin.ModelAdmin):
     # the same CodexEntryAdmin (which declares the required search_fields).
     # invocation_check_type (#4333): the per-being override of the default
     # invocation check; blank uses Devotion config's.
-    autocomplete_fields = ("codex_entry", "invocation_check_type")
+    # intervention_pool (#4349): the consequence pool a divine intervention draws backfires,
+    # signs and lesser answers from, with its rows summarised below it.
+    autocomplete_fields = ("codex_entry", "invocation_check_type", "intervention_pool")
+    readonly_fields = ("intervention_pool_rows", "intervention_miracles")
     filter_horizontal = ("ultimate_techniques",)
     # The tarot link carries an orientation (#4198), so it is a row, not a multi-select.
     # The steward (#4333 slice 4) is a stacked row with its context beside it.
     inlines = (BeingTarotCardInline, BeingStewardInline)
+
+    def get_form(self, request: HttpRequest, obj=None, change: bool = False, **kwargs):
+        kwargs["labels"] = {"intervention_pool": "Intervention answers"}
+        kwargs["help_texts"] = {
+            "intervention_pool": (
+                "The consequence pool drawn from when this being's intervention roll lands "
+                "below Success. Critical Failure rows are backfires, Failure rows are signs "
+                "with no aid, Partial Success rows are lesser answers. One row is drawn by "
+                "weight."
+            )
+        }
+        return super().get_form(request, obj, change=change, **kwargs)
+
+    def get_fieldsets(self, request: HttpRequest, obj=None):
+        """The intervention fields sit together in their own fieldset, after the rest."""
+        own = ("intervention_pool", "intervention_pool_rows", "intervention_miracles")
+        rest = [
+            (name, {**options, "fields": [f for f in options["fields"] if f not in own]})
+            for name, options in super().get_fieldsets(request, obj)
+        ]
+        return [*rest, ("Divine intervention", {"fields": own})]
+
+    @admin.display(description="Miracles")
+    def intervention_miracles(self, obj: WorshippedBeing) -> SafeString | str:
+        """The being's active miracles by the lowest result that can bring them."""
+        if obj.pk is None:
+            return "Save the being to see its miracles."
+        miracles = list(
+            Miracle.objects.filter(being=obj, is_active=True)
+            .select_related("min_outcome_tier")
+            .order_by("sort_order", "pk")
+        )
+        if not miracles:
+            return "No miracles."
+        tiers: dict[str, list[Miracle]] = {}
+        for miracle in miracles:
+            name = miracle.min_outcome_tier.name if miracle.min_outcome_tier_id else "Success"
+            tiers.setdefault(name, []).append(miracle)
+        parts = format_html_join(
+            " ",
+            "{}: {}.",
+            (
+                (
+                    tier,
+                    format_html_join(
+                        ", ",
+                        '<a href="{}">{}</a>',
+                        (
+                            (reverse("admin:arxii_miracle_change", args=[m.pk]), m.name)
+                            for m in group
+                        ),
+                    ),
+                )
+                for tier, group in tiers.items()
+            ),
+        )
+        return format_html(
+            '{} <a href="{}?being__id__exact={}">Edit</a>',
+            parts,
+            reverse("admin:arxii_miracle_changelist"),
+            obj.pk,
+        )
+
+    @admin.display(description="What the pool holds")
+    def intervention_pool_rows(self, obj: WorshippedBeing) -> SafeString | str:
+        """The being's intervention pool by result tier: backfires (Critical Failure), signs
+        (Failure) and lesser answers (Partial Success), with weights, and a link to edit it."""
+        return intervention_pool_summary(obj)
 
 
 @admin.register(BeingFacet)
@@ -309,14 +433,54 @@ class MiracleAdmin(admin.ModelAdmin):
         "resonance_pool_cost",
         "intervention_trigger",
         "favor_threshold",
+        "min_outcome_tier",
         "is_active",
     )
     list_filter = ("being", "intervention_trigger", "is_active")
     search_fields = ("name",)
+    readonly_fields = ("tier_list",)
+
+    def get_form(self, request: HttpRequest, obj=None, change: bool = False, **kwargs):
+        kwargs["labels"] = {"resonance_pool_cost": "Worship pool cost"}
+        kwargs["help_texts"] = {
+            "resonance_pool_cost": ("Taken from the being's worship pool when this miracle fires.")
+        }
+        return super().get_form(request, obj, change=change, **kwargs)
+
     inlines = [
         MiracleAppliedConditionInline,
         MiracleDamageProfileInline,
     ]
+
+    @admin.display(description="This being's miracles for this danger")
+    def tier_list(self, obj: Miracle) -> SafeString | str:
+        """Every active miracle of the being for the same danger, by priority, beside the
+        being's intervention pool, so one page shows every result tier (#4349)."""
+        if obj.pk is None:
+            return "Save the miracle to see the being's tier list."
+        siblings = Miracle.objects.filter(
+            being=obj.being, intervention_trigger=obj.intervention_trigger, is_active=True
+        ).select_related("min_outcome_tier")
+        rows = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
+            (
+                (
+                    f"{m.name} (this one)" if m.pk == obj.pk else m.name,
+                    m.min_outcome_tier.name if m.min_outcome_tier_id else "Success",
+                    m.favor_threshold,
+                    m.sort_order,
+                    m.resonance_pool_cost,
+                )
+                for m in siblings.order_by("sort_order", "pk")
+            ),
+        )
+        return format_html(
+            "<table><tr><th>Miracle</th><th>Min tier</th><th>Favor</th><th>Sort</th>"
+            "<th>Worship pool cost</th></tr>{}</table>{}",
+            rows,
+            intervention_pool_summary(obj.being),
+        )
 
 
 @admin.register(MiraclePerformance)
@@ -338,13 +502,270 @@ class MiraclePerformanceAdmin(admin.ModelAdmin):
         "scene",
         "resonance_spent",
         "trigger_event",
+        "outcome_tier",
         "created_at",
     )
 
 
 @admin.register(DivineInterventionConfig)
 class DivineInterventionConfigAdmin(admin.ModelAdmin):
-    list_display = ("favor_threshold", "cooldown_hours", "min_pool_for_intervention")
+    """The divine intervention roll's terms (#4349): a singleton change form.
+
+    Read-only context below the fields: characters who owe favor, active miracles whose own
+    favor threshold is above the prayer gate, beings with miracles but no intervention
+    answers, and a warning when no invocation check type is set.
+    """
+
+    list_display = (
+        "favor_threshold",
+        "prayer_favor_gate",
+        "cooldown_hours",
+        "min_pool_for_intervention",
+    )
+
+    def get_form(self, request: HttpRequest, obj=None, change: bool = False, **kwargs):
+        from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+        config = get_devotion_config()
+        kwargs["labels"] = {"favor_threshold": "Divine intercession threshold"}
+        kwargs["help_texts"] = {
+            "debt_softening_low_percent": (
+                "Owed favor and the minimum wait are cut by this percent when the character's "
+                "favor is at or above the low favor-ease threshold (Devotion config, "
+                f"{config.favor_ease_low_threshold})."
+            ),
+            "debt_softening_high_percent": (
+                "Used instead at or above the high favor-ease threshold "
+                f"({config.favor_ease_high_threshold}). Favor spent, favor owed and the "
+                "minimum wait per result are the Intervention spend, Intervention debt and "
+                "Intervention wait rows in Devotion config."
+            ),
+            "min_pool_for_intervention": (
+                "A being's worship pool must hold at least this to perform any miracle."
+            ),
+        }
+        return super().get_form(request, obj, change=change, **kwargs)
+
+    readonly_fields = (
+        "roll_rule",
+        "owing_favor_now",
+        "intervention_odds",
+        "intervention_costs",
+        "miracles_above_the_gate",
+        "beings_without_answers",
+    )
+    fieldsets = (
+        (
+            "Who may be answered",
+            {
+                "fields": (
+                    "prayer_favor_gate",
+                    "favor_threshold",
+                    "below_zero_rule",
+                    "below_zero_difficulty",
+                    "roll_rule",
+                )
+            },
+        ),
+        ("Limits", {"fields": ("cooldown_hours", "min_pool_for_intervention")}),
+        (
+            "Price of an answer",
+            {
+                "fields": (
+                    "debt_softening_low_percent",
+                    "debt_softening_high_percent",
+                    "owing_favor_now",
+                )
+            },
+        ),
+        (
+            "Odds and cost at these settings (read only)",
+            {"fields": ("intervention_odds", "intervention_costs")},
+        ),
+        (
+            "Context",
+            {"fields": ("miracles_above_the_gate", "beings_without_answers")},
+        ),
+    )
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        """Never: the changelist creates the one row on first open (``changelist_view``), and
+        every admin page asks this for its sidebar's add link, so an existence check here would
+        cost a query on every admin page."""
+        del request
+        return False
+
+    def has_delete_permission(
+        self, request: HttpRequest, obj: DivineInterventionConfig | None = None
+    ) -> bool:
+        del request, obj
+        return False
+
+    def changelist_view(self, request: HttpRequest, extra_context=None) -> HttpResponse:
+        """The singleton opens its change form, creating the row when there is none."""
+        del request, extra_context
+        from world.worship.services import get_divine_intervention_config  # noqa: PLC0415
+
+        config = get_divine_intervention_config()
+        return HttpResponseRedirect(
+            reverse("admin:arxii_divineinterventionconfig_change", args=[config.pk])
+        )
+
+    @admin.display(description="The roll")
+    def roll_rule(self, obj: DivineInterventionConfig) -> SafeString | str:
+        """How the roll is made, and a warning while no invocation check type is set."""
+        from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+        del obj
+        text = (
+            "Uses the invocation check: the being's invocation check type, else Devotion "
+            "config's, at the invocation difficulty (its base, favor eases and favor invocation "
+            "modifiers). A character with botch immunity for the Faith check category cannot "
+            "backfire."
+        )
+        if get_devotion_config().invocation_check_type_id is None:
+            return format_html(
+                "{} <strong>No invocation check type is set in Devotion config: no "
+                "intervention can fire.</strong>",
+                text,
+            )
+        return text
+
+    @admin.display(description="Owing favor now")
+    def owing_favor_now(self, obj: DivineInterventionConfig) -> str:
+        del obj
+        rows = (
+            DevotionStanding.objects.filter(owed_favor__gt=0)
+            .values("being__name")
+            .annotate(characters=Count("id"), owed=Sum("owed_favor"))
+            .order_by("being__name")
+        )
+        if not rows:
+            return "Nobody owes favor."
+        return " | ".join(
+            f"{row['being__name']}: {row['characters']} characters, {row['owed']} favor owed"
+            for row in rows
+        )
+
+    @admin.display(description="Odds by example character")
+    def intervention_odds(self, obj: DivineInterventionConfig) -> SafeString | str:
+        """The chance of each result for four example characters, each row stating the favor,
+        invocation modifier and difficulty behind it, read from the real result charts (#4349)."""
+        from world.worship.intervention_tables import RESULT_WORDS, odds_rows  # noqa: PLC0415
+        from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+
+        del obj
+        rows = odds_rows()
+        if not rows:
+            return "No result charts are authored for this roller."
+        levels = sorted(RESULT_WORDS)
+        head = format_html_join("", "<th>{}</th>", ((RESULT_WORDS[n],) for n in levels))
+        body = format_html_join(
+            "",
+            "<tr><td>{}<br><small>{}</small></td>{}</tr>",
+            (
+                (
+                    row.archetype,
+                    row.inputs,
+                    format_html_join(
+                        "", "<td>{}%</td>", ((row.percents.get(n, 0),) for n in levels)
+                    ),
+                )
+                for row in rows
+            ),
+        )
+        roller = get_devotion_config().odds_reference_roller_points
+        return format_html(
+            "<table><tr><th>Archetype</th>{}</tr>{}</table>"
+            "<p>For a roller of {} points (the reference roller in Devotion config), at the "
+            "invocation difficulty. Botch immunity turns a Backfire into Unanswered.</p>",
+            head,
+            body,
+            roller,
+        )
+
+    @admin.display(description="What an answer costs")
+    def intervention_costs(self, obj: DivineInterventionConfig) -> SafeString | str:
+        """Spend, owed favor and wait for each result from the award rows, with the favor
+        softening applied at each band (#4349)."""
+        del obj
+        from world.worship.intervention_tables import cost_rows  # noqa: PLC0415
+        from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+        from world.worship.services import get_divine_intervention_config  # noqa: PLC0415
+
+        config = get_devotion_config()
+        cooldown = get_divine_intervention_config().cooldown_hours
+        rows = cost_rows()
+        if not rows:
+            return "No check outcomes are authored."
+        low, high = config.favor_ease_low_threshold, config.favor_ease_high_threshold
+        bands = (f"below {low}", f"{low} to {high - 1}", f"{high} or more")
+        head = format_html_join(
+            "",
+            "<th>Owed, favor {}</th>",
+            ((band,) for band in bands),
+        ) + format_html_join("", "<th>Wait (h), favor {}</th>", ((band,) for band in bands))
+        body = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td>{}{}</tr>",
+            (
+                (
+                    row.result,
+                    row.spent,
+                    format_html_join("", "<td>{}</td>", ((n,) for n in row.owed)),
+                    format_html_join("", "<td>{}</td>", ((n,) for n in row.wait_hours)),
+                )
+                for row in rows
+            ),
+        )
+        return format_html(
+            "<table><tr><th>Result</th><th>Favor spent</th>{}</tr>{}</table>"
+            "<p>Spent only on a rescue or a bigger miracle. Owed favor and a wait row are "
+            "reduced at the favor bands and rounded up; a result with no wait row waits "
+            "{} hours.</p>",
+            head,
+            body,
+            cooldown,
+        )
+
+    @admin.display(description="Miracles whose own favor threshold is above the gate")
+    def miracles_above_the_gate(self, obj: DivineInterventionConfig) -> SafeString | str:
+        miracles = Miracle.objects.filter(
+            is_active=True, favor_threshold__gt=obj.prayer_favor_gate
+        ).select_related("being")
+        if not miracles:
+            return "None."
+        body = format_html_join(
+            "",
+            '<tr><td><a href="{}">{}</a></td><td>{}</td><td>{}</td></tr>',
+            (
+                (
+                    reverse("admin:arxii_miracle_change", args=[m.pk]),
+                    m.name,
+                    m.being.name,
+                    m.favor_threshold,
+                )
+                for m in miracles
+            ),
+        )
+        return format_html(
+            "<table><tr><th>Miracle</th><th>Being</th><th>Favor threshold</th></tr>{}</table>",
+            body,
+        )
+
+    @admin.display(description="Beings with miracles but no intervention answers")
+    def beings_without_answers(self, obj: DivineInterventionConfig) -> SafeString | str:
+        del obj
+        beings = WorshippedBeing.objects.filter(
+            miracles__is_active=True, intervention_pool__isnull=True
+        ).distinct()
+        if not beings:
+            return "None."
+        return format_html_join(
+            "",
+            '<p><a href="{}">{}</a>: rolls below Success give nothing until a pool is set.</p>',
+            ((reverse("admin:arxii_worshippedbeing_change", args=[b.pk]), b.name) for b in beings),
+        )
 
 
 @admin.register(ChosenFavorConfig)
@@ -352,10 +773,9 @@ class ChosenFavorConfigAdmin(admin.ModelAdmin):
     list_display = (
         "id",
         "anima_recovery_threshold",
-        "anima_recovery_bonus",
         "chosen_distinction",
     )
-    readonly_fields = ("chosen_per_being",)
+    readonly_fields = ("chosen_per_being", "anima_recovery_rows")
     autocomplete_fields = ("chosen_distinction",)
     fieldsets = (
         (
@@ -363,7 +783,7 @@ class ChosenFavorConfigAdmin(admin.ModelAdmin):
             {
                 "fields": (
                     "anima_recovery_threshold",
-                    "anima_recovery_bonus",
+                    "anima_recovery_rows",
                     "ceremony_edge_threshold",
                     "ceremony_edge_bonus",
                 )
@@ -405,6 +825,17 @@ class ChosenFavorConfigAdmin(admin.ModelAdmin):
                     level=messages.WARNING,
                 )
 
+    @admin.display(description="Anima the patron adds")
+    def anima_recovery_rows(self, obj: ChosenFavorConfig) -> str:
+        """Where the patron's anima is authored: the Chosen anima rows, by ritual result."""
+        del obj
+        url = reverse("admin:arxii_devotionconfig_changelist")
+        return format_html(
+            'Set in the <a href="{}">Devotion config</a> award table, as the Chosen anima '
+            "rows for each ritual result.",
+            url,
+        )
+
     @admin.display(description="Chosen per being")
     def chosen_per_being(self, obj: ChosenFavorConfig) -> str:
         """How many characters each being has as its Chosen (a Chosen patronage, #4341)."""
@@ -431,7 +862,7 @@ class FavorOutcomeAwardInline(admin.TabularInline):
     fields = ("kind", "outcome_tier", "amount")
     ordering = ("kind", "-outcome_tier__success_level")
     verbose_name = "favor outcome award"
-    verbose_name_plural = "Favor outcome awards: one table, two kinds"
+    verbose_name_plural = "Favor outcome awards: one table, eight kinds"
 
 
 #: DevotionConfig's difficulty choice field, relabelled with its points.
@@ -538,6 +969,17 @@ class DevotionConfigAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Holy-site prayer",
+            {
+                "description": (
+                    "Action points spent praying at a shrine or temple of a being earn base "
+                    "favor, then the earning rate. A full week at the limit earns the limit "
+                    "divided by the points per favor, rounded down."
+                ),
+                "fields": ("prayer_ap_per_favor", "prayer_weekly_ap_cap"),
+            },
+        ),
+        (
             "Sacrifices",
             {
                 "description": (
@@ -619,6 +1061,25 @@ class DevotionConfigAdmin(admin.ModelAdmin):
                     "requested_item_max_points",
                     "requested_item_max_value",
                 ),
+            },
+        ),
+        (
+            "What the favor outcome award rows pay",
+            {
+                "description": (
+                    "Officiant: base favor the officiant earns at ceremony finish for their "
+                    "Rites result (Partial Success when the officiant made no Rites roll). "
+                    "Chosen anima: anima a Chosen's patron adds to their anima ritual for its "
+                    "result, when patron favor meets the Chosen favor config threshold; a "
+                    "Critical Success ritual already refills anima, so a row for it has no "
+                    "effect. Intervention spend: favor a rescue or bigger miracle costs. "
+                    "Intervention debt: favor owed after the result, reduced at higher favor "
+                    "and rounded up, paid from base favor before the earning rate; the being "
+                    "ignores that character's intervention rolls until it is paid (invoking "
+                    "still works). Intervention wait: the minimum hours before the next "
+                    "intervention roll, reduced at higher favor. A missing row pays 0."
+                ),
+                "fields": (),
             },
         ),
     )
@@ -793,6 +1254,7 @@ class PrayerAdmin(admin.ModelAdmin):
         "prayed_at",
         "character_sheet",
         "being",
+        "ap_spent",
         "devotion_granted",
         "dire_straits",
         "intervention",

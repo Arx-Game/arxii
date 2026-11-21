@@ -5,7 +5,7 @@ Thin: parsing only, every rule lives in the actions.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from commands.command import ArxCommand
 from world.worship.constants import InvocationPieceSource
@@ -19,37 +19,74 @@ _SWITCH_REVEAL = "reveal"
 _SWITCH_PRAYER = "prayer"
 
 
+_PRAY_USAGE = "Usage: pray[/ap <n>][/for <character>] <being>=<your words>"
+_SWITCH_AP = "ap"
+_SWITCH_FOR = "for"
+
+
 class CmdPray(ArxCommand):
     """Pray to a being in your own words.
 
     Usage:
         pray <being>=<your words>
+        pray/ap <n> <being>=<your words>
+        pray/for <character> <being>=<your words>
 
-    A prayer is a message, not a mechanic: staff read them, and a god may
-    answer one with a vision. Praying at a shrine or temple of the being once a
-    week counts as an act of devotion; praying in dire straits may be answered
-    at once.
+    A prayer is a message: staff read them, and a god may answer one with a
+    vision. At a shrine or temple of the being, /ap spends action points
+    praying and earns favor, up to a weekly limit. Praying in dire straits
+    calls on the being to save you, one roll at your own odds. /for prays that
+    way for a character here who is in dire straits: you roll and pay, and the
+    help lands on them.
     """
 
     key = "pray"
     locks = "cmd:all()"
     help_category = "Social"
+    takes_switches = True
     action = None
 
     def func(self) -> None:
         from actions.definitions.worship import PrayAction  # noqa: PLC0415
 
         raw = (self.args or "").strip()
-        if "=" not in raw:
-            self.msg("Usage: pray <being>=<your words>")
+        switches = {switch.lower() for switch in self.switches}
+        if "=" not in raw or switches - {_SWITCH_AP, _SWITCH_FOR}:
+            self.msg(_PRAY_USAGE)
             return
-        being_name, text = (part.strip() for part in raw.split("=", 1))
-        if not being_name or not text:
-            self.msg("Usage: pray <being>=<your words>")
+        head, text = (part.strip() for part in raw.split("=", 1))
+        kwargs: dict[str, Any] = {}
+        if _SWITCH_AP in switches:
+            number, _, head = head.partition(" ")
+            kwargs["ap"] = number
+            head = head.strip()
+        if _SWITCH_FOR in switches:
+            name, head = _split_prayed_for(head)
+            kwargs["on_behalf_of_name"] = name
+        if not head or not text:
+            self.msg(_PRAY_USAGE)
             return
-        result = PrayAction().run(actor=self.caller, being_name=being_name, text=text)
+        result = PrayAction().run(actor=self.caller, being_name=head, text=text, **kwargs)
         if result.message:
             self.msg(result.message)
+
+
+def _split_prayed_for(head: str) -> tuple[str, str]:
+    """Split "<character> <being>" where either name may have spaces: the longest being name
+    that is a real active being ends it, else the character is the first word."""
+    from world.worship.models import WorshippedBeing  # noqa: PLC0415
+
+    words = head.split()
+    # One read of the active beings' names, then each candidate ending is tested against it.
+    names = {
+        name.lower()
+        for name in WorshippedBeing.objects.filter(is_active=True).values_list("name", flat=True)
+    }
+    for cut in range(1, len(words)):
+        being = " ".join(words[cut:])
+        if being.lower() in names:
+            return " ".join(words[:cut]), being
+    return (words[0], " ".join(words[1:])) if words else ("", "")
 
 
 class CmdVision(ArxCommand):

@@ -102,6 +102,17 @@ class ReactionWindowViewSet(viewsets.GenericViewSet):
         return Persona.objects.get(pk=persona_id)
 
     @staticmethod
+    def _readable_interaction_ids(request: Request, interaction_ids: list[int]) -> set[int]:
+        """Which of ``interaction_ids`` this viewer may read, through the one read gate.
+
+        Used for the pending list only. A reaction WRITE stays unrefused for a blocked
+        reactor on purpose (#2996 decision 2): a refusal would tell them they are blocked."""
+        readable = Interaction.objects.readable_by(
+            request.user, persona_ids=get_account_personas(request)
+        )
+        return set(readable.filter(pk__in=interaction_ids).values_list("pk", flat=True))
+
+    @staticmethod
     def _reaction_response(reaction: WindowReaction, window_pk: int) -> Response:
         return Response(
             {
@@ -257,7 +268,13 @@ class ReactionWindowViewSet(viewsets.GenericViewSet):
         # can_view_interaction costs 1-2 queries per candidate window; bounded,
         # since candidates are only the unsettled windows of scenes the caller
         # participates in.
-        visible_pks = [w.pk for w in candidates if can_view_interaction(w.interaction, persona)]
+        windows = list(candidates)
+        readable_ids = self._readable_interaction_ids(request, [w.interaction_id for w in windows])
+        visible_pks = [
+            w.pk
+            for w in windows
+            if w.interaction_id in readable_ids and can_view_interaction(w.interaction, persona)
+        ]
         visible = candidates.filter(pk__in=visible_pks)
 
         return self._paginated_pending_response(visible, request, config=config)

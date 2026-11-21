@@ -39,3 +39,9 @@ invocation-options/`): per being the difficulty with each ease, uses left, the b
   an `AlertDialog`; dispatches `pact_renounce` with `being_id`). An ended pact still easing out
   shows its stage and how much it eases each period. `WorshipSection` renders them after the
   pledge card.
+- Calling on a being in danger (#4349). `components/PrayDialog.tsx` takes the AP to spend at a
+  holy site (`site`, from `HolySite.ap_left`/`ap_cap`) and, with `others` (the room's characters
+  by persona), prays for one of them (`on_behalf_of_persona_id`); `RoomPanel` offers "Pray for
+  someone" beside the characters list. `WorshipSection` shows what the character owes
+  (`useOwedFavor`, `GET /api/worship/owed-favor/`): while favor is owed the being ignores their
+  calls for intervention. The result line is the action's own message.

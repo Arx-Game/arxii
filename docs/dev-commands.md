@@ -63,9 +63,18 @@ Loads/exports the private lore-repo content checkout (`CONTENT_REPO_PATH` in
 
 ## Server Management
 
-- `arx start` — Start the Evennia server (**PREFERRED** for running the server)
+- `arx start` — Start the Evennia server (**PREFERRED** for running the server).
+  First removes this checkout's own stale server and portal (a crash or unclean
+  stop leaves them behind). It leaves test runs (`evennia test`, `arx test`) and
+  every process of another checkout or worktree alone, and prints one line per
+  process saying which it killed and which it left alone and why. It cannot tell
+  which checkout a process belongs to where `/proc` is not readable (Windows, macOS);
+  there it still removes server and portal processes but spares test runs.
+  A server in another worktree still holds ports 4001 and 4002, so it stays a
+  port conflict: only one worktree runs a server at a time.
 - `arx stop` — Stop the Evennia server
-- `arx stop --hard` — Force-kill all Evennia processes (use when server hangs)
+- `arx stop --hard` — Force-kill all Evennia processes of every checkout, test runs
+  included (use when server hangs; not while another worktree runs tests)
 - `arx reload` — Reload the Evennia server (picks up code changes)
 - `arx ngrok` — Start ngrok tunnel and auto-update .env for manual testing
   - Updates `src/.env` with `FRONTEND_URL` and `CSRF_TRUSTED_ORIGINS`

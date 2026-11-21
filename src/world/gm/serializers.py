@@ -45,6 +45,7 @@ from world.mechanics.serializers import (
     SituationTemplateListSerializer,
 )
 from world.roster.models.applications import RosterApplication
+from world.roster.services.activity import ReservedForCreatorError
 from world.roster.services.slots import SlotsFullError
 from world.scenes.action_constants import DifficultyChoice
 from world.scenes.models import Persona
@@ -659,7 +660,7 @@ class GMApplicationActionSerializer(serializers.Serializer):
         if action == self.APPROVE:
             try:
                 approve_application_as_gm(gm, application)
-            except SlotsFullError as exc:
+            except (SlotsFullError, ReservedForCreatorError) as exc:
                 raise serializers.ValidationError(
                     {"code": exc.code, "message": exc.user_message},
                 ) from exc
@@ -1072,6 +1073,7 @@ class GMPromptSerializer(serializers.ModelSerializer):
             "resolution_note",
             "room_text",
             "private_text",
+            "context_text",
             "prepared_for_character",
             "created_at",
         ]

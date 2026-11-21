@@ -17,6 +17,13 @@ the page (TehomCD, 2026-09-05: a rulings form makes him jump around the data). T
 demo is not content: nothing on it is authored data, and its two scoring axes are
 how little staff must author and how few decisions a player makes.
 
+**A demo shows only what the design adds or changes.** It never lists, marks or
+annotates a piece that stays as it is: no chips for "exists today", no line naming
+which pieces on a screen already exist, no existing, extended or new marks on a
+table. A "what it replaces" column is fine, because the replaced piece is part of
+the change. The ledger of existing surfaces belongs in the spec, not on the demo
+(owner ruling, 2026-11-20).
+
 Why: capable agents rush brainstorming to reach implementation; the spec is thin
 exactly where it matters (what the user sees and does), the human gets
 implementation detail instead of a feel for the feature, and the built thing gets
@@ -48,21 +55,20 @@ one page, no controls:
 
 1. **Masthead.** Issue number first. One paragraph: what the feature is in the
    reviewer's own framing, that the page is examples only, that feedback goes in
-   chat. A legend for the coverage chips: exists today, in the posted spec, new
-   this round.
+   chat.
 2. **The walkthrough.** Two to three screens, in the order the user meets them,
    each captioned `Screen N · <stage> · <what happens>`, followed by one more item
    captioned `Screen N · what finalize writes`, which is a table, not a drawing. Drawn in the project's
    own grammar (for CG that is `frontend/src/character-creation/cg.css`: Cinzel
    labels, EB Garamond body, paper pinned to Arx, realm ink), not a component
-   library default. Each screen ends with one small line naming which pieces on it
-   already exist and which are new. The finalize table lists each row written,
-   marked existing, extended or new; it is the bridge to the ledger in the spec.
+   library default. The finalize table lists each row the design writes or
+   changes, with no marks for rows that stay as they are; it is the bridge to the
+   ledger in the spec.
    Screens are web screens. When the feature is a play verb (something a player
    does in the world, not an authoring or CG tool), add a ruling asking whether
    telnet parity is required, and say which screens have a telnet equivalent.
 3. **How the example is authored in admin.** A table: piece on the screen, admin
-   page, model row and fields (each chip-marked today / proposed / new), what you
+   page, model row and fields the design adds or changes, what you
    edit to change it. End with the row count for one example of this size.
 4. **Variety within one container.** When the feature is a set of authored
    options a user picks from (Upbringings on a Beginning, templates, presets),
@@ -70,12 +76,12 @@ one page, no controls:
    shape, so the reviewer sees the range the schema carries, not one shape
    generalised.
 5. **Scenarios through the shape.** Five to eight cards, each a scenario the
-   shape must carry, one row per element with a type chip and a coverage chip,
+   shape must carry, one row per element with a type chip,
    and a one-line verdict: holds, or holds with a named addition.
 6. **Cheap to author, easy to play.** Two tables: authoring levers and player
-   levers, each chip-marked, each saying what it saves. This is where ideas that
+   levers, each saying what it saves. This is where ideas that
    reduce staff rows (shared sets, libraries, filters, defaults) belong.
-7. **What the scenarios added to the shape.** One table of pieces, chip-marked,
+7. **What the scenarios added to the shape.** One table of pieces,
    ending in a one-sentence statement of the shape.
 
 The open forks go in the **chat message** that delivers the link, one line each,
@@ -145,6 +151,7 @@ line can carry; do not decide them silently either.
 | Component-library defaults in the mockup | Read the project's CSS tokens; a CG leaf looks like a CG leaf |
 | Placeholder copy that reads as authored lore | Mark it, deslop it, keep names out of content rows |
 | Screens with no "what is written" table | The last screen is the finalize row table; it feeds the ledger |
+| Marking pieces as existing, extended or new, or listing what already exists | Show only what the design adds or changes; the ledger of existing surfaces is in the spec |
 | Deferring forks to "later" in prose | A fork is a ruling or a `needs-design` line, never a promise |
 | Building from the spec text and never re-opening the demo | The demo is the approved design; run `demo-fidelity-reviewer` against it before the PR |
 | Filing the demo's gaps as follow-up issues | Fold in or drop; file only separable scope with a stated reason |

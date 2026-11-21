@@ -517,13 +517,6 @@ scene"`, no explainer. Lists the
   travel to right now (#2222); renders nothing when empty. "Travel" dispatches the
   same `travel_to` registry action the Go-there buttons use.
 
-### Command System (`components/`)
-
-- **`CommandForm.tsx`**: Dynamic command form generation
-- **`CommandDrawer.tsx`**: Command selection interface
-- **`CommandSelectField.tsx`**: Command parameter selection
-- **`CommandTextField.tsx`**: Command text input fields
-
 ### Persona Menu (`persona-menu/`, #4030)
 
 The one right-click menu for a persona lives in `frontend/src/scenes/components/PersonaMenu.tsx`
@@ -550,9 +543,14 @@ This replaces `EntityContextMenu.tsx`/`QuickAction.tsx` (the 2025 left-click qui
 never got a caller outside its own test) and the `BaseState.dispatcher_tags` per-object command
 list (never populated in production): the server-composed persona menu is that feature, built.
 
-### Helpers (`helpers/`)
+### No command palette (ADR-4034)
 
-- **`commandHelpers.ts`**: Command processing utilities
+The web client renders no form for a telnet command. The 2025 Quick Actions palette
+(`CommandDrawer`, `CommandForm`, `CommandSelectField`, `CommandTextField`, `groupCommands`) was
+unmounted by the three-column layout and removed in #4034. A person types a command into the
+composer (`CommandInput` reads `Session.commandNames` to tell `@desc` from `@Nyx`), acts on a person
+through the persona menu, and acts in combat through the typed panels. The server still sends
+per-command descriptors in the `commands` frame's args; the client ignores them.
 
 ## Key Features
 

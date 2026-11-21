@@ -1,8 +1,10 @@
-"""Guarded beta-reset management command (#3055 PR 2).
+"""Guarded beta-reset management command (#3055 PR 2 and PR 3).
 
-Wipes every play-provenance row in the world back to a pristine, CG/authoring-only
-baseline. Management command only — this is deliberately never surfaced in the Django
-admin. Thin wrapper: all logic lives in ``world.beta_reset.services``.
+Runs the cutover policy steps (roster characters, reserved original characters and any
+``--carry-over`` characters are released and progress-reset), then wipes every
+play-provenance row in the world back to a pristine, CG/authoring-only baseline.
+Management command only — this is deliberately never surfaced in the Django admin. Thin
+wrapper: the logic lives in ``world.beta_reset.cutover`` and ``world.beta_reset.services``.
 
 **Operational assumption:** the server must be QUIESCED (no concurrent writers) before
 running this. No cache-flush machinery is built here or in the service — a running
@@ -32,15 +34,17 @@ from typing import Any
 
 from django.core.management.base import BaseCommand, CommandError
 
+from world.beta_reset.cutover import CutoverReport, run_beta_cutover
 from world.beta_reset.exceptions import BetaResetError
-from world.beta_reset.services import CONFIRMATION_PHRASE, wipe_pristine_world
+from world.beta_reset.services import CONFIRMATION_PHRASE
 
 
 class Command(BaseCommand):
     help = (
-        "Guarded beta-reset wipe (#3055 PR 2). Defaults to a dry-run that only counts "
-        "rows. Requires the server to be quiesced and a recently-verified backup before "
-        "--execute. See world/beta_reset/services.py for the full guard design."
+        "Guarded beta cutover (#3055). Defaults to a dry-run that lists what each policy "
+        "step would do and counts the rows the wipe would delete. Requires the server to be "
+        "quiesced and a recently-verified backup before --execute. See "
+        "world/beta_reset/services.py for the full guard design."
     )
 
     def add_arguments(self, parser: Any) -> None:
@@ -66,6 +70,29 @@ class Command(BaseCommand):
             ),
         )
 
+        parser.add_argument(
+            "--carry-over",
+            action="append",
+            type=int,
+            default=[],
+            metavar="CHARACTER_SHEET_ID",
+            help=(
+                "Carry a tester's alpha character into early access with its progress "
+                "zeroed. Repeat for each character. A roster character or an original "
+                "character with a recorded author is already covered and needs no flag."
+            ),
+        )
+
+        parser.add_argument(
+            "--allow-incomplete-ledger",
+            action="store_true",
+            default=False,
+            help=(
+                "Proceed past kept characters whose provenance ledger is incomplete. By "
+                "default --execute refuses and names them; the dry-run lists them."
+            ),
+        )
+
     def handle(self, *_args: Any, **options: Any) -> None:
         execute: bool = options["execute"]
         confirm: str | None = options["confirm"]
@@ -80,25 +107,56 @@ class Command(BaseCommand):
                 raise CommandError(msg) from exc
 
         try:
-            report = wipe_pristine_world(
+            report = run_beta_cutover(
                 execute=execute,
                 confirm=confirm,
                 backup_verified_at=backup_verified_at,
+                carry_over_sheet_ids=options["carry_over"],
+                allow_incomplete_ledger=options["allow_incomplete_ledger"],
             )
         except BetaResetError as exc:
             raise CommandError(exc.user_message) from exc
 
-        verb = "Deleted" if report.executed else "Would delete"
-        for count in report.counts:
+        self._write_report(report)
+
+    def _write_report(self, report: CutoverReport) -> None:
+        verb = "Deleted" if report.wipe.executed else "Would delete"
+        action = "Did" if report.executed else "Would"
+        self.stdout.write(f"{action} run {len(report.plan.steps)} cutover policy step(s):")
+        for step in report.plan.steps:
+            self.stdout.write(f"  {step.describe()}")
+        if report.plan.carry_over_already_covered:
+            names = ", ".join(report.plan.carry_over_already_covered)
+            self.stdout.write(f"  Already covered by policy, no --carry-over needed: {names}")
+        findings = report.plan.ledger_findings()
+        if findings:
+            self.stdout.write(
+                self.style.WARNING(
+                    f"{len(findings)} kept character(s) have an incomplete provenance ledger: "
+                    + ", ".join(findings)
+                    + ". --execute refuses these unless --allow-incomplete-ledger is given."
+                )
+            )
+        if not report.executed:
+            self.stdout.write(
+                "The wipe counts below are computed BEFORE the policy steps run, so rows the "
+                "steps remove from kept characters (play-time techniques, gifts, distinctions, "
+                "trait changes) are counted here too. A real run reports what the wipe itself "
+                "deleted after the steps."
+            )
+        for count in report.wipe.counts:
             if count.would_delete:
                 self.stdout.write(f"  {verb} {count.would_delete} {count.label} row(s).")
         summary = self.style.WARNING if report.executed else self.style.NOTICE
         self.stdout.write(
-            summary(f"{verb} {report.total} row(s) total across {len(report.counts)} model(s).")
+            summary(
+                f"{verb} {report.wipe.total} row(s) total across {len(report.wipe.counts)} "
+                "model(s)."
+            )
         )
         if not report.executed:
             self.stdout.write(
                 "Dry run only — nothing was touched. Re-run with --execute --confirm "
                 f'"{CONFIRMATION_PHRASE}" --backup-verified-at <ISO timestamp> to perform '
-                "the wipe."
+                "the cutover."
             )

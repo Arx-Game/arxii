@@ -306,6 +306,61 @@ class FailureNoSoulfrayTests(TestCase):
         mock_scene.assert_called()
 
 
+class ChosenPatronShareTests(TestCase):
+    """A Chosen's patron adds anima by the ritual's result, and the result says how much (#4349)."""
+
+    def setUp(self) -> None:
+        from world.worship.constants import FavorAwardKind
+        from world.worship.factories import (
+            FavorOutcomeAwardFactory,
+            WorshippedBeingFactory,
+            make_chosen,
+        )
+
+        self.sheet = CharacterSheetFactory()
+        self.ritual = _make_ritual_for_sheet(self.sheet)
+        self.anima = CharacterAnimaFactory(character=self.sheet, current=0, maximum=20)
+        SoulfrayConfigFactory(ritual_severity_cost_per_point=1)
+        SoulfrayTemplateFactory()
+        self.scene = SceneFactory(is_active=True)
+        self.being = WorshippedBeingFactory(name="The Tide")
+        make_chosen(self.sheet, self.being, favor=12)
+        self.award = lambda outcome, amount: FavorOutcomeAwardFactory(
+            kind=FavorAwardKind.CHOSEN_ANIMA, outcome_tier=outcome, amount=amount
+        )
+
+    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
+    @patch(_PERFORM_CHECK_PATH)
+    def test_a_good_ritual_shows_what_the_patron_added(
+        self, mock_check: MagicMock, mock_scene: MagicMock
+    ) -> None:
+        mock_check.return_value = _make_check_result(success_level=1)
+        outcome = mock_check.return_value.outcome
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=3)
+        self.award(outcome, 5)
+
+        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+
+        self.assertEqual(result.anima_recovered, 8)
+        self.assertEqual((result.patron_bonus, result.patron_name), (5, "The Tide"))
+        mock_scene.assert_called()
+
+    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
+    @patch(_PERFORM_CHECK_PATH)
+    def test_a_failure_with_no_patron_row_gets_nothing_from_the_patron(
+        self, mock_check: MagicMock, mock_scene: MagicMock
+    ) -> None:
+        mock_check.return_value = _make_check_result(success_level=-1)
+        AnimaRitualBudgetAward.objects.create(
+            outcome_tier=mock_check.return_value.outcome, budget=2
+        )
+
+        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+
+        self.assertEqual((result.anima_recovered, result.patron_bonus), (2, 0))
+        mock_scene.assert_called()
+
+
 class GateTests(TestCase):
     """Gate conditions that raise before check is rolled."""
 

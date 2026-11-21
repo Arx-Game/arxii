@@ -16,8 +16,8 @@
   _Avoid_: CharacterRelationship for sheetless gods.
 - **Favor** — a character's standing with one being, `DevotionStanding.favor` (running total
   `lifetime_favor`). Read as standing (divine intervention, miracle thresholds, God's
-  Favorite, Chosen anima recovery) and as the gate and ease of an invocation; never spent
-  (ADR-4333-A). _Avoid_: confusing it with an organization's favor token
+  Favorite, Chosen anima recovery) and as the gate and ease of an invocation. Invoking never spends
+  it; a divine intervention rescue does (ADR-4333-A as amended by ADR-4349). _Avoid_: confusing it with an organization's favor token
   (`FavorTokenDetails`, currency) or an organization membership's `favor`.
 - **Invocation** — calling on a being's favor before a check (#4333): the system rolls an
   invocation check (`invoke_favor`) and its outcome tier sets the bonus
@@ -267,9 +267,10 @@
   of its area, or that holder's org leader for a temple. Never a payment.
 - **Prayer** — a character's freeform words to a being (`Prayer`, #3779): a plain log
   with no effect of its own, read by staff. Mechanically meaningful only through the
-  conditions recorded on it: the **holy-site prayer** (the first per game week at a shrine
-  or temple of the being pays a little devotion) and **dire straits** (Soulfray active or
-  near death; the NEAR_DEATH intervention check runs for the god prayed to). _Avoid_:
+  conditions recorded on it: the **holy-site prayer** (action points spent praying at a shrine
+  or temple of the being earn favor, up to a weekly limit, #4349) and **dire straits**
+  (Soulfray active or near death, for the one praying or a character prayed for; the
+  NEAR_DEATH intervention roll runs for the god prayed to). _Avoid_:
   "prayer" for the Rites skill or the Prayer TechniqueStyle (both older uses); "petition".
 - **Vision** — a vision (`Vision`, #3779): prose a being sends one character,
   first-class and standalone, delivered as a VISIONS narrative message in the one
@@ -298,16 +299,33 @@
 - **God's Favorite** — the achievement for reaching (or tying) a being's top devotion;
   three gendered rows (Princess/Prince/Chosen); never names the being.
 - **Miracle** — an authored effect a WorshippedBeing can perform by spending its
-  `resonance_pool` (#2360). Miracles fire automatically when a high-devotion PC is
-  incapacitated. Authored as payload rows (conditions, capabilities, damage profiles)
+  `resonance_pool` (#2360). A miracle is what a rescue or a bigger miracle brings (#4349): its
+  `min_outcome_tier` (Success or Critical Success) is the lowest intervention result that can
+  bring it. Authored as payload rows (conditions, capabilities, damage profiles)
   reusing the `Abstract*` bases. _Avoid_: "prayer" (the mundane skill is Rites; a
   TechniqueStyle named Prayer exists).
-- **Divine Intervention** — the automatic firing of a Miracle when a PC with
-  `DevotionStanding.favor` above the config threshold is incapacitated (#2360), or
-  prays in dire straits (#3779, the NEAR_DEATH trigger, narrowed to the god prayed to).
-  The god decides — no player prompt. Per-character cooldown via a timed condition.
-  Trigger installed on the character's ObjectDB when `bump_devotion` pushes favor past
-  the threshold; removed when it drops below.
+- **Divine Intervention** — one graded roll at the invocation difficulty when a character in
+  dire straits calls on a being (#4349, ADR-4349): backfire, unanswered, lesser answer, rescue
+  or bigger miracle. It starts three ways: the fallen character's own prayer, a **prayer for
+  another**, or **divine intercession** (the being steps in by itself when a character falls
+  whose favor is at or above `DivineInterventionConfig.favor_threshold`). The one praying
+  rolls at their own odds and pays; the help lands on the one in danger. Replaced the
+  automatic firing of a Miracle (#2360, #3779).
+- **Backfire** — what a being does to a character who botches the intervention roll: one
+  Critical Failure row of the being's intervention pool, landing on the one praying. A
+  character with botch immunity on the Faith check category cannot reach it.
+- **Lesser answer** — a partial response to an intervention roll of Partial Success: one row
+  of the being's intervention pool drawn by weight (buy time, partial aid, or aid at a price),
+  landing on the one in danger. Never spends the worship pool.
+- **Intervention pool** — `WorshippedBeing.intervention_pool`, the `ConsequencePool` a being's
+  backfires (Critical Failure rows), signs (Failure rows) and lesser answers (Partial Success
+  rows) are drawn from.
+- **Owed favor** — `DevotionStanding.owed_favor`: favor a character owes a being after a weaker
+  answer. While any is owed the being ignores their intervention rolls (invoking for a check
+  bonus still works); base favor they earn pays it first, before the earning rate.
+- **Minimum wait** — after every intervention roll the being does not consider the one praying
+  again for a time set by the result (an `INTERVENTION_WAIT_HOURS` award row, cut by favor),
+  kept on the existing "Divine Intervention Cooldown" condition.
 - **Faith Variant** — an `AudereMajoraFaithVariant` — per-being ceremony override for
   Audere Majora crossings (#2360). When a crossing character has high devotion, the
   variant overrides vision/manifestation text and grants a mechanical bonus

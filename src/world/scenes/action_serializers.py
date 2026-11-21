@@ -903,6 +903,8 @@ class AnimaRecoverySerializer(serializers.Serializer):
     recovered = serializers.IntegerField()
     soulfray_reduced = serializers.IntegerField()
     new_pool = serializers.IntegerField()
+    patron_bonus = serializers.IntegerField(default=0)
+    patron_name = serializers.CharField(default="", allow_blank=True)
 
 
 class PowerLedgerEntrySerializer(serializers.Serializer):

@@ -590,9 +590,9 @@ class SceneViewSet(viewsets.ModelViewSet):
         # onto this queryset: Interaction is a partitioned table (composite PK), so a per-row
         # aggregate forces a GROUP BY that Postgres rejects. Instead we aggregate on the
         # reaction table (grouped by a plain column) and rank in Python.
-        visible = Interaction.objects.visible_to(user, persona_ids=persona_ids, since=since).filter(
-            scene_id=scene.pk
-        )
+        visible = Interaction.objects.readable_by(
+            user, persona_ids=persona_ids, since=since
+        ).filter(scene_id=scene.pk)
         pose_timestamps = dict(visible.values_list("pk", "timestamp"))
         if not pose_timestamps:
             return Response(HighlightReelSerializer({"featured": None, "index": []}).data)
