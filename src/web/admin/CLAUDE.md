@@ -924,8 +924,11 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   stock-take found missing, each a REQUIRED dependency on the same panel:
   Beginnings that allow no species, Beginnings with no tradition on their slate,
   realms in the canon particle table (`CANON_NOBILIARY_PARTICLES`) with no
-  `NobiliaryParticle` row, no `AppearanceSection` headings, the four per-feature
-  distinctions absent or inactive (`FEATURE_ROW_NAMES`), and no `EnemyReason`.
+  `NobiliaryParticle` row, no `AppearanceSection` headings, the three feature
+  qualities not showing (`FEATURE_ROW_NAMES`: Alluring, Menacing, Majestic; since #5241
+  a row counts only when it is active, taken per feature and has an active Appearance
+  offer on the feature rows, matched by name without regard to case), and no
+  `EnemyReason`.
   Each names the rows in `missing` so a realm can be filled from the panel rather
   than by walking a draft into every stage.
 - **Required-content sentinel** (`web/admin/tuning/required_content.py`) -

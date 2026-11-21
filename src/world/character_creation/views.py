@@ -1490,6 +1490,8 @@ class FormOptionsView(APIView):
             "name": opt.name,
             "display_name": opt.display_name,
             "sort_order": opt.sort_order,
+            # The colour to draw for a colour option (#5241); blank when it has none.
+            "swatch_hex": opt.swatch_hex,
         }
 
     def _inherited_payload(self, draft: CharacterDraft, species: Species) -> list[dict]:

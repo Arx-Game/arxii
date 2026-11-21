@@ -38,8 +38,15 @@ Character creation is a multi-stage process that guides players through creating
    "let's make the budget 350, so 110 starts unspent"): the default spread of twelve at 20
    uses 240, every point has to be placed, and a stat stays within 10 to 50 in steps of 10.
    Until #5223 the budget was the default spread itself, with nothing to place
-8. **Appearance** - Height, build, form traits (hair/eye color, etc.); its offered
-   distinctions in authored sections (`AppearanceSection`, #3709)
+8. **Appearance** - Age, birthday, height, build, form traits (hair/eye color, etc.); its
+   offered distinctions in authored sections (`AppearanceSection`, #3709); and the feature
+   qualities (#3739, #5241, ADR-5241): Alluring, Menacing and Majestic go on any trait or
+   marking directly, a feature holding any tier is distinctive (`offers.opened_features`:
+   every option of its trait and a description), and the first `FEATURE_FREE_POINTS` (10)
+   the qualities cost are free, taken back off the CG total by one breakdown line
+   (`CharacterDraft._append_feature_allowance`); past ten they cost CG points. The draft
+   API reports `feature_points_spent` and `feature_points_free`. A colour option carries
+   `forms.FormTraitOption.swatch_hex` for the page's swatches
 9. **Identity** - Name (shown; asked on Origin), concept, quote, worship
 10. **Final Touches** - The Background (#5178, ADR-5178: one free text,
     `draft_data.background`, written to `Profile.background` word for word at finalize;

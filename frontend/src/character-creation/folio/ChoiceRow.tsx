@@ -4,12 +4,6 @@ interface ChoiceOption<T extends string | number> {
   label: string;
   title?: string;
   disabled?: boolean;
-  /**
-   * Reachable, but outside the ordinary list (#3739): the option is drawn with
-   * a dashed edge so a player can see which values their species does not carry
-   * and something they paid for opened. Styling only; it never gates the pick.
-   */
-  beyond?: boolean;
 }
 
 interface ChoiceRowProps<T extends string | number> {
@@ -45,7 +39,6 @@ export function ChoiceRow<T extends string | number>({
             key={String(opt.value)}
             type="button"
             aria-pressed={pressed}
-            className={opt.beyond ? 'beyond' : undefined}
             title={opt.title}
             disabled={opt.disabled}
             onClick={() => {

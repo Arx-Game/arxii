@@ -23,6 +23,7 @@ from world.character_creation.constants import (
     CRIME_LINE,
     CRIME_LINE_MAX_LENGTH,
     FAMILY_PATRON_BEING_ID,
+    FEATURE_FREE_POINTS,
     FIGURE_NAME_MAX_LENGTH,
     GIFT_FACETS_KEY,
     GIFT_RESONANCE_WEIGHTS_KEY,
@@ -1327,13 +1328,10 @@ class VisibleOfferSerializer(serializers.Serializer):
     first_look = serializers.BooleanField()
     held = serializers.BooleanField()
     effect_line = serializers.CharField()
-    #: The per-feature shape (#3739): whether this line is offered on every feature
-    #: rather than once, whether taking it is what makes a feature distinctive,
-    #: whether it may only sit on an already-distinctive feature, and the rank
-    #: ceiling character creation applies (0 = ``max_rank``).
+    #: The per-feature shape (#3739): whether this line is a quality offered on
+    #: every feature rather than once, and the rank ceiling character creation
+    #: applies (0 = ``max_rank``).
     taken_per_feature = serializers.BooleanField()
-    opens_feature = serializers.BooleanField()
-    requires_feature_opened = serializers.BooleanField()
     cg_max_rank = serializers.IntegerField()
     #: The life page (#4872): the heading the answer sits under, whether the card
     #: takes a figure's name, and the effects with their magnitudes.
@@ -1536,6 +1534,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
+    # Feature qualities (#5241): what the draft's qualities cost before the free
+    # allowance, and the allowance. The page shows the lesser of the two as spent.
+    feature_points_spent = serializers.SerializerMethodField()
+    feature_points_free = serializers.SerializerMethodField()
     stat_bonuses = serializers.SerializerMethodField()
     stage_completion = serializers.SerializerMethodField()
     stage_errors = serializers.SerializerMethodField()
@@ -1631,6 +1633,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
+            "feature_points_spent",
+            "feature_points_free",
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
@@ -1671,6 +1675,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
+            "feature_points_spent",
+            "feature_points_free",
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
@@ -1777,6 +1783,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_cg_points_remaining(self, obj: CharacterDraft) -> int:
         """Get remaining CG points."""
         return obj.calculate_cg_points_remaining()
+
+    def get_feature_points_spent(self, obj: CharacterDraft) -> int:
+        """What the draft's feature qualities cost, before the free allowance (#5241)."""
+        return obj.feature_points_spent()
+
+    def get_feature_points_free(self, _obj: CharacterDraft) -> int:
+        """How many points of feature qualities cost no CG points (#5241)."""
+        return FEATURE_FREE_POINTS
 
     def get_stat_bonuses(self, obj: CharacterDraft) -> dict[str, int]:
         """Get stat bonuses from all sources (heritage + distinctions)."""

@@ -7,6 +7,7 @@
 
 import { useMutation, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import { chargedCost, featureCost } from '@/character-creation/components/offers/syncHelpers';
 import { characterCreationKeys } from '@/character-creation/queries';
 import type { CharacterDraft } from '@/character-creation/types';
 import type {
@@ -325,13 +326,16 @@ export function useSyncDistinctions(draftId: number) {
       // number for the length of the heaviest request on the page.
       queryClient.setQueryData<CharacterDraft>(characterCreationKeys.draft(), (draft) => {
         if (!draft || draft.id !== draftId) return draft;
-        const price = (entries: DraftDistinctionEntry[] | undefined) =>
-          (entries ?? []).reduce((sum, entry) => sum + (entry.cost ?? 0), 0);
-        const moved = price(saved.distinctions) - price(draft.draft_data.distinctions);
+        // The first points of feature qualities are free (#5241): the allowance is
+        // taken off both sums, as the server does.
+        const free = draft.feature_points_free;
+        const moved =
+          chargedCost(saved.distinctions, free) - chargedCost(draft.draft_data.distinctions, free);
         return {
           ...draft,
           cg_points_spent: draft.cg_points_spent + moved,
           cg_points_remaining: draft.cg_points_remaining - moved,
+          feature_points_spent: featureCost(saved.distinctions),
           draft_data: { ...draft.draft_data, distinctions: saved.distinctions },
         };
       });

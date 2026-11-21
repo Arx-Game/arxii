@@ -767,6 +767,8 @@ export const mockEmptyDraft: CharacterDraft = {
   selected_combat_style: null,
   cg_points_spent: 0,
   cg_points_remaining: 100,
+  feature_points_spent: 0,
+  feature_points_free: 10,
   stat_bonuses: {},
   draft_data: mockEmptyDraftData,
   stage_completion: {
@@ -1438,8 +1440,6 @@ export function makeVisibleOffer(overrides: Partial<VisibleOffer> = {}): Visible
     held: false,
     effect_line: '',
     taken_per_feature: false,
-    opens_feature: false,
-    requires_feature_opened: false,
     cg_max_rank: 0,
     // The life page (#4872): no heading, no figure, no effect rows unless a test says.
     group: '',

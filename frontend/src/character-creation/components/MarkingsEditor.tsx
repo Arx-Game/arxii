@@ -8,10 +8,13 @@
  * reads these. Self-contained CRUD (react-query) rather than riding the
  * draft PATCH, since rows are structured records, not draft_data blobs.
  *
- * A marking is a feature (#3739), so each entry carries `FeatureDistinctions`:
- * its name and description stay free, and the point buys only the three
- * presence axes. That is the one difference from a trait row, where the same
- * point also opens the palette and the description.
+ * A marking is a feature (#3739), so each entry carries `FeatureDistinctions`,
+ * the qualities line. Its name and description are free either way; on a trait
+ * a quality also opens the palette and the description.
+ *
+ * The form asks for the name, the kind and the region on one line, the last two
+ * as dropdowns (#5241, owner ruling 2026-11-21). They were two rows of buttons,
+ * five kinds directly above fourteen regions, and read as one block.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +25,7 @@ import {
   listDraftMarkings,
   type DraftMarkingCreate,
 } from '../api';
-import { ChoiceRow, Entry, EntryList, Field } from '../folio';
+import { Entry, EntryList, Field } from '../folio';
 import { FeatureDistinctions } from './offers/FeatureDistinctions';
 import type { CharacterDraft } from '../types';
 
@@ -63,20 +66,12 @@ const MARKINGS_QUERY_KEY = ['draft-markings'] as const;
 interface MarkingsEditorProps {
   /**
    * The draft, when the caller has it (#3739): each marking then offers the
-   * per-feature rows. Omitted by any caller that only needs the CRUD list.
+   * qualities line. Omitted by any caller that only needs the CRUD list.
    */
   draft?: CharacterDraft;
-  markingUnlockLabel?: string;
-  markingUnlockWhy?: string;
-  perTierWord?: string;
 }
 
-export function MarkingsEditor({
-  draft,
-  markingUnlockLabel,
-  markingUnlockWhy,
-  perTierWord,
-}: MarkingsEditorProps = {}) {
+export function MarkingsEditor({ draft }: MarkingsEditorProps = {}) {
   const queryClient = useQueryClient();
   const { data: markings = [] } = useQuery({
     queryKey: MARKINGS_QUERY_KEY,
@@ -129,9 +124,6 @@ export function MarkingsEditor({
                   draft={draft}
                   feature={{ feature_marking: marking.id }}
                   featureLabel={marking.name}
-                  unlockLabel={markingUnlockLabel}
-                  unlockWhy={markingUnlockWhy}
-                  perTierWord={perTierWord}
                 />
               )}
               <div className="entry-act">
@@ -150,27 +142,43 @@ export function MarkingsEditor({
       )}
 
       <h3 className="section-h">Add a marking</h3>
-      <Field id="mk-name" label="Name">
-        <input
-          id="mk-name"
-          type="text"
-          value={form.name}
-          maxLength={100}
-          onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-        />
-      </Field>
-      <ChoiceRow
-        label="Kind"
-        options={MARKING_KINDS}
-        value={form.kind}
-        onChange={(kind) => kind && setForm((f) => ({ ...f, kind }))}
-      />
-      <ChoiceRow
-        label="Region"
-        options={BODY_REGIONS}
-        value={form.body_region}
-        onChange={(body_region) => body_region && setForm((f) => ({ ...f, body_region }))}
-      />
+      <div className="field-row marking-row">
+        <Field id="mk-name" label="Name">
+          <input
+            id="mk-name"
+            type="text"
+            value={form.name}
+            maxLength={100}
+            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+          />
+        </Field>
+        <Field id="mk-kind" label="Kind">
+          <select
+            id="mk-kind"
+            value={form.kind}
+            onChange={(e) => setForm((f) => ({ ...f, kind: e.target.value }))}
+          >
+            {MARKING_KINDS.map((kind) => (
+              <option key={kind.value} value={kind.value}>
+                {kind.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field id="mk-region" label="Region">
+          <select
+            id="mk-region"
+            value={form.body_region}
+            onChange={(e) => setForm((f) => ({ ...f, body_region: e.target.value }))}
+          >
+            {BODY_REGIONS.map((region) => (
+              <option key={region.value} value={region.value}>
+                {region.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
       <Field id="mk-desc" label="Description">
         <textarea
           id="mk-desc"

@@ -296,11 +296,12 @@ from world.character_creation.offers import (
     entry_price,                # (entry, distinction) -> int: 0 if any source arrived
                                #   bundled/carried, else distinction.calculate_total_cost
     opened_features,           # (draft_data) -> set[(trait name, marking id)]: the
-                               #   features the draft paid to make distinctive (#3739)
+                               #   features that hold a tier of any quality, which is
+                               #   what makes a feature distinctive (#3739, #5241)
     opened_feature_traits,     # (draft_data) -> set[str]: the same, narrowed to trait
-                               #   rows -- the one reader of "is this feature unlocked?"
-                               #   for the palette check, the descriptor write and the
-                               #   form-options view
+                               #   rows -- the one reader of "is this feature
+                               #   distinctive?" for the palette check, the descriptor
+                               #   write and the form-options view
 )
 ```
 
@@ -311,9 +312,24 @@ therefore keyed by `world.distinctions.types.feature_key` --
 `(distinction_id, trait name, draft marking id)` -- everywhere they used to be keyed
 by distinction id, and the sync payload carries `feature_trait` / `feature_marking`
 on each row. `reconcile_offer_picks` drops a per-feature pick whose feature is gone
-(a deleted marking) or whose unlock is gone (the axes bought under it), refunding
-both. Anything that is not per-feature keys as `(id, "", 0)` and is unaffected. See
-[distinctions.md](distinctions.md) "Distinctive features".
+(a deleted marking), refunding it. Anything that is not per-feature keys as
+`(id, "", 0)` and is unaffected. See [distinctions.md](distinctions.md) "Distinctive
+features".
+
+**Feature qualities (#5241, ADR-5241).** The per-feature rows are the qualities:
+Alluring, Menacing, Majestic. A feature takes one directly, with no pick before it
+(owner ruling 2026-11-21; the one-point "Make It Distinctive" row is gone), and a
+feature holding at least one tier is distinctive (`opened_features`), which opens its
+description and every option its trait carries. The first `FEATURE_FREE_POINTS` (10,
+`constants.py`) that a draft's qualities cost are free: every quality keeps its own
+priced line in `calculate_cg_points_breakdown`, and `_append_feature_allowance` adds one
+line, "Free feature points", that takes `min(10, feature_points_spent())` back off.
+Past ten a tier costs CG points at the quality's own `cost_per_rank`. Unspent free
+points are lost and no stage asks for them. The draft API carries
+`feature_points_spent` (before the allowance) and `feature_points_free`; the Appearance
+page prints the lesser as spent. The frontend makes the same sum for a save in flight
+(`chargedCost` in `offers/syncHelpers.ts`, read by `useShownPicks` and by
+`useSyncDistinctions` when a save answers).
 
 **Which stances a state opens (#4457, ADR-4457-A).** The Tradition Step
 offers are the schooling stances. `_opener_satisfied` opens an offer when its `schooling_line.rank`
@@ -734,7 +750,8 @@ offers no gift on the Path named by `?path_id=`, or on any Path when none is nam
 - `GET /api/character-creation/paths/` - Active Prospect-stage paths
 - `GET /api/character-creation/traditions/?beginning_id=X` - Traditions for a beginning; each carries `schooling` rows cut to the stances its state opens, each with `training_points` and `grants_distinction_name` (#4659), plus `favored_gift_names` and `favored_affinity_names` on the Tradition
 - `GET /api/character-creation/tarot-cards/` - Tarot cards for naming ritual
-- `GET /api/character-creation/form-options/{species_id}/` - Form traits for a species
+- `GET /api/character-creation/form-options/{species_id}/` - Form traits for a species; each
+  option carries `swatch_hex`, the colour the page draws for a colour option (#5241)
 - `GET /api/character-creation/can-create/` - Eligibility check
 - `GET /api/character-creation/beginnings/{id}/perspectives/` - That beginning's
   `is_perspective=True` codex grants, ungated by codex knowledge (CG shop window,

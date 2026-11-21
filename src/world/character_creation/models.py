@@ -33,6 +33,7 @@ from world.character_creation.constants import (
     AGE_MIN,
     CG_MODIFIER_CATEGORY,
     ENEMY_MARKING_DEGREES,
+    FEATURE_FREE_POINTS,
     MAGIC_SKILL_POINTS_REFUSAL,
     MAGIC_TRAINING_POINTS_TARGET,
     REPUTATION_SEED_MAX,
@@ -2085,6 +2086,39 @@ class CharacterDraft(SharedMemoryModel):
                 }
             )
 
+    def feature_points_spent(self) -> int:
+        """What the draft's feature qualities cost in all, before the free allowance.
+
+        The qualities are the picks that name a feature (#3739). Read by the
+        allowance line below and by the draft serializer, which hands the figure to
+        the Appearance page beside ``FEATURE_FREE_POINTS`` (#5241).
+        """
+        from world.distinctions.types import feature_of  # noqa: PLC0415
+
+        return sum(
+            entry.get("cost", 0)
+            for entry in self.draft_data.get("distinctions", [])
+            if feature_of(entry) != ("", 0)
+        )
+
+    def _append_feature_allowance(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Give back the first ``FEATURE_FREE_POINTS`` the feature qualities cost (#5241).
+
+        Each quality keeps its own priced line, so the breakdown still names what was
+        bought; this one line takes the free part back off the total. Past the
+        allowance the qualities cost CG points like any other pick.
+        """
+        free = min(FEATURE_FREE_POINTS, self.feature_points_spent())
+        if free <= 0:
+            return
+        breakdown.append(
+            {
+                "category": "distinction",
+                "item": "Free feature points",
+                "cost": -free,
+            }
+        )
+
     def _append_enemy_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
         """Add the negative CG cost for carrying an enemy."""
         from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
@@ -2171,6 +2205,7 @@ class CharacterDraft(SharedMemoryModel):
         self._append_beginnings_cost(breakdown)
         self._append_upbringing_cost(breakdown)
         self._append_distinction_costs(breakdown)
+        self._append_feature_allowance(breakdown)
         self._append_enemy_cost(breakdown)
         self._append_age_cost(breakdown)
         self._append_species_cost(breakdown)

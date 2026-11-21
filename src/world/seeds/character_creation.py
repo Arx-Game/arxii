@@ -77,6 +77,7 @@ from world.forms.models import (
     SpeciesFormTrait,
     TraitType as FormTraitType,
 )
+from world.forms.swatches import default_swatch
 from world.magic.constants import ParticipationRule, RitualExecutionKind
 from world.magic.models import Ritual
 from world.missions.constants import (
@@ -396,14 +397,6 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # shows offers here, in place of the retired Distinctions stage.
     "appearance_offers_heading": "What people notice first",
     "appearance_offers_note": "offered here",
-    # Distinctive physical features (#3739). The unlock's own words, the two
-    # glosses that say what the point buys (a trait row also buys its palette and
-    # its description; a marking's name and description were always free), and the
-    # axis price word. PLACEHOLDER prose, authored over by staff.
-    "appearance_make_distinctive": "Make it distinctive",
-    "appearance_make_distinctive_why": ("any colour, a description, and what people feel about it"),
-    "appearance_marking_distinctive_why": "what people feel about it",
-    "appearance_per_tier": "per tier",
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",
     "identity_quote_heading": "Quote",
@@ -2238,7 +2231,12 @@ def _seed_form_traits(species: Species | None) -> None:
         for opt_sort_idx, (opt_name, opt_display) in enumerate(options):
             authored_or_sample(
                 FormTraitOption,
-                {"display_name": opt_display, "sort_order": opt_sort_idx},
+                {
+                    "display_name": opt_display,
+                    "sort_order": opt_sort_idx,
+                    # A first-pass colour for a colour option (#5241); blank otherwise.
+                    "swatch_hex": default_swatch(name, opt_name),
+                },
                 trait=trait,
                 name=opt_name,
             )

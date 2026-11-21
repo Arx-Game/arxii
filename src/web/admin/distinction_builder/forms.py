@@ -56,12 +56,10 @@ class DistinctionForm(forms.ModelForm):
             "allow_other",
             "is_automatic",
             "requires_slot_filled",
-            # Distinctive physical features (#3739). Authored here because the
-            # per-feature shape is a property of the distinction, not of any one
-            # offer: the same row is offered on every feature there is.
+            # Feature qualities (#3739). Authored here because the per-feature shape
+            # is a property of the distinction, not of any one offer: the same row
+            # is offered on every feature there is.
             "taken_per_feature",
-            "opens_feature",
-            "requires_feature_opened",
             "cg_max_rank",
             # The Final Touches chapter (#4846): the optional question this card asks there.
             "final_touches_prompt",
@@ -106,11 +104,9 @@ DISTINCTION_MORE_FIELDS = (
     "allow_other",
     "is_automatic",
     "requires_slot_filled",
-    # Distinctive physical features (#3739): rarely touched, since only the four
-    # Appearance rows set them, but authorable here rather than in the raw admin.
+    # Feature qualities (#3739): rarely touched, since only the three Appearance
+    # rows set them, but authorable here rather than in the raw admin.
     "taken_per_feature",
-    "opens_feature",
-    "requires_feature_opened",
     "cg_max_rank",
     "final_touches_prompt",
     "asks_figure_name",

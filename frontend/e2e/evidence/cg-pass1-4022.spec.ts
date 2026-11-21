@@ -117,6 +117,8 @@ function buildDraft(stage: 1 | 2) {
     selected_tradition: null,
     cg_points_spent: 0,
     cg_points_remaining: 100,
+    feature_points_spent: 0,
+    feature_points_free: 10,
     stat_bonuses: {},
     draft_data: {},
     stage_completion: completion,

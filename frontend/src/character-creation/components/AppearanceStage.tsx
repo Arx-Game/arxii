@@ -1,34 +1,30 @@
 /**
- * Stage 7: Appearance (#3630).
+ * Stage 8: Appearance (#3630; the controls as the owner ruled them in #5241).
  *
- * Physical characteristics as fields and choice rows: age and birthday day
- * and height in inches are typed numbers (a `StatRow`'s steppers would take a
- * hundred presses); birthday month, height band, build and each form trait are
- * pressed-row choices. The record rail lists the choices made so far; every
- * explanatory sentence the old layout put under a section heading now lives
- * in the margin instead (Decision 8).
+ * The stage is short fields and compact pickers:
  *
- * Right after the height block, `ChapterOffers` mounts this chapter's own
- * offered distinctions (`chapter="appearance"`, #3675 Task 15) - the
- * physical/social ones that show, in place of the retired Distinctions
- * stage. It carries its own heading (folio grammar; no separate `section-h`
- * above it, matching the demo's Screen 7). A height band's `title` reads its
- * own `cg_hint` column when staff authored one (fix round 1: an authored
- * column on the row itself, the #3676 one-to-one designation, not a name
- * match against a literal "Towering"); otherwise the usual inches range.
+ * - Age and the birthday share a line. The birthday is typed as two numbers, month
+ *   then day, and read back as "Day 14 of <the game's name for that month>"; a row
+ *   of twelve month names a new player cannot place in the year is gone.
+ * - Height band and build are dropdowns on one line with the height in inches.
+ * - Each physical feature is one `TraitBlock`: a strip of swatches for a colour, a
+ *   dropdown for anything else, two across. Under each sits its qualities line
+ *   (`FeatureDistinctions`: Alluring, Menacing, Majestic), always on the page.
+ *
+ * The first `draft.feature_points_free` points of qualities cost no CG points; the
+ * heading and the side panel say how many are spent. A feature holding any tier is
+ * distinctive: it reaches every option its trait carries and opens its description.
+ *
+ * Between the height line and the features, `ChapterOffers` mounts this chapter's
+ * own offered distinctions (`chapter="appearance"`, #3675 Task 15), one block per
+ * authored section (#3709). A height band's own `cg_hint` column (#3675 fix round
+ * 1) reads under the height field when staff wrote one, never a name match against
+ * a literal band name.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import {
-  ChapterLeaf,
-  ChoiceRow,
-  Field,
-  Marginalia,
-  Note,
-  RecordRail,
-  stageEyebrow,
-} from '../folio';
+import { ChapterLeaf, Field, Marginalia, Note, RecordRail, stageEyebrow } from '../folio';
 import {
   useBuilds,
   useCGExplanations,
@@ -38,12 +34,12 @@ import {
   useUpdateDraft,
 } from '../queries';
 import { formatHeight } from '../utils';
+import { useShownPicks } from '../useShownPicks';
 import { ChapterOffers } from './offers/ChapterOffers';
-import { FeatureDistinctions } from './offers/FeatureDistinctions';
 import { MarkingsEditor } from './MarkingsEditor';
-import { useDraftDistinctions } from '@/hooks/useDistinctions';
+import { TraitBlock } from './appearance/TraitBlock';
 import { Stage } from '../types';
-import type { Build, CharacterDraft, FormTraitOption, HeightBand } from '../types';
+import type { CharacterDraft, FormTraitOption, HeightBand } from '../types';
 
 interface AppearanceStageProps {
   draft: CharacterDraft;
@@ -65,6 +61,12 @@ const AGE_DEFAULT = 22;
 // 29 for February: leap-day birthdays are legal (#2756).
 const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
+/** A typed number held to a range, or null when the text is not a number. */
+function clampedInt(text: string, min: number, max: number): number | null {
+  const parsed = parseInt(text, 10);
+  return Number.isNaN(parsed) ? null : Math.max(min, Math.min(max, parsed));
+}
+
 export function AppearanceStage({
   draft,
   isStaff = false,
@@ -78,8 +80,8 @@ export function AppearanceStage({
   const sections = useMemo(() => {
     const seen = new Map<string, string>();
     for (const offer of appearanceOffers?.offers ?? []) {
-      // A per-feature line (#3739) is not a section: it is offered on every
-      // trait row and marking, and `FeatureDistinctions` mounts it there.
+      // A quality (#3739) is not a section: it is offered on every feature and
+      // marking, and `FeatureDistinctions` mounts it there.
       if (offer.taken_per_feature) continue;
       if (offer.opener_key && !seen.has(offer.opener_key)) {
         seen.set(offer.opener_key, offer.opener_label);
@@ -87,6 +89,9 @@ export function AppearanceStage({
     }
     return Array.from(seen, ([key, label]) => ({ key, label }));
   }, [appearanceOffers]);
+  // Whether staff have authored any quality. Without one there is no qualities
+  // line on any feature, so the page says nothing about feature points either.
+  const hasQualities = (appearanceOffers?.offers ?? []).some((o) => o.taken_per_feature);
   const { data: heightBands, isLoading: heightBandsLoading } = useHeightBands();
   const { data: builds, isLoading: buildsLoading } = useBuilds();
   const { data: formOptions, isLoading: formOptionsLoading } = useFormOptions(
@@ -94,20 +99,16 @@ export function AppearanceStage({
     draft.id
   );
   const draftData = draft.draft_data;
-  // Which trait rows the draft has paid to make distinctive (#3739). The unlock
-  // is what opens the widened palette and the description field, so the leaf
-  // reads it from the draft's own entries rather than re-deriving the rule.
-  const { data: draftDistinctions } = useDraftDistinctions(draft.id);
-  const openedTraits = useMemo(() => {
-    const opensIds = new Set(
-      (appearanceOffers?.offers ?? []).filter((o) => o.opens_feature).map((o) => o.distinction_id)
-    );
-    return new Set(
-      (draftDistinctions ?? [])
-        .filter((e) => opensIds.has(e.distinction_id) && e.feature_trait)
-        .map((e) => e.feature_trait as string)
-    );
-  }, [appearanceOffers, draftDistinctions]);
+  // The picks as the page shows them (#5141): a click on a tier shows at once, so
+  // the feature it lands on opens at once and the points lines move with it.
+  const shown = useShownPicks(draft);
+  // Which traits hold a tier of any quality (#5241). That is what opens the widened
+  // palette and the description field; the server reads the same thing off the
+  // draft's own entries (`offers.opened_features`).
+  const openedTraits = useMemo(
+    () => new Set(shown.picks.map((pick) => pick.feature_trait).filter(Boolean)),
+    [shown.picks]
+  );
 
   // Traits the species offers directly (#2815); a trait id absent from this
   // set but present in `formOptions.inherited` is a stray pinned value (e.g.
@@ -173,8 +174,7 @@ export function AppearanceStage({
   }, [draft.id]);
 
   const commitAge = () => {
-    const parsed = parseInt(localAge, 10);
-    const clamped = Number.isNaN(parsed) ? AGE_DEFAULT : Math.max(ageMin, Math.min(ageMax, parsed));
+    const clamped = clampedInt(localAge, ageMin, ageMax) ?? AGE_DEFAULT;
     setLocalAge(String(clamped));
     if (clamped !== draft.age) {
       updateDraft.mutate({
@@ -184,19 +184,33 @@ export function AppearanceStage({
     }
   };
 
-  // Celebrated birthday (#2756) — waking day for Sleeper beginnings.
-  const birthdayMonth = draft.birthday_month;
-  const birthdayDay = draft.birthday_day;
-  const maxDay = birthdayMonth ? DAYS_IN_MONTH[birthdayMonth - 1] : 31;
+  // Celebrated birthday (#2756), the waking day for Sleeper beginnings. Typed as
+  // two numbers (#5241) and saved once both are there: a month alone is not a
+  // birthday, and the server wants both or neither.
+  const [bdayMonth, setBdayMonth] = useState(String(draft.birthday_month ?? ''));
+  const [bdayDay, setBdayDay] = useState(String(draft.birthday_day ?? ''));
 
-  const commitBirthday = (month: number | null, day: number | null) => {
-    const clampedDay =
-      month !== null && day !== null ? Math.max(1, Math.min(DAYS_IN_MONTH[month - 1], day)) : day;
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: { birthday_month: month, birthday_day: clampedDay },
-    });
+  const commitBirthday = () => {
+    const month = clampedInt(bdayMonth, 1, 12);
+    if (month === null) return;
+    setBdayMonth(String(month));
+    const day = clampedInt(bdayDay, 1, DAYS_IN_MONTH[month - 1]);
+    if (day === null) return;
+    setBdayDay(String(day));
+    if (month !== draft.birthday_month || day !== draft.birthday_day) {
+      updateDraft.mutate({
+        draftId: draft.id,
+        data: { birthday_month: month, birthday_day: day },
+      });
+    }
   };
+
+  // What is saved, in the game's own words. Read from the draft, not the inputs,
+  // so the line confirms the save.
+  const birthdayWords =
+    draft.birthday_month && draft.birthday_day
+      ? `Day ${draft.birthday_day} of ${draft.ic_month_names[draft.birthday_month - 1]}`
+      : undefined;
 
   const handleHeightBandSelect = (band: HeightBand) => {
     const midpoint = Math.floor((band.min_inches + band.max_inches) / 2);
@@ -216,24 +230,14 @@ export function AppearanceStage({
   const commitHeightInches = () => {
     const band = draft.height_band;
     if (!band) return;
-    const parsed = parseInt(heightInput ?? '', 10);
-    if (!Number.isNaN(parsed)) {
-      const clamped = Math.max(band.min_inches, Math.min(band.max_inches, parsed));
-      if (clamped !== draft.height_inches) {
-        updateDraft.mutate({
-          draftId: draft.id,
-          data: { height_inches: clamped },
-        });
-      }
+    const clamped = clampedInt(heightInput ?? '', band.min_inches, band.max_inches);
+    if (clamped !== null && clamped !== draft.height_inches) {
+      updateDraft.mutate({
+        draftId: draft.id,
+        data: { height_inches: clamped },
+      });
     }
     setHeightInput(null);
-  };
-
-  const handleBuildSelect = (build: Build) => {
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: { build_id: build.id },
-    });
   };
 
   const handleFormTraitChange = (traitName: string, optionId: number | null) => {
@@ -254,7 +258,7 @@ export function AppearanceStage({
     });
   };
 
-  // #2632 — optional per-trait flavor text ("red" + "flowing crimson"). The
+  // #2632: optional per-trait flavor text ("red" + "flowing crimson"). The
   // normalized option stays the succinct/mechanical value; this text is what
   // other characters read. Commit-on-blur to avoid a per-keystroke PATCH storm.
   const getTraitDescriptor = (traitName: string): string => {
@@ -283,20 +287,23 @@ export function AppearanceStage({
     return formTraits?.[traitName] ?? null;
   };
 
-  // A band's title is its own authored `cg_hint` (#3675 Task 15 fix round
-  // 1) when staff wrote one - what opens a band players cannot normally
-  // take (e.g. Towering needs Giant's Blood). This is a column on the row
-  // itself, not a name match against a literal band name (the #3676
-  // one-to-one designation the never-match-strings ruling asks for).
-  // Absent a hint, the option falls back to the usual inches range.
-  const heightBandTitle = (band: HeightBand): string | undefined =>
-    band.cg_hint ||
-    (!band.is_cg_selectable && isStaff
-      ? `${band.min_inches} to ${band.max_inches} inches (not normally offered to players)`
-      : `${band.min_inches} to ${band.max_inches} inches`);
+  // The last tier came off a feature, so it is no longer distinctive. A colour only
+  // a distinctive feature may hold is let go here; left in place, the stage would
+  // report it as not available to the species.
+  const handleTraitClosed = (traitName: string, ordinaryIds: Set<number>) => {
+    const selected = getSelectedOptionId(traitName);
+    if (selected !== null && !ordinaryIds.has(selected)) {
+      handleFormTraitChange(traitName, null);
+    }
+  };
 
-  const buildTitle = (build: Build): string | undefined =>
-    !build.is_cg_selectable && isStaff ? 'Not normally offered to players' : undefined;
+  // Staff see the bands and builds players are not normally offered, marked.
+  const staffOnly = (selectable: boolean) =>
+    !selectable && isStaff ? ' (not normally offered)' : '';
+
+  const freePoints = draft.feature_points_free;
+  const freeSpent = Math.min(shown.featureSpent, freePoints);
+  const paidPoints = shown.featureSpent - freeSpent;
 
   const rail = (
     <>
@@ -305,6 +312,7 @@ export function AppearanceStage({
           { label: 'Origin', value: draft.selected_area?.name },
           { label: 'Species', value: draft.selected_species?.name },
           { label: 'Age', value: draft.age !== null ? String(draft.age) : undefined },
+          { label: 'Birthday', value: birthdayWords },
           {
             label: 'Height',
             value:
@@ -313,6 +321,17 @@ export function AppearanceStage({
                 : undefined,
           },
           { label: 'Build', value: draft.build?.display_name },
+          ...(hasQualities
+            ? [
+                {
+                  label: 'Feature points',
+                  value:
+                    paidPoints > 0
+                      ? `${freeSpent} of ${freePoints} spent, ${paidPoints} from CG points`
+                      : `${freeSpent} of ${freePoints} spent`,
+                },
+              ]
+            : []),
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />
@@ -351,6 +370,13 @@ export function AppearanceStage({
             are drawn from the palette your species offers, plus anything a parent line passes down.
           </Note>
         )}
+        {hasQualities && (
+          // PLACEHOLDER: Apostate rewrite
+          <Note lead="Qualities">
+            go on any feature or marking. The first {freePoints} tiers are free; more cost CG
+            points.
+          </Note>
+        )}
         {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Physical description">
           is optional, and is appended to the automatic description.
@@ -366,6 +392,11 @@ export function AppearanceStage({
     </>
   );
 
+  const ageHint = draft.selected_species?.eternal_youth
+    ? 'Your species keeps its eternal youth; apparent age locks in the early twenties.'
+    : // Unseeded copy key today; renders nothing until staff write it.
+      copy?.appearance_age_hint;
+
   return (
     <ChapterLeaf
       stage={Stage.APPEARANCE}
@@ -373,91 +404,131 @@ export function AppearanceStage({
       intro={copy?.appearance_intro}
       aside={rail}
     >
-      <h2 className="section-h">{copy?.appearance_age_heading ?? 'Age'}</h2>
-      <Field
-        id="age"
-        label="Age"
-        hint={
-          draft.selected_species?.eternal_youth
-            ? 'Your species keeps its eternal youth; apparent age locks in the early twenties.'
-            : // Unseeded copy key today; renders nothing until staff write it.
-              copy?.appearance_age_hint
-        }
-      >
-        <input
-          id="age"
-          type="number"
-          min={ageMin}
-          max={ageMax}
-          value={localAge}
-          onChange={(e) => setLocalAge(e.target.value)}
-          onBlur={commitAge}
-        />
-      </Field>
-
-      <h2 className="section-h">{copy?.appearance_birthday_heading ?? 'Birthday'}</h2>
-      <ChoiceRow
-        label="Month"
-        options={draft.ic_month_names.map((name, index) => ({ value: index + 1, label: name }))}
-        value={birthdayMonth}
-        onChange={(month) => commitBirthday(month, birthdayDay ?? 1)}
-      />
-      <Field id="bday" label="Day">
-        <input
-          id="bday"
-          type="number"
-          min={1}
-          max={maxDay}
-          value={birthdayDay ?? ''}
-          onChange={(e) => {
-            const parsed = parseInt(e.target.value, 10);
-            if (!Number.isNaN(parsed) && birthdayMonth) {
-              commitBirthday(birthdayMonth, parsed);
-            }
-          }}
-          disabled={!birthdayMonth}
-        />
-      </Field>
-
-      <h2 className="section-h">{copy?.appearance_height_heading ?? 'Height'}</h2>
-      {heightBandsLoading ? (
-        <p className="ledger-line" aria-busy="true">
-          Loading height bands…
-        </p>
-      ) : (
-        <ChoiceRow
-          label="Height band"
-          options={(heightBands ?? []).map((band) => ({
-            value: band.id,
-            label: band.display_name,
-            title: heightBandTitle(band),
-          }))}
-          value={draft.height_band?.id ?? null}
-          onChange={(id) => {
-            const band = (heightBands ?? []).find((b) => b.id === id);
-            if (band) handleHeightBandSelect(band);
-          }}
-        />
-      )}
-      {draft.height_band && (
-        <Field
-          id="height"
-          label="Height in inches"
-          hint={`${formatHeight(draft.height_band.min_inches)} to ${formatHeight(
-            draft.height_band.max_inches
-          )}`}
-        >
+      <div className="field-row">
+        <Field id="age" label={copy?.appearance_age_heading ?? 'Age'} className="narrow">
           <input
-            id="height"
+            id="age"
             type="number"
-            min={draft.height_band.min_inches}
-            max={draft.height_band.max_inches}
-            value={heightInput ?? String(draft.height_inches ?? '')}
-            onChange={(e) => setHeightInput(e.target.value)}
-            onBlur={commitHeightInches}
+            min={ageMin}
+            max={ageMax}
+            value={localAge}
+            onChange={(e) => setLocalAge(e.target.value)}
+            onBlur={commitAge}
           />
         </Field>
-      )}
+        <div className="field birthday" role="group" aria-labelledby="bday-label">
+          <span className="label" id="bday-label">
+            {copy?.appearance_birthday_heading ?? 'Birthday'}
+          </span>
+          <span className="birthday-inputs">
+            <input
+              type="number"
+              min={1}
+              max={12}
+              placeholder="Month"
+              aria-label="Birthday month"
+              value={bdayMonth}
+              onChange={(e) => setBdayMonth(e.target.value)}
+              onBlur={commitBirthday}
+            />
+            <input
+              type="number"
+              min={1}
+              max={31}
+              placeholder="Day"
+              aria-label="Birthday day"
+              value={bdayDay}
+              onChange={(e) => setBdayDay(e.target.value)}
+              onBlur={commitBirthday}
+            />
+            {birthdayWords && <span className="birthday-words">{birthdayWords}</span>}
+          </span>
+        </div>
+      </div>
+      {ageHint && <p className="ledger-line">{ageHint}</p>}
+
+      <div className="field-row">
+        {heightBandsLoading ? (
+          <p className="ledger-line" aria-busy="true">
+            Loading height bands…
+          </p>
+        ) : (
+          <Field
+            id="height-band"
+            label={copy?.appearance_height_heading ?? 'Height'}
+            hint={draft.height_band?.cg_hint || undefined}
+          >
+            <select
+              id="height-band"
+              value={draft.height_band?.id ?? ''}
+              onChange={(e) => {
+                const band = (heightBands ?? []).find((b) => b.id === Number(e.target.value));
+                if (band) handleHeightBandSelect(band);
+              }}
+            >
+              {!draft.height_band && (
+                <option value="" disabled>
+                  Select
+                </option>
+              )}
+              {(heightBands ?? []).map((band) => (
+                <option key={band.id} value={band.id} title={band.cg_hint || undefined}>
+                  {band.display_name}
+                  {staffOnly(band.is_cg_selectable)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+        {draft.height_band && (
+          <Field
+            id="height"
+            label="Inches"
+            className="narrow"
+            hint={`${formatHeight(draft.height_band.min_inches)} to ${formatHeight(
+              draft.height_band.max_inches
+            )}`}
+          >
+            <input
+              id="height"
+              type="number"
+              min={draft.height_band.min_inches}
+              max={draft.height_band.max_inches}
+              value={heightInput ?? String(draft.height_inches ?? '')}
+              onChange={(e) => setHeightInput(e.target.value)}
+              onBlur={commitHeightInches}
+            />
+          </Field>
+        )}
+        {buildsLoading ? (
+          <p className="ledger-line" aria-busy="true">
+            Loading builds…
+          </p>
+        ) : (
+          <Field id="build" label={copy?.appearance_build_heading ?? 'Build'}>
+            <select
+              id="build"
+              value={draft.build?.id ?? ''}
+              onChange={(e) => {
+                const build = (builds ?? []).find((b) => b.id === Number(e.target.value));
+                if (build) updateDraft.mutate({ draftId: draft.id, data: { build_id: build.id } });
+              }}
+            >
+              {!draft.build && (
+                <option value="" disabled>
+                  Select
+                </option>
+              )}
+              {(builds ?? []).map((build) => (
+                <option key={build.id} value={build.id}>
+                  {build.display_name}
+                  {staffOnly(build.is_cg_selectable)}
+                </option>
+              ))}
+            </select>
+          </Field>
+        )}
+      </div>
 
       {/* What shows, in sections (#3709): one offers block per authored Appearance
           section, in the sections' own order. A card the route closes is absent and
@@ -488,126 +559,68 @@ export function AppearanceStage({
         />
       ))}
 
-      <h2 className="section-h">{copy?.appearance_build_heading ?? 'Build'}</h2>
-      {buildsLoading ? (
-        <p className="ledger-line" aria-busy="true">
-          Loading builds…
-        </p>
-      ) : (
-        <ChoiceRow
-          label="Build"
-          options={(builds ?? []).map((build) => ({
-            value: build.id,
-            label: build.display_name,
-            title: buildTitle(build),
-          }))}
-          value={draft.build?.id ?? null}
-          onChange={(id) => {
-            const build = (builds ?? []).find((b) => b.id === id);
-            if (build) handleBuildSelect(build);
-          }}
-        />
-      )}
-
       {draft.selected_species && (
         <>
-          <h2 className="section-h">{copy?.appearance_features_heading ?? 'Physical features'}</h2>
+          <h2 className="section-h">
+            {copy?.appearance_features_heading ?? 'Physical features'}
+            {hasQualities && (
+              <small>
+                {freeSpent} of {freePoints} feature points spent
+              </small>
+            )}
+          </h2>
           {formOptionsLoading && (
             <p className="ledger-line" aria-busy="true">
               Loading physical features…
             </p>
           )}
-          {(formOptions?.traits ?? []).map((t) => {
-            const opened = openedTraits.has(t.trait.name);
-            // Made distinctive, the row reaches past the species palette to
-            // every option the trait carries, the Unnatural umbrella included
-            // (#3739); otherwise it offers the palette and the lineage's own
-            // inherited options, exactly as before.
-            const palette = opened
-              ? (t.all_options ?? t.options)
-              : [...t.options, ...inheritedOptionsFor(t.trait.id)];
-            // Which of those the species does not itself list: drawn apart, so the
-            // point the player spent is visible in the row it opened (#3739).
-            const ownIds = new Set(t.options.map((o) => o.id));
-            return (
-              <div key={t.trait.id}>
-                <h3 className="section-h" id={`trait-${t.trait.id}`}>
-                  {t.trait.display_name}
-                  {t.is_required && ' (required)'}
-                </h3>
-                <ChoiceRow
-                  labelledBy={`trait-${t.trait.id}`}
-                  label={t.trait.display_name}
-                  options={palette.map((o) => ({
-                    value: o.id,
-                    label: o.display_name,
-                    beyond: opened && !ownIds.has(o.id),
-                  }))}
-                  value={getSelectedOptionId(t.trait.name)}
-                  onChange={(optionId) => handleFormTraitChange(t.trait.name, optionId)}
-                  clearable={!t.is_required}
-                />
-                <FeatureDistinctions
+          <div className="feature-grid">
+            {(formOptions?.traits ?? []).map((t) => {
+              const opened = openedTraits.has(t.trait.name);
+              // What the feature offers without being distinctive: the species
+              // palette and the lineage's own inherited options.
+              const ordinary = [...t.options, ...inheritedOptionsFor(t.trait.id)];
+              const ordinaryIds = new Set(ordinary.map((o) => o.id));
+              return (
+                <TraitBlock
+                  key={t.trait.id}
                   draft={draft}
-                  feature={{ feature_trait: t.trait.name }}
-                  featureLabel={t.trait.display_name}
-                  unlockLabel={copy?.appearance_make_distinctive}
-                  unlockWhy={copy?.appearance_make_distinctive_why}
-                  perTierWord={copy?.appearance_per_tier}
+                  trait={t.trait}
+                  // Distinctive, the feature reaches past that to every option the
+                  // trait carries, the Unnatural umbrella included (#3739).
+                  options={opened ? (t.all_options ?? ordinary) : ordinary}
+                  ownIds={ordinaryIds}
+                  opened={opened}
+                  required={t.is_required}
+                  selectedId={getSelectedOptionId(t.trait.name)}
+                  onSelect={(optionId) => handleFormTraitChange(t.trait.name, optionId)}
+                  descriptor={getTraitDescriptor(t.trait.name)}
+                  onDescriptorCommit={(text) => handleTraitDescriptorCommit(t.trait.name, text)}
+                  onClosed={() => handleTraitClosed(t.trait.name, ordinaryIds)}
                 />
-                {opened && (
-                  <Field id={`desc-${t.trait.id}`} label="Describe it" hint="Optional.">
-                    <input
-                      id={`desc-${t.trait.id}`}
-                      type="text"
-                      maxLength={120}
-                      defaultValue={getTraitDescriptor(t.trait.name)}
-                      onBlur={(e) => handleTraitDescriptorCommit(t.trait.name, e.target.value)}
-                    />
-                  </Field>
-                )}
-              </div>
-            );
-          })}
-          {strayInherited.map((group) => (
-            <div key={`${group.trait.id}-${group.source}`}>
-              <h3 className="section-h" id={`trait-${group.trait.id}-${group.source}`}>
-                {group.trait.display_name}{' '}
-                <span className="entry-gloss">(from {group.source})</span>
-              </h3>
-              <ChoiceRow
-                labelledBy={`trait-${group.trait.id}-${group.source}`}
-                label={group.trait.display_name}
-                options={group.options.map((o) => ({ value: o.id, label: o.display_name }))}
-                value={getSelectedOptionId(group.trait.name)}
-                onChange={(optionId) => handleFormTraitChange(group.trait.name, optionId)}
-                clearable
-              />
-              <FeatureDistinctions
-                draft={draft}
-                feature={{ feature_trait: group.trait.name }}
-                featureLabel={group.trait.display_name}
-                unlockLabel={copy?.appearance_make_distinctive}
-                unlockWhy={copy?.appearance_make_distinctive_why}
-                perTierWord={copy?.appearance_per_tier}
-              />
-              {openedTraits.has(group.trait.name) && (
-                <Field
-                  id={`desc-${group.trait.id}-${group.source}`}
-                  label="Describe it"
-                  hint="Optional."
-                >
-                  <input
-                    id={`desc-${group.trait.id}-${group.source}`}
-                    type="text"
-                    maxLength={120}
-                    defaultValue={getTraitDescriptor(group.trait.name)}
-                    onBlur={(e) => handleTraitDescriptorCommit(group.trait.name, e.target.value)}
-                  />
-                </Field>
-              )}
-            </div>
-          ))}
+              );
+            })}
+            {strayInherited.map((group) => {
+              const ids = new Set(group.options.map((o) => o.id));
+              return (
+                <TraitBlock
+                  key={`${group.trait.id}-${group.source}`}
+                  draft={draft}
+                  trait={group.trait}
+                  idSuffix={`-${group.source}`}
+                  options={group.options}
+                  ownIds={ids}
+                  opened={openedTraits.has(group.trait.name)}
+                  source={group.source}
+                  selectedId={getSelectedOptionId(group.trait.name)}
+                  onSelect={(optionId) => handleFormTraitChange(group.trait.name, optionId)}
+                  descriptor={getTraitDescriptor(group.trait.name)}
+                  onDescriptorCommit={(text) => handleTraitDescriptorCommit(group.trait.name, text)}
+                  onClosed={() => handleTraitClosed(group.trait.name, ids)}
+                />
+              );
+            })}
+          </div>
         </>
       )}
 
@@ -619,12 +632,7 @@ export function AppearanceStage({
       </Field>
 
       <h2 className="section-h">{copy?.appearance_markings_heading ?? 'Markings'}</h2>
-      <MarkingsEditor
-        draft={draft}
-        markingUnlockLabel={copy?.appearance_make_distinctive}
-        markingUnlockWhy={copy?.appearance_marking_distinctive_why}
-        perTierWord={copy?.appearance_per_tier}
-      />
+      <MarkingsEditor draft={draft} />
     </ChapterLeaf>
   );
 }

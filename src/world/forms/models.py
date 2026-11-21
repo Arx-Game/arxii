@@ -1,4 +1,5 @@
 from django.core.exceptions import ValidationError
+from django.core.validators import RegexValidator
 from django.db import models
 from django.utils import timezone
 from django.utils.functional import cached_property
@@ -176,6 +177,16 @@ class FormTraitOption(NaturalKeyMixin, SharedMemoryModel):
     name = models.CharField(max_length=50, help_text="Internal key")
     display_name = models.CharField(max_length=100, help_text="Display name for UI")
     sort_order = models.PositiveSmallIntegerField(default=0)
+    swatch_hex = models.CharField(
+        max_length=7,
+        blank=True,
+        validators=[RegexValidator(r"^#[0-9a-fA-F]{6}$", "Enter a colour as #rrggbb.")],
+        help_text=(
+            "The colour shown for this option where a player picks it (#5241), as "
+            "#rrggbb. Leave blank for an option that is not a colour, or has no single "
+            "colour (Prismatic, Mismatched); it is then drawn as a striped swatch."
+        ),
+    )
     height_modifier_inches = models.SmallIntegerField(
         null=True,
         blank=True,

@@ -139,6 +139,45 @@ describe('useShownPicks', () => {
     expect(fetchDraft).not.toHaveBeenCalled();
   });
 
+  it('a feature quality inside the free allowance moves no CG points (#5241)', async () => {
+    vi.mocked(apiFetch).mockReturnValue(new Promise(() => {}));
+    const { queryClient, view } = setUp();
+    queryClient.setQueryData(characterCreationKeys.draftOffers(DRAFT_ID, 'appearance'), {
+      offers: [{ offer_id: 90, cost_per_rank: 1 }],
+      terms: [],
+    });
+    const tiers = (rank: number): SyncDistinctionEntry[] => [
+      row(1, 11),
+      { id: 9, rank, offer_id: 90, feature_trait: 'hair_color', feature_marking: 0 },
+    ];
+
+    act(() => view.result.current.sync.mutate(tiers(3)));
+
+    // Three tiers of the ten that are free: the feature points move, the CG points do not.
+    await waitFor(() => expect(view.result.current.shown.featureSpent).toBe(3));
+    expect(totals(view.result.current.shown)).toEqual([5, 95]);
+  });
+
+  it('feature qualities past the free allowance cost CG points (#5241)', async () => {
+    vi.mocked(apiFetch).mockReturnValue(new Promise(() => {}));
+    const { queryClient, view } = setUp();
+    queryClient.setQueryData(characterCreationKeys.draftOffers(DRAFT_ID, 'appearance'), {
+      offers: [{ offer_id: 90, cost_per_rank: 1 }],
+      terms: [],
+    });
+
+    act(() =>
+      view.result.current.sync.mutate([
+        row(1, 11),
+        { id: 9, rank: 12, offer_id: 90, feature_trait: 'hair_color', feature_marking: 0 },
+      ])
+    );
+
+    // Twelve points of qualities, ten of them free: two CG points on top of the 5.
+    await waitFor(() => expect(view.result.current.shown.featureSpent).toBe(12));
+    expect(totals(view.result.current.shown)).toEqual([7, 93]);
+  });
+
   it('when the save answers the totals stand, with the draft fetch still out', async () => {
     const save = held<Response>();
     vi.mocked(apiFetch).mockReturnValue(save.promise);

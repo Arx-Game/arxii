@@ -52703,6 +52703,15 @@ components:
           type: integer
           description: Get remaining CG points.
           readOnly: true
+        feature_points_spent:
+          type: integer
+          description: What the draft's feature qualities cost, before the free allowance
+            (#5241).
+          readOnly: true
+        feature_points_free:
+          type: integer
+          description: How many points of feature qualities cost no CG points (#5241).
+          readOnly: true
         stat_bonuses:
           type: object
           additionalProperties:
@@ -52829,6 +52838,8 @@ components:
       - enemy_price_tables
       - enemy_reasons
       - family
+      - feature_points_free
+      - feature_points_spent
       - final_touches_cards
       - final_touches_prompts
       - has_existing_characters
@@ -61158,6 +61169,16 @@ components:
           type: integer
           maximum: 32767
           minimum: 0
+        swatch_hex:
+          description: 'The colour shown for this option where a player picks it (#5241),
+            as #rrggbb. Leave blank for an option that is not a colour, or has no
+            single colour (Prismatic, Mismatched); it is then drawn as a striped swatch.'
+          oneOf:
+          - type: string
+            pattern: ^#[0-9a-fA-F]{6}$
+            maxLength: 7
+          - type: string
+            maxLength: 0
       required:
       - display_name
       - id
@@ -101481,10 +101502,6 @@ components:
           type: string
         taken_per_feature:
           type: boolean
-        opens_feature:
-          type: boolean
-        requires_feature_opened:
-          type: boolean
         cg_max_rank:
           type: integer
         group:
@@ -101516,9 +101533,7 @@ components:
       - offer_id
       - opener_key
       - opener_label
-      - opens_feature
       - player_line
-      - requires_feature_opened
       - taken_per_feature
     Vision:
       type: object
