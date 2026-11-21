@@ -207,3 +207,166 @@ class TestEnvBackupRoundTrip(unittest.TestCase):
 
         self.assertEqual(env.read_bytes(), original)
         self.assertFalse(backup.exists(), "the backup is consumed by the restore")
+
+
+class TestCleanupVerdict(unittest.TestCase):
+    """`arx start` kills only this checkout's server and portal, never a neighbour's.
+
+    Parallel agents each work in a worktree under ``<main>/.claude/worktrees/`` and share
+    one machine; the start-up cleanup used to SIGKILL every process whose command line
+    mentioned evennia, which ended other agents' test runs with no result (#5240).
+    """
+
+    MAIN = Path("/work/arxii")
+    WORKTREE = MAIN / ".claude" / "worktrees" / "feature-a"
+    OTHER_WORKTREE = MAIN / ".claude" / "worktrees" / "feature-b"
+
+    @staticmethod
+    def _twistd(root: Path, name: str) -> str:
+        venv = root / ".venv"
+        script = venv / "lib/python3.13/site-packages/evennia/server" / name
+        return f"{venv}/bin/python {venv}/bin/twistd --python={script} --pidfile={root}/x.pid"
+
+    def _process(self, root: Path, name: str = "server.py", **overrides):
+        from cli.arx import _ProcessInfo
+
+        fields = {
+            "pid": 100,
+            "cmdline": self._twistd(root, name),
+            "state": "S",
+            "cwd": root / "src",
+            "interpreter": root / ".venv" / "bin" / "python",
+        }
+        fields.update(overrides)
+        return _ProcessInfo(**fields)
+
+    def test_own_server_is_killed(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        verdict = _cleanup_verdict(self._process(self.WORKTREE), self.WORKTREE)
+        self.assertTrue(verdict.kill)
+
+    def test_own_portal_is_killed(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        verdict = _cleanup_verdict(self._process(self.WORKTREE, "portal.py"), self.WORKTREE)
+        self.assertTrue(verdict.kill)
+
+    def test_own_server_is_killed_when_only_the_interpreter_names_the_checkout(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        proc = self._process(self.WORKTREE, cwd=Path("/"))
+        self.assertTrue(_cleanup_verdict(proc, self.WORKTREE).kill)
+
+    def test_another_worktrees_server_is_left_alone(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        verdict = _cleanup_verdict(self._process(self.OTHER_WORKTREE), self.WORKTREE)
+        self.assertFalse(verdict.kill)
+        self.assertIn("another checkout", verdict.reason)
+
+    def test_main_checkouts_server_is_left_alone_from_a_worktree(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        verdict = _cleanup_verdict(self._process(self.MAIN), self.WORKTREE)
+        self.assertFalse(verdict.kill)
+
+    def test_a_worktrees_server_is_left_alone_from_the_main_checkout(self) -> None:
+        """The main checkout contains its worktrees on disk but does not own them."""
+        from cli.arx import _cleanup_verdict
+
+        verdict = _cleanup_verdict(self._process(self.WORKTREE), self.MAIN)
+        self.assertFalse(verdict.kill)
+
+    def test_test_run_in_this_checkout_is_left_alone(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        cmdline = (
+            f"{self.WORKTREE}/.venv/bin/python {self.WORKTREE}/.venv/bin/evennia test --settings=x"
+        )
+        verdict = _cleanup_verdict(self._process(self.WORKTREE, cmdline=cmdline), self.WORKTREE)
+        self.assertFalse(verdict.kill)
+        self.assertEqual(verdict.reason, "a test run")
+
+    def test_test_run_elsewhere_is_left_alone(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        cmdline = f"{self.OTHER_WORKTREE}/.venv/bin/python evennia test --parallel=3 world.x"
+        verdict = _cleanup_verdict(
+            self._process(self.OTHER_WORKTREE, cmdline=cmdline), self.WORKTREE
+        )
+        self.assertFalse(verdict.kill)
+
+    def test_child_of_a_test_run_is_left_alone(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        parent = "python /work/arxii/.venv/bin/arx test world.x"
+        proc = self._process(self.WORKTREE, ancestor_cmdlines=("bash -c x", parent))
+        verdict = _cleanup_verdict(proc, self.WORKTREE)
+        self.assertFalse(verdict.kill)
+        self.assertEqual(verdict.reason, "started by a test run")
+
+    def test_zombie_is_left_alone(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        by_state = self._process(self.WORKTREE, state="Z")
+        by_name = self._process(self.WORKTREE, cmdline="[twistd] <defunct>", state="")
+        self.assertFalse(_cleanup_verdict(by_state, self.WORKTREE).kill)
+        self.assertFalse(_cleanup_verdict(by_name, self.WORKTREE).kill)
+
+    def test_unreadable_proc_entry_keeps_the_old_behaviour_for_a_server(self) -> None:
+        """No cwd or interpreter (Windows, macOS, vanished pid): stale, as before."""
+        from cli.arx import _cleanup_verdict
+
+        proc = self._process(self.OTHER_WORKTREE, state="", cwd=None, interpreter=None)
+        self.assertTrue(_cleanup_verdict(proc, self.WORKTREE).kill)
+
+    def test_unreadable_proc_entry_still_spares_a_test_run(self) -> None:
+        from cli.arx import _cleanup_verdict
+
+        proc = self._process(
+            self.WORKTREE,
+            cmdline="python evennia test --settings=x",
+            state="",
+            cwd=None,
+            interpreter=None,
+        )
+        self.assertFalse(_cleanup_verdict(proc, self.WORKTREE).kill)
+
+    def test_a_pid_with_no_proc_entry_describes_as_unknown(self) -> None:
+        from cli.arx import _describe_process
+
+        info = _describe_process({"pid": 2**31 - 2, "cmdline": "python twistd server.py"})
+        self.assertIsNone(info.cwd)
+        self.assertIsNone(info.interpreter)
+        self.assertEqual(info.state, "")
+        self.assertEqual(info.ancestor_cmdlines, ())
+
+    def test_test_run_pattern_ignores_paths_that_merely_contain_the_words(self) -> None:
+        from cli.arx import _is_test_run
+
+        self.assertFalse(_is_test_run(self._twistd(Path("/work/arx-test-runs"), "server.py")))
+        self.assertTrue(_is_test_run("python /x/bin/evennia --settings=a test world.y"))
+        self.assertTrue(_is_test_run("uv run arx test"))
+        self.assertTrue(_is_test_run("python src/manage.py test world"))
+
+    def test_cleanup_reports_each_process_and_kills_only_the_verdict_kills(self) -> None:
+        from cli.arx import _cleanup_stale_processes
+
+        own = self._process(self.WORKTREE, pid=11)
+        neighbour = self._process(self.OTHER_WORKTREE, pid=22)
+        with (
+            mock.patch("cli.arx.PROJECT_ROOT", self.WORKTREE),
+            mock.patch("cli.arx._find_evennia_processes", return_value=[{}, {}]),
+            mock.patch("cli.arx._describe_process", side_effect=[own, neighbour]),
+            mock.patch("cli.arx._kill_process", return_value=True) as kill,
+            mock.patch("cli.arx.typer.echo") as echo,
+            mock.patch("time.sleep"),
+        ):
+            killed = _cleanup_stale_processes()
+
+        self.assertEqual(killed, 1)
+        kill.assert_called_once_with(11)
+        lines = [call.args[0] for call in echo.call_args_list]
+        self.assertTrue(any("killed: pid 11 (server)" in line for line in lines))
+        self.assertTrue(any("left alone: pid 22 (server)" in line for line in lines))
