@@ -10,7 +10,7 @@
  * holding every point. The server owns the rule; `resonanceWeights.ts` keeps this in step.
  */
 
-import { useId } from 'react';
+import { useId, useState } from 'react';
 import { NEUTRAL_HEX } from '@/magic/auraSwirl';
 import { AuraSwirl } from '@/magic/components/AuraSwirl';
 import type { CGExplanations, Resonance, ResonanceWeightPick } from '../../types';
@@ -90,23 +90,36 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
 
   const save = (next: StrengthPicks) => onChange(weightsFromPicks(next, budget));
 
-  const chooseLean = (lean: Lean) => {
-    if (lean === 'none') {
-      save({ ...picks, lean, outward: null, primalPoints: budget });
+  // The side she has chosen but not yet picked a resonance on. The saved list cannot hold it
+  // (a side is only written by its pick), so it is kept here until her pick arrives.
+  const [pendingSide, setPendingSide] = useState<'give' | 'take' | null>(null);
+  // Her answer about others: the saved second pick's side when there is one, else the side she
+  // has just chosen, else what the saved list says.
+  const lean: Lean | null = picks.outward != null ? picks.lean : (pendingSide ?? picks.lean);
+
+  const chooseLean = (next: Lean) => {
+    if (next === 'none') {
+      setPendingSide(null);
+      save({ ...picks, lean: next, outward: null, primalPoints: budget });
       return;
     }
-    // A pick already on this side stays; a new side starts at its first card, and a feeling
-    // that held every point gives up a share to it (the demo's 7 of 10).
-    const kept = lean === picks.lean ? picks.outward : null;
-    const outward = kept ?? sideCards(lean)[0]?.id ?? null;
-    const heldAll = picks.lean !== 'give' && picks.lean !== 'take';
-    const primalPoints = heldAll ? defaultPrimalPoints(budget) : picks.primalPoints;
-    save({ ...picks, lean, outward, primalPoints });
+    // A side gives her no card: she picks one herself. Only a second pick left over from the
+    // other side is cleared, in one write.
+    setPendingSide(next);
+    if (picks.outward != null && picks.lean !== next) {
+      save({ ...picks, lean: next, outward: null, primalPoints: budget });
+    }
+  };
+
+  // A feeling that held every point gives up a share to the second pick (the demo's 7 of 10).
+  const chooseOutward = (id: number) => {
+    const primalPoints = picks.outward == null ? defaultPrimalPoints(budget) : picks.primalPoints;
+    save({ ...picks, lean, outward: id, primalPoints });
   };
 
   const feeling = nameOf(picks.primal);
-  const chosenSide = picks.lean === 'give' || picks.lean === 'take' ? picks.lean : null;
-  const outward = chosenSide ? nameOf(picks.outward) : undefined;
+  const chosenSide = lean === 'give' || lean === 'take' ? lean : null;
+  const outward = chosenSide && picks.lean === chosenSide ? nameOf(picks.outward) : undefined;
   // The balance exists once both picks do; before that the slider is off.
   const balanced = feeling != null && outward != null;
   const neither = picks.lean === 'none' && feeling != null;
@@ -161,7 +174,7 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
         label={text('gift_strength_feeling_question', 'Which feeling gives you strength')}
         resonances={primalCards}
         picked={picks.primal}
-        onPick={(id) => save({ ...picks, primal: id, lean: picks.lean ?? 'none' })}
+        onPick={(id) => save({ ...picks, primal: id, lean: lean ?? 'none' })}
       />
 
       <p className="strength-ask">
@@ -171,12 +184,12 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
         )}
       </p>
       <div className="strength-row">
-        {LEANS.map(({ lean, key, fallback }) => (
+        {LEANS.map(({ lean: choice, key, fallback }) => (
           <button
-            key={lean}
+            key={choice}
             type="button"
-            aria-pressed={picks.lean === lean}
-            onClick={() => chooseLean(lean)}
+            aria-pressed={lean === choice}
+            onClick={() => chooseLean(choice)}
           >
             {text(key, fallback)}
           </button>
@@ -191,8 +204,8 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
           <ResonanceCards
             label={text('gift_strength_outward_question', 'Which of these gives you strength')}
             resonances={sideCards(chosenSide)}
-            picked={picks.outward}
-            onPick={(id) => save({ ...picks, outward: id })}
+            picked={outward?.id ?? null}
+            onPick={chooseOutward}
           />
         </>
       )}

@@ -156,6 +156,9 @@ describe('GiftStage (folio)', () => {
         />
       );
       await userEvent.click(screen.getByRole('button', { name: 'Helping them' }));
+      // The side alone saves nothing: she picks the card herself.
+      expect(JSON.stringify(updateDraftMutate.mock.calls)).not.toContain('gift_resonance_weights');
+      await userEvent.click(screen.getByRole('button', { name: /Mercy/ }));
       expect(updateDraftMutate).toHaveBeenCalledWith({
         draftId: 1,
         data: {

@@ -94,16 +94,21 @@ describe('StrengthStep', () => {
     expect(screen.queryByText(/nothing to balance/)).not.toBeInTheDocument();
   });
 
-  it('writes a valid one-pick list when the side and its card are picked before a feeling', async () => {
+  it('presses no card for her when a side is chosen, and saves nothing until she picks', async () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole('button', { name: 'Hurting them' }));
-    expect(saved).toEqual([{ resonance_id: 5, weight: 8 }]);
-    expect(screen.getByRole('button', { name: /Praedari/, pressed: true })).toBeInTheDocument();
+    expect(saved).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Hurting them', pressed: true })).toBeInTheDocument();
+    // The side's eight cards are there, none pressed; the slider and the plate stay as they were.
+    for (const name of [/Praedari/, /Dominari/]) {
+      expect(screen.getByRole('button', { name, pressed: false })).toBeInTheDocument();
+    }
     expect(screen.getByRole('slider')).toBeDisabled();
     expect(document.querySelector('.strength-named')).toBeNull();
 
     await userEvent.click(screen.getByRole('button', { name: /Dominari/ }));
     expect(saved).toEqual([{ resonance_id: 6, weight: 8 }]);
+    expect(screen.getByRole('slider')).toBeDisabled();
 
     // The feeling then joins it, the Primal pick first, and the slider wakes.
     await userEvent.click(screen.getByRole('button', { name: /Arderi/ }));
@@ -119,19 +124,29 @@ describe('StrengthStep', () => {
     expect(screen.getByText('Your strength, in the words staff wrote')).toBeInTheDocument();
   });
 
-  it('sends the feeling alone with every point, then the side, then the second pick', async () => {
+  it('sends the feeling alone with every point, keeps it when a side is chosen, then the pick', async () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole('button', { name: /Arderi/ }));
     expect(saved).toEqual([{ resonance_id: 1, weight: 8 }]);
     expect(screen.getByRole('button', { name: 'Neither', pressed: true })).toBeInTheDocument();
 
+    saved = [];
     await userEvent.click(screen.getByRole('button', { name: 'Hurting them' }));
-    // The feeling gave up a share to the first card of the side, in one write.
+    // Choosing the side writes nothing and picks nothing: the slider stays off, the plate stays.
+    expect(saved).toEqual([]);
+    expect(screen.getByRole('button', { name: 'Neither', pressed: false })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Praedari/, pressed: false })).toBeInTheDocument();
+    expect(screen.getByRole('slider')).toBeDisabled();
+    expect(screen.getByText('Primal')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: /Praedari/ }));
+    // The feeling gave up a share to her pick, in one write.
     expect(saved).toEqual([
       { resonance_id: 1, weight: 6 },
       { resonance_id: 5, weight: 2 },
     ]);
     expect(screen.getByRole('button', { name: /Praedari/, pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('slider')).toBeEnabled();
 
     await userEvent.click(screen.getByRole('button', { name: /Dominari/ }));
     expect(saved).toEqual([
@@ -140,7 +155,7 @@ describe('StrengthStep', () => {
     ]);
   });
 
-  it('replaces the second pick in one write when the side changes, keeping the balance', async () => {
+  it('clears a second pick from the other side when the side changes, and picks nothing new', async () => {
     render(
       <Harness
         start={[
@@ -150,11 +165,16 @@ describe('StrengthStep', () => {
       />
     );
     await userEvent.click(screen.getByRole('button', { name: 'Helping them' }));
-    expect(saved).toEqual([
-      { resonance_id: 1, weight: 5 },
-      { resonance_id: 3, weight: 3 },
-    ]);
+    expect(saved).toEqual([{ resonance_id: 1, weight: 8 }]);
     expect(screen.queryByRole('button', { name: /Praedari/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Bene/, pressed: false })).toBeInTheDocument();
+    expect(screen.getByRole('slider')).toBeDisabled();
+
+    await userEvent.click(screen.getByRole('button', { name: /Bene/ }));
+    expect(saved).toEqual([
+      { resonance_id: 1, weight: 6 },
+      { resonance_id: 3, weight: 2 },
+    ]);
   });
 
   it('divides the points with the slider, the feeling first', () => {
