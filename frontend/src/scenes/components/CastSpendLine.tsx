@@ -3,6 +3,10 @@
  * response's technique result.
  */
 import type { CastResultPayload } from '../actionTypes';
+import type { PowerLedger } from '@/magic/types';
+
+/** The label the power ledger gives the term a kindled resonance adds to a cast (#5231). */
+export const KINDLED_CAST_LINE = 'kindled cast power';
 
 export function CastSpendLine({ result }: { result: CastResultPayload }) {
   const technique = result.technique_result;
@@ -33,5 +37,32 @@ export function CastFocusLines({ result }: { result: CastResultPayload }) {
         <p key={line}>{line}</p>
       ))}
     </div>
+  );
+}
+
+/**
+ * The sentence above the power ledger when a cast worked in a kindled resonance was made
+ * stronger by it (#5231, Screen 4 of the demo). It reads the resonance's name from the option
+ * the caster cast in, and shows only while the ledger carries the kindled cast power line, so
+ * a kindled resonance that added nothing claims nothing.
+ */
+export function CastKindledLine({
+  resonanceName,
+  ledger,
+}: {
+  resonanceName: string | null;
+  ledger: PowerLedger | null | undefined;
+}) {
+  const carriesLine = ledger?.entries.some(
+    (entry) =>
+      entry.stage === 'term' && entry.source_label === KINDLED_CAST_LINE && entry.amount > 0
+  );
+  if (!resonanceName || !carriesLine) {
+    return null;
+  }
+  return (
+    <p className="text-xs" data-testid="cast-kindled-line">
+      Your kindled {resonanceName} strengthened the cast.
+    </p>
   );
 }

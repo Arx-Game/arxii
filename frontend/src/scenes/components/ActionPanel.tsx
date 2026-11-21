@@ -26,7 +26,7 @@ import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { SurroundingsLines } from '@/magic/components/SurroundingsLines';
 import { CastResonancePicker } from '@/magic/components/CastResonancePicker';
 import { GiftCallUpRow } from './GiftCallUpRow';
-import { CastFocusLines, CastSpendLine } from './CastSpendLine';
+import { CastFocusLines, CastKindledLine, CastSpendLine } from './CastSpendLine';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
@@ -201,6 +201,8 @@ export function ActionPanel({ sceneId }: Props) {
   // afterwards wins over the form's.
   const [selectedResonanceId, setSelectedResonanceId] = useState<number | null>(null);
   const [castLedgerResult, setCastLedgerResult] = useState<CastResponse | null>(null);
+  // The kindled resonance the shown cast was worked in, by name; null when it was not kindled.
+  const [castKindledResonance, setCastKindledResonance] = useState<string | null>(null);
   // The caster's consent (#3573) to hold the selected ward-bearing technique's
   // protective condition alive past zero anima via Soulfray. Only meaningful
   // when selectedTechnique.reactive_anima_cost != null; reset whenever the
@@ -276,6 +278,12 @@ export function ActionPanel({ sceneId }: Props) {
       }),
     onSuccess: (data) => {
       invalidateActionOutcomeQueries();
+      // The option she cast in: her pick, else her usual one, read before the picks reset.
+      const castIn =
+        chosenResonanceId === null
+          ? resonanceOptions.find((o) => o.is_default)
+          : resonanceOptions.find((o) => o.resonance_id === chosenResonanceId);
+      setCastKindledResonance(castIn?.kindled_strength ? castIn.name : null);
       setSelectedTechnique(null);
       setSelectedForm(null);
       setSelectedResonanceId(null);
@@ -814,6 +822,10 @@ export function ActionPanel({ sceneId }: Props) {
                     <div className="space-y-2" data-testid="cast-ledger-result">
                       <CastSpendLine result={castLedgerResult.result} />
                       <CastFocusLines result={castLedgerResult.result} />
+                      <CastKindledLine
+                        resonanceName={castKindledResonance}
+                        ledger={castLedgerResult.result.power_ledger}
+                      />
                       <PowerLedgerPanel ledger={castLedgerResult.result.power_ledger} />
                       <Button
                         size="sm"

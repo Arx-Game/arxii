@@ -1225,6 +1225,61 @@ describe('ActionPanel', () => {
   });
 
   // -------------------------------------------------------------------------
+  const ledgerWith = (...terms: { label: string; amount: number }[]) => ({
+    entries: [
+      { stage: 'base', source_label: 'Channeled', op: 'add', amount: 20, running_total: 20 },
+      ...terms.map((term, index) => ({
+        stage: 'term',
+        source_label: term.label,
+        op: 'add',
+        amount: term.amount,
+        running_total: 20 + index + term.amount,
+      })),
+    ],
+    total: 20 + terms.reduce((sum, term) => sum + term.amount, 0),
+  });
+  const resolvedCast = (power_ledger: ReturnType<typeof ledgerWith>) => ({
+    id: 1,
+    status: 'resolved',
+    result: {
+      action_key: 'cast',
+      power_ledger,
+      action_resolution: { current_phase: 'complete', main_result: null, gate_results: [] },
+      technique_result: null,
+    },
+    action_interaction: 42,
+  });
+
+  it('says the kindled resonance strengthened the cast above the ledger (#5231)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue(
+      resolvedCast(ledgerWith({ label: 'kindled cast power', amount: 9 }))
+    );
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(user);
+    await user.click(await screen.findByTestId('cast-resonance-9'));
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    const line = await screen.findByTestId('cast-kindled-line');
+    expect(line).toHaveTextContent('Your kindled Praedari strengthened the cast.');
+    expect(
+      line.compareDocumentPosition(screen.getByTestId('power-ledger-panel')) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('says nothing about kindling when the cast was worked in the usual, unkindled resonance (#5231)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue(
+      resolvedCast(ledgerWith({ label: 'level power', amount: 4 }))
+    );
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(user);
+    await screen.findByTestId('cast-resonance-picker');
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await screen.findByTestId('cast-ledger-result');
+    expect(screen.queryByTestId('cast-kindled-line')).not.toBeInTheDocument();
+  });
+
   // Immediate cast (#859): power ledger takeover
   // -------------------------------------------------------------------------
 
