@@ -405,19 +405,18 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
 
     @staticmethod
     def _make_it_distinctive_entry(trait_name: str) -> dict:
-        """A draft entry buying "Make It Distinctive" on one trait row (#3739).
+        """A draft entry holding one tier of a quality on one trait row (#3739, #5241).
 
-        The descriptor field is bought, not free: finalize writes a descriptor only
-        for a trait the draft unlocked, so a test about descriptors has to buy one.
+        The descriptor field is not free: finalize writes a descriptor only for a
+        trait the draft made distinctive, so a test about descriptors has to put a
+        quality on one.
         """
         from world.character_creation.constants import OfferChapter
         from world.character_creation.factories import DistinctionOfferFactory
         from world.distinctions.factories import DistinctionFactory
         from world.distinctions.types import build_distinction_entry
 
-        distinction = DistinctionFactory(
-            name="Make It Distinctive", taken_per_feature=True, opens_feature=True
-        )
+        distinction = DistinctionFactory(name="Alluring", taken_per_feature=True)
         # The entry needs a live offer or ``reconcile_offer_picks`` drops it at
         # finalize as a pick whose last source vanished (``_drop_empty_and_reprice``).
         offer = DistinctionOfferFactory(

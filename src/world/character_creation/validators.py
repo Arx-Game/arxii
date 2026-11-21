@@ -470,9 +470,9 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
     selected option must sit in the species' own palette or among the
     inherited options a cross-species parent makes legal (pinned-aware).
 
-    A trait the draft has made distinctive (#3739) is exempt from the palette
-    check: the point the player spent buys exactly that, every option the trait
-    carries including the Unnatural umbrella, on the standing assumption that
+    A trait the draft has made distinctive (#3739; since #5241, one holding a tier
+    of any quality) is exempt from the palette check: it reaches every option the
+    trait carries including the Unnatural umbrella, on the standing assumption that
     an off-species colour has a magical explanation. The required-trait check
     still applies — a distinctive trait is still a trait you have to choose.
     """

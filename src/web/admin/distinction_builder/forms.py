@@ -6,6 +6,7 @@ from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect, FilteredSelectMultiple
 from django.forms import inlineformset_factory
+from django.utils.text import slugify
 
 from world.character_creation.constants import ENEMY_MARKING_DEGREES
 from world.character_creation.models import Beginnings, DistinctionOffer
@@ -38,6 +39,20 @@ class DistinctionForm(forms.ModelForm):
         """Blank means 0 -- the model's own "no separate CG cap" value."""
         return self.cleaned_data.get("cg_max_rank") or 0
 
+    # The slug sits under the folded "More" section. Left to the ModelForm default it
+    # is required, and a required field the browser cannot focus stops Save with no
+    # message at all (#5241). Blank means "made from the name", as the table paste
+    # (``paste.py``) has always made it.
+    slug = forms.SlugField(
+        required=False,
+        max_length=100,
+        help_text="Blank means it is made from the name.",
+    )
+
+    def clean_slug(self) -> str:
+        """A blank slug is the name, slugified."""
+        return self.cleaned_data.get("slug") or slugify(self.cleaned_data.get("name", ""))
+
     class Meta:
         model = Distinction
         fields = [
@@ -56,12 +71,10 @@ class DistinctionForm(forms.ModelForm):
             "allow_other",
             "is_automatic",
             "requires_slot_filled",
-            # Distinctive physical features (#3739). Authored here because the
-            # per-feature shape is a property of the distinction, not of any one
-            # offer: the same row is offered on every feature there is.
+            # Feature qualities (#3739). Authored here because the per-feature shape
+            # is a property of the distinction, not of any one offer: the same row
+            # is offered on every feature there is.
             "taken_per_feature",
-            "opens_feature",
-            "requires_feature_opened",
             "cg_max_rank",
             # The Final Touches chapter (#4846): the optional question this card asks there.
             "final_touches_prompt",
@@ -106,11 +119,9 @@ DISTINCTION_MORE_FIELDS = (
     "allow_other",
     "is_automatic",
     "requires_slot_filled",
-    # Distinctive physical features (#3739): rarely touched, since only the four
-    # Appearance rows set them, but authorable here rather than in the raw admin.
+    # Feature qualities (#3739): rarely touched, since only the three Appearance
+    # rows set them, but authorable here rather than in the raw admin.
     "taken_per_feature",
-    "opens_feature",
-    "requires_feature_opened",
     "cg_max_rank",
     "final_touches_prompt",
     "asks_figure_name",

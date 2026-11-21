@@ -100,6 +100,30 @@ export function picksCost(picks: { cost?: number }[] | undefined): number {
   return (picks ?? []).reduce((sum, pick) => sum + (pick.cost ?? 0), 0);
 }
 
+type PricedPick = { cost?: number } & FeatureRef;
+
+/**
+ * What the feature qualities in a list cost together (#5241): the picks that name a
+ * feature, before the free allowance. The server's `feature_points_spent`.
+ */
+export function featureCost(picks: PricedPick[] | undefined): number {
+  return picksCost(
+    (picks ?? []).filter((pick) => {
+      const [trait, marking] = featureKey(pick);
+      return trait !== '' || marking !== 0;
+    })
+  );
+}
+
+/**
+ * What a list of picks costs in CG points (#5241): their prices together, less the
+ * part of the feature qualities the free allowance covers. The same sum the server
+ * makes (`CharacterDraft._append_feature_allowance`).
+ */
+export function chargedCost(picks: PricedPick[] | undefined, freeFeaturePoints: number): number {
+  return picksCost(picks) - Math.min(freeFeaturePoints, featureCost(picks));
+}
+
 /** A saved pick as a save in flight leaves it, or null when the save lets it go. */
 function underSave(
   entry: DraftDistinctionEntry,

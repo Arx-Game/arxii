@@ -691,11 +691,11 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
     # Tax Collection / Domain Investment checks (#930). After "checks" for the spine.
     "governance": _seed_governance,
-    # Distinctive physical features (#3739): "Make It Distinctive" plus the three
-    # presence axes, each offered on every trait row and marking of the Appearance
-    # chapter. After "social_relationships" (allure), "crafting_materials"
-    # (menace/majesty) and "governance" (the Command check majesty binds to), so every
-    # effect finds its ModifierTarget on the first pass.
+    # Feature qualities (#3739, #5241): Alluring, Menacing and Majestic, each offered
+    # on every trait row and marking of the Appearance chapter. After
+    # "social_relationships" (allure), "crafting_materials" (menace/majesty) and
+    # "governance" (the Command check majesty binds to), so every effect finds its
+    # ModifierTarget on the first pass.
     "distinctive_features": _seed_distinctive_features,
     # Dev domain slice: PLACEHOLDER house/streams/steward offers/scandal archetypes
     # so the books + scandal loops are walkable on a dev DB (#930/#1464). After

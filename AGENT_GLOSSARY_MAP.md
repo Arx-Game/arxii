@@ -108,7 +108,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [forms](src/world/forms/AGENT_GLOSSARY.md) - also holds Audere alternate self (#4731)
 - [ships](src/world/ships/AGENT_GLOSSARY.md)
 - [assets](src/world/assets/AGENT_GLOSSARY.md)
-- [distinctions](src/world/distinctions/AGENT_GLOSSARY.md) - also holds rank size, the size a sized effect steps to at a rank (#4660)
+- [distinctions](src/world/distinctions/AGENT_GLOSSARY.md) - also holds rank size, the size a sized effect steps to at a rank (#4660); and feature, distinctive, feature quality (formerly presence axis) and feature points (#3739, #5241)
 - [narrative](src/world/narrative/AGENT_GLOSSARY.md)
 - [boards](src/world/boards/AGENT_GLOSSARY.md)
 - [messengers](src/world/messengers/AGENT_GLOSSARY.md) - IC missives (#3289): Missive, Transmission method, Messenger, Undeliverable, Attachment resolution (_Avoid_: letter, mail for an IC missive)

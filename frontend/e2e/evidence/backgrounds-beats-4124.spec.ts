@@ -143,8 +143,6 @@ function offer(
     held: false,
     effect_line: '',
     taken_per_feature: false,
-    opens_feature: false,
-    requires_feature_opened: false,
     cg_max_rank: 0,
   };
 }
@@ -187,6 +185,8 @@ function buildDraft(beats: Record<string, { taken?: boolean; unknown?: boolean; 
     selected_tradition: null,
     cg_points_spent: 0,
     cg_points_remaining: 100,
+    feature_points_spent: 0,
+    feature_points_free: 10,
     stat_bonuses: {},
     draft_data: { beats, tarot_card_name: 'The Fool' },
     stage_completion: completion,
