@@ -108,6 +108,21 @@ describe('PayerOptions', () => {
     expect(screen.queryByTestId('payer-kindled-1-3')).not.toBeInTheDocument();
   });
 
+  it('marks the stronger payer and no other', () => {
+    const options = [OPTIONS[0], { ...OPTIONS[1], stronger: true }, OPTIONS[2]];
+    render(
+      <PayerOptions
+        thread={makeThread()}
+        options={options}
+        selectedResonanceId={1}
+        onSelect={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('payer-stronger-1-2')).toHaveTextContent('Stronger');
+    expect(screen.queryByTestId('payer-stronger-1-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('payer-stronger-1-3')).not.toBeInTheDocument();
+  });
+
   it('draws each perk as a shaded bar with the value in its own right-hand cell', () => {
     render(
       <PayerOptions

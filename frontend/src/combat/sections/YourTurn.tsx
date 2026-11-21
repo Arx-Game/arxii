@@ -54,6 +54,7 @@ import { isMoveAction, waitingStrikeTechniques } from '../roundActionHelpers';
 import { PendingAttacks } from '../components/PendingAttacks';
 import { SoulfrayAcceptGate } from '../components/SoulfrayAcceptGate';
 import { FuryDeclaration } from '../components/FuryDeclaration';
+import { CastResonancePicker } from '@/magic/components/CastResonancePicker';
 import {
   ThreadPullDialog,
   type PullSelection,
@@ -267,6 +268,8 @@ interface RoundScopedState {
   soulfrayAccepted: boolean;
   furyTierId: number | null;
   furyResonanceId: number | null;
+  /** The resonance the focused cast is worked in (#5231); null = her usual one. */
+  castResonanceId: number | null;
   coverAllyId: string;
   maneuverError: string | null;
   guardAllyId: string;
@@ -317,6 +320,7 @@ function initialRoundState(): RoundScopedState {
     soulfrayAccepted: false,
     furyTierId: null,
     furyResonanceId: null,
+    castResonanceId: null,
     coverAllyId: '',
     maneuverError: null,
     guardAllyId: GUARD_ANYONE_VALUE,
@@ -436,6 +440,7 @@ function buildFocusedJob(
   soulfrayWarning: SoulfrayWarningData | null,
   furyTierId: number | null,
   furyResonanceId: number | null,
+  castResonanceId: number | null,
   castPosition: CastPosition,
   positionTargetShape: PositionTargetShape,
   isWardBearing: boolean
@@ -459,6 +464,10 @@ function buildFocusedJob(
     furyKwargs.fury_commitment_id = furyTierId;
     furyKwargs.fury_resonance_id = furyResonanceId;
   }
+  // The chosen resonance rides the cast only once she has picked one (#5231); sending
+  // nothing works the usual one.
+  const castResonanceKwargs: Record<string, number> =
+    castResonanceId !== null ? { preferred_resonance_id: castResonanceId } : {};
   const soulfrayKwarg =
     soulfrayAccepted && (soulfrayWarning !== null || isWardBearing)
       ? { confirm_soulfray_risk: true }
@@ -505,6 +514,7 @@ function buildFocusedJob(
         ...soulfrayKwarg,
         ...strainKwarg,
         ...furyKwargs,
+        ...castResonanceKwargs,
         ...positionKwargs,
       },
     });
@@ -2141,6 +2151,7 @@ export function YourTurn({
     soulfrayAccepted,
     furyTierId,
     furyResonanceId,
+    castResonanceId,
     coverAllyId,
     maneuverError,
     guardAllyId,
@@ -2206,6 +2217,7 @@ export function YourTurn({
   const setSoulfrayAccepted = useMemo(() => makeFieldSetter('soulfrayAccepted'), []);
   const setFuryTierId = useMemo(() => makeFieldSetter('furyTierId'), []);
   const setFuryResonanceId = useMemo(() => makeFieldSetter('furyResonanceId'), []);
+  const setCastResonanceId = useMemo(() => makeFieldSetter('castResonanceId'), []);
   const setCoverAllyId = useMemo(() => makeFieldSetter('coverAllyId'), []);
   const setManeuverError = useMemo(() => makeFieldSetter('maneuverError'), []);
   const setGuardAllyId = useMemo(() => makeFieldSetter('guardAllyId'), []);
@@ -2450,6 +2462,14 @@ export function YourTurn({
   const isWardBearingCast = focusedCastDescriptor?.reactive_anima_cost != null;
   const furyTiers = focusedCastDescriptor?.available_fury_tiers ?? [];
   const furyResonances = focusedCastDescriptor?.eligible_fury_resonances ?? [];
+  // The resonances this cast may be worked in (#5231). A pick that the selected technique does
+  // not offer (she changed technique after picking) counts as no pick and is never sent.
+  const castResonanceOptions = focusedCastDescriptor?.cast_resonance_options ?? [];
+  const chosenCastResonanceId = castResonanceOptions.some(
+    (option) => option.resonance_id === castResonanceId
+  )
+    ? castResonanceId
+    : null;
   const furyOverCap = furySelectionOverCap(furyTiers, furyResonances, furyTierId, furyResonanceId);
 
   // A resonance that stops being kindled while she declares (or a step its strength no longer
@@ -2641,6 +2661,7 @@ export function YourTurn({
       soulfrayWarning,
       furyTierId,
       furyResonanceId,
+      chosenCastResonanceId,
       castPosition,
       focusedTechniquePositionShape,
       isWardBearingCast
@@ -3075,6 +3096,20 @@ export function YourTurn({
             </span>
           </label>
         )}
+        <CastResonancePicker
+          options={castResonanceOptions}
+          selectedId={chosenCastResonanceId}
+          onSelect={(resonanceId) =>
+            // Her usual resonance sends nothing: it may be a worn self's resonance that is
+            // not on the Gift's thread, which the server refuses when sent back.
+            setCastResonanceId(
+              castResonanceOptions.find((option) => option.resonance_id === resonanceId)?.is_default
+                ? null
+                : resonanceId
+            )
+          }
+          disabled={isLocked}
+        />
         {furyTiers.length > 0 && furyResonances.length > 0 && (
           <FuryDeclaration
             tiers={furyTiers}

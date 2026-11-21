@@ -2,7 +2,12 @@
 // Legacy scene action types (now slimmed — fetchSceneActions has been removed)
 // ---------------------------------------------------------------------------
 
-import type { PowerLedger, TechniqueEffectSummary, TechniqueForm } from '@/magic/types';
+import type {
+  CastResonanceOption,
+  PowerLedger,
+  TechniqueEffectSummary,
+  TechniqueForm,
+} from '@/magic/types';
 
 export interface TechniqueOption {
   id: number;
@@ -178,6 +183,8 @@ export interface PlayerAction {
   available_fury_tiers?: FuryTierOption[];
   /** Resonances the character can give in to, whose strength caps the fury tier (#5124). */
   eligible_fury_resonances?: FuryResonanceOption[];
+  /** The resonances a combat cast may be worked in (#5231); see `CastableTechnique.resonance_options`. */
+  cast_resonance_options?: CastResonanceOption[];
   /**
    * Whether this technique is a readied ultimate for the current Audere/Audere
    * Majora combat declaration (#4098). Only ever true inside a COMBAT
@@ -599,6 +606,12 @@ export interface CastableTechnique {
    * as `preferred_resonance_id`, or the base form via `use_base_form`.
    */
   forms: TechniqueForm[];
+  /**
+   * The resonances this cast may be worked in (#5231), one per resonance on the Gift's thread:
+   * which is the caster's usual, which are kindled, which is stronger and which adds
+   * corruption. Pick one by sending its `resonance_id` as `preferred_resonance_id`.
+   */
+  resonance_options?: CastResonanceOption[];
   /**
    * Flat reactive anima fee of this technique's protective condition (#3573).
    * null when the technique carries no protective reactive-trigger handler.
