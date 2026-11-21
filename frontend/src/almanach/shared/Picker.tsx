@@ -50,6 +50,7 @@ export function Picker({
             <li key={`${hit.kind}-${hit.id}`}>
               <button
                 type="button"
+                aria-label={hit.sub ? `${hit.name} ${hit.sub}` : undefined}
                 onClick={() => {
                   setQ('');
                   onPick(hit);
