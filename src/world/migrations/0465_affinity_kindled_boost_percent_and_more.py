@@ -92,7 +92,7 @@ class Migration(migrations.Migration):
             name="cast_resonance",
             field=models.ForeignKey(
                 blank=True,
-                help_text="The resonance the requested cast is worked in (#5231), stored when the request is made and used when it resolves; null works it in the default one.",
+                help_text="The resonance the player named for the requested cast, held while the request is pending (#5231); null means she named none and the cast uses the default.",
                 null=True,
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="+",

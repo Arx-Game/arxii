@@ -250,8 +250,8 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         blank=True,
         related_name="+",
         help_text=(
-            "The resonance the requested cast is worked in (#5231), stored when the request "
-            "is made and used when it resolves; null works it in the default one."
+            "The resonance the player named for the requested cast, held while the request "
+            "is pending (#5231); null means she named none and the cast uses the default."
         ),
     )
     snapshot_check_type = models.ForeignKey(
