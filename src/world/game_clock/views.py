@@ -1,19 +1,27 @@
 """API views for the game clock system."""
 
+from django.db.models import QuerySet
 from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
 
-from world.game_clock.models import GameClock
+from web.api.pagination import DefaultPagination
+from world.game_clock.constants import IC_MONTH_NAMES
+from world.game_clock.filters import ClockHistoryFilter
+from world.game_clock.models import GameClock, GameClockHistory
 from world.game_clock.serializers import (
     ClockAdjustSerializer,
     ClockConvertResponseSerializer,
     ClockConvertSerializer,
     ClockDetailSerializer,
+    ClockHistorySerializer,
+    ClockJumpPreviewRequestSerializer,
+    ClockJumpPreviewSerializer,
     ClockRatioSerializer,
     ClockStateSerializer,
 )
@@ -25,6 +33,7 @@ from world.game_clock.services import (
     light_level_from_ic_time,
     pause_clock,
     phase_from_ic_time,
+    preview_clock_jump,
     season_from_ic_time,
     set_clock,
     set_time_ratio,
@@ -42,7 +51,7 @@ class ClockViewSet(viewsets.ViewSet):
     serializer_class = ClockStateSerializer
     permission_classes = [IsAuthenticated]
     # Must stay in sync with the @action methods that require IsAdminUser below.
-    _staff_actions = frozenset({"adjust", "ratio", "pause", "unpause"})
+    _staff_actions = frozenset({"adjust", "adjust_preview", "ratio", "pause", "unpause"})
 
     def get_permissions(self) -> list[object]:
         """Staff actions require IsAdminUser; everything else requires IsAuthenticated."""
@@ -79,6 +88,8 @@ class ClockViewSet(viewsets.ViewSet):
             "season": season,
             "light_level": light_level,
             "paused": clock.paused,
+            "time_ratio": clock.time_ratio,
+            "month_names": [IC_MONTH_NAMES[month] for month in sorted(IC_MONTH_NAMES)],
         }
         serializer = ClockStateSerializer(data)
         return Response(serializer.data)
@@ -134,6 +145,7 @@ class ClockViewSet(viewsets.ViewSet):
                 new_ic_time=serializer.validated_data["ic_datetime"],
                 changed_by=request.user,
                 reason=serializer.validated_data["reason"],
+                age_handling=serializer.validated_data["age_handling"],
             )
         except ClockError as exc:
             return Response(
@@ -142,6 +154,36 @@ class ClockViewSet(viewsets.ViewSet):
             )
 
         return Response({"detail": "Clock adjusted."})
+
+    @extend_schema(
+        parameters=[ClockJumpPreviewRequestSerializer],
+        responses=ClockJumpPreviewSerializer,
+    )
+    @action(detail=False, methods=["get"], url_path="adjust-preview")
+    def adjust_preview(self, request: Request) -> Response:
+        """GET /adjust-preview/ — staff: what setting this date would do; writes nothing."""
+        serializer = ClockJumpPreviewRequestSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            preview = preview_clock_jump(serializer.validated_data["ic_datetime"])
+        except ClockError as exc:
+            return Response(
+                {"detail": exc.user_message},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        data = {
+            "current_ic_time": preview.current_ic_time,
+            "current_date_display": format_ic_date_long(preview.current_ic_time),
+            "new_ic_time": preview.new_ic_time,
+            "direction": preview.direction,
+            "year_shift": preview.year_shift,
+            "characters_with_birth_year": preview.characters_with_birth_year,
+            "upcoming_events": preview.upcoming_events,
+            "heritages_not_yet_appeared": preview.heritages_not_yet_appeared,
+        }
+        return Response(ClockJumpPreviewSerializer(data).data)
 
     @extend_schema(request=ClockRatioSerializer, responses=ClockDetailSerializer)
     @action(detail=False, methods=["post"])
@@ -191,3 +233,17 @@ class ClockViewSet(viewsets.ViewSet):
             )
 
         return Response({"detail": "Clock unpaused."})
+
+
+@extend_schema(tags=["game-clock"])
+class ClockHistoryViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
+    """Staff: the recorded changes to the clock, newest first (#5248)."""
+
+    serializer_class = ClockHistorySerializer
+    permission_classes = [IsAdminUser]
+    pagination_class = DefaultPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ClockHistoryFilter
+
+    def get_queryset(self) -> QuerySet[GameClockHistory]:
+        return GameClockHistory.objects.select_related("changed_by").order_by("-changed_at", "-pk")

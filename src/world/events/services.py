@@ -658,3 +658,33 @@ def respond_to_invitation(
     invitation.responded_at = timezone.now()
     invitation.save(update_fields=["response", "responded_at"])
     return invitation
+
+
+def upcoming_events() -> QuerySet[Event]:
+    """Events that have not begun and whose real start is still ahead."""
+    return Event.objects.filter(
+        status__in=(EventStatus.DRAFT, EventStatus.SCHEDULED),
+        scheduled_real_time__gt=timezone.now(),
+    )
+
+
+def shift_upcoming_events(delta: timedelta) -> int:
+    """Move every upcoming event's IC time by ``delta``; return how many moved (#5248).
+
+    Called by ``game_clock.services.set_clock`` when staff jump the date, so an event
+    still to come stays on the calendar the world is now on. An IC time someone
+    adjusted by hand keeps its distance from the calendar. Events that have begun or
+    ended keep the IC moment they captured.
+    """
+    if not delta:
+        return 0
+    events = list(upcoming_events())
+    for event in events:
+        event.scheduled_ic_time += delta
+    if events:
+        Event.objects.bulk_update_with_reason(
+            events,
+            ["scheduled_ic_time"],
+            reason="clock jump: cached instances changed in place, then written",
+        )
+    return len(events)

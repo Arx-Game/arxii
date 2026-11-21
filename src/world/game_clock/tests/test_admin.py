@@ -1,5 +1,7 @@
 """The Django admin is the sanctioned place to seed the GameClock singleton."""
 
+from datetime import timedelta
+
 from django.test import TestCase
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
@@ -35,3 +37,51 @@ class TestGameClockAdminAdd(TestCase):
         assert clock is not None
         self.assertEqual((clock.anchor_ic_time.year, clock.anchor_ic_time.hour), (1, 6))
         self.assertGreaterEqual(clock.anchor_real_time, before)
+
+
+class TestGameClockAdminChange(TestCase):
+    """The change form shows an existing clock and changes nothing (#5248).
+
+    Saving ``paused`` or ``time_ratio`` there stored the field without moving the
+    anchors, so the date jumped: unticking Paused counted all the real time the clock
+    had sat paused, at the time ratio.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.super = AccountDB.objects.create_superuser(
+            "gcroot2", "gcroot2@example.com", "pw-123456"
+        )
+
+    def test_the_change_form_cannot_unpause_the_clock_or_change_its_speed(self) -> None:
+        clock = GameClock.objects.create(
+            anchor_real_time=timezone.now() - timedelta(days=7),
+            anchor_ic_time=timezone.now().replace(year=1000, month=1, day=1),
+            time_ratio=3.0,
+            paused=True,
+        )
+        self.client.force_login(self.super)
+
+        # A form post with Paused unticked (an absent checkbox) and a new ratio.
+        response = self.client.post(
+            f"/admin/arxii/gameclock/{clock.pk}/change/",
+            {"time_ratio": "9.0", "_save": "Save"},
+        )
+
+        self.assertEqual(response.status_code, 302, response.content[:500])
+        clock = GameClock.get_active()
+        assert clock is not None
+        self.assertTrue(clock.paused, "the admin form must not be able to unpause the clock")
+        self.assertEqual(clock.time_ratio, 3.0)
+
+    def test_the_change_form_points_at_the_staff_clock_page(self) -> None:
+        clock = GameClock.objects.create(
+            anchor_real_time=timezone.now(),
+            anchor_ic_time=timezone.now().replace(year=1000, month=1, day=1),
+        )
+        self.client.force_login(self.super)
+
+        response = self.client.get(f"/admin/arxii/gameclock/{clock.pk}/change/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'href="/staff/clock"')

@@ -295,3 +295,57 @@ def run_death_sweep(*, ic_now: datetime) -> int:
         _mark_dead(vitals.character_sheet)
         deaths += 1
     return deaths
+
+
+#: Why a clock jump may bulk-write identity-mapped rows: it loads them, changes the
+#: cached instances in place and writes those same instances, so the map stays true.
+_JUMP_WRITE_REASON = "clock jump: cached instances changed in place, then written"
+
+
+def characters_with_birth_year() -> int:
+    """How many character sheets carry a birth year: the characters whose age a change
+    of the clock's date moves (#5248). Sleepers and characters made before the clock
+    have none."""
+    return CharacterSheet.objects.filter(ic_birth_year__isnull=False).count()
+
+
+def rebase_ages_for_clock_jump(
+    *, old_ic_now: datetime, new_ic_now: datetime, keep_ages: bool
+) -> int:
+    """Carry the aging state across a jump of the game clock (#5248).
+
+    Called by ``game_clock.services.set_clock`` when staff set the date. Returns the
+    number of years added to every birth year (zero when ages were not kept).
+
+    * Always: every open dying window moves by the length of the jump, so a character
+      in their dying days keeps the days they had left. Without this a long jump
+      forward would end every window at once, since ``run_death_sweep`` resolves any
+      deadline that has passed. A jump never kills anyone by itself.
+    * ``keep_ages``: every ``ic_birth_year`` moves by the calendar years jumped.
+      Chronological age is ``IC year - ic_birth_year``, so every age stays exactly as
+      it was.
+
+    Both models are identity-mapped, so the rows are loaded, changed on the instance
+    and written back; a queryset ``.update()`` would leave the cached sheets, which
+    the aging tasks read, holding the old values.
+    """
+    jump = new_ic_now - old_ic_now
+    windows = list(CharacterVitals.objects.filter(aging_death_ic_deadline__isnull=False))
+    for vitals in windows:
+        vitals.aging_death_ic_deadline += jump
+    if windows:
+        CharacterVitals.objects.bulk_update_with_reason(
+            windows, ["aging_death_ic_deadline"], reason=_JUMP_WRITE_REASON
+        )
+
+    year_shift = new_ic_now.year - old_ic_now.year
+    if not keep_ages or year_shift == 0:
+        return 0
+    sheets = list(CharacterSheet.objects.filter(ic_birth_year__isnull=False))
+    for sheet in sheets:
+        sheet.ic_birth_year += year_shift
+    if sheets:
+        CharacterSheet.objects.bulk_update_with_reason(
+            sheets, ["ic_birth_year"], reason=_JUMP_WRITE_REASON
+        )
+    return year_shift

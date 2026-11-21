@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from django.test import SimpleTestCase, TestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.game_clock.constants import Season, TimePhase
+from world.game_clock.constants import AgeHandling, Season, TimePhase
 from world.game_clock.factories import GameClockFactory
 from world.game_clock.models import GameClockHistory
 from world.game_clock.services import (
@@ -239,7 +239,9 @@ class SetClockTests(TestCase):
     def test_creates_clock_when_none_exists(self) -> None:
         """Should create a new GameClock with the given IC time."""
         ic_time = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
-        clock = set_clock(new_ic_time=ic_time, changed_by=self.account)
+        clock = set_clock(
+            new_ic_time=ic_time, changed_by=self.account, age_handling=AgeHandling.KEPT
+        )
 
         self.assertEqual(clock.anchor_ic_time, ic_time)
         self.assertIsNotNone(clock.pk)
@@ -247,7 +249,7 @@ class SetClockTests(TestCase):
     def test_no_history_on_initial_creation(self) -> None:
         """Initial clock creation should not produce a history entry."""
         ic_time = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
-        set_clock(new_ic_time=ic_time, changed_by=self.account)
+        set_clock(new_ic_time=ic_time, changed_by=self.account, age_handling=AgeHandling.KEPT)
 
         self.assertEqual(GameClockHistory.objects.count(), 0)
 
@@ -257,7 +259,9 @@ class SetClockTests(TestCase):
         GameClockFactory(anchor_ic_time=old_ic)
 
         new_ic = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
-        clock = set_clock(new_ic_time=new_ic, changed_by=self.account)
+        clock = set_clock(
+            new_ic_time=new_ic, changed_by=self.account, age_handling=AgeHandling.AGED
+        )
 
         self.assertEqual(clock.anchor_ic_time, new_ic)
 
@@ -267,7 +271,12 @@ class SetClockTests(TestCase):
         GameClockFactory(anchor_ic_time=old_ic)
 
         new_ic = datetime(1, 6, 15, 12, 0, 0, tzinfo=UTC)
-        set_clock(new_ic_time=new_ic, changed_by=self.account, reason="time jump")
+        set_clock(
+            new_ic_time=new_ic,
+            changed_by=self.account,
+            reason="time jump",
+            age_handling=AgeHandling.AGED,
+        )
 
         self.assertEqual(GameClockHistory.objects.count(), 1)
         history = GameClockHistory.objects.first()

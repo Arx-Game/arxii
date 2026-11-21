@@ -6,8 +6,9 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.game_clock.constants import Season, TimePhase
-from world.game_clock.services import format_ic_date
+from world.game_clock.constants import AgeHandling, JumpDirection, Season, TimePhase
+from world.game_clock.models import GameClockHistory
+from world.game_clock.services import format_ic_date, format_ic_date_long
 
 
 @extend_schema_field(OpenApiTypes.STR)
@@ -43,6 +44,11 @@ class ClockStateSerializer(serializers.Serializer):
     season = serializers.ChoiceField(choices=Season.choices)
     light_level = serializers.FloatField()
     paused = serializers.BooleanField()
+    time_ratio = serializers.FloatField(help_text="IC seconds per real second.")
+    month_names = serializers.ListField(
+        child=serializers.CharField(),
+        help_text="The twelve IC month names in order, for a date picker.",
+    )
 
 
 class ClockConvertSerializer(serializers.Serializer):
@@ -73,6 +79,64 @@ class ClockAdjustSerializer(serializers.Serializer):
 
     ic_datetime = serializers.DateTimeField()
     reason = serializers.CharField(max_length=500)
+    age_handling = serializers.ChoiceField(
+        choices=AgeHandling.choices,
+        help_text=(
+            "Whether characters age with the calendar or keep their ages (#5248). A "
+            "change to an earlier date must keep them."
+        ),
+    )
+
+
+class ClockJumpPreviewRequestSerializer(serializers.Serializer):
+    """Query serializer for the preview of a date change."""
+
+    ic_datetime = serializers.DateTimeField()
+
+
+class ClockJumpPreviewSerializer(serializers.Serializer):
+    """What setting the clock to a date would do, before anything is written."""
+
+    current_ic_time = serializers.DateTimeField()
+    current_date_display = serializers.CharField(
+        help_text="The current IC date in full, for the sentence the dialog shows."
+    )
+    new_ic_time = serializers.DateTimeField()
+    direction = serializers.ChoiceField(choices=JumpDirection.choices)
+    year_shift = serializers.IntegerField(
+        help_text="Calendar years between the dates: what birth years move by if ages are kept."
+    )
+    characters_with_birth_year = serializers.IntegerField()
+    upcoming_events = serializers.IntegerField()
+    heritages_not_yet_appeared = serializers.ListField(child=serializers.CharField())
+
+
+class ClockHistorySerializer(serializers.ModelSerializer):
+    """One recorded change to the clock, for the staff page's Recent changes list."""
+
+    changed_by_name = serializers.CharField(
+        source="changed_by.username", read_only=True, default=""
+    )
+    new_date_display = serializers.SerializerMethodField()
+
+    class Meta:
+        model = GameClockHistory
+        fields = [
+            "id",
+            "changed_at",
+            "changed_by_name",
+            "change",
+            "new_anchor_ic_time",
+            "new_date_display",
+            "old_time_ratio",
+            "new_time_ratio",
+            "birth_year_shift",
+            "reason",
+        ]
+        read_only_fields = fields
+
+    def get_new_date_display(self, obj: GameClockHistory) -> str:
+        return format_ic_date_long(obj.new_anchor_ic_time)
 
 
 class ClockRatioSerializer(serializers.Serializer):

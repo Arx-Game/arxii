@@ -143,7 +143,11 @@ class StaffClockAdjustViewTests(TestCase):
 
         response = self.client.post(
             "/api/clock/adjust/",
-            {"ic_datetime": "0001-06-15T12:00:00Z", "reason": "Test adjustment"},
+            {
+                "ic_datetime": "0001-06-15T12:00:00Z",
+                "reason": "Test adjustment",
+                "age_handling": "aged",
+            },
             format="json",
         )
 

@@ -12,12 +12,18 @@ from world.game_clock.constants import (
     MONTH_TO_SEASON,
     MOON_SYNODIC_IC_DAYS,
     PHASE_BOUNDARIES,
+    AgeHandling,
+    ClockChange,
+    JumpDirection,
     MoonPhase,
     Season,
     TimePhase,
 )
-from world.game_clock.models import GameClock, GameClockHistory
-from world.game_clock.types import ClockError
+from world.game_clock.models import GameClock, GameClockHistory, ScheduledTaskRecord
+from world.game_clock.types import ClockError, ClockJumpPreview
+
+#: A clock's logged state: (anchor_real_time, anchor_ic_time, time_ratio).
+ClockState = tuple[datetime, datetime, float]
 
 _ORDINAL_SUFFIXES = {1: "st", 2: "nd", 3: "rd"}
 _TEEN_DAYS = frozenset({11, 12, 13})  # 11th, 12th, 13th, not 11st/12nd/13rd
@@ -217,32 +223,42 @@ def get_real_time_for_ic_date(ic_dt: datetime) -> datetime | None:
 # ---------------------------------------------------------------------------
 
 
-def _log_clock_change(
+def _clock_state(clock: GameClock) -> ClockState:
+    return (clock.anchor_real_time, clock.anchor_ic_time, clock.time_ratio)
+
+
+def _log_clock_change(  # noqa: PLR0913 - one audit row carries every one of these
     *,
-    clock: GameClock,
-    old_state: tuple[datetime, datetime, float],
+    old_state: ClockState,
+    new_state: ClockState,
     changed_by: AccountDB,
     reason: str,
+    change: ClockChange,
+    birth_year_shift: int = 0,
 ) -> GameClockHistory:
     """Create a GameClockHistory entry recording a clock change.
 
     Args:
-        clock: The clock after the change (new state read from its fields).
-        old_state: Tuple of (anchor_real_time, anchor_ic_time, time_ratio)
-            captured before the change.
+        old_state: The clock's state captured before the change.
+        new_state: The clock's state after it.
         changed_by: The account that initiated the change.
         reason: Human-readable reason for the change.
+        change: The kind of change, which the anchors alone cannot tell.
+        birth_year_shift: Years added to every birth year (a date set with ages kept).
     """
     old_real, old_ic, old_ratio = old_state
+    new_real, new_ic, new_ratio = new_state
     return GameClockHistory.objects.create(
         changed_by=changed_by,
         old_anchor_real_time=old_real,
         old_anchor_ic_time=old_ic,
         old_time_ratio=old_ratio,
-        new_anchor_real_time=clock.anchor_real_time,
-        new_anchor_ic_time=clock.anchor_ic_time,
-        new_time_ratio=clock.time_ratio,
+        new_anchor_real_time=new_real,
+        new_anchor_ic_time=new_ic,
+        new_time_ratio=new_ratio,
         reason=reason,
+        change=change,
+        birth_year_shift=birth_year_shift,
     )
 
 
@@ -251,13 +267,33 @@ def set_clock(
     *,
     new_ic_time: datetime,
     changed_by: AccountDB,
+    age_handling: AgeHandling,
     reason: str = "",
 ) -> GameClock:
     """Set the game clock IC time, creating it if it doesn't exist.
 
-    On initial creation no history entry is logged. On subsequent calls
-    the clock is re-anchored to now and a history entry is recorded.
+    On initial creation no history entry is logged and ``age_handling`` has nothing to
+    act on. On an existing clock the change is a jump from the current IC time to
+    ``new_ic_time`` (#5248):
+
+    * Either way, anyone in their dying days keeps the days they had left, and every
+      event still to come moves with the calendar. A jump never kills anyone by itself.
+    * ``AgeHandling.AGED``: birth years stay, so ages change with the calendar; the
+      birthday task then matures each character by the birthdays skipped. Refused for
+      a change to an earlier time, because maturation does not go down.
+    * ``AgeHandling.KEPT``: every birth year moves by the calendar years jumped, and
+      every task's IC last-run stamp is set to the new time, so the aging tasks
+      neither replay the gap nor wait for the calendar to catch up.
+
+    Order matters. The refusal and the history row come first, because they are the
+    steps that can fail and a rolled-back transaction does not undo a change already
+    made to an identity-mapped instance. The clock's anchors and the task stamps are
+    then changed in memory together, so the task loop cannot read new anchors against
+    old stamps for longer than those assignments take.
     """
+    from world.events.services import shift_upcoming_events  # noqa: PLC0415
+    from world.vitals.aging import rebase_ages_for_clock_jump  # noqa: PLC0415
+
     now = timezone.now()
     clock = GameClock.get_active()
 
@@ -269,20 +305,67 @@ def set_clock(
         clock.save()
         return clock
 
-    # Existing clock — capture old state, re-anchor, log history
-    old_state = (clock.anchor_real_time, clock.anchor_ic_time, clock.time_ratio)
-
-    clock.anchor_real_time = now
-    clock.anchor_ic_time = new_ic_time
-    clock.save(update_fields=["anchor_real_time", "anchor_ic_time"])
+    old_ic_now = clock.get_ic_now(real_now=now)
+    if age_handling == AgeHandling.AGED and new_ic_time < old_ic_now:
+        raise ClockError(ClockError.EARLIER_KEEPS_AGES)
+    keep_ages = age_handling == AgeHandling.KEPT
 
     _log_clock_change(
-        clock=clock,
-        old_state=old_state,
+        old_state=_clock_state(clock),
+        new_state=(now, new_ic_time, clock.time_ratio),
         changed_by=changed_by,
         reason=reason,
+        change=ClockChange.DATE_KEPT if keep_ages else ClockChange.DATE_AGED,
+        birth_year_shift=new_ic_time.year - old_ic_now.year if keep_ages else 0,
     )
+
+    # Identity-mapped rows: load, change the instances, write them back. A queryset
+    # .update() would leave the cached records the task loop reads on the old stamp.
+    stamped = (
+        list(ScheduledTaskRecord.objects.filter(last_ic_run_at__isnull=False)) if keep_ages else []
+    )
+    clock.anchor_real_time = now
+    clock.anchor_ic_time = new_ic_time
+    for record in stamped:
+        record.last_ic_run_at = new_ic_time
+    clock.save(update_fields=["anchor_real_time", "anchor_ic_time"])
+    if stamped:
+        ScheduledTaskRecord.objects.bulk_update_with_reason(
+            stamped,
+            ["last_ic_run_at"],
+            reason="clock jump: cached instances changed in place, then written",
+        )
+
+    rebase_ages_for_clock_jump(old_ic_now=old_ic_now, new_ic_now=new_ic_time, keep_ages=keep_ages)
+    shift_upcoming_events(new_ic_time - old_ic_now)
     return clock
+
+
+def preview_clock_jump(new_ic_time: datetime) -> ClockJumpPreview:
+    """What ``set_clock(new_ic_time=...)`` would do, without writing anything (#5248)."""
+    from world.character_sheets.services import heritages_not_yet_appeared  # noqa: PLC0415
+    from world.events.services import upcoming_events  # noqa: PLC0415
+    from world.vitals.aging import characters_with_birth_year  # noqa: PLC0415
+
+    clock = GameClock.get_active()
+    if clock is None:
+        raise ClockError(ClockError.NOT_CONFIGURED)
+    current = clock.get_ic_now()
+    if new_ic_time > current:
+        direction = JumpDirection.FORWARD
+    elif new_ic_time < current:
+        direction = JumpDirection.BACK
+    else:
+        direction = JumpDirection.NONE
+    return ClockJumpPreview(
+        current_ic_time=current,
+        new_ic_time=new_ic_time,
+        direction=direction,
+        year_shift=new_ic_time.year - current.year,
+        characters_with_birth_year=characters_with_birth_year(),
+        upcoming_events=upcoming_events().count(),
+        heritages_not_yet_appeared=heritages_not_yet_appeared(new_ic_time),
+    )
 
 
 @transaction.atomic()
@@ -300,7 +383,7 @@ def set_time_ratio(
     if clock is None:
         raise ClockError(ClockError.NOT_CONFIGURED)
 
-    old_state = (clock.anchor_real_time, clock.anchor_ic_time, clock.time_ratio)
+    old_state = _clock_state(clock)
 
     now = timezone.now()
     current_ic = clock.get_ic_now(real_now=now)
@@ -311,10 +394,11 @@ def set_time_ratio(
     clock.save(update_fields=["anchor_real_time", "anchor_ic_time", "time_ratio"])
 
     _log_clock_change(
-        clock=clock,
         old_state=old_state,
+        new_state=_clock_state(clock),
         changed_by=changed_by,
         reason=reason,
+        change=ClockChange.SPEED,
     )
     return clock
 
@@ -332,7 +416,7 @@ def pause_clock(
     if clock.paused:
         raise ClockError(ClockError.ALREADY_PAUSED)
 
-    old_state = (clock.anchor_real_time, clock.anchor_ic_time, clock.time_ratio)
+    old_state = _clock_state(clock)
 
     now = timezone.now()
     current_ic = clock.get_ic_now(real_now=now)
@@ -343,10 +427,11 @@ def pause_clock(
     clock.save(update_fields=["anchor_real_time", "anchor_ic_time", "paused"])
 
     _log_clock_change(
-        clock=clock,
         old_state=old_state,
+        new_state=_clock_state(clock),
         changed_by=changed_by,
         reason=reason,
+        change=ClockChange.PAUSED,
     )
     return clock
 
@@ -364,7 +449,7 @@ def unpause_clock(
     if not clock.paused:
         raise ClockError(ClockError.NOT_PAUSED)
 
-    old_state = (clock.anchor_real_time, clock.anchor_ic_time, clock.time_ratio)
+    old_state = _clock_state(clock)
 
     now = timezone.now()
     # IC time stays at anchor (where we paused), only real anchor moves to now
@@ -373,9 +458,10 @@ def unpause_clock(
     clock.save(update_fields=["anchor_real_time", "paused"])
 
     _log_clock_change(
-        clock=clock,
         old_state=old_state,
+        new_state=_clock_state(clock),
         changed_by=changed_by,
         reason=reason,
+        change=ClockChange.RESUMED,
     )
     return clock
