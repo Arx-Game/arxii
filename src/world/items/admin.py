@@ -1,8 +1,9 @@
 """Django admin configuration for items."""
 
 from django.contrib import admin
-from django.db.models import Count
+from django.db.models import Count, QuerySet
 from django.forms import (
+    BaseInlineFormSet,
     ModelForm,
 )
 from django.http import HttpRequest, HttpResponse
@@ -37,6 +38,7 @@ from world.items.models import (
     ItemLineage,
     ItemStyle,
     ItemTemplate,
+    ItemWornCondition,
     Keepsake,
     MakeoverConsentRequest,
     Mantle,
@@ -473,6 +475,15 @@ class ItemStyleInline(admin.TabularInline):
     autocomplete_fields = ["style"]
 
 
+class ItemWornConditionInline(admin.TabularInline):
+    """The conditions this item puts on its wearer (#5074)."""
+
+    model = ItemWornCondition
+    formset = OneRowPerFormSet
+    extra = 0
+    autocomplete_fields = ["condition"]
+
+
 class ItemLineageInline(admin.TabularInline):
     """What the piece was worked from, read-only (#4512): written once, at making."""
 
@@ -680,7 +691,42 @@ class ItemInstanceAdmin(admin.ModelAdmin):
             },
         ),
     ]
-    inlines = [ItemStyleInline, ItemLineageInline]
+    inlines = [ItemStyleInline, ItemWornConditionInline, ItemLineageInline]
+
+    def save_formset(
+        self, request: HttpRequest, form: ModelForm, formset: BaseInlineFormSet, change: bool
+    ) -> None:
+        """A saved or deleted worn-condition row reaches whoever wears the item now.
+
+        Imported here because the services package pulls in checks and magic, which
+        import back into items at admin autodiscovery.
+        """
+        from world.items.services.worn_conditions import (  # noqa: PLC0415
+            reconcile_item_wearers,
+        )
+
+        super().save_formset(request, form, formset, change)
+        if formset.model is not ItemWornCondition:
+            return
+        saved = [*formset.new_objects, *(row for row, _ in formset.changed_objects)]
+        if saved or formset.deleted_objects:
+            reconcile_item_wearers(form.instance, apply_rows=saved)
+
+    def delete_model(self, request: HttpRequest, obj: ItemInstance) -> None:
+        """A staff delete takes off the conditions the item gave its wearer first (#5074):
+        the cascade removes the equipped rows without unequipping."""
+        from world.items.services.worn_conditions import release_worn_conditions  # noqa: PLC0415
+
+        release_worn_conditions(obj)
+        super().delete_model(request, obj)
+
+    def delete_queryset(self, request: HttpRequest, queryset: QuerySet[ItemInstance]) -> None:
+        """The bulk delete does the same for every item chosen (#5074)."""
+        from world.items.services.worn_conditions import release_worn_conditions  # noqa: PLC0415
+
+        for item in queryset:
+            release_worn_conditions(item)
+        super().delete_queryset(request, queryset)
 
     def render_change_form(  # noqa: PLR0913 - Django's own signature
         self,
@@ -742,6 +788,37 @@ class EquippedItemAdmin(admin.ModelAdmin):
     list_filter = ["body_region", "equipment_layer"]
     list_select_related = ["character", "item_instance"]
     raw_id_fields = ["character", "item_instance"]
+
+    def save_model(
+        self, request: HttpRequest, obj: EquippedItem, form: ModelForm, change: bool
+    ) -> None:
+        """A slot staff add, or move to another item, puts that item on: its worn conditions
+        follow (#5074). A second slot for an item already worn is not putting it on, as in
+        ``equip_item``, so a condition dispelled since stays off."""
+        from world.items.models import ItemWornCondition  # noqa: PLC0415
+        from world.items.services.worn_conditions import reconcile_worn_conditions  # noqa: PLC0415
+
+        super().save_model(request, obj, form, change)
+        obj.character.character.equipped_items.invalidate()
+        already_worn = (
+            EquippedItem.objects.filter(item_instance=obj.item_instance).exclude(pk=obj.pk).exists()
+        )
+        puts_on = (not change or "item_instance" in form.changed_data) and not already_worn  # noqa: STRING_LITERAL - a form field name
+        rows = ItemWornCondition.objects.filter(item_instance=obj.item_instance) if puts_on else []
+        reconcile_worn_conditions(obj.character, apply_rows=rows)
+
+    def delete_model(self, request: HttpRequest, obj: EquippedItem) -> None:  # noqa: ARG002 - Django's signature
+        """A staff delete takes the item off through the canonical service (#5074)."""
+        from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+        unequip_item(equipped_item=obj)
+
+    def delete_queryset(self, request: HttpRequest, queryset: QuerySet[EquippedItem]) -> None:  # noqa: ARG002 - Django signature
+        """The bulk delete takes each chosen item off the same way (#5074)."""
+        from world.items.services.equip import unequip_item  # noqa: PLC0415
+
+        for equipped in queryset.select_related("character"):
+            unequip_item(equipped_item=equipped)
 
 
 @admin.register(OwnershipEvent)

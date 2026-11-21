@@ -1585,6 +1585,15 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   via `ConditionCategory.alters_behavior`), progression (interactions), scenes (telnet `treat` +
   web Treat panel surface converges on the `SceneActionRequest` consent seam via the
   custom-action-resolver registry)
+- **Gear conditions (#5074, ADR-5074):** `ItemWornCondition` (`world/items/models.py`) names a
+  condition an item gives its wearer, optionally from a mantle attunement level;
+  `ConditionInstance.source_item` marks the instances gear owns;
+  `reconcile_worn_conditions` / `reconcile_item_wearers` / `release_worn_conditions`
+  (`world/items/services/worn_conditions.py`) are called from `equip_item`, `unequip_item`,
+  `spend_resonance_for_imbuing`, the item admin and the delete paths. A gear condition's
+  movement and dodge powers charge its `reactive_anima_cost` and overspend into Soulfray
+  (`gear_condition_with_cost`, `world/combat/services/movement_use.py`). See
+  [items.md](items.md) "Worn conditions" and [conditions.md](conditions.md) "Gear conditions".
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species

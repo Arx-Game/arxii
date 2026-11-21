@@ -161,3 +161,19 @@ class Object(ObjectParent, DefaultObject):
                                  object speaks
 
     """
+
+    def at_object_delete(self) -> bool:
+        """Before an item's object goes, take off the conditions it gave its wearer (#5074).
+
+        Deleting the object cascades the item row and its equipped rows without
+        unequipping, which would leave a permanent gear condition tied to nothing.
+        """
+        if not super().at_object_delete():
+            return False
+        from world.items.models import ItemInstance
+        from world.items.services.worn_conditions import release_worn_conditions
+
+        item = ItemInstance.objects.filter(game_object=self).first()
+        if item is not None:
+            release_worn_conditions(item)
+        return True

@@ -677,3 +677,14 @@ consent category defaulted to allowlist and no row existed on production. Built:
   (RunPython seeds are banned, ADR-0013). Player-facing copy is PLACEHOLDER.
 - Not built: asks for any other category (body handling, treatment); a timer; a card
   pinned in `/game` beyond the toast.
+
+## Magical Gear Puts a Condition on Its Wearer (DONE, #5074)
+
+Built: `ItemWornCondition` (an item gives its wearer a condition, optionally from a mantle
+level), `ConditionInstance.source_item`, `reconcile_worn_conditions` called from
+`equip_item`, `unequip_item`, the mantle thread's level raise and the item admin, per-use
+anima for a gear condition's movement and dodge powers (overspend into Soulfray, never
+refused), the admin refusal of a condition both an item and a technique give, and the
+owner's name shown to the wearer only. Staff author the rows on the item's admin page.
+Decisions: ADR-5074. Not built: a crafting recipe that works an enchantment onto an item
+(a later question, asked before it is filed), and a spell cast from an item on each use.

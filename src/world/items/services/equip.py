@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
@@ -10,13 +11,16 @@ from django.db import transaction
 from world.items.exceptions import ItemPlacedNotEquippable, SlotConflict, SlotIncompatible
 from world.items.models import EquippedItem, ItemInstance
 
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
+
 logger = logging.getLogger(__name__)
 
 
 @transaction.atomic
 def equip_item(
     *,
-    character_sheet: object,  # CharacterSheet; .character is the ObjectDB.
+    character_sheet: CharacterSheet,  # .character is the ObjectDB.
     item_instance: ItemInstance,
     body_region: str,
     equipment_layer: str,
@@ -60,6 +64,7 @@ def equip_item(
         for s in template_slots
     ):
         raise SlotIncompatible
+    already_worn = EquippedItem.objects.filter(item_instance=item_instance).exists()
     equipped = EquippedItem.objects.create(
         character=character_sheet,
         item_instance=item_instance,
@@ -69,6 +74,9 @@ def equip_item(
     char_obj.equipped_items.invalidate()
     _recompute_body_persona_items_prestige(character_sheet)
     _reconcile_sun_exposure(char_obj)
+    # A second slot of an item already worn is not putting it on: a condition dispelled
+    # since stays off until the item comes off and goes back on (#5074 decision 4).
+    _reconcile_worn_conditions(character_sheet, put_on=None if already_worn else item_instance)
     _close_opened_layers(character_sheet, body_region)
     return equipped
 
@@ -94,6 +102,7 @@ def unequip_item(*, equipped_item: EquippedItem) -> None:
     sheet.character.equipped_items.invalidate()
     _recompute_body_persona_items_prestige(sheet)
     _reconcile_sun_exposure(sheet.character)
+    _reconcile_worn_conditions(sheet)
 
 
 def _close_opened_layers(character_sheet: object, body_region: str) -> None:
@@ -108,6 +117,25 @@ def _close_opened_layers(character_sheet: object, body_region: str) -> None:
     for row in rows:
         row.opened_at = None
         row.save(update_fields=["opened_at"])
+
+
+def _reconcile_worn_conditions(
+    character_sheet: CharacterSheet,
+    *,
+    put_on: ItemInstance | None = None,
+) -> None:
+    """Wardrobe changed: re-reconcile the conditions her worn items give her (#5074).
+
+    ``put_on`` names the item just equipped, whose conditions are applied; an unequip
+    names none, so it only removes and repoints. Unlike the sun reconcile this runs inside
+    the equip transaction with no broad catch: a gear condition that fails to apply is a
+    real error and the equip fails with it.
+    """
+    from world.items.models import ItemWornCondition  # noqa: PLC0415
+    from world.items.services.worn_conditions import reconcile_worn_conditions  # noqa: PLC0415
+
+    rows = ItemWornCondition.objects.filter(item_instance=put_on) if put_on is not None else []
+    reconcile_worn_conditions(character_sheet, apply_rows=rows)
 
 
 def _reconcile_sun_exposure(char_obj: object) -> None:

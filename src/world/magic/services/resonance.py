@@ -51,6 +51,7 @@ from world.magic.services.threads import (
     recompute_max_health_with_threads,
     relationship_side_from_row,
     thread_level_multiplier,
+    thread_rung,
 )
 from world.magic.types import (
     PayerOption,
@@ -684,6 +685,7 @@ def spend_resonance_for_imbuing(
     character_sheet.character.threads.invalidate()
 
     recompute_max_health_with_threads(character_sheet)
+    _apply_mantle_level_conditions(thread, character_sheet, starting_level)
 
     from world.magic.crossing.ceremony import execute_crossing_ceremonies  # noqa: PLC0415
 
@@ -700,6 +702,30 @@ def spend_resonance_for_imbuing(
         blocked_by=blocked_by,  # type: ignore[arg-type]
         blocked_requirement_messages=blocked_requirement_messages,
     )
+
+
+def _apply_mantle_level_conditions(
+    thread: Thread, character_sheet: CharacterSheet, starting_level: int
+) -> None:
+    """A MANTLE thread's level rose: give the wearer the worn conditions its new mantle
+    levels unlock, with the mantle still on (#5074).
+
+    Applies only the item's rows whose mantle level lies above the level the thread held
+    and at most the level it holds now, so a level raise never brings back a condition that
+    was dispelled at a lower level. Recording a clearance does not change the level, so it
+    needs no hook.
+    """
+    if thread.target_kind != TargetKind.MANTLE or thread.level <= starting_level:
+        return
+    from world.items.models import ItemWornCondition  # noqa: PLC0415
+    from world.items.services.worn_conditions import reconcile_worn_conditions  # noqa: PLC0415
+
+    rows = ItemWornCondition.objects.filter(
+        item_instance_id=thread.target_mantle.item_instance_id,
+        mantle_level__gt=thread_rung(starting_level),
+        mantle_level__lte=thread_rung(thread.level),
+    )
+    reconcile_worn_conditions(character_sheet, apply_rows=rows)
 
 
 # =============================================================================

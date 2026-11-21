@@ -506,7 +506,10 @@ class ConditionInstanceAdmin(admin.ModelAdmin):
         "source_technique",
         "target",
     ]
-    readonly_fields = ["applied_at"]
+    # source_item is set only by the worn-conditions reconcile (#5074): editing it by hand would
+    # make a gear condition unowned or take someone else's.
+    readonly_fields = ["applied_at", "source_item"]
+    large_table_widget_exempt = ["source_item"]  # read-only: no widget is rendered
 
     fieldsets = [
         (None, {"fields": ["target", "condition"]}),
@@ -539,6 +542,7 @@ class ConditionInstanceAdmin(admin.ModelAdmin):
                 "fields": [
                     "source_character",
                     "source_technique",
+                    "source_item",
                     "source_description",
                 ],
             },

@@ -98,7 +98,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)
 - [goals](src/world/goals/AGENT_GLOSSARY.md)
 - [game_clock](src/world/game_clock/AGENT_GLOSSARY.md) - Clock jump, Age handling, Birth-year shift (#5248, ADR-5248)
-- [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530), and natural weapon (#4898), and also protects against and can be thrown (#5026), and item template family (#5041), and Primum item and Carried substance (#5125)
+- [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530), and natural weapon (#4898), and also protects against and can be thrown (#5026), and item template family (#5041), and Primum item and Carried substance (#5125), and Worn condition (#5074)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
 - [areas](src/world/areas/AGENT_GLOSSARY.md) - also holds Rung (#3983), the canonical
   feudal-ladder-step definition Almanach de Catenys vocabulary (societies glossary) points back to,
