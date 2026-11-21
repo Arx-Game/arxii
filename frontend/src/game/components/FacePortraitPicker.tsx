@@ -63,7 +63,9 @@ export function FacePortraitPicker({
         </DialogHeader>
         <div className="gallery">
           <div className="gallery-head">
-            <span className="refsheet-eyebrow">Your pictures</span>
+            <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              Your pictures
+            </span>
             <span className="gallery-count">
               {pictures.length === 1 ? '1 picture' : `${pictures.length} pictures`}
               {usage && ` · ${formatBytes(usage.used_bytes)} of ${formatBytes(usage.quota_bytes)}`}

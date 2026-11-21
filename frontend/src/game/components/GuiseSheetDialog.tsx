@@ -94,6 +94,10 @@ export function GuiseSheetDialog({
     ? { kind: 'alternate', alternateSelfId: alternateSelf.id }
     : personaTarget;
   const faceName = persona?.name ?? alternateSelf?.display_name ?? 'this face';
+  const guiseTitle =
+    persona && !alternateSelf
+      ? `Guise sheet: ${faceName}`
+      : `Face: ${alternateSelf?.display_name || faceName}`;
   const portraitUrl = alternateSelf
     ? alternateSelf.thumbnail_url
     : (persona?.thumbnail_media_url ?? persona?.thumbnail_url ?? null);
@@ -131,8 +135,8 @@ export function GuiseSheetDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{persona ? `Guise sheet: ${faceName}` : `Face: ${faceName}`}</DialogTitle>
-          {persona && (
+          <DialogTitle>{guiseTitle}</DialogTitle>
+          {persona && !alternateSelf && (
             <DialogDescription>
               The bio this cover identity presents to the world. A guise with no story outs itself;
               give it one.

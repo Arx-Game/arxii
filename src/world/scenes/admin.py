@@ -221,6 +221,16 @@ class FacePlaceholderConfigAdmin(admin.ModelAdmin):
     # Shown read-only and written by save_model, never picked from a dropdown.
     large_table_widget_exempt = ["updated_by"]
 
+    def get_form(self, request: object, obj: object = None, change: bool = False, **kwargs: object):
+        """Pick the picture only: no add, change or delete of a ``Media`` row from this form."""
+        form = super().get_form(request, obj, change=change, **kwargs)  # ty: ignore[invalid-argument-type]
+        widget = form.base_fields["placeholder"].widget
+        widget.can_add_related = False  # ty: ignore[unresolved-attribute]
+        widget.can_change_related = False  # ty: ignore[unresolved-attribute]
+        widget.can_delete_related = False  # ty: ignore[unresolved-attribute]
+        widget.can_view_related = False  # ty: ignore[unresolved-attribute]
+        return form
+
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""
         return not FacePlaceholderConfig.objects.exists()

@@ -457,19 +457,6 @@ class Persona(RelatedCacheClearingMixin, SharedMemoryModel):
         blank=True,
         help_text="Name with color formatting codes",
     )
-    # #4033: the mask's own prose, written by its player. A previous ``description`` field
-    # (the pre-forms #347 identity model) was removed in #2632 because nothing wrote it and the
-    # roster page's description chain read it first, so it rendered empty forever. This one
-    # has a writer (``world.scenes.face_services.set_persona_description``), exactly two
-    # readers (``look`` and the character sheet, through ``persona_display.mask_description``)
-    # and a stated precedence: it replaces the real prose only for a viewer who has not seen
-    # through the face. The roster page never reads it. The real face's description lives on
-    # ``CharacterSheet.additional_desc``; per-persona trait wording on ``PersonaTraitDescriptor``.
-    description = models.TextField(
-        blank=True,
-        help_text="The mask's own prose, shown instead of the real description to a viewer "
-        "who has not seen through it.",
-    )
     # #1270 — the bio this face presents. The PRIMARY persona points at the sheet's
     # true_profile (the real bio); an established/cover persona may own its own Profile (a
     # fabricated bio) so it does not out itself with an empty one. Null falls back to the
@@ -490,6 +477,19 @@ class Persona(RelatedCacheClearingMixin, SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="persona_thumbnails",
         help_text="Visual representation",
+    )
+    # #4033: the mask's own prose, written by its player. A previous ``description`` field
+    # (the pre-forms #347 identity model) was removed in #2632 because nothing wrote it and the
+    # roster page's description chain read it first, so it rendered empty forever. This one
+    # has a writer (``world.scenes.face_services.set_persona_description``), exactly two
+    # readers (``look`` and the character sheet, through ``persona_display.mask_description``)
+    # and a stated precedence: it replaces the real prose only for a viewer who has not seen
+    # through the face. The roster page never reads it. The real face's description lives on
+    # ``CharacterSheet.additional_desc``; per-persona trait wording on ``PersonaTraitDescriptor``.
+    description = models.TextField(
+        blank=True,
+        help_text="The mask's own prose, shown instead of the real description to a viewer "
+        "who has not seen through it.",
     )
     persona_type = models.CharField(
         max_length=20,
@@ -1946,7 +1946,8 @@ class FacePlaceholderConfig(SharedMemoryModel):
         related_name="face_placeholder_configs",
         limit_choices_to={"player_data__isnull": True},
         help_text="The one picture a face shows when it has no portrait. "
-        "Only staff-authored pictures are listed.",
+        "Only staff-authored pictures are listed. "
+        "Until one is chosen, a plain grey silhouette is shown.",
     )
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(

@@ -37,7 +37,7 @@ class Migration(migrations.Migration):
                     "placeholder",
                     models.ForeignKey(
                         blank=True,
-                        help_text="The one picture a face shows when it has no portrait. Only staff-authored pictures are listed.",
+                        help_text="The one picture a face shows when it has no portrait. Only staff-authored pictures are listed. Until one is chosen, a plain grey silhouette is shown.",
                         limit_choices_to={"player_data__isnull": True},
                         null=True,
                         on_delete=django.db.models.deletion.SET_NULL,
