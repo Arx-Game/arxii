@@ -70,11 +70,22 @@ rewritten, re-upload the images afterward and verify every final URL with HTTP
 
 ## Evidence revision after cleanup
 
-Record the exact commit that was reviewed in the report. The evidence gate can
-carry that report across commits confined to the temporary evidence directories,
-independently reproduced clean main merges, and verified migration-bot updates.
-Material changes and manual conflict resolutions require a fresh review and an
-updated report; changing the revision in a report is not a substitute for review.
+Record the exact commit that was reviewed in the report. The evidence gate carries
+that report across later commits that cannot change what a screen renders. These
+are commits that touch only the temporary evidence directories, test files
+(`src/integration_tests/`, any `tests/` directory under `src/` or `tools/`,
+`frontend/e2e/`, `frontend/src/test/`, frontend `*.test.ts` and `*.test.tsx`
+files, frontend `__tests__/` directories), documents (`docs/` and any `*.md`
+file) or `.github/`. They also include clean main merges the gate reproduces, and
+merges of main that renumber the branch's migrations, whether the migration bot or
+a person made them, when the gate rebuilds the identical tree from the trusted
+transformer. A person gets that tree by running `just migration-rebase-like-bot`
+when `max_migration.txt` is the only conflict; a merge made with
+`arx manage rebase_migration arxii` is not byte-identical to it and needs a fresh
+review. A commit that touches any other path changes application code and
+requires a fresh review and an updated report, as does a merge of main whose
+conflict resolution is anything beyond that renumbering. Changing the revision in
+a report is not a substitute for review.
 
 ## Why not a gist, why not GitHub's own image upload
 
