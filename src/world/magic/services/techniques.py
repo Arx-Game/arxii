@@ -577,12 +577,16 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     target_sheet: CharacterSheet | None = None,
     price_payment: PricePayment | None = None,
     substance_lines: Sequence[tuple[str, int]] = (),
+    cast_resonance: Resonance | None = None,
 ) -> PowerLedger:
     """Derive effective power as an ordered ledger. NEVER stored — recomputed each cast.
 
     ``substance_lines`` (#5125): ``(label, power)`` per Primum source her gift's substance
     draws on, after any call-up this cast makes, one ENVIRONMENT line each ("Surroundings:
     fire"). Computed once in ``use_technique`` from the cast's ``SubstancePlan``.
+
+    ``cast_resonance`` (#5231): the one resonance the cast is worked in, forwarded into
+    ``PowerTermContext`` for ``kindled_cast_power_term``. ``None`` (the default) adds nothing.
 
     ``price_payment`` (#4099): the cast's one price decision, forwarded unchanged into
     ``PowerTermContext`` for ``price_power_term``. ``None`` (the default, and every
@@ -676,6 +680,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
         price_payment=price_payment,
+        cast_resonance=cast_resonance,
     )
     for provider in get_power_term_providers():
         builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
@@ -1478,6 +1483,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
     cast_check=None,
     burn_result: ResonanceBurnResult | None = None,
     substance_plan: SubstancePlan | None = None,
+    cast_resonance: Resonance | None = None,
 ) -> _CastPreparation | None:
     """Run the pre-cast event and prepare power and pull effects."""
     from world.magic.services.substance import source_power_lines  # noqa: PLC0415
@@ -1494,6 +1500,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
         price_payment=price_payment,
+        cast_resonance=cast_resonance,
         substance_lines=(
             [(source.label, power) for source, power in source_power_lines(substance_plan)]
             if substance_plan is not None
@@ -1882,6 +1889,7 @@ def use_technique(  # noqa: PLR0913
         cast_check=cast_check,
         burn_result=burn_result,
         substance_plan=substance_plan,
+        cast_resonance=cast_resonance,
     )
     if preparation is None:
         if fury is not None:

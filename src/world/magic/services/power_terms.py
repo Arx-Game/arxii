@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from world.magic.models import (
         AuraPowerConfig,
         CovenantRoleBlendConfig,
+        KindledStrengthTier,
         LevelPowerConfig,
         Resonance,
         Technique,
@@ -83,6 +84,9 @@ class PowerTermContext:
     #: nothing. Never re-derived here: the power, narration, consumption and condition
     #: must all follow the same decision.
     price_payment: PricePayment | None = None
+    #: The one resonance this cast is worked in (#5231), resolved once by ``use_technique``
+    #: through ``cast_resonance_for``. ``None`` = a cast with no resonance (no Gift).
+    cast_resonance: Resonance | None = None
 
 
 PowerTermProvider = Callable[[PowerTermContext], int]
@@ -710,6 +714,52 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     return sum_potency_scaled_magnitudes(fired)
 
 
+def kindled_cast_strength(resonance: Resonance, tier: KindledStrengthTier | None) -> int:
+    """Cast power a kindled ``resonance`` at ``tier`` adds to a cast worked in it (#5231).
+
+    The strength row's ``cast_power`` scaled by the resonance's own affinity's staff-set
+    ``kindled_boost_percent`` (rounded down), so an Abyssal resonance can pay more than a
+    Primal one at the same strength. 0 when it is not kindled. Carries no pull test: the
+    provider below adds that, and the cast options show the number as it stands.
+    """
+    if tier is None:
+        return 0
+    return tier.cast_power * resonance.affinity.kindled_boost_percent // 100
+
+
+def _pulled_this_round(ctx: PowerTermContext) -> bool:
+    """True when the caster has a thread pull behind this cast.
+
+    A scene cast merges its declared pull into ``applicable_threads`` with a pull tier. A
+    combat cast passes no threads to ``use_technique``: the round's pull lives in her
+    ``CombatPull`` rows, one per round, read for the fight this cast resolves in.
+    """
+    if any(applicable.pull_tier > 0 for applicable in ctx.applicable_threads):
+        return True
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+
+    if not isinstance(ctx.situation_ctx, CombatRoundContext):
+        return False
+    encounter = ctx.situation_ctx.participant.encounter
+    return bool(ctx.sheet.character.combat_pulls.active_for_encounter(encounter))
+
+
+def kindled_cast_power_term(ctx: PowerTermContext) -> int:
+    """A cast worked in a kindled resonance is stronger, and more for an Abyssal one (#5231).
+
+    Adds ``kindled_cast_strength`` of the cast's resonance. A cast that pulls a thread gains
+    nothing here: the pull is the way to draw strength from a feeling, and a cast does not
+    get both (Decision 18). 0 for a cast with no resonance or one that is not kindled.
+    """
+    from world.magic.services.kindling import kindled_strength_now  # noqa: PLC0415
+
+    if ctx.cast_resonance is None or _pulled_this_round(ctx):
+        return 0
+    return kindled_cast_strength(
+        ctx.cast_resonance, kindled_strength_now(ctx.sheet, ctx.cast_resonance)
+    )
+
+
 _PROVIDERS: list[PowerTermProvider] = [
     level_power_term,
     aura_power_term,
@@ -720,6 +770,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     covenant_role_specialty_power_term,
     vow_situational_power_term,
     price_power_term,
+    kindled_cast_power_term,
 ]
 
 
