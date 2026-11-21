@@ -153,8 +153,14 @@ def _thread_on(sheet, resonance, technique, name: str):
     )
 
 
-class TheAbyssalTemptation(JourneyCase):
-    """Ysmay casts in Warmth, in Praedari, and in Praedari with a pulled thread."""
+class _AnAbyssalCasterInAScene(JourneyCase):
+    """Ysmay in the Lantern, ready to cast through the web cast endpoint.
+
+    Her own feeling kindles Praedari at Blazing unless a subclass sets ``kindle_praedari``
+    false.
+    """
+
+    kindle_praedari = True
 
     def setUp(self) -> None:
         super().setUp()
@@ -188,10 +194,10 @@ class TheAbyssalTemptation(JourneyCase):
             action_template=ActionTemplateFactory(check_type=cast_check),
         )
         _author_the_pull(self.praedari)
-        blazing = KindledStrengthTier.objects.get(rank=3)
-        blazing.cast_power = 6
-        blazing.earn_percent = 100
-        blazing.save()
+        self.blazing = KindledStrengthTier.objects.get(rank=3)
+        self.blazing.cast_power = 6
+        self.blazing.earn_percent = 100
+        self.blazing.save()
         success = CheckOutcome.objects.get(name="Success")
         KindledDeedAward.objects.update_or_create(outcome_tier=success, defaults={"amount": 10})
         KindlingConfigFactory(instant_percent=100, claim_percent=50)
@@ -217,7 +223,8 @@ class TheAbyssalTemptation(JourneyCase):
         self.strand = _thread_on(self.sheet, self.praedari, self.technique, "Praedari Strand")
         # Her own feeling kindles Praedari at Blazing, through a real own-feeling situation
         # that any act she makes while bearing it feeds.
-        kindle_resonance(self.sheet, self.praedari, blazing)
+        if self.kindle_praedari:
+            kindle_resonance(self.sheet, self.praedari, self.blazing)
         # The scene's anti-spam memory is process-wide and keyed by sheet pk.
         pending_actions._LAST_ACTED.clear()
         self.addCleanup(pending_actions._LAST_ACTED.clear)
@@ -276,6 +283,10 @@ class TheAbyssalTemptation(JourneyCase):
     def line(ledger: dict, label: str) -> int:
         """The amount of the ledger's line called ``label``; 0 when it has none."""
         return sum(entry["amount"] for entry in ledger["entries"] if entry["source_label"] == label)
+
+
+class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
+    """Ysmay casts in Warmth, in Praedari, and in Praedari with a pulled thread."""
 
     def test_reaching_for_her_kindled_abyssal_resonance_is_stronger_earns_fast_and_warns(
         self,
@@ -364,6 +375,79 @@ class TheAbyssalTemptation(JourneyCase):
             character_sheet=self.sheet, resonance=self.praedari
         ).balance
         self.assertEqual(balance - balance_before, -1 + 15)
+
+
+class TheKindledPullInAScene(_AnAbyssalCasterInAScene):
+    """A real pull in a scene, on a thread holding Warmth (Primal, leading) and Praedari.
+
+    Numbers this journey sets: the thread is woven on the technique at level 25 and imbued 70
+    Warmth and 30 Praedari, so Warmth leads and Praedari holds 30 of the 100 imbued. A thread
+    level multiplier is the level divided by ten, rounded down. Warmth pays, and its perk is
+    an intensity bump of 3, scaled by the multiplier. Warmth is kindled at a strength worth 10
+    pull levels (Primal's boost is 100 percent), Praedari at Blazing, worth 12 (Abyssal's
+    boost is 150 percent). The cast is worked in Warmth, which carries no cast power.
+
+    Hand-worked from the spec:
+
+    * Only Warmth kindled: its boost is 10 * 100 // 100 = 10, nothing else counts, so the
+      thread reads 25 + 10 = 35, a multiplier of 3, and the ledger's "thread power" line is
+      3 * 3 = 9.
+    * Both kindled: Praedari's boost is 12 * 150 // 100 = 18, and 18 * 30 // 100 = 5 of it
+      counts (its share of what was imbued), so the thread reads 25 + 10 + 5 = 40, a
+      multiplier of 4, and the line is 3 * 4 = 12.
+    """
+
+    kindle_praedari = False
+
+    def setUp(self) -> None:
+        super().setUp()
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.TECHNIQUE,
+            resonance=self.warmth,
+            tier=1,
+            min_thread_level=0,
+            as_intensity_bump=True,
+            intensity_bump_amount=3,
+        )
+        self.warm_tier = KindledStrengthTier.objects.get(rank=1)
+        self.warm_tier.pull_levels = 10
+        self.warm_tier.save()
+        self.blazing.pull_levels = 12
+        self.blazing.save()
+        self.lantern = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.warmth,
+            target_kind=TargetKind.TECHNIQUE,
+            target_trait=None,
+            target_technique=self.technique,
+            level=25,
+            name="Lantern Strand",
+        )
+        add_to_resonance_row(self.lantern, self.warmth, 70)
+        add_to_resonance_row(self.lantern, self.praedari, 30)
+        refresh_leading_resonance(self.lantern)
+        self.ysmay.threads.invalidate()
+
+    def pull_in_warmth(self) -> dict:
+        """Cast in Warmth with a pull of the Lantern thread, Warmth paying; the power ledger."""
+        return self.cast(
+            self.warmth,
+            pull={
+                "tier": 1,
+                "thread_ids": [self.lantern.pk],
+                "payers": {str(self.lantern.pk): self.warmth.pk},
+            },
+        )
+
+    def test_a_pull_with_both_resonances_kindled_adds_more_power_than_with_one(self) -> None:
+        kindle_resonance(self.sheet, self.warmth, self.warm_tier)
+        feeling_only = self.pull_in_warmth()
+
+        kindle_resonance(self.sheet, self.praedari, self.blazing)
+        both = self.pull_in_warmth()
+
+        self.assertEqual(self.line(feeling_only, "thread power"), 9)
+        self.assertEqual(self.line(both, "thread power"), 12)
 
 
 class TheAbyssalTemptationInAFight(JourneyCase):
