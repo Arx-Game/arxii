@@ -33,6 +33,7 @@ from world.character_creation.constants import (
     AGE_MIN,
     CG_MODIFIER_CATEGORY,
     ENEMY_MARKING_DEGREES,
+    FEATURE_FREE_POINTS,
     MAGIC_SKILL_POINTS_REFUSAL,
     MAGIC_TRAINING_POINTS_TARGET,
     REPUTATION_SEED_MAX,
@@ -1748,6 +1749,32 @@ class CharacterDraft(SharedMemoryModel):
             return FamilyPath.NAMED
         return ""
 
+    def surname(self) -> str:
+        """The surname this draft has so far, or '' (#5199).
+
+        By family path: the claimed family's name, the name typed for a new family, or
+        the surname the drawn tarot card gives a character with no family. The side
+        panel shows it on every stage, so it no longer reads "Family: not yet chosen"
+        after the card is drawn.
+        """
+        path = self.resolve_family_path()
+        if path == FamilyPath.NAMED:
+            return str(self.draft_data.get("new_family_name", "")).strip()
+        if path == FamilyPath.NONE:
+            return self._tarot_surname()
+        return self.family.name if self.family else ""
+
+    def _tarot_surname(self) -> str:
+        from world.tarot.models import TarotCard  # noqa: PLC0415
+
+        card_name = self.draft_data.get("tarot_card_name")
+        if not card_name:
+            return ""
+        card = TarotCard.objects.filter(name=card_name).first()
+        if card is None:
+            return ""
+        return card.get_surname(bool(self.draft_data.get("tarot_reversed", False)))
+
     def resolve_family_template(self) -> HouseTemplate | None:
         """The Family Template the name path builds from (#3648): the only one, else the pick."""
         template = self.selected_origin_template
@@ -1870,6 +1897,20 @@ class CharacterDraft(SharedMemoryModel):
             self.pk,
         )
         return None
+
+    def record_stage_visit(self, stage: int) -> None:
+        """Remember that this draft has been opened on *stage* (#5199)."""
+        DraftStageVisit.objects.get_or_create(draft=self, stage=stage)
+
+    def visited_stages(self) -> list[int]:
+        """The stages this draft has been opened on, in order (#5199).
+
+        The stage it stands on now always counts: a new draft has no row yet and is
+        open on Origin.
+        """
+        visited = set(self.stage_visits.values_list("stage", flat=True))
+        visited.add(self.current_stage)
+        return sorted(visited)
 
     def get_stage_completion(self) -> dict[int, bool]:
         """
@@ -2037,7 +2078,8 @@ class CharacterDraft(SharedMemoryModel):
     def calculate_points_remaining(self) -> int:
         """Budget minus allocated points. 0 = fully allocated."""
         budget = self.calculate_stat_budget()
-        stats = self.draft_data.get("stats", {})
+        # `or {}`: a client that clears the key leaves it holding None (#5199).
+        stats = self.draft_data.get("stats") or {}
         if not stats:
             return budget - (STAT_DEFAULT_VALUE * len(REQUIRED_STATS))
         spent = sum(stats.values())
@@ -2084,6 +2126,39 @@ class CharacterDraft(SharedMemoryModel):
                     "cost": cost,
                 }
             )
+
+    def feature_points_spent(self) -> int:
+        """What the draft's feature qualities cost in all, before the free allowance.
+
+        The qualities are the picks that name a feature (#3739). Read by the
+        allowance line below and by the draft serializer, which hands the figure to
+        the Appearance page beside ``FEATURE_FREE_POINTS`` (#5241).
+        """
+        from world.distinctions.types import feature_of  # noqa: PLC0415
+
+        return sum(
+            entry.get("cost", 0)
+            for entry in self.draft_data.get("distinctions", [])
+            if feature_of(entry) != ("", 0)
+        )
+
+    def _append_feature_allowance(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Give back the first ``FEATURE_FREE_POINTS`` the feature qualities cost (#5241).
+
+        Each quality keeps its own priced line, so the breakdown still names what was
+        bought; this one line takes the free part back off the total. Past the
+        allowance the qualities cost CG points like any other pick.
+        """
+        free = min(FEATURE_FREE_POINTS, self.feature_points_spent())
+        if free <= 0:
+            return
+        breakdown.append(
+            {
+                "category": "distinction",
+                "item": "Free feature points",
+                "cost": -free,
+            }
+        )
 
     def _append_enemy_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
         """Add the negative CG cost for carrying an enemy."""
@@ -2171,6 +2246,7 @@ class CharacterDraft(SharedMemoryModel):
         self._append_beginnings_cost(breakdown)
         self._append_upbringing_cost(breakdown)
         self._append_distinction_costs(breakdown)
+        self._append_feature_allowance(breakdown)
         self._append_enemy_cost(breakdown)
         self._append_age_cost(breakdown)
         self._append_species_cost(breakdown)
@@ -2274,7 +2350,8 @@ class CharacterDraft(SharedMemoryModel):
 
     def calculate_final_stats(self) -> dict[str, int]:
         """Return allocated stats (stored units, 10-50). No bonuses applied on top."""
-        stats = self.draft_data.get("stats", {})
+        # `or {}`: a client that clears the key leaves it holding None (#5199).
+        stats = self.draft_data.get("stats") or {}
         return {name: stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS}
 
     def _is_attributes_complete(self) -> bool:
@@ -2400,6 +2477,36 @@ class CharacterDraft(SharedMemoryModel):
 
 
 SOFT_DELETE_DAYS = 14
+
+
+class DraftStageVisit(SharedMemoryModel):
+    """One stage a draft has been opened on (#5199).
+
+    The stage list shows what a stage still asks only once the player has opened that
+    stage (owner ruling 2026-11-18); until then the row is the stage's name alone. The
+    visits are kept here so a reload or another device shows the same list. A row per
+    stage, like ``DraftMarking``, and not a key in ``draft_data`` (ADR-0007): the client
+    merges ``draft_data`` on every save and must not be able to write this.
+
+    Written by ``CharacterDraft.record_stage_visit`` when the draft's ``current_stage``
+    changes. Play state: the rows go with the draft.
+    """
+
+    draft = models.ForeignKey(
+        CharacterDraft,
+        on_delete=models.CASCADE,
+        related_name="stage_visits",
+    )
+    stage = models.PositiveSmallIntegerField(choices=Stage.choices)
+
+    class Meta:
+        ordering = ["stage"]
+        constraints = [
+            models.UniqueConstraint(fields=["draft", "stage"], name="draftstagevisit_unique")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.draft} opened on {self.get_stage_display()}"
 
 
 class DraftMarking(SharedMemoryModel):
@@ -2727,7 +2834,7 @@ class DistinctionOffer(
         max_length=60,
         blank=True,
         default="",
-        help_text="Backgrounds chapter only: the heading this answer is listed under.",
+        help_text="Backgrounds and Identity: the heading this card is listed under.",
     )
     sort_order = models.PositiveSmallIntegerField(default=0)
     is_active = models.BooleanField(default=True)
@@ -2767,14 +2874,14 @@ class DistinctionOffer(
         null=True,
         blank=True,
         related_name="distinction_offers",
-        help_text="Who wants you to fail only: the reason that opens this offer (#3709).",
+        help_text="An enemy only: the reason that opens this offer (#3709).",
     )
     enemy_degree = models.CharField(
         max_length=10,
         choices=EnemyDegree.choices,
         blank=True,
         help_text=(
-            "Who wants you to fail only: the degree (ruined or destroy) that opens this "
+            "An enemy only: the degree (ruined or destroy) that opens this "
             "offer; the mark a degree bundles (#3709)."
         ),
     )
@@ -2867,7 +2974,16 @@ class DistinctionOffer(
                     }
                 ),
                 name="distinctionoffer_at_most_one_opener",
-            )
+            ),
+            # Identity takes no opener (#5255), so nothing else tells two of a card's
+            # lines there apart: the card would be drawn twice, and the two rows would
+            # share one natural key. A partial unique index, PostgreSQL and SQLite both.
+            models.UniqueConstraint(
+                fields=["distinction"],
+                condition=models.Q(chapter=OfferChapter.IDENTITY),
+                name="distinctionoffer_one_identity_line",
+                violation_error_message="This card is already placed on the Identity stage.",
+            ),
         ]
 
     class NaturalKeyConfig:
@@ -2895,6 +3011,8 @@ class DistinctionOffer(
         OfferChapter.ENEMY: ("enemy_reason", "enemy_degree"),
         OfferChapter.BACKGROUNDS: ("beat",),
         OfferChapter.FINAL_TOUCHES: ("unlocked_by",),
+        # Identity (#5255) is its own opener: a line there names no row.
+        OfferChapter.IDENTITY: (),
     }
 
     def __str__(self) -> str:
@@ -2907,7 +3025,8 @@ class DistinctionOffer(
 
     @property
     def chapter_opener_fields(self) -> tuple[str, ...]:
-        """The opener fields this offer's chapter accepts (exactly one must be set)."""
+        """The opener fields this offer's chapter accepts: exactly one must be set, or
+        none where the tuple is empty (Identity, #5255)."""
         return self._OPENERS_FOR_CHAPTER[OfferChapter(self.chapter)]
 
     def _opener_is_set(self, field: str) -> bool:
@@ -2968,12 +3087,18 @@ class DistinctionOffer(
             raise ValidationError(
                 {set_openers[0]: "This chapter's offers are not opened by this field."}
             )
-        if not set_openers:
+        if not set_openers and wanted:
             raise ValidationError({wanted[0]: "This chapter's offers need an opener."})
         if self.enemy_degree and self.enemy_degree not in ENEMY_MARKING_DEGREES:
             raise ValidationError({"enemy_degree": "Only ruined and destroy mark the character."})
         if self.unlocked_by_id is not None and self.unlocked_by_id == self.distinction_id:
             raise ValidationError({"unlocked_by": "A card does not unlock itself."})
+        if self.chapter == OfferChapter.IDENTITY and self.arrives_as != OfferArrival.CHOICE:
+            # Every Identity line is open to every draft (#5255), so a bundled or carried
+            # one would hand the card to every character there is.
+            raise ValidationError(
+                {"arrives_as": "A card on the Identity stage is always a choice."}
+            )
 
 
 class OfferFirstLook(SharedMemoryModel):

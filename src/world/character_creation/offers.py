@@ -476,7 +476,8 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         # A card the draft holds unlocks the line (#4846); unpicking the card hides it
         # again, and ``reconcile_offer_picks`` drops whatever it had opened.
         return offer.unlocked_by_id is not None and offer.unlocked_by_id in ctx["held_ids"]
-    return False
+    # Identity (#5255): the chapter is its own opener, so every active line shows.
+    return chapter == OfferChapter.IDENTITY
 
 
 def _context(draft: CharacterDraft) -> dict:
@@ -486,7 +487,11 @@ def _context(draft: CharacterDraft) -> dict:
     """
     answers = DraftAnswers.from_draft(draft)
     visible = visible_slot_ids(draft)
-    enemy = draft.draft_data.get("enemy") or {}
+    from world.character_creation.enemies import enemy_answer  # noqa: PLC0415
+
+    # Empty unless a held card asks for an enemy (#5255), so a reason or a degree saved
+    # before its card was let go opens nothing.
+    enemy = enemy_answer(draft)
     return {
         "tag_ids": set(draft.draft_data.get("glimpse_tag_ids", [])),
         "choice_ids": {cid for sid, cid in answers.picks.items() if sid in visible},
@@ -831,6 +836,9 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
     for field in ("glimpse_tag", "schooling_line", "beat", "unlocked_by"):
         if getattr(offer, f"{field}_id"):
             return getattr(offer, field).name
+    # An Identity line has no opener row (#5255): the stage itself is where it came from.
+    if offer.chapter == OfferChapter.IDENTITY:
+        return OfferChapter.IDENTITY.label
     return ""
 
 
@@ -1021,8 +1029,6 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 held=held_elsewhere,
                 effect_line=effect_line(effects.get(dist.id, [])),
                 taken_per_feature=dist.taken_per_feature,
-                opens_feature=dist.opens_feature,
-                requires_feature_opened=dist.requires_feature_opened,
                 cg_max_rank=dist.cg_max_rank,
                 group=offer.group,
                 asks_figure_name=dist.asks_figure_name,
@@ -1272,25 +1278,16 @@ def _apply_bundled(
 def opened_features(draft_data: dict) -> set[tuple[str, int]]:
     """The features this draft has made distinctive, as ``(trait name, marking id)``.
 
-    One query. The single reader of "is this feature unlocked?" for everything
+    No query. The single reader of "is this feature distinctive?" for everything
     downstream of the draft (#3739): the Appearance validator's palette check,
     ``services._apply_form_trait_descriptors`` at finalize, and the form-options
-    view's widened palette. A feature is unlocked exactly while an ``opens_feature``
-    entry naming it sits in ``draft_data["distinctions"]`` — refund the pick and the
-    widened palette, the description and the axes all close again together.
+    view's widened palette. A feature is distinctive exactly while a quality
+    (Alluring, Menacing, Majestic: any entry that names a feature) is held on it
+    (#5241, owner ruling 2026-11-21: no pick before the qualities). Take the last
+    tier off a feature and its widened palette and its description close again.
     """
     entries = draft_data.get("distinctions") or []
-    if not entries:
-        return set()
-    opens = set(
-        Distinction.objects.filter(
-            id__in={e["distinction_id"] for e in entries if e.get("distinction_id")},
-            opens_feature=True,
-        ).values_list("id", flat=True)
-    )
-    if not opens:
-        return set()
-    return {feature_of(e) for e in entries if e.get("distinction_id") in opens}
+    return {feature_of(e) for e in entries} - {("", 0)}
 
 
 def opened_feature_traits(draft_data: dict) -> set[str]:
@@ -1306,44 +1303,29 @@ def _drop_vanished_features(
     entries: list[DraftDistinctionEntry],
     draft: CharacterDraft,
 ) -> tuple[list[DraftDistinctionEntry], list[str]]:
-    """Drop per-feature picks whose feature or whose unlock has gone (#3739).
+    """Drop per-feature picks whose feature has gone (#3739).
 
-    Called by ``reconcile_offer_picks`` after the carried/bundled passes. Two
-    things can strand a per-feature entry between syncs:
+    Called by ``reconcile_offer_picks`` after the carried/bundled passes. One thing
+    can strand a per-feature entry between syncs: the player deleted the
+    ``DraftMarking`` the pick names. (A trait row cannot vanish: every trait the
+    species offers is always on the page, whether or not an option is chosen for
+    it. And since #5241 a quality needs no pick before it, so there is no unlock
+    whose refund could strand one.)
 
-    * the **feature** itself is gone -- the player deleted the ``DraftMarking``
-      the pick names. (A trait row cannot vanish: every trait the species offers
-      is always on the page, whether or not an option is chosen for it.)
-    * the **unlock** is gone -- the axis lines (``requires_feature_opened``) may
-      only be held where "Make it distinctive" (``opens_feature``) is held on the
-      same feature, so dropping the unlock drops the axes bought under it.
-
-    Both are refunded by dropping the entry, which ``_drop_empty_and_reprice``
+    The pick is refunded by dropping the entry, which ``_drop_empty_and_reprice``
     then leaves alone; the returned names go into the caller's changed list so
     the player is told what the change cost them.
     """
-    feature_entries = [e for e in entries if feature_of(e) != ("", 0)]
-    if not feature_entries:
+    marking_ids = {feature_of(e)[1] for e in entries} - {0}
+    if not marking_ids:
         return entries, []
 
     live_marking_ids = set(draft.markings.values_list("id", flat=True))
-    flags = Distinction.objects.filter(
-        id__in={e["distinction_id"] for e in feature_entries}
-    ).values_list("id", "opens_feature", "requires_feature_opened")
-    opens = {did for did, o, _ in flags if o}
-    needs_open = {did for did, _, r in flags if r}
-
-    opened_features = {feature_of(e) for e in feature_entries if e["distinction_id"] in opens}
-
     kept: list[DraftDistinctionEntry] = []
     changed: list[str] = []
     for entry in entries:
-        feature = feature_of(entry)
-        marking_id = feature[1]
+        marking_id = feature_of(entry)[1]
         if marking_id and marking_id not in live_marking_ids:
-            changed.append(entry["distinction_name"])
-            continue
-        if entry["distinction_id"] in needs_open and feature not in opened_features:
             changed.append(entry["distinction_name"])
             continue
         kept.append(entry)
@@ -1383,15 +1365,17 @@ def _drop_empty_and_reprice(
     return kept, changed
 
 
-def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
-    """Apply carried and bundled offers, drop picks whose offer has gone, reprice.
+#: How many times ``reconcile_offer_picks`` may go round. A pass can change which cards
+#: are held, and a held card opens chapters of its own (a Final Touches line, the enemy's
+#: reason and degree lines, #5255), so the pass repeats until the held cards stop
+#: changing. Two rounds settle every shape there is today; the bound stops a cycle.
+_RECONCILE_ROUNDS = 4
 
-    Called after every draft patch that could change which offers are open (a
-    Glimpse tag pick, a Lineage answer, a tradition select). Returns the
-    distinction names dropped or repriced. Saves ``draft_data`` when anything
-    changed.
-    """
-    original = draft.draft_data.get("distinctions", [])
+
+def _reconcile_pass(
+    draft: CharacterDraft, original: list[DraftDistinctionEntry]
+) -> tuple[list[DraftDistinctionEntry], list[str]]:
+    """One round of ``reconcile_offer_picks`` over ``original``: what is kept, what moved."""
     entries: list[DraftDistinctionEntry] = list(original)
     visible = visible_offers(draft)
     # Carried and bundled offers are never per-feature (#3739), so they index by
@@ -1409,6 +1393,34 @@ def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
     changed += dropped_features
     kept, repriced = _drop_empty_and_reprice(entries)
     changed += repriced
+    return kept, changed
+
+
+def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
+    """Apply carried and bundled offers, drop picks whose offer has gone, reprice.
+
+    Called after every draft patch that could change which offers are open (a
+    Glimpse tag pick, a Lineage answer, a tradition select). Returns the
+    distinction names dropped or repriced. Saves ``draft_data`` when anything
+    changed.
+
+    A round that changes which cards are held is followed by another (#5255): a held
+    card opens lines of its own, so a card dropped in one round (its Glimpse tag
+    unpicked) takes the mark its enemy's degree bundled with it in the next, in this
+    same call and not at the next request.
+    """
+    original = draft.draft_data.get("distinctions", [])
+    kept: list[DraftDistinctionEntry] = original
+    changed: list[str] = []
+    for _ in range(_RECONCILE_ROUNDS):
+        before = kept
+        kept, moved = _reconcile_pass(draft, before)
+        changed += moved
+        if kept != before:
+            # The next round reads the held cards from the draft itself.
+            draft.draft_data["distinctions"] = kept
+        if {e["distinction_id"] for e in kept} == {e["distinction_id"] for e in before}:
+            break
 
     if kept != original or changed:
         draft.draft_data["distinctions"] = kept

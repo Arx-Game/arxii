@@ -500,7 +500,7 @@ describe('GiftStage (folio)', () => {
     expect(rail.getByText('The Whispering Path · Trained for years')).toBeInTheDocument();
   });
 
-  it('rail shows techniques to pick once a tradition is chosen', () => {
+  it('rail has no "Techniques to pick" row beside "Techniques" (#5199)', () => {
     const draft = createMockDraft({
       selected_beginnings: mockBeginnings,
       selected_path: mockPath,
@@ -511,12 +511,16 @@ describe('GiftStage (folio)', () => {
       <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
     );
     const rail = within(container.querySelector('.record-rail')!);
-    expect(rail.getByText('Techniques to pick')).toBeInTheDocument();
-    expect(rail.getByText('3')).toBeInTheDocument();
+    expect(rail.queryByText('Techniques to pick')).not.toBeInTheDocument();
+    expect(rail.getByText('Techniques')).toBeInTheDocument();
   });
 
-  it('rail shows CG points from the same source HeritageStage uses', () => {
-    const draft = createMockDraft({ selected_path: mockPath, cg_points_spent: 42 });
+  it('rail shows the CG points every stage shows: spent of spent plus remaining', () => {
+    const draft = createMockDraft({
+      selected_path: mockPath,
+      cg_points_spent: 42,
+      cg_points_remaining: 58,
+    });
     const { container } = renderWithCharacterCreationProviders(
       <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
     );
@@ -547,8 +551,6 @@ describe('GiftStage (folio)', () => {
           held: false,
           effect_line: '',
           taken_per_feature: false,
-          opens_feature: false,
-          requires_feature_opened: false,
           cg_max_rank: 0,
           group: '',
           asks_figure_name: false,
@@ -602,8 +604,6 @@ describe('GiftStage (folio)', () => {
           held: false,
           effect_line: '',
           taken_per_feature: false,
-          opens_feature: false,
-          requires_feature_opened: false,
           cg_max_rank: 0,
           group: '',
           asks_figure_name: false,

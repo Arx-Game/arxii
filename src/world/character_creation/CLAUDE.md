@@ -38,16 +38,33 @@ Character creation is a multi-stage process that guides players through creating
    "let's make the budget 350, so 110 starts unspent"): the default spread of twelve at 20
    uses 240, every point has to be placed, and a stat stays within 10 to 50 in steps of 10.
    Until #5223 the budget was the default spread itself, with nothing to place
-8. **Appearance** - Height, build, form traits (hair/eye color, etc.); its offered
-   distinctions in authored sections (`AppearanceSection`, #3709)
-9. **Identity** - Name (shown; asked on Origin), concept, quote, worship
+8. **Appearance** - Age, birthday, height, build, form traits (hair/eye color, etc.); its
+   offered distinctions in authored sections (`AppearanceSection`, #3709); and the feature
+   qualities (#3739, #5241, ADR-5241): Alluring, Menacing and Majestic go on any trait or
+   marking directly, a feature holding any tier is distinctive (`offers.opened_features`:
+   every option of its trait and a description), and the first `FEATURE_FREE_POINTS` (10)
+   the qualities cost are free, taken back off the CG total by one breakdown line
+   (`CharacterDraft._append_feature_allowance`); past ten they cost CG points. The draft
+   API reports `feature_points_spent` and `feature_points_free`. A colour option carries
+   `forms.FormTraitOption.color_hex` for the page's swatches
+9. **Identity** - Name (shown; asked on Origin), concept, quote, the Personality cards
+   (#5255, ADR-5255: `OfferChapter.IDENTITY` lines, a chapter that takes no opener, so
+   every active line shows, a line is always a choice and a card has one; staff place
+   cards there on the Distinction Builder, or many at once with the Distinction list's
+   "Offer on the Identity stage" action), worship
 10. **Final Touches** - The Background (#5178, ADR-5178: one free text,
     `draft_data.background`, written to `Profile.background` word for word at finalize;
     it replaced the per-stage notes and Recent History, whose keys the draft serializer
     refuses) and the Actor's Sheet (#3621): three questions, each with the
     distinctions that answer it under it (#3709), numbered goals, one priced enemy whose
     why is picked from the authored `EnemyReason` list before the own words and whose
-    reason and degree open offers, the Officially dead door (#4396, opened by a held
+    reason and degree open offers, asked only of a draft holding a card that starts the
+    character with an enemy (#5255, ADR-5255: `FinalTouchesPrompt.ENEMY` on the card;
+    `enemies.enemy_answer` is the one read of `draft_data.enemy` and is empty without
+    such a card, so the enemy is then not priced, opens no offer and is not written;
+    `reconcile_offer_picks` repeats its pass while the held cards keep changing, so the
+    degree's mark leaves in the pass that drops the card),
+    the Officially dead door (#4396, opened by a held
     Presumed Dead since #4856), the card-unlocked
     chapter (#4846: `OfferChapter.FINAL_TOUCHES` lines opened by `unlocked_by`, and the
     prompt a held card asks, `Distinction.final_touches_prompt`; Jailbird's crime in
@@ -327,6 +344,20 @@ Checks if account can create characters (email verified, under the character lim
 - Staff bypass all access restrictions and limits
 - Navigation between stages is free; incomplete stages are highlighted but not blocked
 - Submit is blocked until all required stages are complete
+- **What the stage list is told (#5199, owner rulings 2026-11-18).** A stage's to-do shows
+  only once the draft has been opened on that stage, so the draft keeps which stages those
+  are: `DraftStageVisit` (one row per draft and stage, written by
+  `CharacterDraft.record_stage_visit` when `CharacterDraftSerializer.update` changes
+  `current_stage`, for the stage left and the stage opened) and read as `visited_stages`,
+  which always includes the current stage. A row and not a `draft_data` key, because the
+  client merges `draft_data` on every save and must not write this. `optional_stages` is
+  `constants.OPTIONAL_STAGES` (Identity, Final Touches): the stages whose validators ask
+  nothing, which the list reads as "optional" in place of "complete". A requirement added
+  to either validator has to take the stage out of that tuple (`test_stage_list.py` holds
+  it). A stage's validator returns only what that stage asks: Heritage no longer repeats
+  Lineage's errors (left from #313, when the family was chosen on Heritage). `surname` is
+  `CharacterDraft.surname()`: the claimed family's name, the new family's, or the drawn
+  tarot card's on a route with no family.
 - **Stage completion is computed per call, never cached on the draft.**
   `get_stage_validation_errors()` / `get_stage_completion()` back both the stepper
   badges (`stage_completion`/`stage_errors` on `CharacterDraftSerializer`) and the

@@ -45,3 +45,10 @@ not at the encounter's end - deferral is tied to the condition's lifetime, not t
 encounter's.
 _Avoid_: pending death (ambiguous with the pre-existing `death_deferred_pending`
 CHARACTER_KILLED-suppression flag, a different mechanism), scheduled death.
+
+**Dying window** (`CharacterVitals.aging_death_ic_deadline`, #2756): the in-game days a
+character has left once Frailty has driven their health through the aging floor. It opens
+with a deadline; the death sweep resolves it when the game clock passes that deadline. A
+clock jump made by staff moves the deadline by the jump's length, so the days left are the
+same after as before (#5248, ADR-5248).
+_Avoid_: death timer, countdown.

@@ -601,9 +601,9 @@ What landed:
     `OutfitSlotWritePermission` to inherit `PlayerOrStaffPermission` and
     drop their inline `is_staff` short-circuits. Behavior preserved.
   - **`world.scenes.interaction_permissions.CanViewInteraction` flagged
-    during the audit** — has a non-uniform staff bypass policy (excludes
-    staff from very_private interactions). Worth a separate review before
-    refactoring; left untouched in this PR.
+    during the audit** — had a non-uniform staff bypass policy. It was
+    removed in #3751: the interaction detail now uses the same
+    `readable_by` gate as the list.
 
 Explicitly NOT in this slice (parked):
 
@@ -615,8 +615,7 @@ Explicitly NOT in this slice (parked):
 - **Examining items in containers belonging to others** — only the
   requester's own / same-room containers work today.
 - **Right-click context menu on worn items** ("compliment outfit", etc.).
-- **`CanViewInteraction` permission refactor** — flagged for separate
-  review as noted above.
+- **`CanViewInteraction` permission refactor** — done in #3751 by removing it, as noted above.
 
 ## What's Needed for MVP
 - ~~Equipment slot / body part model~~ — **done** (TemplateSlot with BodyRegion + EquipmentLayer)

@@ -226,6 +226,7 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
             GroupPromptFactory,
             OriginTemplateFactory,
             OriginTemplateSlotChoiceFactory,
+            enemy_card_entry,
         )
         from world.distinctions.factories import DistinctionFactory
         from world.distinctions.models import CharacterDistinction
@@ -255,6 +256,8 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
         draft = self._draft(
             origin_anchors={str(q1.id): crew.id},
             origin_choices={str(q1.id): courier.id},
+            # The enemy counts only while a card that starts with one is held (#5255).
+            distinctions=[enemy_card_entry()],
             enemy={
                 "kind": "group",
                 "organization_id": None,

@@ -1781,7 +1781,8 @@ def _create_stat_values(
     from world.character_creation.sheet_writers import set_stat_values  # noqa: PLC0415
     from world.traits.models import TraitChangeSource  # noqa: PLC0415
 
-    stats = draft.draft_data.get("stats", {})
+    # `or {}`: a client that clears the key leaves it holding None (#5199).
+    stats = draft.draft_data.get("stats") or {}
     if not stats:
         return
     traits_by_name = {
@@ -2452,9 +2453,9 @@ def _apply_form_trait_descriptors(
     (#1109) is untouched — nothing is copied, the player typed it for this face.
 
     Since #3739 a descriptor is also **bought**: the field opens only on a trait
-    the draft made distinctive (an ``opens_feature`` pick naming that trait), so
-    a descriptor left in ``draft_data`` for a trait whose unlock was refunded is
-    dropped here rather than written. This is the finalize-side half of the same
+    the draft made distinctive (since #5241, a trait holding at least one tier of
+    a quality), so a descriptor left in ``draft_data`` for a trait whose last tier
+    was taken away is dropped here rather than written. This is the finalize-side half of the same
     gate the Appearance leaf and ``validators._get_form_trait_errors`` apply.
 
     Args:

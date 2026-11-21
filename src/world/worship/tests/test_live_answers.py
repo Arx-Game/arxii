@@ -366,7 +366,9 @@ class LimitTests(LiveTestBase):
     def test_a_miracle_and_an_answer_count_together(self) -> None:
         answer = self._general("Partial Success")
         miracle = MiracleFactory(being=self.being, favor_threshold=1, resonance_pool_cost=10)
-        DivineInterventionConfigFactory(favor_threshold=1, min_pool_for_intervention=10)
+        DivineInterventionConfigFactory(
+            favor_threshold=1, prayer_favor_gate=1, min_pool_for_intervention=10
+        )
         self._perform("Partial Success")
         send_live_answer(self._prompt(), resolver=self.gm_account, miracle=miracle)
 
@@ -399,7 +401,9 @@ class MiracleTests(LiveTestBase):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
         cls.cooldown = ConditionTemplateFactory(name="Divine Intervention Cooldown")
-        DivineInterventionConfigFactory(favor_threshold=1, min_pool_for_intervention=10)
+        DivineInterventionConfigFactory(
+            favor_threshold=1, prayer_favor_gate=1, min_pool_for_intervention=10
+        )
 
     def test_live_miracle_eligibility(self) -> None:
         """Favor, the pool and the cooldown each grey a miracle with its reason; an

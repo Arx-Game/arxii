@@ -15,7 +15,7 @@ The central time engine that drives the living world. An anchor-based game clock
 
 ## Key Design Points
 - **Anchor-based derivation:** IC time = `anchor_ic_time + (now - anchor_real_time) * time_ratio`. Never a ticking counter.
-- **Staff adjustment:** Set a new anchor for time skips or nudges. History model logs all changes.
+- **Staff adjustment:** Set a new anchor for time skips or nudges. History model logs all changes. A skip either ages characters or carries their birth years with it (ADR-5248).
 - **Idempotent tasks:** Every periodic task is safe to run twice via per-system timestamps.
 - **Scheduler-agnostic tasks:** Task logic lives in app service functions. Scheduler only calls them — swappable from Evennia Scripts to Celery later.
 - **Historical IC timestamps:** Stored as concrete values on models (journals, scenes, events). Unaffected by anchor changes.
@@ -23,6 +23,7 @@ The central time engine that drives the living world. An anchor-based game clock
 - **Calendar:** 12 months, 4 seasons, mapped real-world structure. The months carry the game's names (#4185, below).
 
 ## What Exists
+- **Staff clock control (#5248, ADR-5248):** the staff hub's Game clock page (`/staff/clock`) pauses the clock, resumes it from the date it shows, sets the date and changes the speed, and lists who changed it, when, how and why. A change of date asks whether characters age with the calendar or keep their ages (`AgeHandling`; a change to an earlier date always keeps them); either way a dying window keeps its remaining days and an event still to come moves with the calendar, so a jump never kills anyone by itself. `GameClockHistory` records the kind of change and the birth-year shift. The Django admin's change form became read-only: saving Paused or the ratio there made the date jump. Left for #5250: population growth and sun exposure count a pause on resume and never see a jump.
 - **GameWeek model:** Formal game week tracking with `GameWeek` and `GameSeason` models. All weekly systems FK to `GameWeek` instead of storing raw dates. Unified `weekly_rollover` cron orchestrator advances the week then runs all weekly processors in sequence.
 - **AP regen:** `apply_daily_regen()`, `apply_weekly_regen()` batch jobs wired to scheduler.
 - **Journal weekly reset:** `WeeklyJournalXP` uses `game_week` FK. `needs_reset()` / `reset_week()` compare FKs. Batch sweep resets all non-current-week trackers.

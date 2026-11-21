@@ -38,6 +38,13 @@ export type PactCard = components['schemas']['PactCard'];
 export type PledgeCreditLine = components['schemas']['PledgeCreditLine'];
 /** A being holy where the acting character stands: its shrine here or the temple over it. */
 export type HolySite = components['schemas']['HolySite'];
+/** Favor a character owes a being after a weaker answer to divine intervention (#4349). */
+export type OwedFavor = components['schemas']['OwedFavor'];
+/** A character present who can be prayed for: the persona the room shows, and its name. */
+export interface PrayerTarget {
+  personaId: number;
+  name: string;
+}
 
 /** `PledgeCard.state`, as the server derives it (`world.worship.constants.PledgeState`). */
 export const PLEDGE_STATE = {

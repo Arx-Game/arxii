@@ -4,6 +4,7 @@ import {
   closePledge,
   fetchHolySites,
   fetchInvocationOptions,
+  fetchOwedFavor,
   fetchPactCards,
   fetchPledgeCards,
   fetchPledges,
@@ -15,6 +16,7 @@ import {
   sacrifice,
   sendVision,
   takePledge,
+  type PrayOptions,
 } from './api';
 import type { VisionCreate } from './types';
 
@@ -31,6 +33,7 @@ export const worshipKeys = {
     ['worship', 'holy-sites', entryId ?? null, roomId ?? null] as const,
   pledgeCards: (sheetId: number) => ['worship', 'pledge-cards', sheetId] as const,
   pactCards: (sheetId: number) => ['worship', 'pact-cards', sheetId] as const,
+  owedFavor: (sheetId: number) => ['worship', 'owed-favor', sheetId] as const,
 };
 
 /**
@@ -71,11 +74,20 @@ export function usePrayers(sheetId: number, enabled = true) {
   });
 }
 
+/** The beings a character owes favor to; the server returns none for a sheet you do not play. */
+export function useOwedFavor(sheetId: number, enabled = true) {
+  return useQuery({
+    queryKey: worshipKeys.owedFavor(sheetId),
+    queryFn: () => fetchOwedFavor(sheetId),
+    enabled: enabled && sheetId > 0,
+  });
+}
+
 export function usePrayMutation(characterId: number) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ being, text }: { being: number; text: string }) =>
-      pray(characterId, being, text),
+    mutationFn: ({ being, text, ...options }: { being: number; text: string } & PrayOptions) =>
+      pray(characterId, being, text, options),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: worshipKeys.all }).catch(() => {});
     },

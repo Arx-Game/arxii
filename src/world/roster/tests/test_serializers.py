@@ -8,6 +8,7 @@ import logging
 from django.test import TestCase
 from django.utils import timezone
 
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import (
     CharacterFactory,
@@ -499,8 +500,7 @@ class RosterEntrySerializerTestCase(TestCase):
     def test_includes_fullname_quote_description(self):
         """Serializer exposes additional character fields."""
 
-        user = type("User", (), {"is_authenticated": True})()
-        data = self._serialize(user)
+        data = self._serialize(AccountFactory())
 
         assert data["fullname"] == "Sir TestChar the Bold"
         assert data["quote"] == "Honor above all"
@@ -509,7 +509,7 @@ class RosterEntrySerializerTestCase(TestCase):
     def test_can_apply_logic(self):
         """can_apply requires auth and available entry."""
 
-        auth_user = type("User", (), {"is_authenticated": True})()
+        auth_user = AccountFactory()
         anon_user = type("User", (), {"is_authenticated": False})()
 
         # Authenticated user, entry accepts applications

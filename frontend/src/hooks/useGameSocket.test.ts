@@ -912,13 +912,13 @@ describe('useGameSocket text frames become feed notes (#3856)', () => {
     expect(dispatchedTypes()).toContain('game/addSessionMessage');
   });
 
-  it('hands a commands frame its descriptors and its kwargs, names included (#4346)', async () => {
+  it('hands a commands frame its kwargs, names included, and ignores its descriptors (#4346)', async () => {
     const descriptor = { action: 'look', prompt: 'Look', params_schema: {}, icon: 'eye' };
     // The wire shape Evennia sends: descriptors as args, `names` (and its own
     // `options`) in kwargs.
     await deliver(['commands', [descriptor], { names: ['look', 'who'], options: {} }]);
 
-    expect(mockHandleCommandPayload).toHaveBeenCalledWith('Aria', [descriptor], {
+    expect(mockHandleCommandPayload).toHaveBeenCalledWith('Aria', {
       names: ['look', 'who'],
       options: {},
     });

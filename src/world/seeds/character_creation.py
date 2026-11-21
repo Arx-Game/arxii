@@ -77,6 +77,7 @@ from world.forms.models import (
     SpeciesFormTrait,
     TraitType as FormTraitType,
 )
+from world.forms.swatches import default_swatch
 from world.magic.constants import ParticipationRule, RitualExecutionKind
 from world.magic.models import Ritual
 from world.missions.constants import (
@@ -396,17 +397,11 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # shows offers here, in place of the retired Distinctions stage.
     "appearance_offers_heading": "What people notice first",
     "appearance_offers_note": "offered here",
-    # Distinctive physical features (#3739). The unlock's own words, the two
-    # glosses that say what the point buys (a trait row also buys its palette and
-    # its description; a marking's name and description were always free), and the
-    # axis price word. PLACEHOLDER prose, authored over by staff.
-    "appearance_make_distinctive": "Make it distinctive",
-    "appearance_make_distinctive_why": ("any colour, a description, and what people feel about it"),
-    "appearance_marking_distinctive_why": "what people feel about it",
-    "appearance_per_tier": "per tier",
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",
     "identity_quote_heading": "Quote",
+    # The cards picked on Identity (#5255): the block's heading, between quote and worship.
+    "identity_personality_heading": "Personality",
     "identity_worship_heading": "Worship",
     # The Actor's Sheet (#3621): the three questions and their example lines, the
     # reviewer's own wording. The set is fixed in code (ACTOR_SHEET_QUESTIONS); the
@@ -437,7 +432,8 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "so a goal can be named in play. Add more, and change these, from your sheet as "
         "the character goes on."
     ),  # PLACEHOLDER: Apostate rewrite
-    "finaltouches_enemy_heading": "Who wants you to fail",
+    # The enemy section is headed by the card that asks for it (#5255), so it has no
+    # heading key of its own; "finaltouches_enemy_heading" is retired and not read.
     "finaltouches_enemy_intro": (
         "A person or a group. Offered from your Lineage and your Beginning, or write your "
         "own. The price is what the world owes you for carrying them, and the worst of "
@@ -2238,7 +2234,12 @@ def _seed_form_traits(species: Species | None) -> None:
         for opt_sort_idx, (opt_name, opt_display) in enumerate(options):
             authored_or_sample(
                 FormTraitOption,
-                {"display_name": opt_display, "sort_order": opt_sort_idx},
+                {
+                    "display_name": opt_display,
+                    "sort_order": opt_sort_idx,
+                    # A first-pass colour for a colour option (#5241); blank otherwise.
+                    "color_hex": default_swatch(name, opt_name),
+                },
                 trait=trait,
                 name=opt_name,
             )

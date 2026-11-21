@@ -62,8 +62,6 @@ const offer = (offerId: number, beatId: number, name: string, cost: number) => (
   held: false,
   effect_line: '',
   taken_per_feature: false,
-  opens_feature: false,
-  requires_feature_opened: false,
   cg_max_rank: 0,
   group: '',
   asks_figure_name: false,
@@ -243,7 +241,8 @@ test.describe('one Background box on Final Touches replaces the life page’s te
       const empty = await heightOf(page, '#background', PLACEHOLDER);
       expect(empty.needed).toBeLessThanOrEqual(empty.room);
 
-      // The box sits after the enemy and before The Introductions.
+      // The box sits after the goals and before The Introductions. (The enemy section
+      // that used to stand above it shows only to a draft holding an enemy card, #5255.)
       const order = await page.evaluate(() => {
         const top = (el: Element | null) => el!.getBoundingClientRect().top + window.scrollY;
         const named = (text: string) =>
@@ -251,12 +250,12 @@ test.describe('one Background box on Final Touches replaces the life page’s te
             (h) => h.textContent?.trim() === text
           ) ?? null;
         return {
-          enemy: top(named('Who wants you to fail')),
+          goals: top(named('Goals')),
           background: top(document.querySelector('#background')),
           introductions: top(named('The Introductions')),
         };
       });
-      expect(order.enemy).toBeLessThan(order.background);
+      expect(order.goals).toBeLessThan(order.background);
       expect(order.background).toBeLessThan(order.introductions);
 
       await heading.scrollIntoViewIfNeeded();

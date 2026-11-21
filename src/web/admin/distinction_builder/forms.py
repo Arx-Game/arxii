@@ -5,9 +5,10 @@ from __future__ import annotations
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect, FilteredSelectMultiple
-from django.forms import inlineformset_factory
+from django.forms import BaseInlineFormSet, inlineformset_factory
+from django.utils.text import slugify
 
-from world.character_creation.constants import ENEMY_MARKING_DEGREES
+from world.character_creation.constants import ENEMY_MARKING_DEGREES, OfferChapter
 from world.character_creation.models import Beginnings, DistinctionOffer
 from world.character_sheets.types import EnemyDegree
 from world.distinctions.models import Distinction, DistinctionEffect
@@ -38,6 +39,20 @@ class DistinctionForm(forms.ModelForm):
         """Blank means 0 -- the model's own "no separate CG cap" value."""
         return self.cleaned_data.get("cg_max_rank") or 0
 
+    # The slug sits under the folded "More" section. Left to the ModelForm default it
+    # is required, and a required field the browser cannot focus stops Save with no
+    # message at all (#5241). Blank means "made from the name", as the table paste
+    # (``paste.py``) has always made it.
+    slug = forms.SlugField(
+        required=False,
+        max_length=100,
+        help_text="Blank means it is made from the name.",
+    )
+
+    def clean_slug(self) -> str:
+        """A blank slug is the name, slugified."""
+        return self.cleaned_data.get("slug") or slugify(self.cleaned_data.get("name", ""))
+
     class Meta:
         model = Distinction
         fields = [
@@ -56,12 +71,10 @@ class DistinctionForm(forms.ModelForm):
             "allow_other",
             "is_automatic",
             "requires_slot_filled",
-            # Distinctive physical features (#3739). Authored here because the
-            # per-feature shape is a property of the distinction, not of any one
-            # offer: the same row is offered on every feature there is.
+            # Feature qualities (#3739). Authored here because the per-feature shape
+            # is a property of the distinction, not of any one offer: the same row
+            # is offered on every feature there is.
             "taken_per_feature",
-            "opens_feature",
-            "requires_feature_opened",
             "cg_max_rank",
             # The Final Touches chapter (#4846): the optional question this card asks there.
             "final_touches_prompt",
@@ -106,11 +119,9 @@ DISTINCTION_MORE_FIELDS = (
     "allow_other",
     "is_automatic",
     "requires_slot_filled",
-    # Distinctive physical features (#3739): rarely touched, since only the four
-    # Appearance rows set them, but authorable here rather than in the raw admin.
+    # Feature qualities (#3739): rarely touched, since only the three Appearance
+    # rows set them, but authorable here rather than in the raw admin.
     "taken_per_feature",
-    "opens_feature",
-    "requires_feature_opened",
     "cg_max_rank",
     "final_touches_prompt",
     "asks_figure_name",
@@ -216,13 +227,41 @@ class OfferForm(forms.ModelForm):
 DistinctionEffectFormSet = inlineformset_factory(
     Distinction, DistinctionEffect, form=EffectForm, extra=1, can_delete=True
 )
+
+
 # ``fk_name`` since #4846: ``unlocked_by`` is a second FK from an offer to a Distinction
 # (the card that unlocks a Final Touches line), and this page edits the lines a
 # distinction is offered on, not the lines it unlocks.
+class BaseDistinctionOfferFormSet(BaseInlineFormSet):
+    """The offers of one distinction, checked together.
+
+    A card has one line on the Identity stage (#5255). The model holds that with a
+    partial unique constraint over ``distinction``, and an inline formset leaves its
+    parent's key out of each row's own validation, so a second Identity row passed every
+    row check and the save then raised ``IntegrityError`` (a server error page, seen on
+    the live pass). The rows are all on this page, so the page counts them itself.
+    """
+
+    def clean(self) -> None:
+        super().clean()
+        identity_rows = [
+            form
+            for form in self.forms
+            if form.cleaned_data
+            and not form.cleaned_data.get("DELETE")
+            and form.cleaned_data.get("chapter") == OfferChapter.IDENTITY
+        ]
+        if len(identity_rows) > 1:
+            # The same words the model's constraint uses, so every surface says one thing.
+            already_placed = "This card is already placed on the Identity stage."
+            raise forms.ValidationError(already_placed)
+
+
 DistinctionOfferFormSet = inlineformset_factory(
     Distinction,
     DistinctionOffer,
     form=OfferForm,
+    formset=BaseDistinctionOfferFormSet,
     fk_name="distinction",
     extra=1,
     can_delete=True,

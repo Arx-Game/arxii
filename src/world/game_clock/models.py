@@ -8,7 +8,7 @@ from evennia.accounts.models import AccountDB
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
-from world.game_clock.constants import DEFAULT_TIME_RATIO
+from world.game_clock.constants import DEFAULT_TIME_RATIO, ClockChange
 
 
 class GameClock(SharedMemoryModel):
@@ -108,6 +108,24 @@ class GameClockHistory(SharedMemoryModel):
     new_time_ratio = models.FloatField()
 
     reason = models.TextField(blank=True, default="")
+    change = models.CharField(
+        max_length=20,
+        choices=ClockChange.choices,
+        blank=True,
+        default="",
+        help_text=(
+            "The kind of change (#5248). The anchors and ratios alone cannot tell a pause "
+            "from a change of date. Blank on rows written before the kind was recorded."
+        ),
+    )
+    birth_year_shift = models.IntegerField(
+        default=0,
+        help_text=(
+            "Years added to every character's birth year by this change, so their ages "
+            "stayed as they were. Zero unless the date was set with ages kept. Subtract it "
+            "to undo the change by hand."
+        ),
+    )
 
     class Meta:
         verbose_name = "Game Clock History"

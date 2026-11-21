@@ -1684,16 +1684,63 @@ class TestCharacterCreationGapProbes(TestCase):
         self.assertTrue(rc._realms_without_nobiliary_particles().present)
 
     def test_feature_rows_must_all_exist_and_be_active(self) -> None:
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
         from world.distinctions.factories import DistinctionFactory
         from world.seeds.distinctive_features import FEATURE_ROW_NAMES
 
+        def quality(name: str, **overrides: bool):
+            row = DistinctionFactory(name=name, taken_per_feature=True, **overrides)
+            DistinctionOfferFactory(
+                distinction=row, chapter=OfferChapter.APPEARANCE, feature_rows=True
+            )
+            return row
+
+        self.assertEqual(FEATURE_ROW_NAMES, ("Alluring", "Menacing", "Majestic"))
         self.assertEqual(set(rc._probe_feature_distinctions().missing), set(FEATURE_ROW_NAMES))
-        for name in FEATURE_ROW_NAMES[:-1]:
-            DistinctionFactory(name=name)
-        DistinctionFactory(name=FEATURE_ROW_NAMES[-1], is_active=False)
+        # Staff capitalise as they see fit; the probe matches without regard to case.
+        quality("alluring")
+        quality("Menacing")
+        quality("Majestic", is_active=False)
         result = rc._probe_feature_distinctions()
         self.assertFalse(result.present)
-        self.assertEqual(result.missing, (FEATURE_ROW_NAMES[-1],))
+        self.assertEqual(result.missing, ("Majestic",))
+
+    def test_a_feature_row_with_no_feature_rows_offer_is_missing(self) -> None:
+        """The row alone shows nothing on the page: it needs its Appearance offer (#5241)."""
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+        from world.distinctions.factories import DistinctionFactory
+
+        for name in ("Alluring", "Menacing"):
+            DistinctionOfferFactory(
+                distinction=DistinctionFactory(name=name, taken_per_feature=True),
+                chapter=OfferChapter.APPEARANCE,
+                feature_rows=True,
+            )
+        majestic = DistinctionFactory(name="Majestic", taken_per_feature=True)
+        self.assertEqual(rc._probe_feature_distinctions().missing, ("Majestic",))
+        DistinctionOfferFactory(
+            distinction=majestic, chapter=OfferChapter.APPEARANCE, feature_rows=True
+        )
+        self.assertTrue(rc._probe_feature_distinctions().present)
+
+    def test_enemy_reasons_are_wanted_only_once_a_card_asks_for_an_enemy(self) -> None:
+        """#5255: the enemy section shows only for a card that starts with an enemy."""
+        from world.character_creation.factories import EnemyReasonFactory
+        from world.distinctions.factories import DistinctionFactory
+
+        self.assertTrue(rc._probe_enemy_reasons().present)
+        card = DistinctionFactory(name="Old Grudge", final_touches_prompt="enemy")
+        result = rc._probe_enemy_reasons()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("EnemyReason",))
+        self.assertIn("Old Grudge", result.detail)
+        EnemyReasonFactory(name="You know what they did")
+        self.assertTrue(rc._probe_enemy_reasons().present)
+        card.is_active = False
+        card.save(update_fields=["is_active"])
+        self.assertTrue(rc._probe_enemy_reasons().present)
 
     def test_the_six_are_registered_with_admin_links(self) -> None:
         keys = {dep.key: dep for dep in rc.build_registry(rc._declarations())}
@@ -2449,3 +2496,18 @@ class TestScaleConfigProbes(TestCase):
         seed_level_tiers()
         for key in ("development-cost-config", "check-scale-config", "level-tier"):
             self.assertTrue(self._dependency(key).probe.resolve(None).present, key)
+
+
+class FavorAwardProbeTests(TestCase):
+    """Every kind of favor outcome award has a probe naming what a missing row means (#4349)."""
+
+    def test_every_favor_award_kind_has_a_probe(self) -> None:
+        from world.worship.constants import FavorAwardKind
+
+        keys = {dep.key for dep in rc._declarations()}
+        for kind in FavorAwardKind:
+            self.assertIn(f"favor-{kind.value.replace('_', '-')}-awards", keys)
+
+    def test_the_invocation_check_type_probe_says_intervention_stops_too(self) -> None:
+        dep = next(d for d in rc._declarations() if d.key == "favor-invocation-check-type")
+        self.assertIn("divine intervention", dep.consequence)

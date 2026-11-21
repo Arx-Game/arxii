@@ -23,10 +23,12 @@ from world.character_creation.constants import (
     CRIME_LINE,
     CRIME_LINE_MAX_LENGTH,
     FAMILY_PATRON_BEING_ID,
+    FEATURE_FREE_POINTS,
     FIGURE_NAME_MAX_LENGTH,
     GIFT_FACETS_KEY,
     GIFT_RESONANCE_WEIGHTS_KEY,
     OFFICIALLY_DEAD_KEY,
+    OPTIONAL_STAGES,
     ORGANIZATIONS_KEY,
     PERSONALIZATION_COPY_KEYS,
     PRESTIGE_STORIES_KEY,
@@ -1327,13 +1329,10 @@ class VisibleOfferSerializer(serializers.Serializer):
     first_look = serializers.BooleanField()
     held = serializers.BooleanField()
     effect_line = serializers.CharField()
-    #: The per-feature shape (#3739): whether this line is offered on every feature
-    #: rather than once, whether taking it is what makes a feature distinctive,
-    #: whether it may only sit on an already-distinctive feature, and the rank
-    #: ceiling character creation applies (0 = ``max_rank``).
+    #: The per-feature shape (#3739): whether this line is a quality offered on
+    #: every feature rather than once, and the rank ceiling character creation
+    #: applies (0 = ``max_rank``).
     taken_per_feature = serializers.BooleanField()
-    opens_feature = serializers.BooleanField()
-    requires_feature_opened = serializers.BooleanField()
     cg_max_rank = serializers.IntegerField()
     #: The life page (#4872): the heading the answer sits under, whether the card
     #: takes a figure's name, and the effects with their magnitudes.
@@ -1536,9 +1535,16 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # CG points computed fields
     cg_points_spent = serializers.SerializerMethodField()
     cg_points_remaining = serializers.SerializerMethodField()
+    # Feature qualities (#5241): what the draft's qualities cost before the free
+    # allowance, and the allowance. The page shows the lesser of the two as spent.
+    feature_points_spent = serializers.SerializerMethodField()
+    feature_points_free = serializers.SerializerMethodField()
     stat_bonuses = serializers.SerializerMethodField()
     stage_completion = serializers.SerializerMethodField()
     stage_errors = serializers.SerializerMethodField()
+    surname = serializers.SerializerMethodField()
+    visited_stages = serializers.SerializerMethodField()
+    optional_stages = serializers.SerializerMethodField()
     stats_points_remaining = serializers.SerializerMethodField()
     stats_budget = serializers.SerializerMethodField()
     # Gift-stage technique pick budget (#2426 Task 10) — CharacterDraft property,
@@ -1631,9 +1637,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
+            "feature_points_spent",
+            "feature_points_free",
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
+            "surname",
+            "visited_stages",
+            "optional_stages",
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
@@ -1671,9 +1682,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
+            "feature_points_spent",
+            "feature_points_free",
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
+            "surname",
+            "visited_stages",
+            "optional_stages",
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
@@ -1778,6 +1794,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         """Get remaining CG points."""
         return obj.calculate_cg_points_remaining()
 
+    def get_feature_points_spent(self, obj: CharacterDraft) -> int:
+        """What the draft's feature qualities cost, before the free allowance (#5241)."""
+        return obj.feature_points_spent()
+
+    def get_feature_points_free(self, _obj: CharacterDraft) -> int:
+        """How many points of feature qualities cost no CG points (#5241)."""
+        return FEATURE_FREE_POINTS
+
     def get_stat_bonuses(self, obj: CharacterDraft) -> dict[str, int]:
         """Get stat bonuses from all sources (heritage + distinctions)."""
         return obj.get_all_stat_bonuses()
@@ -1785,6 +1809,18 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stats_points_remaining(self, obj: CharacterDraft) -> int:
         """Get remaining stat points to allocate (0 = fully allocated)."""
         return obj.calculate_points_remaining()
+
+    def get_surname(self, obj: CharacterDraft) -> str:
+        """The family's name, the new family's, or the drawn card's surname; '' until one exists."""
+        return obj.surname()
+
+    def get_visited_stages(self, obj: CharacterDraft) -> list[int]:
+        """The stages this draft has been opened on; the stage list shows a to-do for these only."""
+        return obj.visited_stages()
+
+    def get_optional_stages(self, _obj: CharacterDraft) -> list[int]:
+        """The stages that ask nothing; the stage list reads "optional" for them."""
+        return [int(stage) for stage in OPTIONAL_STAGES]
 
     def get_stats_budget(self, obj: CharacterDraft) -> int:
         """Get total stat point budget (base + bonuses)."""
@@ -2119,12 +2155,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 merged.pop(retired, None)
             validated_data["draft_data"] = merged
         restyled = {"selected_tradition", "selected_combat_style"} & validated_data.keys()
+        left_stage = instance.current_stage
         instance = super().update(instance, validated_data)
+        self._record_stage_move(instance, left_stage)
         if restyled:
             # A style the Tradition does not teach is cleared, and another style's
             # skill drops out of the training allocation (#4921).
             reconcile_combat_style(instance)
         return instance
+
+    @staticmethod
+    def _record_stage_move(instance: CharacterDraft, left_stage: int) -> None:
+        """Both ends of a stage change are stages the player has now seen (#5199).
+
+        The stage they left has no row of its own when it is the one the draft was made on.
+        """
+        if instance.current_stage == left_stage:
+            return
+        instance.record_stage_visit(left_stage)
+        instance.record_stage_visit(instance.current_stage)
 
     @staticmethod
     def _reconcile_vacancy_claims(instance: CharacterDraft, validated_data: dict) -> None:

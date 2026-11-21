@@ -12,7 +12,7 @@ from world.roster.models import NPCLoan, Roster, RosterEntry
 from world.roster.models.choices import RosterType
 from world.roster.serializers.characters import CharacterSerializer
 from world.roster.serializers.tenures import RosterTenureSerializer
-from world.roster.services.activity import entry_is_story_npc
+from world.roster.services.activity import entry_is_story_npc, is_reserved_against
 from world.roster.services.gallery import portrait_url
 from world.roster.services.presence import room_name, session_count
 
@@ -65,7 +65,10 @@ class RosterEntrySerializer(serializers.ModelSerializer):
 
         request = self.context.get("request")
         return bool(
-            request and request.user.is_authenticated and obj.accepts_applications,
+            request
+            and request.user.is_authenticated
+            and obj.accepts_applications
+            and not is_reserved_against(obj, request.user.pk),
         )
 
     def get_fullname(self, obj):

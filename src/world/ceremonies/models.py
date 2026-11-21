@@ -370,9 +370,6 @@ class CeremonyConfig(SharedMemoryModel):
             "Renamed from 'devotion per offering': review this number."
         ),
     )
-    devotion_officiant = models.PositiveIntegerField(
-        default=10, help_text="Devotion favor the officiant gains at finish."
-    )
     offering_favored_facet_multiplier_percent = models.PositiveIntegerField(
         default=200,
         help_text=(

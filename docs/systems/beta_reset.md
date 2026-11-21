@@ -2,8 +2,9 @@
 
 The alpha→beta early-access cutover needs a one-shot way to strip everything alpha testers
 did through play from the world while keeping every CG/authoring-provenance row as the
-pristine baseline (ADR-0206). PR 2 built the guarded wipe that performs this; PR 1 (merged)
-built the acquisition-provenance ledger it filters on (`CharacterTechnique.origin` /
+pristine baseline (ADR-0206). PR 2 built the guarded wipe that performs this and PR 3 the
+cutover policy layer around it; PR 1 (merged) built the acquisition-provenance ledger both
+filter on (`CharacterTechnique.origin` /
 `CharacterGift.origin` / `AcquisitionOrigin`, `CharacterTraitChange.source` /
 `TraitChangeSource`, `CharacterDistinction.origin` / `DistinctionOrigin`,
 `Discovery.discovered_by_tenure`, `CharacterAchievement.earned_by_tenure`).
@@ -48,30 +49,100 @@ Deletion runs in one transaction, in `SCOPE_TABLE` order — the order resolves 
 `CombatEncounter.scene`/`TreatmentAttempt.scene` against `scenes.Scene`) — followed by
 `world.societies.models.refresh_legend_views()`.
 
-**Not touched, deliberately:** `CharacterSheet`/`Persona`/`RosterEntry`/`RosterTenure`/
-`Organization`/`Covenant` (structural identity — see the PR 2/PR 3 boundary below);
+**Not touched by the wipe, deliberately:** `CharacterSheet`/`Persona`/`RosterEntry`/
+`RosterTenure`/`Organization`/`Covenant` (structural identity; the cutover policy layer ends
+tenures and moves entries but never deletes them);
 `GMProfile`/`AccountDB`/kudos/`Block`/`Friendship`/`Mute` (account-level data; `Rivalry` is gone since #3957 — rivalry is an IC relationship label now, and relationship rows are play state);
 catalog/config models (`CrimeKind`, `AreaLaw`, `SecretCategory`, `Profession`,
 `DistinctionPurseDrain`, `DistinctionStartingGrant`, tuning singletons); `CharacterCodexKnowledge` (no CG-vs-play
 discriminator exists on it today — flagged, not guessed at); org economics
 (`OrganizationTreasury` and friends — orgs themselves survive the reset).
 
-## PR 2 / PR 3 boundary
+## Delete order and the provenance sets
 
-PR 2's wipe does **not** step `CharacterTraitValue` back down after deleting a play-time
-`CharacterTraitChange` row, even though that row records the exact delta. Replaying the
-ledger backward to restore a derived value on a **kept** character is PR 3's "roster
-characters progress-reset" scope. PR 2's own alpha test characters are deleted wholesale
-at cutover by a separate step outside this command — `wipe_pristine_world` never touches
-`CharacterSheet`/`Persona`/`RosterEntry`/`RosterTenure` at all — so any derived-value drift
-this wipe leaves behind is moot for them. PR 3 is what makes a *kept* roster character's
-sheet numbers consistent again after using this same provenance ledger.
+The wipe's scope is `SCOPE_TABLE` alone: the explicit list of what it deletes, in order.
+`test_service.ScopeTableDeleteOrderTests` walks every PROTECT or RESTRICT relation onto a
+`SCOPE_TABLE` table and fails when the table holding it is not deleted at or before that
+step (itself or by cascade), because the wipe would then raise `ProtectedError`. That is how
+the capstone-anchored `Thread` rows and their `ThreadLevelUnlock` receipts, journal capstones,
+legend honors, listener harvests and event grandeur spends come to be listed ahead of their
+targets. A protected reference onto a table the wipe reaches only by cascade (a `Clue` the
+Secret wipe cascades into, with a pool entry, vision or answer pointing at it) is not in
+that walk; it is covered by the seeded behavioural test in `test_cutover.py`, where the
+cutover rolls everything back and the command raises a `CommandError` naming the blocking
+model. The `PLAY_TIME_*` and `CG_AUTHORING_*` provenance sets in `services.py` together
+cover every `AcquisitionOrigin`, `TraitChangeSource` and `DistinctionOrigin` member, enforced
+by `test_progress.py`.
+
+## Cutover policy layer (PR 3)
+
+`world.beta_reset.cutover.run_beta_cutover` runs behind the same guards as the wipe, from the
+same `arx manage beta_reset` command, in one transaction: first the policy steps, then
+`wipe_pristine_world`. The dry-run prints what each step would do. Three kinds of kept
+character, each treated the same way (every open tenure ends, an entry someone held returns to
+the Available shelf, `reset_character_progress` runs):
+
+- **Roster characters** (`creation_provenance` STAFF or GM_TABLE, off the NPC shelf).
+- **Reserved original characters** (PLAYER provenance with a `created_by_account`). Only that
+  account may apply for it again (`is_reserved_against` in `roster/services/activity.py`,
+  checked by `RosterApplicationCreateSerializer` and `can_apply`); approval re-seats them on
+  their own past tenure. No schema change (ADR-3055).
+- **Carried-over characters** (`--carry-over <character sheet id>`, repeatable). An original
+  character with no recorded author is reserved to the account that held it last; a sheet with
+  no roster entry is progress-reset in place; a roster character, a story NPC or a missing id
+  is refused (`CarryOverError`) before anything is touched.
+
+Safeguards added on review: `execute_cutover` and `reset_character_progress` check the
+enabled constant and the release latch themselves, so no direct call runs after release (the
+typed phrase and backup precheck stay on the command path). Before `--execute` changes anything
+it checks every kept character's ledger (`progress.ledger_problems`: each trait's rows chain and
+end at the current value, a ledger row's value row still exists, the class-level receipts chain
+up to the level); a character that fails is listed in the dry-run and refused by `--execute`,
+which names it, unless `--allow-incomplete-ledger` is given. The policy steps and the wipe run in
+one transaction, so a `ProtectedError` rolls everything back and the command raises a
+`CommandError` naming the blocking model (`WipeBlockedError`). After the wipe the thread handler
+is invalidated for every character that owned a capstone-anchored thread and max health is
+recomputed for each kept character. The reset lowers the class level directly instead of through
+`apply_class_level_advance`, which would re-run story auto-beats and could notify players.
+`RosterApplication.approve` refuses an application onto an original character reserved to
+another account (`ReservedForCreatorError`), so a rival application filed before the cutover
+cannot be approved by any path; the dry-run counts those pending applications. The dry-run also
+names the account each reserved character is reserved to, the trait rows that would be removed,
+natural weapons that would go with their gifts, and states that its wipe counts are computed
+before the policy steps run.
+
+Alpha accounts and their kudos, blocks, mutes and friendships are never touched. An original
+character with no recorded author that nobody names for carry-over is left exactly as it is.
+
+`world.beta_reset.progress.reset_character_progress(sheet)` reverses play provenance for one
+character, reading the play-time filters from `SCOPE_TABLE` (`scope_entry_for`): trait values
+step back by the summed play-time `CharacterTraitChange` deltas (a row play created is removed,
+the play-time change rows are deleted so a second run is a no-op), play-origin techniques,
+gifts (with their natural weapon) and distinctions (through
+`distinctions.services.delete_character_distinction`, the teardown `remove_distinction` shares)
+are removed, the stat-point and maturation spend receipts are deleted, and the class level
+returns to the lowest `level_before` among the Durance and Audere Majora receipts. It does not
+reset anything it does not list or the character's path (`CharacterPathHistory`
+carries no provenance).
 
 ## Tests
 
 `world/beta_reset/tests/test_service.py` — journey tests against the service directly
 (seed play + CG rows across every ledger, execute, assert the split; dry-run destroys
 nothing; the latch blocks execution; the confirmation/backup/constant guards each refuse
-independently; PROTECT-ordering for `NPCStanding` and `CombatEncounter`/`Scene`).
-`world/beta_reset/tests/test_command.py` — thin argument-gating tests via `call_command`
-for both `beta_reset` and `mark_beta_release`.
+independently; PROTECT-ordering for `NPCStanding`, `CombatEncounter`/`Scene`, journal
+capstones and legend honors, capstone-anchored threads, listener harvests and event
+grandeur spends). `test_service.py` also holds the delete-order walk.
+`test_progress.py` — the per-character reset and the provenance-set partition.
+`test_cutover.py` — the policy steps, the reservation gate over the API, carry-over, and the
+command output. `test_command.py` — thin argument-gating tests via `call_command` for both
+`beta_reset` and `mark_beta_release`.
+
+## Retired after the cutover
+
+The reset exists for one day. At the cutover a reviewed PR sets `BETA_RESET_ENABLED` to
+False. The PR after it deletes the whole `world/beta_reset` package (both commands, the
+services, the progress reset, the cutover layer and their tests) and drops the `ReleaseLatch`
+table with one `DeleteModel` migration. The reservation rule for original characters
+(`is_reserved_against` and its use in the application serializer, `RosterApplication.approve`
+and `can_apply`) lives in the roster app and stays.

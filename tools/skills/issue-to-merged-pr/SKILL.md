@@ -249,6 +249,23 @@ markers and uses `docs/spec-template.md`; consult `docs/adr/` and
 `AGENT_GLOSSARY_MAP.md` before drafting. Do not create a committed
 `docs/superpowers/` spec file.
 
+**A posted spec reads at a glance on one page, with everything else expandable.**
+Format the issue body this way before the plain-prose review, using the skeleton in
+`docs/spec-template.md`:
+
+- An "At a glance" list comes first and stays open: what the work does in one or
+  two sentences, the demo link, the size (files and migrations), how many decisions
+  are ruled and how many are waiting, how it will be proved, and what is left out.
+- Every other section is wrapped in a `<details>` block whose `<summary>` is one
+  plain line saying what is inside and how much of it. This includes the discovery
+  assessment, the goal, the walkthrough, the ruled decisions, the pending decisions,
+  the ledger, the schema answers, the build steps and the verification.
+- Headings stay outside the blocks, and so do the `<!-- spec:start -->`,
+  `<!-- spec:end -->` and discovery markers. A blank line follows `</summary>`, or
+  GitHub does not render the markdown inside the block.
+- Run `scripts/validate-discovery.sh <N>` after formatting, since the body was
+  edited. The body of #5231 is the worked example.
+
 **Spec-review dispatch:** when the brainstorming flow reaches
 "dispatch spec-document-reviewer," dispatch with the prompt at
 `tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md` instead of
@@ -444,6 +461,7 @@ do not convene a permanent council. Existing narrow reviewers take precedence:
 | Portal, websocket, telnet protocol, or Portal-read setting | `portal-code-deploy-reviewer` |
 | Approved visual/demo surface | `demo-fidelity-reviewer` |
 | Any behavior claim | `evidence-challenge-reviewer` runs on the PR automatically (Step 6a); dispatch it locally first when you want the challenge before the PR opens |
+| New helper, class, option, wrapper, or abstraction | `lean-diff-reviewer` |
 | Auth, permissions, privileged writes, input/trust boundary, IC/OOC audience, private content, query/resource cost, recovery, or operational burden with no narrower trigger | `implementation-quality-reviewer` with exactly the selected lens and a focused prompt |
 
 The fallback reviewer is not a generic approval. Its report must name the lens,

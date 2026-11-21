@@ -145,12 +145,10 @@ class LineageCompletionTests(TestCase):
         assert get_lineage_errors(draft) == []
 
     def test_no_upbringing_selected_incomplete(self):
-        """No Upbringing selected -> lineage incomplete."""
+        """No beginning, so no route -> lineage incomplete, and it says what comes first (#5199)."""
         draft = CharacterDraft.objects.create(
             account=self.account,
             selected_area=self.area,
             draft_data={},
         )
-        assert get_lineage_errors(draft) == [
-            "The family paths for this beginning are not set up yet"
-        ]
+        assert get_lineage_errors(draft) == ["Choose a beginning on Heritage first"]

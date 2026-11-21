@@ -83,7 +83,7 @@ def get_heritage_errors(draft: CharacterDraft) -> list[str]:
     """Return validation errors for the Heritage stage."""
     errors: list[str] = []
     if not draft.selected_beginnings:
-        errors.append("Select a beginnings path")
+        errors.append("Select a beginning")
     if not draft.selected_species:
         errors.append("Select a species")
     if not draft.selected_gender:
@@ -93,10 +93,11 @@ def get_heritage_errors(draft: CharacterDraft) -> list[str]:
     if draft.selected_beginnings and draft.selected_species:
         available_species = draft.selected_beginnings.get_available_species()
         if draft.selected_species not in available_species:
-            errors.append("Selected species is not allowed for this beginnings path")
+            errors.append("Selected species is not allowed for this beginning")
 
-    # Lineage must be complete (family or tarot card)
-    errors.extend(get_lineage_errors(draft))
+    # Lineage's errors are Lineage's own row in the stage table (#5199). They were
+    # repeated here from when the family was chosen on this stage (#313), which made
+    # Heritage ask for a surname it has no way to give.
 
     # CG points must not be over budget
     remaining = draft.calculate_cg_points_remaining()
@@ -183,6 +184,11 @@ def get_lineage_errors(draft: CharacterDraft) -> list[str]:
     errors.extend(_get_heredity_species_errors(draft))
 
     template = draft.selected_origin_template
+    if template is None and draft.selected_beginnings_id is None:
+        # No beginning yet, so no route to be missing (#5199): say what comes first.
+        # PLACEHOLDER: Apostate rewrite
+        errors.append("Choose a beginning on Heritage first")
+        return errors
     if template is None:
         # The route is the beginning's own, assigned with it (#4395); none authored yet
         # is a staff gap the player cannot close.
@@ -428,12 +434,15 @@ def stat_value_error(stat_name: str, value: int) -> str | None:
 def get_attributes_errors(draft: CharacterDraft) -> list[str]:
     """Return validation errors for the Attributes & Skills stage."""
     errors: list[str] = [*get_skill_allocation_errors(draft)]
-    stats = draft.draft_data.get("stats", {})
+    # `or {}`: a client that clears the key leaves it holding None (#5199).
+    stats = draft.draft_data.get("stats") or {}
 
     # All 12 stats must exist
     missing = [s for s in REQUIRED_STATS if s not in stats]
     if missing:
-        errors.append(f"Missing stats: {', '.join(missing)}")
+        # Plain words, never the list of field names (#5199).
+        # PLACEHOLDER: Apostate rewrite
+        errors.append("Set your statistics")
         return errors  # Can't validate values if stats are missing
 
     # Validate each stat value
@@ -461,9 +470,9 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
     selected option must sit in the species' own palette or among the
     inherited options a cross-species parent makes legal (pinned-aware).
 
-    A trait the draft has made distinctive (#3739) is exempt from the palette
-    check: the point the player spent buys exactly that, every option the trait
-    carries including the Unnatural umbrella, on the standing assumption that
+    A trait the draft has made distinctive (#3739; since #5241, one holding a tier
+    of any quality) is exempt from the palette check: it reaches every option the
+    trait carries including the Unnatural umbrella, on the standing assumption that
     an off-species colour has a magical explanation. The required-trait check
     still applies — a distinctive trait is still a trait you have to choose.
     """

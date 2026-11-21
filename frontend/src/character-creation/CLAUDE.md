@@ -24,7 +24,15 @@ character-creation/
 ├── CharacterCreationPage.tsx # Main page component
 ├── folio/                   # Folio chassis primitives (#3540), realm-agnostic
 │   ├── index.ts             # Barrel re-export
-│   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper
+│   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper. What a row
+│   │                        #   says (#5199, owner rulings 2026-11-18): a stage the draft has
+│   │                        #   not been opened on is its name alone; an opened stage shows
+│   │                        #   the first thing it still asks; a finished stage is marked
+│   │                        #   complete; a stage that asks nothing reads "optional" and is
+│   │                        #   never marked complete. Which stages are opened and which are
+│   │                        #   optional come from the server (`visited_stages`,
+│   │                        #   `optional_stages` on the draft); the stage the draft stands
+│   │                        #   on always counts as opened
 │   ├── PageTurn.tsx         # Back/next doors between chapters, the same button (owner
 │   │                        #   ruling 2026-11-16, #5146: Back is not an italic link);
 │   │                        #   `between` is a stage's own door drawn between the two
@@ -34,7 +42,14 @@ character-creation/
 │   │                        #   whole room and keeps a slot at the foot of that panel
 │   ├── chapterRail.ts       # `useChapterRail()`: the slot at the foot of the right-hand
 │   │                        #   panel that a stage's own list portals into (#5148)
-│   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside
+│   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside. The rows
+│   │                        #   come from `../cgRecord.ts` (#5199): `cgRecord(draft)` gives
+│   │                        #   `head` (Name, Origin, Beginning, Species, Gender, Family or
+│   │                        #   Surname, Path, Tradition) and `points`, and a stage writes
+│   │                        #   `[...record.head, ...its own rows, record.points]`. No stage
+│   │                        #   writes the shared rows itself. The surname is the server's
+│   │                        #   (`draft.surname`); on a route with no family the row is
+│   │                        #   "Surname" and holds the drawn card's
 │   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (`tag`
 │   │                        #   is optional and marks the exception only, #5207: no
 │   │                        #   "Available" on every row; an
@@ -45,7 +60,15 @@ character-creation/
 │   │                        #   the foot keeps one door, Select before and Clear after
 │   ├── InstrumentFrame.tsx  # InstrumentGroup/StatRow: labeled stat instruments
 │   ├── ChoiceRow.tsx        # Segmented choice: a few named options, one pressed (#3630)
-│   ├── Field.tsx            # Inscription label over a serif control on a hairline (#3630)
+│   ├── SwatchRow.tsx        # A colour choice (#5241): one round swatch per option in the
+│   │                        #   option's own colour (`--swatch`, checked as #rrggbb before
+│   │                        #   it goes into a style), named on hover and to a screen
+│   │                        #   reader; an option with no colour is striped (`no-hue`), one
+│   │                        #   outside the ordinary list dashed (`beyond`); `onPreview`
+│   │                        #   hands the caller the name under the pointer or the focus
+│   ├── Field.tsx            # Inscription label over a serif control on a hairline (#3630);
+│   │                        #   `className` is a width class for a field in a `.field-row`
+│   │                        #   (short fields side by side, #5241), e.g. `narrow`
 │   ├── Paragraphs.tsx       # Blank-line-separated prose split into <p> tags (#3630)
 │   ├── CodexWord.tsx        # In-world term linked via CodexTerm when a codex entry exists
 │   ├── CodexLine.tsx        # "Codex: {name}" ledger line in an entry body (solid link; an
@@ -100,20 +123,56 @@ character-creation/
     │                        #   → Anima Check, plus an
     │                        #   always-visible Motif textarea and the guided Glimpse
     │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
-    ├── AppearanceStage.tsx  # Stage 8: Appearance. After the height block, mounts this
-    │                        #   chapter's own offered distinctions (ChapterOffers
-    │                        #   chapter="appearance", #3675 Task 15), the physical/social
-    │                        #   ones that show, in place of the retired Distinctions stage.
-    │                        #   A height band's title reads its own authored `cg_hint`
-    │                        #   column (forms.HeightBand, #3675 fix round 1) when staff
-    │                        #   wrote one - e.g. what opens a band players cannot normally
-    │                        #   take - never a name match against a literal band name.
+    ├── AppearanceStage.tsx  # Stage 8: Appearance, in compact controls (#5241, owner
+    │                        #   rulings 2026-11-21). Age and the birthday share a line: the
+    │                        #   birthday is two numbers, month then day, saved once both are
+    │                        #   typed and read back as "Day 14 of <the game's month name>".
+    │                        #   Height band and build are dropdowns on one line with the
+    │                        #   inches; the chosen band's own authored `cg_hint` column
+    │                        #   (forms.HeightBand, #3675 fix round 1) reads under it, never
+    │                        #   a name match against a literal band name. No control on the
+    │                        #   stage is a row of a button per option. Then this chapter's
+    │                        #   own offered distinctions (ChapterOffers chapter="appearance",
+    │                        #   #3675 Task 15), one block per authored section. Then the
+    │                        #   features, two across (`.feature-grid`), each an
+    │                        #   `appearance/TraitBlock`. The heading and the side panel's
+    │                        #   "Feature points" row say how many of the free ten are spent
+    │                        #   (from `useShownPicks(draft).featureSpent`, so they move with
+    │                        #   a click); neither shows when staff have authored no quality
+    ├── appearance/
+    │   └── TraitBlock.tsx   # One feature: a `SwatchRow` for a colour (`trait_type`
+    │                        #   "color"; the chosen colour's name beside the trait's name),
+    │                        #   a dropdown for anything else; under it the qualities line
+    │                        #   (`offers/FeatureDistinctions`), and the "Describe it" field
+    │                        #   once the feature holds a tier. Options outside the ordinary
+    │                        #   list are a dashed swatch or a "Distinctive" group
+    ├── MarkingsEditor.tsx   # Markings (#2985): the form asks name, kind and region on one
+    │                        #   line, kind and region as dropdowns (#5241); each saved
+    │                        #   marking carries the qualities line. Removing a marking
+    │                        #   also refetches the draft's picks, the draft and its CG
+    │                        #   points: the server drops the marking's qualities in the
+    │                        #   same request, and a stale list was sent again with the
+    │                        #   next quality clicked and refused
     ├── IdentityStage.tsx    # Stage 9: Identity (concept, quote, worship); the name is a
     │                        #   read-only line since #4874, asked on Origin. The Background
     │                        #   is Final Touches' (#5178); this stage neither reads nor
-    │                        #   saves it
+    │                        #   saves it. Between the quote and worship, the Personality
+    │                        #   block (#5255, owner ruling 2026-11-21): an h2 (copy
+    │                        #   `identity_personality_heading`) over `ChapterOffers
+    │                        #   chapter="identity"` as the life page's cards, two across
+    │                        #   (`pair`), signed prices, four at rest and the rest under
+    │                        #   "See N more"; once staff give the lines headings every
+    │                        #   card shows under its heading and nothing folds. Absent
+    │                        #   when no card is placed. The side panel's points line
+    │                        #   reads `useShownPicks`, so it moves with a click
     ├── FinalTouchesStage.tsx # Stage 10: the Actor's Sheet (#3621): three questions,
     │                        #   numbered goals by horizon, the priced enemy, The Introductions.
+    │                        #   The enemy section, its side-panel row and its note render
+    │                        #   only when a held card asks `enemy` (#5255:
+    │                        #   draft.final_touches_cards), headed by that card's name;
+    │                        #   "Who wants you to fail" is printed nowhere and the copy key
+    │                        #   `finaltouches_enemy_heading` is not read. An enemy card by
+    │                        #   itself does not open the card-unlocked section.
     │                        #   After the enemy and before the faces' doors, the Background
     │                        #   (#5178, owner ruling 2026-11-17: one box for the character's
     │                        #   history, no text per life stage): an h2 "Background" and a
@@ -346,6 +405,10 @@ a click or tap pins it open, and Escape, a scroll or any other click closes it (
 term whose definition is blank is plain text with no underline; `interceptPick` runs before a click
 changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 `secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.
+`pair` (#5255) puts a grid two across in the reading column (`.stances.grid.pair`, the
+Glimpse's rule) with four cards at rest where the others show three, and a grid folded
+under "See N more" keeps its cards; the Identity
+stage's Personality block uses both.
 
 ## A card click shows at once (#5134)
 
@@ -424,6 +487,25 @@ the one element (`.interview.popover`), taking back what the root rule adds (the
 `min-height`). `__tests__/portaledStyles.test.ts` holds this for every such element, and
 the `portaled-style-reach-reviewer` agent reads a diff for the shape. Evidence for a
 styled element is its computed style and its box in a browser, never its class name.
+
+## Feature qualities and the free points (#3739, #5241)
+
+`offers/FeatureDistinctions` is one feature's qualities (Alluring, Menacing, Majestic: the
+chapter's `taken_per_feature` offers) on one thin line, each tier a round button; it mounts
+once per trait and once per marking. A click sets that tier, and a click on the top tier
+held takes it off; there is no step before the tiers (ADR-5241). It reads a tier from the
+save in flight (`pendingEntries`) and takes no second click until that save answers.
+`onClosed` fires when a click takes the last tier off the feature, and the Appearance stage
+then lets go of a colour only a distinctive feature may hold. With no quality authored it
+renders nothing.
+
+The first `draft.feature_points_free` points of qualities cost no CG points. Every sum the
+frontend makes of a pick list goes through `chargedCost(picks, free)`
+(`offers/syncHelpers.ts`): the prices together, less the part of the qualities the
+allowance covers (`featureCost`). `useShownPicks` uses it for a save in flight and returns
+`featureSpent`; `useSyncDistinctions` uses it when a save answers and writes
+`feature_points_spent` into the cached draft. A draft fixture needs both
+`feature_points_spent` and `feature_points_free`, or those sums are NaN.
 
 ## Counts and names in copy (#5207)
 

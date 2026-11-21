@@ -924,8 +924,12 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   stock-take found missing, each a REQUIRED dependency on the same panel:
   Beginnings that allow no species, Beginnings with no tradition on their slate,
   realms in the canon particle table (`CANON_NOBILIARY_PARTICLES`) with no
-  `NobiliaryParticle` row, no `AppearanceSection` headings, the four per-feature
-  distinctions absent or inactive (`FEATURE_ROW_NAMES`), and no `EnemyReason`.
+  `NobiliaryParticle` row, no `AppearanceSection` headings, the three feature
+  qualities not showing (`FEATURE_ROW_NAMES`: Alluring, Menacing, Majestic; since #5241
+  a row counts only when it is active, taken per feature and has an active Appearance
+  offer on the feature rows, matched by name without regard to case), and no
+  `EnemyReason` (since #5255 a gap only once an active card asks for an enemy:
+  `_probe_enemy_reasons`, which names the asking cards).
   Each names the rows in `missing` so a realm can be filled from the panel rather
   than by walking a draft into every stage.
 - **Required-content sentinel** (`web/admin/tuning/required_content.py`) -
@@ -1031,7 +1035,17 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   offered" row renders every opener widget (`schooling_line`, `glimpse_tag`,
   `origin_choice`, `prompt`, `enemy_reason`, `enemy_degree`,
   `appearance_section`, `feature_rows`, `beat`, and since #4846 `unlocked_by`, the
-  Final Touches chapter's card; since #4872 each row also carries `group`, the heading a
+  Final Touches chapter's card; the Identity chapter, #5255, accepts none, so its row
+  shows no opener and the "not opened by anything" check skips it; a card has one line
+  there and it is always a choice, both refused by the model; the Builder's offers
+  formset (`BaseDistinctionOfferFormSet`) counts the Identity rows itself, because an
+  inline formset leaves the parent key out of each row's validation and the unique
+  constraint would otherwise surface as an `IntegrityError` page (cards that already exist
+  are placed there many at once by the Distinction list's "Offer on the Identity stage"
+  action, `authoring.offers.offer_on_identity`: superusers only, credited to the operator
+  with a contributor linked on the spot as the paste does, one log entry per card; a card
+  already placed, switched off there, or not active is left as it is and named; tests
+  `tests/test_offer_on_identity.py`); since #4872 each row also carries `group`, the heading a
   Backgrounds answer is listed under, and the "More" fieldset `asks_figure_name`) and
   `page.html`'s cascade shows the one(s) the row's
   chapter accepts (`live.opener_field_map` is chapter -> list now; the enemy
@@ -1053,7 +1067,9 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   rank, max rank, player line, description, effects as `+Target; -Target;
   immune:Target`, offered under as `rules|devotions|fears|reason:<name>|
   degree:ruined|degree:destroy|appearance:<section>|glimpse:<tag>|
-  lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>|unlocked:<card>`, first look for
+  lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>|unlocked:<card>|identity|
+  identity:<heading>` (a card picked on the Identity stage, #5255; one such token per
+  row), first look for
   as Beginning names; a `beat:` token (#4655) looks up an existing Life beat by
   life stage and name and creates the Backgrounds answer on it, never the beat; an
   a leading star on a first-look name (`*Reavers`, #4865) also marks that pin as part of the
@@ -1115,6 +1131,14 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   for both rather than relying on the transitive import). The widget also
   needs the jsi18n catalog (`{% url 'admin:jsi18n' %}` in `extrahead`,
   loaded automatically by `change_form.html` but not by `base_site.html`).
+- **Every field the form saves is drawn (#5241).** `DistinctionForm` is a ModelForm, so a
+  field it lists and `page.html` does not draw is posted absent and saved as off, 0 or
+  blank. The page shipped without `taken_per_feature`, `cg_max_rank` and
+  `final_touches_prompt`: none could be authored here, and every save cleared all three.
+  `BuilderEveryFieldTest` walks `DistinctionForm.base_fields` against the rendered page.
+  The slug is not required: blank means "made from the name" (`clean_slug`, as the table
+  paste makes it), because a required field under the folded "More" cannot be focused and
+  the browser then stops Save with no message.
 - **Rendering** - the top module's five main fields and the collapsed "More"
   fieldset (every other field the stock admin exposes) are plain
   `tuning-table` rows, not `admin/includes/fieldset.html` - "More" is a bare

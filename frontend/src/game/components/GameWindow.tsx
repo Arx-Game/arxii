@@ -43,6 +43,9 @@ export interface GameWindowSceneFeed {
   interactions: Interaction[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
+  /** A historical reference pages later as well as earlier; a live feed never does. */
+  hasLaterPage?: boolean;
+  fetchLaterPage?: () => void;
   retention?: { retained: number; evicted: number; warning: boolean; gap: boolean };
 }
 
@@ -512,6 +515,8 @@ function GameWindowFeed({
                   interactions={sceneFeed.interactions}
                   hasNextPage={sceneFeed.hasNextPage}
                   fetchNextPage={sceneFeed.fetchNextPage}
+                  hasLaterPage={sceneFeed.hasLaterPage}
+                  fetchLaterPage={sceneFeed.fetchLaterPage}
                   onAvatarClick={onAvatarClick}
                   onAddTarget={onAddTarget}
                   onAttachAction={onAttachAction}

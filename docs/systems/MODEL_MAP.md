@@ -66,6 +66,7 @@
   - mishap_tiers <- magic.MishapPoolTier
   - situation_guides <- gm.ConsequencePoolGuide
   - traps <- room_features.Trap
+  - intervention_for_beings <- worship.WorshippedBeing
   - being_answers <- worship.Answer
   - success_beats <- stories.Beat
   - failure_beats <- stories.Beat
@@ -1373,12 +1374,12 @@
 - `abandon_ceremony(*, ceremony: world.ceremonies.models.Ceremony) -> world.ceremonies.models.Ceremony - Decision 12: close the rite awarding nothing; frees the location + ghost window.`
 - `execute_will(character_sheet: 'CharacterSheet') -> None - Execute the deceased's estate — the funeral door of #1985.`
 - `favored_facets_by_item(being: 'WorshippedBeing', item_instances: 'list[ItemInstance]') -> 'dict[int, Facet]' - Each of ``item_instances`` carrying a Facet ``being`` favors (BeingFacet),`
-- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.models.Ceremony - Close the rite: quality roll, renown tallies, worship, funeral effects.`
+- `finish_ceremony(*, ceremony: world.ceremonies.models.Ceremony, sincere: bool | None = None) -> world.ceremonies.services.CeremonyFinish - Close the rite: quality roll, renown tallies, worship, funeral effects.`
 - `get_ceremony_config() -> world.ceremonies.models.CeremonyConfig - Get-or-create the first CeremonyConfig row (singleton-by-convention).`
 - `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, reading: world.ceremonies.services.ItemReading, counted: bool, granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and, when it counts, feed ``being``'s pool.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
-- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held,`
+- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - Pending offers for characters currently held by the account, on open rites.`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
 - `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None', being: 'WorshippedBeing | None' = None, request: 'RequestedItem | None' = None) -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
@@ -1531,6 +1532,7 @@
   - build -> forms.Build [FK] (nullable)
   - target_table -> gm.GMTable [FK] (nullable)
 **Pointed to by:**
+  - stage_visits <- character_creation.DraftStageVisit
   - markings <- character_creation.DraftMarking
   - application <- character_creation.DraftApplication
   - house_claim <- societies.HouseClaim
@@ -1576,6 +1578,10 @@
   - author -> evennia.AccountDB [FK] (nullable)
 
 ### DraftMarking
+**Foreign Keys:**
+  - draft -> character_creation.CharacterDraft [FK]
+
+### DraftStageVisit
 **Foreign Keys:**
   - draft -> character_creation.CharacterDraft [FK]
 
@@ -2026,6 +2032,7 @@
 - `can_staff_edit_sheet(user: 'AbstractBaseUser | AnonymousUser', sheet: 'CharacterSheet') -> 'bool' - Whether this account may edit this sheet in place (#3988). Staff only.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `ensure_true_profile(sheet: 'CharacterSheet') -> 'Profile' - The sheet's true profile, created empty if an older character has none (#3988).`
+- `heritages_not_yet_appeared(ic_moment: 'datetime') -> 'list[str]' - Names of heritages whose first appearance is later than ``ic_moment`` (#5248).`
 - `rename_character(sheet: 'CharacterSheet', name: 'str') -> 'None' - Rename a character: its key and its primary persona's name together (#3988).`
 - `restore_profile_text_version(version: 'ProfileTextVersion', *, edited_by: 'Any') -> 'ProfileTextVersion' - Write a past version's text back as the current text (#3988).`
 - `set_physical_description(sheet: 'CharacterSheet', text: 'str', *, edited_by: 'Any | None' = None) -> 'ProfileTextVersion' - THE seam for setting a character's free-text physical description (#2632).`
@@ -4412,8 +4419,10 @@
 - `respond_to_invitation(invitation: world.events.models.EventInvitation, persona: world.scenes.models.Persona, *, response: str) -> world.events.models.EventInvitation - Record an invitee's RSVP (ACCEPTED / DECLINED) on a PERSONA invitation.`
 - `schedule_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from DRAFT to SCHEDULED.`
 - `set_room_description_overlay(event: world.events.models.Event, overlay_text: str) -> world.events.models.EventModification - Set or update the room description overlay for an event.`
+- `shift_upcoming_events(plan: world.game_clock.jump.JumpPlan, delta: datetime.timedelta) -> int - Plan moving every upcoming event's IC time by ``delta``; return how many (#5248).`
 - `start_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from SCHEDULED to ACTIVE and create a linked Scene.`
 - `tag_catered_provision(item_instance: 'ItemInstance', container_instance: 'ItemInstance', contributor: 'ObjectDB | None' = None) -> world.events.models.EventCatering | None - Tag a consumable set out in a catering vessel (#2869).`
+- `upcoming_events() -> django.db.models.query.QuerySet - Events that have not begun and whose real start is still ahead.`
 - `validate_location_gap(location_id: int, scheduled_real_time: datetime.datetime, exclude_event_id: int | None = None) -> bool - Check that no other event at this location is within LOCATION_GAP_HOURS.`
 
 
@@ -4687,8 +4696,9 @@
 - `moon_phase_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.MoonPhase - Derive the lunar phase from a concrete IC datetime (8 centered bins).`
 - `pause_clock(*, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock - Pause the game clock, freezing IC time at its current value.`
 - `phase_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.TimePhase - Derive the time-of-day phase from a concrete IC datetime.`
+- `preview_clock_jump(new_ic_time: datetime.datetime) -> world.game_clock.types.ClockJumpPreview - What ``set_clock(new_ic_time=...)`` would do, without writing anything (#5248).`
 - `season_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.Season - Derive the IC season from a concrete IC datetime.`
-- `set_clock(*, new_ic_time: datetime.datetime, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock - Set the game clock IC time, creating it if it doesn't exist.`
+- `set_clock(*, new_ic_time: datetime.datetime, changed_by: evennia.accounts.models.AccountDB, age_handling: world.game_clock.constants.AgeHandling, reason: str = '') -> world.game_clock.models.GameClock - Set the game clock IC time, creating it if it doesn't exist.`
 - `set_time_ratio(*, ratio: float, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock - Change the time ratio, re-anchoring IC time to preserve continuity.`
 - `unpause_clock(*, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock - Unpause the game clock, resuming IC time from where it was paused.`
 
@@ -12402,6 +12412,7 @@
 ### Miracle
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
+  - min_outcome_tier -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
   - condition_applications <- worship.MiracleAppliedCondition
   - damage_profiles <- worship.MiracleDamageProfile
@@ -12423,6 +12434,7 @@
   - being -> worship.WorshippedBeing [FK]
   - target_character -> character_sheets.CharacterSheet [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
   - answered_prayer <- worship.Prayer
 
@@ -12451,6 +12463,7 @@
   - resonance_grant -> magic.ResonanceGrant [OneToOne] (nullable)
   - offering -> ceremonies.CeremonyOffering [OneToOne] (nullable)
   - rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
 
 ### PledgeDetails
 **Foreign Keys:**
@@ -12575,6 +12588,7 @@
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
   - codex_entry -> codex.CodexEntry [FK] (nullable)
   - invocation_check_type -> checks.CheckType [FK] (nullable)
+  - intervention_pool -> actions.ConsequencePool [FK] (nullable)
   - tarot_cards -> tarot.TarotCard [M2M]
   - ultimate_techniques -> magic.Technique [M2M]
 **Pointed to by:**
@@ -12613,11 +12627,10 @@
 
 ### Service Functions
 - `active_patronage_for(sheet: 'CharacterSheet') -> list[world.worship.models.DevotionStanding] - Return all active patronages for a character, ordered by favor descending.`
-- `best_patronage_favor(sheet: 'CharacterSheet') -> int - Return the favor of the highest-favor Chosen patronage, or 0.`
+- `broadcast_prayer_line(character, text: str, scene=None) -> None - Post a prayer's room line as an EMIT to the scene (#4349): an ally praying for a fallen`
 - `bump_devotion(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, amount: int, *, source: 'FavorSource | None' = None) -> world.worship.types.DevotionBump - Upsert the (sheet, being) standing and run the God's Favorite check.`
 - `convert_public_worship(character_sheet: 'CharacterSheet', new_being: world.worship.models.WorshippedBeing, *, is_sincere: bool = True) -> world.worship.models.WorshipDeclaration - Repoint a character's PUBLIC worship declaration (#2361).`
 - `establish_patronage(sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, valence: world.worship.models.PatronageValence) -> world.worship.models.DevotionStanding - Get-or-create a DevotionStanding and mark it as a patronage.`
-- `fire_divine_intervention(character_sheet: 'CharacterSheet', *, trigger: str, trigger_event: str, scene=None, being: world.worship.models.WorshippedBeing | None = None) -> 'MiraclePerformance | None' - The divine-intervention check: the highest-priority qualifying miracle fires.`
 - `get_chosen_favor_config() -> world.worship.models.ChosenFavorConfig - Lazy-create the ChosenFavorConfig singleton (pk=1).`
 - `get_divine_intervention_config() -> 'DivineInterventionConfig' - Lazy-create the singleton (pk=1) divine intervention config (#2360).`
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
@@ -12627,9 +12640,10 @@
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
 - `intervention_cooldown_active(character) -> bool - Whether the divine intervention cooldown condition is on ``character``.`
 - `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
-- `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
+- `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: divine intercession, a being stepping in for a fallen character (#4349).`
 - `miracle_ineligibility(character_sheet: 'CharacterSheet', miracle: 'Miracle', *, favor: int | None = None, on_cooldown: bool | None = None, cfg: 'DivineInterventionConfig | None' = None) -> str - Why ``miracle`` cannot be performed for ``character_sheet`` now, or "" when it can.`
-- `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None, trigger_event: str = 'character_incapacitated') -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
+- `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None, trigger_event: str = 'character_incapacitated', outcome_tier: 'CheckOutcome | None' = None, context_text: str = '') -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`
 - `remove_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Remove the divine intervention trigger when favor drops below threshold.`
+- `route_intervention_text(character_sheet: 'CharacterSheet', text: str, scene=None, *, context_text: str = '') -> None - Route a lesser answer's or backfire's authored text the way a miracle's is: to the scene`
 - `spend_worship_pool(being: world.worship.models.WorshippedBeing, amount: int, *, reason: str = '') -> bool - Deduct ``amount`` from ``being.resonance_pool`` (the spend counterpart to ``grant_worship``).`

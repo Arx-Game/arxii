@@ -263,6 +263,81 @@ class RequiredContentSnapshot:
     present_tuning: list[DependencyRow]
 
 
+#: What a missing row of each ``FavorAwardKind`` means in play: (label, consumer, consequence).
+#: One entry per kind; a test fails when a kind is added without one.
+_FAVOR_AWARD_MEANING: dict[str, tuple[str, str, str]] = {
+    "invocation": (
+        "invocation bonuses",
+        "world/worship/invocation_services.py invocation_bonus_for()",
+        "An invocation that succeeds adds no bonus to the check it was made for.",
+    ),
+    "closing": (
+        "closing awards",
+        "world/worship/pledge_services.py resolve_pledge_project()",
+        "A pledge closed by its closing rite, or one that lapses at half its target "
+        "or more, pays no closing award.",
+    ),
+    "sacrifice": (
+        "sacrifice awards",
+        "world/ceremonies/services.py sacrifice_items()",
+        "A sacrifice whose check lands on that tier earns no favor.",
+    ),
+    "officiant": (
+        "officiant awards",
+        "world/ceremonies/services.py _pay_officiant_favor()",
+        "An officiant whose Rites result has no row earns no favor with the being, "
+        "however well the ceremony went.",
+    ),
+    "chosen_anima": (
+        "Chosen anima",
+        "world/magic/services/anima.py apply_anima_ritual_outcome()",
+        "A Chosen's patron adds no anima to an anima ritual that lands on that tier.",
+    ),
+    "intervention_spend": (
+        "intervention spend",
+        "world/worship/intervention_services.py _charge()",
+        "A rescue or bigger miracle costs no favor: the rescue is free.",
+    ),
+    "intervention_debt": (
+        "intervention debt",
+        "world/worship/intervention_services.py _charge()",
+        "A weaker answer leaves no favor owed, so the being never ignores the character "
+        "afterward: the answer is debt-free.",
+    ),
+    "intervention_wait": (
+        "intervention wait",
+        "world/worship/intervention_services.py _charge()",
+        "A result with no wait row uses the Divine Intervention Config cooldown hours "
+        "instead of its own minimum wait.",
+    ),
+}
+
+
+def _favor_award_dependencies() -> list[ContentDependency]:
+    """One tuning probe per ``FavorAwardKind``, each naming what a missing row means."""
+    from world.worship.constants import FavorAwardKind  # noqa: PLC0415
+
+    return [
+        ContentDependency(
+            key=f"favor-{kind.value.replace('_', '-')}-awards",
+            label=f"Favor outcome awards: {_FAVOR_AWARD_MEANING[kind.value][0]}",
+            tier=DependencyTier.TUNING,
+            consumer=_FAVOR_AWARD_MEANING[kind.value][1],
+            consequence=_FAVOR_AWARD_MEANING[kind.value][2],
+            probe=FilteredRowProbe(
+                label="FavorOutcomeAward",
+                filters=(("kind", kind.value),),
+                absent_detail=(
+                    f"No {_FAVOR_AWARD_MEANING[kind.value][0]} row is authored for any "
+                    "outcome tier."
+                ),
+            ),
+            admin_model="DevotionConfig",
+        )
+        for kind in FavorAwardKind
+    ]
+
+
 def build_registry(dependencies: Iterable[ContentDependency]) -> tuple[ContentDependency, ...]:
     """Freeze `dependencies` into a tuple, rejecting a duplicate `key`.
 
@@ -2807,24 +2882,71 @@ def _realms_without_nobiliary_particles() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
-def _probe_feature_distinctions() -> ProbeResult:
-    """The four per-feature Appearance rows exist and are active (#3739, #4104).
+def _probe_enemy_reasons() -> ProbeResult:
+    """Reasons exist for the enemy a card starts a character with (#3709, #5255).
 
-    Consumer: the Appearance stage's distinctive-feature path. Without the opener
-    nothing can be made distinctive; without an axis row the Alluring / Menacing /
-    Majestic purchases on a feature do not exist. The seed only invents these under
-    SEED_SAMPLE_CONTENT, so a production database has to author them.
+    Consumer: the enemy section of Final Touches, which shows only to a draft holding a
+    card that asks for an enemy (``FinalTouchesPrompt.ENEMY``). While no active card asks,
+    nobody sees the section and an empty reason list is no gap. Once a card does, the
+    section's "Why they want it" list is empty without an active ``EnemyReason``, and the
+    cards a reason opens can never be offered.
     """
+    from world.character_creation.constants import FinalTouchesPrompt  # noqa: PLC0415
+    from world.character_creation.models import EnemyReason  # noqa: PLC0415
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+
+    asking = list(
+        Distinction.objects.filter(is_active=True, final_touches_prompt=FinalTouchesPrompt.ENEMY)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not asking:
+        return ProbeResult(present=True, detail="No card starts a character with an enemy.")
+    if EnemyReason.objects.filter(is_active=True).exists():
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        missing=("EnemyReason",),
+        detail="Asked by: " + ", ".join(asking),
+    )
+
+
+def _probe_feature_distinctions() -> ProbeResult:
+    """The three feature quality rows exist and are active (#3739, #4104, #5241).
+
+    Consumer: the Appearance stage's feature qualities. Without a row, that quality
+    (Alluring, Menacing or Majestic) cannot be put on a feature; with none of the
+    three the stage shows no qualities at all and nothing can be made distinctive.
+    The seed only invents these under SEED_SAMPLE_CONTENT, so a production database
+    has to author them.
+    """
+    from world.character_creation.constants import OfferChapter  # noqa: PLC0415
     from world.distinctions.models import Distinction  # noqa: PLC0415
     from world.seeds.distinctive_features import FEATURE_ROW_NAMES  # noqa: PLC0415
 
-    active = set(
-        Distinction.objects.filter(name__in=FEATURE_ROW_NAMES, is_active=True).values_list(
-            "name", flat=True
+    # A quality shows on the page only when all of this holds, so the probe asks for
+    # all of it (#5241): the row is active and taken per feature, and it has an active
+    # Appearance offer on the feature rows. Names are matched without regard to case,
+    # since staff capitalise authored names as they see fit.
+    showing = {
+        name.lower()
+        for name in Distinction.objects.filter(
+            is_active=True,
+            taken_per_feature=True,
+            offers__is_active=True,
+            offers__chapter=OfferChapter.APPEARANCE,
+            offers__feature_rows=True,
+        ).values_list("name", flat=True)
+    }
+    missing = tuple(name for name in FEATURE_ROW_NAMES if name.lower() not in showing)
+    detail = (
+        ""
+        if not missing
+        else (
+            f"No active, per-feature distinction with an active Appearance offer on the "
+            f"feature rows is named: {', '.join(missing)}."
         )
     )
-    missing = tuple(name for name in FEATURE_ROW_NAMES if name not in active)
-    detail = "" if not missing else f"Missing or inactive feature row(s): {', '.join(missing)}."
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
@@ -3212,7 +3334,9 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consumer="world/worship/invocation_services.py invocation_refusal()",
             consequence=(
                 "No one can call on a being's favor unless that being has its own "
-                "invocation check type: every Call on favor is refused as not set up."
+                "invocation check type: every Call on favor is refused as not set up, and "
+                "divine intervention (a prayer, a prayer for another, a being stepping in) "
+                "stops without it too."
             ),
             probe=FilteredRowProbe(
                 label="DevotionConfig",
@@ -3220,35 +3344,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 absent_detail="Devotion config has no default invocation check type.",
             ),
         ),
-        ContentDependency(
-            key="favor-invocation-awards",
-            label="Favor outcome awards: invocation bonuses",
-            tier=DependencyTier.TUNING,
-            consumer="world/worship/invocation_services.py invocation_bonus_for()",
-            consequence="An invocation that succeeds adds no bonus to the check it was made for.",
-            probe=FilteredRowProbe(
-                label="FavorOutcomeAward",
-                filters=(("kind", "invocation"),),
-                absent_detail="No invocation bonus is authored for any outcome tier.",
-            ),
-            admin_model="DevotionConfig",
-        ),
-        ContentDependency(
-            key="favor-closing-awards",
-            label="Favor outcome awards: closing awards",
-            tier=DependencyTier.TUNING,
-            consumer="world/worship/pledge_services.py resolve_pledge_project()",
-            consequence=(
-                "A pledge closed by its closing rite, or one that lapses at half its target "
-                "or more, pays no closing award."
-            ),
-            probe=FilteredRowProbe(
-                label="FavorOutcomeAward",
-                filters=(("kind", "closing"),),
-                absent_detail="No closing award is authored for any outcome tier.",
-            ),
-            admin_model="DevotionConfig",
-        ),
+        *_favor_award_dependencies(),
         ContentDependency(
             key="savaged-condition",
             label="Savaged condition template",
@@ -4917,6 +5013,24 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="NobiliaryParticle",
         ),
         ContentDependency(
+            key="character_creation.identity_cards",
+            label="Cards offered on the Identity stage",
+            tier=DependencyTier.REQUIRED,
+            consumer="IdentityStage's Personality block (#5255): the Identity chapter's offers",
+            consequence=(
+                "The Identity stage shows no Personality block, so the cards meant to be "
+                "picked there cannot be. Select the cards on the Distinction list and run "
+                '"Offer on the Identity stage".'
+            ),
+            probe=FilteredRowProbe(
+                label="DistinctionOffer",
+                # The same three things the page asks of a line it lists.
+                filters=(("chapter", "identity"), ("is_active", True), ("arrives_as", "choice")),
+                absent_detail="No active offer line is on the Identity chapter.",
+            ),
+            admin_model="Distinction",
+        ),
+        ContentDependency(
             key="character_creation.appearance_sections",
             label="Appearance section headings",
             tier=DependencyTier.REQUIRED,
@@ -4932,11 +5046,11 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="distinctions.feature_rows",
             label="Per-feature Appearance distinctions",
             tier=DependencyTier.REQUIRED,
-            consumer="AppearanceStage distinctive features (#3739, #3756)",
+            consumer="AppearanceStage feature qualities (#3739, #3756, #5241)",
             consequence=(
-                "Nothing can be made distinctive and Alluring, Menacing and Majestic cannot "
-                "be bought on a feature; the seed only invents these rows under "
-                "SEED_SAMPLE_CONTENT."
+                "A missing quality (Alluring, Menacing or Majestic) cannot be put on a "
+                "feature, and with none of the three nothing can be made distinctive; the "
+                "seed only invents these rows under SEED_SAMPLE_CONTENT."
             ),
             probe=CustomProbe(fn=_probe_feature_distinctions),
             admin_model="Distinction",
@@ -4945,12 +5059,15 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="character_sheets.enemy_reasons",
             label="Enemy reasons",
             tier=DependencyTier.REQUIRED,
-            consumer="Final Touches enemy picker (#3621, #3709)",
-            consequence=(
-                "The enemy picker offers no reason, so no enemy can be priced and the "
-                "Actor's Sheet's enemy line is unreachable."
+            consumer=(
+                "Final Touches enemy section, shown to a draft holding a card that starts "
+                "the character with an enemy (#3621, #3709, #5255)"
             ),
-            probe=AnyRowProbe(label="EnemyReason"),
+            consequence=(
+                "A card asks for an enemy and the section's reason list is empty, so no "
+                "reason can be picked and no card a reason opens is ever offered."
+            ),
+            probe=CustomProbe(fn=_probe_enemy_reasons),
             admin_model="EnemyReason",
         ),
         ContentDependency(

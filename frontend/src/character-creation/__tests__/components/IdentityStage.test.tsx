@@ -2,13 +2,14 @@
  * IdentityStage Component Tests
  *
  * Tests for the name line and the concept and quote fields. The Background is Final
- * Touches' (#5178): this stage neither shows nor saves it.
+ * Touches' (#5178): this stage neither shows nor saves it. The Personality block
+ * (#5255) is this stage's own offered cards.
  */
 
-import { act, screen } from '@testing-library/react';
+import { act, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import { updateDraft } from '../../api';
+import { getDraftOffers, updateDraft } from '../../api';
 import { IdentityStage } from '../../components/IdentityStage';
 import {
   mockCGExplanations,
@@ -22,13 +23,52 @@ import {
   seedQueryData,
 } from '../testUtils';
 import { characterCreationKeys } from '../../queries';
+import type { VisibleOffer } from '../../types';
+import { unreachableClasses } from './offers/classGuard';
 
 // Mock the API module
 vi.mock('../../api', () => ({
   updateDraft: vi.fn(),
   getCGExplanations: vi.fn(),
   getWorshippedBeings: vi.fn().mockResolvedValue([]),
+  getDraftOffers: vi.fn().mockResolvedValue({ offers: [], terms: [] }),
 }));
+vi.mock('@/hooks/useDistinctions', () => ({
+  useDraftDistinctions: () => ({ data: [] }),
+  useSyncDistinctions: () => ({ mutate: syncMutate, pendingEntries: null }),
+  usePendingSync: () => null,
+}));
+
+const syncMutate = vi.fn();
+
+/** A card placed on the Identity stage (#5255). */
+function identityCard(id: number, name: string, extra: Partial<VisibleOffer> = {}): VisibleOffer {
+  return {
+    offer_id: id,
+    distinction_id: id,
+    name,
+    distinction_name: name,
+    distinction_description: `${name} in a sentence.`,
+    player_line: '',
+    chapter: 'identity',
+    arrives_as: 'choice',
+    opener_label: 'Identity',
+    cost_per_rank: 5,
+    max_rank: 1,
+    is_locked: false,
+    lock_reason: '',
+    opener_key: '',
+    first_look: false,
+    held: false,
+    effect_line: '',
+    taken_per_feature: false,
+    cg_max_rank: 0,
+    group: '',
+    asks_figure_name: false,
+    effects: [],
+    ...extra,
+  };
+}
 
 describe('IdentityStage', () => {
   describe('Character Name Section', () => {
@@ -178,6 +218,106 @@ describe('IdentityStage', () => {
 
       expect(screen.getByText('Identity')).toBeInTheDocument();
       expect(screen.getByText(/define your character.*s name and story/i)).toBeInTheDocument();
+    });
+  });
+
+  describe('Personality cards (#5255)', () => {
+    beforeEach(() => {
+      syncMutate.mockClear();
+      vi.mocked(getDraftOffers).mockResolvedValue({ offers: [], terms: [] });
+    });
+
+    it('shows no Personality section when no card is placed on Identity', async () => {
+      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
+        queryClient: createTestQueryClient(),
+      });
+      await waitFor(() =>
+        expect(getDraftOffers).toHaveBeenCalledWith(mockCompleteDraft.id, 'identity')
+      );
+      expect(screen.queryByRole('heading', { name: 'Personality' })).toBeNull();
+    });
+
+    it('lists the cards between the quote and worship and takes one on a click', async () => {
+      const user = userEvent.setup();
+      vi.mocked(getDraftOffers).mockResolvedValue({
+        offers: [identityCard(1, 'Indolent'), identityCard(2, 'Tireless', { cost_per_rank: -5 })],
+        terms: [],
+      });
+      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
+        queryClient: createTestQueryClient(),
+      });
+
+      const heading = await screen.findByRole('heading', { name: 'Personality' });
+      const quote = screen.getByRole('heading', { name: 'Quote' });
+      const worship = screen.getByRole('heading', { name: 'Worship' });
+      expect(
+        quote.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+      expect(
+        heading.compareDocumentPosition(worship) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+
+      // The life page's cards: the name, the description under it, the price signed.
+      const indolent = screen.getByRole('button', { name: /Indolent/ });
+      expect(indolent).toHaveTextContent('Indolent in a sentence.');
+      expect(indolent).toHaveTextContent('\u22125');
+      expect(screen.getByRole('button', { name: /Tireless/ })).toHaveTextContent('+5');
+      // Two across in the reading column, like the Glimpse's cards.
+      expect(indolent.closest('ul')).toHaveClass('stances', 'grid', 'pair');
+
+      await user.click(indolent);
+      expect(syncMutate).toHaveBeenCalledTimes(1);
+      expect(syncMutate.mock.calls[0][0]).toEqual([
+        expect.objectContaining({ id: 1, offer_id: 1, rank: 1 }),
+      ]);
+    });
+
+    it('shows four cards at rest and the rest, still as cards, under See more', async () => {
+      const names = ['Daring', 'Efficient', 'Hedonistic', 'Indolent', 'Proud', 'Tireless'];
+      vi.mocked(getDraftOffers).mockResolvedValue({
+        offers: names.map((name, index) => identityCard(index + 1, name)),
+        terms: [],
+      });
+      const { container } = renderWithCharacterCreationProviders(
+        <div className="interview">
+          <IdentityStage draft={mockCompleteDraft} />
+        </div>,
+        { queryClient: createTestQueryClient() }
+      );
+
+      await screen.findByRole('heading', { name: 'Personality' });
+      const fold = screen.getByText('See 2 more').closest('details');
+      expect(fold).not.toBeNull();
+      const folded = fold!.querySelector('ul');
+      expect(folded).toHaveClass('stances', 'grid', 'pair');
+      expect(folded!.querySelectorAll('li')).toHaveLength(2);
+      // Two full rows at rest: four cards, not the three a one-column block shows.
+      expect(container.querySelectorAll('.offer-group ul.stances > li')).toHaveLength(4);
+      // Every class the block emits has a rule in cg.css that reaches it (#3667 shape).
+      const styledElsewhere = new Set(['leaf-body', 'note-group']);
+      expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
+    });
+
+    it('shows every card under its heading when staff grouped the lines', async () => {
+      vi.mocked(getDraftOffers).mockResolvedValue({
+        offers: [
+          ...['Daring', 'Proud', 'Indolent'].map((name, index) =>
+            identityCard(index + 1, name, { group: 'Temperament' })
+          ),
+          ...['Tireless', 'Efficient', 'Hedonistic'].map((name, index) =>
+            identityCard(index + 10, name, { group: 'Habits' })
+          ),
+        ],
+        terms: [],
+      });
+      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
+        queryClient: createTestQueryClient(),
+      });
+
+      await screen.findByRole('heading', { name: 'Personality' });
+      expect(screen.getByText('Temperament (3)')).toBeInTheDocument();
+      expect(screen.getByText('Habits (3)')).toBeInTheDocument();
+      expect(screen.queryByText(/See \d+ more/)).toBeNull();
     });
   });
 

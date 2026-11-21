@@ -74,11 +74,11 @@ kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave 
   because the roster payload's `session_count`/`room_name` is what every other tab's
   chip and Hall card read, and the server unpuppets a beat after the browser's close
   event. This tab's own chip reads its socket first, so the gap is never visible here.
-- **`handleCommandPayload.ts`**: The `commands` frame. Its args are the web-form
-  descriptors (`Session.commands`); its kwargs carry `names` (#4346), every name the
-  character can type a command by, prefix-free and lowercased (`Session.commandNames`,
-  read by the composer's `readComposerLine`). A frame without the list (the unpuppet
-  frame) clears it.
+- **`handleCommandPayload.ts`**: The `commands` frame. Its kwargs carry `names` (#4346),
+  every name the character can type a command by, prefix-free and lowercased
+  (`Session.commandNames`, read by the composer's `readComposerLine`). A frame without the
+  list (the unpuppet frame) clears it. The frame's args are the server's per-command web-form
+  descriptors; the client ignores them and stores none (ADR-4034, #4034).
 - **`handleRoomStatePayload.ts`**: Updates room state from server messages
 - **`handleScenePayload.ts`**: Processes scene-related updates
 - **`handleChannelMessagePayload.ts`** (#3299): the `channel_message` frame. It writes the

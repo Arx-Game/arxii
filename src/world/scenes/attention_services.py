@@ -8,7 +8,8 @@ which would make a badge meaningless and disclose volume. The count is built
 from rows that are already this account's own instead, which is both correctly
 bounded and cheaper.
 
-Five queries, none per character and none per row:
+Five queries, none per character and none per row, after one read of the account's block
+list (a staff account skips it) so the badge never counts a face the feed hides:
 1. Directed unread across both directed-message through tables
    (`InteractionReceiver` and `InteractionTargetPersona`), combined with a
    single SQL UNION.
@@ -98,6 +99,7 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
     (`RosterEntryViewSet.mine`) already resolves them, so this stays the one
     place that counts and never the place that decides who you play.
     """
+    from world.scenes.block_services import hidden_persona_ids_for_viewer  # noqa: PLC0415
     from world.scenes.managers import room_heard_q  # noqa: PLC0415
     from world.scenes.models import (  # noqa: PLC0415
         Interaction,
@@ -112,17 +114,27 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
         return AccountAttention(by_character={}, as_of_id=0)
 
     floor = timezone.now() - timedelta(days=DIRECTED_UNREAD_DAYS)
+    # A badge counts only what the reader could open: the faces this account's blocks hide
+    # (#1278, staff bypass) are never counted, as in the feed.
+    hidden_persona_ids = (
+        set() if account.is_staff else hidden_persona_ids_for_viewer(viewer_account=account)
+    )
 
     # 1. Directed unread, across both directed-message through tables. Both
     # carry a denormalized `timestamp`, so the window applies without joining
     # the partitioned Interaction table. A single `.union()` executes as one
     # SQL query and dedupes any (character, interaction) pair the two tables
     # might agree on.
+    # A whisper reaches the ACCOUNT it was pinned to at creation (#1219), never whoever plays
+    # the character later: ``account=account`` keeps a new player from inheriting the badge
+    # (and so the existence) of the old player's whispers, exactly as ``visible_to`` keeps
+    # the text from them.
     receiver_rows = (
         InteractionReceiver.objects.filter(
-            persona__character_sheet_id__in=sheet_ids, timestamp__gte=floor
+            persona__character_sheet_id__in=sheet_ids, timestamp__gte=floor, account=account
         )
         .exclude(interaction__persona__character_sheet_id__in=sheet_ids)
+        .exclude(interaction__persona_id__in=hidden_persona_ids)
         .filter(
             ~Exists(
                 InteractionReadReceipt.objects.filter(
@@ -134,11 +146,18 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
         )
         .values_list("persona__character_sheet_id", "interaction_id")
     )
+    # A whisper writes a target row beside its receiver row, so the target side counts only
+    # room-heard poses: anything directed reaches this account through the pinned receiver
+    # rows above or not at all, and `room_heard_q()` stays the one definition of "heard".
+    room_heard_ids = Interaction.objects.filter(room_heard_q(), timestamp__gte=floor).values("pk")
     target_rows = (
         InteractionTargetPersona.objects.filter(
-            persona__character_sheet_id__in=sheet_ids, timestamp__gte=floor
+            persona__character_sheet_id__in=sheet_ids,
+            timestamp__gte=floor,
+            interaction_id__in=room_heard_ids,
         )
         .exclude(interaction__persona__character_sheet_id__in=sheet_ids)
+        .exclude(interaction__persona_id__in=hidden_persona_ids)
         .filter(
             ~Exists(
                 InteractionReadReceipt.objects.filter(
@@ -198,6 +217,7 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
         ambient_rows = (
             Interaction.objects.filter(room_heard_q(), scene_id__in=open_scene_ids)
             .exclude(persona__character_sheet_id__in=sheet_ids)
+            .exclude(persona_id__in=hidden_persona_ids)
             .filter(
                 ~Exists(
                     InteractionReadReceipt.objects.filter(

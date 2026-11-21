@@ -1,8 +1,13 @@
 # ADR-0287: One CG point makes a physical feature distinctive, and a distinction can be held per feature
 
-**Status:** Accepted (#3739, 2026-09-10). Extends ADR-0010 (FK direction) and the
-#2632 normalized-appearance decision; relates to #2886 (item accent axes) and #2985
-(markings).
+**Status:** Accepted (#3739, 2026-09-10); **superseded in part by ADR-5241**
+(#5241, 2026-11-21). The one-point "Make It Distinctive" pick and the two-a-tier
+price are gone: a feature takes a quality directly, a feature holding any tier is
+distinctive, and the first ten points of qualities are free. Everything else here
+still stands (a distinction held once per feature, +2 a tier, three tiers in
+character creation, the Unnatural umbrella, the Command check, visibility). Extends
+ADR-0010 (FK direction) and the #2632 normalized-appearance decision; relates to
+#2886 (item accent axes) and #2985 (markings).
 
 **Context.** "Flaming crimson hair the colour of the dawn" and "red hair" are both
 things players want to write, and the game needs both: the prose is what other

@@ -5972,6 +5972,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/clock/adjust-preview/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /adjust-preview/ — staff: what setting this date would do; writes nothing. */
+    get: operations['clock_adjust_preview_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/clock/convert/': {
     parameters: {
       query?: never;
@@ -5981,6 +5998,23 @@ export interface paths {
     };
     /** @description GET /convert/ — convert between IC and real dates. */
     get: operations['clock_convert_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clock/history/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff: the recorded changes to the clock, newest first (#5248). */
+    get: operations['clock_history_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -27836,6 +27870,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/owed-favor/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The beings a character owes favor to (#4349): the owner reads their own, staff anyone's. */
+    get: operations['worship_owed_favor_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/owed-favor/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The beings a character owes favor to (#4349): the owner reads their own, staff anyone's. */
+    get: operations['worship_owed_favor_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/pledge-cards/': {
     parameters: {
       query?: never;
@@ -28575,6 +28643,12 @@ export interface components {
       label: string;
       description: string;
     };
+    /**
+     * @description * `aged` - Characters age
+     *     * `kept` - Characters keep their ages
+     * @enum {string}
+     */
+    AgeHandlingEnum: 'aged' | 'kept';
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -31515,6 +31589,10 @@ export interface components {
       readonly cg_points_spent: number;
       /** @description Get remaining CG points. */
       readonly cg_points_remaining: number;
+      /** @description What the draft's feature qualities cost, before the free allowance (#5241). */
+      readonly feature_points_spent: number;
+      /** @description How many points of feature qualities cost no CG points (#5241). */
+      readonly feature_points_free: number;
       /** @description Get stat bonuses from all sources (heritage + distinctions). */
       readonly stat_bonuses: {
         [key: string]: number;
@@ -31527,6 +31605,12 @@ export interface components {
       readonly stage_errors: {
         [key: string]: string[];
       };
+      /** @description The family's name, the new family's, or the drawn card's surname; '' until one exists. */
+      readonly surname: string;
+      /** @description The stages this draft has been opened on; the stage list shows a to-do for these only. */
+      readonly visited_stages: number[];
+      /** @description The stages that ask nothing; the stage list reads "optional" for them. */
+      readonly optional_stages: number[];
       /** @description Get remaining stat points to allocate (0 = fully allocated). */
       readonly stats_points_remaining: number;
       /** @description Get total stat point budget (base + bonuses). */
@@ -31981,7 +32065,23 @@ export interface components {
       /** Format: date-time */
       ic_datetime: string;
       reason: string;
+      /**
+       * @description Whether characters age with the calendar or keep their ages (#5248). A change to an earlier date must keep them.
+       *
+       *     * `aged` - Characters age
+       *     * `kept` - Characters keep their ages
+       */
+      age_handling: components['schemas']['AgeHandlingEnum'];
     };
+    /**
+     * @description * `paused` - Paused
+     *     * `resumed` - Resumed
+     *     * `speed` - Speed changed
+     *     * `date_aged` - Date set, characters aged
+     *     * `date_kept` - Date set, characters kept their ages
+     * @enum {string}
+     */
+    ClockChangeEnum: 'paused' | 'resumed' | 'speed' | 'date_aged' | 'date_kept';
     /** @description Response serializer for date conversion results. */
     ClockConvertResponse: {
       /** Format: date-time */
@@ -31993,6 +32093,59 @@ export interface components {
     ClockDetail: {
       detail: string;
     };
+    /** @description One recorded change to the clock, for the staff page's Recent changes list. */
+    ClockHistory: {
+      readonly id: number;
+      /**
+       * Format: date-time
+       * @description When the change was made.
+       */
+      readonly changed_at: string;
+      /** @default  */
+      readonly changed_by_name: string;
+      /**
+       * @description The kind of change (#5248). The anchors and ratios alone cannot tell a pause from a change of date. Blank on rows written before the kind was recorded.
+       *
+       *     * `paused` - Paused
+       *     * `resumed` - Resumed
+       *     * `speed` - Speed changed
+       *     * `date_aged` - Date set, characters aged
+       *     * `date_kept` - Date set, characters kept their ages
+       */
+      readonly change: components['schemas']['ClockChangeEnum'];
+      /** Format: date-time */
+      readonly new_anchor_ic_time: string;
+      readonly new_date_display: string;
+      /** Format: double */
+      readonly old_time_ratio: number;
+      /** Format: double */
+      readonly new_time_ratio: number;
+      /** @description Years added to every character's birth year by this change, so their ages stayed as they were. Zero unless the date was set with ages kept. Subtract it to undo the change by hand. */
+      readonly birth_year_shift: number;
+      readonly reason: string;
+    };
+    /** @description What setting the clock to a date would do, before anything is written. */
+    ClockJumpPreview: {
+      /** Format: date-time */
+      current_ic_time: string;
+      /** @description The current IC date in full, for the sentence the dialog shows. */
+      current_date_display: string;
+      /** Format: date-time */
+      new_ic_time: string;
+      direction: components['schemas']['ClockJumpPreviewDirectionEnum'];
+      /** @description Calendar years between the dates: what birth years move by if ages are kept. */
+      year_shift: number;
+      characters_with_birth_year: number;
+      upcoming_events: number;
+      heritages_not_yet_appeared: string[];
+    };
+    /**
+     * @description * `forward` - Forward
+     *     * `back` - Back
+     *     * `none` - No change
+     * @enum {string}
+     */
+    ClockJumpPreviewDirectionEnum: 'forward' | 'back' | 'none';
     /** @description Request serializer for staff time-ratio change. */
     ClockRatioRequest: {
       /** Format: double */
@@ -32017,6 +32170,17 @@ export interface components {
       /** Format: double */
       light_level: number;
       paused: boolean;
+      /**
+       * Format: double
+       * @description IC seconds per real second.
+       */
+      time_ratio: number;
+      /** @description The twelve IC month names in order, for a date picker. */
+      month_names: string[];
+      /** @description The earliest year the clock may be set to. */
+      min_year: number;
+      /** @description The latest year the clock may be set to. */
+      max_year: number;
     };
     /**
      * @description Staff CRUD for clue-reveal-kind offer details (#3428).
@@ -35427,6 +35591,8 @@ export interface components {
       /** @description Display name for UI */
       display_name: string;
       sort_order?: number;
+      /** @description The colour shown for this option where a player picks it (#5241), as #rrggbb. Leave blank for an option that is not a colour, or has no single colour (Prismatic, Mismatched); it is then drawn as a striped swatch. */
+      color_hex?: string;
     };
     /**
      * @description * `color` - Color
@@ -35826,6 +35992,8 @@ export interface components {
       readonly room_text: string;
       /** @description Resolved authored private line for the character this concerns, e.g. the Crossing vision. Spoiler-private: shown only to the addressed GM. */
       readonly private_text: string;
+      /** @description What happened, for the addressed GM only: a miracle prompt's result tier, what was drawn and who prayed (#4349). Never narrated; the room and private lines above are what the GM may send. */
+      readonly context_text: string;
       /** @description True when the defaults came from the character's prepared text. */
       readonly prepared_for_character: boolean;
       /** Format: date-time */
@@ -36772,6 +36940,8 @@ export interface components {
       being_id: number;
       being_name: string;
       site: string;
+      ap_left: number;
+      ap_cap: number;
     };
     /**
      * @description * `short_term` - Short term
@@ -38918,8 +39088,10 @@ export interface components {
        *     * `near_death` - Character Near Death
        */
       readonly intervention_trigger: components['schemas']['InterventionTriggerEnum'];
-      /** @description Minimum DevotionStanding.favor required for this miracle to fire. */
+      /** @description Minimum favor with the being for this miracle to be a candidate. 0 means only the Divine Intervention Config's prayer favor gate applies. */
       readonly favor_threshold: number;
+      /** @default Success */
+      readonly min_outcome_tier: string;
       /** @description Narrative broadcast (EMIT) when this miracle fires. */
       readonly narrative_text: string;
       readonly is_active: boolean;
@@ -41864,6 +42036,17 @@ export interface components {
       wardrobe: number;
     };
     /**
+     * @description Favor a character owes a being after a weaker answer (#4349): while any is owed the
+     *     being ignores their calls for intervention.
+     */
+    OwedFavor: {
+      readonly id: number;
+      being_id: number;
+      being_name: string;
+      /** @description Favor owed to the being after a weaker answer to divine intervention (#4349). While any is owed the being ignores this character's intervention rolls; base favor the character earns pays it first, before the earning rate. */
+      readonly owed_favor: number;
+    };
+    /**
      * @description * `PERSONAL` - Personal (Persona-owned home)
      *     * `COVENANT` - Covenant (Organization-owned sacred ground)
      * @enum {string}
@@ -42547,6 +42730,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CheckType'][];
+    };
+    PaginatedClockHistoryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ClockHistory'][];
     };
     PaginatedClueRevealOfferDetailsList: {
       /** @example 123 */
@@ -44057,6 +44255,21 @@ export interface components {
       /** Format: uri */
       previous: string | null;
       results: components['schemas']['OutfitSlotRead'][];
+    };
+    PaginatedOwedFavorList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OwedFavor'][];
     };
     PaginatedPactCardList: {
       /** @example 123 */
@@ -49098,8 +49311,10 @@ export interface components {
       readonly being: number;
       readonly being_name: string;
       readonly text: string;
-      /** @description Favor paid by the weekly holy-site prayer; 0 for every other. */
+      /** @description Favor paid by a holy-site prayer; 0 for every other. */
       readonly devotion_granted: number;
+      /** @description Action points spent praying at a holy site of the being (#4349). The weekly limit is the sum of these for the character, being and game week. */
+      readonly ap_spent: number;
       readonly dire_straits: components['schemas']['DireStraitsEnum'];
       readonly answered: boolean;
       /** Format: date-time */
@@ -49395,6 +49610,7 @@ export interface components {
     };
     /**
      * @description * `crime` - Name the crime (Jailbird)
+     *     * `enemy` - Name the enemy (a card that starts with one)
      *     * `prestige_story` - What people say happened (a prestige grant)
      *     * `organization` - The organization that takes you in (an organization grant)
      *     * `path_aspect` - Your Path's stronger Aspect (a path aspect grant)
@@ -49405,6 +49621,7 @@ export interface components {
      */
     PromptEnum:
       | 'crime'
+      | 'enemy'
       | 'prestige_story'
       | 'organization'
       | 'path_aspect'
@@ -56004,8 +56221,6 @@ export interface components {
       held: boolean;
       effect_line: string;
       taken_per_feature: boolean;
-      opens_feature: boolean;
-      requires_feature_opened: boolean;
       cg_max_rank: number;
       group: string;
       asks_figure_name: boolean;
@@ -64227,6 +64442,27 @@ export interface operations {
       };
     };
   };
+  clock_adjust_preview_retrieve: {
+    parameters: {
+      query: {
+        ic_datetime: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClockJumpPreview'];
+        };
+      };
+    };
+  };
   clock_convert_retrieve: {
     parameters: {
       query?: {
@@ -64245,6 +64481,40 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ClockConvertResponse'];
+        };
+      };
+    };
+  };
+  clock_history_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description The kind of change (#5248). The anchors and ratios alone cannot tell a pause from a change of date. Blank on rows written before the kind was recorded.
+         *
+         *     * `paused` - Paused
+         *     * `resumed` - Resumed
+         *     * `speed` - Speed changed
+         *     * `date_aged` - Date set, characters aged
+         *     * `date_kept` - Date set, characters kept their ages
+         */
+        change?: 'date_aged' | 'date_kept' | 'paused' | 'resumed' | 'speed';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedClockHistoryList'];
         };
       };
     };
@@ -94802,6 +95072,51 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Miracle'];
+        };
+      };
+    };
+  };
+  worship_owed_favor_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOwedFavorList'];
+        };
+      };
+    };
+  };
+  worship_owed_favor_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OwedFavor'];
         };
       };
     };

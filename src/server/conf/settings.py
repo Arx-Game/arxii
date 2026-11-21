@@ -552,6 +552,11 @@ SPECTACULAR_SETTINGS = {
         "ChannelNotificationLevelEnum": (
             "world.channels.constants.ChannelNotificationLevel.choices"
         ),
+        # The clock history's `change` (#5248) shares its field name with the standoff
+        # profile change's `change`; both pinned so the standoff one keeps the name
+        # ChangeEnum instead of becoming StandoffProfileChangeChangeEnum.
+        "ClockChangeEnum": "world.game_clock.constants.ClockChange.choices",
+        "ChangeEnum": "world.standoffs.constants.ProfileChange.choices",
     },
 }
 

@@ -53,7 +53,7 @@ if TYPE_CHECKING:
         WorshippedBeing,
         WorshipRite,
     )
-    from world.worship.types import SacrificedItem, SacrificeOutcome
+    from world.worship.types import DevotionBump, SacrificedItem, SacrificeOutcome
 
 logger = logging.getLogger(__name__)
 
@@ -587,7 +587,17 @@ def _require_wedding_consent(ceremony: Ceremony) -> None:
         raise CeremonyError(msg)
 
 
-def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Ceremony:
+@dataclass(frozen=True)
+class CeremonyFinish:
+    """What finishing a ceremony did: the ceremony, and the favor its officiant earned with the
+    being (``DevotionBump``; None when their Rites result paid nothing), with any base favor that
+    paid owed favor first (#4349)."""
+
+    ceremony: Ceremony
+    officiant_favor: "DevotionBump | None" = None
+
+
+def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> CeremonyFinish:
     """Close the rite: quality roll, renown tallies, worship, funeral effects.
 
     ``sincere`` is the heart-vs-lip-service choice (#2361 Ratified amendment #2)
@@ -607,9 +617,6 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     from world.checks.services import perform_check_with_modifiers  # noqa: PLC0415
     from world.magic.constants import MagicActivity  # noqa: PLC0415
     from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
-    from world.worship.constants import PledgeCreditSource  # noqa: PLC0415
-    from world.worship.services import bump_devotion  # noqa: PLC0415
-    from world.worship.types import FavorSource  # noqa: PLC0415
 
     config = get_ceremony_config()
     officiant_sheet = ceremony.officiant.character_sheet
@@ -666,12 +673,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
                 officiant_sheet,
                 f"Officiated a {ceremony.ceremony_type.name.lower()} PLACEHOLDER",
             )
-    bump_devotion(
-        officiant_sheet,
-        ceremony.being,
-        config.devotion_officiant,
-        source=FavorSource(kind=PledgeCreditSource.CEREMONY),
-    )
+    officiant_bump = _pay_officiant_favor(officiant_sheet, ceremony.being, rites_outcome)
     _pay_rite_award(ceremony, officiant_sheet, rites_outcome, rite_award)
 
     _run_type_specific_finish(ceremony, honorees)
@@ -681,7 +683,36 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
     ceremony.finished_at = timezone.now()
     ceremony.save(update_fields=["quality_level", "status", "finished_at"])
     revoke_seance_manifestations(ceremony)
-    return ceremony
+    return CeremonyFinish(ceremony=ceremony, officiant_favor=officiant_bump)
+
+
+def _pay_officiant_favor(
+    officiant_sheet: "CharacterSheet", being, rites_outcome
+) -> "DevotionBump | None":
+    """The officiant's favor with the ceremony's being, by their Rites result (#4349).
+
+    The OFFICIANT ``FavorOutcomeAward`` row for ``rites_outcome`` is the base favor, scaled by
+    the officiant's earning rate in ``bump_devotion``. With no Rites roll (the check type is not
+    seeded) the Partial Success row is used; a missing row pays 0.
+    """
+    from world.worship.constants import FavorAwardKind, PledgeCreditSource  # noqa: PLC0415
+    from world.worship.invocation_services import (  # noqa: PLC0415
+        outcome_award,
+        partial_success_outcome,
+    )
+    from world.worship.services import bump_devotion  # noqa: PLC0415
+    from world.worship.types import FavorSource  # noqa: PLC0415
+
+    outcome = rites_outcome if rites_outcome is not None else partial_success_outcome()
+    amount = outcome_award(FavorAwardKind.OFFICIANT, outcome) or 0
+    if amount <= 0:
+        return None
+    return bump_devotion(
+        officiant_sheet,
+        being,
+        amount,
+        source=FavorSource(kind=PledgeCreditSource.CEREMONY, outcome_tier=outcome),
+    )
 
 
 def _resolve_rite_award(ceremony: Ceremony, rites_outcome):
@@ -1328,7 +1359,7 @@ def _pay_sacrifice(
     from world.worship.types import FavorSource, SacrificedItem  # noqa: PLC0415
 
     base = sacrifice_award(outcome) if counted else 0
-    credited, rate = 0, 100
+    credited, rate, owed_paid = 0, 100, 0
     if base > 0:
         bump = bump_devotion(
             sheet,
@@ -1337,10 +1368,13 @@ def _pay_sacrifice(
             source=FavorSource(kind=PledgeCreditSource.SACRIFICE, offering=offering),
         )
         credited, rate = bump.credited, bump.earning_rate_percent
+        owed_paid = bump.owed_paid
     return SacrificedItem(
         name=offering.item_name,
         credited=credited,
-        calculation=sacrifice_calculation(offering, base=base, rate=rate, credited=credited),
+        calculation=sacrifice_calculation(
+            offering, base=base - owed_paid, rate=rate, credited=credited, owed_paid=owed_paid
+        ),
     )
 
 

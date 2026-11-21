@@ -37,9 +37,9 @@ class InteractionVisibility(models.TextChoices):
     personas recorded as ``InteractionReceiver`` rows — the characters who actually
     perceived the event — while STILL admitting staff and the scene's GM, so a scene
     stays runnable. The GM exception is a scene-log read guarantee only
-    (``InteractionQuerySet.visible_to``'s ``gm_visible`` branch); a non-staff GM is
-    denied on REST object access (``CanViewInteraction``) and the reaction-witness gate
-    (``can_view_interaction``), both staff-only. ``VERY_PRIVATE`` is the stricter tier
+    (``InteractionQuerySet.visible_to``'s ``gm_visible`` branch), which the REST list,
+    search, context and detail all share; the reaction-witness gate
+    (``can_view_interaction``) still refuses a non-staff GM. ``VERY_PRIVATE`` is the stricter tier
     and admits no exception, staff included; the two are not interchangeable.
     """
 

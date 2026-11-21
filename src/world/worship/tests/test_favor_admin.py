@@ -72,11 +72,134 @@ class DevotionConfigAdminTests(TestCase):
             "Favor ease low threshold",
             "Invocations per week",
             "Earning rate",
-            "Favor outcome awards: one table, two kinds",
+            "Favor outcome awards: one table, eight kinds",
             "Resulting invocation difficulty",
             "Invocations last week",
         ):
             self.assertIn(text, body, text)
+
+    def test_divine_intervention_config_shows_odds_by_favor_band(self) -> None:
+        from world.traits.factories import CheckRankFactory, ResultChartFactory
+        from world.traits.models import ResultChart, ResultChartOutcome
+        from world.worship.services import get_divine_intervention_config
+
+        for rank, points in ((0, 0), (1, 25), (2, 50), (3, 75)):
+            CheckRankFactory(rank=rank, min_points=points, name=f"Rank {rank}")
+        # Reference roller 48 (rank 1). At the example settings the four example characters
+        # roll at 15 (niche: rank 0, gap +1), 45 (rank 1, gap 0) and 75 (rank 3, gap -2).
+        botch = CheckOutcomeFactory(name="Critical Failure", success_level=-2)
+        for gap, failure_to, with_botch in ((1, 20, False), (0, 40, False), (-2, 90, True)):
+            chart = ResultChartFactory(rank_difference=gap)
+            first = 1
+            if with_botch:
+                ResultChartOutcome.objects.create(
+                    chart=chart, min_roll=1, max_roll=5, outcome=botch
+                )
+                first = 6
+            ResultChartOutcome.objects.create(
+                chart=chart, min_roll=first, max_roll=failure_to, outcome=self.failure
+            )
+            ResultChartOutcome.objects.create(
+                chart=chart, min_roll=failure_to + 1, max_roll=100, outcome=self.success
+            )
+        ResultChart.clear_cache()
+        for kind, amount in (
+            (FavorAwardKind.INTERVENTION_SPEND, 10),
+            (FavorAwardKind.INTERVENTION_DEBT, 10),
+            (FavorAwardKind.INTERVENTION_WAIT_HOURS, 72),
+        ):
+            FavorOutcomeAwardFactory(
+                config=get_devotion_config(), kind=kind, outcome_tier=self.success, amount=amount
+            )
+        config = get_divine_intervention_config()
+
+        body = self.client.get(
+            reverse("admin:arxii_divineinterventionconfig_change", args=(config.pk,))
+        ).content.decode()
+
+        self.assertIn("Odds and cost at these settings", body)
+        self.assertIn("Divine intercession threshold", body)
+        self.assertIn("(Devotion config, 30)", body)
+        # Each row states the inputs behind its numbers.
+        self.assertIn(
+            "favor 65 (ease 30), favor invocation modifier +30, Trivial 15, botch immune", body
+        )
+        self.assertIn("favor 20 (ease 0), favor invocation modifier +0, Daunting 75", body)
+        # Faith niche: the chart's Failure 20 and Success 80, no backfire.
+        self.assertIn("<td>0%</td><td>20%</td><td>0%</td><td>80%</td><td>0%</td>", body)
+        # High favor, no niche: Failure 40, Success 60.
+        self.assertIn("<td>0%</td><td>40%</td><td>0%</td><td>60%</td><td>0%</td>", body)
+        # Outsider: a 5% backfire band, Failure 85, Success 10.
+        self.assertIn("<td>5%</td><td>85%</td><td>0%</td><td>10%</td><td>0%</td>", body)
+        # The cost of a Success: 10 spent, 10 owed cut by 25% and 50% (rounded up), the 72 hour
+        # wait cut the same way.
+        self.assertIn("<td>Success</td><td>10</td><td>10</td><td>8</td><td>5</td>", body)
+        self.assertIn("<td>72</td><td>54</td><td>36</td>", body)
+
+    def test_staff_pages_carry_the_demo_labels_and_notes(self) -> None:
+        from world.ceremonies.models import CeremonyConfig
+        from world.worship.factories import MiracleFactory, WorshippedBeingFactory
+        from world.worship.services import get_divine_intervention_config
+
+        config = get_devotion_config()
+        body = self.client.get(
+            reverse("admin:arxii_devotionconfig_change", args=(config.pk,))
+        ).content.decode()
+        self.assertIn("What the favor outcome award rows pay", body)
+        self.assertIn("a Critical Success ritual already refills anima", body)
+
+        ceremony = CeremonyConfig.objects.create()
+        miracle_above = MiracleFactory(favor_threshold=50, being=WorshippedBeingFactory())
+        gate_body = self.client.get(
+            reverse(
+                "admin:arxii_divineinterventionconfig_change",
+                args=(get_divine_intervention_config().pk,),
+            )
+        ).content.decode()
+        self.assertIn(f"<td>{miracle_above.being.name}</td><td>50</td>", gate_body)
+        body = self.client.get(
+            reverse("admin:arxii_ceremonyconfig_change", args=(ceremony.pk,))
+        ).content.decode()
+        self.assertIn("Devotion officiant (removed)", body)
+        self.assertIn("See the Officiant award rows", body)
+        self.assertIn("To be replaced by the symbolic-item weighting", body)
+
+        being = WorshippedBeingFactory()
+        miracle = MiracleFactory(being=being)
+        body = self.client.get(
+            reverse("admin:arxii_worshippedbeing_change", args=(being.pk,))
+        ).content.decode()
+        self.assertIn("Divine intervention", body)
+        self.assertIn("Intervention answers", body)
+        self.assertIn(miracle.name, body)
+        body = self.client.get(
+            reverse("admin:arxii_miracle_change", args=(miracle.pk,))
+        ).content.decode()
+        self.assertIn("Worship pool cost", body)
+
+    def test_the_being_page_lists_each_pool_rows_effects_with_their_conditions(self) -> None:
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+        from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.worship.factories import WorshippedBeingFactory
+
+        pool = ConsequencePoolFactory(name="Pool of answers")
+        for label, condition in (("A breath", "Respite"), ("A price", "Brand of Silence")):
+            row = ConsequenceFactory(outcome_tier=self.failure, label=label)
+            ConsequenceEffectFactory(
+                consequence=row,
+                condition_template=ConditionTemplateFactory(name=condition),
+                target="self",
+            )
+            ConsequencePoolEntryFactory(pool=pool, consequence=row)
+        being = WorshippedBeingFactory(intervention_pool=pool)
+
+        body = self.client.get(
+            reverse("admin:arxii_worshippedbeing_change", args=(being.pk,))
+        ).content.decode()
+
+        self.assertIn(": Respite", body)
+        self.assertIn(": Brand of Silence", body)
 
     def test_odds_table_is_read_from_the_result_charts(self) -> None:
         from world.traits.factories import CheckRankFactory, ResultChartFactory
@@ -156,6 +279,8 @@ class DevotionConfigAdminTests(TestCase):
                 "rite_items_counted": "3",
                 "requested_item_max_points": "4",
                 "requested_item_max_value": "5",
+                "prayer_ap_per_favor": "5",
+                "prayer_weekly_ap_cap": "30",
                 "outcome_awards-TOTAL_FORMS": "1",
                 "outcome_awards-INITIAL_FORMS": "0",
                 "outcome_awards-MIN_NUM_FORMS": "0",
@@ -262,7 +387,6 @@ class ChosenAndBeingAdminTests(TestCase):
             reverse("admin:arxii_chosenfavorconfig_change", args=(config.pk,)),
             {
                 "anima_recovery_threshold": config.anima_recovery_threshold,
-                "anima_recovery_bonus": config.anima_recovery_bonus,
                 "ceremony_edge_threshold": config.ceremony_edge_threshold,
                 "ceremony_edge_bonus": config.ceremony_edge_bonus,
                 "chosen_distinction": distinction.pk,
@@ -302,7 +426,6 @@ class ChosenAndBeingAdminTests(TestCase):
             reverse("admin:arxii_chosenfavorconfig_change", args=(config.pk,)),
             {
                 "anima_recovery_threshold": config.anima_recovery_threshold,
-                "anima_recovery_bonus": config.anima_recovery_bonus,
                 "ceremony_edge_threshold": config.ceremony_edge_threshold,
                 "ceremony_edge_bonus": config.ceremony_edge_bonus,
                 "chosen_distinction": distinction.pk,

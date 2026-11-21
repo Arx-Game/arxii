@@ -53,10 +53,10 @@ function PrayerBadge({ prayer }: { prayer: StaffPrayer }) {
       </Badge>
     );
   }
-  if (prayer.devotion_granted) {
+  if (prayer.devotion_granted || prayer.ap_spent) {
     return (
       <Badge variant="secondary" data-testid="prayer-devotion">
-        Act of devotion
+        Act of devotion{prayer.ap_spent ? ` · ${prayer.ap_spent} AP` : ''}
       </Badge>
     );
   }

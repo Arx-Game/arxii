@@ -16,6 +16,7 @@ from world.roster.models import (
     ValidationMessages,
 )
 from world.roster.models.choices import ActivityRequirement
+from world.roster.services.activity import ReservedForCreatorError, is_reserved_against
 from world.roster.services.slots import SlotsFullError, assert_slot_available
 
 
@@ -100,6 +101,16 @@ class RosterApplicationCreateSerializer(serializers.Serializer):
                 code = ValidationErrorCodes.ROSTER_PERMISSION_DENIED
                 message = ValidationMessages.ROSTER_PERMISSION_DENIED
             raise serializers.ValidationError({"code": code, "message": message})
+
+        # 3b. An original character may only be claimed by the account that created it
+        # (#3055): the beta cutover leaves OCs on the Available shelf progress-wiped.
+        if is_reserved_against(character.sheet_data.roster_entry, player_data.account_id):
+            raise serializers.ValidationError(
+                {
+                    "code": ValidationErrorCodes.RESERVED_FOR_CREATOR,
+                    "message": ValidationMessages.RESERVED_FOR_CREATOR,
+                },
+            )
 
         # 4. Player cannot have duplicate pending applications
         existing_app = RosterApplication.objects.filter(
@@ -285,7 +296,7 @@ class RosterApplicationApprovalSerializer(serializers.Serializer):
         if action == ApplicationAction.APPROVE:
             try:
                 result = application.approve(request.user.player_data)
-            except SlotsFullError as exc:
+            except (SlotsFullError, ReservedForCreatorError) as exc:
                 raise serializers.ValidationError(
                     {"code": exc.code, "message": exc.user_message},
                 ) from exc

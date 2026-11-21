@@ -46,7 +46,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   (#4520): Worn piece, Resonance fed; and the slice 4 terms (#4530): Requested item, Relic
   ease; and the being pact terms (#4341, ADR-4341; code in `world/pacts`): Pact (being pact,
   follower pact), Pact offer, Pact commitment, Holder, Pact period, Patronage, Chosen, Patron
-  target (_Avoid_: bond, compact, contract, terms, obligation, vow, oath, tithe, debt, deal)
+  target (_Avoid_: bond, compact, contract, terms, obligation, vow, oath, tithe, debt, deal); and the #4349 intervention terms (ADR-4349): Divine Intervention (one graded roll),
+  Backfire, Lesser answer, Intervention pool, Owed favor, Minimum wait
 - [ceremonies](src/world/ceremonies/AGENT_GLOSSARY.md)
 - [estates](src/world/estates/AGENT_GLOSSARY.md)
 - [checks](src/world/checks/AGENT_GLOSSARY.md) - also holds Favor as a modifier source (#4333); band position, the slide and own standing (#4601; the hopeless pin was removed by #4723); and modifier level, size, value table, level baseline, taper and lane (#4594), and size fraction, level width, level tier and tier bonus (#5093), with worn items' level from quality (#4628) and distinctions' from their holder (#4638); the stat lane (#4726); niche and botch immunity (#4386)
@@ -96,6 +97,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [beta_reset](src/world/beta_reset/AGENT_GLOSSARY.md)
 - [achievements](src/world/achievements/AGENT_GLOSSARY.md)
 - [goals](src/world/goals/AGENT_GLOSSARY.md)
+- [game_clock](src/world/game_clock/AGENT_GLOSSARY.md) - Clock jump, Age handling, Birth-year shift (#5248, ADR-5248)
 - [items](src/world/items/AGENT_GLOSSARY.md) - also holds Keepsake and Trophy (#4530), and natural weapon (#4898), and also protects against and can be thrown (#5026), and item template family (#5041), and Primum item and Carried substance (#5125)
 - [traits](src/world/traits/AGENT_GLOSSARY.md)
 - [areas](src/world/areas/AGENT_GLOSSARY.md) - also holds Rung (#3983), the canonical
@@ -108,7 +110,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [forms](src/world/forms/AGENT_GLOSSARY.md) - also holds Audere alternate self (#4731)
 - [ships](src/world/ships/AGENT_GLOSSARY.md)
 - [assets](src/world/assets/AGENT_GLOSSARY.md)
-- [distinctions](src/world/distinctions/AGENT_GLOSSARY.md) - also holds rank size, the size a sized effect steps to at a rank (#4660)
+- [distinctions](src/world/distinctions/AGENT_GLOSSARY.md) - also holds rank size, the size a sized effect steps to at a rank (#4660); and feature, distinctive, feature quality (formerly presence axis) and feature points (#3739, #5241)
 - [narrative](src/world/narrative/AGENT_GLOSSARY.md)
 - [boards](src/world/boards/AGENT_GLOSSARY.md)
 - [messengers](src/world/messengers/AGENT_GLOSSARY.md) - IC missives (#3289): Missive, Transmission method, Messenger, Undeliverable, Attachment resolution (_Avoid_: letter, mail for an IC missive)

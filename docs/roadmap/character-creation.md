@@ -1,5 +1,58 @@
 # Character Creation & Identity
 
+## Built (2026-11-21, #5255: the enemy is asked only of a card that starts with one; personality cards are picked on Identity)
+
+Owner rulings 2026-11-21 on the last writing stages. The enemy section of Final Touches is
+no longer asked of every draft ("feels like a non-sequitur that wouldn't be applicable to
+many PCs"). It shows only to a draft holding a card that starts the character with an
+enemy (`FinalTouchesPrompt.ENEMY`, set by staff on the card), under that card's name; the
+words "Who wants you to fail" are gone from the page. Without such a card a saved enemy
+pays no CG points, opens no reason or degree offer and reaches no sheet, and the answer is
+kept for the card's return. Nothing about a finished character's enemy record changed.
+
+The personality cards have a home again: the Identity stage has a Personality block
+between the quote and worship, the life page's cards two across, four at rest and the
+rest under "See N more", or every card under its heading once staff group the lines. It
+reads a new offer chapter, Identity, which takes no opener, and the Distinction Builder
+and its paste table (`identity`, `identity:<heading>`) place cards there; for cards that
+already exist, the Distinction list has an "Offer on the Identity stage" action that
+places every selected card at once. A card has one line there and it is always a choice.
+Migration `identity_chapter_and_enemy_prompt` changes choices and help text and adds the
+one-line-per-card constraint; it writes no row. The Required content page gains a row for an Identity stage
+with no card, and its row for enemy reasons is a gap only once a card asks for an enemy.
+See ADR-5255, which supersedes ADR-0279 in part.
+
+**Owed on production:** the Personality block is empty until staff place the cards: on
+the Distinction list, filter by the Personality category, select the cards and run "Offer
+on the Identity stage". No card asks for an enemy yet, so nobody sees the enemy section
+until the owner authors one (the Distinction Builder's "Final Touches prompt" field).
+Attractive, Leal Agent and Generational Talent still have no offer line anywhere, the
+three Actor's Sheet questions and the Appearance sections still offer no card, and the
+Appearance stage has no section to put one in.
+
+## Built (2026-11-21, #5241: Appearance in compact controls, colour swatches, ten free points of feature qualities)
+
+Owner rulings 2026-11-21 on the Appearance stage. The birthday is typed as two numbers,
+month then day, on one line with the age, and read back as "Day 14 of <the game's name for
+that month>"; the row of twelve month names is gone. Height band and build are dropdowns on
+one line with the height in inches. Each physical feature is one compact control, two
+across: a dropdown for a list of names, and for a colour a strip of swatches drawn in each
+option's own colour (`FormTraitOption.color_hex`, new; a first pass of values for the 62
+single-colour options production held, which staff correct in the admin with a colour
+picker). A marking's name, kind and region are asked on one line, the kind and region as
+dropdowns. The qualities (Alluring, Menacing, Majestic) sit on one line under every feature
+and marking, always visible, and a click sets a tier: the one-point "Make It Distinctive"
+pick of #3739 and the two flags behind it are removed, a feature holding any tier is
+distinctive, and the first ten points of qualities cost no CG points
+(`FEATURE_FREE_POINTS`), further tiers costing CG points at the quality's own price. The
+page and the side panel say how many of the ten are spent. Migrations
+`feature_qualities_and_swatch_colour` and `swatch_colour_fill`. See ADR-5241, which
+supersedes ADR-0287 in part.
+
+**Owed on production:** the three quality rows are authored content and production has
+none, so the qualities line shows nothing there until staff add them (the walkthrough is
+on #5241; the Required content page lists them as "Per-feature Appearance distinctions").
+
 ## Built (2026-11-17, #5178: one Background box on Final Touches)
 
 Character creation asks for the character's history once. The owner ruled that a text box
@@ -119,6 +172,9 @@ builder for beats and beginnings; a Glimpse row "you remember a life you never l
 (a past-life source exists, `PAST_LIFE`, the option is content).
 
 ## Built (2026-09-10, #3739: distinctive physical features)
+
+*Changed by #5241 (above): there is no one-point pick any more, a tier costs 1, and the
+first ten points are free.*
 
 A feature is any trait row or any marking, species-required markers included.
 One CG point on "Make It Distinctive" opens that feature's description, widens

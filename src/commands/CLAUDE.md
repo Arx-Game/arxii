@@ -415,11 +415,12 @@ actions, backends, and service functions.
   lip-service choice is the web dialog's). Typed in `AnsweringAConversion`, with the rite
   opened by `ceremony/conversion` and concluded by `ceremony/finish`, the convert's worship
   read back (the hand-built `tests/test_conversion_command.py` is gone).
-- **`worship.py`**: `CmdPray` (`pray <being>=<words>`, `PrayAction`: a holy-site prayer pays
-  the week's devotion once), `CmdVision` (`vision[/reveal] <character>/<being>=<prose>`,
+- **`worship.py`**: `CmdPray` (`pray[/ap <n>][/for <character>] <being>=<words>`, `PrayAction`: AP spent
+  praying at a holy site earns favor up to a weekly limit; in dire straits it is one graded roll,
+  for oneself or, with `/for`, for a character present, #4349), `CmdVision` (`vision[/reveal] <character>/<being>=<prose>`,
   `vision/prayer <id> ...`, `cmd:perm(Admin)`, `SendVisionAction` spending the being's pool
   and delivering the prose as a VISIONS narrative message), `CmdInvoke`, `CmdPledge` and
-  `CmdSacrifice` (#3779, #4333). `pray` and `vision` are typed in `PrayingAndTheVision`
+  `CmdSacrifice` (#3779, #4333). `pray` and `vision` are typed in `PrayingAndTheVision` and `CallingOnTheGodsInDanger`
   (#3657 tranche 16; the hand-built `tests/test_worship_commands.py`, which mocked the
   actions, is gone); `pledge` and `sacrifice` in `integration_tests/pipeline/
   test_pledge_telnet_e2e.py` and `test_item_that_fed_resonance_journeys.py`.

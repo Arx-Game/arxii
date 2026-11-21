@@ -33,6 +33,7 @@ from world.character_creation.factories import (
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
+    enemy_card_entry,
 )
 from world.character_creation.models import BeginningEnemyOffer
 from world.character_creation.services import _create_enemy, finalize_character
@@ -152,6 +153,8 @@ class EnemyOffersTests(FinalizationTestMixin, TestCase):
 
     def test_resolve_prices_an_offered_group_and_a_free_written_one(self):
         draft, crew = self._draft_with_lineage()
+        # An enemy counts only while a card that starts with one is held (#5255).
+        draft.draft_data["distinctions"] = [enemy_card_entry()]
         draft.draft_data["enemy"] = {
             "kind": "group",
             "organization_id": crew.id,
@@ -187,6 +190,7 @@ class EnemyRowsCacheMutationTests(TestCase):
     def _minimal_draft(self):
         return CharacterDraftFactory(
             draft_data={
+                "distinctions": [enemy_card_entry()],
                 "enemy": {
                     "kind": "person",
                     "organization_id": None,
@@ -195,7 +199,7 @@ class EnemyRowsCacheMutationTests(TestCase):
                     "degree": "annoyed",
                     "why": "Petty jealousy.",
                     "public_line": "We do not speak.",
-                }
+                },
             }
         )
 
@@ -279,6 +283,8 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
                     "horizon": "long_term",
                 },
             ],
+            # The card that starts the character with an enemy (#5255).
+            "distinctions": [enemy_card_entry()],
             "enemy": {
                 "kind": "group",
                 "organization_id": self.republic.id,
@@ -372,6 +378,20 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
         assert CharacterEnemy.objects.get(character=sheet).price == 50
+        # The card that opened the enemy section is held; the degree adds no mark to it.
+        held = CharacterDistinction.objects.filter(character=sheet)
+        assert [row.distinction.name for row in held] == ["A Standing Grudge"]
+        assert not PersonaHeat.objects.filter(persona=sheet.primary_persona).exists()
+
+    def test_an_enemy_saved_without_its_card_is_not_priced_or_written(self):
+        """#5255: the enemy section is asked only of a draft holding an enemy card, so an
+        enemy left on a draft that let its card go pays nothing and reaches no sheet."""
+        draft = self._full_draft(distinctions=[])
+        assert resolve_enemy(draft) is None
+        assert not any(row["category"] == "enemy" for row in draft.calculate_cg_points_breakdown())
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+        assert not CharacterEnemy.objects.filter(character=sheet).exists()
         assert not CharacterDistinction.objects.filter(character=sheet).exists()
         assert not PersonaHeat.objects.filter(persona=sheet.primary_persona).exists()
 

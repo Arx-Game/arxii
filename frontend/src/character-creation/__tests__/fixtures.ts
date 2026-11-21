@@ -767,6 +767,8 @@ export const mockEmptyDraft: CharacterDraft = {
   selected_combat_style: null,
   cg_points_spent: 0,
   cg_points_remaining: 100,
+  feature_points_spent: 0,
+  feature_points_free: 10,
   stat_bonuses: {},
   draft_data: mockEmptyDraftData,
   stage_completion: {
@@ -784,6 +786,10 @@ export const mockEmptyDraft: CharacterDraft = {
   } as Record<Stage, boolean>,
   has_existing_characters: false,
   stage_errors: {},
+  // Origin; Identity and Final Touches (the enum is imported here as a type only).
+  surname: '',
+  visited_stages: [1] as Stage[],
+  optional_stages: [9, 10] as Stage[],
   stats_points_remaining: 5,
   stats_budget: 5,
   starting_technique_picks: 1,
@@ -1438,8 +1444,6 @@ export function makeVisibleOffer(overrides: Partial<VisibleOffer> = {}): Visible
     held: false,
     effect_line: '',
     taken_per_feature: false,
-    opens_feature: false,
-    requires_feature_opened: false,
     cg_max_rank: 0,
     // The life page (#4872): no heading, no figure, no effect rows unless a test says.
     group: '',

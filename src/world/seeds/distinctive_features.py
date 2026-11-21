@@ -1,24 +1,26 @@
-"""Seed the distinctive-physical-feature distinctions and their offers (#3739).
+"""Seed the feature qualities and their offers (#3739, #5241).
 
-Four rows, all ``taken_per_feature`` — held once per feature (a trait row or a
-marking), not once per character:
+Three rows, all ``taken_per_feature``: held once per feature (a trait row or a
+marking), not once per character.
 
-* **Make It Distinctive** (``opens_feature``, 1 point, rank 1) — the whole gate.
-  Taking it on a feature opens that feature's description, widens its palette to
-  every option the trait carries including the off-species Unnatural umbrella
-  (a strange colour is assumed to have a magical explanation), and opens the
-  three axis rows below it.
-* **Alluring / Menacing / Majestic** (``requires_feature_opened``, 2 points a tier,
-  ``+_AXIS_PER_TIER`` to the axis a tier) — bought on an already-distinctive
-  feature, in any combination: one scar can be all three. They reach rank 5 in
-  play and stop at ``_CG_MAX_RANK`` in character creation, which is what
-  ``cg_max_rank`` says.
+**Alluring / Menacing / Majestic** cost 1 point a tier and add ``_AXIS_PER_TIER``
+to their axis a tier. Any feature takes them directly, in any combination: one
+scar can be all three. Holding any tier on a feature makes it distinctive, which
+opens its description and widens its palette to every option the trait carries,
+the off-species Unnatural umbrella included (a strange colour is assumed to have a
+magical explanation). They reach rank 5 in play and stop at ``_AXIS_CG_MAX_RANK`` in
+character creation, which is what ``cg_max_rank`` says.
+
+There is no pick before them. Until #5241 a fourth row, "Make It Distinctive",
+cost one point and gated the other three (owner ruling 2026-11-21: one point buys
+one tier, with no unlock step). The first ``FEATURE_FREE_POINTS`` a draft spends on
+these rows cost no CG points (``CharacterDraft._append_feature_allowance``).
 
 The axes are the same three ``ModifierTarget`` rows item accents use (#2886), so
 a feature and a garment push on the same number: allure through the directed-
 allure engine, menace through Intimidation, majesty through the Command check
 (#3739, ``world.seeds.governance_checks``). A feature is worth more than a
-garment on purpose — an accent rung is +1, a feature tier is +2.
+garment on purpose: an accent rung is +1, a feature tier is +2.
 
 Every row goes through ``authored_or_sample``: content-repo-owned (#2698),
 invented here only under ``SEED_SAMPLE_CONTENT`` so a fresh clone has a walkable
@@ -38,24 +40,22 @@ if TYPE_CHECKING:
 #: physical feature is meant to matter more than a worn thing, so it adds +2.
 _AXIS_PER_TIER = 2
 
-#: What one tier of an axis costs in CG points.
-_AXIS_COST_PER_TIER = 2
+#: What one tier of an axis costs: a point of the free allowance, or a CG point
+#: once the allowance is spent (#5241).
+_AXIS_COST_PER_TIER = 1
 
 #: The rank an axis reaches in play, and the ceiling character creation applies.
 #: You may start distinctive; you may not start unforgettable.
 _AXIS_MAX_RANK = 5
 _AXIS_CG_MAX_RANK = 3
 
-#: The one-point pick that makes a feature distinctive.
-_OPENER_COST = 1
+#: The three rows' names, for the admin's required-content probe (#4104).
+FEATURE_ROW_NAMES: tuple[str, ...] = ("Alluring", "Menacing", "Majestic")
 
 #: (slug, name, accent target, player line). The accent target is the
 #: ``ModifierTarget`` the tier value lands on; each is seeded elsewhere
 #: (``allure`` by ``social_relationships``, ``menace``/``majesty`` by
 #: ``crafting_materials``) and skipped here when a clone has none.
-#: The four rows' names, for the admin's required-content probe (#4104).
-FEATURE_ROW_NAMES: tuple[str, ...] = ("Make It Distinctive", "Alluring", "Menacing", "Majestic")
-
 _AXES: tuple[tuple[str, str, str, str], ...] = (
     (
         "alluring-feature",
@@ -76,8 +76,6 @@ _AXES: tuple[tuple[str, str, str, str], ...] = (
         "PLACEHOLDER: this feature is the one people take orders from.",
     ),
 )
-
-_OPENER_SLUG = "make-it-distinctive"
 
 
 def _feature_category():
@@ -117,33 +115,8 @@ def _ensure_offer(distinction: Distinction, sort_order: int) -> None:
     )
 
 
-def _ensure_opener(category) -> None:
-    """Seed "Make It Distinctive" — the pick every other feature row hangs off."""
-    from world.distinctions.models import Distinction  # noqa: PLC0415
-    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
-
-    distinction = authored_or_sample(
-        Distinction,
-        {
-            "name": "Make It Distinctive",
-            "category": category,
-            "description": (
-                "PLACEHOLDER: one feature of yours is worth describing, and you get to "
-                "describe it in your own words, in whatever colour it happens to be."
-            ),
-            "cost_per_rank": _OPENER_COST,
-            "max_rank": 1,
-            "taken_per_feature": True,
-            "opens_feature": True,
-        },
-        slug=_OPENER_SLUG,
-    )
-    if distinction is not None:
-        _ensure_offer(distinction, sort_order=0)
-
-
 def _ensure_axis(category, axis: tuple[str, str, str, str], order: int) -> None:
-    """Seed one presence axis and point its effect at the accent target it shares."""
+    """Seed one quality and point its effect at the accent target it shares."""
     slug, name, target_name, line = axis
     from world.distinctions.models import Distinction, DistinctionEffect  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
@@ -159,7 +132,6 @@ def _ensure_axis(category, axis: tuple[str, str, str, str], order: int) -> None:
             "max_rank": _AXIS_MAX_RANK,
             "cg_max_rank": _AXIS_CG_MAX_RANK,
             "taken_per_feature": True,
-            "requires_feature_opened": True,
         },
         slug=slug,
     )
@@ -168,7 +140,9 @@ def _ensure_axis(category, axis: tuple[str, str, str, str], order: int) -> None:
     _ensure_offer(distinction, sort_order=order)
     # The accent targets are content-repo-owned and seeded by other clusters; a
     # clone missing one gets the distinction without its effect rather than nothing.
-    target = ModifierTarget.objects.filter(name=target_name).first()
+    # Matched without regard to case: staff capitalise authored names (production
+    # holds "Majesty" beside "allure" and "menace").
+    target = ModifierTarget.objects.filter(name__iexact=target_name).first()
     if target is None:
         return
     authored_or_sample(
@@ -183,7 +157,7 @@ def _ensure_axis(category, axis: tuple[str, str, str, str], order: int) -> None:
 
 
 def seed_distinctive_features() -> None:
-    """Cluster entry — the four per-feature Appearance rows and their offers (#3739).
+    """Cluster entry: the three feature qualities and their offers (#3739, #5241).
 
     Runs after ``social_relationships`` (the allure target), ``crafting_materials``
     (menace, majesty) and ``governance`` (the Command check the majesty axis binds to),
@@ -192,6 +166,5 @@ def seed_distinctive_features() -> None:
     category = _feature_category()
     if category is None:
         return
-    _ensure_opener(category)
     for order, axis in enumerate(_AXES, start=1):
         _ensure_axis(category, axis, order)

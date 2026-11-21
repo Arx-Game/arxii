@@ -141,7 +141,8 @@ issue bodies; the model decision is ADR-0132.
   Founded 0 → 10%, Consecrated 100 → 25%, Great 500 → 50%.
 - `Prayer` (#3779) — a character's freeform words to a being: `character_sheet`,
   `being` FK (`related_name="prayers"`), `text`, `room_profile` (where it was made),
-  `game_week`, `devotion_granted` (the weekly holy-site prayer's favor, else 0),
+  `game_week`, `devotion_granted` (the favor a holy-site prayer's AP earned, else 0), `ap_spent`
+  (AP spent praying at a holy site; the weekly limit sums it, #4349),
   `dire_straits` (`DireStraitsKind`: SOULFRAY / NEAR_DEATH / blank), OneToOne
   `intervention` → `MiraclePerformance` (the miracle that answered it, when one did),
   `prayed_at`. A plain log with no effect of its own: one of the few freeform channels
@@ -157,7 +158,9 @@ issue bodies; the model decision is ADR-0132.
   `resonance_spent`, `sent_at`. Rarity is not enforced: a person writes each one, live or
   ahead of time (ADR-4333-B).
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
-- `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
+- `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being). `owed_favor`
+  (#4349, non-negative): favor owed after a weaker answer to divine intervention; while above 0
+  the being ignores the character's intervention rolls, and base favor earned pays it first.
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:
   DEVOTIONAL/ANTAGONISTIC/PACT — null = ordinary worship), `established_at`
   (when the patronage was established), `released_at` (set when the patron
@@ -176,9 +179,10 @@ issue bodies; the model decision is ADR-0132.
   everyone regardless.
 - `ChosenFavorConfig` — singleton (pk=1, lazy-created via
   `get_chosen_favor_config()`). Staff-tunable favor thresholds for Chosen
-  benefits (#2550): `anima_recovery_threshold`/`anima_recovery_bonus` (wired —
-  the Chosen's anima ritual adds the bonus to recovery budget when favor meets
-  the threshold), `ceremony_edge_threshold`/`ceremony_edge_bonus` (deferred —
+  benefits (#2550): `anima_recovery_threshold` (wired — the Chosen's anima ritual adds the
+  patron's share to its recovery budget when favor meets the threshold; the share is the
+  CHOSEN_ANIMA `FavorOutcomeAward` for the ritual's result, #4349, and `RitualOutcome.patron_bonus`
+  says how much it added; `anima_recovery_bonus` is gone), `ceremony_edge_threshold`/`ceremony_edge_bonus` (deferred —
   defined for shape stability but inert until a future issue wires them), and
   `chosen_distinction` (#4341: FK `Distinction`, null, SET_NULL), the distinction every
   Chosen holds. Its effects on the two patron favor targets are the Chosen earning bonus
@@ -220,9 +224,10 @@ issue bodies; the model decision is ADR-0132.
   the technique picker, which a pact holder gets too. The Chosen readers use
   `favor_services.chosen_patronage_of(sheet, being)` / `chosen_patronages_for(sheet)`
   instead (#4341).
-- `best_patronage_favor(sheet)` → the highest-favor Chosen patronage's favor, or 0
-  (a pact patronage does not count, #4341). Read by `apply_anima_ritual_outcome` to gate
-  the anima recovery bonus.
+- `best_patronage_favor` is gone (#4349): it read the highest-favor Chosen patronage's favor to
+  gate the anima ritual's Chosen bonus. `apply_anima_ritual_outcome` now reads
+  `favor_services.chosen_patronages_for(sheet)` directly, since it needs the patron's name for
+  the result line as well as its favor (a pact patronage still does not count, #4341).
 - `grant_chosen_distinction(sheet)` / `grant_chosen_distinction_to_chosen(config)` (#4341)
   → grant the designated Chosen distinction at creation / to every Chosen lacking it. A
   Chosen whose distinctions exclude it (`DistinctionExclusionError`) is logged and skipped:
@@ -283,23 +288,29 @@ anima-recovery ritual's shape.
   "worship"): `rite` or `rite_name` (+ `being_name`) kwargs, resolves the scene from
   the actor's room, maps every `WorshipRiteError` to a soft failure.
 
-**Prayer services** (`worship/prayer_services.py`, #3779) — a prayer is a message,
-not a mechanic; three independent, stackable conditions make one count.
+**Prayer services** (`worship/prayer_services.py`, #3779, #4349) — a prayer is a message;
+three independent, stackable conditions make one count.
 
-- `pray(character_sheet, being, text)` → `PrayerOutcome(prayer, at_holy_site,
-  devotion_granted, dire_straits, intervention)`. Writes the `Prayer` first (it stands
-  on its own; `PrayerEmpty` / `PrayerTooLong` / `PrayerBeingInactive` refuse before
-  any write). Then: the **weekly holy-site prayer**: when the character's room holds a
-  shrine or sits under a temple of the being (`consecration_services.sites_of`) and
-  `site_prayer_capped_this_week` is False, `bump_devotion` pays
-  `PRAYER_SITE_DEVOTION_AMOUNT` (once per being per `GameWeek`, below a tier 1 rite);
-  and **dire straits**: `dire_straits_for(sheet)` reads Soulfray through
-  `magic.services.soulfray.get_soulfray_warning` (a read on TehomCD's domain, not a
-  redesign) and near death as `CharacterVitals.health_percentage <=
-  KNOCKOUT_HEALTH_THRESHOLD` while alive; when either holds, `fire_divine_intervention`
-  runs on the `NEAR_DEATH` trigger narrowed to the being prayed to, outside the
-  prayer's transaction (a miracle is its own committed act). The performance's
-  `trigger_event` is `prayer_soulfray` / `prayer_near_death` and the prayer records it.
+- `pray(character_sheet, being, text, *, on_behalf_of=None, ap=0)` → `PrayerOutcome(prayer,
+  at_holy_site, devotion_granted, dire_straits, intervention, ap_spent, lines)`. Writes the
+  `Prayer` first (it stands on its own; `PrayerEmpty` / `PrayerTooLong` / `PrayerBeingInactive`
+  refuse before any write). Then: the **holy-site prayer** (#4349): when the character's room
+  holds a shrine or sits under a temple of the being (`consecration_services.sites_of`), the
+  `ap` spent praying (`ActionPointPool.spend`) earns base favor of `ap //
+  DevotionConfig.prayer_ap_per_favor`, then the earning rate through `bump_devotion`. The
+  week's limit is `prayer_weekly_ap_cap` per being, the sum of `Prayer.ap_spent` for the
+  character, being and `GameWeek`; a prayer that would pass it raises `PrayerApLimit` before
+  any AP is spent. Away from a site, or with no AP, the prayer is logged and earns nothing.
+  And **dire straits**: `dire_straits_for(sheet)` reads Soulfray through
+  `magic.services.soulfray.get_soulfray_warning` and near death as
+  `CharacterVitals.health_percentage <= KNOCKOUT_HEALTH_THRESHOLD` while alive; when the one in
+  danger is in straits, `intervention_services.fire_divine_intervention` rolls on the
+  `NEAR_DEATH` trigger narrowed to the being prayed to, outside the prayer's transaction. The
+  one in danger is the character, or `on_behalf_of`: a character in the same room who is in
+  straits (`PrayerTargetUnavailable`: one refusal for not here, not seen and not in danger) and not played by the same account
+  (`PrayerForOwnCharacter`). The performance's `trigger_event` is `prayer_soulfray` /
+  `prayer_near_death`. `prayer_ap_left_this_week` and `HolySite.ap_left`/`ap_cap` feed the web
+  dialog; `GET /api/worship/owed-favor/` lists what a character owes (owner and staff only).
 - `send_vision(*, recipient, being, body, sent_by=None, reveal_source=False,
   prayer=None, clue=None, episode=None)` → `Vision`. Validates the attachments
   (`VisionPrayerMismatch`, `VisionClueNotCodex`, `VisionEpisodeNotShared`,
@@ -316,8 +327,9 @@ not a mechanic; three independent, stackable conditions make one count.
 - Actions (`actions/definitions/worship.py`): `PrayAction` (`pray`: `being` /
   `being_name`, `text`), `SendVisionAction` (`vision_send`, staff only: `recipient` /
   `recipient_name`, `being` / `being_name`, `body`, `reveal_source`, `prayer`, `clue`,
-  `episode` ids). Telnet (`commands/worship.py`): `pray <being>=<words>`,
-  `vision[/reveal] <character>/<being>=<prose>`, `vision/prayer <id> ...` (Admin).
+  `episode` ids). Telnet (`commands/worship.py`): `pray[/ap <n>][/for <character>]
+  <being>=<words>` (`/ap` spends AP praying at a holy site; `/for` prays for a character present, named by the
+  face they present), `vision[/reveal] <character>/<being>=<prose>`, `vision/prayer <id> ...` (Admin).
 - Delivery presentation: a VISIONS message is the one narrative category with its own
   tag and colour, `|G[VISION]|n` on telnet (Arx 1's green), and the frame carries
   `category` so the web feed files it as its own `vision` kind; see the narrative doc.
@@ -418,8 +430,9 @@ the rite consecrates the site in turn.
 ### Favor with beings: invoking favor (#4333, slice 1) [BUILT & WIRED]
 
 Spec and demo: issue #4333 (slice 1 is #4353). Decision: ADR-4333-A (favor is
-invoked through a check and never spent). Favor (`DevotionStanding.favor`) is a
-character's standing with one being; it is never spent.
+invoked through a check; amended by ADR-4349: invoking is still free, but a divine intervention
+rescue spends favor). Favor (`DevotionStanding.favor`) is a character's standing with one
+being.
 
 **Models**
 
@@ -429,7 +442,10 @@ character's standing with one being; it is never spent.
   `favor_ease_low_threshold`/`_points` (30/15) and `favor_ease_high_threshold`/`_points`
   (60/30), `invocations_per_week` (3). Example tuning throughout.
 - `FavorOutcomeAward` — `config` FK, `kind` (`FavorAwardKind`: INVOCATION = check points
-  added to the check; CLOSING = base favor a pledge's closing rite pays, read from slice 2),
+  added to the check; CLOSING = base favor a pledge's closing rite pays, read from slice 2;
+  SACRIFICE (#4500); and, #4349, OFFICIANT = base favor an officiant earns at ceremony finish,
+  CHOSEN_ANIMA = anima a Chosen's patron adds to their anima ritual, INTERVENTION_SPEND,
+  INTERVENTION_DEBT and INTERVENTION_WAIT_HOURS = the cost of a divine intervention),
   `outcome_tier` FK `CheckOutcome`, `amount`; unique per (config, kind, tier). Not an
   `OutcomeTierAward` (its one-to-one allows one row per tier). A missing INVOCATION row is
   no bonus.
@@ -911,14 +927,17 @@ route. Migration 0248 is schema only.
   and only for a level with `may_adapt_answers`; nobody edits clue, cost or follow-up. A
   miracle is checked by `services.miracle_ineligibility` and performed through
   `perform_divine_intervention` (`trigger_event="live_rite"`; its normal miracle narration
-  prompt follows). The prompt and every sibling copy are locked first: the first answer
+  prompt follows). A live answer obeys none of the intervention roll's rules (#4349): no roll,
+  no owed favor, no spend; it keeps the cooldown condition, the favor floor (the higher of the
+  prayer gate and the miracle's own threshold) and the pool check. The prompt and every sibling copy are locked first: the first answer
   confirms its prompt and dismisses the others, and the limit is asked under the same lock.
 - `dismiss_live_prompt` - dismissing sends nothing (`dismiss_being_answer` routes a prompt
   with a `rite_performance` here); the scene ending closes a still-pending prompt the same way.
   The hourly steward timeout leaves live prompts alone.
-- `services.miracle_ineligibility(sheet, miracle, favor=, on_cooldown=, cfg=)` - the check
-  extracted from `fire_divine_intervention`: cooldown condition clear, favor at least both the
-  config threshold and the miracle's, pool at least the larger of the cost and the config
+- `services.miracle_ineligibility(sheet, miracle, favor=, on_cooldown=, cfg=)` - the check the
+  intervention roll and the live answer share: cooldown condition clear, favor at least the
+  higher of `prayer_favor_gate` and the miracle's own threshold (the config's `favor_threshold`
+  is the divine intercession threshold since #4349 and is not asked here), pool at least the larger of the cost and the config
   minimum. It does not ask the miracle's trigger. `intervention_cooldown_active(character)`.
 
 **Surfaces**
@@ -950,7 +969,9 @@ Majora crossings.
 
 - `Miracle` — authored catalog entry: `name`, `being` FK (PROTECT),
   `resonance_pool_cost`, `intervention_trigger` (MiracleTrigger: INCAPACITATED,
-  NEAR_DEATH), `favor_threshold`, `narrative_text`, `is_active`, `sort_order`.
+  NEAR_DEATH), `favor_threshold` (default 0 since #4349: 0 means only the prayer gate applies),
+  `min_outcome_tier` (FK `CheckOutcome`, Success or Critical Success, null means Success:
+  the lowest roll result that can bring it), `narrative_text`, `is_active`, `sort_order`.
   Unique per `(being, name)`.
 - `MiracleAppliedCondition` / `MiracleDamageProfile` —
   payload child rows inheriting `Abstract*` bases from `magic/models/techniques.py`.
@@ -961,9 +982,18 @@ Majora crossings.
   `docs/systems/magic.md`'s "The Damage Identity" section) — default 0, no wiring
   change needed here since it rides the shared column.
 - `MiraclePerformance` — immutable audit row (miracle, being, target_character,
-  scene, resonance_spent, trigger_event, created_at).
-- `DivineInterventionConfig` — singleton (pk=1): `favor_threshold` (default 50),
-  `cooldown_hours` (default 24), `min_pool_for_intervention` (default 100).
+  scene, resonance_spent, trigger_event, `outcome_tier` (the roll's result, null for older rows
+  and a live answer), created_at).
+- `DivineInterventionConfig` — singleton (pk=1): `favor_threshold` (default 80 since #4349: the
+  divine intercession threshold, where a being steps in by itself when the character falls),
+  `prayer_favor_gate` (20: the favor a prayer needs to be rolled), `below_zero_rule`
+  (`BelowZeroRule`: automatic failure, or a much harder roll at `below_zero_difficulty`,
+  default Harrowing), `cooldown_hours` (24: the minimum wait for a result with no wait row),
+  `min_pool_for_intervention` (100), `debt_softening_low_percent` (25) and
+  `debt_softening_high_percent` (50). The cost per result is `FavorOutcomeAward` rows of the
+  INTERVENTION_SPEND, INTERVENTION_DEBT and INTERVENTION_WAIT_HOURS kinds.
+- `WorshippedBeing.intervention_pool` (FK `ConsequencePool`, null): the being's backfires
+  (Critical Failure rows), signs (Failure rows) and lesser answers (Partial Success rows).
 - `MiracleTrigger` (TextChoices in `constants.py`): INCAPACITATED, NEAR_DEATH.
 
 **Services** (`worship/services.py`)
@@ -971,27 +1001,52 @@ Majora crossings.
 - `spend_worship_pool(being, amount, *, reason)` → bool — the spend counterpart to
   `grant_worship`. Deducts from `resonance_pool` (floor at 0); returns False if
   insufficient. Does NOT create an audit row — the caller creates `MiraclePerformance`.
-- `perform_divine_intervention(sheet, being, miracle, *, scene)` → MiraclePerformance —
-  the commit seam: spends pool, applies `MiracleAppliedCondition` rows via
-  `apply_condition`, creates audit row, broadcasts narrative EMIT.
-- `fire_divine_intervention(sheet, *, trigger, trigger_event, scene=None, being=None)`
-  (#3779) — the shared check: cooldown, then every `DevotionStanding` at or above the
-  config threshold (narrowed to `being` when given), each of its miracles on
-  `trigger` whose own threshold and pool cost are met, highest priority first;
-  performs it with `trigger_event` on the audit row and applies the cooldown
-  condition. Returns the `MiraclePerformance` or None.
+- `perform_divine_intervention(sheet, being, miracle, *, scene, trigger_event, outcome_tier=None,
+  context_text="")` → MiraclePerformance — the commit seam: spends pool, applies
+  `MiracleAppliedCondition` rows via `apply_condition`, creates the audit row (with the roll's
+  `outcome_tier`), routes the narrative and the GM's `context_text`.
+- **Divine intervention is one graded roll** (`worship/intervention_services.py`, #4349,
+  ADR-4349): `fire_divine_intervention(praying, *, trigger, trigger_event, scene=None,
+  being=None, target=None)` → `InterventionResult`. `praying` rolls and pays; `target` (the one
+  in danger, `praying` when None) receives miracles and lesser answers; a backfire lands on
+  `praying`. With `being` None it is divine intercession (`intercession_being`: the Chosen
+  patron among the beings at or above `DivineInterventionConfig.favor_threshold`, else the
+  highest favor). No roll, with an `InterventionStatus` and a reason, while the cooldown
+  condition is on (the minimum wait), `DevotionStanding.owed_favor` is above 0, favor is below 0
+  (`below_zero_rule`: automatic failure, or a roll at `below_zero_difficulty`) or below
+  `prayer_favor_gate`, or no invocation check type is set. Otherwise the roll is the being's
+  invocation check at `invocation_difficulty`; the tier decides: Critical Failure a backfire
+  and Failure an optional sign (rows of `WorshippedBeing.intervention_pool`), Partial Success a
+  lesser answer (drawn by weight with the resolution wheel, no second roll), Success the
+  lowest-priority affordable miracle whose `Miracle.min_outcome_tier` is Success, Critical
+  Success the lowest-priority affordable miracle of minimum tier Critical Success, then the
+  Success one, then a lesser answer (drawn from the Partial Success rows, but costed by the
+  rolled tier's debt and wait rows, with nothing spent). Cost by `FavorOutcomeAward` rows: INTERVENTION_SPEND (rescue and bigger
+  miracle only, through `bump_devotion` as a negative, uncapped, so favor may go below 0),
+  INTERVENTION_DEBT (added to `owed_favor`) and INTERVENTION_WAIT_HOURS (the cooldown
+  condition's length; `cooldown_hours` when no row); owed favor and the wait are cut by
+  `debt_softening_low_percent`/`debt_softening_high_percent` at the Devotion config's favor ease
+  thresholds, read before the spend, rounded up. A positive tier that delivered nothing spends
+  and owes nothing, and still waits. `bump_devotion` pays `owed_favor` first from the base amount,
+  before the earning rate, for every source (`DevotionBump.owed_paid`, `PledgeCredit.owed_paid`). An officiant's ceremony credit stores the
+  Rites result that earned it (`PledgeCredit.outcome_tier`), so the pledge card reads "Ceremony
+  (officiant): Rites result Success: 10 base, at 200% = +20".
+  The fallen character is sent who prayed and what landed on them as stored notices (nothing on a Failure or a backfire); with no scene and no GM prompt the room hears the authored text and the one it touched is sent it too. A failure inside divine intercession at incapacitation is logged and never breaks the incapacitation. `finish_ceremony` returns a `CeremonyFinish` (the ceremony and the officiant's `DevotionBump`). `intervention_lines` builds the one praying's private lines; `prayed_for_you_line` and
+  `prayer_room_line` are the fallen character's and the room's. The `MIRACLE` GM prompt
+  carries `GMPrompt.context_text` (tier, what was drawn, who prayed).
 - `maybe_fire_divine_intervention(character, payload)` — trigger handler: called by
   the `divine_intervention_on_incapacitated` TriggerDefinition's flow step when
-  `CHARACTER_INCAPACITATED` fires; resolves the sheet and scene and calls
-  `fire_divine_intervention` on the INCAPACITATED trigger. The NEAR_DEATH trigger is
-  the dire-straits prayer's (#3779, `prayer_services.pray`).
+  `CHARACTER_INCAPACITATED` fires; the fallen character rolls at her own odds and cost
+  (divine intercession) and is told privately. The NEAR_DEATH trigger is the dire-straits
+  prayer's (#3779, `prayer_services.pray`).
 - `install_divine_intervention_trigger(sheet, being)` / `remove_divine_intervention_trigger(sheet, being)` —
   installs/removes the `Trigger` row on the character's ObjectDB. Called from
-  `bump_devotion` when favor crosses the config threshold. Mirrors Soul Tether's
+  `bump_devotion` when favor crosses the divine intercession threshold. Mirrors Soul Tether's
   trigger installation pattern.
 
 **Trigger lifecycle**: `bump_devotion` calls `install_divine_intervention_trigger`
-when `standing.favor >= DivineInterventionConfig.favor_threshold`. The trigger
+when `standing.favor >= DivineInterventionConfig.favor_threshold` (the divine intercession
+threshold, example 80; a prayer needs only `prayer_favor_gate`). The trigger
 subscribes to `CHARACTER_INCAPACITATED` (priority 60, above combat escalation's 50).
 When the event fires, the flow's `CALL_SERVICE_FUNCTION` step calls
 `maybe_fire_divine_intervention`. Per-character cooldown via a timed
@@ -1002,16 +1057,25 @@ FlowDefinition, DivineInterventionConfig singleton, "Divine Intervention Cooldow
 ConditionTemplate, example Miracle rows per seeded being. Called from
 `seed_worship_content()`.
 
-**Admin**: `MiracleAdmin` (with payload inlines), `MiraclePerformanceAdmin` (read-only
-audit), `DivineInterventionConfigAdmin` (singleton).
+**Admin**: `MiracleAdmin` (with payload inlines, `min_outcome_tier`, and a read-only tier list
+beside the being's intervention pool), `MiraclePerformanceAdmin` (read-only audit),
+`DivineInterventionConfigAdmin` (a singleton change form: the prayer favor gate, the divine
+intercession threshold, the below-zero rule, the wait default, the two softening percentages,
+and read-only context: who owes favor, the odds of each result for four example characters, each row stating its
+favor, invocation modifier and difficulty (`world.worship.intervention_tables.odds_rows`, read from the
+result charts for the reference roller), the cost of each result with the favor softening applied
+(`cost_rows`, from the award rows),
+miracles whose own threshold is above the gate, beings with miracles and no pool, a warning with no invocation check type), `WorshippedBeingAdmin`
+(`intervention_pool` with a summary of its rows by tier).
 
 **API**: `GET /api/worship/miracles/` — staff-facing catalog browser
-(`IsAdminUser`). No player-facing API — intervention is automatic.
+(`IsAdminUser`). The player calls on a being through the `pray` action (web dialog, telnet
+`pray`, `pray/ap`, `pray/for`); `GET /api/worship/owed-favor/` shows what they owe.
 
 **GM narration (#4101):** `perform_divine_intervention` calls `_route_miracle` instead of
 broadcasting `miracle.narrative_text` directly: `route_narratable_event(NarratableEvent(
 kind=GMPromptKind.MIRACLE, scene=..., character_sheet=..., room_text=miracle
-.narrative_text))` prompts every opted-in GM present with a `GMPrompt` to narrate
+.narrative_text, context_text=...))` prompts every opted-in GM present with a `GMPrompt` to narrate
 (`GMPromptGroup.MIRACLE`); with no GM opted in, the authored `narrative_text` broadcasts
 unprompted exactly as before #4101. Full model/queue reference: `docs/systems/magic.md`'s
 "GM Prompt Queue" section and `docs/systems/scenes.md`'s "GM narration of mechanical
@@ -1103,7 +1167,7 @@ consent gate for a Seance honoree's manifestation), `WorshipConversionOffer`
 a tier 1 or 2 rite is refused as a scene act); at finish the officiant's Rites roll
 outcome pays the rite's tier award through `worship.rite_services.apply_rite_award`
 (`_pay_rite_award`; skipped when no Rites check type is seeded, so there was no
-roll), on top of the ceremony's own honors and `devotion_officiant`. Participants
+roll), on top of the ceremony's own honors and the officiant's own award (#4349: the OFFICIANT `FavorOutcomeAward` row for the Rites result, the Partial Success row with no roll, 0 with no row; `devotion_officiant` is gone). Participants
 earn resonance through `DramaticMomentType`/`DramaticMomentTag` as before; the
 event's own contest resolution stays out of scope (#3770). Telnet: `ceremony/rite
 <rite>[,<honoree>…][=<being>]`; the open action takes `rite_name`.

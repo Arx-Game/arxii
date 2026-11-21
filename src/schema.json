@@ -8743,6 +8743,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ClockDetail'
           description: ''
+  /api/clock/adjust-preview/:
+    get:
+      operationId: clock_adjust_preview_retrieve
+      description: 'GET /adjust-preview/ — staff: what setting this date would do;
+        writes nothing.'
+      parameters:
+      - in: query
+        name: ic_datetime
+        schema:
+          type: string
+          format: date-time
+        required: true
+      tags:
+      - game-clock
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClockJumpPreview'
+          description: ''
   /api/clock/convert/:
     get:
       operationId: clock_convert_retrieve
@@ -8768,6 +8791,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClockConvertResponse'
+          description: ''
+  /api/clock/history/:
+    get:
+      operationId: clock_history_list
+      description: 'Staff: the recorded changes to the clock, newest first (#5248).'
+      parameters:
+      - in: query
+        name: change
+        schema:
+          type: string
+          enum:
+          - date_aged
+          - date_kept
+          - paused
+          - resumed
+          - speed
+        description: |-
+          The kind of change (#5248). The anchors and ratios alone cannot tell a pause from a change of date. Blank on rows written before the kind was recorded.
+
+          * `paused` - Paused
+          * `resumed` - Resumed
+          * `speed` - Speed changed
+          * `date_aged` - Date set, characters aged
+          * `date_kept` - Date set, characters kept their ages
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - game-clock
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedClockHistoryList'
           description: ''
   /api/clock/pause/:
     post:
@@ -44912,6 +44981,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/Miracle'
           description: ''
+  /api/worship/owed-favor/:
+    get:
+      operationId: worship_owed_favor_list
+      description: 'The beings a character owes favor to (#4349): the owner reads
+        their own, staff anyone''s.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOwedFavorList'
+          description: ''
+  /api/worship/owed-favor/{id}/:
+    get:
+      operationId: worship_owed_favor_retrieve
+      description: 'The beings a character owes favor to (#4349): the owner reads
+        their own, staff anyone''s.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwedFavor'
+          description: ''
   /api/worship/pledge-cards/:
     get:
       operationId: worship_pledge_cards_list
@@ -46411,6 +46531,14 @@ components:
       - description
       - key
       - label
+    AgeHandlingEnum:
+      enum:
+      - aged
+      - kept
+      type: string
+      description: |-
+        * `aged` - Characters age
+        * `kept` - Characters keep their ages
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.
@@ -52703,6 +52831,15 @@ components:
           type: integer
           description: Get remaining CG points.
           readOnly: true
+        feature_points_spent:
+          type: integer
+          description: What the draft's feature qualities cost, before the free allowance
+            (#5241).
+          readOnly: true
+        feature_points_free:
+          type: integer
+          description: How many points of feature qualities cost no CG points (#5241).
+          readOnly: true
         stat_bonuses:
           type: object
           additionalProperties:
@@ -52722,6 +52859,25 @@ components:
             items:
               type: string
           description: Get validation errors for each stage.
+          readOnly: true
+        surname:
+          type: string
+          description: The family's name, the new family's, or the drawn card's surname;
+            '' until one exists.
+          readOnly: true
+        visited_stages:
+          type: array
+          items:
+            type: integer
+          description: The stages this draft has been opened on; the stage list shows
+            a to-do for these only.
+          readOnly: true
+        optional_stages:
+          type: array
+          items:
+            type: integer
+          description: The stages that ask nothing; the stage list reads "optional"
+            for them.
           readOnly: true
         stats_points_remaining:
           type: integer
@@ -52829,6 +52985,8 @@ components:
       - enemy_price_tables
       - enemy_reasons
       - family
+      - feature_points_free
+      - feature_points_spent
       - final_touches_cards
       - final_touches_prompts
       - has_existing_characters
@@ -52837,6 +52995,7 @@ components:
       - id
       - introductions_offered
       - magic_training
+      - optional_stages
       - organization_choices
       - public_worship
       - resonance_creation_points
@@ -52858,6 +53017,8 @@ components:
       - stat_bonuses
       - stats_budget
       - stats_points_remaining
+      - surname
+      - visited_stages
     CharacterDraftCreate:
       type: object
       description: Serializer for creating a new draft.
@@ -53788,9 +53949,32 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+        age_handling:
+          allOf:
+          - $ref: '#/components/schemas/AgeHandlingEnum'
+          description: |-
+            Whether characters age with the calendar or keep their ages (#5248). A change to an earlier date must keep them.
+
+            * `aged` - Characters age
+            * `kept` - Characters keep their ages
       required:
+      - age_handling
       - ic_datetime
       - reason
+    ClockChangeEnum:
+      enum:
+      - paused
+      - resumed
+      - speed
+      - date_aged
+      - date_kept
+      type: string
+      description: |-
+        * `paused` - Paused
+        * `resumed` - Resumed
+        * `speed` - Speed changed
+        * `date_aged` - Date set, characters aged
+        * `date_kept` - Date set, characters kept their ages
     ClockConvertResponse:
       type: object
       description: Response serializer for date conversion results.
@@ -53809,6 +53993,116 @@ components:
           type: string
       required:
       - detail
+    ClockHistory:
+      type: object
+      description: One recorded change to the clock, for the staff page's Recent changes
+        list.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        changed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the change was made.
+        changed_by_name:
+          type: string
+          readOnly: true
+          default: ''
+        change:
+          allOf:
+          - $ref: '#/components/schemas/ClockChangeEnum'
+          readOnly: true
+          description: |-
+            The kind of change (#5248). The anchors and ratios alone cannot tell a pause from a change of date. Blank on rows written before the kind was recorded.
+
+            * `paused` - Paused
+            * `resumed` - Resumed
+            * `speed` - Speed changed
+            * `date_aged` - Date set, characters aged
+            * `date_kept` - Date set, characters kept their ages
+        new_anchor_ic_time:
+          type: string
+          format: date-time
+          readOnly: true
+        new_date_display:
+          type: string
+          readOnly: true
+        old_time_ratio:
+          type: number
+          format: double
+          readOnly: true
+        new_time_ratio:
+          type: number
+          format: double
+          readOnly: true
+        birth_year_shift:
+          type: integer
+          readOnly: true
+          description: Years added to every character's birth year by this change,
+            so their ages stayed as they were. Zero unless the date was set with ages
+            kept. Subtract it to undo the change by hand.
+        reason:
+          type: string
+          readOnly: true
+      required:
+      - birth_year_shift
+      - change
+      - changed_at
+      - changed_by_name
+      - id
+      - new_anchor_ic_time
+      - new_date_display
+      - new_time_ratio
+      - old_time_ratio
+      - reason
+    ClockJumpPreview:
+      type: object
+      description: What setting the clock to a date would do, before anything is written.
+      properties:
+        current_ic_time:
+          type: string
+          format: date-time
+        current_date_display:
+          type: string
+          description: The current IC date in full, for the sentence the dialog shows.
+        new_ic_time:
+          type: string
+          format: date-time
+        direction:
+          $ref: '#/components/schemas/ClockJumpPreviewDirectionEnum'
+        year_shift:
+          type: integer
+          description: 'Calendar years between the dates: what birth years move by
+            if ages are kept.'
+        characters_with_birth_year:
+          type: integer
+        upcoming_events:
+          type: integer
+        heritages_not_yet_appeared:
+          type: array
+          items:
+            type: string
+      required:
+      - characters_with_birth_year
+      - current_date_display
+      - current_ic_time
+      - direction
+      - heritages_not_yet_appeared
+      - new_ic_time
+      - upcoming_events
+      - year_shift
+    ClockJumpPreviewDirectionEnum:
+      enum:
+      - forward
+      - back
+      - none
+      type: string
+      description: |-
+        * `forward` - Forward
+        * `back` - Back
+        * `none` - No change
     ClockRatioRequest:
       type: object
       description: Request serializer for staff time-ratio change.
@@ -53857,18 +54151,37 @@ components:
           format: double
         paused:
           type: boolean
+        time_ratio:
+          type: number
+          format: double
+          description: IC seconds per real second.
+        month_names:
+          type: array
+          items:
+            type: string
+          description: The twelve IC month names in order, for a date picker.
+        min_year:
+          type: integer
+          description: The earliest year the clock may be set to.
+        max_year:
+          type: integer
+          description: The latest year the clock may be set to.
       required:
       - date_display
       - day
       - hour
       - ic_datetime
       - light_level
+      - max_year
+      - min_year
       - minute
       - month
       - month_name
+      - month_names
       - paused
       - phase
       - season
+      - time_ratio
       - year
     ClueRevealOfferDetails:
       type: object
@@ -61158,6 +61471,16 @@ components:
           type: integer
           maximum: 32767
           minimum: 0
+        color_hex:
+          description: 'The colour shown for this option where a player picks it (#5241),
+            as #rrggbb. Leave blank for an option that is not a colour, or has no
+            single colour (Prismatic, Mismatched); it is then drawn as a striped swatch.'
+          oneOf:
+          - type: string
+            pattern: ^#[0-9a-fA-F]{6}$
+            maxLength: 7
+          - type: string
+            maxLength: 0
       required:
       - display_name
       - id
@@ -62060,6 +62383,12 @@ components:
           description: 'Resolved authored private line for the character this concerns,
             e.g. the Crossing vision. Spoiler-private: shown only to the addressed
             GM.'
+        context_text:
+          type: string
+          readOnly: true
+          description: 'What happened, for the addressed GM only: a miracle prompt''s
+            result tier, what was drawn and who prayed (#4349). Never narrated; the
+            room and private lines above are what the GM may send.'
         prepared_for_character:
           type: boolean
           readOnly: true
@@ -62073,6 +62402,7 @@ components:
       - being_answer_summary
       - being_answer_table
       - character_sheet
+      - context_text
       - created_at
       - id
       - kind
@@ -64173,7 +64503,13 @@ components:
           type: string
         site:
           type: string
+        ap_left:
+          type: integer
+        ap_cap:
+          type: integer
       required:
+      - ap_cap
+      - ap_left
       - being_id
       - being_name
       - site
@@ -68742,8 +69078,12 @@ components:
         favor_threshold:
           type: integer
           readOnly: true
-          description: Minimum DevotionStanding.favor required for this miracle to
-            fire.
+          description: Minimum favor with the being for this miracle to be a candidate.
+            0 means only the Divine Intervention Config's prayer favor gate applies.
+        min_outcome_tier:
+          type: string
+          readOnly: true
+          default: Success
         narrative_text:
           type: string
           readOnly: true
@@ -68761,6 +69101,7 @@ components:
       - id
       - intervention_trigger
       - is_active
+      - min_outcome_tier
       - name
       - narrative_text
       - resonance_pool_cost
@@ -74579,6 +74920,31 @@ components:
       - character_sheet
       - name
       - wardrobe
+    OwedFavor:
+      type: object
+      description: |-
+        Favor a character owes a being after a weaker answer (#4349): while any is owed the
+        being ignores their calls for intervention.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        being_id:
+          type: integer
+        being_name:
+          type: string
+        owed_favor:
+          type: integer
+          readOnly: true
+          description: Favor owed to the being after a weaker answer to divine intervention
+            (#4349). While any is owed the being ignores this character's intervention
+            rolls; base favor the character earns pays it first, before the earning
+            rate.
+      required:
+      - being_id
+      - being_name
+      - id
+      - owed_favor
     OwnerModeEnum:
       enum:
       - PERSONAL
@@ -75695,6 +76061,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CheckType'
+    PaginatedClockHistoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClockHistory'
     PaginatedClueRevealOfferDetailsList:
       type: object
       required:
@@ -78084,6 +78473,29 @@ components:
       - next
       - previous
       - results
+    PaginatedOwedFavorList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OwedFavor'
     PaginatedPactCardList:
       type: object
       required:
@@ -87060,7 +87472,13 @@ components:
         devotion_granted:
           type: integer
           readOnly: true
-          description: Favor paid by the weekly holy-site prayer; 0 for every other.
+          description: Favor paid by a holy-site prayer; 0 for every other.
+        ap_spent:
+          type: integer
+          readOnly: true
+          description: Action points spent praying at a holy site of the being (#4349).
+            The weekly limit is the sum of these for the character, being and game
+            week.
         dire_straits:
           allOf:
           - $ref: '#/components/schemas/DireStraitsEnum'
@@ -87074,6 +87492,7 @@ components:
           readOnly: true
       required:
       - answered
+      - ap_spent
       - being
       - being_name
       - character_sheet
@@ -87695,6 +88114,7 @@ components:
     PromptEnum:
       enum:
       - crime
+      - enemy
       - prestige_story
       - organization
       - path_aspect
@@ -87704,6 +88124,7 @@ components:
       type: string
       description: |-
         * `crime` - Name the crime (Jailbird)
+        * `enemy` - Name the enemy (a card that starts with one)
         * `prestige_story` - What people say happened (a prestige grant)
         * `organization` - The organization that takes you in (an organization grant)
         * `path_aspect` - Your Path's stronger Aspect (a path aspect grant)
@@ -101481,10 +101902,6 @@ components:
           type: string
         taken_per_feature:
           type: boolean
-        opens_feature:
-          type: boolean
-        requires_feature_opened:
-          type: boolean
         cg_max_rank:
           type: integer
         group:
@@ -101516,9 +101933,7 @@ components:
       - offer_id
       - opener_key
       - opener_label
-      - opens_feature
       - player_line
-      - requires_feature_opened
       - taken_per_feature
     Vision:
       type: object

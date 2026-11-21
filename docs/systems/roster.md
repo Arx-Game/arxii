@@ -282,6 +282,13 @@ creation leaves a player-made entry with `activity_requirement=NONE`. The former
 `CharacterSheet.is_oc` / `created_by` columns are gone (`0159_is_oc_to_provenance` carried
 the flag onto provenance, `0159_remove_charactersheet_is_oc_created_by` dropped them).
 
+**An original character is reserved to its creator.** `reserving_account_id(entry)` is the
+entry's `created_by_account` when `creation_provenance` is PLAYER, else none;
+`is_reserved_against(entry, account_id)` is true for every other account. The application
+serializer refuses such an application (`reserved_for_creator`) and `can_apply` is false for
+them. The beta cutover relies on this to leave original characters on the Available shelf
+(#3055, ADR-3055).
+
 **Freeing a slot.** An original character is *frozen* (`freeze_character`, 30-day thaw
 cooldown, `activity_state=FROZEN`; the tenure stays) and later *thawed*. A roster
 character is *given up* (`release_tenure`): the tenure ends and the entry returns to

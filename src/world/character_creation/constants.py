@@ -22,6 +22,14 @@ STAT_DEFAULT_VALUE = 20  # Default starting value
 STAT_CREATION_BUDGET = 350
 STAT_ALLOCATION_STEP = STAT_POINT_VALUE
 
+# Feature qualities (#5241, owner ruling 2026-11-21: "I would just give someone 10 free
+# points of making any features have bonuses"). The qualities a draft holds on its
+# features (Alluring, Menacing, Majestic: the ``taken_per_feature`` distinctions) cost
+# nothing up to this many points in all; past it they cost CG points at the quality's
+# own ``cost_per_rank`` (the owner, asked the same day: "Yes, with CG points"). Points
+# of the allowance left unspent are lost.
+FEATURE_FREE_POINTS = 10
+
 # Age constraints for character creation
 AGE_MIN = 18
 AGE_MAX = 65
@@ -101,6 +109,14 @@ class Stage(models.IntegerChoices):
     REVIEW = 11, "Review"
 
 
+# The stages that ask nothing of the player (#5199, owner ruling 2026-11-18 on #5205: a
+# stage that asks nothing says "optional"). Identity's validator returns no error for any
+# draft, and Final Touches' only error is the purse being overspent, which no choice on
+# that stage is needed to avoid. The stage list reads "optional" for these in place of
+# "complete". `test_stage_list.py` holds that an empty draft has no error on either.
+OPTIONAL_STAGES: tuple[Stage, ...] = (Stage.IDENTITY, Stage.FINAL_TOUCHES)
+
+
 class TraditionState(models.TextChoices):
     """How a tradition on a Beginning's slate reads at the tradition step (#3675).
 
@@ -151,8 +167,17 @@ class OfferChapter(models.TextChoices):
     GLIMPSE = "glimpse", "Gift, the Glimpse"
     LINEAGE = "lineage", "Lineage"
     APPEARANCE = "appearance", "Appearance"
+    #: #5255 (owner ruling 2026-11-21): the cards a player picks on the Identity stage to
+    #: say who the character is, the personality cards first. The chapter is its own
+    #: opener: a line here names no row and shows to every draft, a card has at most one
+    #: line here, and the line is always a choice. Declared here, after Appearance, because
+    #: the members' order is the order the stages are met in (the Builder sorts by it).
+    IDENTITY = "identity", "Identity"
     ACTORS_SHEET = "actors_sheet", "The actor's sheet"
-    ENEMY = "enemy", "Who wants you to fail"
+    #: The reason or the degree of the enemy a card starts the character with. The enemy
+    #: section itself shows only to a draft holding a card that asks for one
+    #: (``FinalTouchesPrompt.ENEMY``, #5255).
+    ENEMY = "enemy", "An enemy's reason or degree"
     #: #4124: the beats of a life. Every answer on a beat is one of these lines,
     #: opened by the beat and priced at the distinction's own cost.
     BACKGROUNDS = "backgrounds", "Backgrounds, a beat"
@@ -176,6 +201,11 @@ class FinalTouchesPrompt(models.TextChoices):
     """
 
     CRIME = "crime", "Name the crime (Jailbird)"
+    #: The card starts the character with an enemy (#5255, owner ruling 2026-11-21: the
+    #: enemy section is "invisible unless someone has selected a distinction where they
+    #: start with an enemy"). Staff set it per card; ``enemies.enemy_is_open`` reads it,
+    #: and with no such card held the draft's enemy is not shown, priced or written.
+    ENEMY = "enemy", "Name the enemy (a card that starts with one)"
     #: What people say happened: the story behind a starting prestige, kept as the pick's
     #: notes. Raised by ``societies.DistinctionPrestigeGrant``, never set by staff.
     PRESTIGE_STORY = "prestige_story", "What people say happened (a prestige grant)"
