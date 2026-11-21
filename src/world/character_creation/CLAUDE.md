@@ -198,11 +198,12 @@ for the five-branch validation gate this data must satisfy before submission.
   `draft.draft_data["gift_resonance_weights"]` (`GIFT_RESONANCE_WEIGHTS_KEY`), a list of
   `{resonance_id, weight}` parsed in one place, `resonance_weights.py` (heaviest first, a tie
   keeping the order given). `compute_magic_errors` requires distinct, existing resonances,
-  each weighted at least 1, summing to `DriftConfig.creation_points` (a stale or missing
-  pick reads "Select a gift resonance"), exactly one of them Primal (the feeling that gives
-  the character strength) and at most one other, which must be Celestial or Abyssal (what she
-  does to others), through `_affinity_picks_error` in `validators.py`. The three refusals are
-  "Pick the feeling that gives you strength." (no Primal pick), "Pick one feeling." (more than one
+  each weighted at least 1, summing to `DriftConfig.creation_points` (a stale pick, or a
+  draft with no picks, reads "Pick the feeling that gives you strength."), exactly one of
+  them Primal (the feeling that gives the character strength) and at most one other, which
+  must be Celestial or Abyssal (what she does to others), through `_affinity_picks_error` in
+  `validators.py`. The three refusals are "Pick the feeling that gives you strength." (no
+  Primal pick), "Pick one feeling." (more than one
   Primal pick) and "Pick one resonance for what you do to others, or none." (a second pick that is
   not Celestial or Abyssal, or a third pick). The draft serializer applies the same check
   while a draft is saved, minus the full spread and minus the Primal requirement (a second pick

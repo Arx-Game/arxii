@@ -286,12 +286,13 @@ class TheGiftStageChecksTheSpread(TestCase):
         )
 
     def test_no_picks_and_unreadable_picks_are_refused(self) -> None:
-        self.assertEqual(self._errors(None), ["Select a gift resonance"])
-        self.assertEqual(self._errors([]), ["Select a gift resonance"])
+        self.assertEqual(self._errors(None), ["Pick the feeling that gives you strength."])
+        self.assertEqual(self._errors([]), ["Pick the feeling that gives you strength."])
         self.assertEqual(
             self._errors([{"resonance_id": self.first.pk, "weight": "10"}]),
             ["Your resonance picks are not readable"],
         )
         self.assertEqual(
-            self._errors([{"resonance_id": 0, "weight": 10}]), ["Select a gift resonance"]
+            self._errors([{"resonance_id": 0, "weight": 10}]),
+            ["Pick the feeling that gives you strength."],
         )

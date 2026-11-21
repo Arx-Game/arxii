@@ -619,7 +619,7 @@ def resonance_weights_error(
     from world.magic.services.drift import get_drift_config  # noqa: PLC0415
 
     if not raw:
-        return "Select a gift resonance"
+        return "Pick the feeling that gives you strength."
     if not isinstance(raw, list) or len(weights) != len(raw):
         return "Your resonance picks are not readable"
     ids = [pick.resonance_id for pick in weights]
@@ -627,7 +627,7 @@ def resonance_weights_error(
         return "Pick each resonance once"
     picked = list(Resonance.objects.filter(pk__in=ids).select_related("affinity"))
     if len(picked) != len(ids):
-        return "Select a gift resonance"
+        return "Pick the feeling that gives you strength."
     affinity_error = _affinity_picks_error(
         [resonance.affinity.name for resonance in picked],
         require_full_spread=require_full_spread,

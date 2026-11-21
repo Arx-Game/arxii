@@ -182,7 +182,7 @@ class MagicStageValidationTest(TestCase):
         """Resonance is required — anchors the latent GIFT thread (#1620)."""
         draft = self._draft(gift_resonance_weights=None)
         errors = compute_magic_errors(draft)
-        assert errors == ["Select a gift resonance"]
+        assert errors == ["Pick the feeling that gives you strength."]
 
     def test_stale_gift_resonance_pk_fails(self):
         """A pick pointing at a since-deleted Resonance must not pass (#2971) — it
@@ -198,7 +198,7 @@ class MagicStageValidationTest(TestCase):
         doomed_resonance.delete()
 
         errors = compute_magic_errors(draft)
-        assert errors == ["Select a gift resonance"]
+        assert errors == ["Pick the feeling that gives you strength."]
 
     def test_no_anima_check_stat_fails(self):
         draft = self._draft(anima_check_stat_id=None)
