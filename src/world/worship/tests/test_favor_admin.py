@@ -120,6 +120,7 @@ class DevotionConfigAdminTests(TestCase):
     def test_staff_pages_carry_the_demo_labels_and_notes(self) -> None:
         from world.ceremonies.models import CeremonyConfig
         from world.worship.factories import MiracleFactory, WorshippedBeingFactory
+        from world.worship.services import get_divine_intervention_config
 
         config = get_devotion_config()
         body = self.client.get(
@@ -129,11 +130,20 @@ class DevotionConfigAdminTests(TestCase):
         self.assertIn("a Critical Success ritual already refills anima", body)
 
         ceremony = CeremonyConfig.objects.create()
+        miracle_above = MiracleFactory(favor_threshold=50, being=WorshippedBeingFactory())
+        gate_body = self.client.get(
+            reverse(
+                "admin:arxii_divineinterventionconfig_change",
+                args=(get_divine_intervention_config().pk,),
+            )
+        ).content.decode()
+        self.assertIn(f"<td>{miracle_above.being.name}</td><td>50</td>", gate_body)
         body = self.client.get(
             reverse("admin:arxii_ceremonyconfig_change", args=(ceremony.pk,))
         ).content.decode()
         self.assertIn("Devotion officiant (removed)", body)
         self.assertIn("See the Officiant award rows", body)
+        self.assertIn("To be replaced by the symbolic-item weighting", body)
 
         being = WorshippedBeingFactory()
         miracle = MiracleFactory(being=being)

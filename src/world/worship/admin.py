@@ -692,9 +692,9 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
         ).select_related("being")
         if not miracles:
             return "None."
-        return format_html_join(
+        body = format_html_join(
             "",
-            '<p><a href="{}">{}</a> ({}): favor threshold {}</p>',
+            '<tr><td><a href="{}">{}</a></td><td>{}</td><td>{}</td></tr>',
             (
                 (
                     reverse("admin:arxii_miracle_change", args=[m.pk]),
@@ -704,6 +704,10 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
                 )
                 for m in miracles
             ),
+        )
+        return format_html(
+            "<table><tr><th>Miracle</th><th>Being</th><th>Favor threshold</th></tr>{}</table>",
+            body,
         )
 
     @admin.display(description="Beings with miracles but no intervention answers")

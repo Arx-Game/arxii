@@ -92,6 +92,15 @@ class CeremonyConfigAdmin(admin.ModelAdmin):
     list_display = ("pk", "officiant_cut_percent", "base_honoree_prestige")
     readonly_fields = ("devotion_officiant_rows",)
 
+    def get_form(self, request: HttpRequest, obj=None, change: bool = False, **kwargs):
+        kwargs["help_texts"] = {
+            "devotion_per_offering_point": (
+                "Unchanged by this issue. To be replaced by the symbolic-item weighting."
+            ),
+            "offering_favored_facet_multiplier_percent": "Unchanged by this issue.",
+        }
+        return super().get_form(request, obj, change=change, **kwargs)
+
     @admin.display(description="Devotion officiant (removed)")
     def devotion_officiant_rows(self, obj: CeremonyConfig) -> str:
         """Where the officiant's favor is authored now: the Officiant award rows by Rites result."""
