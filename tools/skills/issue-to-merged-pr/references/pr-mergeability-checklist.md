@@ -156,8 +156,10 @@ gh api graphql -f query='mutation($t:ID!){resolveReviewThread(input:{threadId:$t
 them as an error rather than a question:
 
 - **Review evidence**, when the linked issue carries `review:evidence-required`.
-  The report identifies the reviewed revision; independently verified neutral updates
-  retain it. Review material changes before refreshing the report with
+  The report identifies the reviewed revision; later commits that touch only tests,
+  documents or `.github/`, and merges of main that the gate reproduces (including a
+  hand-made migration renumbering), retain it. A commit that touches any other path
+  needs a review of the change before the report is refreshed with
   `sync-evidence-revision.sh <pr>`.
 - **Open code-scanning alerts** on the PR head ref (section 3).
 - **Evidence committed under `docs/reviews/` or `.github/issue-evidence/`** is failed by the

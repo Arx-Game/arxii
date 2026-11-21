@@ -28,6 +28,12 @@ only if its tree is byte-identical, so the PR's CI runs. If the queue had droppe
 unless the PR carries review evidence. Anything else is refused with a PR comment, and
 nothing is pushed.
 
+**Amended 2026-11-21 (#5254).** The review-evidence check (`tools/review_evidence_revision.py`)
+no longer trusts the bot's name to carry a visual review across a renumbering merge. It tries
+the same independent rebuild on any two-parent merge of an ancestor of main that is not a
+clean merge, for any author, and carries the report only when the whole tree is identical. A
+hand merge that matches the rebuild passes, and one with any other change is refused.
+
 **Why:** the single-app collapse (ADR-0195) made every pair of migration-bearing PRs
 collide. Each merge then dropped the next PR from the queue until someone ran the manual
 `rebase_migration` recipe (#4826, #4828 and #4832 in one afternoon). The answer is
