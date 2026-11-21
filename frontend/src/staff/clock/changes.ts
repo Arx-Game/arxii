@@ -15,8 +15,9 @@ export function describeChange(row: ClockHistoryRow): string {
       return `Date set to ${date}. Characters aged.`;
     case 'date_kept': {
       const shift = row.birth_year_shift;
-      const moved = shift === 0 ? '' : ` Birth years moved by ${shift > 0 ? '+' : ''}${shift}.`;
-      return `Date set to ${date}. Characters kept their ages.${moved}`;
+      const kept = `Date set to ${date}. Characters kept their ages.`;
+      if (shift === 0) return kept;
+      return `${kept} Birth years moved by ${shift > 0 ? '+' : ''}${shift}.`;
     }
     default:
       return `Clock changed to ${date}`;
