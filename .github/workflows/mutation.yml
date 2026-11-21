@@ -1,0 +1,196 @@
+name: Mutation run
+
+# Which test group notices each small change to one source file (#4248, ADR-4248).
+# Started by hand: pick a source file, usually one function, the kept test group
+# (journeys and properties) and the unit test group, and the job writes the
+# report (tools/mutation_run.py) to the run summary on the Postgres tier.
+# Never a gate: this workflow has no pull_request or merge_group trigger, is not
+# a required check and sets no target.
+#
+# The Postgres setup mirrors journey-coverage.yml (the manual `docker run`
+# because the `services:` block cannot pass max_locks_per_transaction).
+#
+# Inputs reach the script through `env:` only. No `${{ ... }}` expression
+# appears inside a `run:` block, so an input can never be read as shell code.
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_file:
+        description: "The .py file to change, relative to the repo root"
+        required: true
+        type: string
+      kept:
+        description: "Kept test labels, separated by spaces"
+        required: true
+        type: string
+      units:
+        description: "Unit test labels, separated by spaces"
+        required: true
+        type: string
+      functions:
+        description: "Function names, comma separated (leave empty for the whole file)"
+        required: false
+        type: string
+      lines:
+        description: "Inclusive line range such as 434-435 (not with functions)"
+        required: false
+        type: string
+      sample:
+        description: "Keep only N changes, spaced evenly in the file"
+        required: false
+        type: string
+      max_minutes:
+        description: "Refuse a run whose estimate is longer than this many minutes"
+        required: false
+        type: string
+  # TEMPORARY (#4248): removed before the PR is enqueued
+  push:
+    branches:
+      - test-4248-mutation-testing-pilot-find-tests-that-g
+    paths:
+      - .github/mutation-pilot.args
+
+permissions:
+  contents: read
+
+jobs:
+  mutation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+    env:
+      DEBUG: False
+      SECRET_KEY: test-secret-key-for-ci-only
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/arxii_test
+      CLOUDINARY_CLOUD_NAME: test-cloud
+      CLOUDINARY_API_KEY: test-key
+      CLOUDINARY_API_SECRET: test-secret
+      SENDGRID_API_KEY: test-sendgrid-key
+      DEFAULT_FROM_EMAIL: test@example.com
+      FACEBOOK_APP_ID: test-facebook-id
+      FACEBOOK_APP_SECRET: test-facebook-secret
+    steps:
+      - uses: actions/checkout@v7
+      - name: Mint a throwaway MFA_SECRETS_KEY for this job
+        run: echo "MFA_SECRETS_KEY=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode())')" >> "$GITHUB_ENV"
+      - name: Start Postgres with max_locks_per_transaction bumped
+        run: |
+          docker run -d \
+            --name postgres-ci \
+            -e POSTGRES_PASSWORD=postgres \
+            -e POSTGRES_DB=arxii_test \
+            -e POSTGRES_INITDB_ARGS=--no-sync \
+            --tmpfs /var/lib/postgresql/data:rw,noexec,nosuid,size=2g \
+            -p 5432:5432 \
+            postgres:15 \
+            -c max_locks_per_transaction=512
+      - name: Wait for Postgres ready
+        run: |
+          for i in $(seq 1 30); do
+            if docker exec postgres-ci pg_isready -U postgres -d arxii_test; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Postgres did not become ready" >&2
+          docker logs postgres-ci
+          exit 1
+      - uses: astral-sh/setup-uv@v7
+        with:
+          python-version: '3.13'
+      - run: uv sync
+      - name: Build schema from model state
+        run: uv run python tools/build_schema.py
+      - name: Clone built DB into the test database
+        run: |
+          docker exec postgres-ci psql -U postgres -d postgres \
+            -c "CREATE DATABASE test_arxii_test TEMPLATE arxii_test"
+      - name: Run the mutation driver
+        env:
+          IN_SOURCE_FILE: ${{ inputs.source_file }}
+          IN_KEPT: ${{ inputs.kept }}
+          IN_UNITS: ${{ inputs.units }}
+          IN_FUNCTIONS: ${{ inputs.functions }}
+          IN_LINES: ${{ inputs.lines }}
+          IN_SAMPLE: ${{ inputs.sample }}
+          IN_MAX_MINUTES: ${{ inputs.max_minutes }}
+        run: |
+          set -euo pipefail
+
+          # TEMPORARY (#4248): removed before the PR is enqueued
+          # On a push, the inputs come from .github/mutation-pilot.args, one
+          # name=value per line. The value is everything after the first "=".
+          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
+            while IFS= read -r line || [ -n "$line" ]; do
+              if [[ -z "${line//[[:space:]]/}" || "$line" == "#"* ]]; then
+                continue
+              fi
+              name="${line%%=*}"
+              value="${line#*=}"
+              if [ "$name" = "$line" ]; then
+                echo "::error::Line without an = in mutation-pilot.args: $line"
+                exit 1
+              fi
+              case "$name" in
+                source_file) IN_SOURCE_FILE="$value" ;;
+                kept) IN_KEPT="$value" ;;
+                units) IN_UNITS="$value" ;;
+                functions) IN_FUNCTIONS="$value" ;;
+                lines) IN_LINES="$value" ;;
+                sample) IN_SAMPLE="$value" ;;
+                max_minutes) IN_MAX_MINUTES="$value" ;;
+                *)
+                  echo "::error::Unknown input name in mutation-pilot.args: $line"
+                  exit 1
+                  ;;
+              esac
+            done < .github/mutation-pilot.args
+          fi
+          # End of the TEMPORARY block.
+
+          for required in IN_SOURCE_FILE IN_KEPT IN_UNITS; do
+            if [ -z "${!required:-}" ]; then
+              echo "::error::The input behind ${required} is empty"
+              exit 1
+            fi
+          done
+
+          read -r -a kept_labels <<< "$IN_KEPT"
+          read -r -a unit_labels <<< "$IN_UNITS"
+          args=("$IN_SOURCE_FILE" --kept "${kept_labels[@]}" --units "${unit_labels[@]}")
+          if [ -n "${IN_FUNCTIONS:-}" ]; then
+            args+=(--functions "$IN_FUNCTIONS")
+          fi
+          if [ -n "${IN_LINES:-}" ]; then
+            args+=(--lines "$IN_LINES")
+          fi
+          if [ -n "${IN_SAMPLE:-}" ]; then
+            args+=(--sample "$IN_SAMPLE")
+          fi
+          if [ -n "${IN_MAX_MINUTES:-}" ]; then
+            args+=(--max-minutes "$IN_MAX_MINUTES")
+          fi
+          args+=(--tier postgres --out mutation-report)
+
+          printf 'uv run python tools/mutation_run.py'
+          printf ' %q' "${args[@]}"
+          printf '\n'
+          uv run python tools/mutation_run.py "${args[@]}"
+      - name: Write the report to the run summary
+        if: always()
+        run: |
+          if [ -f mutation-report/report.md ]; then
+            cat mutation-report/report.md >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No report was written." >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: mutation-report
+          path: |
+            mutation-report/changes.csv
+            mutation-report/unit_tests.csv
+            mutation-report/report.md
+          retention-days: 30
+          if-no-files-found: ignore
