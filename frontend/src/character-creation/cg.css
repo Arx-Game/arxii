@@ -2344,16 +2344,19 @@
   max-width: 19rem;
   margin: 0 auto;
 }
-.interview .strength-named {
+/* Written under .strength-plate so they outrank `.entry-prose p`, which the step sits inside
+   and which would otherwise colour both lines the grey of body prose on the night plate. */
+.interview .strength-plate .strength-named {
   font-family: 'Cinzel', serif;
   font-weight: 600;
   letter-spacing: 0.14em;
   text-transform: uppercase;
   font-size: 0.9rem;
   text-align: center;
+  color: var(--cg-night-text);
   margin: 0.6rem 0 0.1rem;
 }
-.interview .strength-said {
+.interview .strength-plate .strength-said {
   font-style: italic;
   text-align: center;
   color: var(--cg-night-soft);
