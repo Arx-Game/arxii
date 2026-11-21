@@ -135,6 +135,9 @@ class PersonaSerializer(serializers.ModelSerializer):
     thumbnail_url = serializers.SerializerMethodField()
     # #4033 — the mask's own prose; empty for the PRIMARY face and for a mask with none.
     description = serializers.SerializerMethodField()
+    # Whether the face holds a picture of its own, so the editor offers "Remove portrait"
+    # only then (#4889). The portrait itself is already in ``thumbnail_url``.
+    has_portrait = serializers.SerializerMethodField()
     allow_social_actions = serializers.SerializerMethodField()
     # #3261 — the particled composed name at this persona's preferred degree.
     display_name = serializers.SerializerMethodField()
@@ -166,6 +169,7 @@ class PersonaSerializer(serializers.ModelSerializer):
             "thumbnail_url",
             "thumbnail_media_url",
             "description",
+            "has_portrait",
             "roster_entry",
             "allow_social_actions",
             "guise_concept",
@@ -238,6 +242,9 @@ class PersonaSerializer(serializers.ModelSerializer):
 
     def get_description(self, obj: Persona) -> str:
         return mask_description(obj)
+
+    def get_has_portrait(self, obj: Persona) -> bool:
+        return obj.thumbnail_id is not None or bool(obj.thumbnail_url)
 
     def get_thumbnail_media_url(self, obj: Persona) -> str | None:
         from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415

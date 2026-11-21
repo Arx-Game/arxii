@@ -18,6 +18,8 @@ export interface SwitchableAlternateSelf {
   persona_id: number | null;
   /** The picture this self shows: its own, its persona's, else the placeholder (#4889). */
   thumbnail_url: string;
+  /** Whether this self holds a picture of its own (#4889). */
+  has_portrait: boolean;
 }
 
 export const alternateSelfKeys = {
@@ -44,6 +46,7 @@ async function fetchAlternateSelves(characterSheetId: number): Promise<Switchabl
       compulsion?: Compulsion | null;
       persona_id?: number | null;
       thumbnail_url?: string;
+      has_portrait?: boolean;
     }>;
   };
   return (data.results ?? []).map((alt) => ({
@@ -57,6 +60,7 @@ async function fetchAlternateSelves(characterSheetId: number): Promise<Switchabl
     compulsion: alt.compulsion ?? null,
     persona_id: alt.persona_id ?? null,
     thumbnail_url: alt.thumbnail_url ?? '',
+    has_portrait: alt.has_portrait ?? false,
   }));
 }
 

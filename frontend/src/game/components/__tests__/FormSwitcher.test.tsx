@@ -45,6 +45,7 @@ function alternate(id: number, name: string): SwitchableAlternateSelf {
     compulsion: null,
     persona_id: null,
     thumbnail_url: '',
+    has_portrait: false,
   };
 }
 

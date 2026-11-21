@@ -47419,10 +47419,16 @@ components:
 
             Never the character's real face, the same order the room list resolves (#4889).
           readOnly: true
+        has_portrait:
+          type: boolean
+          description: Whether this self holds a picture of its own, so the editor
+            can offer to remove it.
+          readOnly: true
       required:
       - compulsion
       - form_name
       - has_combat_profile
+      - has_portrait
       - has_techniques
       - id
       - is_active
@@ -73371,8 +73377,8 @@ components:
           description: |-
             Direct portrait URL, resolved through the opponent's persona.
 
-            Mirrors ``PersonaSerializer.thumbnail_url`` (the persona's
-            ``thumbnail_url`` URLField — ``""`` when unset). Persona-less
+            Mirrors ``PersonaSerializer.thumbnail_url`` (``persona_face_url``: the persona's
+            picture, the placeholder for a mask, ``""`` for a true face with none). Persona-less
             opponents (``persona=None``) return ``None``.
           readOnly: true
         thumbnail_media_url:
@@ -81401,9 +81407,10 @@ components:
           description: |-
             Direct portrait URL via the presented persona (mirrors OpponentSerializer).
 
-            The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
-            character has no persona. A mask shows its own portrait, never the true face
-            (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
+            ``persona_face_url`` of the presented persona (the placeholder for a mask, ``""`` for a
+            true face with none); ``None`` when the character has no persona. A mask shows its own
+            portrait, never the true face (#4802). Portrait is public identity, so it is not gated
+            by ``_can_view_vitals``.
           readOnly: true
         thumbnail_media_url:
           type: string
@@ -85973,6 +85980,9 @@ components:
         description:
           type: string
           readOnly: true
+        has_portrait:
+          type: boolean
+          readOnly: true
         roster_entry:
           type: object
           additionalProperties:
@@ -86028,6 +86038,7 @@ components:
       - guise_never_do
       - guise_protect
       - guise_quote
+      - has_portrait
       - humiliation_mark
       - id
       - name

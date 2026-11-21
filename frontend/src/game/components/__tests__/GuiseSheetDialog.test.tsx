@@ -35,6 +35,7 @@ const mask: SwitchablePersona = {
   guise_fear: '',
   guise_background: '',
   description: 'Slim and straight-backed.',
+  has_portrait: true,
 };
 
 const hollowForm: SwitchableAlternateSelf = {
@@ -48,6 +49,7 @@ const hollowForm: SwitchableAlternateSelf = {
   compulsion: null,
   persona_id: null,
   thumbnail_url: '',
+  has_portrait: true,
 };
 
 // A unit the journeys cannot reach: which face the dialog writes to, and which fields it

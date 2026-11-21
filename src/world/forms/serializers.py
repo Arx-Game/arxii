@@ -112,6 +112,7 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
     compulsion = serializers.SerializerMethodField()
     persona_id = serializers.SerializerMethodField()
     thumbnail_url = serializers.SerializerMethodField()
+    has_portrait = serializers.SerializerMethodField()
 
     class Meta:
         model = AlternateSelf
@@ -127,6 +128,7 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
             "compulsion",
             "persona_id",
             "thumbnail_url",
+            "has_portrait",
         ]
 
     def get_persona_name(self, obj: AlternateSelf) -> str | None:
@@ -135,6 +137,10 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
     def get_persona_id(self, obj: AlternateSelf) -> int | None:
         """The persona this self wears, so the editor opens its description (#4889)."""
         return obj.persona_id
+
+    def get_has_portrait(self, obj: AlternateSelf) -> bool:
+        """Whether this self holds a picture of its own, so the editor can offer to remove it."""
+        return obj.thumbnail_id is not None
 
     def get_thumbnail_url(self, obj: AlternateSelf) -> str:
         """The picture this self shows: its own, its persona's, else the placeholder.

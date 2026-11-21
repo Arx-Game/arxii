@@ -236,7 +236,9 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
     def test_a_replaced_copy_is_deleted_and_a_removed_portrait_returns_the_placeholder(
         self,
     ) -> None:
-        self.assertEqual(self.pick(self.her_picture(size=500)).status_code, 200)
+        picked = self.pick(self.her_picture(size=500))
+        self.assertEqual(picked.status_code, 200)
+        self.assertTrue(picked.json()["has_portrait"])
         first = Persona.objects.get(pk=self.mask.pk).thumbnail
         self.assertEqual(self.pick(self.her_picture(size=700)).status_code, 200)
         self.assertFalse(Media.objects.filter(pk=first.pk).exists())
@@ -246,6 +248,7 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
             SET_PORTRAIT, {"persona_id": self.mask.pk, "clear": True}, format="json"
         )
         self.assertEqual(cleared.status_code, 200, cleared.content)
+        self.assertFalse(cleared.json()["has_portrait"])
         self.mask.refresh_from_db()
         self.assertEqual((self.mask.thumbnail, self.mask.thumbnail_url), (None, ""))
 

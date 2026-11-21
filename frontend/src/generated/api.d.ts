@@ -29077,6 +29077,8 @@ export interface components {
        *     Never the character's real face, the same order the room list resolves (#4889).
        */
       readonly thumbnail_url: string;
+      /** @description Whether this self holds a picture of its own, so the editor can offer to remove it. */
+      readonly has_portrait: boolean;
     };
     /**
      * @description Read shape for the alternate-self switcher (#1111 slice 4).
@@ -41354,8 +41356,8 @@ export interface components {
       /**
        * @description Direct portrait URL, resolved through the opponent's persona.
        *
-       *     Mirrors ``PersonaSerializer.thumbnail_url`` (the persona's
-       *     ``thumbnail_url`` URLField — ``""`` when unset). Persona-less
+       *     Mirrors ``PersonaSerializer.thumbnail_url`` (``persona_face_url``: the persona's
+       *     picture, the placeholder for a mask, ``""`` for a true face with none). Persona-less
        *     opponents (``persona=None``) return ``None``.
        */
       readonly thumbnail_url: string | null;
@@ -46144,9 +46146,10 @@ export interface components {
       /**
        * @description Direct portrait URL via the presented persona (mirrors OpponentSerializer).
        *
-       *     The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
-       *     character has no persona. A mask shows its own portrait, never the true face
-       *     (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
+       *     ``persona_face_url`` of the presented persona (the placeholder for a mask, ``""`` for a
+       *     true face with none); ``None`` when the character has no persona. A mask shows its own
+       *     portrait, never the true face (#4802). Portrait is public identity, so it is not gated
+       *     by ``_can_view_vitals``.
        */
       readonly thumbnail_url: string | null;
       /**
@@ -48701,6 +48704,7 @@ export interface components {
       readonly thumbnail_url: string;
       readonly thumbnail_media_url: string | null;
       readonly description: string;
+      readonly has_portrait: boolean;
       readonly roster_entry: {
         [key: string]: number | string;
       } | null;

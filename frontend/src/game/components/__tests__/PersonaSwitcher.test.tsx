@@ -48,6 +48,7 @@ function persona(
     guise_fear: '',
     guise_background: '',
     description: '',
+    has_portrait: false,
   };
 }
 
