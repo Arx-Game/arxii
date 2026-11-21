@@ -46,6 +46,8 @@ from world.magic.factories import (
     primal_resonance,
 )
 from world.magic.seeds_cast import get_standalone_cast_template
+from world.roster.models import Roster
+from world.roster.models.choices import RosterType
 from world.roster.seeds import ensure_rosters
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
@@ -457,6 +459,22 @@ class ApproveApplicationTests(TestCase):
         # A second approval is refused for the draft, not for a status it never reached.
         with self.assertRaises(DraftIncompleteError):
             approve_application(app, reviewer=self.staff)
+
+    @patch("world.character_creation.services.finalize_character")
+    def test_a_failure_after_finalize_leaves_the_application_in_review_in_memory(
+        self,
+        mock_finalize,  # noqa: ARG002
+    ):
+        """With no Active roster the roster step raises after finalize returned, and the
+        cached application still reads In Review, as the rolled-back table does."""
+        Roster.objects.filter(roster_type=RosterType.ACTIVE).delete()
+        draft = CharacterDraftFactory(account=self.account)
+        app = DraftApplicationFactory(
+            draft=draft, status=ApplicationStatus.IN_REVIEW, reviewer=self.staff
+        )
+        with self.assertRaises(Roster.DoesNotExist):
+            approve_application(app, reviewer=self.staff)
+        self.assertEqual(app.status, ApplicationStatus.IN_REVIEW)
 
 
 class RequestRevisionsTests(TestCase):
