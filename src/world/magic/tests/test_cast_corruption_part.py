@@ -49,3 +49,17 @@ class TestCastCorruptionPart(TestCase):
         config = CorruptionConfig(light_corruption_percent=100, full_corruption_from_share=50)
         sheet = self._caster_with_abyssal_share("20")
         self.assertEqual(cast_corruption_part(sheet, config), 100)
+
+
+class TestCastCorruptionPartWithoutAbyssalAffinity(TestCase):
+    """A game with no Abyssal affinity row takes the full part and never raises."""
+
+    def test_a_missing_abyssal_row_takes_all_of_it(self) -> None:
+        Affinity.objects.clear_cache()
+        sheet = CharacterSheetFactory()
+        # An aura of Primal only: the factory writes no row for a share of zero.
+        CharacterAuraFactory(
+            character=sheet, celestial=Decimal(0), primal=Decimal(100), abyssal=Decimal(0)
+        )
+        self.assertFalse(Affinity.objects.filter(name="Abyssal").exists())
+        self.assertEqual(cast_corruption_part(sheet, CorruptionConfigFactory()), 100)

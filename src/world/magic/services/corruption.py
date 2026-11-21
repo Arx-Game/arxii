@@ -14,6 +14,7 @@ from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.conditions.services import advance_condition_severity, decay_condition_severity
 from world.conditions.types import AdvancementOutcome
 from world.magic.constants import SoulTetherRole, TargetKind
+from world.magic.exceptions import AffinityNotConfigured
 from world.magic.models.affinity import Affinity, Resonance
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.corruption_config import CorruptionConfig
@@ -133,12 +134,18 @@ def cast_corruption_part(caster_sheet: CharacterSheet, config: CorruptionConfig)
     All of it (100) once the Abyssal share of her true aura, as her deeds have made it
     (neither her settled shares nor a worn alternate self), reaches
     ``full_corruption_from_share``; until then only ``light_corruption_percent``, so a
-    slightly Abyssal caster feels a warning. A caster with no aura counts as fully Abyssal.
+    slightly Abyssal caster feels a warning. A caster with no aura counts as fully Abyssal, and
+    so does one on a game with no Abyssal affinity row: a missing configuration row never
+    raises out of a cast, so it takes the full part.
     """
     aura = caster_sheet.aura_or_none
     if aura is None:
         return 100
-    share = aura.percent_for(Affinity.objects.get_abyssal_affinity())
+    try:
+        abyssal = Affinity.objects.get_abyssal_affinity()
+    except AffinityNotConfigured:
+        return 100
+    share = aura.percent_for(abyssal)
     if share >= config.full_corruption_from_share:
         return 100
     return config.light_corruption_percent
