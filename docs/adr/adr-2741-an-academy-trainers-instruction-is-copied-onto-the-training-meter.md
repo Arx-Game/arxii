@@ -1,0 +1,11 @@
+# ADR-2741: An Academy trainer's instruction is copied onto the training meter
+
+A player who pays an Academy NPC to train a technique is never in a room with that NPC when she trains: the NPC is a functionary at a desk, and each later session is a separate `train` command that can run anywhere. A player teacher's bonus is read from the teacher's own check rating and only when that teacher stands in the room, so it never applied. On 2026-11-20 the owner ruled that paying for Academy training gives a staff-set instruction bonus on the training check and lifts the self-study penalty, and (#2740) that the learning roll also adds the technique's own casting skill, counted once.
+
+The bonus is authored in check points on `TrainOfferDetails.instruction_bonus`, copied by `charge_and_learn` onto `TechniqueProgress.instruction_bonus` when the offer is accepted, and read from the meter at every session. It enters the roll as one labelled `CHARACTER` modifier through `extra_contributions`. A meter whose `source` is `ACADEMY_TRAINING` counts as paid instruction, so the penalty is lifted even when the bonus is 0.
+
+**Consequences.** An open meter keeps the bonus it was opened with: staff retuning or deleting the offer changes only meters opened afterwards, the same snapshot rule as `total_required`. It survives a restart because it is a column. Every TRAIN offer is Academy-fronted, so the Great Archive librarian's offers get the same rule. The bonus tapers with other `CHARACTER` modifiers wherever staff have authored a taper.
+
+**Rejected:** a foreign key from the meter to the offer that reads the live value (an offer edit or delete would change or lose an open meter, and one technique can be taught by several offers); a flat default for every trainer or a value derived from the Academy's standing (the ruling is that staff set it per offer); a new modifier source kind for instruction (a new member of a hand-enumerated set for no gain a label does not give); and a new `ndb` value on the learner (lost on restart).
+
+> Status: accepted · Source: issues #2741 and #2740, owner ruling 2026-11-20 · verify against `world/magic/services/technique_training.py` (`is_academy_instructed`), `world/magic/services/magic_skills.py` (`technique_learning_terms`) and `world/magic/services/gift_acquisition.py` (`charge_and_learn`)

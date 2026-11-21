@@ -121,7 +121,9 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
 - ✅ **Trainer system** — DONE (#2440 TRAIN effect: NPC teaches a technique for AP + coin;
   `NPCRole.teaches_tradition`, per-technique offers with costs; seeded Academy Trainer +
   tradition-gated trainers + ghost tutelage #2460; Training Room AP discount). Check-based technique
-  learning follow-ups remain open: #2739/#2740/#2741.
+  learning follow-ups: #2739 done; #2740 (the technique's own casting skill joins the learning roll,
+  counted once) and #2741 (an Academy trainer's staff-set instruction bonus, carried by the meter, and
+  no self-study penalty) done.
 - **Path discovery / research / switching** — beyond listing next options. `intent`.
 - ✅ **Resonance→aspect / aspect-in-magic** — resolved (#1363 closed; resonance→aspect mapping was
   rejected earlier as double-counting, #1357).
