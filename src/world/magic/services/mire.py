@@ -7,6 +7,8 @@ for any other reason, ``reduce_corruption`` keeps the holdings within it.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from django.db import transaction
 from django.db.models import OuterRef, Subquery, Sum
 
@@ -63,23 +65,33 @@ def _largest_shed_arriving_within(
     return low
 
 
-def own_corruption(sinner_sheet: CharacterSheet, resonance: Resonance) -> int:
-    """The corruption in ``resonance`` a Sinner can shed: what she carries less what she holds.
+def own_corruptions(
+    sinner_sheet: CharacterSheet, resonances: Iterable[Resonance]
+) -> dict[int, int]:
+    """For each of ``resonances`` (by id), the corruption a Sinner can shed in it.
 
-    What she holds in this resonance as a Sineater for someone else is not hers to pass on.
+    What she carries less what she holds in that resonance as a Sineater for someone else,
+    which is not hers to pass on. Two queries however many resonances are asked about.
     """
-    sinner_row = CharacterResonance.objects.filter(
-        character_sheet=sinner_sheet, resonance=resonance
-    ).first()
-    held_for_others = (
-        MireHolding.objects.filter(
-            relationship__source=sinner_sheet, resonance=resonance
-        ).aggregate(total=Sum("amount"))["total"]
-        or 0
+    ids = [resonance.pk for resonance in resonances]
+    carried = dict(
+        CharacterResonance.objects.filter(
+            character_sheet=sinner_sheet, resonance_id__in=ids
+        ).values_list("resonance_id", "corruption_current")
     )
-    return max(
-        0, (sinner_row.corruption_current if sinner_row is not None else 0) - held_for_others
+    held = dict(
+        MireHolding.objects.filter(relationship__source=sinner_sheet, resonance_id__in=ids)
+        .order_by()
+        .values("resonance_id")
+        .annotate(total=Sum("amount"))
+        .values_list("resonance_id", "total")
     )
+    return {pk: max(0, carried.get(pk, 0) - held.get(pk, 0)) for pk in ids}
+
+
+def own_corruption(sinner_sheet: CharacterSheet, resonance: Resonance) -> int:
+    """The corruption in ``resonance`` a Sinner can shed: what she carries less what she holds."""
+    return own_corruptions(sinner_sheet, [resonance])[resonance.pk]
 
 
 def corruption_that_can_move(

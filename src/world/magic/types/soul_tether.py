@@ -13,6 +13,7 @@ from world.magic.models.soul_tether import Sineating, SoulTetherRescue
 from world.relationships.models import CharacterRelationship
 
 if TYPE_CHECKING:
+    from world.magic.models import Thread
     from world.scenes.models import Scene
 
 
@@ -62,6 +63,21 @@ class MireForSinner:
     sinner_name: str
     rows: tuple[MireCarried, ...]
     total: int
+
+
+@dataclass(frozen=True, slots=True)
+class CheckedPlea:
+    """A Sinner's plea after every refusal has passed, before anything is written (#5231).
+
+    ``units`` is the number offered after clamping to the scene's cap. ``resonance`` is the one
+    on the Sinner's tether ``thread`` in which the plea moves her corruption.
+    """
+
+    relationship: CharacterRelationship
+    thread: Thread
+    scene: Scene
+    units: int
+    resonance: Resonance
 
 
 @dataclass(frozen=True, slots=True)

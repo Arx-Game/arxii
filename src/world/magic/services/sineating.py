@@ -36,7 +36,7 @@ from world.magic.models.soul_tether_config import SineatingOutcomeAward, SoulTet
 from world.magic.services.corruption import get_corruption_config
 from world.magic.services.mire import (
     corruption_that_can_move,
-    own_corruption,
+    own_corruptions,
     take_on_corruption,
 )
 from world.magic.services.soul_tether import (
@@ -57,6 +57,7 @@ from world.magic.services.soul_tether import (
     shared_active_scene,
 )
 from world.magic.types.soul_tether import (
+    CheckedPlea,
     PendingSineating,
     SineatingLines,
     SineatingOffer,
@@ -198,7 +199,7 @@ def _plea_resonance(sinner_sheet: CharacterSheet, thread: Thread) -> Resonance:
     """The resonance on the Sinner's thread a plea moves corruption in (#5231).
 
     Among the thread's rows, the one in which she has the most corruption of her own to shed
-    (``own_corruption``). A tie goes to the row with more imbued, then to the lower resonance
+    (``own_corruptions``). A tie goes to the row with more imbued, then to the lower resonance
     id. A thread with no rows reads as its leading resonance.
     """
     from world.magic.models.threads import ThreadResonance  # noqa: PLC0415
@@ -206,14 +207,8 @@ def _plea_resonance(sinner_sheet: CharacterSheet, thread: Thread) -> Resonance:
     rows = list(ThreadResonance.objects.filter(thread=thread).select_related("resonance"))
     if not rows:
         return thread.resonance
-    best = min(
-        rows,
-        key=lambda row: (
-            -own_corruption(sinner_sheet, row.resonance),
-            -row.amount,
-            row.resonance_id,
-        ),
-    )
+    own = own_corruptions(sinner_sheet, [row.resonance for row in rows])
+    best = min(rows, key=lambda row: (-own[row.resonance_id], -row.amount, row.resonance_id))
     return best.resonance
 
 
@@ -243,8 +238,8 @@ def _earning_parts(
 
 def _checked_plea(
     sinner_sheet: CharacterSheet, sineater_sheet: CharacterSheet, units: int
-) -> tuple[CharacterRelationship, Thread, Scene, int, Resonance]:
-    """Validate a plea; return its relationship, tether thread, scene, clamped units and resonance.
+) -> CheckedPlea:
+    """Validate a plea and return it: relationship, tether thread, scene, clamped units, resonance.
 
     The resonance is the one the plea moves corruption in (``_plea_resonance``).
     """
@@ -266,7 +261,7 @@ def _checked_plea(
     cap = _compute_per_scene_sineating_cap(thread, relationship)
     if cap == 0:
         raise SineatingValidationError(_MSG_PER_SCENE_CAP_REACHED)
-    return relationship, thread, scene, max(1, min(units, cap)), resonance
+    return CheckedPlea(relationship, thread, scene, max(1, min(units, cap)), resonance)
 
 
 def request_sineating(
@@ -281,15 +276,19 @@ def request_sineating(
         SineatingValidationError: no tether, a fallen Sineater, not in one active scene, the
             pair already performed Sineating in this scene, no thread, or no capacity.
     """
-    relationship, thread, scene, offered, resonance = _checked_plea(
-        sinner_sheet, sineater_sheet, units
+    plea = _checked_plea(sinner_sheet, sineater_sheet, units)
+    relationship, thread, offered, resonance = (
+        plea.relationship,
+        plea.thread,
+        plea.units,
+        plea.resonance,
     )
     SineatingPendingOffer.objects.update_or_create(
         sinner_sheet=sinner_sheet,
         sineater_sheet=sineater_sheet,
         defaults={
             "relationship": relationship,
-            "scene": scene,
+            "scene": plea.scene,
             "resonance": resonance,
             "units_offered": offered,
         },
@@ -304,7 +303,7 @@ def request_sineating(
         current_hollow=thread.hollow_current,
         hollow_max=_compute_hollow_max(thread),
         sineater_current_strain_stage=sineater_sheet.get_tether_strain_stage(),
-        scene=scene,
+        scene=plea.scene,
     )
 
 
@@ -572,8 +571,6 @@ def sineating_lines(result: SineatingResult) -> SineatingLines:
         for part_resonance, recorded in result.sinner_earned_parts:
             if recorded > 0:
                 sinner[-1] += f" Your {part_resonance.name} grows by {recorded}."
-    elif result.sinner_resonance_earned > 0:
-        sinner[-1] += f" Your {carried_in} grows by {result.sinner_resonance_earned}."
     if result.sineater_resonance is None:
         sineater.append(_NO_SINEATER_RESONANCE_LINE)
     elif result.sineater_resonance_earned > 0:
@@ -622,8 +619,8 @@ def pending_sineating_from(sheet: CharacterSheet, params: Any) -> PendingSineati
     if partner is None:
         raise SineatingValidationError(_MSG_PARTNER_NOT_FOUND)
     if role == SineatingPoseRole.ENTREAT:
-        offered = _checked_plea(sheet, partner, int(units))[3]
-        return PendingSineating(role, sheet, partner, offered)
+        plea = _checked_plea(sheet, partner, int(units))
+        return PendingSineating(role, sheet, partner, plea.units)
     _, chosen, _ = _checked_performance(partner, sheet, int(units))
     return PendingSineating(role, partner, sheet, chosen)
 
@@ -690,7 +687,7 @@ def sineating_options_for(sheet: CharacterSheet) -> list[SineatingOption]:
         if not _same_location(relationship.target, location):
             continue
         try:
-            _, _, _, cap, resonance = _checked_plea(sheet, relationship.target, 1_000_000)
+            plea = _checked_plea(sheet, relationship.target, 1_000_000)
         except SoulTetherError:
             continue
         options.append(
@@ -698,8 +695,8 @@ def sineating_options_for(sheet: CharacterSheet) -> list[SineatingOption]:
                 SineatingPoseRole.ENTREAT,
                 relationship.target.pk,
                 _name(relationship.target),
-                cap,
-                resonance.name,
+                plea.units,
+                plea.resonance.name,
             )
         )
     pleas = SineatingPendingOffer.objects.filter(sineater_sheet=sheet).select_related(

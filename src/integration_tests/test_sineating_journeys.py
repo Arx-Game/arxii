@@ -38,6 +38,7 @@ from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     ResonanceFactory,
     SineatingOutcomeAwardFactory,
+    TechniqueFactory,
     ThreadResonanceFactory,
     ThreadWeavingUnlockFactory,
     ensure_conversion_pairs,
@@ -48,11 +49,11 @@ from world.magic.factories import (
 from world.magic.models import Affinity, AffinityInteraction, CharacterAura, MireHolding, Thread
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.soul_tether import Sineating, SineatingPendingOffer
-from world.magic.services.corruption import accrue_corruption
+from world.magic.services.corruption import accrue_corruption_for_cast
 from world.magic.services.soul_tether import accept_soul_tether, get_soul_tether_config
 from world.magic.services.thread_rows import refresh_leading_resonance
-from world.magic.types.corruption import CorruptionSource
 from world.magic.types.soul_tether import SoulTetherRole
+from world.magic.types.techniques import AnimaCostResult, ResonanceInvolvement, TechniqueUseResult
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.interaction_services import invalidate_active_scene_cache
@@ -325,8 +326,13 @@ class ASinnerWhoseBondIsMostlyHerFeeling(SineatingJourneyCase):
 
     Expected values come from the spec (Verification 8 and decisions 13 and 24), worked by hand:
     she carries only Ruin corruption, so the plea moves Ruin; two units at a full share earn
-    2 x 5 x 1.00 = 10, split 80/20 by the amounts imbued: 8 Longing and 2 Ruin; the Hollow
-    refills by the 2 units and then absorbs 2 of the Ruin her next cast would add.
+    2 x 5 x 1.00 = 10, split 80/20 by the amounts imbued: 8 Longing and 2 Ruin. At a Failure
+    (a quarter share) they earn int(2.5) = 2: Longing 2 x 80 // 100 = 1 and Ruin 2 x 20 // 100 =
+    0, the leading Longing takes the remainder of 1 so it reads 2, and Ruin's part of 0 grants
+    nothing. The Hollow refills by the 2 units. Her aura is mostly Primal (10 percent Abyssal,
+    under the 50 percent a caster pays in full from), so a tier-1 cast with 50 involvement in
+    Ruin adds ceil(50 x 10 x 10 / 100 x 10 / 100) = 5 corruption, of which the Hollow's 2 are
+    absorbed and 3 reach her.
     """
 
     def setUp(self) -> None:
@@ -340,6 +346,24 @@ class ASinnerWhoseBondIsMostlyHerFeeling(SineatingJourneyCase):
         ThreadResonanceFactory(thread=thread, resonance=self.longing, amount=80)
         ThreadResonanceFactory(thread=thread, resonance=self.ruin, amount=20)
         refresh_leading_resonance(thread)
+        self.aura(self.ysmay, celestial="10", primal="80", abyssal="10")
+
+    def cast_in_ruin(self) -> None:
+        use = TechniqueUseResult(
+            anima_cost=AnimaCostResult(
+                base_cost=2, effective_cost=2, control_delta=0, current_anima=10, deficit=0
+            ),
+            technique=TechniqueFactory(level=1),
+            was_deficit=False,
+            was_mishap=False,
+            was_audere=False,
+            resonance_involvements=(
+                ResonanceInvolvement(
+                    resonance=self.ruin, stat_bonus_contribution=50, thread_pull_resonance_spent=0
+                ),
+            ),
+        )
+        accrue_corruption_for_cast(caster_sheet=self.ysmay.sheet_data, technique_use_result=use)
 
     def test_the_ruin_falls_she_is_paid_in_her_mix_and_the_hollow_guards_her_next_cast(
         self,
@@ -359,15 +383,26 @@ class ASinnerWhoseBondIsMostlyHerFeeling(SineatingJourneyCase):
         self.assertEqual((audit.resonance, audit.sinner_resonance_earned), (self.ruin, 10))
         self.assertEqual(self.hollow(), 2)
 
-        accrue_corruption(
-            character_sheet=self.ysmay.sheet_data,
-            resonance=self.ruin,
-            amount=2,
-            source=CorruptionSource.TECHNIQUE_USE,
-        )
+        self.cast_in_ruin()
+
+        # 5 added, 2 absorbed by the Hollow: only 3 reach her.
+        self.assertEqual(corruption(self.ysmay, self.ruin), 143)
+        self.assertEqual(self.hollow(), 0)
+
+    def test_a_failed_roll_gives_the_remainder_to_her_feeling_and_nothing_to_a_zero_part(
+        self,
+    ) -> None:
+        self.entreat()
+
+        self.perform(self.corvin, tier="Failure")
 
         self.assertEqual(corruption(self.ysmay, self.ruin), 140)
-        self.assertEqual(self.hollow(), 0)
+        self.assertEqual(balance(self.ysmay, self.longing), 2)
+        self.assertEqual(balance(self.ysmay, self.ruin), 0)
+        self.assertTold(self.ysmay, "Your Longing grows by 2.")
+        self.assertNotTold(self.ysmay, "Your Ruin grows by")
+        audit = Sineating.objects.get()
+        self.assertEqual((audit.resonance, audit.sinner_resonance_earned), (self.ruin, 2))
 
 
 class ASineatingByTheWeb(SineatingJourneyCase):
