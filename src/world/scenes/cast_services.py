@@ -850,6 +850,30 @@ def _resolve_cast_pull(
     return None, _PULL_FIZZLE_NOTE
 
 
+def _stored_cast_resonance_still_held(action_request: SceneActionRequest) -> Resonance | None:
+    """The resonance stored on a pending cast, or None when it is no longer usable (#5231).
+
+    Time passes between a consent-gated request and its acceptance, and the Gift's thread
+    can lose that resonance in between. The cast then resolves in the default resonance:
+    a player is never left unable to cast.
+    """
+    from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
+    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+    stored = action_request.cast_resonance
+    if stored is None:
+        return None
+    try:
+        cast_resonance_for(
+            action_request.initiator_persona.character_sheet.character,
+            action_request.technique,
+            stored,
+        )
+    except ResonanceNotOnGiftThread:
+        return None
+    return stored
+
+
 def resolve_accepted_cast(
     action_request: SceneActionRequest,
 ) -> EnhancedSceneActionResult | None:
@@ -895,6 +919,7 @@ def resolve_accepted_cast(
 
     declaration = SceneActionPullDeclaration.objects.filter(request=action_request).first()
     cast_pull, fizzle_note = _resolve_cast_pull(declaration, action_request.initiator_persona)
+    cast_resonance = _stored_cast_resonance_still_held(action_request)
 
     from world.magic.exceptions import MagicError  # noqa: PLC0415
 
@@ -917,6 +942,7 @@ def resolve_accepted_cast(
                 # the True above bypasses the re-halt; it is not the caster's Soulfray
                 # consent, which the pending request does not persist (#3573)
                 soulfray_consented=False,
+                preferred_resonance=cast_resonance,
             )
 
     try:
@@ -1175,6 +1201,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             technique=technique,
             originated_as_entrance=originated_as_entrance,
             cast_openly=cast_openly,
+            preferred_resonance=preferred_resonance,
         )
     if cast_requires_consent(technique, caster=initiator_persona.character_sheet.character):
         return _route_benign_cast(
@@ -1189,6 +1216,7 @@ def _route_other_pc_cast(  # noqa: PLR0913
             confirm_soulfray_risk=confirm_soulfray_risk,
             originated_as_entrance=originated_as_entrance,
             cast_openly=cast_openly,
+            preferred_resonance=preferred_resonance,
         )
     return _route_immediate_cast(
         scene=scene,
@@ -1306,6 +1334,15 @@ def request_technique_cast(  # noqa: PLR0913
             }
         )
 
+    if preferred_resonance is not None:
+        # #5231: refuse a resonance the Gift's thread does not hold before any route, so a
+        # consent-gated or hostile cast refuses now rather than when it later resolves.
+        from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+        cast_resonance_for(
+            initiator_persona.character_sheet.character, technique, preferred_resonance
+        )
+
     knows_technique = CharacterTechnique.objects.filter(
         character_id=initiator_persona.character_sheet_id,
         technique=technique,
@@ -1399,6 +1436,7 @@ def _create_cast_request(  # noqa: PLR0913
     resolved_at: datetime | None = None,
     originated_as_entrance: bool = False,
     cast_openly: bool = False,
+    cast_resonance: Resonance | None = None,
 ) -> SceneActionRequest:
     """Create a SceneActionRequest for a standalone cast.
 
@@ -1419,6 +1457,7 @@ def _create_cast_request(  # noqa: PLR0913
         resolved_at=resolved_at,
         originated_as_entrance=originated_as_entrance,
         cast_openly=cast_openly,
+        cast_resonance=cast_resonance,
     )
 
 
@@ -1430,6 +1469,7 @@ def _route_hostile_cast(  # noqa: PLR0913 - cohesive hostile-cast routing params
     technique: Technique,
     originated_as_entrance: bool = False,
     cast_openly: bool = False,
+    preferred_resonance: Resonance | None = None,
 ) -> CastResult:
     """Hostile cast at another PC → audit request + seed/feed a combat encounter.
 
@@ -1450,6 +1490,7 @@ def _route_hostile_cast(  # noqa: PLR0913 - cohesive hostile-cast routing params
             status=ActionRequestStatus.PENDING,
             originated_as_entrance=originated_as_entrance,
             cast_openly=cast_openly,
+            cast_resonance=preferred_resonance,
         )
         return CastResult(request=request)
     with transaction.atomic():
@@ -1462,6 +1503,7 @@ def _route_hostile_cast(  # noqa: PLR0913 - cohesive hostile-cast routing params
             resolved_at=timezone.now(),
             originated_as_entrance=originated_as_entrance,
             cast_openly=cast_openly,
+            cast_resonance=preferred_resonance,
         )
         encounter = seed_or_feed_encounter_from_cast(
             caster_sheet=initiator_persona.character_sheet,
@@ -1487,6 +1529,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
     confirm_soulfray_risk: bool = True,  # noqa: ARG001 — resolution deferred to accept; kept for signature symmetry
     originated_as_entrance: bool = False,
     cast_openly: bool = False,
+    preferred_resonance: Resonance | None = None,
 ) -> CastResult:
     """Benign cast at another PC → PENDING request awaiting consent (resolved on accept).
 
@@ -1505,6 +1548,7 @@ def _route_benign_cast(  # noqa: PLR0913 - cohesive benign-cast routing params
             fury_resonance=fury_resonance,
             originated_as_entrance=originated_as_entrance,
             cast_openly=cast_openly,
+            cast_resonance=preferred_resonance,
         )
         if cast_pull is not None:
             declaration = SceneActionPullDeclaration.objects.create(

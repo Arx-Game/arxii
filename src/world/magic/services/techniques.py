@@ -292,9 +292,9 @@ def _combat_burn_strain_units(character: ObjectDB, combat_burn_for: str) -> int:
 
 def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged pull
     *,
-    technique: Technique,
     character: ObjectDB,
     runtime_intensity: int,
+    cast_resonance: Resonance | None,
     cast_pull: CastPullDeclaration | None = None,
     cast_pull_spent: int = 0,
     burn_result: ResonanceBurnResult | None = None,
@@ -302,20 +302,16 @@ def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged 
 ) -> tuple[ResonanceInvolvement, ...]:
     """Compute per-resonance involvement for one cast.
 
-    stat_bonus_contribution splits runtime intensity equally across the
-    technique's gift's resonances (the modifier system does not track
-    per-resonance attribution; spec §10.1 acknowledges this as an
-    impl-phase resolution).
+    A cast is worked in one resonance (#5231): the whole ``runtime_intensity`` goes to
+    ``cast_resonance`` as its ``stat_bonus_contribution`` and no other resonance gets any.
 
     thread_pull_resonance_spent sums the resonance this cast's pulls spent: the
     character's active CombatPull rows and the non-combat ``cast_pull`` charged with
-    the cast, each with the resonance burned raw beside it (#4736). A pull on a
-    resonance outside the gift's set still involves that resonance. Burned points
-    that fell at the pair rate are carried as ``hasty_fall_points``.
+    the cast, each with the resonance burned raw beside it (#4736). A pull attaches to the
+    resonance that paid for it, whichever resonance the cast is worked in, so a pull paid
+    in Abyssal corrupts as it always did. Burned points that fell at the pair rate are
+    carried as ``hasty_fall_points``.
     """
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
-
-    resonances = list(gift_resonances_for(character, technique.gift))
     spends = _pull_spends_for_cast(
         character=character,
         cast_pull=cast_pull,
@@ -324,16 +320,20 @@ def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged 
         combat_burn_for=combat_burn_for,
         # Combat pulls exist only in a combat encounter, whose casts and clash
         # contributions name ``combat_burn_for``. Any other cast reads them only to add
-        # to its gift's resonances, so with none it skips the per-caster query (#1846).
-        read_combat_pulls=bool(resonances) or bool(combat_burn_for),
+        # to its resonance, so with none it skips the per-caster query (#1846).
+        read_combat_pulls=cast_resonance is not None or bool(combat_burn_for),
     )
-    if not resonances and not spends:
+    if cast_resonance is None and not spends:
         return ()
 
-    per_resonance_share = runtime_intensity // len(resonances) if resonances else 0
-    involved = [(r, per_resonance_share) for r in resonances]
-    gift_pks = {r.pk for r in resonances}
-    involved.extend((res, 0) for pk, (res, _spend) in spends.items() if pk not in gift_pks)
+    involved = []
+    if cast_resonance is not None:
+        involved.append((cast_resonance, runtime_intensity))
+    involved.extend(
+        (res, 0)
+        for pk, (res, _spend) in spends.items()
+        if cast_resonance is None or pk != cast_resonance.pk
+    )
 
     involvements = []
     for resonance, share in involved:
@@ -1626,6 +1626,7 @@ def _complete_technique_cast(  # noqa: PLR0913
     price_payment=None,
     defer_soulfray_reveal: bool = False,
     substance_plan: SubstancePlan | None = None,
+    cast_resonance: Resonance | None,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
@@ -1687,9 +1688,9 @@ def _complete_technique_cast(  # noqa: PLR0913
         check_result=effective_check_result,
     )
     resonance_involvements = _build_resonance_involvements(
-        technique=technique,
         character=character,
         runtime_intensity=stats.intensity,
+        cast_resonance=cast_resonance,
         cast_pull=preparation.charged_pull,
         cast_pull_spent=preparation.charged_pull_spent,
         burn_result=preparation.burn_result,
@@ -1799,7 +1800,14 @@ def use_technique(  # noqa: PLR0913
     wheel on ``result.soulfray_result.reveal`` instead of sending it on commit
     (#4089). Only a caller that plays the reveal itself, in order with its own
     wheels (the scene action path), passes it; that caller must never drop it.
+
+    The cast is worked in one resonance (#5231), ``cast_resonance_for`` of the technique and
+    the caller's ``preferred_resonance``. It is read before anything is charged, so a named
+    resonance the Gift's thread does not hold refuses the cast with nothing spent.
     """
+    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+    cast_resonance = cast_resonance_for(character, technique, preferred_resonance)
     _validate_strain_commitment(strain_commitment)
     stats, anima, cost, effective_strain, substance_plan = _calculate_technique_cost(
         character=character,
@@ -1908,4 +1916,5 @@ def use_technique(  # noqa: PLR0913
         price_payment=price_payment,
         defer_soulfray_reveal=defer_soulfray_reveal,
         substance_plan=substance_plan,
+        cast_resonance=cast_resonance,
     )
