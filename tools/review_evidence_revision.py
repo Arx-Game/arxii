@@ -148,6 +148,20 @@ def verify_clean_main_merge(repo: Path, revision: str, main_ref: str) -> str | N
     return previous
 
 
+def verify_hand_migration_update(repo: Path, revision: str, main_ref: str) -> str | None:
+    """Peel a merge of main that renumbers migrations, whoever made it.
+
+    Authorship proves nothing: the same independent rebuild and whole-tree comparison as the
+    bot's merge decide it. A refusal or a nothing-to-do result only means this merge is not a
+    matching renumbering, so the caller goes on to refuse it as it did before. Any other
+    error is a real failure and propagates.
+    """
+    try:
+        return verify_migration_update(repo, revision, main_ref)
+    except (RefusalError, NothingToDoError):
+        return None
+
+
 def cannot_change_a_rendered_screen(path: bytes | str) -> bool:
     """Say whether a changed path is one that can never alter what a screen renders.
 
@@ -235,6 +249,8 @@ def reviewed_revision(
                 raise RefusalError(message) from exc
         else:
             previous = verify_clean_main_merge(repo, current, main_ref)
+            if previous is None:
+                previous = verify_hand_migration_update(repo, current, main_ref)
             if previous is None:
                 if anchor is None:
                     break

@@ -369,3 +369,50 @@ def test_moving_a_source_file_into_a_tests_directory_is_refused(repo: Path):
     head = sh(repo, "rev-parse", "HEAD").strip()
     with pytest.raises(RefusalError, match="changes reviewed content"):
         reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+HAND = "Ordinary Author <author@example.com>"
+
+
+def hand_merge(repo: Path) -> tuple[str, str]:
+    """Make the bot's renumbering merge, then re-sign it as an ordinary author's merge.
+
+    Returns (anchor, head). The tree is the one the bot would produce, so only the author
+    and subject differ from a bot commit.
+    """
+    anchor = sh(repo, "rev-parse", "HEAD^1").strip()
+    update(repo)
+    sh(
+        repo,
+        "commit",
+        "--amend",
+        "-q",
+        "-m",
+        "Merge main and renumber my migration",
+        "--author",
+        HAND,
+    )
+    return anchor, sh(repo, "rev-parse", "HEAD").strip()
+
+
+def test_hand_merge_that_matches_the_rebuilt_renumbering_is_carried(repo: Path):
+    anchor, head = hand_merge(repo)
+    assert "Ordinary Author" in sh(repo, "log", "-1", "--format=%an", head)
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def test_hand_merge_with_one_extra_changed_line_is_refused(repo: Path):
+    anchor, _ = hand_merge(repo)
+    (repo / "feature.txt").write_text("base\none extra line\n")
+    sh(repo, "add", "feature.txt")
+    sh(repo, "commit", "--amend", "--no-edit", "-q")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_hand_merge_of_something_main_does_not_contain_is_refused(repo: Path):
+    anchor, head = hand_merge(repo)
+    old_main = sh(repo, "rev-parse", "main^1").strip()
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, old_main, anchor=anchor)
