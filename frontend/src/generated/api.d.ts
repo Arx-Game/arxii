@@ -27836,6 +27836,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/worship/owed-favor/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The beings a character owes favor to (#4349): the owner reads their own, staff anyone's. */
+    get: operations['worship_owed_favor_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/worship/owed-favor/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The beings a character owes favor to (#4349): the owner reads their own, staff anyone's. */
+    get: operations['worship_owed_favor_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/worship/pledge-cards/': {
     parameters: {
       query?: never;
@@ -35838,6 +35872,8 @@ export interface components {
       readonly room_text: string;
       /** @description Resolved authored private line for the character this concerns, e.g. the Crossing vision. Spoiler-private: shown only to the addressed GM. */
       readonly private_text: string;
+      /** @description What happened, for the addressed GM only: a miracle prompt's result tier, what was drawn and who prayed (#4349). Never narrated; the room and private lines above are what the GM may send. */
+      readonly context_text: string;
       /** @description True when the defaults came from the character's prepared text. */
       readonly prepared_for_character: boolean;
       /** Format: date-time */
@@ -36784,6 +36820,8 @@ export interface components {
       being_id: number;
       being_name: string;
       site: string;
+      ap_left: number;
+      ap_cap: number;
     };
     /**
      * @description * `short_term` - Short term
@@ -38930,8 +38968,10 @@ export interface components {
        *     * `near_death` - Character Near Death
        */
       readonly intervention_trigger: components['schemas']['InterventionTriggerEnum'];
-      /** @description Minimum DevotionStanding.favor required for this miracle to fire. */
+      /** @description Minimum favor with the being for this miracle to be a candidate. 0 means only the Divine Intervention Config's prayer favor gate applies. */
       readonly favor_threshold: number;
+      /** @default Success */
+      readonly min_outcome_tier: string;
       /** @description Narrative broadcast (EMIT) when this miracle fires. */
       readonly narrative_text: string;
       readonly is_active: boolean;
@@ -41876,6 +41916,17 @@ export interface components {
       wardrobe: number;
     };
     /**
+     * @description Favor a character owes a being after a weaker answer (#4349): while any is owed the
+     *     being ignores their calls for intervention.
+     */
+    OwedFavor: {
+      readonly id: number;
+      being_id: number;
+      being_name: string;
+      /** @description Favor owed to the being after a weaker answer to divine intervention (#4349). While any is owed the being ignores this character's intervention rolls; base favor the character earns pays it first, before the earning rate. */
+      readonly owed_favor: number;
+    };
+    /**
      * @description * `PERSONAL` - Personal (Persona-owned home)
      *     * `COVENANT` - Covenant (Organization-owned sacred ground)
      * @enum {string}
@@ -44069,6 +44120,21 @@ export interface components {
       /** Format: uri */
       previous: string | null;
       results: components['schemas']['OutfitSlotRead'][];
+    };
+    PaginatedOwedFavorList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['OwedFavor'][];
     };
     PaginatedPactCardList: {
       /** @example 123 */
@@ -49110,8 +49176,10 @@ export interface components {
       readonly being: number;
       readonly being_name: string;
       readonly text: string;
-      /** @description Favor paid by the weekly holy-site prayer; 0 for every other. */
+      /** @description Favor paid by a holy-site prayer; 0 for every other. */
       readonly devotion_granted: number;
+      /** @description Action points spent praying at a holy site of the being (#4349). The weekly limit is the sum of these for the character, being and game week. */
+      readonly ap_spent: number;
       readonly dire_straits: components['schemas']['DireStraitsEnum'];
       readonly answered: boolean;
       /** Format: date-time */
@@ -94812,6 +94880,51 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Miracle'];
+        };
+      };
+    };
+  };
+  worship_owed_favor_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedOwedFavorList'];
+        };
+      };
+    };
+  };
+  worship_owed_favor_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OwedFavor'];
         };
       };
     };

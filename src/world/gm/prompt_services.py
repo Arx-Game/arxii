@@ -336,6 +336,7 @@ def route_narratable_event(
                 addressed_to=account,
                 room_text=event.room_text,
                 private_text=event.private_text,
+                context_text=event.context_text,
                 prepared_for_character=event.prepared_for_character,
                 technique=event.technique,
                 stake_outcome=event.stake_outcome,

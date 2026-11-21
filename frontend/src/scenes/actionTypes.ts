@@ -444,6 +444,9 @@ export interface AnimaRecoveryData {
   recovered: number;
   soulfray_reduced: number;
   new_pool: number;
+  /** Anima of `recovered` the Chosen's patron added; 0 or absent when it added none. */
+  patron_bonus?: number;
+  patron_name?: string;
 }
 
 export interface ActionResultData {

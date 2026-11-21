@@ -1,9 +1,10 @@
 /**
- * PrayDialog (#3779) — the owner's freeform prayer to a being.
+ * PrayDialog (#3779, #4349) — the owner's freeform prayer to a being.
  *
- * A prayer is a message, not a mechanic: the dialog says so, and the result line is whatever
- * the action answered (an act of devotion at a holy site, a god answering in dire straits, or
- * simply "You pray"). Dispatches `pray` as the character.
+ * The result line is whatever the action answered. At a holy site of the being the dialog also
+ * takes the action points to spend praying (favor is earned by them, up to the week's limit);
+ * with characters present it can pray for one of them, who is in dire straits. Dispatches
+ * `pray` as the character.
  */
 
 import { useState } from 'react';
@@ -27,19 +28,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { usePrayMutation } from '../queries';
+import type { PrayerTarget } from '../types';
 
 interface PrayDialogProps {
   characterId: number;
   /** The character's public being, preselected when set. */
   defaultBeingId?: number | null;
+  /** At a holy site of the being: what may still be spent praying this week. */
+  site?: { apLeft: number; apCap: number } | null;
+  /** Characters present who can be prayed for. */
+  others?: PrayerTarget[];
+  /** The trigger's label; "Pray" unless the dialog is only for praying for someone. */
+  triggerLabel?: string;
+  /** True when the prayer must be for one of `others`. */
+  forRequired?: boolean;
 }
 
-export function PrayDialog({ characterId, defaultBeingId }: PrayDialogProps) {
+const YOURSELF = 'self';
+
+export function PrayDialog({
+  characterId,
+  defaultBeingId,
+  site = null,
+  others = [],
+  triggerLabel = 'Pray',
+  forRequired = false,
+}: PrayDialogProps) {
   const [open, setOpen] = useState(false);
   const [beingId, setBeingId] = useState<string>(defaultBeingId ? String(defaultBeingId) : '');
   const [text, setText] = useState('');
+  const [ap, setAp] = useState('');
+  const [forPersona, setForPersona] = useState<string>(
+    forRequired && others[0] ? String(others[0].personaId) : YOURSELF
+  );
   const { data: beings } = useWorshippedBeings();
   const mutation = usePrayMutation(characterId);
 
@@ -54,8 +78,22 @@ export function PrayDialog({ characterId, defaultBeingId }: PrayDialogProps) {
       toast.error('A prayer needs words.');
       return;
     }
+    if (forRequired && forPersona === YOURSELF) {
+      toast.error('Choose whom you pray for.');
+      return;
+    }
+    const points = Math.floor(Number(ap));
+    if (site && ap !== '' && (!Number.isFinite(points) || points < 0 || points > site.apLeft)) {
+      toast.error(`Spend between 0 and ${site.apLeft} AP.`);
+      return;
+    }
     mutation.mutate(
-      { being: Number(beingId), text: words },
+      {
+        being: Number(beingId),
+        text: words,
+        ap: site && points > 0 ? points : undefined,
+        onBehalfOfPersonaId: forPersona === YOURSELF ? undefined : Number(forPersona),
+      },
       {
         onSuccess: (result) => {
           if (result.success === false) {
@@ -64,6 +102,7 @@ export function PrayDialog({ characterId, defaultBeingId }: PrayDialogProps) {
           }
           toast.success(result.message);
           setText('');
+          setAp('');
           setOpen(false);
         },
         onError: (error: Error) => toast.error(error.message),
@@ -75,7 +114,7 @@ export function PrayDialog({ characterId, defaultBeingId }: PrayDialogProps) {
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
         <Button variant="outline" size="sm" data-testid="pray-button">
-          Pray
+          {triggerLabel}
         </Button>
       </DialogTrigger>
       <DialogContent {...NO_DESCRIPTION}>
@@ -98,6 +137,40 @@ export function PrayDialog({ characterId, defaultBeingId }: PrayDialogProps) {
               </SelectContent>
             </Select>
           </div>
+          {others.length > 0 && (
+            <div className="space-y-2">
+              <Label htmlFor="pray-for">For</Label>
+              <Select value={forPersona} onValueChange={setForPersona}>
+                <SelectTrigger id="pray-for">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {!forRequired && <SelectItem value={YOURSELF}>Myself</SelectItem>}
+                  {others.map((other) => (
+                    <SelectItem key={other.personaId} value={String(other.personaId)}>
+                      {other.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {site && (
+            <div className="space-y-2">
+              <Label htmlFor="pray-ap">AP</Label>
+              <Input
+                id="pray-ap"
+                type="number"
+                min={0}
+                max={site.apLeft}
+                value={ap}
+                onChange={(event) => setAp(event.target.value)}
+              />
+              <p className="text-xs text-muted-foreground" data-testid="pray-ap-left">
+                {site.apLeft} of {site.apCap} left this week
+              </p>
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="pray-text">Words</Label>
             <Textarea

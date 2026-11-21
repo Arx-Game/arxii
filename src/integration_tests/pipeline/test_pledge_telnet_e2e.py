@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from commands.tests.message_capture import message_text
-from commands.worship import CmdPledge, CmdSacrifice
+from commands.worship import CmdPledge, CmdPray, CmdSacrifice
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
 from world.action_points.factories import ActionPointPoolFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -145,6 +145,10 @@ class PledgeTelnetTests(TestCase):
         self.assertIn("You pledge yourself to Ombrin: The Silk Watch.", out)
         self.assertIn("Your earning rate with Ombrin: 200% (100% + 100% Chosen).", out)
         details = PledgeDetails.objects.get()
+        # The pledge's own prayer spends no AP, so it earns nothing (#4349); 5 AP spent praying
+        # at the shrine is 1 base favor, 2 at the Chosen's 200%, and counts toward the pledge.
+        _run(CmdPray, self.ysmay, "5 Ombrin=[a vigil at the shrine]", ["ap"])
+        self.assertIn("You spend 5 AP in prayer: +2 favor with Ombrin.", _said(self.ysmay))
 
         obj = ObjectDBFactory(db_key="silk scarf", db_typeclass_path="typeclasses.objects.Object")
         obj.db_location = self.ysmay

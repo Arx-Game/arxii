@@ -113,8 +113,8 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   no effect of its own. Three independent, stackable conditions make one count: dire straits
   (Soulfray active, or health in the knockout band) runs the divine-intervention check on the
   NEAR_DEATH trigger, the wire `MiracleTrigger.NEAR_DEATH` had waited for, narrowed to the god
-  prayed to; the first prayer of the game week at a shrine or temple of the being pays a
-  little devotion (the humblest engagement, below a tier 1 rite); and a GM may answer with a
+  prayed to; at a shrine or temple of the being, AP spent praying earns favor up to a weekly
+  limit (#4349; it was the first prayer of the game week, flat); and a GM may answer with a
   `Vision`. A vision is first-class prose from a being (`send_vision`, staff action
   `vision_send`, the sheet's Send-vision composer beside the character's recent prayers),
   with `reveal_source`, an optional Codex clue handed over on the spot, an optional episode of
@@ -146,8 +146,23 @@ Vitals (#2287 ghost containers), Events/Scenes (optional chassis)
   the entries its visions' clues open, with which clue unlocks each). Only Dan and TehomCD use
   it; density over hand-holding.
 - **Miracles / divine intervention (#2360):** gods spend `resonance_pool` on authored
-  `Miracle` effects that fire automatically for a high-devotion PC in danger, plus
-  faith-colored Audere Majora crossing variants.
+  `Miracle` effects, plus faith-colored Audere Majora crossing variants. Until #4349 a
+  high-devotion PC in danger was rescued automatically, the same way every time.
+- **Scaled worship outcomes (#4349, ADR-4349) [BUILT & WIRED]:** divine intervention is one
+  graded roll, made by whoever prays (the fallen character, an ally praying for them, or the
+  being itself at a very high favor threshold) at the invocation difficulty. A botch is a
+  backfire on the one praying, a Failure goes unanswered (or sends a sign), a Partial Success
+  draws a lesser answer from the being's intervention pool, a Success is a rescue and a
+  Critical Success the bigger miracle. A rescue spends favor, a weaker answer leaves favor
+  owed (earned base favor pays it first), every roll sets a minimum wait, and higher favor
+  softens both; the faith niche is botch immunity on the Faith check category (#4386), which
+  staff author, plus favor and favor invocation modifiers. Built with it: officiant favor and a
+  Chosen's anima come from award rows by the Rites or ritual result (and the anima ritual's
+  result now says what the patron added), and holy-site prayer earns favor by the AP spent up to
+  a weekly limit. Staff author the intervention pools, the bigger-miracle rows, the Faith check
+  category and the new award rows' other tiers. Left to the symbolic-item design: weighting
+  ceremony offerings by what an item means. The Deity Editor's own pool field is not built; the
+  being's admin page carries it.
 - **Post-CG public conversion (#2361):** a `CONVERSION` ceremony repoints
   `WorshipDeclaration.public_being`, via either a PC-officiated rite the convert
   must accept (`WorshipConversionOffer`, mirrors the Seance offer — player-reachable

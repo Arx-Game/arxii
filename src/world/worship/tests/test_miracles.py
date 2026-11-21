@@ -48,7 +48,7 @@ class MiracleModelTests(TestCase):
 
     def test_divine_intervention_config_defaults(self) -> None:
         cfg = DivineInterventionConfig.objects.create()
-        self.assertEqual(cfg.favor_threshold, 50)
+        self.assertEqual(cfg.favor_threshold, 80)
         self.assertEqual(cfg.cooldown_hours, 24)
         self.assertEqual(cfg.min_pool_for_intervention, 100)
 
@@ -89,7 +89,7 @@ class SpendWorshipPoolTests(TestCase):
         DivineInterventionConfig.objects.all().delete()
         cfg = get_divine_intervention_config()
         self.assertEqual(cfg.pk, 1)
-        self.assertEqual(cfg.favor_threshold, 50)
+        self.assertEqual(cfg.favor_threshold, 80)
 
 
 class DivineInterventionTests(TestCase):
@@ -179,7 +179,7 @@ class TriggerLifecycleTests(TestCase):
                 flow=flow,
                 action=FlowActionChoices.CALL_SERVICE_FUNCTION,
                 variable_name="world.worship.services.maybe_fire_divine_intervention",
-                parameters={"payload": "{{payload}}"},
+                parameters={"character": "@owner"},
             )
         TriggerDefinition.objects.create(
             name="divine_intervention_on_incapacitated",
@@ -205,7 +205,7 @@ class TriggerLifecycleTests(TestCase):
         from flows.models import Trigger
 
         self._seed_trigger_def()
-        bump_devotion(self.sheet, self.being, 60)
+        bump_devotion(self.sheet, self.being, 90)
 
         self.assertTrue(
             Trigger.objects.filter(

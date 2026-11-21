@@ -304,6 +304,8 @@ def _resolve_anima_ritual(
         "recovered": ritual_outcome.anima_recovered,
         "soulfray_reduced": ritual_outcome.severity_reduced,
         "new_pool": anima.current,
+        "patron_bonus": ritual_outcome.patron_bonus,
+        "patron_name": ritual_outcome.patron_name,
     }
 
 

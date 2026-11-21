@@ -27,6 +27,7 @@ from world.worship.constants import (
     FAVOR_INVOCATION_LINE_MAX_LENGTH,
     BeingRelationshipValence,
     BeingResonanceTier,
+    BelowZeroRule,
     ConsecrationScope,
     DireStraitsKind,
     FavorAwardKind,
@@ -161,6 +162,19 @@ class WorshippedBeing(SharedMemoryModel):
         help_text=(
             "Optional override of Devotion config's default invocation check type for "
             "this being (#4333). Blank uses the default."
+        ),
+    )
+    intervention_pool = models.ForeignKey(
+        "arxii.ConsequencePool",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="intervention_for_beings",
+        help_text=(
+            "Intervention answers (#4349): the consequence pool this being's divine "
+            "intervention draws from when the roll lands below Success. Critical Failure "
+            "rows are backfires, Failure rows are signs with no aid, Partial Success rows "
+            "are lesser answers; one row is drawn by weight. Blank gives nothing below Success."
         ),
     )
 
@@ -449,6 +463,14 @@ class DevotionStanding(SharedMemoryModel):
     )
     favor = models.IntegerField(default=0)
     lifetime_favor = models.IntegerField(default=0)
+    owed_favor = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Favor owed to the being after a weaker answer to divine intervention (#4349). "
+            "While any is owed the being ignores this character's intervention rolls; base "
+            "favor the character earns pays it first, before the earning rate."
+        ),
+    )
     valence = models.CharField(
         max_length=20,
         choices=PatronageValence.choices,
@@ -539,28 +561,78 @@ class WorshipDeclaration(SharedMemoryModel):
 class DivineInterventionConfig(SharedMemoryModel):
     """Singleton config for divine intervention tuning (#2360).
 
-    Staff-tunable knobs: favor threshold for trigger installation,
-    per-character cooldown, minimum pool for any miracle.
+    Staff-tunable knobs. Since #4349 a divine intervention is one graded roll:
+    ``favor_threshold`` is the favor at which a being steps in by itself when the
+    character falls (divine intercession), ``prayer_favor_gate`` the favor a prayer needs to
+    be rolled at all, and the two softening percentages cut the owed favor and the minimum
+    wait at higher favor. What a result costs (favor spent, favor owed, wait in hours) are
+    ``FavorOutcomeAward`` rows on the Devotion config.
     """
 
     objects = ArxSharedMemoryManager()
 
     favor_threshold = models.PositiveIntegerField(
-        default=50,
-        help_text="Minimum DevotionStanding.favor to install the intervention trigger.",
+        default=80,
+        help_text=(
+            "Divine intercession threshold: at or above this favor with a being, the being "
+            "steps in by itself when the character falls, a roll at the character's own odds "
+            "and cost with no one praying. Also what installs the incapacitation trigger."
+        ),
+    )
+    prayer_favor_gate = models.PositiveIntegerField(
+        default=20,
+        help_text=(
+            "Minimum favor the one praying needs with a being for a prayer for intervention "
+            "to be rolled. Each miracle's own favor threshold also applies."
+        ),
+    )
+    below_zero_rule = models.CharField(
+        max_length=20,
+        choices=BelowZeroRule.choices,
+        default=BelowZeroRule.AUTOMATIC_FAILURE,
+        help_text="What happens when someone prays for intervention while their favor is below 0.",
+    )
+    below_zero_difficulty = models.CharField(
+        max_length=20,
+        choices=DifficultyChoice.choices,
+        default=DifficultyChoice.HARROWING,
+        help_text="The roll's difficulty when the rule above is a much harder roll.",
     )
     cooldown_hours = models.PositiveIntegerField(
         default=24,
-        help_text="Per-character cooldown between interventions (hours).",
+        help_text=(
+            "Minimum wait (hours) after a roll whose result has no Intervention wait row in "
+            "Devotion config. Owed favor can make the wait longer."
+        ),
     )
     min_pool_for_intervention = models.PositiveIntegerField(
         default=100,
         help_text="Minimum resonance_pool a being must have to perform any miracle.",
     )
+    debt_softening_low_percent = models.PositiveIntegerField(
+        default=25,
+        help_text=(
+            "Owed favor and the minimum wait are cut by this percent at or above the low "
+            "favor ease threshold in Devotion config."
+        ),
+    )
+    debt_softening_high_percent = models.PositiveIntegerField(
+        default=50,
+        help_text="Used instead at or above the high favor ease threshold.",
+    )
 
     class Meta:
         verbose_name = "Divine Intervention Config"
         verbose_name_plural = "Divine Intervention Config"
+
+    def clean(self) -> None:
+        super().clean()
+        if self.favor_threshold < self.prayer_favor_gate:
+            msg = (
+                "The divine intercession threshold must be at least the prayer favor gate: "
+                "a being cannot step in for someone it would not answer a prayer from."
+            )
+            raise ValidationError({"favor_threshold": msg})
 
     def __str__(self) -> str:
         return f"DivineInterventionConfig(favor>={self.favor_threshold}, cd={self.cooldown_hours}h)"
@@ -590,8 +662,24 @@ class Miracle(SharedMemoryModel):
         help_text="Danger context this miracle responds to.",
     )
     favor_threshold = models.PositiveIntegerField(
-        default=50,
-        help_text="Minimum DevotionStanding.favor required for this miracle to fire.",
+        default=0,
+        help_text=(
+            "Minimum favor with the being for this miracle to be a candidate. 0 means only "
+            "the Divine Intervention Config's prayer favor gate applies."
+        ),
+    )
+    min_outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        limit_choices_to={"name__in": ["Success", "Critical Success"]},
+        help_text=(
+            "The lowest intervention roll result that can bring this miracle: Success or "
+            "Critical Success. Empty means Success. Of the candidates the roll qualifies "
+            "for, the lowest sort order fires."
+        ),
     )
     narrative_text = models.TextField(
         help_text="Narrative broadcast (EMIT) when this miracle fires.",
@@ -680,6 +768,17 @@ class MiraclePerformance(SharedMemoryModel):
     )
     resonance_spent = models.PositiveIntegerField()
     trigger_event = models.CharField(max_length=50)
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The intervention roll's result that brought this miracle (#4349). Empty for "
+            "performances made before the roll existed and for a steward's live answer."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -703,11 +802,11 @@ class ChosenFavorConfig(SharedMemoryModel):
 
     anima_recovery_threshold = models.PositiveIntegerField(
         default=10,
-        help_text="Minimum favor for the Chosen's anima ritual bonus.",
-    )
-    anima_recovery_bonus = models.PositiveIntegerField(
-        default=5,
-        help_text="Extra anima recovered when favor meets the threshold.",
+        help_text=(
+            "Minimum patron favor for the patron's share of the anima ritual. The anima "
+            "itself is the Chosen anima rows of the Devotion config's award table, by ritual "
+            "result."
+        ),
     )
     ceremony_edge_threshold = models.PositiveIntegerField(
         default=25,
@@ -992,6 +1091,23 @@ class DevotionConfig(SharedMemoryModel):
             "is read, and it adds no points."
         ),
     )
+    prayer_ap_per_favor = models.PositiveIntegerField(
+        default=5,
+        db_default=5,
+        help_text=(
+            "Holy-site prayer: action points spent per base favor, rounded down, before the "
+            "earning rate (#4349). At 5, a full week of prayer at the weekly limit earns "
+            "limit / 5 base favor."
+        ),
+    )
+    prayer_weekly_ap_cap = models.PositiveIntegerField(
+        default=30,
+        db_default=30,
+        help_text=(
+            "Action points a character can spend praying at holy sites of one being per game "
+            "week. A prayer that would pass it is refused before anything is spent."
+        ),
+    )
 
     class Meta:
         verbose_name = "Devotion config"
@@ -1005,6 +1121,9 @@ class DevotionConfig(SharedMemoryModel):
         if self.favor_ease_high_threshold <= self.favor_ease_low_threshold:
             msg = "The second favor threshold must be above the first."
             raise ValidationError({"favor_ease_high_threshold": msg})
+        if self.prayer_ap_per_favor < 1:
+            msg = "Holy-site prayer needs at least 1 action point per base favor."
+            raise ValidationError({"prayer_ap_per_favor": msg})
 
 
 class FavorOutcomeAward(SharedMemoryModel):
@@ -1026,7 +1145,13 @@ class FavorOutcomeAward(SharedMemoryModel):
         help_text=(
             "Invocation: check points added to the check the invocation was declared on. "
             "Closing: base favor paid when a closing rite resolves a pledge. "
-            "Sacrifice: base favor paid when a sacrifice's check lands on this tier."
+            "Sacrifice: base favor paid when a sacrifice's check lands on this tier. "
+            "Officiant: base favor the officiant earns at ceremony finish for this Rites "
+            "result. Chosen anima: anima a Chosen's patron adds to their anima ritual for "
+            "this result. Intervention spend: favor a rescue or bigger miracle costs. "
+            "Intervention debt: favor owed after this result, paid from base favor before "
+            "the earning rate. Intervention wait: the minimum hours before the next "
+            "intervention roll."
         )
     )
 
@@ -1467,10 +1592,10 @@ class Prayer(SharedMemoryModel):
     A plain log with no mechanical effect of its own: one of the few freeform
     channels a player has straight to staff. A prayer becomes mechanically
     meaningful only through the qualifying conditions ``pray`` records on it,
-    each independent and stackable: ``devotion_granted`` for the first prayer
-    of the game week made at a shrine or temple of the being, ``dire_straits``
-    plus ``intervention`` when the character prayed in Soulfray or near death
-    and a miracle answered.
+    each independent and stackable: ``ap_spent`` and ``devotion_granted`` for AP
+    spent praying at a shrine or temple of the being, ``dire_straits`` plus
+    ``intervention`` when the one prayed for was in Soulfray or near death and a
+    miracle answered.
     """
 
     character_sheet = models.ForeignKey(
@@ -1490,7 +1615,14 @@ class Prayer(SharedMemoryModel):
         "arxii.GameWeek", on_delete=models.PROTECT, related_name="prayers"
     )
     devotion_granted = models.PositiveIntegerField(
-        default=0, help_text="Favor paid by the weekly holy-site prayer; 0 for every other."
+        default=0, help_text="Favor paid by a holy-site prayer; 0 for every other."
+    )
+    ap_spent = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Action points spent praying at a holy site of the being (#4349). The weekly limit "
+            "is the sum of these for the character, being and game week."
+        ),
     )
     dire_straits = models.CharField(
         max_length=12, choices=DireStraitsKind.choices, blank=True, default=""
@@ -1856,6 +1988,13 @@ class PledgeCredit(SharedMemoryModel):
     base = models.PositiveIntegerField(help_text="Favor before the earning rate.")
     earning_rate_percent = models.PositiveIntegerField()
     credited = models.PositiveIntegerField(help_text="Favor credited, at the earning rate.")
+    owed_paid = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Base favor this write paid toward owed favor instead (#4349). It is not part of "
+            "``base`` and never advances the pledge."
+        ),
+    )
     game_week = models.ForeignKey(
         "arxii.GameWeek", on_delete=models.PROTECT, related_name="pledge_credits"
     )
@@ -1879,6 +2018,17 @@ class PledgeCredit(SharedMemoryModel):
         blank=True,
         on_delete=models.SET_NULL,
         related_name="pledge_credits",
+    )
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The Rites result an officiant's ceremony credit was paid for (#4349), so the "
+            "pledge card can say which result earned it. Empty for every other source."
+        ),
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
