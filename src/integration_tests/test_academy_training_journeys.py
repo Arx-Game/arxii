@@ -32,6 +32,7 @@ from world.magic.factories import (
     PathGiftGrantFactory,
     ResonanceFactory,
     TechniqueFactory,
+    TechniqueStyleFactory,
 )
 from world.magic.models import CharacterTechnique, TechniqueProgress, TrainingOutcomeAward
 from world.npc_services.constants import OfferKind
@@ -43,6 +44,7 @@ from world.npc_services.factories import (
 )
 from world.progression.factories import CharacterPathHistoryFactory
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
+from world.skills.factories import MagicSkillFactory
 from world.societies.factories import OrganizationFactory
 from world.traits.factories import ensure_level_ladder
 from world.traits.models import CheckOutcome
@@ -69,7 +71,10 @@ class TrainingAtTheAcademy(JourneyCase):
         self.hall = self.make_room("The Shroudwatch Hall")
         self.academy = OrganizationFactory(name="Shroudwatch Academy")
         self.path = PathFactory()
-        self.gift = GiftFactory(kind=GiftKind.MINOR)
+        # The gift's style has a casting skill, so a session also rolls that skill.
+        self.style_skill = MagicSkillFactory(name="Steelwork")
+        self.style = TechniqueStyleFactory(name="Steel", skill=self.style_skill)
+        self.gift = GiftFactory(kind=GiftKind.MINOR, style=self.style)
         self.gift.resonances.add(ResonanceFactory())
         self.unlock = GiftUnlockFactory(gift=self.gift)
         self.technique = TechniqueFactory(gift=self.gift)
@@ -228,13 +233,18 @@ class TrainingAtTheAcademy(JourneyCase):
         meter = TechniqueProgress.objects.get(character_sheet=sheet, technique=self.technique)
         self.assertEqual(meter.instruction_bonus, INSTRUCTION_BONUS)
 
-        # The trainer is never in the hall, yet she is not self-studying, by telnet or web.
-        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+        # The trainer is never in the hall. Each session still rolls her bonus from the meter
+        # (not the retuned 3) and the style's skill once, by telnet and by the web dispatch.
+        success = CheckOutcome.objects.get(name="Success")
+        with force_check_outcome(success) as roll:
             told = strip_ansi(self.telnet(self.hobb, f"train {self.technique.name}=2"))
         self.assertIn(f"You train {self.technique.name} (Success)", told)
-        with force_check_outcome(CheckOutcome.objects.get(name="Success")):
+        self.assertEqual(roll.extra_modifiers, INSTRUCTION_BONUS)
+        self.assertEqual([term.trait.pk for term in roll.extra_traits], [self.style_skill.pk])
+        with force_check_outcome(success) as roll:
             result = self.web(self.hobb, "train_technique", technique_id=self.technique.pk)
         self.assertTrue(result.detail.success, result.detail.message)
         self.assertFalse(result.detail.data["self_study"])
+        self.assertEqual(roll.extra_modifiers, INSTRUCTION_BONUS)
         meter.refresh_from_db()
         self.assertGreater(meter.points_accumulated, 0)

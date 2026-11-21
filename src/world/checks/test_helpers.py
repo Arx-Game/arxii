@@ -3,8 +3,8 @@
 NOT a production code path. ``perform_check`` reads the thread-local
 override (set by ``force_check_outcome``) and clears it on first use;
 the context manager yields a CheckCapture object the test can inspect
-to verify what ``check_type`` and ``target_difficulty`` perform_check
-was about to use.
+to verify what ``check_type``, ``target_difficulty``, skill terms and
+``extra_modifiers`` perform_check was about to use.
 """
 
 from __future__ import annotations
@@ -48,6 +48,7 @@ class CheckCapture:
     check_type: CheckType | None = None
     target_difficulty: int | None = None
     extra_traits: tuple[ExtraTraitTerm, ...] = ()
+    extra_modifiers: int | None = None
 
 
 def _consume_forced_outcome() -> CheckOutcome | None:
@@ -63,6 +64,7 @@ def _record_capture(
     check_type: CheckType,
     target_difficulty: int | None,
     extra_traits: Sequence[ExtraTraitTerm] = (),
+    extra_modifiers: int | None = None,
 ) -> None:
     """Write into the active CheckCapture, if any. No-op outside a force context."""
     # Suppression justified: threading.local attr absent until a force context sets it.
@@ -71,6 +73,7 @@ def _record_capture(
         capture.check_type = check_type
         capture.target_difficulty = target_difficulty
         capture.extra_traits = tuple(extra_traits)
+        capture.extra_modifiers = extra_modifiers
 
 
 @contextmanager

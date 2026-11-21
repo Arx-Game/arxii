@@ -153,6 +153,7 @@ def perform_check(  # noqa: PLR0913 - optional effort/fatigue params extend exis
         check_type=check_type,
         target_difficulty=target_difficulty,
         extra_traits=extra_traits,
+        extra_modifiers=extra_modifiers,
     )
 
     forced_outcome = _consume_forced_outcome()
