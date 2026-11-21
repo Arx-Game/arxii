@@ -63,6 +63,25 @@ def _largest_shed_arriving_within(
     return low
 
 
+def own_corruption(sinner_sheet: CharacterSheet, resonance: Resonance) -> int:
+    """The corruption in ``resonance`` a Sinner can shed: what she carries less what she holds.
+
+    What she holds in this resonance as a Sineater for someone else is not hers to pass on.
+    """
+    sinner_row = CharacterResonance.objects.filter(
+        character_sheet=sinner_sheet, resonance=resonance
+    ).first()
+    held_for_others = (
+        MireHolding.objects.filter(
+            relationship__source=sinner_sheet, resonance=resonance
+        ).aggregate(total=Sum("amount"))["total"]
+        or 0
+    )
+    return max(
+        0, (sinner_row.corruption_current if sinner_row is not None else 0) - held_for_others
+    )
+
+
 def corruption_that_can_move(
     *,
     sineater_sheet: CharacterSheet,
@@ -80,16 +99,7 @@ def corruption_that_can_move(
     stage after ``max_stage``. ``fits`` is below ``carried`` exactly when the cap cuts the
     move.
     """
-    sinner_row = CharacterResonance.objects.filter(
-        character_sheet=sinner_sheet, resonance=resonance
-    ).first()
-    held_for_others = (
-        MireHolding.objects.filter(
-            relationship__source=sinner_sheet, resonance=resonance
-        ).aggregate(total=Sum("amount"))["total"]
-        or 0
-    )
-    own = max(0, (sinner_row.corruption_current if sinner_row is not None else 0) - held_for_others)
+    own = own_corruption(sinner_sheet, resonance)
     carried = min(amount, own)
     ceiling = corruption_ceiling(resonance, max_stage)
     if ceiling is None or carried <= 0:

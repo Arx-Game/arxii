@@ -38,6 +38,7 @@ from world.magic.factories import (
     CharacterThreadWeavingUnlockFactory,
     ResonanceFactory,
     SineatingOutcomeAwardFactory,
+    ThreadResonanceFactory,
     ThreadWeavingUnlockFactory,
     ensure_conversion_pairs,
     set_aura_split,
@@ -47,7 +48,10 @@ from world.magic.factories import (
 from world.magic.models import Affinity, AffinityInteraction, CharacterAura, MireHolding, Thread
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.soul_tether import Sineating, SineatingPendingOffer
+from world.magic.services.corruption import accrue_corruption
 from world.magic.services.soul_tether import accept_soul_tether, get_soul_tether_config
+from world.magic.services.thread_rows import refresh_leading_resonance
+from world.magic.types.corruption import CorruptionSource
 from world.magic.types.soul_tether import SoulTetherRole
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.scenes.factories import SceneFactory
@@ -314,6 +318,56 @@ class ASineatingByTelnet(SineatingJourneyCase):
         self.assertFalse(SineatingPendingOffer.objects.exists())
         self.assertEqual(Sineating.objects.get().units_accepted, 0)
         self.assertEqual(corruption(self.ysmay, self.ruin), 260)
+
+
+class ASinnerWhoseBondIsMostlyHerFeeling(SineatingJourneyCase):
+    """Ysmay's bond thread holds 80 of a Primal feeling (leading) and 20 of Ruin (Abyssal).
+
+    Expected values come from the spec (Verification 8 and decisions 13 and 24), worked by hand:
+    she carries only Ruin corruption, so the plea moves Ruin; two units at a full share earn
+    2 x 5 x 1.00 = 10, split 80/20 by the amounts imbued: 8 Longing and 2 Ruin; the Hollow
+    refills by the 2 units and then absorbs 2 of the Ruin her next cast would add.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.longing = ResonanceFactory(name="Longing", affinity=self.primal_affinity)
+        thread = Thread.objects.get(
+            owner=self.ysmay.sheet_data,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            retired_at__isnull=True,
+        )
+        ThreadResonanceFactory(thread=thread, resonance=self.longing, amount=80)
+        ThreadResonanceFactory(thread=thread, resonance=self.ruin, amount=20)
+        refresh_leading_resonance(thread)
+
+    def test_the_ruin_falls_she_is_paid_in_her_mix_and_the_hollow_guards_her_next_cast(
+        self,
+    ) -> None:
+        self.entreat()
+        plea = SineatingPendingOffer.objects.get()
+        self.assertEqual(plea.resonance, self.ruin)
+
+        self.perform(self.corvin)
+
+        self.assertEqual(corruption(self.ysmay, self.ruin), 140)
+        self.assertEqual(balance(self.ysmay, self.longing), 8)
+        self.assertEqual(balance(self.ysmay, self.ruin), 2)
+        self.assertTold(self.ysmay, "your corruption in Ruin falls by 120")
+        self.assertTold(self.ysmay, "Your Longing grows by 8. Your Ruin grows by 2.")
+        audit = Sineating.objects.get()
+        self.assertEqual((audit.resonance, audit.sinner_resonance_earned), (self.ruin, 10))
+        self.assertEqual(self.hollow(), 2)
+
+        accrue_corruption(
+            character_sheet=self.ysmay.sheet_data,
+            resonance=self.ruin,
+            amount=2,
+            source=CorruptionSource.TECHNIQUE_USE,
+        )
+
+        self.assertEqual(corruption(self.ysmay, self.ruin), 140)
+        self.assertEqual(self.hollow(), 0)
 
 
 class ASineatingByTheWeb(SineatingJourneyCase):
