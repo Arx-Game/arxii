@@ -31539,6 +31539,12 @@ export interface components {
       readonly stage_errors: {
         [key: string]: string[];
       };
+      /** @description The family's name, the new family's, or the drawn card's surname; '' until one exists. */
+      readonly surname: string;
+      /** @description The stages this draft has been opened on; the stage list shows a to-do for these only. */
+      readonly visited_stages: number[];
+      /** @description The stages that ask nothing; the stage list reads "optional" for them. */
+      readonly optional_stages: number[];
       /** @description Get remaining stat points to allocate (0 = fully allocated). */
       readonly stats_points_remaining: number;
       /** @description Get total stat point budget (base + bonuses). */

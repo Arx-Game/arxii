@@ -52770,6 +52770,25 @@ components:
               type: string
           description: Get validation errors for each stage.
           readOnly: true
+        surname:
+          type: string
+          description: The family's name, the new family's, or the drawn card's surname;
+            '' until one exists.
+          readOnly: true
+        visited_stages:
+          type: array
+          items:
+            type: integer
+          description: The stages this draft has been opened on; the stage list shows
+            a to-do for these only.
+          readOnly: true
+        optional_stages:
+          type: array
+          items:
+            type: integer
+          description: The stages that ask nothing; the stage list reads "optional"
+            for them.
+          readOnly: true
         stats_points_remaining:
           type: integer
           description: Get remaining stat points to allocate (0 = fully allocated).
@@ -52884,6 +52903,7 @@ components:
       - id
       - introductions_offered
       - magic_training
+      - optional_stages
       - organization_choices
       - public_worship
       - resonance_creation_points
@@ -52905,6 +52925,8 @@ components:
       - stat_bonuses
       - stats_budget
       - stats_points_remaining
+      - surname
+      - visited_stages
     CharacterDraftCreate:
       type: object
       description: Serializer for creating a new draft.

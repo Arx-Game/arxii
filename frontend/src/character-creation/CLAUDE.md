@@ -24,7 +24,15 @@ character-creation/
 ├── CharacterCreationPage.tsx # Main page component
 ├── folio/                   # Folio chassis primitives (#3540), realm-agnostic
 │   ├── index.ts             # Barrel re-export
-│   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper
+│   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper. What a row
+│   │                        #   says (#5199, owner rulings 2026-11-18): a stage the draft has
+│   │                        #   not been opened on is its name alone; an opened stage shows
+│   │                        #   the first thing it still asks; a finished stage is marked
+│   │                        #   complete; a stage that asks nothing reads "optional" and is
+│   │                        #   never marked complete. Which stages are opened and which are
+│   │                        #   optional come from the server (`visited_stages`,
+│   │                        #   `optional_stages` on the draft); the stage the draft stands
+│   │                        #   on always counts as opened
 │   ├── PageTurn.tsx         # Back/next doors between chapters, the same button (owner
 │   │                        #   ruling 2026-11-16, #5146: Back is not an italic link);
 │   │                        #   `between` is a stage's own door drawn between the two
@@ -34,7 +42,14 @@ character-creation/
 │   │                        #   whole room and keeps a slot at the foot of that panel
 │   ├── chapterRail.ts       # `useChapterRail()`: the slot at the foot of the right-hand
 │   │                        #   panel that a stage's own list portals into (#5148)
-│   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside
+│   ├── RecordRail.tsx       # Marginalia: the "CG selections" rows + a Note aside. The rows
+│   │                        #   come from `../cgRecord.ts` (#5199): `cgRecord(draft)` gives
+│   │                        #   `head` (Name, Origin, Beginning, Species, Gender, Family or
+│   │                        #   Surname, Path, Tradition) and `points`, and a stage writes
+│   │                        #   `[...record.head, ...its own rows, record.points]`. No stage
+│   │                        #   writes the shared rows itself. The surname is the server's
+│   │                        #   (`draft.surname`); on a route with no family the row is
+│   │                        #   "Surname" and holds the drawn card's
 │   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (`tag`
 │   │                        #   is optional and marks the exception only, #5207: no
 │   │                        #   "Available" on every row; an
