@@ -23,6 +23,16 @@ if TYPE_CHECKING:
     from world.magic.models.glimpse import CharacterGlimpseTag
 
 
+def share_lead_key(share: "CharacterAuraShare", percent: Decimal) -> tuple[Decimal, bool, int]:
+    """The sort key that puts the leading aura share first.
+
+    The one tie order for every reader of the main affinity: the largest ``percent``
+    first, Primal before the others on a tie, then the lowest affinity id. The caller
+    passes the percent it ranks by (the share's ``percent``, or its ``settled_percent``).
+    """
+    return (-percent, share.affinity.name != AFFINITY_PRIMAL, share.affinity_id)
+
+
 class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
     """
     Tracks a character's soul-state across the three affinities.
@@ -118,11 +128,7 @@ class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
             raise ValueError(msg)
         best = min(
             self.cached_shares,
-            key=lambda share: (
-                -share.percent,
-                share.affinity.name != AFFINITY_PRIMAL,
-                share.affinity_id,
-            ),
+            key=lambda share: share_lead_key(share, share.percent),
         )
         return best.affinity
 

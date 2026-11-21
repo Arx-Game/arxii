@@ -36,7 +36,7 @@ from world.magic.constants import (
     ComponentMode,
 )
 from world.magic.exceptions import ConversionMappingError, NotUnsettledError
-from world.magic.models.aura import CharacterResonance
+from world.magic.models.aura import CharacterResonance, share_lead_key
 from world.magic.models.drift import (
     DriftConfig,
     DriftConversionCap,
@@ -99,11 +99,7 @@ def _main_affinity(aura: CharacterAura | None) -> Affinity | None:
         return None
     return min(
         settled,
-        key=lambda share: (
-            -share.settled_percent,
-            share.affinity.name != AFFINITY_PRIMAL,
-            share.affinity_id,
-        ),
+        key=lambda share: share_lead_key(share, share.settled_percent),
     ).affinity
 
 
