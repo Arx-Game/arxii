@@ -120,7 +120,7 @@ def fill_reactive_line(text: str, names: Mapping[str, str]) -> str | None:
             parts.append(literal)
             if field is None:
                 continue
-            if spec or conversion or not names.get(field):
+            if spec or conversion or not names.get(field, "").strip():
                 return None
             parts.append(names[field])
     except ValueError:
