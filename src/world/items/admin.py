@@ -479,6 +479,7 @@ class ItemWornConditionInline(admin.TabularInline):
     """The conditions this item puts on its wearer (#5074)."""
 
     model = ItemWornCondition
+    formset = OneRowPerFormSet
     extra = 0
     autocomplete_fields = ["condition"]
 

@@ -72,7 +72,7 @@ from world.covenants.models import (
     WeaknessPoolEntry,
 )
 from world.forms.models import AlternateSelf
-from world.items.models import ItemTemplateProperty
+from world.items.models import ItemTemplateProperty, ItemWornCondition
 from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariantAppliedCondition,
@@ -185,6 +185,11 @@ def _vow_effect_label(row: Any) -> str:
     return f"{effect.get_function_display()} ({where})"
 
 
+def _worn_item_label(row: ItemWornCondition) -> str:
+    """The item that gives the condition, by its own name (#5074)."""
+    return row.item_instance.display_name
+
+
 def _interaction_label(row: ConditionConditionInteraction) -> str:
     """Both conditions by name; ``__str__`` repeats what the Does column shows."""
     return f"{row.condition.name} and {row.other_condition.name}"
@@ -255,6 +260,15 @@ _ON_SELF = "on self"
 _CONFIG = "config"
 
 SETTER_SOURCES: tuple[SetterSource, ...] = (
+    SetterSource(
+        "worn item",
+        ItemWornCondition,
+        "condition",
+        _fixed("on its wearer"),
+        owner="item_instance",
+        label=_worn_item_label,
+        related=("item_instance__template",),
+    ),
     SetterSource(
         "technique",
         TechniqueAppliedCondition,

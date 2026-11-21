@@ -32380,7 +32380,12 @@ export interface components {
        *     requirement calls for.
        */
       readonly source_vow_name: string | null;
-      /** @description Freeform description of source (e.g., 'poisoned wine') */
+      /**
+       * @description The source's free-text description. A condition a worn item gave (#5074) reads the
+       *     item's own name and is shown only where the caller says the viewer is the bearer (or
+       *     staff): ``show_gear_source`` in the serializer context. An onlooker never learns
+       *     from it that a ring is enchanted.
+       */
       readonly source_description: string;
     };
     /** @description Serializer for condition stages. */
