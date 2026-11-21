@@ -104,7 +104,8 @@ class TestLoreOnboardingSeed(TestCase):
         the Glimpse, Lineage, Appearance and Actor's Sheet headings/chips/closed
         leads, plus gift_schooling_label (TraditionPicker.tsx, predates #3675 but
         was undeclared until the same grep that found these keys caught it),
-        none of which have a content-repo counterpart yet. Fix round 3 adds the
+        none of which have a content-repo counterpart yet. The Gift stage's fifteen
+        ``gift_strength_*`` keys (#5231) ride the same list. Fix round 3 adds the
         per-axis Glimpse chip keys and the Review stage's own distinctions
         ledger heading. #5191 replaces the per-axis Glimpse prompt keys with
         lead-in keys and retires "choose one"."""
@@ -141,6 +142,21 @@ class TestLoreOnboardingSeed(TestCase):
             "finaltouches_enemy_reason_offers_heading",
             "finaltouches_enemy_reason_offers_chip",
             "gift_schooling_label",
+            "gift_strength_heading",
+            "gift_strength_intro",
+            "gift_strength_feeling_question",
+            "gift_strength_others_question",
+            "gift_strength_outward_question",
+            "gift_strength_balance_question",
+            "gift_strength_answer_helping",
+            "gift_strength_answer_hurting",
+            "gift_strength_answer_neither",
+            "gift_strength_slider_feeling",
+            "gift_strength_slider_others",
+            "gift_strength_skipped",
+            "gift_strength_aura_all_feeling",
+            "gift_strength_aura_mostly_feeling",
+            "gift_strength_aura_mostly_others",
             "review_distinctions_heading",
             "offers_sync_error",
             "offers_word_bundled",
