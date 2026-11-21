@@ -655,7 +655,15 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     # The caster's condition severity and duration modifiers (#4822), worked out per target so
     # an opponent scope reads who each condition lands on (#4823), ride the technique's own
     # rows only; the signature and vow rows below keep their own sources.
-    condition_bonus = TechniqueConditionBonus.for_cast(caster_persona.character_sheet, technique)
+    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+    condition_bonus = TechniqueConditionBonus.for_cast(
+        caster_persona.character_sheet,
+        technique,
+        cast_resonance=cast_resonance_for(
+            character, technique, preferred_resonance, refuse_off_thread=False
+        ),
+    )
     apply_technique_conditions(
         technique=technique,
         success_level=success_level,

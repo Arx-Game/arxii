@@ -170,9 +170,9 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
     """Affinity-alignment contribution: one bonus, the best over the cast's affinities.
 
     A worn alternate self keeps its acting-aura reading: the aura's percent in the
-    affinity she acts in. Otherwise the cast works in the gift's affinities and
-    those of the resonances paying its pulled threads, so pulling never lowers the bonus,
-    and a mixed character is never penalised for it (#5123, ruling 26): the bonus is the
+    affinity she acts in. Otherwise the cast works in the affinity of the resonance it is
+    worked in and those of the resonances paying its pulled threads, so pulling never lowers
+    the bonus, and a mixed character is never penalised for it (#5123, ruling 26): the bonus is the
     largest over those affinities, the full ``affinity_alignment_bonus`` for an affinity
     that is part of who she is (a settled share above zero), else her current percent of it.
     """
@@ -231,10 +231,11 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     """Aura contribution to power: affinity-alignment + resonance standing (#768).
 
     Affinity axis: the caster's acting aura % in each working affinity of the cast
-    (the gift's resonances, or the worn alternate self's resonance, #4731),
-    proportional to ``affinity_alignment_bonus``.
+    (the one resonance the cast is worked in, #5231, or the worn alternate self's resonance,
+    #4731, with the payers of any pulled threads joining), proportional to
+    ``affinity_alignment_bonus``.
     Standing axis ("aura farming"): summed CharacterResonance.lifetime_earned
-    in those resonances x ``resonance_standing_bonus``, then capped per character
+    in the cast's resonance x ``resonance_standing_bonus``, then capped per character
     level by the applicable ``StandingCapBand`` (HARD clamp / SOFT diminish; #853).
     Returns 0 when unconfigured or when the cast has no technique.
     """
@@ -242,9 +243,9 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     if config is None or ctx.technique is None:
         return 0
 
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    from world.magic.specialization.services import cast_working_resonances  # noqa: PLC0415
 
-    resonances = list(gift_resonances_for(ctx.sheet.character, ctx.technique.gift))
+    resonances = cast_working_resonances(ctx.sheet.character, ctx.technique, ctx.cast_resonance)
     if not resonances:
         return 0
 
@@ -296,18 +297,18 @@ def price_power_term(ctx: PowerTermContext) -> int:
 
 
 def touchstone_power_term(ctx: PowerTermContext) -> int:
-    """Flat bonus from attuned touchstones matching the technique's gift resonance (#2023).
+    """Flat bonus from attuned touchstones matching the resonance the cast is worked in (#2023).
 
     Scans the character's equipped items for touchstones whose ``tied_resonance``
-    matches any of the technique's gift resonances. The bonus is modest and
-    tier-scaled via ``TouchstoneCastConfig``.
+    matches the cast's resonance (#5231; every Gift resonance only when the cast has none).
+    The bonus is modest and tier-scaled via ``TouchstoneCastConfig``.
     """
     if ctx.technique is None:
         return 0
     from world.magic.services.touchstone import touchstone_cast_bonus  # noqa: PLC0415
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    from world.magic.specialization.services import cast_working_resonances  # noqa: PLC0415
 
-    resonances = gift_resonances_for(ctx.sheet.character, ctx.technique.gift)
+    resonances = cast_working_resonances(ctx.sheet.character, ctx.technique, ctx.cast_resonance)
     if not resonances:
         return 0
     return sum(touchstone_cast_bonus(ctx.sheet, resonance) for resonance in resonances)

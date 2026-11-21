@@ -480,6 +480,29 @@ def cast_resonance_for(
     return _effective_variant_resonance(sheet, thread, named)
 
 
+def cast_working_resonances(
+    # the thread handler and sheet lookups take the character
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+    cast_resonance: Resonance | None,
+) -> list[Resonance]:
+    """The resonances a cast's resonance-tied power draws on (#5231, E1).
+
+    The one resonance the cast is worked in, as a one-entry list, whenever the cast has one.
+    Only where no cast resonance exists (a caller that is not a cast, a sheetless caster, a
+    technique with no Gift) does it fall back to every resonance the Gift manifests as for her
+    (``gift_resonances_for``). Every reader of a resonance-tied power (touchstones, resonance
+    standing, a resonance-scoped power or effect target, the aura alignment, the place's
+    reaction) reads through here, so a cast worked in her Primal resonance never collects power
+    tied to her Abyssal one while taking none of its corruption.
+    """
+    if cast_resonance is not None:
+        return [cast_resonance]
+    if technique.gift_id is None:
+        return []
+    return gift_resonances_for(character, technique.gift)
+
+
 def _prefer_early_form(character, technique, resonance, variant):
     """Use an eligible purchased early form when it outranks the natural form."""
     hold = character.techniques.hold_for(technique)

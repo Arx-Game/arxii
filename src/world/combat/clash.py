@@ -588,13 +588,13 @@ def _technique_effect_property_ids(technique: Technique) -> frozenset[int]:
 def _get_technique_affinity(
     technique: Technique, *, character: object | None = None
 ) -> Affinity | None:
-    """Derive the dominant affinity for a technique from its gift's first resonance.
+    """Derive the affinity a technique is worked in.
 
-    When a ``character`` is provided, resolves the gift's resonances via
-    ``gift_resonances_for(character, technique.gift)`` — the derive-on-read
-    seam that reads the woven GIFT thread's resonance (ADR-0052). Falls back
-    to ``technique.gift.resonances`` (the authored supported set) when no
-    character is available.
+    When a ``character`` is provided, it is the affinity of the resonance a cast of the
+    technique by that character is worked in with nothing named, ``cast_resonance_for``
+    (#5231): the same default the cast itself uses, a worn alternate self's included. A clash
+    contribution has no resonance choice. Falls back to the gift's first authored resonance
+    (``technique.gift.resonances``, the supported set) when no character is available.
 
     Returns ``None`` if the gift has no resonances (no affinity signal).
 
@@ -612,16 +612,16 @@ def _get_technique_affinity(
 
     if character is not None:
         from world.magic.specialization.services import (  # noqa: PLC0415
-            gift_resonances_for,
+            cast_resonance_for,
         )
 
-        resonances = gift_resonances_for(character, technique.gift)
+        first_resonance = cast_resonance_for(character, technique, refuse_off_thread=False)
     else:
         resonances = technique.gift.cached_resonances
+        first_resonance = resonances[0] if resonances else None
 
-    if not resonances:
+    if first_resonance is None:
         return None
-    first_resonance = resonances[0]
     # Django lazy-loads .affinity if not select_related; acceptable for the
     # one-off detect-time lookup (the cached CharacterTechniqueHandler is the
     # hot path).

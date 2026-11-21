@@ -364,11 +364,14 @@ def _partition_power_targets(
     *,
     technique: Technique | None,
     character: object,
+    cast_resonance: Resonance | None = None,
 ) -> tuple[ModifierTarget | None, ModifierTarget | None, list[ModifierTarget]]:
     """Split scope-matched power targets into (multiplier_target, team_lane_target, flat_targets).
 
     A target matches when it passes both scope gates (AND semantics; null = global):
-    - Resonance: target_resonance is None, or matches the character's GIFT-thread resonance.
+    - Resonance: target_resonance is None, or matches the resonance the cast is worked in
+      (``cast_working_resonances``: every Gift-thread resonance only when no cast resonance
+      is given, #5231).
     - Damage-type: target_damage_type is None, or matches a technique damage profile.
     Untyped damage profiles (damage_type=None) never count as a damage-type match.
 
@@ -385,9 +388,11 @@ def _partition_power_targets(
     technique_resonance_ids: set[int] = set()
     technique_damage_type_ids: set[int] = set()
     if technique is not None:
-        from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+        from world.magic.specialization.services import cast_working_resonances  # noqa: PLC0415
 
-        technique_resonance_ids = {r.id for r in gift_resonances_for(character, technique.gift)}
+        technique_resonance_ids = {
+            r.id for r in cast_working_resonances(character, technique, cast_resonance)
+        }
         technique_damage_type_ids = {
             p.damage_type_id
             for p in technique.damage_profiles.all()
@@ -629,7 +634,8 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     multiplicative stage (ADR-0158).
 
     A target is matched when it passes both scope gates (AND semantics; null = global):
-    - Resonance scope: target_resonance is None, or matches a technique gift resonance.
+    - Resonance scope: target_resonance is None, or matches the resonance the cast is worked in
+      (#5231; every gift resonance only for a caller that names no cast resonance).
     - Damage-type scope: target_damage_type is None, or matches a technique damage profile.
     Untyped damage profiles (damage_type=None) never count as a damage-type match.
     Power-scoped contributions raise landed effect only; channeled intensity
@@ -649,7 +655,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
         return PowerLedgerBuilder(base=max(0, channeled_intensity)).build()
 
     multiplier_target, team_lane_target, flat_targets = _partition_power_targets(
-        technique=technique, character=character
+        technique=technique, character=character, cast_resonance=cast_resonance
     )
 
     builder = PowerLedgerBuilder(base=channeled_intensity, base_label="channeled intensity")
@@ -859,6 +865,7 @@ def _evaluate_cast_environment(
     character: ObjectDB,
     caster_room: ObjectDB | None,
     technique: Technique,
+    cast_resonance: Resonance | None = None,
 ) -> tuple[RoomProfile | None, ResonanceEnvironmentEffect | None]:
     """Resolve the caster's room profile and evaluate the resonance environment once.
 
@@ -872,7 +879,7 @@ def _evaluate_cast_environment(
     except RoomProfile.DoesNotExist:
         return None, None
     environment_effect = evaluate_resonance_environment(
-        caster=character, room=caster_room, technique=technique
+        caster=character, room=caster_room, technique=technique, cast_resonance=cast_resonance
     )
     return room_profile, environment_effect
 
@@ -1490,7 +1497,9 @@ def _prepare_technique_cast(  # noqa: PLR0913
 
     effective_targets = targets or []
     caster_room = character.location
-    room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
+    room_profile, environment_effect = _evaluate_cast_environment(
+        character, caster_room, technique, cast_resonance
+    )
     seed_ledger = _derive_power(
         channeled_intensity=stats.intensity + max(power_intensity_bonus, 0) + strain_power_bonus,
         technique=technique,
