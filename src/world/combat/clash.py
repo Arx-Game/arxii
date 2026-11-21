@@ -37,7 +37,7 @@ Current scope (Tasks 2.1–5.1):
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from django.db import transaction
 
@@ -615,7 +615,10 @@ def _get_technique_affinity(
             cast_resonance_for,
         )
 
-        first_resonance = cast_resonance_for(character, technique, refuse_off_thread=False)
+        # The tilt's callers hold the caster loosely typed; it is always her game object.
+        first_resonance = cast_resonance_for(
+            cast("ObjectDB", character), technique, refuse_off_thread=False
+        )
     else:
         resonances = technique.gift.cached_resonances
         first_resonance = resonances[0] if resonances else None

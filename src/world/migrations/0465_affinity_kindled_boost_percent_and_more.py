@@ -68,7 +68,7 @@ class Migration(migrations.Migration):
             name="cast_power",
             field=models.PositiveSmallIntegerField(
                 default=0,
-                help_text="Power a cast gains when it is worked in a resonance kindled this strongly and pulls no thread.",
+                help_text="Power a cast gains when it is worked in a resonance kindled this strongly.",
             ),
         ),
         migrations.AddField(

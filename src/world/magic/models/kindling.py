@@ -163,10 +163,7 @@ class KindledStrengthTier(NaturalKeyMixin, SharedMemoryModel):
     )
     cast_power = models.PositiveSmallIntegerField(
         default=0,
-        help_text=(
-            "Power a cast gains when it is worked in a resonance kindled this strongly and "
-            "pulls no thread."
-        ),
+        help_text="Power a cast gains when it is worked in a resonance kindled this strongly.",
     )
 
     objects = KindledStrengthTierManager()
