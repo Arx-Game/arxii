@@ -2,8 +2,9 @@
 
 ``points_to_power`` and ``apportion_power`` are pure, so they are fed arbitrary curves, points
 and lines with no database. The properties are what casting relies on: more points never give
-less power, power never passes the cap, a negative total is the mirror of a positive one, and a
-split always adds up to the power it divides. Three more rules come straight from the
+less power, power never passes the cap, a negative total is the mirror of a positive one, the
+points of the lines add up to their signed sum, and a split always adds up to the power it
+divides. Three more rules come straight from the
 docstrings: the curve passes through every one of its own rows, between two rows it is the
 straight line (starting from the point 0, 0), and the split is the textbook largest-remainder
 split, worked here in exact fractions, for the helping lines and the opposing lines together.
@@ -128,6 +129,9 @@ class PointsToPowerHoldsItsContract(unittest.TestCase):
 
 class ApportionPowerHoldsItsContract(unittest.TestCase):
     @given(st.lists(points, max_size=8))
+    # This case is the one the docstring works through: a helping line of 7 and an opposing
+    # line of -2.
+    @example([7, -2])
     def test_total_points_is_the_signed_sum(self, line_points) -> None:
         """``total_points`` gives "The signed points of every line added together."
 

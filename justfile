@@ -268,7 +268,7 @@ coverage-journeys *args: _fs-warn
 # Never a gate and never a target; the lists are for a person to read.
 #   just mutate src/world/magic/services/primum.py --functions points_to_power \
 #       --kept integration_tests.fuzz.test_primum_curve_fuzz \
-#       --units world.magic.tests.test_primum_math.PowerCurveTests
+#       --units world.magic.tests.test_primum_math
 #   just mutate src/world/magic/services/primum.py --lines 434-435 --kept <label> --units <label>
 mutate *args: _fs-warn
     uv run python tools/mutation_run.py {{args}}

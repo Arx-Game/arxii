@@ -6,7 +6,7 @@ Run via: just mutate <source-file> --kept <label>... --units <label>... [options
 Example:
     just mutate src/world/magic/services/primum.py --functions points_to_power \\
         --kept integration_tests.fuzz.test_primum_curve_fuzz \\
-        --units world.magic.tests.test_primum_math.PowerCurveTests
+        --units world.magic.tests.test_primum_math
 
 cosmic-ray (pinned, run through ``uvx`` so it is never a project dependency) generates
 small changes to the source file and applies them one at a time. Each change is tried

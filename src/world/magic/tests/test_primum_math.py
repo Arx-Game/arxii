@@ -1,8 +1,8 @@
 """The pure Primum reads (#5125): steps, a place's amount, and the sources of a cast.
 
-These are unit tests because maths and a clock cannot be reached by a journey; casting is
-wired to them (and journey-tested) in a later task. The power curve and the split of power
-across sources are held by the properties in
+These are existing unit tests of the steps, a place's amount and the sources of a cast. Under
+ADR-4248 an existing unit test stays until a mutation run shows the kept tests catch what it
+catches. The power curve and the split of power across sources are held by the properties in
 ``integration_tests/fuzz/test_primum_curve_fuzz.py`` (#4248).
 """
 

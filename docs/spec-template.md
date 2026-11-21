@@ -145,8 +145,10 @@ behavior the change promises:
 
 "Wrote unit tests" is not a verification plan. Tests may support it: the SQLite
 fast tier (`just test-fast <app>`) for local iteration, Postgres parity (CI) for
-the gate, journey/E2E tests over fine-grained unit tests, and focused unit tests
-only for fiddly parse/error paths. They do not replace operating the change.
+the gate, journey/E2E tests over fine-grained unit tests, and a unit test only as
+the failing-first evidence of a bug fix, marked `@tag("regression")` (ADR-4248); a
+rule a journey cannot reach gets a Hypothesis property. They do not replace
+operating the change.
 
 ### Scope / follow-ups
 
