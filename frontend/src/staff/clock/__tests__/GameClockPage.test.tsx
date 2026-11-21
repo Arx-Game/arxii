@@ -132,6 +132,33 @@ describe('GameClockPage', () => {
     await waitFor(() => expect(api.resumeClock).toHaveBeenCalledTimes(1));
   });
 
+  it('reads the changes again after a control clicked before the list had loaded', async () => {
+    vi.mocked(api.fetchClock).mockResolvedValue(makeClock());
+    vi.mocked(api.pauseClock).mockResolvedValue();
+    // The first read is still in flight when Pause is clicked, and answers afterwards
+    // with what it was asked for before the pause.
+    let answerFirstRead: (value: ReturnType<typeof history>) => void = () => {};
+    vi.mocked(api.fetchClockHistory)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            answerFirstRead = resolve;
+          })
+      )
+      .mockResolvedValue(history([makeRow({ id: 2, change: 'paused' })]));
+    const user = userEvent.setup();
+
+    renderWithProviders(<GameClockPage />);
+    await user.click(await screen.findByRole('button', { name: 'Pause' }));
+    await waitFor(() => expect(api.fetchClockHistory).toHaveBeenCalledTimes(2));
+    answerFirstRead(history([]));
+
+    expect(
+      await screen.findByText('Paused at the 1st of the Month of Dreaming, Year 1000')
+    ).toBeVisible();
+    expect(screen.queryByText('No changes yet.')).toBeNull();
+  });
+
   it('says so in the server’s words when a control is refused', async () => {
     vi.mocked(api.fetchClock).mockResolvedValue(makeClock());
     vi.mocked(api.pauseClock).mockRejectedValue(

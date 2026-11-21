@@ -56,7 +56,11 @@ function useClockMutation<TInput>(mutationFn: (input: TInput) => Promise<void>) 
   return useMutation({
     mutationFn,
     // Settled, not success: a refusal ("already paused") means the page is stale too.
-    onSettled: () => {
+    onSettled: async () => {
+      // A list still on its first load is cancelled first. React Query joins an initial
+      // fetch that is in flight instead of restarting it, and that answer was asked for
+      // before this change, so without the cancel the list would keep it.
+      await queryClient.cancelQueries({ queryKey: clockKeys.historyAll });
       queryClient.invalidateQueries({ queryKey: clockKeys.state });
       queryClient.invalidateQueries({ queryKey: clockKeys.historyAll });
     },
