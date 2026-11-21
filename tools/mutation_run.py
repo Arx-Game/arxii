@@ -50,6 +50,7 @@ COSMIC_RAY = ("uvx", "--from", "cosmic-ray==8.9.0", "cosmic-ray")
 
 # The changes worth grading, each with cosmic-ray's ``core/`` prefix. Bitwise and shift
 # operators and the two variable operators are left out because their changes are noise.
+# cosmic-ray 8.9.0 has no operator for ``in`` and ``not in``, so those two are absent.
 OPERATORS: tuple[str, ...] = tuple(
     f"core/{name}"
     for name in (
@@ -72,8 +73,6 @@ OPERATORS: tuple[str, ...] = tuple(
         "ReplaceComparisonOperator_NotEq_Eq",
         "ReplaceComparisonOperator_Is_IsNot",
         "ReplaceComparisonOperator_IsNot_Is",
-        "ReplaceComparisonOperator_In_NotIn",
-        "ReplaceComparisonOperator_NotIn_In",
         "ReplaceUnaryOperator_Delete_USub",
         "ReplaceUnaryOperator_Delete_Not",
         "ReplaceUnaryOperator_USub_UAdd",
