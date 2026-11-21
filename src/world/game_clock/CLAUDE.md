@@ -17,6 +17,10 @@ Anchor-based IC time derivation. IC time = `anchor_ic_time + (now - anchor_real_
 
 ### GameClockHistory
 Audit log for clock adjustments. Stores old/new anchor values, who changed it, and why.
+- `change` — the kind (`ClockChange`: paused, resumed, speed, date_aged, date_kept; blank on
+  rows from before #5248). The anchors alone cannot tell a pause from a change of date.
+- `birth_year_shift` — years added to every character's birth year by a date set with ages
+  kept; zero otherwise. Subtract it to undo that change by hand.
 
 ### ScheduledTaskRecord
 Per-task tracking of last run time. Tasks are auto-created on first scheduler tick.
@@ -59,9 +63,57 @@ names: it renders the `*_display` strings, and the CG birthday picker reads
 - `get_real_time_for_ic_date(ic_dt)` — convert IC to real datetime
 
 ### Clock Management (staff)
-- `set_clock()` — set IC time (creates clock or re-anchors)
+- `set_clock(new_ic_time, changed_by, age_handling, reason="")` — set IC time (creates the
+  clock or re-anchors it; see "Changing a clock that exists")
+- `preview_clock_jump(new_ic_time)` — what that would do, as a `ClockJumpPreview`; writes nothing
 - `set_time_ratio()` — change ratio with re-anchor
-- `pause_clock()` / `unpause_clock()` — emergency pause
+- `pause_clock()` / `unpause_clock()` — stop the clock; restart it from the date it shows
+
+## Changing a clock that exists (#5248, ADR-5248)
+
+Staff do this on the staff hub's **Game clock** page (`/staff/clock`,
+`frontend/src/staff/clock/`): Pause, Resume from this date, Set the date, Change speed, and
+a Recent changes list. **Every change goes through the four services**, which re-anchor the
+clock and write `GameClockHistory`. The Django admin's change form is read-only for that
+reason: saving `paused` or `time_ratio` there stored the field without moving the anchors,
+so the date jumped (unticking Paused counted all the real time the clock had sat paused).
+The admin still creates the one row.
+
+**Resume counts nothing.** `unpause_clock` moves only the real-time anchor, so the clock
+carries on from the date it showed. The date can be set while paused; it stays paused.
+
+**A change of date is a jump, and `age_handling` says what it does to characters:**
+
+| | `AgeHandling.AGED` | `AgeHandling.KEPT` |
+|---|---|---|
+| Birth years (`CharacterSheet.ic_birth_year`) | unchanged, so every age moves by the calendar years jumped | each moves by the calendar years jumped, so no age changes |
+| The birthday task | walks the gap: matures each character by the birthdays skipped | skips the gap: every `ScheduledTaskRecord.last_ic_run_at` is set to the new time |
+| Allowed for a change to an earlier date | no (`ClockError.EARLIER_KEEPS_AGES`): maturation does not go down | yes, and it is the only choice |
+
+Both modes move every open dying window (`CharacterVitals.aging_death_ic_deadline`) and
+every event still to come (`Event.scheduled_ic_time`, status draft or scheduled, real start
+ahead) by the length of the jump. **A jump never kills anyone by itself**: without the first,
+`run_death_sweep` would resolve every deadline a long jump passed. The monthly old-age check
+runs once at the new date, not once per skipped month.
+
+A jump never writes a heritage's `first_appeared_ic`, the IC dates already stamped on
+journals, letters, recorded profiles, treatments and conditions (records, never compared for
+logic), or anything timed in real time (condition expiry, letters in transit).
+
+**Before #5248 a change to an earlier date stalled the aging tasks**: an IC-interval task is
+due when `ic_now - last_ic_run_at >= interval`, which stayed negative until the calendar
+passed the old date again. The re-stamp in `KEPT` is what ends that. After such a change a
+birthday that falls between the new date and the old one happens again as time passes.
+
+**Write contract.** `set_clock` runs in one transaction: the refusal and the history row
+first (the steps that can fail; a rollback does not undo a change already made to an
+identity-mapped instance), then the anchors and the task stamps changed in memory together,
+then `vitals.aging.rebase_ages_for_clock_jump` and `events.services.shift_upcoming_events`.
+Each loads the rows, changes the cached instances and writes them with
+`bulk_update_with_reason`, so the instances the tasks read are the ones written.
+
+Known and out of scope (#5250): population growth and sun exposure convert a stored real
+time through the clock's current anchor, so they count a pause on resume and never see a jump.
 
 ## Scheduler
 
@@ -141,12 +193,16 @@ money bands rather than being one task.
 
 ## API Endpoints
 
-- `GET /api/clock/` — current IC time, phase, season, light level, `month_name`, `date_display`
+- `GET /api/clock/` — current IC time, phase, season, light level, `month_name`,
+  `date_display`, `paused`, `time_ratio`, `month_names` (the twelve names, for a date picker)
 - `GET /api/clock/convert/` — date conversion (IC<>real)
-- `POST /api/clock/adjust/` — set IC time (staff only)
-- `POST /api/clock/ratio/` — change time ratio (staff only)
+- `POST /api/clock/adjust/` — set IC time: `ic_datetime`, `reason`, `age_handling` (staff only)
+- `GET /api/clock/adjust-preview/?ic_datetime=` — what that would do: direction, the year
+  shift, characters with a birth year, upcoming events, heritages not yet appeared (staff only)
+- `POST /api/clock/ratio/` — change time ratio: `ratio`, `reason` (staff only)
 - `POST /api/clock/pause/` — pause clock (staff only)
-- `POST /api/clock/unpause/` — unpause clock (staff only)
+- `POST /api/clock/unpause/` — resume from the date shown (staff only)
+- `GET /api/clock/history/` — the recorded changes, newest first, paginated, `?change=` (staff only)
 
 ## Three Time Contexts
 
