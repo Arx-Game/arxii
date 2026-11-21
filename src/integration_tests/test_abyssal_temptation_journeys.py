@@ -75,6 +75,7 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     CharacterTechniqueFactory,
     GiftFactory,
+    KindledStrengthTierFactory,
     KindlingConfigFactory,
     ResonanceFactory,
     TechniqueFactory,
@@ -88,7 +89,6 @@ from world.magic.models import (
     Affinity,
     CharacterResonance,
     KindledDeedAward,
-    KindledStrengthTier,
     ResonanceGrant,
 )
 from world.magic.services.corruption import get_corruption_config
@@ -120,7 +120,11 @@ def _corruption_condition(resonance) -> None:
 
 def _author_the_pull(resonance) -> None:
     """A tier 1 pull costs 1 resonance and, on a thread of ``resonance``, adds 2 to the roll
-    (a flat bonus) and 3 to the power (an intensity bump), at the multiplier of one rung."""
+    (a flat bonus) and 3 to the power (an intensity bump), at the multiplier of one rung.
+
+    A pull effect is keyed on its target kind, resonance, tier and the thread level it needs, and
+    only one row may hold a key, so the bump needs level 1 where the flat bonus needs none. The
+    thread the journeys weave reads as level 10 and so qualifies for both."""
     ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
     ThreadPullEffectFactory(
         target_kind=TargetKind.TECHNIQUE,
@@ -134,7 +138,7 @@ def _author_the_pull(resonance) -> None:
         target_kind=TargetKind.TECHNIQUE,
         resonance=resonance,
         tier=1,
-        min_thread_level=0,
+        min_thread_level=1,
         as_intensity_bump=True,
         intensity_bump_amount=3,
     )
@@ -194,10 +198,9 @@ class _AnAbyssalCasterInAScene(JourneyCase):
             action_template=ActionTemplateFactory(check_type=cast_check),
         )
         _author_the_pull(self.praedari)
-        self.blazing = KindledStrengthTier.objects.get(rank=3)
-        self.blazing.cast_power = 6
-        self.blazing.earn_percent = 100
-        self.blazing.save()
+        self.blazing = KindledStrengthTierFactory(
+            rank=3, name="Blazing", cast_power=6, earn_percent=100
+        )
         success = CheckOutcome.objects.get(name="Success")
         KindledDeedAward.objects.update_or_create(outcome_tier=success, defaults={"amount": 10})
         KindlingConfigFactory(instant_percent=100, claim_percent=50)
@@ -409,11 +412,10 @@ class TheKindledPullInAScene(_AnAbyssalCasterInAScene):
             as_intensity_bump=True,
             intensity_bump_amount=3,
         )
-        self.warm_tier = KindledStrengthTier.objects.get(rank=1)
-        self.warm_tier.pull_levels = 10
-        self.warm_tier.save()
-        self.blazing.pull_levels = 12
-        self.blazing.save()
+        self.warm_tier = KindledStrengthTierFactory(rank=1, name="Faint", pull_levels=10)
+        self.blazing = KindledStrengthTierFactory(
+            rank=3, name="Blazing", cast_power=6, earn_percent=100, pull_levels=12
+        )
         self.lantern = ThreadFactory(
             owner=self.sheet,
             resonance=self.warmth,
@@ -466,9 +468,7 @@ class TheAbyssalTemptationInAFight(JourneyCase):
         self.warmth = ResonanceFactory(name="Warmth", affinity=primal)
         self.praedari = ResonanceFactory(name="Praedari", affinity=abyssal)
         _corruption_condition(self.praedari)
-        blazing = KindledStrengthTier.objects.get(rank=3)
-        blazing.cast_power = 6
-        blazing.save()
+        KindledStrengthTierFactory(rank=3, name="Blazing", cast_power=6)
 
         room = self.make_room("The Ashen Court")
         SceneFactory(room=room)
@@ -691,12 +691,8 @@ class TheKindledPull(JourneyCase):
         drift = get_drift_config()
         drift.second_resonance_level_step = 20
         drift.save()
-        self.warm_tier = KindledStrengthTier.objects.get(rank=1)
-        self.warm_tier.pull_levels = 10
-        self.warm_tier.save()
-        self.blazing = KindledStrengthTier.objects.get(rank=3)
-        self.blazing.pull_levels = 12
-        self.blazing.save()
+        self.warm_tier = KindledStrengthTierFactory(rank=1, name="Faint", pull_levels=10)
+        self.blazing = KindledStrengthTierFactory(rank=3, name="Blazing", pull_levels=12)
 
         self.warmth = ResonanceFactory(name="Warmth", affinity=self.primal)
         self.praedari = ResonanceFactory(name="Praedari", affinity=self.abyssal)
