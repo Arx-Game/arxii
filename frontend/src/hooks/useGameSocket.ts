@@ -37,7 +37,6 @@ import type {
   ScenePayload,
   SocketMessageType,
 } from './types';
-import type { CommandSpec } from '@/game/types';
 import { handleRoomStatePayload } from './handleRoomStatePayload';
 import { handleScenePayload } from './handleScenePayload';
 import { handleCommandPayload } from './handleCommandPayload';
@@ -471,8 +470,7 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
         );
 
     case WS_MESSAGE_TYPE.COMMANDS:
-      return ({ character, args, kwargs }) =>
-        handleCommandPayload(character, args as CommandSpec[], kwargs);
+      return ({ character, kwargs }) => handleCommandPayload(character, kwargs);
 
     // Broadcast to every account session on each successful puppet (#3933).
     // The frame carries a `session_id`, but a socket does not know its own, so

@@ -11269,7 +11269,7 @@ Thin telnet compatibility layer that delegates to Actions.
 
 - **Key Classes:** `ArxCommand` (base with `action` + `resolve_action_args()`), `FrontendMetadataMixin` (for non-action commands)
 - **Pattern:** Telnet text → `command.func()` → `resolve_action_args()` → `action.run()`. Web bypasses commands entirely.
-- **Frontend Integration:** `ArxCommand.to_payload()` builds descriptors from action metadata. `serialize_cmdset()` aggregates for room state.
+- **Frontend Integration:** `ArxCommand.to_payload()` builds descriptors from action metadata. `serialize_cmdset()` aggregates them into the `commands` frame the server pushes on puppet and on every cmdset change. The web client keeps only the frame's `names` (`Session.commandNames`, read by the composer) and ignores the descriptors: it renders no form for a telnet command (ADR-4034, #4034).
 - **Non-action commands:** CmdIC, CmdCharacters, CmdAccount, CmdSheet, CmdPage, builder commands
 - **Dispatch families (#1337):** `DispatchCommand` (Family 1 → `dispatch_player_action()`),
   consent commands `ConsentRequestCommand`/`CmdAccept`/`CmdDeny` (Family 2 → consent

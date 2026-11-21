@@ -12,7 +12,6 @@ import type {
 } from '@/hooks/types';
 import { DEFAULT_NARRATIVE_RETENTION_LIMITS, narrativeBodyCache } from '@/game/narrativeRetention';
 import type { MyRosterEntry } from '@/roster/types';
-import type { CommandSpec } from '@/game/types';
 
 export type RoomStateResyncStatus = 'idle' | 'pending' | 'success' | 'partial' | 'failure';
 
@@ -60,7 +59,6 @@ export interface Session {
   lifecycleState?: GameLifecycleState;
   messages: Array<GameMessage & { id: string }>;
   unread: number;
-  commands: CommandSpec[];
   /**
    * Every name this character can type a command by, prefix-free and lowercased
    * (#4346): the `commands` frame's `names`. The composer reads it to tell `@desc`
@@ -226,7 +224,6 @@ export const gameSlice = createSlice({
           minimizedFeed: [],
           dismissedFeed: [],
           unread: 0,
-          commands: [],
           commandNames: [],
           room: null,
           scene: null,
@@ -348,18 +345,16 @@ export const gameSlice = createSlice({
         session.messages = [];
       }
     },
-    setSessionCommands: (
+    setSessionCommandNames: (
       state,
       action: PayloadAction<{
         character: MyRosterEntry['name'];
-        commands: CommandSpec[];
         commandNames: string[];
       }>
     ) => {
-      const { character, commands, commandNames } = action.payload;
+      const { character, commandNames } = action.payload;
       const session = state.sessions[character];
       if (session) {
-        session.commands = commands;
         session.commandNames = commandNames;
       }
     },
@@ -751,7 +746,7 @@ export const {
   setRoomStateResyncStatus,
   addSessionMessage,
   clearSessionMessages,
-  setSessionCommands,
+  setSessionCommandNames,
   setSessionRoom,
   addAmbientInteraction,
   clearAmbientInteractions,

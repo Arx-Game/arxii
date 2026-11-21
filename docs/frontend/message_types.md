@@ -69,7 +69,7 @@ args array.
 ]
 ```
 
-For the structure of each command object, refer to [CommandDescriptor Format](./command_descriptor.md), which shows how these descriptors power context menus, icon buttons, and prompts.
+The web client reads only the `names` list in the frame's kwargs (every name the character can type a command by) and ignores the command objects; see [CommandDescriptor Format](./command_descriptor.md) for their shape and why (ADR-4034).
 
 ## `room_state`
 
