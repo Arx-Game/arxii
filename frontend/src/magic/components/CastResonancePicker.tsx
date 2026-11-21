@@ -8,6 +8,7 @@
  * it. Choosing nothing works the default, so the picker never blocks a cast. With fewer than
  * two options there is nothing to choose and nothing is drawn.
  */
+import { useId } from 'react';
 import { cn } from '@/lib/utils';
 import type { CastResonanceOption } from '../types';
 
@@ -25,6 +26,7 @@ export function CastResonancePicker({
   onSelect,
   disabled = false,
 }: CastResonancePickerProps) {
+  const labelId = useId();
   if (options.length < 2) return null;
 
   const defaultOption = options.find((option) => option.is_default);
@@ -32,10 +34,10 @@ export function CastResonancePicker({
 
   return (
     <div className="space-y-1.5" data-testid="cast-resonance-picker">
-      <p id="cast-resonance-label" className="text-xs font-medium">
+      <p id={labelId} className="text-xs font-medium">
         Work it in:
       </p>
-      <div aria-labelledby="cast-resonance-label" role="group" className="space-y-1.5">
+      <div aria-labelledby={labelId} role="group" className="space-y-1.5">
         {options.map((option) => {
           const active = option.resonance_id === activeId;
           return (
@@ -48,7 +50,7 @@ export function CastResonancePicker({
               data-testid={`cast-resonance-${option.resonance_id}`}
               className={cn(
                 'grid w-full grid-cols-[1rem_minmax(0,1fr)] gap-x-2 gap-y-0.5 rounded-md border p-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-60',
-                active ? 'border-primary bg-primary/5' : 'border-border'
+                active ? 'border-primary ring-1 ring-inset ring-primary' : 'border-border'
               )}
             >
               <span
@@ -69,7 +71,7 @@ export function CastResonancePicker({
                 {option.is_default && <span className="text-muted-foreground">your usual</span>}
                 {option.kindled_strength && (
                   <span
-                    className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
+                    className="border border-current px-1.5 py-0.5 text-[11px] font-semibold text-primary"
                     data-testid={`cast-resonance-kindled-${option.resonance_id}`}
                   >
                     Kindled, {option.kindled_strength}
@@ -85,9 +87,7 @@ export function CastResonancePicker({
                 <span className="col-start-2 text-muted-foreground">
                   {option.stronger && (
                     <b className="font-semibold text-foreground">
-                      {defaultOption && !option.is_default
-                        ? `Stronger here than ${defaultOption.name}.`
-                        : 'Stronger here.'}
+                      Stronger here than {defaultOption?.name}.
                     </b>
                   )}
                   {option.stronger && option.adds_corruption && ' '}

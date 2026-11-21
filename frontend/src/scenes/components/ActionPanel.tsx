@@ -522,18 +522,33 @@ export function ActionPanel({ sceneId }: Props) {
     pull.reset();
   }
 
+  // The pick counts only while the selected technique offers it, so a pick can never be sent
+  // for a technique that does not.
+  const resonanceOptions = selectedTechnique?.resonance_options ?? [];
+  const chosenResonanceId = resonanceOptions.some((o) => o.resonance_id === selectedResonanceId)
+    ? selectedResonanceId
+    : null;
+
   // Choosing her usual resonance clears the pick and sends nothing, because the usual one may
   // be a worn self's resonance that is not on the Gift's thread, which the server refuses when
   // sent back. It also releases a variant form she picked, so the form no longer names a
   // resonance for her.
+  // A variant form of another resonance than the one she picks falls back to the base form, so
+  // the form picker shows what is sent.
   function handleResonanceSelect(resonanceId: number) {
-    const options = selectedTechnique?.resonance_options ?? [];
-    if (options.find((o) => o.resonance_id === resonanceId)?.is_default) {
+    if (resonanceOptions.find((o) => o.resonance_id === resonanceId)?.is_default) {
       setSelectedResonanceId(null);
       if (typeof selectedForm === 'number') setSelectedForm(null);
       return;
     }
     setSelectedResonanceId(resonanceId);
+    const defaultForm = selectedTechnique?.forms.find((f) => f.is_default);
+    const shownForm = selectedForm ?? defaultForm?.variant_id ?? 'base';
+    const shown =
+      typeof shownForm === 'number'
+        ? selectedTechnique?.forms.find((f) => f.variant_id === shownForm)
+        : undefined;
+    if (shown !== undefined && shown.resonance_id !== resonanceId) setSelectedForm('base');
   }
 
   // Choosing a variant form works that form's resonance, so the resonance picker follows it;
@@ -565,7 +580,7 @@ export function ActionPanel({ sceneId }: Props) {
         technique_id: selectedTechnique.id,
         target_persona_ids: castTargetPersonaIds,
         ...formSelection(selectedTechnique, selectedForm),
-        ...resonanceSelection(selectedResonanceId),
+        ...resonanceSelection(chosenResonanceId),
         ...payload,
         ...soulfrayKwarg,
       });
@@ -575,7 +590,7 @@ export function ActionPanel({ sceneId }: Props) {
         technique_id: selectedTechnique.id,
         target_persona: castTargetPersonaId ?? null,
         ...formSelection(selectedTechnique, selectedForm),
-        ...resonanceSelection(selectedResonanceId),
+        ...resonanceSelection(chosenResonanceId),
         ...payload,
         ...soulfrayKwarg,
       });
@@ -899,8 +914,8 @@ export function ActionPanel({ sceneId }: Props) {
                       />
 
                       <CastResonancePicker
-                        options={selectedTechnique.resonance_options ?? []}
-                        selectedId={selectedResonanceId}
+                        options={resonanceOptions}
+                        selectedId={chosenResonanceId}
                         onSelect={handleResonanceSelect}
                         disabled={performCast.isPending}
                       />

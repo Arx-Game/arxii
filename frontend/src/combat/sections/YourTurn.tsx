@@ -2281,7 +2281,10 @@ export function YourTurn({
       return;
     }
     setCastPosition({});
-  }, [focusedContext.techniqueId, setCastPosition]);
+    // Two techniques on one Gift share resonance ids, so a pick made for the last technique
+    // must not ride the next one (#5231).
+    setCastResonanceId(null);
+  }, [focusedContext.techniqueId, setCastPosition, setCastResonanceId]);
 
   // ---------------------------------------------------------------------------
   // Slot composition

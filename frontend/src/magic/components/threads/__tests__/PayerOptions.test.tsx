@@ -123,6 +123,21 @@ describe('PayerOptions', () => {
     expect(screen.queryByTestId('payer-stronger-1-3')).not.toBeInTheDocument();
   });
 
+  it('marks the stronger payer in the fixed layout of a one-resonance thread', () => {
+    render(
+      <PayerOptions
+        thread={makeThread({
+          resonances: [{ resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true }],
+        })}
+        options={[{ ...OPTIONS[0], stronger: true }]}
+        selectedResonanceId={1}
+        onSelect={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('payer-fixed-1')).toBeInTheDocument();
+    expect(screen.getByTestId('payer-stronger-1-1')).toHaveTextContent('Stronger');
+  });
+
   it('draws each perk as a shaded bar with the value in its own right-hand cell', () => {
     render(
       <PayerOptions
