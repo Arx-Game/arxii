@@ -3,7 +3,8 @@
 A character with favor above zero calls on a being before a check. The system
 rolls an invocation check first, and its outcome tier sets the bonus (a
 ``FavorOutcomeAward`` row of kind INVOCATION) added to the check that follows,
-as a labelled ``ModifierContribution`` of kind FAVOR. Favor is never spent; each
+as a labelled ``ModifierContribution`` of kind FAVOR. Invoking never spends favor (a
+divine intervention rescue does, ADR-4349); each
 invocation writes a ``FavorInvocation`` row, which is both the weekly counter and
 the log. Callers (mission options, scene checks, scene actions) own the check the
 bonus lands on and where the lines are delivered.
@@ -210,6 +211,29 @@ def invocation_bonus_for(outcome: CheckOutcome | None) -> int:
         config=get_devotion_config(), kind=FavorAwardKind.INVOCATION, outcome_tier=outcome
     ).first()
     return award.amount if award is not None else 0
+
+
+def outcome_award(kind: str, outcome: CheckOutcome | None) -> int | None:
+    """The ``FavorOutcomeAward`` amount of ``kind`` for ``outcome``, or None when there is no
+    outcome or no such row (#4349). A caller whose rule is "a missing row pays 0" reads
+    ``outcome_award(...) or 0``."""
+    from world.worship.models import FavorOutcomeAward  # noqa: PLC0415
+
+    if outcome is None:
+        return None
+    row = FavorOutcomeAward.objects.filter(
+        config=get_devotion_config(), kind=kind, outcome_tier=outcome
+    ).first()
+    return row.amount if row is not None else None
+
+
+def partial_success_outcome() -> CheckOutcome | None:
+    """The Partial Success tier, which an award read with no roll falls back to; found by its
+    name, since other outcomes may share its level."""
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+    from world.worship.constants import PARTIAL_SUCCESS_NAME  # noqa: PLC0415
+
+    return CheckOutcome.objects.filter(name=PARTIAL_SUCCESS_NAME).first()
 
 
 def invocations_used(

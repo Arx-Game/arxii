@@ -14,6 +14,19 @@ if TYPE_CHECKING:
     from world.worship.types import ClosingOutcome
 
 
+def _rite_favor_sentences(outcome, being_name: str) -> list[str]:
+    """The rite's favor line: what was credited, any part that paid owed favor first (#4349),
+    or that the being already marked this rite this week."""
+    if outcome.favor_granted or outcome.favor_owed_paid:
+        earned = f"+{outcome.favor_granted} favor with {being_name}"
+        if outcome.favor_owed_paid:
+            earned += f", and {outcome.favor_owed_paid} base favor paid what you owe"
+        return [f"{earned}."]
+    if outcome.favor_capped:
+        return [f"{being_name} has already marked this rite of yours this week."]
+    return []
+
+
 def _resolve_rite(kwargs: dict[str, Any]):
     """(rite, error): a ``rite`` object wins; else ``rite_name`` (+ ``being_name``)."""
     from world.worship.models import WorshipRite  # noqa: PLC0415
@@ -96,10 +109,7 @@ class PerformWorshipRiteAction(Action):
         ]
         if outcome.resonance_granted:
             parts.append(f"+{outcome.resonance_granted} {rite.resonance.resonance.name} resonance.")
-        if outcome.favor_granted:
-            parts.append(f"+{outcome.favor_granted} favor with {rite.being.name}.")
-        elif outcome.favor_capped:
-            parts.append(f"{rite.being.name} has already marked this rite of yours this week.")
+        parts.extend(_rite_favor_sentences(outcome, rite.being.name))
         parts.extend(_gift_sentences(outcome))
         return ActionResult(
             success=True,
@@ -308,6 +318,10 @@ class PrayAction(Action):
     kwargs:
         being / being_name: whom the prayer is to.
         text: the words.
+        ap: at a shrine or temple of the being, the action points to spend praying (#4349);
+            favor is earned by the points, up to the weekly limit.
+        on_behalf_of_persona_id (web) / on_behalf_of_name (telnet): a character here in dire
+            straits to pray for. The roll and its cost are yours; the help lands on them.
     """
 
     key: str = "pray"
@@ -328,26 +342,100 @@ class PrayAction(Action):
         sheet = _sheet_of(actor)
         if sheet is None:
             return ActionResult(success=False, message="You have no character sheet to pray with.")
+        ap, error = _prayer_ap(kwargs)
+        if error is not None:
+            return error
+        for_sheet, error = _prayed_for(actor, kwargs)
+        if error is not None:
+            return error
         try:
-            outcome = pray(sheet, being, str(kwargs.get("text") or ""))
+            outcome = pray(
+                sheet, being, str(kwargs.get("text") or ""), on_behalf_of=for_sheet, ap=ap
+            )
         except PrayerError as exc:
             return ActionResult(success=False, message=exc.user_message)
         parts = [f"You pray to {being.name}."]
-        if outcome.devotion_granted:
-            parts.append(f"An act of devotion: +{outcome.devotion_granted} favor.")
-        if outcome.intervention is not None:
-            parts.append(f"{being.name} answers.")
+        if outcome.ap_spent:
+            earned = f"+{outcome.devotion_granted} favor with {being.name}"
+            if outcome.owed_paid:
+                earned += f", and {outcome.owed_paid} base favor paid what you owe"
+            parts.append(f"You spend {outcome.ap_spent} AP in prayer: {earned}.")
+        parts.extend(outcome.lines)
+        intervention = outcome.intervention
         return ActionResult(
             success=True,
             message=" ".join(parts),
             data={
                 "prayer_id": outcome.prayer.pk,
                 "devotion_granted": outcome.devotion_granted,
+                "ap_spent": outcome.ap_spent,
+                "owed_paid": outcome.owed_paid,
                 "at_holy_site": outcome.at_holy_site,
                 "dire_straits": outcome.dire_straits.kind,
-                "answered": outcome.intervention is not None,
+                "answered": outcome.answered,
+                "intervention_status": intervention.status if intervention else "",
+                "intervention_outcome": (
+                    intervention.outcome.name
+                    if intervention is not None and intervention.outcome is not None
+                    else ""
+                ),
+                "favor_spent": intervention.cost.favor_spent if intervention else 0,
+                "favor_owed": intervention.cost.favor_owed if intervention else 0,
+                "wait_hours": intervention.cost.wait_hours if intervention else 0,
             },
         )
+
+
+def _prayer_ap(kwargs: dict[str, Any]):
+    """(action points to spend praying, error): telnet sends a string, the web a number."""
+    raw = kwargs.get("ap")
+    if raw in (None, ""):
+        return 0, None
+    try:
+        ap = int(raw)
+    except (TypeError, ValueError):
+        return 0, ActionResult(success=False, message="Spend a whole number of action points.")
+    if ap < 0:
+        return 0, ActionResult(success=False, message="Spend a whole number of action points.")
+    return ap, None
+
+
+_NO_ONE_TO_PRAY_FOR = "There is no one here you can pray for."
+
+
+def _prayed_for(actor: ObjectDB, kwargs: dict[str, Any]):
+    """(the character prayed for, error): None when the prayer is for oneself.
+
+    The target is found only among the characters here, by the face each presents now: a
+    persona pk (the web) must be that face, a typed name (telnet) is matched against it. The
+    service then checks that the actor can see them and that they are in danger; every miss
+    is the same refusal.
+    """
+    from world.scenes.models import Persona  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    persona_id = kwargs.get("on_behalf_of_persona_id")
+    name = (kwargs.get("on_behalf_of_name") or "").strip().lower()
+    if persona_id in (None, "") and not name:
+        return None, None
+    refusal = ActionResult(success=False, message=_NO_ONE_TO_PRAY_FOR)
+    location = actor.location
+    if location is None:
+        return None, refusal
+    for occupant in location.contents:
+        sheet = _sheet_of(occupant)
+        if sheet is None:
+            continue
+        try:
+            face = active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            continue
+        if persona_id not in (None, ""):
+            if str(face.pk) == str(persona_id):
+                return sheet, None
+        elif face.name.lower() == name:
+            return sheet, None
+    return None, refusal
 
 
 def _resolve_recipient(kwargs: dict[str, Any]):
@@ -672,6 +760,23 @@ class ClosePledgeAction(Action):
         )
 
 
+def _closing_award_words(outcome: ClosingOutcome, being: str) -> str:
+    """The closing award's calculation; what paid owed favor first is said, never a bare +0."""
+    owed = outcome.award_owed_paid
+    if not owed:
+        return (
+            f"{outcome.award_base} base, at {outcome.earning_rate_percent}% = "
+            f"+{outcome.award} favor with {being}."
+        )
+    paid = f"{outcome.award_base + owed} base, {owed} paid what you owe"
+    if not outcome.award_base:
+        return f"{paid}."
+    return (
+        f"{paid}, {outcome.award_base} left, at {outcome.earning_rate_percent}% = "
+        f"+{outcome.award} favor with {being}."
+    )
+
+
 def _closing_message(outcome: ClosingOutcome, being: str, *, awaiting: bool) -> str:
     """The closer's line: the rite's tier, the award, and the pact accepted or refused."""
     if not outcome.resolved:
@@ -682,9 +787,8 @@ def _closing_message(outcome: ClosingOutcome, being: str, *, awaiting: bool) -> 
     else:
         message = (
             f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}. "
-            f"Closing award for {outcome.outcome_name}: {outcome.award_base} base, at "
-            f"{outcome.earning_rate_percent}% = +{outcome.award} favor with {being}."
-            if outcome.award
+            f"Closing award for {outcome.outcome_name}: {_closing_award_words(outcome, being)}"
+            if outcome.award or outcome.award_owed_paid
             else f"You close your pledge with {outcome.rite.name}: {outcome.outcome_name}."
         )
     if awaiting:

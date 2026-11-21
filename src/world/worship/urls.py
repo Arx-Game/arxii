@@ -13,6 +13,7 @@ from world.worship.steward_views import (
 )
 from world.worship.views import (
     MiracleViewSet,
+    OwedFavorViewSet,
     PledgeCardViewSet,
     PledgeViewSet,
     PrayerViewSet,
@@ -29,6 +30,7 @@ router.register("prayers", PrayerViewSet, basename="prayer")
 router.register("pledges", PledgeViewSet, basename="pledge")
 router.register("pledge-cards", PledgeCardViewSet, basename="pledge-card")
 router.register("visions", VisionViewSet, basename="vision")
+router.register("owed-favor", OwedFavorViewSet, basename="owed-favor")
 router.register("admin/beings", StaffBeingViewSet, basename="staff-being")
 # #4333 slice 4: the table page's Beings section, for a stewarded being's table GM.
 router.register("stewarded-beings", StewardedBeingViewSet, basename="stewarded-being")

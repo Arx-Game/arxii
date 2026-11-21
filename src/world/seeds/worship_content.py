@@ -290,12 +290,59 @@ _SACRIFICE_AWARDS = {
 }
 
 
+#: Example officiant awards by Rites result (#4349): base favor an officiant earns at ceremony
+#: finish, before their earning rate. PLACEHOLDER tuning.
+_OFFICIANT_AWARDS = {
+    "Critical Success": 15,
+    "Success": 10,
+    "Partial Success": 6,
+    "Failure": 2,
+    "Critical Failure": 0,
+}
+
+#: Example Chosen anima by ritual result (#4349): anima a Chosen's patron adds to their anima
+#: ritual. A critical success refills anima anyway, so it pays nothing. PLACEHOLDER tuning.
+_CHOSEN_ANIMA_AWARDS = {
+    "Critical Success": 0,
+    "Success": 5,
+    "Partial Success": 3,
+    "Failure": 0,
+    "Critical Failure": 0,
+}
+
+#: Example cost of a divine intervention by result (#4349). Spend: favor a rescue or bigger
+#: miracle costs. Debt: favor owed afterward. Wait: the minimum hours before the next roll.
+#: PLACEHOLDER tuning.
+_INTERVENTION_SPEND = {
+    "Critical Success": 10,
+    "Success": 20,
+    "Partial Success": 0,
+    "Failure": 0,
+    "Critical Failure": 0,
+}
+_INTERVENTION_DEBT = {
+    "Critical Success": 0,
+    "Success": 10,
+    "Partial Success": 15,
+    "Failure": 0,
+    "Critical Failure": 0,
+}
+_INTERVENTION_WAIT_HOURS = {
+    "Critical Success": 24,
+    "Success": 72,
+    "Partial Success": 48,
+    "Failure": 24,
+    "Critical Failure": 168,
+}
+
+
 def ensure_favor_terms(check_type) -> None:
     """Seed the favor terms every character shares (#4333) and every being's targets.
 
     The ``DevotionConfig`` singleton (its default invocation check is the Ceremony
-    Rites check, when that exists and none is set yet), the example INVOCATION, CLOSING
-    and SACRIFICE ``FavorOutcomeAward`` rows, and each being's favor invocation and favor
+    Rites check, when that exists and none is set yet), the example INVOCATION, CLOSING,
+    SACRIFICE, OFFICIANT, CHOSEN_ANIMA and INTERVENTION ``FavorOutcomeAward`` rows, and each
+    being's favor invocation and favor
     earning ``ModifierTarget`` (``ensure_being_modifier_targets``). Idempotent; never
     overwrites a value staff set.
     """
@@ -315,6 +362,11 @@ def ensure_favor_terms(check_type) -> None:
         (FavorAwardKind.INVOCATION, _INVOCATION_BONUSES),
         (FavorAwardKind.CLOSING, _CLOSING_AWARDS),
         (FavorAwardKind.SACRIFICE, _SACRIFICE_AWARDS),
+        (FavorAwardKind.OFFICIANT, _OFFICIANT_AWARDS),
+        (FavorAwardKind.CHOSEN_ANIMA, _CHOSEN_ANIMA_AWARDS),
+        (FavorAwardKind.INTERVENTION_SPEND, _INTERVENTION_SPEND),
+        (FavorAwardKind.INTERVENTION_DEBT, _INTERVENTION_DEBT),
+        (FavorAwardKind.INTERVENTION_WAIT_HOURS, _INTERVENTION_WAIT_HOURS),
     ):
         for outcome_name, amount in amounts.items():
             outcome = CheckOutcome.objects.filter(name=outcome_name).first()

@@ -89,10 +89,11 @@ excluded except for the party themselves):
 ```python
 from world.scenes.models import Interaction
 
-# Single source of truth for interaction read-visibility (was inlined in
-# InteractionViewSet.get_queryset). Preserves any prefetches on the chain. Callers pass
-# the account's CURRENT persona ids (empty for anonymous) and an optional `since` bound.
-Interaction.objects.visible_to(account, persona_ids=persona_ids, since=since)
+# Single source of truth for interaction read-visibility. A player's read goes through
+# `readable_by`, which is `visible_to` plus the viewer's blocks (#3751). Preserves any
+# prefetches on the chain. Callers pass the account's CURRENT persona ids (empty for
+# anonymous) and an optional `since` bound.
+Interaction.objects.readable_by(account, persona_ids=persona_ids, since=since)
 ```
 
 **Consumers:**
@@ -105,24 +106,24 @@ Interaction.objects.visible_to(account, persona_ids=persona_ids, since=since)
   as the sole encounter read-gate: staff bypass OR `scene__in=Scene.objects.viewable_by(user)`.
   The participant union is gone — every encounter carries a required scene, so scene
   visibility subsumes participant membership (`src/world/combat/views.py`).
-- `InteractionViewSet.get_queryset()` calls `Interaction.objects.visible_to(...)`
+- `InteractionViewSet.get_queryset()` calls `Interaction.objects.readable_by(...)`
   (`src/world/scenes/interaction_views.py`).
-- `SceneViewSet.highlight_reel()` calls `Interaction.objects.visible_to(...)` so the reel
+- `SceneViewSet.highlight_reel()` calls `Interaction.objects.readable_by(...)` so the reel
   can never surface a pose the viewer cannot see — not even as a sealed slot (#1241).
 
 ### `InteractionVisibility` tiers
 
 `Interaction.visibility` (`world.scenes.constants.InteractionVisibility`) is a per-row
 privacy override that can only escalate, never reduce. Three tiers, three enforcement
-surfaces per tier: `InteractionQuerySet.visible_to` (queryset reads — the scene log),
-`CanViewInteraction` (`world/scenes/interaction_permissions.py` — REST object-detail
-access), and `can_view_interaction` (`world/scenes/interaction_services.py` — the IC
+surfaces per tier: `InteractionQuerySet.visible_to` and `readable_by` (queryset reads — the scene
+log, search, context and the REST detail, which has no object permission of its own since #3751),
+and `can_view_interaction` (`world/scenes/interaction_services.py` — the IC
 scene-reaction witness gate, "did this persona actually perceive the event").
 
 | Tier | Admits | Enforcement notes |
 |------|--------|--------------------|
 | `DEFAULT` | Room-heard: everyone who could plausibly witness the pose (subject to the usual scene/room read rules) | Baseline — no receiver-row restriction. |
-| `PERCEIVED_ONLY` (#2710, ADR-0170) | Writer + `InteractionReceiver` rows (the personas who actually perceived the event), plus staff, plus — **on the scene-log read only** — a non-staff GM of that scene | `visible_to`'s `gm_visible` branch is the *only* surface that admits a non-staff GM. `CanViewInteraction` and `can_view_interaction` both admit **staff only** for this tier — a non-staff GM is denied on REST object access and on the reaction-witness gate, same as `VERY_PRIVATE`. |
+| `PERCEIVED_ONLY` (#2710, ADR-0170) | Writer + `InteractionReceiver` rows (the personas who actually perceived the event), plus staff, plus — **on the scene-log read only** — a non-staff GM of that scene | `visible_to`'s `gm_visible` branch admits a non-staff GM, and the REST list, search, context and detail all share it. `can_view_interaction` (the reaction-witness gate) admits **staff only** for this tier, so a non-staff GM is still refused there, same as `VERY_PRIVATE`. |
 | `VERY_PRIVATE` | Writer + `InteractionReceiver` rows only | No exception on any of the three surfaces — not even staff. The strictest tier; deliberately not interchangeable with `PERCEIVED_ONLY`. |
 
 `PERCEIVED_ONLY` was introduced for concealed spellcasting (`world.magic.services
@@ -609,7 +610,7 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   nomination or reaction, ranked by all-time `Nomination` count first (#3738; persists past
   weekly settlement — a pose's standing outlives the week it was posed in; never shown,
   since a nomination is invisible to its nominee), reaction count as tie-break, and
-  recency last, capped at 10. Source set is filtered through `Interaction.objects.visible_to`,
+  recency last, capped at 10. Source set is filtered through `Interaction.objects.readable_by`,
   so hidden poses never appear. Reveal a pose via `GET /api/interactions/{id}/`.
 - `GET /api/scenes/{id}/gm-rail/` - GM story rail (#3434): the running beat's authored
   material + protected subjects + room clue placements, composed per-viewer. View-level
@@ -729,7 +730,7 @@ Read-only listing of a player's pending additional-target consent rows (#1177).
 
 Reader contracts for the play-history workspace (`src/world/scenes/play_views.py`). All six
 endpoints require authentication (`IsAuthenticated`). Five of the six read from the same
-authorized `Interaction` queryset the scene feed itself uses — `InteractionQuerySet.visible_to`
+authorized `Interaction` queryset the scene feed itself uses — `InteractionQuerySet.readable_by`
 (via `InteractionViewSet.get_queryset()`, reused for masking, language comprehension, and
 block/mute rules) — so this surface introduces no separate visibility rule for them.
 `POST /api/play/read/` is the exception: it doesn't gate reads at all — it privately records this
@@ -777,7 +778,12 @@ PRIMARY persona is effectively immutable once created, so no write site needs to
   reference (optionally narrowed by `conversation`), plus `before`/`after` cursors so a client can
   page further in either direction without re-deriving the boundary. A missing or unauthorized
   reference returns an identical 404 (`"This pose is no longer available."`) — the two are never
-  distinguished.
+  distinguished. Frontend (#3751): `GamePage`'s historical reference is a `useInfiniteQuery`
+  (`play-reference`) whose first page is this window (or the conversation's latest page) and whose
+  `before`/`after` cursors feed "Load earlier history" and "Load later history" in
+  `ThreadedNarrativeReader`, repeating the first request's filters because the cursor is bound to
+  them. A failed earlier or later page leaves the passage already read on screen; only a reference
+  with nothing loaded shows the unavailable or retry states.
 - `GET /api/play/search/` (#3759) - Case-insensitive substring search over authorized,
   already-rendered content. Requires a 2-200 character query AND at least one of `conversation`/
   `kind`/`from`/`to`/`until`/`participant` (an unbounded scan is rejected with 400); cursor-paginated
@@ -804,7 +810,7 @@ PRIMARY persona is effectively immutable once created, so no write site needs to
 
 `account_attention(*, account, entries) -> AccountAttention` (`world/scenes/attention_services.py`)
 answers what is waiting for each of an account's characters (`CharacterAttention.direct`/`.ambient`,
-keyed by `character_sheet_id`) in five queries total, none per character and none per row. It
+keyed by `character_sheet_id`) in six queries total, none per character and none per row. It
 deliberately never calls `InteractionQuerySet.visible_to` - that queryset's staff/player branches
 return far more than one account's own waiting attention, which would make a badge meaningless and
 disclose volume - and instead builds the count from rows already scoped to the account (directed
@@ -819,6 +825,35 @@ badge that scene produces (Finding 1, #3774 final review). Consumed by
 `has_ambient_unread`/`attention_as_of_id` once per request via serializer context - the frontend's
 `characterAttention()` (`frontend/src/game/attention.ts`) then adds each session's own live delta on
 top of that server baseline.
+
+The badge obeys the same privacy rules as the feed (#3751). A whisper counts only through the
+`InteractionReceiver` row pinned to the account asking (`account=account`), so a character's next
+player never inherits the old player's whispers as a badge. The target side counts only room-heard
+poses (`room_heard_q()`), since a whisper writes a target row beside its receiver row. Faces the
+account's blocks hide (`hidden_persona_ids_for_viewer`, staff bypass) are excluded from all three
+queries, which costs one extra query for the block list.
+
+### The one read gate (`InteractionQuerySet.readable_by`, #3751)
+
+`readable_by(account, persona_ids=, since=)` is `visible_to` minus the faces the viewer's blocks hide,
+and every read of an interaction goes through it: the interaction list and detail
+(`InteractionViewSet.get_queryset`), every `/api/play/` surface built on that queryset (poses,
+search, context, conversation and thread summaries, mark-read), a reply's parent chip
+(`InteractionListSerializer._visible_parents`, so a blocked author's pose never leaks as a chip), the
+scene highlight reel, the reply-target check (`thread_services`), the nomination check
+(`progression/services/nominations.py`) and the combat outcome detail. `tools/lint_interaction_visible_to.py`
+rejects a bare `.visible_to(` anywhere else, and the `read-gate-reviewer` agent covers the shapes a
+lint cannot see (a count, badge or chip built from its own query). What decides a read is whether the viewer's account was there. A persona-presence grant (a
+character they now hold was in the scene) counts only for what happened inside the account's own
+`RosterTenure` on that character, so a roster character's next player reads none of the previous
+player's private-scene poses, while an account that was in the scene (a `SceneParticipation` row, a
+pinned writer or receiver) keeps its history. The REST detail has no object permission of its own
+(`CanViewInteraction` was removed), so it opens exactly what the list shows. Muted faces stay in:
+their rows come back with the text blanked
+(`get_content`), and the detail endpoint is the one deliberate reveal. The journeys in
+`src/integration_tests/test_play_reader_authorization_journeys.py` hold each rule (block, mute,
+VERY_PRIVATE, language, mask, inherited character) against list, detail, search, context,
+conversation summaries and the top-bar badge.
 
 ---
 

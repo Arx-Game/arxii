@@ -307,7 +307,7 @@ def _outcome_interaction(
     )
 
     interaction_qs = Interaction.objects.filter(pk=action_interaction_id)
-    if not interaction_qs.visible_to(account, persona_ids=persona_ids or []).exists():
+    if not interaction_qs.readable_by(account, persona_ids=persona_ids or []).exists():
         return None, None
     interaction = interaction_qs.first()
     ledger = (

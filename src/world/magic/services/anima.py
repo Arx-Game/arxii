@@ -183,6 +183,22 @@ def perform_anima_ritual(
     )
 
 
+def _chosen_patron_share(character_sheet: CharacterSheet, outcome: object) -> tuple[str, int]:
+    """(the patron's name, the anima it adds) when the character is a Chosen whose patron favor
+    meets the Chosen favor config's threshold: the CHOSEN_ANIMA award for the ritual's result
+    (#2550, #4349). ("", 0) otherwise."""
+    from world.worship.constants import FavorAwardKind  # noqa: PLC0415
+    from world.worship.favor_services import chosen_patronages_for  # noqa: PLC0415
+    from world.worship.invocation_services import outcome_award  # noqa: PLC0415
+    from world.worship.services import get_chosen_favor_config  # noqa: PLC0415
+
+    patronages = chosen_patronages_for(character_sheet)
+    if not patronages or patronages[0].favor < get_chosen_favor_config().anima_recovery_threshold:
+        return "", 0
+    share = outcome_award(FavorAwardKind.CHOSEN_ANIMA, outcome) or 0  # ty: ignore[invalid-argument-type]
+    return patronages[0].being.name, share
+
+
 def apply_anima_ritual_outcome(
     *,
     ritual: Ritual,
@@ -254,18 +270,11 @@ def apply_anima_ritual_outcome(
                 soulfray_resolved = True
                 break
 
-    # Chosen patronage favor bonus (#2550): additive to the leftover budget
-    # after soulfray reduction, before the anima refill. Both call paths
-    # (perform_anima_ritual direct + _resolve_anima_ritual web) converge here.
-    from world.worship.services import (  # noqa: PLC0415
-        best_patronage_favor,
-        get_chosen_favor_config,
-    )
-
-    favor = best_patronage_favor(character_sheet)
-    chosen_config = get_chosen_favor_config()
-    if favor >= chosen_config.anima_recovery_threshold:
-        budget += chosen_config.anima_recovery_bonus
+    # Chosen patronage share (#2550, #4349): the CHOSEN_ANIMA award for the ritual's result,
+    # additive to the leftover budget after soulfray reduction, before the anima refill. Both
+    # call paths (perform_anima_ritual direct + _resolve_anima_ritual web) converge here.
+    patron_name, patron_share = _chosen_patron_share(character_sheet, outcome)
+    budget += patron_share
 
     anima_before = anima.current
     anima.current = min(anima.current + max(0, budget), anima.maximum)
@@ -276,6 +285,9 @@ def apply_anima_ritual_outcome(
 
     anima.save(update_fields=["current"])
     anima_recovered = anima.current - anima_before
+    # A critical success refills anima whatever the patron adds, and the patron's share cannot
+    # be more than what was recovered: the line the player reads names only what it did.
+    patron_bonus = 0 if success_level >= 2 else min(patron_share, anima_recovered)  # noqa: PLR2004
 
     performance = AnimaRitualPerformance.objects.create(
         ritual=ritual,
@@ -294,6 +306,8 @@ def apply_anima_ritual_outcome(
         anima_recovered=anima_recovered,
         soulfray_stage_after=stage_after,
         soulfray_resolved=soulfray_resolved,
+        patron_bonus=patron_bonus,
+        patron_name=patron_name if patron_bonus else "",
     )
 
 

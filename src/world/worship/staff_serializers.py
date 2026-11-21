@@ -334,6 +334,7 @@ class StaffPrayerSerializer(serializers.ModelSerializer):
             "character_name",
             "text",
             "devotion_granted",
+            "ap_spent",
             "dire_straits",
             "answered",
             "place",

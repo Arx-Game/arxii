@@ -210,6 +210,33 @@ class PledgeTestBase(TestCase):
         details.project.save(update_fields=["current_progress"])
 
 
+class ClosingAwardWordsTests(TestCase):
+    """The closing line says where favor went when it paid owed favor first (#4349)."""
+
+    def _closing(self, **fields):
+        from types import SimpleNamespace
+
+        return SimpleNamespace(earning_rate_percent=100, **fields)
+
+    def test_all_of_it_paying_the_debt_is_not_a_bare_zero(self) -> None:
+        from actions.definitions.worship import _closing_award_words
+
+        words = _closing_award_words(
+            self._closing(award_base=0, award=0, award_owed_paid=4), "Ombrin"
+        )
+        self.assertEqual(words, "4 base, 4 paid what you owe.")
+
+    def test_a_part_paying_the_debt_names_both_parts(self) -> None:
+        from actions.definitions.worship import _closing_award_words
+
+        words = _closing_award_words(
+            self._closing(award_base=3, award=3, award_owed_paid=4), "Ombrin"
+        )
+        self.assertEqual(
+            words, "7 base, 4 paid what you owe, 3 left, at 100% = +3 favor with Ombrin."
+        )
+
+
 class TakePledgeTests(PledgeTestBase):
     def test_taking_a_pledge_opens_a_pledge_project_with_a_prayer(self) -> None:
         details = take_pledge(self.sheet, self.pledge, prayer_text="[player-written prayer]")
@@ -218,14 +245,31 @@ class TakePledgeTests(PledgeTestBase):
         self.assertEqual(project.kind, ProjectKind.PLEDGE)
         self.assertEqual(project.status, ProjectStatus.ACTIVE)
         self.assertEqual(project.threshold_target, 20)
-        # Pledging at the shrine with a prayer is the week's holy-site prayer: 1 base
-        # at 200% counts toward the pledge it was made with.
-        self.assertEqual(project.current_progress, 2)
+        # The pledge's prayer spends no action points, so it earns no favor (#4349).
+        self.assertEqual(project.current_progress, 0)
         self.assertAlmostEqual(
             project.time_limit - project.started_at, timedelta(days=14), delta=timedelta(seconds=1)
         )
         self.assertEqual(details.prayer, Prayer.objects.get(character_sheet=self.sheet))
         self.assertEqual(details.prayer.text, "[player-written prayer]")
+
+    def test_the_officiant_credit_names_the_rites_result_that_earned_it(self) -> None:
+        from world.worship.pledge_services import credit_lines
+        from world.worship.types import FavorSource
+
+        details = take_pledge(self.sheet, self.pledge)
+        success = CheckOutcomeFactory(name="Success", success_level=1)
+
+        bump_devotion(
+            self.sheet,
+            self.being,
+            10,
+            source=FavorSource(kind=PledgeCreditSource.CEREMONY, outcome_tier=success),
+        )
+
+        (line,) = credit_lines(details)
+        self.assertEqual(line.label, "Ceremony (officiant)")
+        self.assertTrue(line.calculation.startswith("Rites result Success: 10 base, at "))
 
     def test_one_open_pledge_per_character(self) -> None:
         take_pledge(self.sheet, self.pledge)
@@ -827,7 +871,16 @@ class PledgeApiTests(PledgeTestBase):
         self.assertEqual(terms["lines"][0]["amount"], "100% of amount")
         self.assertIn("Silk facet count x2", terms["lines"][2]["label"])
         self.assertEqual(
-            sites, [{"being_id": self.being.pk, "being_name": "Ombrin", "site": "shrine"}]
+            sites,
+            [
+                {
+                    "being_id": self.being.pk,
+                    "being_name": "Ombrin",
+                    "site": "shrine",
+                    "ap_left": 30,
+                    "ap_cap": 30,
+                }
+            ],
         )
 
     def test_the_owner_reads_their_pledge_card_and_a_stranger_does_not(self) -> None:

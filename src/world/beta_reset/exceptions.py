@@ -86,3 +86,51 @@ class AlreadyReleasedError(BetaResetError):
         ),
     ) -> None:
         super().__init__(user_message)
+
+
+class CarryOverError(BetaResetError):
+    """Raised when a character named for carry-over cannot be carried over.
+
+    The operator named it with ``--carry-over``; the message says which character and why,
+    and nothing was touched.
+    """
+
+
+class IncompleteLedgerError(BetaResetError):
+    """Raised when the provenance ledger of a kept character is not whole.
+
+    Subtracting the play-time deltas from an incomplete ledger would restore a wrong number,
+    so execution refuses by default and names every character and trait. Nothing was touched.
+    ``--allow-incomplete-ledger`` proceeds past them.
+    """
+
+    def __init__(self, findings: dict[str, list[str]]) -> None:
+        self.findings = findings
+        lines = [f"  {name}: {'; '.join(problems)}" for name, problems in findings.items()]
+        super().__init__(
+            "The provenance ledger is incomplete for these characters, so their progress "
+            "cannot be reversed reliably:\n"
+            + "\n".join(lines)
+            + "\nRe-run with --allow-incomplete-ledger to proceed past them. Nothing was touched."
+        )
+
+
+class WipeBlockedError(BetaResetError):
+    """Raised when a ``ProtectedError`` stops the cutover; the whole cutover rolled back."""
+
+    def __init__(self, blocking_models: list[str], detail: str) -> None:
+        self.blocking_models = blocking_models
+        super().__init__(
+            f"The cutover was blocked by {', '.join(blocking_models)} rows that point at rows "
+            f"the wipe deletes ({detail}). Everything was rolled back and nothing changed."
+        )
+
+
+class CutoverFailedError(BetaResetError):
+    """Raised when any other failure stops the cutover; the whole cutover rolled back."""
+
+    def __init__(self, cause: Exception) -> None:
+        super().__init__(
+            f"The cutover failed with {type(cause).__name__}: {cause}. Everything was rolled "
+            "back and nothing changed."
+        )

@@ -45,6 +45,7 @@ class MyRosterEntriesAttentionTests(TestCase):
             interaction=whisper,
             timestamp=whisper.timestamp,
             persona=cls.persona_one,
+            account=cls.account,
         )
 
         # A second, unrelated account with no attention waiting for it.

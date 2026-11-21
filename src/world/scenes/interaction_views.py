@@ -31,7 +31,7 @@ from world.magic.services.sineating import (
     pending_sineating_from,
 )
 from world.relationships.reads import resolve_viewer_sheet
-from world.scenes.block_services import flag_blocked_contact_attempt, hidden_persona_ids_for_viewer
+from world.scenes.block_services import flag_blocked_contact_attempt
 from world.scenes.constants import (
     InteractionMode,
     PersonaType,
@@ -44,7 +44,6 @@ from world.scenes.interaction_filters import (
 )
 from world.scenes.interaction_link_services import auto_link_pose_to_actions
 from world.scenes.interaction_permissions import (
-    CanViewInteraction,
     IsInteractionWriter,
     get_account_personas,
     get_account_roster_entries,
@@ -579,20 +578,15 @@ class InteractionViewSet(
         )
 
         # Read-visibility lives on the Interaction queryset so the scene highlight reel
-        # (#1241) shares the exact same gate — no parallel privacy implementation.
+        # (#1241) and a reply's parent chip share the exact same gate -- no parallel privacy
+        # implementation. ``readable_by`` also drops the faces the viewer's blocks hide
+        # (#1278, staff bypass); muted personas (#2087) are NOT excluded -- their
+        # interactions stay in the feed with content blanked by the serializer ("actions
+        # still show without text").
         user = self.request.user
         persona_ids = get_account_personas(self.request) if user.is_authenticated else []
         since = self.request.query_params.get("since") or self.request.query_params.get("from")  # noqa: USE_FILTERSET
-        qs = base_qs.visible_to(user, persona_ids=persona_ids, since=since)
-        # #1278 — hide personas the viewer can't see (Block, enforced, staff bypass).
-        # Muted personas (#2087) are NOT excluded here — their interactions stay in the
-        # feed with content blanked by the serializer ("actions still show without text").
-        exclude_persona_ids: set[int] = set()
-        if not user.is_staff:
-            exclude_persona_ids = hidden_persona_ids_for_viewer(viewer_account=user)
-        if exclude_persona_ids:
-            qs = qs.exclude(persona_id__in=exclude_persona_ids)
-        return qs
+        return base_qs.readable_by(user, persona_ids=persona_ids, since=since)
 
     # Behaviorally equivalent to the inherited `mixins.ListModelMixin.list()` --
     # same filtering, pagination, and permission behavior (materializes the
@@ -634,8 +628,9 @@ class InteractionViewSet(
             return [AllowAny()]
         if self.action == "destroy":
             return [IsAuthenticated(), IsInteractionWriter()]
-        if self.action == "retrieve":
-            return [IsAuthenticated(), CanViewInteraction()]
+        # No object permission on retrieve: ``get_queryset`` (``readable_by``) is the one
+        # read gate, so the detail opens exactly the rows the list, search and context
+        # show this viewer and never more (#3751).
         return [permission() for permission in self.permission_classes]
 
     @property

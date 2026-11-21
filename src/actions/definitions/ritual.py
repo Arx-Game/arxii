@@ -378,5 +378,8 @@ def _anima_ritual_message(ritual: Any, outcome: Any) -> str:
     if outcome.soulfray_resolved:
         parts.append("The Soulfray is gone.")
     if outcome.anima_recovered:
-        parts.append(f"You recover {outcome.anima_recovered} anima.")
+        share = (
+            f", +{outcome.patron_bonus} from {outcome.patron_name}" if outcome.patron_bonus else ""
+        )
+        parts.append(f"You recover {outcome.anima_recovered} anima{share}.")
     return " ".join(parts)

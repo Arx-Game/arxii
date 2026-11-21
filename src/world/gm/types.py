@@ -86,6 +86,7 @@ class NarratableEvent:
     character_sheet: CharacterSheet | None
     room_text: str = ""
     private_text: str = ""
+    context_text: str = ""
     prepared_for_character: bool = False
     technique: Technique | None = None
     stake_outcome: StakeOutcome | None = None

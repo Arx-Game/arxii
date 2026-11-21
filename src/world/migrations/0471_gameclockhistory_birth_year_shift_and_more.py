@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0467_swatch_colour_fill"),
+        ("arxii", "0470_drop_flat_worship_amount_columns"),
     ]
 
     operations = [
