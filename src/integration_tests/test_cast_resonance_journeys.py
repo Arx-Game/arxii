@@ -17,6 +17,8 @@ from __future__ import annotations
 
 import math
 
+from django.urls import reverse
+
 from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
 from world.checks.test_helpers import force_check_outcome
@@ -31,10 +33,15 @@ from world.magic.factories import (
     TechniqueFactory,
     ensure_canonical_affinities,
 )
-from world.magic.models import Affinity, CharacterAnima, CharacterResonance
+from world.magic.models import Affinity, CharacterAnima, CharacterResonance, ThreadResonance
 from world.magic.specialization.services import provision_latent_gift_thread
+from world.scenes.action_constants import ConsentDecision
 from world.scenes.factories import SceneFactory
-from world.scenes.tests.cast_test_helpers import grant_technique
+from world.scenes.models import SceneActionRequest
+from world.scenes.tests.cast_test_helpers import (
+    attach_behavior_altering_condition,
+    grant_technique,
+)
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import CheckOutcome
 from world.vitals.models import CharacterVitals
@@ -174,3 +181,58 @@ class WorkingACastInAChosenResonance(JourneyCase):
         after = self.corruption(hobb)
         self.assertGreaterEqual(after["Ruin"] - before["Ruin"], 1)
         self.assertEqual(after["Warmth"], before["Warmth"])
+
+    def _ask_hobb_to_accept_a_cast_in_ruin(self):
+        """Ysmay asks to cast a consent-gated technique on Hobb, worked in Ruin."""
+        self.seed_social_engagement()
+        technique = self._technique(self.gift)
+        attach_behavior_altering_condition(technique)
+        ysmay = self.caster("Ysmay", primal="80", abyssal="20")
+        hobb = self.caster("Hobb", primal="40", abyssal="60")
+        grant_technique(ysmay.sheet_data.primary_persona, technique)
+        response = self.cast(
+            ysmay,
+            technique=technique,
+            target_persona=hobb.sheet_data.primary_persona.pk,
+            preferred_resonance_id=self.ruin.pk,
+        )
+        self.assertEqual(response.status_code, 201, response.data)
+        (request,) = SceneActionRequest.objects.filter(technique=technique)
+        return ysmay, hobb, request
+
+    def _hobb_accepts(self, hobb, request):
+        with (
+            force_check_outcome(CheckOutcome.objects.get(name="Success")),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            return self.api(self.account_of(hobb)).post(
+                reverse("sceneactionrequest-respond", kwargs={"pk": request.pk}),
+                {"decision": ConsentDecision.ACCEPT},
+                format="json",
+            )
+
+    def test_a_consent_gated_cast_is_worked_in_the_resonance_she_chose_when_it_resolves(
+        self,
+    ) -> None:
+        ysmay, hobb, request = self._ask_hobb_to_accept_a_cast_in_ruin()
+        self.assertEqual(request.cast_resonance, self.ruin)
+        before = self.corruption(ysmay)
+
+        response = self._hobb_accepts(hobb, request)
+
+        self.assertEqual(response.status_code, 200, response.data)
+        after = self.corruption(ysmay)
+        self.assertGreaterEqual(after["Ruin"] - before["Ruin"], 1)
+        self.assertEqual(after["Warmth"], before["Warmth"])
+
+    def test_a_chosen_resonance_the_thread_lost_meanwhile_falls_back_to_the_default(self) -> None:
+        ysmay, hobb, request = self._ask_hobb_to_accept_a_cast_in_ruin()
+        ThreadResonance.objects.get(thread__owner=ysmay.sheet_data, resonance=self.ruin).delete()
+        ysmay.threads.invalidate()
+        before = self.corruption(ysmay)
+
+        response = self._hobb_accepts(hobb, request)
+
+        # She is not left unable to cast: it resolves in Warmth, which adds no corruption.
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(self.corruption(ysmay), before)
