@@ -422,8 +422,9 @@ def total_points(lines: Sequence[SourcePoints]) -> int:
 def points_to_power(total: int, curve: Sequence[tuple[int, int]], *, cap: int) -> int:
     """The power ``total`` points reach on ``curve``, a list of ``(points_reached, power)``.
 
-    Linear between the rows, starting from (0, 0), flat after the last row. A negative total
-    mirrors the positive one. The result never passes ``cap`` either way. No rows gives 0.
+    Linear between the rows, starting from (0, 0), flat after the last row. A value between two
+    rows is rounded down before the sign is applied (#4248). A negative total mirrors the
+    positive one. The result never passes ``cap`` either way. No rows gives 0.
     """
     magnitude = abs(total)
     if not curve or magnitude == 0:

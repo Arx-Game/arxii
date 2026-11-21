@@ -24,6 +24,13 @@ Command reference for working on Arx II. The load-bearing *rules* live in
   go through `just test-parity` / `just build-test-schema` rather than bare
   `arx test`/`arx test --keepdb` — see the `running-tests` skill)
 - `arx test <args>` — Run specific tests with additional arguments
+- `arx test --tag <name>` — Run only tests decorated with `@tag(<name>)`;
+  `--exclude-tag <name>` skips them. Both repeat.
+- `just mutate <source-file> --kept <label>... --units <label>...` — Change one
+  source file a small edit at a time and report whether the kept group
+  (journeys and properties) or only the units group notices each edit. A
+  measurement, never a gate; it edits the file on disk while it runs and puts
+  it back. See `tools/mutation_run.py` and `.mutation/<file stem>/report.md`.
 - `arx shell` — Start Evennia Django shell with correct settings
 - `arx manage <command>` — Run arbitrary Django management commands
 - `arx build` — Build docker images (runs `make build`)

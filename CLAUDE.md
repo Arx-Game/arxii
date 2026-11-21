@@ -543,7 +543,7 @@ no-backwards-compat, `# noqa` policy + custom-linter tokens) live in `django_not
 
 ## Testing
 
-For bug fixes with a new or updated regression test, follow the [regression evidence workflow](tools/skills/running-tests/SKILL.md#bug-fix-regression-evidence). Run the test on unfixed code and capture the relevant failure before implementing the fix, then capture the same test passing with the fix. The focused baseline run precedes implementation even when longer suites run after committing.
+For bug fixes with a new or updated regression test, follow the [regression evidence workflow](tools/skills/running-tests/SKILL.md#bug-fix-regression-evidence). Run the test on unfixed code and capture the relevant failure before implementing the fix, then capture the same test passing with the fix. Mark that test `@tag("regression")` and begin its docstring with `Regression for #<issue>.`; it stays after the fix. The focused baseline run precedes implementation even when longer suites run after committing.
 
 **Unit tests alone are not proof that a change works** (ADR-4246). Before a PR,
 operate the change through the interface a person or caller uses, against isolated
@@ -557,7 +557,11 @@ a maintainer approval overrides it, but its challenges get real answers.
 does, on the real seam (`integration_tests.harness.JourneyCase`: `telnet()`
 through the command handler, `web()` through dispatch, `api()`), fuzz at those
 seams (Hypothesis, `integration_tests/fuzz/`), cross-system integration. A unit
-test is kept only where a journey cannot reach. Never build a `Cmd` and call
+test is written only as the failing-first evidence of a bug fix (ADR-4248); a
+rule gets a Hypothesis property whose statement comes from a spec, a docstring
+or a ruling. An existing unit test is removed only when a mutation run
+(`just mutate`) shows the kept tests catch every change it catches; where they
+do not, the property or journey is written first. Never build a `Cmd` and call
 `.func()` by hand. The curated journeys live in `docs/testing/journeys.md` and a
 PR names the row its change is covered by; `docs/testing/README.md` has the
 rubric and recipes.

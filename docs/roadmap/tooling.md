@@ -3,6 +3,28 @@
 **Status:** in-progress
 **Depends on:** Areas, Items, Combat, Stories (for GM tools)
 
+## Built (2026-11-21, #4248 — the mutation run, and unit tests only as bug-fix evidence)
+
+A person can now ask which of two groups of tests notices each small change to one source
+file. `just mutate` runs `tools/mutation_run.py`: for one source file it makes one small
+change at a time (cosmic-ray 8.9.0 through a pinned `uvx`, never a project dependency), runs
+a kept group and a unit group of tests against each change, and reports each change as
+guarded, units only or unguarded (`.mutation/<file>/report.md`, `changes.csv` and
+`unit_tests.csv`). `arx test --tag <name>` runs only the tests carrying a Django tag.
+`.github/workflows/mutation.yml` runs the same tool on the Postgres tier for one function per
+run; it is started by hand (`workflow_dispatch` only) and is never a required check. A bug-fix
+test carries `@tag("regression")` and a docstring beginning `Regression for #<issue>.`
+ADR-4248 sets the rule: a unit test is written only as the failing-first evidence of a bug
+fix, and an existing unit test is removed only on mutation evidence, with the property or
+journey written first where the kept tests do not yet catch what it catches. The Primum power
+curve is the worked example: 11 of its 69 changes were caught only by four unit tests, the
+properties in `integration_tests/fuzz/test_primum_curve_fuzz.py` written from the docstrings
+brought that to 0, and the four tests were deleted. The `world.conditions` pilot ran four
+older service functions: the six conditions journey modules caught 23 of the 77 changes the
+unit tests catch, and the report is on #4248. Follow-ups are #5262 (a run of one function in
+under 5 minutes of CI), #5263 (a mutation report on the lines a PR changes) and #5264
+(retiring `world.conditions` unit tests on mutation evidence).
+
 ## Built (2026-10-15, #3657 tranche 0 — the three-layer test suite's tools)
 
 The suite audit's first tranche builds the tools and changes the rules, and removes
