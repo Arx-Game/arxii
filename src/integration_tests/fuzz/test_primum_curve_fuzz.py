@@ -19,7 +19,7 @@ import unittest
 from hypothesis import example, given, strategies as st
 
 from world.magic.constants import PrimumLineKind
-from world.magic.services.primum import apportion_power, points_to_power
+from world.magic.services.primum import apportion_power, points_to_power, total_points
 from world.magic.types.primum import SourcePoints
 
 
@@ -127,6 +127,23 @@ class PointsToPowerHoldsItsContract(unittest.TestCase):
 
 
 class ApportionPowerHoldsItsContract(unittest.TestCase):
+    @given(st.lists(points, max_size=8))
+    def test_total_points_is_the_signed_sum(self, line_points) -> None:
+        """``total_points`` gives "The signed points of every line added together."
+
+        A helping line of 7 and an opposing line of -2 total 5, and with every line's points
+        negated the total is the negation.
+        """
+
+        def lines_of(values: list[int]) -> list[SourcePoints]:
+            return [
+                SourcePoints(kind=PrimumLineKind.PLACE, label=str(i), points=p, substance_id=i)
+                for i, p in enumerate(values)
+            ]
+
+        self.assertEqual(total_points(lines_of(line_points)), sum(line_points))
+        self.assertEqual(total_points(lines_of([-p for p in line_points])), -sum(line_points))
+
     @given(
         st.lists(points, max_size=8),
         st.integers(0, 60),
