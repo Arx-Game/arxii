@@ -532,28 +532,41 @@ describe('ActionPanel', () => {
     });
   });
 
-  it('sends no resonance when the caster picks none or switches back to her usual one (#5231)', async () => {
+  it.each([
+    {
+      name: 'the caster picks none',
+      resonances: undefined,
+      picks: [],
+      pressed: undefined,
+      usual: undefined,
+    },
+    {
+      name: 'the caster chooses her usual resonance again after another one',
+      resonances: undefined,
+      picks: ['cast-resonance-9', 'cast-resonance-3'],
+      pressed: 'cast-resonance-3',
+      usual: undefined,
+    },
+    {
+      name: 'her usual resonance is not on the thread and is shown first',
+      resonances: [
+        resonanceOption(77, 'Mirrorwake', { is_default: true }),
+        resonanceOption(3, 'Arderi'),
+        TWO_RESONANCES[1],
+      ],
+      picks: ['cast-resonance-9', 'cast-resonance-77'],
+      pressed: undefined,
+      usual: 'cast-resonance-77',
+    },
+  ])('sends no resonance when $name (#5231)', async ({ resonances, picks, pressed, usual }) => {
     vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
     const user = userEvent.setup();
-    await openCastDialogWithResonanceOptions(user);
+    await openCastDialogWithResonanceOptions(user, undefined, resonances);
 
     await screen.findByTestId('cast-resonance-picker');
-    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
-    await waitFor(() => {
-      expect(castTechnique).toHaveBeenCalledTimes(1);
-    });
-    expect(vi.mocked(castTechnique).mock.calls[0][1]).not.toHaveProperty('preferred_resonance_id');
-  });
-
-  it('clears the pick when the caster chooses her usual resonance again (#5231)', async () => {
-    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
-    const user = userEvent.setup();
-    await openCastDialogWithResonanceOptions(user);
-
-    await screen.findByTestId('cast-resonance-picker');
-    await user.click(screen.getByTestId('cast-resonance-9'));
-    await user.click(screen.getByTestId('cast-resonance-3'));
-    expect(screen.getByTestId('cast-resonance-3')).toHaveAttribute('aria-pressed', 'true');
+    if (usual) expect(screen.getByTestId(usual)).toHaveTextContent('your usual');
+    for (const testId of picks) await user.click(screen.getByTestId(testId));
+    if (pressed) expect(screen.getByTestId(pressed)).toHaveAttribute('aria-pressed', 'true');
     await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
 
     await waitFor(() => {
@@ -642,27 +655,6 @@ describe('ActionPanel', () => {
         expect.objectContaining({ use_base_form: true, preferred_resonance_id: 12 })
       );
     });
-  });
-
-  it('shows a usual resonance that is not on the thread, first, and sends nothing for it (#5231)', async () => {
-    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
-    const user = userEvent.setup();
-    await openCastDialogWithResonanceOptions(user, undefined, [
-      resonanceOption(77, 'Mirrorwake', { is_default: true }),
-      resonanceOption(3, 'Arderi'),
-      TWO_RESONANCES[1],
-    ]);
-
-    const usual = await screen.findByTestId('cast-resonance-77');
-    expect(usual).toHaveTextContent('your usual');
-    await user.click(screen.getByTestId('cast-resonance-9'));
-    await user.click(usual);
-    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
-
-    await waitFor(() => {
-      expect(castTechnique).toHaveBeenCalledTimes(1);
-    });
-    expect(vi.mocked(castTechnique).mock.calls[0][1]).not.toHaveProperty('preferred_resonance_id');
   });
 
   it('renders actions after opening the panel', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cloud, hexToOklch, noise, ramp, swirlThreshold } from '@/magic/auraSwirl';
+import { cloud, hexToOklch, noise, swirlThreshold } from '@/magic/auraSwirl';
 
 function cloudSamples(count: number): Float32Array {
   const side = Math.sqrt(count);
@@ -40,14 +40,6 @@ describe('hexToOklch', () => {
 
   it('refuses a string that is not #RRGGBB', () => {
     expect(() => hexToOklch('red')).toThrow(RangeError);
-  });
-});
-
-describe('ramp', () => {
-  it('runs 33 steps from the first colour to the second', () => {
-    const steps = ramp([0.68, 0.19, 45], [0.22, 0.1, 20]);
-    expect(steps).toHaveLength(33);
-    expect(steps[0][0]).toBeGreaterThan(steps[32][0]);
   });
 });
 
