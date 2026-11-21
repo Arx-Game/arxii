@@ -199,6 +199,49 @@ class CastTechniqueActionTests(TestCase):
         self.assertIsNotNone(pending, "A PendingCast must be registered after soulfray gate")
         self.assertEqual(pending.technique_id, self.technique.pk)
 
+    def test_a_confirmed_cast_keeps_every_choice_she_made(self) -> None:
+        """The pending cast carries resonance, form, openness and strain to the confirmed cast."""
+        from world.magic.factories import ResonanceFactory
+        from world.magic.specialization.services import provision_latent_gift_thread
+
+        resonance = ResonanceFactory()
+        provision_latent_gift_thread(
+            self.persona.character_sheet, self.technique.gift, resonances=[resonance]
+        )
+        warning = self._make_soulfray_warning()
+        sheet_pk = self.persona.character_sheet.pk
+        pop_pending(sheet_pk)
+        with patch(
+            "world.magic.services.soulfray.get_soulfray_warning",
+            return_value=warning,
+        ):
+            CastTechniqueAction().run(
+                actor=self.character,
+                technique_id=self.technique.pk,
+                confirm_soulfray_risk=False,
+                preferred_resonance_id=resonance.pk,
+                use_base_form=True,
+                cast_openly=True,
+                strain_commitment=1,
+            )
+        pending = pop_pending(sheet_pk)
+
+        with patch("world.scenes.cast_services.request_technique_cast") as request_cast:
+            request_cast.return_value = MagicMock(soulfray_warning=None, combat_seated=False)
+            CastTechniqueAction().run(
+                actor=self.character,
+                technique_id=pending.technique_id,
+                target_persona_id=pending.target_persona_id,
+                confirm_soulfray_risk=True,
+                **pending.kwargs,
+            )
+
+        sent = request_cast.call_args.kwargs
+        self.assertEqual(sent["preferred_resonance"], resonance)
+        self.assertTrue(sent["use_base_form"])
+        self.assertTrue(sent["cast_openly"])
+        self.assertEqual(sent["strain_commitment"], 1)
+
     def test_soulfray_gate_does_not_deduct_anima(self) -> None:
         """When soulfray gate fires, anima is NOT deducted."""
         warning = self._make_soulfray_warning()

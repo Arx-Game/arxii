@@ -198,7 +198,14 @@ def accrue_corruption_for_cast(
     tier_coef = _resolve_tier_coefficient(tier, config)
     leak_percent = _alternate_self_corruption_leak_percent(caster_sheet, config)
 
-    part = cast_corruption_part(caster_sheet, config)
+    # Read once, and only when some resonance's ordinary tick is above zero: a cast worked in
+    # a Primal or Celestial resonance never needs the Abyssal affinity or the aura.
+    parts: list[int] = []
+
+    def light_part() -> int:
+        if not parts:
+            parts.append(cast_corruption_part(caster_sheet, config))
+        return parts[0]
 
     def raw_tick_for(
         involvement: int, affinity_coef: int, hasty_fall_multiplier: int = 10
@@ -239,6 +246,7 @@ def accrue_corruption_for_cast(
         )
         # One rounding up, after the light part and the leak: any corruption the cast adds
         # is at least 1, and a whole number never rounds up.
+        part = light_part() if ordinary > 0 else 100
         tick = math.ceil((ordinary * part / 100 + hasty_fall) * leak_percent / 100)
         if tick == 0:
             continue

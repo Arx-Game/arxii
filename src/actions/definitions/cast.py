@@ -152,7 +152,16 @@ class CastTechniqueAction(Action):
                 PendingCast(
                     technique_id=technique_id,
                     target_persona_id=target_persona_id,
-                    kwargs={"position_params": position_params, **kwargs},
+                    # Every choice the player made rides along: a confirmed cast is the
+                    # cast she asked for, in the resonance and form she named.
+                    kwargs={
+                        "position_params": position_params,
+                        "preferred_resonance_id": preferred_resonance_id,
+                        "use_base_form": use_base_form,
+                        "cast_openly": cast_openly,
+                        "strain_commitment": strain_commitment,
+                        **kwargs,
+                    },
                 ),
             )
             warning = cast.soulfray_warning

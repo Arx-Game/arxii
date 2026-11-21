@@ -528,6 +528,20 @@ def _cast_display_form(
     return resolved_name, resolved_intensity
 
 
+def _resonance_worked_in(
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the thread handler takes the character
+    technique: Technique,
+    preferred_resonance: Resonance | None,
+) -> Resonance | None:
+    """The resonance a resolved cast was worked in: the named one if still held, else default.
+
+    The request records this so its record is true whichever route made it (#5231).
+    """
+    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+    return cast_resonance_for(character, technique, preferred_resonance, refuse_off_thread=False)
+
+
 def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     *,
     request: SceneActionRequest,
@@ -720,7 +734,8 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
     request.status = ActionRequestStatus.RESOLVED
     request.resolved_at = timezone.now()
     request.resolved_difficulty = difficulty
-    request.save(update_fields=["status", "resolved_at", "resolved_difficulty"])
+    request.cast_resonance = _resonance_worked_in(character, technique, preferred_resonance)
+    request.save(update_fields=["status", "resolved_at", "resolved_difficulty", "cast_resonance"])
 
     from world.magic.services.cast_observation import resolve_cast_audience  # noqa: PLC0415
 
@@ -785,6 +800,9 @@ def _resolve_hostile_accepted_cast(
     casts — fires flourish-only entrance success hooks (the real success level
     becomes known later at combat round resolution, #2183).
     """
+    # A resonance the thread has lost since the request was made is dropped from the request
+    # as well, so the record names the resonance the declared cast is worked in.
+    held = _stored_cast_resonance_still_held(action_request)
     with transaction.atomic():
         encounter = seed_or_feed_encounter_from_cast(
             caster_sheet=initiator.character_sheet,
@@ -793,12 +811,13 @@ def _resolve_hostile_accepted_cast(
             scene=action_request.scene,
             room=action_request.scene.room,
             from_entrance=action_request.originated_as_entrance,
-            cast_resonance=_stored_cast_resonance_still_held(action_request),
+            cast_resonance=held,
         )
         acknowledge_encounter_risk(encounter, target.character_sheet)
         action_request.status = ActionRequestStatus.RESOLVED
         action_request.resolved_at = timezone.now()
-        action_request.save(update_fields=["status", "resolved_at"])
+        action_request.cast_resonance = held
+        action_request.save(update_fields=["status", "resolved_at", "cast_resonance"])
     if action_request.originated_as_entrance:
         from actions.definitions.social import run_entrance_success_hooks  # noqa: PLC0415
 
@@ -1335,6 +1354,14 @@ def request_technique_cast(  # noqa: PLR0913
             }
         )
 
+    knows_technique = CharacterTechnique.objects.filter(
+        character_id=initiator_persona.character_sheet_id,
+        technique=technique,
+    ).exists()
+    if not knows_technique:
+        msg = f"Character does not know technique '{technique}'."
+        raise ValidationError(msg)
+
     if preferred_resonance is not None:
         # #5231: refuse a resonance the Gift's thread does not hold before any route, so a
         # consent-gated or hostile cast refuses now rather than when it later resolves.
@@ -1343,14 +1370,6 @@ def request_technique_cast(  # noqa: PLR0913
         cast_resonance_for(
             initiator_persona.character_sheet.character, technique, preferred_resonance
         )
-
-    knows_technique = CharacterTechnique.objects.filter(
-        character_id=initiator_persona.character_sheet_id,
-        technique=technique,
-    ).exists()
-    if not knows_technique:
-        msg = f"Character does not know technique '{technique}'."
-        raise ValidationError(msg)
 
     if not technique.action_template_id:
         msg = "Technique is not castable standalone (no action template)."

@@ -209,7 +209,7 @@ class TechniqueUseResultFieldTests(TestCase):
         # the gift's first resonance and the other resonance is not involved at all.
         assert len(result.resonance_involvements) == 1
         (inv,) = result.resonance_involvements
-        assert inv.resonance in (self.resonance, resonance_b)
+        assert inv.resonance == two_res_gift.cached_resonances[0]
         assert inv.stat_bonus_contribution == 6
 
     def test_use_technique_resonance_involvements_includes_combat_pull_spent(self) -> None:

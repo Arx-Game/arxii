@@ -157,6 +157,20 @@ class WorkingACastInAChosenResonance(_AYsmayWithATwoResonanceGift):
 
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(self.corruption(ysmay), before)
+        # The request records the resonance the cast was worked in.
+        self.assertEqual(
+            SceneActionRequest.objects.get(technique=self.technique).cast_resonance, self.warmth
+        )
+
+    def test_a_cast_with_no_choice_is_worked_in_the_leading_resonance_and_says_so(self) -> None:
+        ysmay = self.caster("Ysmay", primal="80", abyssal="20")
+
+        response = self.cast(ysmay)
+
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(
+            SceneActionRequest.objects.get(technique=self.technique).cast_resonance, self.warmth
+        )
 
     def test_a_cast_worked_in_her_abyssal_resonance_adds_a_tenth_rounded_up(self) -> None:
         ysmay = self.caster("Ysmay", primal="80", abyssal="20")
@@ -171,8 +185,11 @@ class WorkingACastInAChosenResonance(_AYsmayWithATwoResonanceGift):
         self.assertEqual(hobb_response.status_code, 201, hobb_response.data)
         full = self.corruption(hobb)["Ruin"] - hobb_before
         light = self.corruption(ysmay)["Ruin"] - ysmay_before
-        self.assertGreaterEqual(full, 1)
-        self.assertGreaterEqual(light, 1)
+        # Hand-worked: intensity 20 at coefficients of 1.0 (Abyssal 10 tenths, tier 1 10
+        # tenths) is 20 for Hobb, who is past the line of 50. Ysmay at 20 percent Abyssal takes
+        # the light 10 percent: 20 x 10 / 100 = 2.
+        self.assertEqual(full, 20)
+        self.assertEqual(light, 2)
         self.assertEqual(light, math.ceil(full / 10))
 
     def test_a_resonance_not_on_the_gifts_thread_is_refused_and_nothing_is_charged(self) -> None:
@@ -255,9 +272,12 @@ class WorkingACastInAChosenResonance(_AYsmayWithATwoResonanceGift):
 
         response = self._hobb_accepts(hobb, request)
 
-        # She is not left unable to cast: it resolves in Warmth, which adds no corruption.
+        # She is not left unable to cast: it resolves in Warmth, which adds no corruption,
+        # and the request no longer names the resonance the thread lost.
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(self.corruption(ysmay), before)
+        request.refresh_from_db()
+        self.assertEqual(request.cast_resonance, self.warmth)
 
 
 class WorkingACombatCastInAChosenResonance(_AYsmayWithATwoResonanceGift):
