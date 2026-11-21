@@ -546,6 +546,16 @@ multipliers    = ((deficit ? deficit_multiplier : 10)
 tick(R)        = ceil(base_tick(R) × multipliers)
 ```
 
+**Amended by #5231 (ADR-5231).** A cast is worked in one resonance, so only that resonance gets the cast's
+`stat_bonus_contribution` (the whole runtime intensity); a pull's spend still attaches to the resonance that paid for
+it. The tick is no longer rounded on its own. With `ordinary` the exact `base_tick × multipliers` (`_raw_tick`),
+`hasty_fall` the exact hasty-fall part, and `part` the caster's share of the full corruption
+(`cast_corruption_part`: 100 when the Abyssal share of her own true aura reaches
+`CorruptionConfig.full_corruption_from_share`, else `CorruptionConfig.light_corruption_percent`; no aura counts as 100),
+`tick(R) = ceil((ordinary × part / 100 + hasty_fall) × leak_percent / 100)`: one rounding up, the light part reduces the
+ordinary tick (a pull paid in an Abyssal resonance included) and never the hasty-fall part, and the part is read only
+when some ordinary tick is above zero. See `docs/systems/magic.md` "A cast is worked in one resonance".
+
 If `tick(R) == 0` after rounding (Celestial resonances always; very low Primal
 cantrip casts often), no service call is made for R — no accrual, no event, no
 audit trail noise.

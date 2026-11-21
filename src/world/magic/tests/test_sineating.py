@@ -12,7 +12,6 @@ Covers:
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 from rest_framework.test import APITestCase
@@ -312,10 +311,12 @@ class SineatingRitualTests(SineatingCase):
     def test_the_result_and_the_audit_row_report_what_the_earn_rate_really_paid(self) -> None:
         request_sineating(self.sinner, self.sineater, 2)
 
-        # 10 each at a full share, earned at 150%: 15 is what the ledger records and what is
-        # reported, not the unscaled 10.
-        with patch("world.magic.services.drift.earn_rate_percent", return_value=150):
-            result = self.perform(2, "Success")
+        # 10 each at a full share, each earned in a resonance whose affinity pays 150%: 15 is
+        # what the ledger records and what is reported, not the unscaled 10.
+        for affinity in (self.resonance.affinity, self.primal.affinity):
+            affinity.earn_rate_percent = 150
+            affinity.save()
+        result = self.perform(2, "Success")
 
         self.assertEqual(self.balance(self.sinner, self.resonance), 15)
         self.assertEqual(

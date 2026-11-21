@@ -31,6 +31,41 @@ if TYPE_CHECKING:
     from world.magic.types.pull import CastPullDeclaration
 
 
+# The keys a combat cast's declaration reads from its kwargs (#5231). The declaration and the
+# Soulfray pending cast both build from these, so a confirmed cast keeps every choice.
+_COMBAT_DECLARATION_KEYS: tuple[str, ...] = (
+    "focused_opponent_target_id",
+    "focused_ally_target_id",
+    "confirm_soulfray_risk",
+    "strain_commitment",
+    "fury_commitment_id",
+    "fury_resonance_id",
+    "position_params",
+    "preferred_resonance_id",
+)
+# The keys that declare the cast's thread pull: telnet's built ``cast_pull`` and the web's raw
+# ids. They are read at the combat door, never stored on the round's action.
+_COMBAT_PULL_KEYS: tuple[str, ...] = (
+    "cast_pull",
+    "pull_tier",
+    "pull_thread_ids",
+    "pull_burn",
+    "pull_burn_resonance_id",
+    "pull_payers",
+)
+
+
+def _combat_declaration_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """The declaration kwargs of a combat cast: the effort level and each key it set."""
+    declared: dict[str, Any] = {"effort_level": kwargs.get("effort_level", "medium")}
+    for key in _COMBAT_DECLARATION_KEYS:
+        value = kwargs.get(key)
+        # An unset key, a False flag, a zero strain and an empty positions dict add nothing.
+        if value is not None and value is not False and value not in (0, {}):
+            declared[key] = value
+    return declared
+
+
 @dataclass
 class CastTechniqueAction(Action):
     """Standalone technique cast — resolves immediately or gates on soulfray consent.
@@ -152,7 +187,20 @@ class CastTechniqueAction(Action):
                 PendingCast(
                     technique_id=technique_id,
                     target_persona_id=target_persona_id,
-                    kwargs={"position_params": position_params, **kwargs},
+                    # Every choice the player made rides along: a confirmed cast is the
+                    # cast she asked for, in the resonance and form she named.
+                    kwargs={
+                        "position_params": position_params,
+                        "preferred_resonance_id": preferred_resonance_id,
+                        "use_base_form": use_base_form,
+                        "cast_openly": cast_openly,
+                        "strain_commitment": strain_commitment,
+                        # A pull declared with the cast was not charged (the cast stopped
+                        # before it); the confirmed cast carries it, as the combat
+                        # path's replay carries the pull's own kwargs.
+                        **({"cast_pull": cast_pull} if cast_pull is not None else {}),
+                        **kwargs,
+                    },
                 ),
             )
             warning = cast.soulfray_warning
@@ -171,7 +219,7 @@ class CastTechniqueAction(Action):
             )
         return ActionResult(success=True, message=message)
 
-    def round_declaration(  # noqa: C901
+    def round_declaration(
         self,
         ctx: Any,
         *,
@@ -209,9 +257,13 @@ class CastTechniqueAction(Action):
         if not isinstance(ctx, CombatRoundContext) or technique_id is None:
             return None
 
-        # Soulfray gate — BEFORE committing the cast pull so no resonance/anima is
-        # charged for a declaration the player then declines.
-        gate = self._combat_soulfray_gate(ctx, technique_id, kwargs)
+        # A named resonance the Gift's thread lacks is refused first: nothing is recorded,
+        # charged or offered for a cast that cannot be declared (#5231). Then the Soulfray
+        # gate, BEFORE committing the cast pull so no resonance/anima is charged for a
+        # declaration the player then declines.
+        gate = self._combat_resonance_refusal(
+            ctx, technique_id, kwargs
+        ) or self._combat_soulfray_gate(ctx, technique_id, kwargs)
         if gate is not None:
             return gate
         fury_refusal = self._combat_fury_cap_refusal(ctx, kwargs)
@@ -239,36 +291,48 @@ class CastTechniqueAction(Action):
             display_name="Cast",
             ref=ref,
         )
-        decl_kwargs: dict[str, Any] = {
-            "effort_level": kwargs.get("effort_level", "medium"),
-        }
-        focused_opponent_id = kwargs.get("focused_opponent_target_id")
-        if focused_opponent_id is not None:
-            decl_kwargs["focused_opponent_target_id"] = focused_opponent_id
-        focused_ally_id = kwargs.get("focused_ally_target_id")
-        if focused_ally_id is not None:
-            decl_kwargs["focused_ally_target_id"] = focused_ally_id
-        if kwargs.get("confirm_soulfray_risk"):
-            decl_kwargs["confirm_soulfray_risk"] = True
-        strain_commitment = kwargs.get("strain_commitment")
-        if strain_commitment:
-            decl_kwargs["strain_commitment"] = strain_commitment
-        fury_commitment_id = kwargs.get("fury_commitment_id")
-        if fury_commitment_id is not None:
-            decl_kwargs["fury_commitment_id"] = fury_commitment_id
-        fury_resonance_id = kwargs.get("fury_resonance_id")
-        if fury_resonance_id is not None:
-            decl_kwargs["fury_resonance_id"] = fury_resonance_id
-        position_params = kwargs.get("position_params")
-        if position_params:
-            decl_kwargs["position_params"] = position_params
-        # #1619: Forward variant resonance selection for multi-resonance casts.
-        preferred_resonance_id = kwargs.get("preferred_resonance_id")
-        if preferred_resonance_id is not None:
-            decl_kwargs["preferred_resonance_id"] = preferred_resonance_id
+        decl_kwargs = _combat_declaration_kwargs(kwargs)
         # cast_pull is deliberately excluded from decl_kwargs: the CombatPull read-path
         # supplies the bonus during resolution; forwarding it here would double-charge.
         return pa, decl_kwargs
+
+    @staticmethod
+    def _combat_resonance_refusal(
+        ctx: Any, technique_id: int, kwargs: dict[str, Any]
+    ) -> ActionResult | None:
+        """Refuse a named cast resonance the Gift's thread holds no row for (#5231).
+
+        The focused cast only: a passive names no resonance. Runs before the cast pull is
+        committed and before the Soulfray gate, so a refused choice is never charged.
+        """
+        from actions.constants import CombatActionSlot  # noqa: PLC0415
+
+        preferred_resonance_id = kwargs.get("preferred_resonance_id")
+        if preferred_resonance_id is None:
+            return None
+        if kwargs.get("action_slot", CombatActionSlot.FOCUSED) != CombatActionSlot.FOCUSED:
+            return None
+        from world.combat.services.declarations.declaration_validation import (  # noqa: PLC0415
+            DeclarationRefusedError,
+        )
+        from world.combat.services.declarations.declare_action import (  # noqa: PLC0415
+            refuse_resonance_off_thread,
+        )
+        from world.magic.models import Resonance, Technique  # noqa: PLC0415
+
+        try:
+            resonance = Resonance.objects.get(pk=int(preferred_resonance_id))
+        except (TypeError, ValueError, Resonance.DoesNotExist):
+            return ActionResult(success=False, message="Resonance not found.")
+        # The declaration's own refusal, run here so it comes before the pull is charged.
+        try:
+            refuse_resonance_off_thread(
+                ctx.participant, Technique.objects.filter(pk=technique_id).first(), resonance
+            )
+        except DeclarationRefusedError as exc:
+            # A fixed player-facing line (ResonanceNotOnGiftThread.user_message), never detail.
+            return ActionResult(success=False, message=str(exc))
+        return None
 
     @staticmethod
     def _combat_fury_cap_refusal(ctx: Any, kwargs: dict[str, Any]) -> ActionResult | None:
@@ -322,16 +386,10 @@ class CastTechniqueAction(Action):
 
         from commands.pending_actions import PendingCast, register_pending  # noqa: PLC0415
 
-        pending_kwargs: dict[str, Any] = {
-            "effort_level": kwargs.get("effort_level", "medium"),
-        }
-        for _key in (
-            "focused_opponent_target_id",
-            "focused_ally_target_id",
-            "action_slot",
-            "fury_commitment_id",
-            "fury_resonance_id",
-        ):
+        # The same keys the declaration reads, so a confirmed combat cast keeps its strain, its
+        # positions, its resonance and its pull; they cannot drift apart (#5231).
+        pending_kwargs = _combat_declaration_kwargs(kwargs)
+        for _key in ("action_slot", *_COMBAT_PULL_KEYS):
             _value = kwargs.get(_key)
             if _value is not None:
                 pending_kwargs[_key] = _value

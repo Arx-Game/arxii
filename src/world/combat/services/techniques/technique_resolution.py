@@ -13,6 +13,7 @@ from world.combat.services.techniques.technique_targets import (
     _build_affected_targets,
     _check_combat_target_prerequisites,
     _resolve_primary_target_sheet,
+    stored_cast_resonance,
 )
 from world.combat.types import CombatTechniqueResolution, CombatTechniqueResult
 
@@ -97,6 +98,14 @@ def resolve_combat_technique(
         participant, technique=action.focused_action, cast_check=cast_check
     )
 
+    # The resonance the player chose at declaration (#5231). The Gift's thread may have lost
+    # it since, and a round never fails on that: the cast is then worked in the default.
+    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+    character = participant.character_sheet.character
+    chosen_resonance = stored_cast_resonance(participant, action)
+    cast_resonance = cast_resonance_for(character, action.focused_action, chosen_resonance)
+
     resolver = CombatTechniqueResolver(
         participant=participant,
         action=action,
@@ -105,6 +114,7 @@ def resolve_combat_technique(
         offense_check_type=cast_check.check_type,
         offense_check_fn=offense_check_fn,
         offense_extra_traits=cast_check.extra_traits,
+        cast_resonance=cast_resonance,
     )
 
     targets = _build_affected_targets(participant, action)
@@ -132,6 +142,7 @@ def resolve_combat_technique(
     technique_use_result = use_technique(
         character=participant.character_sheet.character,
         technique=action.focused_action,
+        preferred_resonance=chosen_resonance,
         resolve_fn=resolver,
         confirm_soulfray_risk=action.confirm_soulfray_risk,
         strain_commitment=action.strain_commitment,

@@ -186,6 +186,11 @@ class ConditionTemplateDetailSerializer(ConditionTemplateSerializer):
 # =============================================================================
 
 
+#: Serializer context flag: the viewer is the bearer, so a worn item's name may show as the
+#: condition's source (#5074).
+GEAR_SOURCE_CONTEXT_KEY = "show_gear_source"
+
+
 def condition_display_name(instance: ConditionInstance) -> str:
     """The name a player is shown for ``instance``: its template's, except that a corruption
     condition reads "Intrusive Thoughts: <resonance>" or "Compulsion: <resonance>" from the
@@ -240,6 +245,7 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
     source_character_name = serializers.SerializerMethodField()
     source_technique_name = serializers.SerializerMethodField()
     source_vow_name = serializers.SerializerMethodField()
+    source_description = serializers.SerializerMethodField()
 
     # Computed fields
     effective_severity = serializers.IntegerField(read_only=True)
@@ -304,6 +310,17 @@ class ConditionInstanceSerializer(serializers.ModelSerializer):
         if obj.source_technique:
             return obj.source_technique.name
         return None
+
+    def get_source_description(self, obj: ConditionInstance) -> str:
+        """The source's free-text description. A condition a worn item gave (#5074) reads the
+        item's own name and is shown only where the caller says the viewer is the bearer (or
+        staff): ``show_gear_source`` in the serializer context. An onlooker never learns
+        from it that a ring is enchanted."""
+        if obj.source_item_id is None:
+            return obj.source_description
+        if not self.context.get(GEAR_SOURCE_CONTEXT_KEY):
+            return ""
+        return obj.source_item.display_name
 
     def get_source_vow_name(self, obj: ConditionInstance) -> str | None:
         """Get the name of the applier's engaged vow (covenant role) at apply time (#2643).

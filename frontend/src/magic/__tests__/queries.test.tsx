@@ -162,6 +162,7 @@ const mockResonance = {
     affinity_name: 'Solar',
     description: 'A bright resonance',
     codex_entry_id: null,
+    color_hex: '#8C8C8C',
   },
   balance: 50,
   lifetime_earned: 200,

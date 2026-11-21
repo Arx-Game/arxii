@@ -507,11 +507,25 @@ red, so do not treat it as cleanup to get to later:
    `review-evidence` job reads that line; a stale path there fails it.
 4. **Delete `docs/reviews/` and `.github/issue-evidence/`, then push again.**
 5. Keep the report's `Reviewed revision` as the exact commit reviewed. The gate
-   verifies later clean main merges, reproducible migration updates, and changes
-   confined to the temporary evidence directories. Other changes, including
-   manual conflict resolutions, require review and an updated report. Once
-   that review is complete, `scripts/sync-evidence-revision.sh <pr>` can point
-   the report at the reviewed HEAD; it does not perform the review itself.
+   carries the report across later commits that cannot change what a screen
+   renders: commits that touch only test files, documents or `.github/`; clean
+   main merges that it reproduces; and merges of main that renumber the
+   branch's migrations, whether the bot or a person made them, provided the
+   gate rebuilds the same tree from main (`just migration-rebase-like-bot` makes
+   that merge by hand under your own identity; `arx manage rebase_migration`
+   does not produce the same bytes, so a merge made with it needs a fresh
+   review). Test files are `src/integration_tests/`,
+   any `tests/` directory under `src/` or `tools/`, `frontend/e2e/`,
+   `frontend/src/test/`, frontend `*.test.ts` and `*.test.tsx` files, and
+   frontend `__tests__/` directories. Documents are `docs/` and any `*.md`
+   file. A commit that touches any other path is a change to application code
+   and needs a fresh review and an updated report. That includes
+   `src/world/seeds/`, factories modules and `conftest.py` files outside a
+   `tests/` directory, and a source file moved into a `tests/` directory.
+   A merge of main whose conflict resolution is anything beyond the migration
+   renumbering also needs a fresh review. Once that review is complete,
+   `scripts/sync-evidence-revision.sh <pr>` can point the report at the
+   reviewed HEAD; it does not perform the review itself.
 
 See `references/evidence-screenshots-not-in-main.md` for the underlying
 technique.

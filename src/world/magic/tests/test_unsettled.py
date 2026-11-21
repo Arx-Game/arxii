@@ -104,9 +104,10 @@ class UnsettledReadingTests(_UnsettledCase):
         # 30 own share - 10 settled - 1 range = 19 past, 2 to a step.
         self.assertEqual(reading.excess_percent, Decimal(19))
         self.assertEqual(reading.steps_past, 10)
-        # A character led by another affinity keeps the general numbers.
+        # A Primal-led character with no lean (Celestial and Abyssal settled equal) keeps the
+        # general numbers: the "Primal, lean None" row of the drift table. 30 - 10 - 5 = 15.
         other = CharacterSheetFactory()
-        self.settle(other, primal="90", abyssal="10")
+        self.settle(other, celestial="10", primal="80", abyssal="10")
         _hold(other, self.wild, 70)
         _hold(other, self.dread, 30)
         self.assertEqual(drift_for(other).steps_past, 3)

@@ -12,11 +12,10 @@ packages:
 storeDir: /home/vscode/.local/share/pnpm/store
 allowBuilds:
   esbuild: true
-  # Security overrides — forces vulnerable transitives onto patched versions.
-  # Each entry corresponds to a Dependabot/pnpm-audit alert. Remove an entry once
-  # the dependency chain naturally pulls a patched version. Major-version
-  # selectors (e.g. `minimatch@9`) are used because compound `>=X <Y` selectors
-  'minimatch@10': '11.0.1'
+# Security overrides — forces vulnerable transitives onto patched versions.
+# Each entry corresponds to a Dependabot/pnpm-audit alert. Remove an entry once
+# the dependency chain naturally pulls a patched version. Major-version
+# selectors (e.g. `minimatch@9`) are used because compound `>=X <Y` selectors
 # are not supported by pnpm v11 overrides.
 overrides:
   'ajv@6': '6.14.0'

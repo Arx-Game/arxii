@@ -156,8 +156,10 @@ gh api graphql -f query='mutation($t:ID!){resolveReviewThread(input:{threadId:$t
 them as an error rather than a question:
 
 - **Review evidence**, when the linked issue carries `review:evidence-required`.
-  The report identifies the reviewed revision; independently verified neutral updates
-  retain it. Review material changes before refreshing the report with
+  The report identifies the reviewed revision; later commits that touch only tests,
+  documents or `.github/`, and merges of main that the gate reproduces (including a
+  hand-made migration renumbering), retain it. A commit that touches any other path
+  needs a review of the change before the report is refreshed with
   `sync-evidence-revision.sh <pr>`.
 - **Open code-scanning alerts** on the PR head ref (section 3).
 - **Evidence committed under `docs/reviews/` or `.github/issue-evidence/`** is failed by the
@@ -174,9 +176,10 @@ git show origin/main:src/world/migrations/max_migration.txt
 
 If it has moved past your branch's base, CI's `migration-conflict-rebase`
 workflow fixes it within minutes of the merge that moved it (#4879); look for its
-`<!-- migration-auto-rebase` comment and `git pull --ff-only`. Fix it yourself only
-when that comment says `status=refused`, with `rebase_migration` per
-`ci-merge-queue-gotchas.md`. Read that file first, because the tool needs the
+`<!-- migration-auto-rebase` comment and `git pull --ff-only`. If it has not run and
+`max_migration.txt` is the only conflict, run `just migration-rebase-like-bot`, which
+keeps a review report valid. Use `rebase_migration` per `ci-merge-queue-gotchas.md`
+only when the comment says `status=refused`, and refresh any visual review after it. Read that file first, because the tool needs the
 conflict markers left in and renames whichever side sits after `=======`.
 
 ## 7. Human approval

@@ -7,7 +7,7 @@ Both are proper domain models replacing the old ModifierTarget-based pattern.
 
 from decimal import Decimal
 
-from django.core.validators import MaxValueValidator, MinValueValidator
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.utils.functional import cached_property
 
@@ -130,10 +130,18 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=100,
         db_default=100,
         help_text=(
-            "How much of the resonance they earn a character whose main affinity is this one "
-            "actually gets, as a percentage. 100 is as authored, 150 is half as much again. "
-            "Staff grants, character creation and resonance that is only being moved or "
-            "converted are never scaled."
+            "How much of a resonance of this affinity a character actually gets when she earns "
+            "it, as a percentage, whatever her own main affinity. 100 is as authored, 150 is "
+            "half as much again. Staff grants, character creation and resonance that is only "
+            "being moved or converted are never scaled."
+        ),
+    )
+    kindled_boost_percent = models.PositiveSmallIntegerField(
+        default=100,
+        db_default=100,
+        verbose_name="Kindled boost",
+        help_text=(
+            "A percentage. 100 leaves a kindled resonance of this affinity as strong as any other."
         ),
     )
     learn_rate_percent = models.PositiveSmallIntegerField(
@@ -235,6 +243,16 @@ class Resonance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "scene, when something this resonance cares about is present. Written in second "
             "person. Blank uses a plain default line."
         ),
+    )
+    color_hex = models.CharField(
+        max_length=7,
+        default="#8C8C8C",
+        db_default="#8C8C8C",
+        validators=[
+            RegexValidator(r"^#[0-9A-Fa-f]{6}$", "Must be a hex color (#RRGGBB)."),
+        ],
+        verbose_name="Colour",
+        help_text="Picked with a colour picker. The aura is drawn in it.",
     )
     objects = ResonanceManager()
 

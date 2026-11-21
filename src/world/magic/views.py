@@ -1110,6 +1110,14 @@ class ThreadViewSet(viewsets.ModelViewSet):
         thread = self.get_object()
         thread.retired_at = timezone.now()
         thread.save(update_fields=["retired_at"])
+        if thread.target_kind == TargetKind.MANTLE:
+            # A retired mantle thread attunes to nothing: the worn conditions its levels
+            # gave go with it (#5074).
+            from world.items.services.worn_conditions import (  # noqa: PLC0415
+                reconcile_worn_conditions,
+            )
+
+            reconcile_worn_conditions(thread.owner)
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(

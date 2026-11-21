@@ -114,12 +114,17 @@ character-creation/
     │                        #   `onPointsChange`). The side panel's row is "Beginning", singular
     ├── GiftStage.tsx        # Stage 6 (Gift): vertical funnel — Tradition → Gift →
     │                        #   [magical training, #4659] → Techniques → Gift Resonance
-    │                        #   (several resonances weighted by points, #5123: opens with
-    │                        #   text on what resonance is, point steppers against the
-    │                        #   server's `resonance_creation_points`, a live halo in words;
-    │                        #   saves `draft_data.gift_resonance_weights`, a partial spread
-    │                        #   may be saved but the step stays open until every point is
-    │                        #   placed; `resonanceWeights.ts` holds the pure helpers)
+    │                        #   (a feeling, a side and a balance, #5231: `StrengthStep`
+    │                        #   asks which Primal feeling gives strength, whether helping
+    │                        #   or hurting others does too and which resonance on that
+    │                        #   side, then the split of the server's
+    │                        #   `resonance_creation_points` with the aura drawn beside it;
+    │                        #   saves `draft_data.gift_resonance_weights` as one whole list
+    │                        #   obeying the server's rule; the whole step is drawn from the
+    │                        #   start (the aura is grey for a feeling not yet picked and the
+    │                        #   slider is disabled), and a stored list that breaks the rule
+    │                        #   shows nothing chosen so the player picks again;
+    │                        #   `resonanceWeights.ts` holds the pure helpers)
     │                        #   → Anima Check, plus an
     │                        #   always-visible Motif textarea and the guided Glimpse
     │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
@@ -216,9 +221,11 @@ character-creation/
     │                        #   entry in TraditionPicker (#3281, #3630)
     ├── gift/                # GiftStage funnel steps (#2426 Task 10)
     │   ├── TraditionStep.tsx    # Wraps TraditionPicker
-    │   ├── ResonanceWeights.tsx # The Resonance step body (#5123): a stepper per resonance,
-    │   │                        #   the points left, and the `AuraHalo` (`@/magic/components`)
-    │   │                        #   of the spread in words
+    │   ├── StrengthStep.tsx     # The Resonance step body (#5231): the feeling cards, the
+    │   │                        #   three answers about others, the second cards, and the
+    │   │                        #   balance slider beside the night plate holding
+    │   │                        #   `AuraSwirl` (`@/magic/components`); words from the
+    │   │                        #   `gift_strength_*` CG explanation keys
     │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=); a Gift the
     │   │                        #   Tradition favors is tagged "Teaches well" (#4659)
     │   ├── MagicTrainingBlock.tsx # Body of GiftStage's own "What <Tradition> taught you"

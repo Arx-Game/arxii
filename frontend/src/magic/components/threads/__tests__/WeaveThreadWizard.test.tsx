@@ -96,6 +96,7 @@ function makeCharacterResonance(overrides: Partial<CharacterResonance> = {}): Ch
       affinity_name: 'Celestial',
       description: 'A celestial resonance.',
       codex_entry_id: null,
+      color_hex: '#8C8C8C',
     },
     balance: 42,
     lifetime_earned: 100,

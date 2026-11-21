@@ -35,7 +35,8 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
     purged — it is logged for staff to resolve (clear ``destroyed_at`` to truly
     undelete it, or pull it back out of the world).
 
-    PROTECT-referenced instances (those with a Mantle or ProjectContribution
+    An item carrying a staff-authored worn condition (#5074) is a design too and is
+    excluded. PROTECT-referenced instances (those with a Mantle or ProjectContribution
     FK) are excluded from the eligibility queryset. Additionally, each deletion
     runs in its own savepoint so that any unexpected ProtectedError from a
     future FK addition skips that row instead of aborting the whole batch."""
@@ -45,7 +46,9 @@ def purge_expired_soft_deleted_items(*, grace: timedelta | None = None) -> int:
 
     eligible = list(
         ItemInstance.objects.filter(destroyed_at__lt=cutoff, lore_value=0)
-        .filter(mantle__isnull=True, project_contributions__isnull=True)
+        .filter(
+            mantle__isnull=True, project_contributions__isnull=True, worn_conditions__isnull=True
+        )
         .filter(
             custom_name="",
             custom_description="",

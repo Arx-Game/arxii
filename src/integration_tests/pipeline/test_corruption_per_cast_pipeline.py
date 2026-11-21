@@ -11,8 +11,9 @@ Covers gaps NOT already exercised by FullCastPipelineCorruptionTests
 
     1. Audere push multiplier — Abyssal cast while character is in Audere
        accrues more corruption than the same cast without Audere (×1.5).
-    2. Multi-resonance split attribution — a Gift with 2 Abyssal resonances
-       splits runtime intensity equally; each resonance accrues its share.
+    2. One-resonance attribution — a Gift with 2 Abyssal resonances is worked in
+       one of them (the Gift's first); that resonance takes the whole runtime
+       intensity as corruption and the other is not involved (#5231).
     3. Stacked multipliers (deficit + Audere) — both flags true; asserts
        the combined × 3.0 multiplier is applied (per spec §3.1 formula).
     4. CORRUPTION_ACCRUING / CORRUPTION_ACCRUED events fire from the
@@ -253,18 +254,21 @@ class TestCorruptionPerCastPipeline(TestCase):
     # Scenario 2: Multi-resonance split attribution
     # -----------------------------------------------------------------------
 
-    def test_multi_resonance_split_attribution(self) -> None:
-        """Gift with 2 Abyssal resonances splits involvement equally between them.
+    def test_a_two_resonance_gift_corrupts_only_the_resonance_it_is_worked_in(self) -> None:
+        """Gift with 2 Abyssal resonances: the cast is worked in the first, which takes it all.
 
         Setup:
-            intensity=10, level=1 (tier 1).  2 Abyssal resonances on the Gift.
-            per_resonance_share = 10 // 2 = 5 (integer division per spec §10.1)
-            base_tick per resonance = 5 × (10/10) × (10/10) = 5
-            multipliers = 10×10×10/1000 = 1.0 (no flags set)
-            tick per resonance = ceil(5 × 1.0) = 5
+            intensity=10, level=1 (tier 1).  2 Abyssal resonances on the Gift.  The caster has
+            no thread on the Gift and no aura, so the cast is worked in the Gift's first
+            resonance (resonances order by affinity, then name: res_a) and she takes all of
+            the corruption (no aura counts as fully Abyssal).
+            involvement = 10 (the whole runtime intensity, to res_a alone)
+            base_tick = 10 x (10/10) x (10/10) = 10
+            multipliers = 10x10x10/1000 = 1.0 (no flags set)
+            tick = ceil(10 x 1.0) = 10
 
-        Both resonances should increment corruption_current and
-        corruption_lifetime by 5.  Accrual summary has 2 per_resonance entries.
+        res_a gains 10 current and lifetime corruption.  res_b is not involved: it has no
+        corruption row, or one at zero.  The accrual summary has 1 per_resonance entry.
         """
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import CharacterAnimaFactory
@@ -289,17 +293,17 @@ class TestCorruptionPerCastPipeline(TestCase):
         )
 
         self.assertIsNotNone(result.corruption_summary)
-        # Both resonances should appear in per_resonance accrual list
-        self.assertEqual(len(result.corruption_summary.per_resonance), 2)
+        self.assertEqual(len(result.corruption_summary.per_resonance), 1)
 
         char_res_a = CharacterResonance.objects.get(character_sheet=sheet, resonance=res_a)
-        char_res_b = CharacterResonance.objects.get(character_sheet=sheet, resonance=res_b)
-
-        # Equal split: each resonance should receive involvement=5 → tick=5
-        self.assertEqual(char_res_a.corruption_current, 5)
-        self.assertEqual(char_res_a.corruption_lifetime, 5)
-        self.assertEqual(char_res_b.corruption_current, 5)
-        self.assertEqual(char_res_b.corruption_lifetime, 5)
+        self.assertEqual(char_res_a.corruption_current, 10)
+        self.assertEqual(char_res_a.corruption_lifetime, 10)
+        # The other resonance is not involved: no row of hers holds any of its corruption.
+        self.assertFalse(
+            CharacterResonance.objects.filter(character_sheet=sheet, resonance=res_b)
+            .exclude(corruption_current=0, corruption_lifetime=0)
+            .exists()
+        )
 
     # -----------------------------------------------------------------------
     # Scenario 3: Stacked multipliers — deficit + Audere

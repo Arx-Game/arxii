@@ -41,6 +41,7 @@ const option = (id: number, name: string, levelRead: number, effects = [effect])
   affordable: true,
   effects,
   level_read: levelRead,
+  stronger: false,
 });
 
 describe('PerkInspect', () => {

@@ -13,7 +13,7 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { GiftStage } from '../../components/GiftStage';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
-import type { CGCombatStyleOption, OffersResponse } from '../../types';
+import type { CGCombatStyleOption, OffersResponse, Resonance } from '../../types';
 import {
   createMockDraft,
   mockBeginnings,
@@ -29,13 +29,26 @@ let traditions = [mockTradition];
 let draftDistinctions: DraftDistinctionEntry[] = [];
 let glimpseOffers: OffersResponse = { offers: [], terms: [] };
 let cgExplanations = mockCGExplanations;
+// The Primal and outward cards the Resonance step offers: Flame is the only Primal one.
+const strengthResonances: Resonance[] = [
+  ...mockResonances,
+  {
+    id: 3,
+    name: 'Mercy',
+    affinity: 1,
+    affinity_name: 'Celestial',
+    description: 'Gentle with the fallen',
+    codex_entry_id: null,
+    color_hex: '#F2E9B8',
+  },
+];
 let combatStyles: CGCombatStyleOption[] = [];
 const updateDraftMutate = vi.fn();
 
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
   useCGExplanations: () => ({ data: cgExplanations }),
-  useResonances: () => ({ data: mockResonances, isLoading: false }),
+  useResonances: () => ({ data: strengthResonances, isLoading: false }),
   useUpdateDraft: () => ({ mutate: updateDraftMutate, mutateAsync: vi.fn() }),
   useTraditions: () => ({ data: traditions, isLoading: false }),
   useSelectTradition: () => ({ mutate: vi.fn(), isPending: false }),
@@ -63,6 +76,8 @@ beforeEach(() => {
   cgExplanations = mockCGExplanations;
   combatStyles = [];
   updateDraftMutate.mockReset();
+  // jsdom has no canvas: the aura draws nothing, the step still renders.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
 });
 
 describe('GiftStage (folio)', () => {
@@ -119,7 +134,7 @@ describe('GiftStage (folio)', () => {
     expect(screen.getByText('Whispers of Shadow', { selector: '.tag' })).toBeInTheDocument();
   });
 
-  describe('the resonance step (#5123)', () => {
+  describe('the resonance step (#5231)', () => {
     const pickedDraft = (weights: { resonance_id: number; weight: number }[]) =>
       createMockDraft({
         selected_path: mockPath,
@@ -130,70 +145,116 @@ describe('GiftStage (folio)', () => {
           gift_resonance_weights: weights,
         },
       });
+    const resonanceStepRows = () =>
+      Array.from(screen.getByRole('list', { name: 'Gift steps' }).children) as HTMLElement[];
 
-    it('saves the spread as gift_resonance_weights, the whole list each time', async () => {
+    it('saves a second pick as the whole list, the feeling first', async () => {
       renderWithCharacterCreationProviders(
         <GiftStage
-          draft={pickedDraft([{ resonance_id: 1, weight: 4 }])}
+          draft={pickedDraft([{ resonance_id: 2, weight: 10 }])}
           onRegisterBeforeLeave={vi.fn()}
         />
       );
-      expect(screen.getByText('4 of 10 placed')).toBeInTheDocument();
-      await userEvent.click(screen.getByRole('button', { name: 'More Flame' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Helping them' }));
+      // The side alone saves nothing: she picks the card herself.
+      expect(JSON.stringify(updateDraftMutate.mock.calls)).not.toContain('gift_resonance_weights');
+      await userEvent.click(screen.getByRole('button', { name: /Mercy/ }));
       expect(updateDraftMutate).toHaveBeenCalledWith({
         draftId: 1,
         data: {
           draft_data: {
             gift_resonance_weights: [
-              { resonance_id: 1, weight: 4 },
-              { resonance_id: 2, weight: 1 },
+              { resonance_id: 2, weight: 7 },
+              { resonance_id: 3, weight: 3 },
             ],
           },
         },
       });
     });
 
-    it('stays open and gates what follows until every point is placed', () => {
-      renderWithCharacterCreationProviders(
-        <GiftStage
-          draft={pickedDraft([{ resonance_id: 1, weight: 4 }])}
-          onRegisterBeforeLeave={vi.fn()}
-        />
-      );
-      const steps = Array.from(
-        screen.getByRole('list', { name: 'Gift steps' }).children
-      ) as HTMLElement[];
-      expect(steps[3]).not.toHaveClass('chosen');
-      expect(steps[3].querySelector('details')).toHaveAttribute('open');
-      expect(steps[4]).toHaveClass('closed');
-      expect(steps[4]).toHaveTextContent('Place all your points first');
-      expect(steps[3]).toHaveTextContent('Your Resonance');
-      expect(screen.getAllByText('Your Resonance')).toHaveLength(1);
-    });
-
-    it('reads as chosen, naming every resonance heaviest first, once all are placed', () => {
+    it('reads as chosen, naming the feeling and then the second pick', () => {
       renderWithCharacterCreationProviders(
         <GiftStage
           draft={pickedDraft([
-            { resonance_id: 2, weight: 3 },
-            { resonance_id: 1, weight: 7 },
+            { resonance_id: 2, weight: 7 },
+            { resonance_id: 1, weight: 3 },
           ])}
           onRegisterBeforeLeave={vi.fn()}
         />
       );
-      const steps = Array.from(
-        screen.getByRole('list', { name: 'Gift steps' }).children
-      ) as HTMLElement[];
+      const steps = resonanceStepRows();
       expect(steps[3]).toHaveClass('chosen');
-      expect(steps[3]).toHaveTextContent('Shadow, Flame');
+      expect(steps[3]).toHaveTextContent('Flame, Shadow');
+      expect(steps[3]).toHaveTextContent('Your Resonance');
+      expect(screen.getAllByText('Your Resonance')).toHaveLength(1);
       expect(steps[4]).not.toHaveClass('closed');
+    });
+
+    it('stays open after a pick completes it, and arrives folded when already complete', async () => {
+      const complete = [{ resonance_id: 2, weight: 10 }];
+      const { rerender } = renderWithCharacterCreationProviders(
+        <GiftStage draft={pickedDraft([])} onRegisterBeforeLeave={vi.fn()} />
+      );
+      expect(resonanceStepRows()[3].querySelector('details')).toHaveAttribute('open');
+      await userEvent.click(screen.getByRole('button', { name: /Flame/ }));
+      // The save lands and one feeling alone completes the step.
+      rerender(<GiftStage draft={pickedDraft(complete)} onRegisterBeforeLeave={vi.fn()} />);
+      const steps = resonanceStepRows();
+      expect(steps[3]).toHaveClass('chosen');
+      expect(steps[3].querySelector('details')).toHaveAttribute('open');
+      expect(screen.getByRole('button', { name: 'Helping them' })).toBeInTheDocument();
+    });
+
+    it('shows a step that arrives already complete folded', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage
+          draft={pickedDraft([{ resonance_id: 2, weight: 10 }])}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      );
+      const steps = resonanceStepRows();
+      expect(steps[3]).toHaveClass('chosen');
+      expect(steps[3].querySelector('details')).not.toHaveAttribute('open');
+    });
+
+    it('is not done for a draft saved under the old rule with three picks', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage
+          draft={pickedDraft([
+            { resonance_id: 2, weight: 5 },
+            { resonance_id: 1, weight: 3 },
+            { resonance_id: 3, weight: 2 },
+          ])}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      );
+      const steps = resonanceStepRows();
+      expect(steps[3]).not.toHaveClass('chosen');
+      expect(steps[3].querySelector('details')).toHaveAttribute('open');
+      expect(steps[4]).toHaveClass('closed');
+      expect(steps[4]).toHaveTextContent('Choose a resonance first');
+      // What she sees is what she must redo: nothing in the step reads as chosen.
+      expect(steps[3].querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+    });
+
+    it('is not done for a partial spread, and shows it as chosen nowhere', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage
+          draft={pickedDraft([{ resonance_id: 2, weight: 4 }])}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      );
+      const steps = resonanceStepRows();
+      expect(steps[3]).not.toHaveClass('chosen');
+      expect(steps[3].querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+      expect(steps[4]).toHaveClass('closed');
     });
   });
 
   describe('the magical training step (#4659)', () => {
     const trainedDraft = (
       allocated: number,
-      { giftId = 1, resonanceId = 1 }: { giftId?: number | null; resonanceId?: number | null } = {}
+      { giftId = 1, resonanceId = 2 }: { giftId?: number | null; resonanceId?: number | null } = {}
     ) =>
       createMockDraft({
         selected_path: mockPath,
@@ -307,7 +368,7 @@ describe('GiftStage (folio)', () => {
         selected_combat_style: styleId,
         draft_data: {
           selected_gift_id: 1,
-          gift_resonance_weights: [{ resonance_id: 1, weight: 10 }],
+          gift_resonance_weights: [{ resonance_id: 2, weight: 10 }],
         },
         magic_training: {
           ...createMockDraft().magic_training,

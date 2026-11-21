@@ -124,7 +124,11 @@ export function RulerSlot({ titleId, houseId, holderId, holderName }: RulerSlotP
           const note = noteFor(node, familyId);
           return (
             <li key={node.id}>
-              <button type="button" onClick={() => pick(node.id)}>
+              <button
+                type="button"
+                aria-label={note ? `${node.name} ${note}` : undefined}
+                onClick={() => pick(node.id)}
+              >
                 {node.name}
                 {note && <small> {note}</small>}
               </button>

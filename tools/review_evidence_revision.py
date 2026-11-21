@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -147,8 +148,73 @@ def verify_clean_main_merge(repo: Path, revision: str, main_ref: str) -> str | N
     return previous
 
 
-def verify_evidence_only_commit(repo: Path, revision: str) -> str:
-    """Allow no-op commits and changes confined to the temporary evidence directories."""
+def verify_hand_migration_update(repo: Path, revision: str, main_ref: str) -> str | None:
+    """Peel a merge of main that renumbers migrations, whoever made it.
+
+    Authorship proves nothing: the same independent rebuild and whole-tree comparison as the
+    bot's merge decide it. A refusal or a nothing-to-do result only means this merge is not a
+    matching renumbering, so the caller goes on to refuse it as it did before. So does a git
+    failure while rebuilding (unrelated histories, or no max_migration.txt at main): the
+    rebuild could not be made, which proves nothing. Any other error propagates.
+    """
+    try:
+        return verify_migration_update(repo, revision, main_ref)
+    except (RefusalError, NothingToDoError, RuntimeError):
+        return None
+
+
+def cannot_change_a_rendered_screen(path: bytes | str) -> bool:
+    """Say whether a changed path is one that can never alter what a screen renders.
+
+    A reviewer compared pictures of the running application with the approved demo, so a
+    commit may be carried over only when every path it touches is listed here. A path that
+    matches no group is application code and voids the report. Each group is matched by
+    directory or file extension only, never by a file name such as `conftest.py` or
+    `factories.py`: a factories module can be imported by a seed, so it stays application
+    code unless it sits inside a tests directory, which nothing in production imports.
+    The caller diffs with `--no-renames`, so a file moved out of application code shows up
+    as a deletion of that file and is refused.
+    """
+    text = os.fsdecode(path)
+    parts = text.split("/")
+    if "." in parts or ".." in parts:
+        return False  # git never emits one; a future caller must not climb out of a prefix
+    directories = parts[:-1]  # a tests segment must be a whole directory, never a file name
+    name = parts[-1]
+    top = parts[0]
+    # The temporary evidence directories hold only the report and its pictures; the journey
+    # harness, its fixtures and its live seeds are imported only by tests (and by
+    # test_settings, which installs the app for the test runner); browser specs and their
+    # support files run Playwright against a server and are not bundled into the application;
+    # the frontend test setup runs under vitest; documents and GitHub configuration are never
+    # read by the running application.
+    neutral_prefixes = (
+        "docs/reviews/",
+        ".github/issue-evidence/",
+        "src/integration_tests/",
+        "frontend/e2e/",
+        "frontend/src/test/",
+        "docs/",
+        ".github/",
+    )
+    return (
+        text.startswith(neutral_prefixes)
+        # A directory named exactly tests under src/ or tools/ holds unit tests and their
+        # helpers, and production code does not import from one. src/world/seeds/ is
+        # production code and is not matched, only a tests directory inside it would be.
+        or (top in {"src", "tools"} and "tests" in directories)
+        # Frontend unit test files and __tests__ directories run under vitest and are not
+        # imported by application modules.
+        or (top == "frontend" and name.endswith((".test.ts", ".test.tsx")))
+        or (top == "frontend" and "__tests__" in directories)
+        # Any Markdown file, including the CLAUDE.md files that sit beside the code, is
+        # documentation that nothing in the application reads.
+        or name.endswith(".md")
+    )
+
+
+def verify_commit_cannot_change_a_screen(repo: Path, revision: str) -> str:
+    """Carry a report across a single-parent commit that touches only neutral paths."""
     parents = git("show", "-s", "--format=%P", revision, cwd=repo).split()
     if len(parents) != 1:
         message = f"cannot verify update {revision}; review the changes and refresh evidence"
@@ -160,8 +226,7 @@ def verify_evidence_only_commit(repo: Path, revision: str) -> str:
         check=True,
         capture_output=True,
     ).stdout.split(b"\0")
-    allowed = (b"docs/reviews/", b".github/issue-evidence/")
-    if any(path and not path.startswith(allowed) for path in changes):
+    if any(path and not cannot_change_a_rendered_screen(path) for path in changes):
         message = f"update {revision} changes reviewed content; review it and refresh evidence"
         raise RefusalError(message)
     return parent
@@ -188,9 +253,11 @@ def reviewed_revision(
         else:
             previous = verify_clean_main_merge(repo, current, main_ref)
             if previous is None:
+                previous = verify_hand_migration_update(repo, current, main_ref)
+            if previous is None:
                 if anchor is None:
                     break
-                previous = verify_evidence_only_commit(repo, current)
+                previous = verify_commit_cannot_change_a_screen(repo, current)
         print(
             f"Verified safe update {current}; retaining evidence from {previous}", file=sys.stderr
         )

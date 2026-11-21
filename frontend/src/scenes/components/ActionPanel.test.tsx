@@ -4,7 +4,7 @@ import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { PlayerActionsResponse } from '../actionTypes';
-import type { TechniqueEffectSummary, TechniqueForm } from '@/magic/types';
+import type { CastResonanceOption, TechniqueEffectSummary, TechniqueForm } from '@/magic/types';
 
 vi.mock('../actionQueries', async (importOriginal) => {
   // Keep the real toastDispositionMessage (it only depends on 'sonner', mocked
@@ -435,6 +435,224 @@ describe('ActionPanel', () => {
       expect(castTechnique).toHaveBeenCalledWith(
         '42',
         expect.objectContaining({ technique_id: 10, preferred_resonance_id: 4 })
+      );
+    });
+  });
+
+  const resonanceOption = (
+    id: number,
+    name: string,
+    overrides: Partial<CastResonanceOption> = {}
+  ): CastResonanceOption => ({
+    resonance_id: id,
+    name,
+    color_hex: '#8C8C8C',
+    is_default: false,
+    kindled_strength: null,
+    reasons: [],
+    stronger: false,
+    adds_corruption: false,
+    ...overrides,
+  });
+
+  /** Arderi is her usual; Praedari is kindled, stronger and adds corruption (#5231). */
+  const TWO_RESONANCES = [
+    resonanceOption(3, 'Arderi', { is_default: true }),
+    resonanceOption(9, 'Praedari', {
+      kindled_strength: 'Blazing',
+      reasons: ['Someone is at your mercy.'],
+      stronger: true,
+      adds_corruption: true,
+    }),
+  ];
+
+  async function openCastDialogWithResonanceOptions(
+    user: ReturnType<typeof userEvent.setup>,
+    forms: TechniqueForm[] = [CASTABLE_BASE_FORM],
+    options: CastResonanceOption[] = TWO_RESONANCES
+  ) {
+    vi.mocked(fetchAvailableActions).mockResolvedValue(MOCK_ACTIONS);
+    vi.mocked(useCastableTechniques).mockReturnValue({
+      data: [
+        {
+          id: 10,
+          name: 'Ember Touch',
+          anima_cost: 3,
+          tier: 1,
+          intensity: 2,
+          control: 1,
+          hostile: false,
+          description: 'A test technique.',
+          effect_summary: CASTABLE_EFFECT_SUMMARY,
+          forms,
+          resonance_options: options,
+        },
+      ],
+      isLoading: false,
+    } as unknown as ReturnType<typeof useCastableTechniques>);
+    await mockRosterWithPersona();
+
+    render(<ActionPanel sceneId="42" />, { wrapper: createWrapper() });
+    await user.click(screen.getByRole('button'));
+    await waitFor(() => {
+      expect(screen.getByText('Cast')).toBeInTheDocument();
+    });
+    await user.click(screen.getByText('Cast'));
+    await waitFor(() => {
+      expect(screen.getAllByText('Ember Touch').length).toBeGreaterThan(0);
+    });
+    await user.click(screen.getAllByText('Ember Touch')[0]);
+  }
+
+  const ASHFALL_FORM: TechniqueForm = {
+    ...CASTABLE_BASE_FORM,
+    variant_id: 55,
+    name: 'Ashfall Touch',
+    resonance_id: 9,
+    resonance_name: 'Praedari',
+    is_default: false,
+    unlock_thread_level: 3,
+    thread_level: 3,
+  };
+
+  it('sends the resonance the caster picked to work the cast in (#5231)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(user);
+
+    expect(await screen.findByTestId('cast-resonance-picker')).toBeInTheDocument();
+    await user.click(screen.getByTestId('cast-resonance-9'));
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({ technique_id: 10, preferred_resonance_id: 9 })
+      );
+    });
+  });
+
+  it.each([
+    {
+      name: 'the caster picks none',
+      resonances: undefined,
+      picks: [],
+      pressed: undefined,
+      usual: undefined,
+    },
+    {
+      name: 'the caster chooses her usual resonance again after another one',
+      resonances: undefined,
+      picks: ['cast-resonance-9', 'cast-resonance-3'],
+      pressed: 'cast-resonance-3',
+      usual: undefined,
+    },
+    {
+      name: 'her usual resonance is not on the thread and is shown first',
+      resonances: [
+        resonanceOption(77, 'Mirrorwake', { is_default: true }),
+        resonanceOption(3, 'Arderi'),
+        TWO_RESONANCES[1],
+      ],
+      picks: ['cast-resonance-9', 'cast-resonance-77'],
+      pressed: undefined,
+      usual: 'cast-resonance-77',
+    },
+  ])('sends no resonance when $name (#5231)', async ({ resonances, picks, pressed, usual }) => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(user, undefined, resonances);
+
+    await screen.findByTestId('cast-resonance-picker');
+    if (usual) expect(screen.getByTestId(usual)).toHaveTextContent('your usual');
+    for (const testId of picks) await user.click(screen.getByTestId(testId));
+    if (pressed) expect(screen.getByTestId(pressed)).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledTimes(1);
+    });
+    expect(vi.mocked(castTechnique).mock.calls[0][1]).not.toHaveProperty('preferred_resonance_id');
+  });
+
+  it('moves the resonance picker to a variant form, and the usual one released it (#5231)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(user, [
+      { ...CASTABLE_BASE_FORM, is_default: true },
+      ASHFALL_FORM,
+    ]);
+
+    await screen.findByTestId('cast-resonance-picker');
+    await user.click(screen.getByRole('button', { name: /ashfall touch/i }));
+    expect(screen.getByTestId('cast-resonance-9')).toHaveAttribute('aria-pressed', 'true');
+
+    // The base form leaves the resonance alone.
+    await user.click(screen.getByRole('button', { name: /base form/i }));
+    expect(screen.getByTestId('cast-resonance-9')).toHaveAttribute('aria-pressed', 'true');
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({ use_base_form: true, preferred_resonance_id: 9 })
+      );
+    });
+  });
+
+  it('releases a variant form picked earlier when the caster chooses her usual resonance (#5231)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(user, [
+      { ...CASTABLE_BASE_FORM, is_default: true },
+      ASHFALL_FORM,
+    ]);
+
+    await screen.findByTestId('cast-resonance-picker');
+    await user.click(screen.getByRole('button', { name: /ashfall touch/i }));
+    expect(screen.getByRole('button', { name: /ashfall touch/i })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await user.click(screen.getByTestId('cast-resonance-3'));
+    expect(screen.getByRole('button', { name: /ashfall touch/i })).toHaveAttribute(
+      'aria-pressed',
+      'false'
+    );
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledTimes(1);
+    });
+    const body = vi.mocked(castTechnique).mock.calls[0][1];
+    expect(body).not.toHaveProperty('preferred_resonance_id');
+    expect(body).not.toHaveProperty('use_base_form');
+  });
+
+  it('falls back to the base form when she picks a resonance the shown variant is not for (#5231)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({ id: 99, status: 'pending' });
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(
+      user,
+      [
+        { ...CASTABLE_BASE_FORM, is_default: false },
+        { ...ASHFALL_FORM, is_default: true },
+      ],
+      [...TWO_RESONANCES, resonanceOption(12, 'Sorrow')]
+    );
+
+    await screen.findByTestId('cast-resonance-picker');
+    await user.click(screen.getByTestId('cast-resonance-12'));
+    expect(screen.getByRole('button', { name: /base form/i })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await waitFor(() => {
+      expect(castTechnique).toHaveBeenCalledWith(
+        '42',
+        expect.objectContaining({ use_base_form: true, preferred_resonance_id: 12 })
       );
     });
   });
@@ -1007,6 +1225,61 @@ describe('ActionPanel', () => {
   });
 
   // -------------------------------------------------------------------------
+  const ledgerWith = (...terms: { label: string; amount: number }[]) => ({
+    entries: [
+      { stage: 'base', source_label: 'Channeled', op: 'add', amount: 20, running_total: 20 },
+      ...terms.map((term, index) => ({
+        stage: 'term',
+        source_label: term.label,
+        op: 'add',
+        amount: term.amount,
+        running_total: 20 + index + term.amount,
+      })),
+    ],
+    total: 20 + terms.reduce((sum, term) => sum + term.amount, 0),
+  });
+  const resolvedCast = (power_ledger: ReturnType<typeof ledgerWith>) => ({
+    id: 1,
+    status: 'resolved',
+    result: {
+      action_key: 'cast',
+      power_ledger,
+      action_resolution: { current_phase: 'complete', main_result: null, gate_results: [] },
+      technique_result: null,
+    },
+    action_interaction: 42,
+  });
+
+  it('says the kindled resonance strengthened the cast above the ledger (#5231)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue(
+      resolvedCast(ledgerWith({ label: 'kindled cast power', amount: 9 }))
+    );
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(user);
+    await user.click(await screen.findByTestId('cast-resonance-9'));
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    const line = await screen.findByTestId('cast-kindled-line');
+    expect(line).toHaveTextContent('Your kindled Praedari strengthened the cast.');
+    expect(
+      line.compareDocumentPosition(screen.getByTestId('power-ledger-panel')) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+  });
+
+  it('says nothing about kindling when the cast was worked in the usual, unkindled resonance (#5231)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue(
+      resolvedCast(ledgerWith({ label: 'level power', amount: 4 }))
+    );
+    const user = userEvent.setup();
+    await openCastDialogWithResonanceOptions(user);
+    await screen.findByTestId('cast-resonance-picker');
+    await user.click(screen.getByRole('button', { name: /^cast ember touch$/i }));
+
+    await screen.findByTestId('cast-ledger-result');
+    expect(screen.queryByTestId('cast-kindled-line')).not.toBeInTheDocument();
+  });
+
   // Immediate cast (#859): power ledger takeover
   // -------------------------------------------------------------------------
 

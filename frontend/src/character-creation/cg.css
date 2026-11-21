@@ -2349,99 +2349,176 @@
   cursor: progress;
 }
 
-/* The Gift stage's resonance step (#5123): each resonance a row with its points as pips
-   between a less and a more button, the aura those points make previewed underneath. */
-.interview .resonance-weights {
-  display: grid;
-  gap: 0.9rem;
+/* The Gift stage's resonance step (#5231): a feeling, a side and a balance. Cards in the
+   demo's `.opts`, the answers as a segmented row, and the aura on a night plate that stays
+   night in both themes like the creation night plates. */
+.interview .strength-step {
+  font-size: 1.1875rem;
+  line-height: 1.6;
 }
-.interview .resonance-budget {
-  margin: 0;
-  font-size: 0.85rem;
-  color: var(--cg-muted);
-  font-variant-numeric: tabular-nums;
-}
-.interview .resonance-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-}
-.interview .resonance-row {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 0.25rem 0.75rem;
-  padding: 0.55rem 0;
-  border-bottom: 1px solid var(--cg-hairline);
-}
-.interview .resonance-row:last-child {
-  border-bottom: none;
-}
-.interview .resonance-name {
-  font-weight: 600;
-  color: var(--cg-text);
-}
-.interview .resonance-affinity {
-  margin-left: 0.5rem;
+.interview .strength-heading {
   font-family: 'Cinzel', serif;
-  font-size: 0.7rem;
+  font-weight: 600;
+  font-size: 1.15rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--cg-accent);
+  margin: 0 0 0.4rem;
+  text-wrap: balance;
+}
+/* The intro, the questions and the skipped line are paragraphs inside the entry's prose, so
+   they are written under .strength-step to outrank `.interview .entry-prose p` (margin 0 0 1rem),
+   which would otherwise put every question flush under the block above it. */
+.interview .strength-step .strength-intro {
+  margin: 0 0 0.6rem;
+  font-style: italic;
+  color: var(--cg-text-soft);
+}
+.interview .strength-step .strength-ask {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-text-soft);
+  margin: 1.5rem 0 0.2rem;
+}
+.interview .strength-opts {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(8.6rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.7rem 0 0;
+}
+.interview .strength-opt {
+  text-align: left;
+  background: transparent;
+  color: var(--cg-text);
+  border: 1px solid var(--cg-hairline-strong);
+  padding: 0.55rem 0.7rem 0.6rem;
+  cursor: pointer;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+.interview .strength-opt b {
+  display: block;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.86rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--cg-muted);
 }
-.interview .resonance-stepper {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
-.interview .resonance-stepper button {
-  width: 1.75rem;
-  height: 1.75rem;
-  display: grid;
-  place-items: center;
-  background: transparent;
-  border: 1px solid var(--cg-hairline-strong);
+.interview .strength-opt span {
+  font-style: italic;
   color: var(--cg-text-soft);
-  font: inherit;
-  line-height: 1;
-  cursor: pointer;
+  font-size: 0.95rem;
 }
-.interview .resonance-stepper button:hover:not(:disabled) {
+.interview .strength-opt:hover {
   border-color: var(--cg-accent);
+}
+.interview .strength-opt[aria-pressed='true'] {
+  border-color: var(--cg-accent);
+  box-shadow: inset 0 0 0 1px var(--cg-accent);
+}
+.interview .strength-opt[aria-pressed='true'] b {
   color: var(--cg-accent);
 }
-.interview .resonance-stepper button:disabled {
-  opacity: 0.5;
-  cursor: default;
+.interview .strength-sw {
+  display: inline-block;
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 50%;
+  border: 1px solid var(--cg-hairline-strong);
+  margin-right: 0.45rem;
+  vertical-align: -0.06em;
 }
-.interview .resonance-pips {
+.interview .strength-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.25rem;
-  max-width: 14rem;
+  gap: 0.6rem;
+  margin: 0.7rem 0 0;
 }
-.interview .resonance-pip {
-  width: 0.85rem;
-  height: 0.85rem;
-  border-radius: 50%;
-  border: 1.5px solid var(--cg-accent);
-  background: var(--cg-accent);
-}
-.interview .resonance-row-body {
-  grid-column: 1 / -1;
-}
-.interview .resonance-row-body p {
-  margin: 0;
-  font-style: italic;
-  color: var(--cg-muted);
-}
-.interview .resonance-row-body .ledger-line {
-  font-style: normal;
-}
-.interview .resonance-aura-label {
+.interview .strength-row button {
   font-family: 'Cinzel', serif;
-  font-size: 0.7rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  background: transparent;
+  color: var(--cg-text-soft);
+  border: 1px solid var(--cg-hairline-strong);
+  padding: 0.6rem 1.2rem;
+  cursor: pointer;
+}
+.interview .strength-row button:hover,
+.interview .strength-row button[aria-pressed='true'] {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+.interview .strength-balance {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  gap: 1.6rem;
+  align-items: center;
+  margin-top: 0.9rem;
+}
+@media (max-width: 40rem) {
+  .interview .strength-balance {
+    grid-template-columns: 1fr;
+  }
+}
+.interview .strength-plate {
+  background: var(--cg-night);
+  border: 1px solid #262b35;
+  padding: 1rem;
+  color: var(--cg-night-text);
+}
+.interview .strength-aura {
+  max-width: 19rem;
+  margin: 0 auto;
+}
+/* Written under .strength-plate so they outrank `.entry-prose p`, which the step sits inside
+   and which would otherwise colour both lines the grey of body prose on the night plate. */
+.interview .strength-plate .strength-named {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+  text-align: center;
+  color: var(--cg-night-text);
+  margin: 0.6rem 0 0.1rem;
+}
+.interview .strength-plate .strength-said {
+  font-style: italic;
+  text-align: center;
+  color: var(--cg-night-soft);
+  font-size: 1.02rem;
+  margin: 0;
+}
+.interview .strength-slide label {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.74rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--cg-muted);
+  color: var(--cg-text-soft);
+}
+.interview .strength-slide input[type='range'] {
+  width: 100%;
+  margin: 0.6rem 0 0.3rem;
+  accent-color: var(--cg-accent);
+}
+.interview .strength-pts {
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--cg-text-soft);
+}
+.interview .strength-step .strength-skipped {
+  margin: 0.6rem 0 0;
+  font-style: italic;
+  color: var(--cg-text-soft);
 }

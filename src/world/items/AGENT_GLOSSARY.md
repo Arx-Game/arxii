@@ -142,7 +142,7 @@ _Avoid_: allowance (that's the automatic even split), donation, gem grant (super
   rolls its own check at craft time and its realized rung is thread-capped.
   Feeds `crafted_modifier_value` and flatters fashion presentations.
   _Avoid_: Styling (collides with `Style`), Finish, Touch, Aura, enchantment
-  (that's facets).
+  (that's facets, or a worn condition when the item must do more than add a bonus).
 - **Accent ladder** — the benefit-only 7-rung `AccentLevel` ladder (slightly →
   legendarily); the adverbs ARE the display grammar ("a quite menacing
   accent"). Separate from `QualityTier` by design — Accents have no "poor"
@@ -255,3 +255,7 @@ _Avoid_: Primum currency, Primum points, essence item
 **Carried substance** (#5125):
 The substance an item carries and the Primum step it carries it at (`ItemSubstance`), stamped when a craft or a facet attach consumes a Primum item. Everyone sees "Carries fire" on the item. It helps a cast only while the item is equipped (worn or held in hand) and only a caster whose gift works that substance or a related one. See the magic glossary's Substance.
 _Avoid_: enchantment, infusion, imbued
+
+**Worn condition** (#5074, ADR-5074):
+A condition an item puts on whoever wears it (`ItemWornCondition`: the item, the `ConditionTemplate`, and for a mantle optionally the attunement level it needs). The wearer holds it while the item is equipped in any slot and loses it when the item comes off. It is how an enchantment does anything beyond a facet's bonus: it carries check bonuses, resistances, capabilities and properties like any condition. Her condition list names the item as its source to her alone.
+_Avoid_: enchantment (a facet is imagery and a flat bonus), item buff, gear power

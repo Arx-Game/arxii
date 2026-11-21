@@ -88,8 +88,8 @@ def _grant(
 ) -> int:
     """Grant ``amount`` of ``resonance`` under ``source``; nothing to grant, or no resonance,
     grants nothing. Returns the amount the ledger row recorded: ``amount`` scaled by the
-    character's earn rate for a source that is scaled (#5181), so a line that says "grows by N"
-    says what grew."""
+    resonance's own affinity's earn rate for a source that is scaled (#5231), so a line that
+    says "grows by N" says what grew."""
     if resonance is None or amount <= 0:
         return 0
     ledger: list = []

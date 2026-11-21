@@ -25,6 +25,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TraditionFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.models import Thread
 from world.magic.models.gifts import CharacterGift
@@ -293,7 +294,7 @@ class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
     @classmethod
     def setUpTestData(cls):
         ensure_canonical_affinities()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         cls.minor_gift = GiftFactory(name="Test Elven Sight", kind=GiftKind.MINOR)
         cls.minor_gift.resonances.add(cls.resonance)
         cls.minor_technique = TechniqueFactory(

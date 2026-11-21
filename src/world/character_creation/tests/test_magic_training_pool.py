@@ -9,12 +9,13 @@ from world.character_creation.constants import (
 from world.character_creation.factories import CharacterDraftFactory, single_resonance_weights
 from world.character_creation.types import DistinctionBonusSource
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
+from world.magic.constants import AFFINITY_PRIMAL
 from world.magic.factories import (
     AffinityFactory,
     GiftFactory,
-    ResonanceFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    primal_resonance,
 )
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.skills.factories import SkillFactory, SkillPointBudgetFactory
@@ -28,11 +29,14 @@ class MagicTrainingPoolTest(TestCase):
         cls.target = ModifierTargetFactory(name=MAGIC_TRAINING_POINTS_TARGET, category=category)
         SkillPointBudgetFactory(pk=1)
         cls.gift = GiftFactory()
-        cls.affinity = AffinityFactory()
-        cls.resonance = ResonanceFactory(affinity=cls.affinity)
+        cls.affinity = AffinityFactory(name=AFFINITY_PRIMAL)
+        cls.resonance = primal_resonance()
         cls.tradition = TraditionFactory()
         cls.tradition.favored_affinities.add(cls.affinity)
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
+        # The same teaching of the gift, favoring no affinity: a Primal pick does not fit it.
+        cls.unfavoring_tradition = TraditionFactory()
+        TraditionGiftGrantFactory(tradition=cls.unfavoring_tradition, gift=cls.gift)
         cls.training = DistinctionFactory(name="Tradition Training", max_rank=3)
         DistinctionEffectFactory(distinction=cls.training, target=cls.target, value_per_rank=20)
         cls.studious = DistinctionFactory(name="Studious")
@@ -44,14 +48,10 @@ class MagicTrainingPoolTest(TestCase):
             data["selected_gift_id"] = self.gift.id
         else:
             data["selected_gift_id"] = GiftFactory().id
-        if affinity:
-            data["gift_resonance_weights"] = single_resonance_weights(self.resonance)
-        else:
-            data["gift_resonance_weights"] = single_resonance_weights(
-                ResonanceFactory(affinity=AffinityFactory())
-            )
+        data["gift_resonance_weights"] = single_resonance_weights(self.resonance)
+        chosen = self.tradition if affinity else self.unfavoring_tradition
         return CharacterDraftFactory(
-            draft_data=data, selected_tradition=self.tradition if tradition else None
+            draft_data=data, selected_tradition=chosen if tradition else None
         )
 
     def test_both_fits(self) -> None:
@@ -130,7 +130,7 @@ class MagicSkillAllocationTest(TestCase):
         cls.training = training
         cls.skills = [SkillFactory(category=TraitCategory.MAGIC) for _ in range(3)]
         cls.combat = SkillFactory(category=TraitCategory.COMBAT)
-        cls.resonance = ResonanceFactory(affinity=AffinityFactory())
+        cls.resonance = primal_resonance()
 
     def _draft(self, magic_skills, *, gift=None, trained=True):
         data = {

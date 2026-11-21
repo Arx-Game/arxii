@@ -656,10 +656,14 @@ class TheFallConvertsAThreadsRows(JourneyCase):
         self.ysmay = self.make_player("Ysmay", room=room)
         self.sheet = self.ysmay.sheet_data
         set_aura_split(
-            CharacterAuraFactory(character=self.sheet), celestial="50", primal="45", abyssal="5"
+            CharacterAuraFactory(character=self.sheet), celestial="56", primal="44", abyssal="0"
         )
+        # The grants recompute the aura from what she has earned. 100 Celestial against 80
+        # Primal is 55.56 / 44.44: Celestial leads and Primal is past the Fall's 40 percent.
+        # An even 100 / 100 would tie, and a tie reads Primal, so the Fall to Primal would be
+        # refused as "already dominant".
         grant_resonance(self.sheet, self.bene, 100, source=GainSource.STAFF_GRANT)
-        grant_resonance(self.sheet, self.praedari, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(self.sheet, self.praedari, 80, source=GainSource.STAFF_GRANT)
 
     def fall(self) -> str:
         return self.telnet(self.ysmay, f"ritual Ritual of Falling target_affinity={self.primal.pk}")

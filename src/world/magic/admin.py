@@ -295,6 +295,7 @@ class AffinityAdmin(admin.ModelAdmin):
         "unsettled_step_percent",
         "claim_verb",
         "earn_rate_percent",
+        "kindled_boost_percent",
         "learn_rate_percent",
         "ritual_partner_fatigue",
         "description",
@@ -303,11 +304,21 @@ class AffinityAdmin(admin.ModelAdmin):
     inlines = [AffinityKindlingSituationInline]
 
 
+class ResonanceAdminForm(forms.ModelForm):
+    """The resonance form: the colour is picked with the browser's colour picker (#5231)."""
+
+    class Meta:
+        model = Resonance
+        fields = "__all__"  # noqa: DJ007 - the admin shows every authored column
+        widgets = {"color_hex": forms.TextInput(attrs={"type": "color"})}
+
+
 @admin.register(Resonance)
 class ResonanceAdmin(admin.ModelAdmin):
     """The most cross-referenced model in the app (#3679) — see ``get_connections``."""
 
-    list_display = ["name", "affinity", "get_opposite", "get_gift_count"]
+    form = ResonanceAdminForm
+    list_display = ["name", "color_hex", "affinity", "get_opposite", "get_gift_count"]
     list_filter = ["affinity"]
     search_fields = ["name"]
     list_select_related = ["affinity", "opposite"]
@@ -3198,6 +3209,8 @@ class CorruptionConfigAdmin(admin.ModelAdmin):
         "intrusive_thoughts_stage",
         "compulsion_stage",
         "sineater_max_stage",
+        "light_corruption_percent",
+        "full_corruption_from_share",
         "compulsion_condition",
         "updated_at",
     ]
@@ -3449,6 +3462,7 @@ class DriftConfigAdmin(admin.ModelAdmin):
         "pk",
         "unsettled_tolerance_percent",
         "unsettled_step_percent",
+        "own_side_tolerance_percent",
         "creation_points",
         "focus_check_type",
         "conflict_condition",
@@ -3542,6 +3556,7 @@ class KindledStrengthTierForm(forms.ModelForm):
             "give_in_ease_tenths": "Control roll eased by",
             "dig_deep_scale_percent": "Dig deep and Rally surge",
             "earn_percent": "Earned",
+            "cast_power": "Cast power",
         }
         help_texts = {
             "name": "Staff can rename each strength.",
@@ -3643,6 +3658,7 @@ class KindledStrengthTierInline(ConfigRowsInline):
         "min_bond_tier",
         "min_severity",
         "pull_levels",
+        "cast_power",
         "give_in_max_depth",
         "give_in_bonus_percent",
         "give_in_ease_tenths",
