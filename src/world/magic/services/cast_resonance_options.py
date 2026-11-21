@@ -25,6 +25,7 @@ from world.magic.services.kindling import (
 )
 from world.magic.services.power_terms import kindled_cast_strength
 from world.magic.specialization.services import (
+    ALT_RESONANCE_UNSET,
     cast_resonance_for,
     gift_resonances_for,
     gift_threads_for,
@@ -79,6 +80,7 @@ def cast_resonance_options(
     *,
     sheet: CharacterSheet | None = None,
     kindling: Mapping[int, KindledResonance] | None = None,
+    alt_resonance: Resonance | None | object = ALT_RESONANCE_UNSET,
 ) -> list[CastResonanceOption]:
     """Every resonance a cast of ``technique`` may be worked in, the default first if off-thread.
 
@@ -89,8 +91,9 @@ def cast_resonance_options(
     with the highest kindled cast power, when that is above the default entry's; a tie for the
     highest marks none.
 
-    A caller that lists several techniques passes the ``sheet`` it holds and the ``kindling``
-    it read once (``kindling_by_resonance``); left out, they are read for this call alone.
+    A caller that lists several techniques passes the ``sheet`` it holds, the ``kindling``
+    it read once (``kindling_by_resonance``) and the worn alternate self's resonance
+    (``alt_resonance``, None for none worn); left out, they are read for this call alone.
     """
     from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
 
@@ -100,11 +103,13 @@ def cast_resonance_options(
         sheet = _get_character_sheet(character)
     if sheet is None:
         return []
-    default = cast_resonance_for(character, technique)
+    default = cast_resonance_for(character, technique, sheet=sheet, alt_resonance=alt_resonance)
     # A caster with no thread on the Gift has no choice to make (#5231): her only entry is the
     # default, so no picker shows and nothing offered would be refused.
     has_thread = bool(gift_threads_for(character, technique.gift))
-    resonances = list(gift_resonances_for(character, technique.gift)) if has_thread else []
+    resonances = (
+        list(gift_resonances_for(character, technique.gift, sheet=sheet)) if has_thread else []
+    )
     # A worn alternate self's resonance is the default without being on the Gift's thread: it is
     # its own entry, first, because choosing it is the same as naming nothing.
     if default is not None and all(resonance.pk != default.pk for resonance in resonances):

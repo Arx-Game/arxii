@@ -23,6 +23,7 @@ from world.magic.services.technique_forms import (
     base_technique_form,
 )
 from world.magic.services.technique_personalization import hold_display_name
+from world.magic.specialization.services import ALT_RESONANCE_UNSET
 from world.scenes.action_constants import (
     ActionDelivery,
     ActionRequestStatus,
@@ -419,6 +420,8 @@ class CastableTechniqueSerializer(serializers.Serializer):
             obj,
             sheet=self.context.get("character_sheet"),
             kindling=self.context.get("cast_kindling"),
+            # Her worn alternate self's resonance, when the view read it once for every technique.
+            alt_resonance=self.context.get("cast_alt_resonance", ALT_RESONANCE_UNSET),
         )
         return list(CastResonanceOptionSerializer(options, many=True).data)
 

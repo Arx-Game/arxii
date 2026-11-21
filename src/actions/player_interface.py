@@ -734,6 +734,7 @@ def _combat_actions(
     )
     from world.magic.services.technique_personalization import hold_display_name  # noqa: PLC0415
     from world.magic.services.ultimates import readied_ultimate  # noqa: PLC0415
+    from world.magic.specialization.services import active_alt_self_resonance  # noqa: PLC0415
 
     # The readied Audere ultimate (if any) joins the known-technique list for
     # this one declaration window -- it never becomes a CharacterTechnique row
@@ -763,6 +764,9 @@ def _combat_actions(
     kindling = kindling_by_resonance(
         sheet, resolution=ctx if isinstance(ctx, CombatRoundContext) else None
     )
+    # Her worn alternate self's resonance is the default every technique's picker leads with:
+    # read it once, with the kindling, not once per technique (#5231).
+    alt_resonance = active_alt_self_resonance(sheet)
     result: list[PlayerAction] = []
     # #5125: the Primum lines of one gift in this room, read once for all its techniques.
     lines_cache: dict = {}
@@ -807,7 +811,13 @@ def _combat_actions(
                 available_fury_tiers=fury_tiers,
                 eligible_fury_resonances=eligible_fury_resonances,
                 cast_resonance_options=tuple(
-                    cast_resonance_options(character, technique, sheet=sheet, kindling=kindling)
+                    cast_resonance_options(
+                        character,
+                        technique,
+                        sheet=sheet,
+                        kindling=kindling,
+                        alt_resonance=alt_resonance,
+                    )
                 ),
                 is_ultimate=technique.is_ultimate,
                 cast_preview=_cast_preview(

@@ -36,6 +36,8 @@ if TYPE_CHECKING:
 
 # Sentinel: caller has not yet fetched the sheet (distinct from None = "no sheet").
 _SHEET_UNSET: object = object()
+# Sentinel: caller has not yet read the worn alternate self's resonance (None = "none worn").
+ALT_RESONANCE_UNSET: object = object()
 
 
 def provision_latent_gift_thread(
@@ -286,7 +288,9 @@ def gift_threads_for(character, gift: Gift) -> list:
     return covering
 
 
-def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
+def gift_resonances_for(
+    character, gift: Gift, *, sheet: CharacterSheet | None | object = _SHEET_UNSET
+) -> list[Resonance]:
     """The resonance(s) this gift manifests as FOR THIS character.
 
     Derived on read from the character's active GIFT thread covering ``gift``:
@@ -309,12 +313,17 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     catching the ``sheet_data`` raise from the handler. A non-Character object
     (no ``.threads``) is a caller bug and is left to raise ``AttributeError``
     rather than papered over with a ``hasattr`` check.
-    """
-    from world.magic.services.techniques import (  # noqa: PLC0415
-        _get_character_sheet,
-    )
 
-    sheet = _get_character_sheet(character)
+    ``sheet`` is the character's sheet when the caller already holds it (``None`` for a
+    sheetless character); left out, it is read here. A caller listing several techniques reads
+    it once and passes it in (#5231).
+    """
+    if sheet is _SHEET_UNSET:
+        from world.magic.services.techniques import (  # noqa: PLC0415
+            _get_character_sheet,
+        )
+
+        sheet = _get_character_sheet(character)
     if sheet is None:
         return gift.cached_resonances
 
@@ -417,11 +426,19 @@ def _gift_thread_for_variant(character, technique: Technique):
     return covering[0] if covering else None
 
 
-def _effective_variant_resonance(sheet, thread, preferred_resonance):
-    """Choose cast-time, alt-self, or thread resonance in priority order."""
+def _effective_variant_resonance(
+    sheet, thread, preferred_resonance, alt_resonance=ALT_RESONANCE_UNSET
+):
+    """Choose cast-time, alt-self, or thread resonance in priority order.
+
+    ``alt_resonance`` is the worn alternate self's resonance when the caller already read it
+    (``None`` for none worn); left out, it is read here.
+    """
     if preferred_resonance is not None:
         return preferred_resonance
-    resonance = active_alt_self_resonance(sheet)
+    resonance = (
+        active_alt_self_resonance(sheet) if alt_resonance is ALT_RESONANCE_UNSET else alt_resonance
+    )
     return thread.resonance if resonance is None else resonance
 
 
@@ -458,6 +475,8 @@ def resonance_on_gift_thread(
     character: ObjectDB,  # noqa: OBJECTDB_PARAM
     technique: Technique,
     resonance: Resonance | None,
+    *,
+    sheet: CharacterSheet | None | object = _SHEET_UNSET,
 ) -> Resonance | None:
     """The named ``resonance`` when a thread this caster's forms come from holds a row for it.
 
@@ -473,7 +492,7 @@ def resonance_on_gift_thread(
 
     if resonance is None or technique.gift_id is None:
         return None
-    if _get_character_sheet(character) is None:
+    if (_get_character_sheet(character) if sheet is _SHEET_UNSET else sheet) is None:
         return None
     for thread in _threads_the_forms_come_from(character, technique):
         if character.threads.amount_of(thread, resonance) is not None:
@@ -503,13 +522,15 @@ def _first_unthreaded_resonance(gift: Gift) -> Resonance | None:
     )
 
 
-def cast_resonance_for(
+def cast_resonance_for(  # noqa: PLR0913 - the named pick, the refusal switch, two lookups read once
     # the thread handler and sheet lookups take the character
     character: ObjectDB,  # noqa: OBJECTDB_PARAM
     technique: Technique,
     preferred: Resonance | None = None,
     *,
     refuse_off_thread: bool = True,
+    sheet: CharacterSheet | None | object = _SHEET_UNSET,
+    alt_resonance: Resonance | None | object = ALT_RESONANCE_UNSET,
 ) -> Resonance | None:
     """The one resonance a cast of ``technique`` is worked in (#5231).
 
@@ -522,20 +543,25 @@ def cast_resonance_for(
     first one in the order Primal, Celestial, Abyssal (``_first_unthreaded_resonance``). A
     technique with no Gift, or a Gift with no resonances, is worked in none. Choosing the base
     form does not change the answer: the form and the resonance are separate choices.
+
+    A caller listing several techniques for one character reads her ``sheet`` and her worn
+    alternate self's resonance (``alt_resonance``, None for none worn) once and passes them in,
+    so the list costs no sheet or alternate-self query per technique.
     """
     from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
     from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
 
     if technique.gift_id is None:
         return None
-    named = resonance_on_gift_thread(character, technique, preferred)
+    if sheet is _SHEET_UNSET:
+        sheet = _get_character_sheet(character)
+    named = resonance_on_gift_thread(character, technique, preferred, sheet=sheet)
     if preferred is not None and named is None and refuse_off_thread:
         raise ResonanceNotOnGiftThread
-    sheet = _get_character_sheet(character)
     thread = _gift_thread_for_variant(character, technique) if sheet is not None else None
     if thread is None:
         return named if named is not None else _first_unthreaded_resonance(technique.gift)
-    return _effective_variant_resonance(sheet, thread, named)
+    return _effective_variant_resonance(sheet, thread, named, alt_resonance)
 
 
 def cast_working_resonances(

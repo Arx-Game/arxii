@@ -947,6 +947,7 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         from world.magic.services.cast_resonance_options import (  # noqa: PLC0415
             kindling_by_resonance,
         )
+        from world.magic.specialization.services import active_alt_self_resonance  # noqa: PLC0415
         from world.scenes.cast_services import (  # noqa: PLC0415
             castable_technique_links_for_sheet,
         )
@@ -988,6 +989,8 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             "substance_lines": {},
             # #5231: her kindling, read once for the resonance options of every technique.
             "cast_kindling": kindling_by_resonance(sheet),
+            # #5231: her worn alternate self's resonance, read once for every technique's default.
+            "cast_alt_resonance": active_alt_self_resonance(sheet),
         }
         return Response(
             CastableTechniqueSerializer(
