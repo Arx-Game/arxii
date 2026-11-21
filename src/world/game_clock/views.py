@@ -211,7 +211,7 @@ class ClockViewSet(viewsets.ViewSet):
     def pause(self, request: Request) -> Response:
         """POST /pause/ — staff: pause the clock."""
         try:
-            pause_clock(changed_by=request.user, reason="Paused via API")
+            pause_clock(changed_by=request.user)
         except ClockError as exc:
             return Response(
                 {"detail": exc.user_message},
@@ -225,7 +225,7 @@ class ClockViewSet(viewsets.ViewSet):
     def unpause(self, request: Request) -> Response:
         """POST /unpause/ — staff: unpause the clock."""
         try:
-            unpause_clock(changed_by=request.user, reason="Unpaused via API")
+            unpause_clock(changed_by=request.user)
         except ClockError as exc:
             return Response(
                 {"detail": exc.user_message},

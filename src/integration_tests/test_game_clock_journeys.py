@@ -128,6 +128,7 @@ class StaffRunTheGameClock(JourneyCase):
         history = self.client.get("/api/clock/history/").json()["results"]
         self.assertEqual([row["change"] for row in history], ["resumed", "date_kept", "paused"])
         self.assertEqual(history[1]["reason"], "Opening day is in spring")
+        self.assertEqual((history[0]["reason"], history[2]["reason"]), ("", ""))
         self.assertEqual(history[1]["changed_by_name"], self.staff.username)
         self.assertEqual(
             history[1]["new_date_display"], "the 15th of the Month of Thawing, Year 1000"
