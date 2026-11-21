@@ -298,12 +298,12 @@ class TestCorruptionPerCastPipeline(TestCase):
         char_res_a = CharacterResonance.objects.get(character_sheet=sheet, resonance=res_a)
         self.assertEqual(char_res_a.corruption_current, 10)
         self.assertEqual(char_res_a.corruption_lifetime, 10)
-        char_res_b = CharacterResonance.objects.filter(
-            character_sheet=sheet, resonance=res_b
-        ).first()
-        if char_res_b is not None:
-            self.assertEqual(char_res_b.corruption_current, 0)
-            self.assertEqual(char_res_b.corruption_lifetime, 0)
+        # The other resonance is not involved: no row of hers holds any of its corruption.
+        self.assertFalse(
+            CharacterResonance.objects.filter(character_sheet=sheet, resonance=res_b)
+            .exclude(corruption_current=0, corruption_lifetime=0)
+            .exists()
+        )
 
     # -----------------------------------------------------------------------
     # Scenario 3: Stacked multipliers — deficit + Audere

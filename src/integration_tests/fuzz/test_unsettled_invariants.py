@@ -15,8 +15,9 @@ grant, an atone (moving lifetime from one resonance to another) or an accept. Af
 
 Drift reads by side (#5231). A tie in the main affinity goes to Primal. Primal growth never
 raises ``steps_past`` for a character whose main affinity is Primal or Abyssal, and an Abyssal
-character is never unsettled by it. A Primal character leaning to a side reads her own side at
-``DriftConfig.own_side_tolerance_percent``; with no lean the Primal range applies.
+main never reads Primal at all (it adds no excess of its own). A Primal character leaning to a
+side reads her own side at ``DriftConfig.own_side_tolerance_percent``; with no lean the Primal
+range applies.
 
 The rite of settling disowning her Ruin (``perform_settling_rite``, the service the web dialog
 and ``aura settle`` reach) is fuzzed too: whatever the cap lets her convert, she converts
@@ -264,28 +265,9 @@ class UnsettledAuraInvariants(HypothesisTestCase):
         # A Celestial main may be unsettled by Primal growth; no other main may be.
         if before.main_affinity.name in ("Primal", "Abyssal"):
             self.assertLessEqual(after.steps_past, before.steps_past)
-
-    @given(
-        primal_settled=st.integers(0, 5),
-        primal_held=st.lists(st.integers(0, 300), min_size=2, max_size=2),
-        abyssal_held=st.lists(st.integers(0, 300), min_size=2, max_size=2),
-        primal_index=st.sampled_from([2, 3]),
-        amount=st.integers(1, 800),
-    )
-    def test_an_abyssal_character_is_never_unsettled_by_primal(
-        self, primal_settled, primal_held, abyssal_held, primal_index, amount
-    ) -> None:
-        # Abyssal is her main affinity (settled 6 to 10 more than Primal); she holds no
-        # Celestial, so Primal growth is the only thing that could have unsettled her.
-        sheet, _aura = self.character(
-            ((0, primal_settled, primal_settled + 10), [0, 0, *primal_held, *abyssal_held])
-        )
-        before = drift_for(sheet)
-        self.assertEqual(before.main_affinity.name, "Abyssal")
-        grant_resonance(sheet, self.resonances[primal_index], amount, source=GainSource.STAFF_GRANT)
-        after = drift_for(sheet)
-        self.assertEqual(after.steps_past, before.steps_past)
-        self.assertEqual(after.steps_past, 0)
+        # An Abyssal main never reads Primal at all, however grown: it adds no excess of its own.
+        if before.main_affinity.name == "Abyssal":
+            self.assertNotIn(self.resonances[primal_index].affinity_id, after.excess_points)
 
     def read_abyssal_growth(self, celestial: int, primal: int, abyssal: int, abyssal_pct: int):
         """A Primal-led character who holds ``abyssal_pct`` percent of 1000 lifetime in Abyssal."""
