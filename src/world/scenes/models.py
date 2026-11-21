@@ -1946,7 +1946,6 @@ class FacePlaceholderConfig(SharedMemoryModel):
         related_name="face_placeholder_configs",
         limit_choices_to={"player_data__isnull": True},
         help_text="The one picture a face shows when it has no portrait. "
-        "Only staff-authored pictures are listed. "
         "Until one is chosen, a plain grey silhouette is shown.",
     )
     updated_at = models.DateTimeField(auto_now=True)
@@ -1959,7 +1958,7 @@ class FacePlaceholderConfig(SharedMemoryModel):
     )
 
     def __str__(self) -> str:
-        return f"FacePlaceholderConfig(pk={self.pk})"
+        return "Face placeholder config"
 
 
 def get_face_placeholder_config() -> FacePlaceholderConfig:
