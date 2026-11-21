@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0471_gameclockhistory_birth_year_shift_and_more")]
+    dependencies = [("arxii", "0472_identity_chapter_and_enemy_prompt")]
 
     operations = [
         migrations.AddField(

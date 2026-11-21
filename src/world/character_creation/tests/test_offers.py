@@ -3,7 +3,12 @@ from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import AccountFactory
-from world.character_creation.constants import OfferArrival, OfferChapter, TraditionState
+from world.character_creation.constants import (
+    FinalTouchesPrompt,
+    OfferArrival,
+    OfferChapter,
+    TraditionState,
+)
 from world.character_creation.factories import (
     AppearanceSectionFactory,
     BeginningsFactory,
@@ -16,6 +21,7 @@ from world.character_creation.factories import (
     OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
     TraditionStateLineFactory,
+    enemy_card_entry,
 )
 from world.character_creation.offers import (
     degree_marks,
@@ -175,7 +181,12 @@ class OffersForTests(TestCase):
             arrives_as=OfferArrival.BUNDLED,
             enemy_degree="ruined",
         )
-        draft = self._draft(enemy={"kind": "group", "reason_id": reason.id, "degree": "ruined"})
+        enemy = {"kind": "group", "reason_id": reason.id, "degree": "ruined"}
+        # With no card that starts with an enemy, the saved enemy opens nothing (#5255).
+        assert offers_for(self._draft(enemy=enemy), OfferChapter.ENEMY) == []
+
+        card = enemy_card_entry()
+        draft = self._draft(enemy=enemy, distinctions=[card])
         offers = offers_for(draft, OfferChapter.ENEMY)
         assert [o.offer_id for o in offers] == [sleeper_offer.id]
         assert offers[0].opener_key == f"reason:{reason.id}"
@@ -184,10 +195,86 @@ class OffersForTests(TestCase):
         # The mark arrives as a bundle through the reconcile, and leaves with the degree.
         reconcile_offer_picks(draft)
         names = [e["distinction_name"] for e in draft.draft_data["distinctions"]]
-        assert names == ["Marked"]
+        assert names == [card["distinction_name"], "Marked"]
         draft.draft_data["enemy"]["degree"] = "thwarted"
         reconcile_offer_picks(draft)
+        assert draft.draft_data["distinctions"] == [card]
+
+    def test_the_degree_mark_leaves_when_the_enemy_card_is_let_go(self):
+        """#5255: the saved enemy stays on the draft, and stops marking the character."""
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Marked", cost_per_rank=0),
+            chapter=OfferChapter.ENEMY,
+            arrives_as=OfferArrival.BUNDLED,
+            enemy_degree="ruined",
+        )
+        card = enemy_card_entry()
+        draft = self._draft(enemy={"kind": "group", "degree": "ruined"}, distinctions=[card])
+        reconcile_offer_picks(draft)
+        assert len(draft.draft_data["distinctions"]) == 2
+
+        draft.draft_data["distinctions"] = [
+            e
+            for e in draft.draft_data["distinctions"]
+            if e["distinction_id"] != card["distinction_id"]
+        ]
+        reconcile_offer_picks(draft)
         assert draft.draft_data["distinctions"] == []
+        assert draft.draft_data["enemy"]["degree"] == "ruined"
+
+    def test_the_degree_mark_leaves_in_the_same_pass_that_drops_the_enemy_card(self):
+        """#5255: the card is held through a Glimpse line, and the player unpicks the tag.
+        The pass that drops the card also drops the mark its enemy's degree bundled; the
+        mark is not left for the next request to tidy."""
+        grudge = DistinctionFactory(
+            name="Old Grudge", cost_per_rank=0, final_touches_prompt=FinalTouchesPrompt.ENEMY
+        )
+        grudge_line = DistinctionOfferFactory(
+            distinction=grudge, chapter=OfferChapter.GLIMPSE, glimpse_tag=self.mark
+        )
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Marked", cost_per_rank=0),
+            chapter=OfferChapter.ENEMY,
+            arrives_as=OfferArrival.BUNDLED,
+            enemy_degree="ruined",
+        )
+        held = {
+            "distinction_id": grudge.pk,
+            "distinction_name": grudge.name,
+            "rank": 1,
+            "cost": 0,
+            "offer_ids": [grudge_line.pk],
+            "sources": ["Mark"],
+            "arrivals": ["choice"],
+        }
+        draft = self._draft(
+            glimpse_tag_ids=[self.mark.id],
+            enemy={"kind": "group", "degree": "ruined"},
+            distinctions=[held],
+        )
+        reconcile_offer_picks(draft)
+        names = sorted(e["distinction_name"] for e in draft.draft_data["distinctions"])
+        assert names == ["Marked", "Old Grudge"]
+
+        draft.draft_data["glimpse_tag_ids"] = []
+        dropped = reconcile_offer_picks(draft)
+        assert draft.draft_data["distinctions"] == []
+        assert sorted(dropped) == ["Marked", "Old Grudge"]
+
+    def test_an_identity_line_shows_to_every_draft(self):
+        """#5255: the Identity chapter is its own opener, and a switched-off line is absent."""
+        proud = DistinctionFactory(name="Proud", cost_per_rank=5)
+        line = DistinctionOfferFactory(distinction=proud, chapter=OfferChapter.IDENTITY)
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Meek"),
+            chapter=OfferChapter.IDENTITY,
+            is_active=False,
+        )
+        line.full_clean()
+        (offer,) = offers_for(self._draft(), OfferChapter.IDENTITY)
+        assert offer.offer_id == line.id
+        assert offer.opener_label == "Identity"
+        assert offer.opener_key == ""
 
     def test_a_route_closed_distinction_is_absent_from_the_chapter(self):
         """#4979: a distinction the route closes is left out of ``offers_for`` and named

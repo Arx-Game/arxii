@@ -5,9 +5,11 @@
  * chapter's own offered distinctions (`ChapterOffers chapter="actors_sheet"`,
  * #3675 Task 15) - the personality-flavored ones each prompt answers, in
  * place of the retired Distinctions stage; then the goals, numbered within
- * short term and long term with the points purse at the head; who wants the
- * character to fail, a person priced by their power or a group by its reach
- * at one of four degrees, awarding CG points; the Officially dead door (#4396),
+ * short term and long term with the points purse at the head; the enemy, a
+ * person priced by their power or a group by its reach at one of four degrees,
+ * awarding CG points, shown only to a draft holding a card that starts the
+ * character with one (#5255, owner ruling 2026-11-21: the `enemy` prompt) and
+ * headed by that card's name; the Officially dead door (#4396),
  * which names the established face the world meets while the character's own
  * is believed dead, with that face's guise texts; and The Introductions, three
  * white journals in the character's own voice, each with a Skip door. Between the
@@ -37,6 +39,7 @@ import {
   Marginalia,
   Note,
   RecordRail,
+  type RecordRow,
   stageEyebrow,
 } from '../folio';
 import { useGoalDomains } from '../goals';
@@ -357,6 +360,15 @@ function awardLabel(points: number): string {
   return `Awards ${points} CG ${points === 1 ? 'point' : 'points'}`;
 }
 
+/**
+ * The side panel's Enemy row (#5255): present only for a draft a held card asks an enemy
+ * of, and blank until the enemy is named.
+ */
+function enemyRailRows(asked: boolean, line: string | undefined, award: number): RecordRow[] {
+  if (!asked) return [];
+  return [{ label: 'Enemy', value: line ? `${line} · ${awardLabel(award)}` : undefined }];
+}
+
 /** Which offer the draft's enemy pick is, if any (by kind, group id and name). */
 function offerFor(enemy: DraftEnemy | null, offers: EnemyOffer[]): EnemyOffer | undefined {
   if (!enemy) return undefined;
@@ -428,9 +440,14 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
   // a question; `ChapterOffers` itself renders nothing for an empty chapter.
   const { data: cardOffers } = useDraftOffers(draft.id, 'final_touches');
   const prompts = draft.final_touches_prompts ?? [];
+  // The enemy (#5255): asked only of a draft holding a card that starts the character
+  // with one, and headed by that card's name. The saved answer is kept either way.
+  const enemyCards = cards.filter((card) => card.prompt === 'enemy');
+  const enemyAsked = enemyCards.length > 0;
   // A card the route closes is absent from the offers and named nowhere (#4979), so only
-  // a live line or a live prompt opens the chapter.
-  const showCards = prompts.length > 0 || (cardOffers?.offers.length ?? 0) > 0;
+  // a live line or a live prompt opens the chapter. The enemy has its own section below.
+  const showCards =
+    prompts.some((prompt) => prompt !== 'enemy') || (cardOffers?.offers.length ?? 0) > 0;
   const [openIntros, setOpenIntros] = useState<Record<string, boolean>>(() => ({
     first_journal: (draftData.introductions?.first_journal ?? []).some((a) => a.trim() !== ''),
     application: (draftData.introductions?.application ?? []).some((a) => a.trim() !== ''),
@@ -668,17 +685,16 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             label: 'Goals',
             value: `${goals.length} goals, ${usedPoints} of ${BASE_GOAL_POINTS} points`,
           },
-          {
-            label: 'Enemy',
-            value: enemyLine ? `${enemyLine} · ${awardLabel(enemyAward)}` : undefined,
-          },
+          ...enemyRailRows(enemyAsked, enemyLine, enemyAward),
           record.points,
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-finaltouches">
         <Note lead="Goals">{copy?.finaltouches_how_note ?? HOW_GOALS_WORK}</Note>
-        <Note lead="Enemy">{copy?.finaltouches_enemy_public_line_hint ?? PUBLIC_LINE_HINT}</Note>
+        {enemyAsked && (
+          <Note lead="Enemy">{copy?.finaltouches_enemy_public_line_hint ?? PUBLIC_LINE_HINT}</Note>
+        )}
       </Marginalia>
     </>
   );
@@ -990,200 +1006,217 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         ))}
       </InstrumentFrame>
 
-      <h2 className="section-h">{copy?.finaltouches_enemy_heading ?? 'Who wants you to fail'}</h2>
-      <p>{copy?.finaltouches_enemy_intro ?? ENEMY_INTRO}</p>
-      <ChoiceRow<'person' | 'group'>
-        label="Kind of enemy"
-        options={[
-          { value: 'person', label: 'A person' },
-          { value: 'group', label: 'A group' },
-        ]}
-        value={enemyKind}
-        onChange={(value) => {
-          if (value) setEnemyKind(value);
-        }}
-      />
-      <EntryList label="Enemies offered">
-        {visibleOffers.map((offer) => {
-          const chosen = chosenOffer === offer;
-          return (
+      {enemyAsked && (
+        <>
+          <h2 className="section-h">{enemyCards.map((card) => card.name).join(', ')}</h2>
+          <p>{copy?.finaltouches_enemy_intro ?? ENEMY_INTRO}</p>
+          <ChoiceRow<'person' | 'group'>
+            label="Kind of enemy"
+            options={[
+              { value: 'person', label: 'A person' },
+              { value: 'group', label: 'A group' },
+            ]}
+            value={enemyKind}
+            onChange={(value) => {
+              if (value) setEnemyKind(value);
+            }}
+          />
+          <EntryList label="Enemies offered">
+            {visibleOffers.map((offer) => {
+              const chosen = chosenOffer === offer;
+              return (
+                <Entry
+                  key={`${offer.kind}-${offer.organization_id ?? 'x'}-${offer.name}`}
+                  name={offer.name}
+                  gloss={offer.why || undefined}
+                  tag={
+                    offer.kind === 'group'
+                      ? `${REACH_LABELS[offer.reach] ?? offer.reach} · from your ${offer.source === 'lineage' ? 'Lineage' : 'Beginning'}`
+                      : `${offer.power_tier ? POWER_TIERS.find((t) => t.value === offer.power_tier)?.label : 'Rate their power'} · from your ${offer.source === 'lineage' ? 'Lineage' : 'Beginning'}`
+                  }
+                  chosen={chosen}
+                  open={chosen}
+                  onChoose={() => chooseOffer(offer)}
+                  onSetAside={() => setEnemy(null)}
+                >
+                  <EntryDoors
+                    chooseLabel="Name them"
+                    chosen={chosen}
+                    onChoose={() => chooseOffer(offer)}
+                    onSetAside={() => setEnemy(null)}
+                  />
+                </Entry>
+              );
+            })}
             <Entry
-              key={`${offer.kind}-${offer.organization_id ?? 'x'}-${offer.name}`}
-              name={offer.name}
-              gloss={offer.why || undefined}
-              tag={
-                offer.kind === 'group'
-                  ? `${REACH_LABELS[offer.reach] ?? offer.reach} · from your ${offer.source === 'lineage' ? 'Lineage' : 'Beginning'}`
-                  : `${offer.power_tier ? POWER_TIERS.find((t) => t.value === offer.power_tier)?.label : 'Rate their power'} · from your ${offer.source === 'lineage' ? 'Lineage' : 'Beginning'}`
-              }
-              chosen={chosen}
-              open={chosen}
-              onChoose={() => chooseOffer(offer)}
+              name={enemyKind === 'group' ? 'Another group' : 'Someone else'}
+              gloss="write who, and staff place them at review"
+              tag="Free-written · priced at review"
+              chosen={writtenOwn}
+              open={writtenOwn}
+              onChoose={writeOwn}
               onSetAside={() => setEnemy(null)}
             >
               <EntryDoors
-                chooseLabel="Name them"
-                chosen={chosen}
-                onChoose={() => chooseOffer(offer)}
+                chooseLabel="Write your own"
+                chosen={writtenOwn}
+                onChoose={writeOwn}
                 onSetAside={() => setEnemy(null)}
               />
+              {writtenOwn && (
+                <Field id="enemy-name" label="Who">
+                  <input
+                    id="enemy-name"
+                    type="text"
+                    value={enemy?.name ?? ''}
+                    onChange={(e) => patchEnemy({ name: e.target.value })}
+                  />
+                </Field>
+              )}
             </Entry>
-          );
-        })}
-        <Entry
-          name={enemyKind === 'group' ? 'Another group' : 'Someone else'}
-          gloss="write who, and staff place them at review"
-          tag="Free-written · priced at review"
-          chosen={writtenOwn}
-          open={writtenOwn}
-          onChoose={writeOwn}
-          onSetAside={() => setEnemy(null)}
-        >
-          <EntryDoors
-            chooseLabel="Write your own"
-            chosen={writtenOwn}
-            onChoose={writeOwn}
-            onSetAside={() => setEnemy(null)}
-          />
-          {writtenOwn && (
-            <Field id="enemy-name" label="Who">
-              <input
-                id="enemy-name"
-                type="text"
-                value={enemy?.name ?? ''}
-                onChange={(e) => patchEnemy({ name: e.target.value })}
-              />
-            </Field>
-          )}
-        </Entry>
-      </EntryList>
+          </EntryList>
 
-      {enemy && enemy.kind === enemyKind && (
-        <>
-          {enemy.kind === 'person' && !chosenOffer?.power_tier && (
-            <ChoiceRow<string>
-              label="How strong they are"
-              options={[...POWER_TIERS]}
-              value={enemy.power_tier || null}
-              onChange={(value) => patchEnemy({ power_tier: value ?? '' })}
-            />
-          )}
-          {reasons.length > 0 && (
-            <div className="field">
-              <label id="enemy-reason-label">
-                {copy?.finaltouches_enemy_reason_prompt ?? 'Why they want it'}
-                <span className="tags">
-                  <span className="tag soft">
-                    {copy?.finaltouches_enemy_reason_chip ?? 'pick one, or none'}
-                  </span>
+          {enemy && enemy.kind === enemyKind && (
+            <>
+              {enemy.kind === 'person' && !chosenOffer?.power_tier && (
+                <ChoiceRow<string>
+                  label="How strong they are"
+                  options={[...POWER_TIERS]}
+                  value={enemy.power_tier || null}
+                  onChange={(value) => patchEnemy({ power_tier: value ?? '' })}
+                />
+              )}
+              {reasons.length > 0 && (
+                <div className="field">
+                  <label id="enemy-reason-label">
+                    {copy?.finaltouches_enemy_reason_prompt ?? 'Why they want it'}
+                    <span className="tags">
+                      <span className="tag soft">
+                        {copy?.finaltouches_enemy_reason_chip ?? 'pick one, or none'}
+                      </span>
+                    </span>
+                  </label>
+                  <ChoiceRow<number>
+                    label="Why they want it"
+                    labelledBy="enemy-reason-label"
+                    options={reasons.map((r) => ({
+                      value: r.id,
+                      label: r.name,
+                      title: r.player_line,
+                    }))}
+                    value={enemy.reason_id}
+                    onChange={(value) => patchEnemy({ reason_id: value })}
+                    clearable
+                  />
+                </div>
+              )}
+              {enemy.reason_id !== null && (
+                <ChapterOffers
+                  draft={draft}
+                  chapter="enemy"
+                  filter={(o) => o.opener_key === `reason:${enemy.reason_id}`}
+                  heading={
+                    copy?.finaltouches_enemy_reason_offers_heading ?? 'What it left you with'
+                  }
+                  headingTag={
+                    copy?.finaltouches_enemy_reason_offers_chip ?? 'offered by your reason'
+                  }
+                  showOpener={false}
+                  syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+                  wordBundled={copy?.offers_word_bundled}
+                  wordPerRank={copy?.offers_word_per_rank}
+                  wordSpent={copy?.offers_word_spent}
+                  wordAwards={copy?.offers_word_awards}
+                  wordSeeMore={copy?.offers_word_see_more}
+                  wordHeld={copy?.offers_word_held}
+                  className="conditional"
+                />
+              )}
+              <Field
+                id="enemy-why"
+                label={copy?.finaltouches_enemy_why_prompt ?? 'In your own words'}
+              >
+                <textarea
+                  id="enemy-why"
+                  rows={3}
+                  value={enemy.why}
+                  onChange={(e) => patchEnemy({ why: e.target.value })}
+                />
+              </Field>
+              <div className="field">
+                <label id="enemy-degree-label">
+                  {copy?.finaltouches_enemy_degree_prompt ?? 'How badly'}
+                </label>
+                <ChoiceRow<string>
+                  label="How badly"
+                  labelledBy="enemy-degree-label"
+                  options={DEGREES.map((d) => {
+                    const grant = draft.enemy_degree_grants?.[d.value];
+                    return {
+                      value: d.value,
+                      label: `${d.label} · ${awardLabel(priceAt(d.value))}${grant ? ` · bundles ${grant}` : ''}`,
+                      title: d.gloss,
+                    };
+                  })}
+                  value={enemy.degree || null}
+                  onChange={(value) => patchEnemy({ degree: value ?? '' })}
+                />
+                <span className="hint">
+                  {!scale && enemy.kind === 'person' ? 'Rate their power to see the price. ' : ''}
+                  {copy?.finaltouches_enemy_mark_hint ?? MARK_HINT}
                 </span>
-              </label>
-              <ChoiceRow<number>
-                label="Why they want it"
-                labelledBy="enemy-reason-label"
-                options={reasons.map((r) => ({ value: r.id, label: r.name, title: r.player_line }))}
-                value={enemy.reason_id}
-                onChange={(value) => patchEnemy({ reason_id: value })}
-                clearable
-              />
-            </div>
+              </div>
+              <div className="field">
+                <label id="enemy-scales-label">
+                  {copy?.finaltouches_enemy_scales_heading ?? 'The two scales'}
+                </label>
+                {(['group', 'person'] as const).map((kind) => (
+                  <table className="price-grid" key={kind} aria-labelledby="enemy-scales-label">
+                    <thead>
+                      <tr>
+                        <th scope="col">{kind === 'group' ? 'A group' : 'A person'}</th>
+                        {DEGREES.map((d) => (
+                          <th scope="col" key={d.value}>
+                            {d.value[0].toUpperCase() + d.value.slice(1)}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {SCALE_ROWS[kind].map((row) => (
+                        <tr key={row.value}>
+                          <th scope="row">{row.label}</th>
+                          {DEGREES.map((d) => {
+                            const on =
+                              enemy.kind === kind &&
+                              scale === row.value &&
+                              enemy.degree === d.value;
+                            return (
+                              <td key={d.value} className={on ? 'on' : undefined}>
+                                {priceFor(draft.enemy_price_tables, kind, row.value, d.value)}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ))}
+              </div>
+              <Field
+                id="enemy-public-line"
+                label={copy?.finaltouches_enemy_public_line_prompt ?? 'As the sheet will say it'}
+                hint={copy?.finaltouches_enemy_public_line_hint ?? PUBLIC_LINE_HINT}
+              >
+                <input
+                  id="enemy-public-line"
+                  type="text"
+                  value={enemy.public_line}
+                  onChange={(e) => patchEnemy({ public_line: e.target.value })}
+                />
+              </Field>
+            </>
           )}
-          {enemy.reason_id !== null && (
-            <ChapterOffers
-              draft={draft}
-              chapter="enemy"
-              filter={(o) => o.opener_key === `reason:${enemy.reason_id}`}
-              heading={copy?.finaltouches_enemy_reason_offers_heading ?? 'What it left you with'}
-              headingTag={copy?.finaltouches_enemy_reason_offers_chip ?? 'offered by your reason'}
-              showOpener={false}
-              syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
-              wordBundled={copy?.offers_word_bundled}
-              wordPerRank={copy?.offers_word_per_rank}
-              wordSpent={copy?.offers_word_spent}
-              wordAwards={copy?.offers_word_awards}
-              wordSeeMore={copy?.offers_word_see_more}
-              wordHeld={copy?.offers_word_held}
-              className="conditional"
-            />
-          )}
-          <Field id="enemy-why" label={copy?.finaltouches_enemy_why_prompt ?? 'In your own words'}>
-            <textarea
-              id="enemy-why"
-              rows={3}
-              value={enemy.why}
-              onChange={(e) => patchEnemy({ why: e.target.value })}
-            />
-          </Field>
-          <div className="field">
-            <label id="enemy-degree-label">
-              {copy?.finaltouches_enemy_degree_prompt ?? 'How badly'}
-            </label>
-            <ChoiceRow<string>
-              label="How badly"
-              labelledBy="enemy-degree-label"
-              options={DEGREES.map((d) => {
-                const grant = draft.enemy_degree_grants?.[d.value];
-                return {
-                  value: d.value,
-                  label: `${d.label} · ${awardLabel(priceAt(d.value))}${grant ? ` · bundles ${grant}` : ''}`,
-                  title: d.gloss,
-                };
-              })}
-              value={enemy.degree || null}
-              onChange={(value) => patchEnemy({ degree: value ?? '' })}
-            />
-            <span className="hint">
-              {!scale && enemy.kind === 'person' ? 'Rate their power to see the price. ' : ''}
-              {copy?.finaltouches_enemy_mark_hint ?? MARK_HINT}
-            </span>
-          </div>
-          <div className="field">
-            <label id="enemy-scales-label">
-              {copy?.finaltouches_enemy_scales_heading ?? 'The two scales'}
-            </label>
-            {(['group', 'person'] as const).map((kind) => (
-              <table className="price-grid" key={kind} aria-labelledby="enemy-scales-label">
-                <thead>
-                  <tr>
-                    <th scope="col">{kind === 'group' ? 'A group' : 'A person'}</th>
-                    {DEGREES.map((d) => (
-                      <th scope="col" key={d.value}>
-                        {d.value[0].toUpperCase() + d.value.slice(1)}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {SCALE_ROWS[kind].map((row) => (
-                    <tr key={row.value}>
-                      <th scope="row">{row.label}</th>
-                      {DEGREES.map((d) => {
-                        const on =
-                          enemy.kind === kind && scale === row.value && enemy.degree === d.value;
-                        return (
-                          <td key={d.value} className={on ? 'on' : undefined}>
-                            {priceFor(draft.enemy_price_tables, kind, row.value, d.value)}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            ))}
-          </div>
-          <Field
-            id="enemy-public-line"
-            label={copy?.finaltouches_enemy_public_line_prompt ?? 'As the sheet will say it'}
-            hint={copy?.finaltouches_enemy_public_line_hint ?? PUBLIC_LINE_HINT}
-          >
-            <input
-              id="enemy-public-line"
-              type="text"
-              value={enemy.public_line}
-              onChange={(e) => patchEnemy({ public_line: e.target.value })}
-            />
-          </Field>
         </>
       )}
 

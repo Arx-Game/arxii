@@ -161,9 +161,23 @@ character-creation/
     ├── IdentityStage.tsx    # Stage 9: Identity (concept, quote, worship); the name is a
     │                        #   read-only line since #4874, asked on Origin. The Background
     │                        #   is Final Touches' (#5178); this stage neither reads nor
-    │                        #   saves it
+    │                        #   saves it. Between the quote and worship, the Personality
+    │                        #   block (#5255, owner ruling 2026-11-21): an h2 (copy
+    │                        #   `identity_personality_heading`) over `ChapterOffers
+    │                        #   chapter="identity"` as the life page's cards, two across
+    │                        #   (`pair`), signed prices, four at rest and the rest under
+    │                        #   "See N more"; once staff give the lines headings every
+    │                        #   card shows under its heading and nothing folds. Absent
+    │                        #   when no card is placed. The side panel's points line
+    │                        #   reads `useShownPicks`, so it moves with a click
     ├── FinalTouchesStage.tsx # Stage 10: the Actor's Sheet (#3621): three questions,
     │                        #   numbered goals by horizon, the priced enemy, The Introductions.
+    │                        #   The enemy section, its side-panel row and its note render
+    │                        #   only when a held card asks `enemy` (#5255:
+    │                        #   draft.final_touches_cards), headed by that card's name;
+    │                        #   "Who wants you to fail" is printed nowhere and the copy key
+    │                        #   `finaltouches_enemy_heading` is not read. An enemy card by
+    │                        #   itself does not open the card-unlocked section.
     │                        #   After the enemy and before the faces' doors, the Background
     │                        #   (#5178, owner ruling 2026-11-17: one box for the character's
     │                        #   history, no text per life stage): an h2 "Background" and a
@@ -398,6 +412,10 @@ a click or tap pins it open, and Escape, a scroll or any other click closes it (
 term whose definition is blank is plain text with no underline; `interceptPick` runs before a click
 changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 `secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.
+`pair` (#5255) puts a grid two across in the reading column (`.stances.grid.pair`, the
+Glimpse's rule) with four cards at rest where the others show three, and a grid folded
+under "See N more" keeps its cards; the Identity
+stage's Personality block uses both.
 
 ## A card click shows at once (#5134)
 

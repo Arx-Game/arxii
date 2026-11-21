@@ -117,6 +117,13 @@ interface ChapterOffersProps {
    */
   layout?: 'list' | 'grid';
   /**
+   * A grid in the reading column (#5255, the Identity stage's Personality): two cards
+   * across and one on a phone (`.stances.grid.pair`, the Glimpse's rule), where the
+   * default three across is too narrow for a description. A folded pair shows four
+   * cards at rest, two full rows, where the other layouts show three.
+   */
+  pair?: boolean;
+  /**
    * How many of this block's offers may be picked at once (#4395): an age-scaled
    * beat's allowance. At the allowance the unpicked cards read disabled; the server
    * refuses the extra pick as well. `null` or omitted is any number.
@@ -166,6 +173,8 @@ interface PriceWords {
 
 /** Lines shown at rest when a folding block has no pinned line (#3709 fork a). */
 const FIRST_LOOK_FALLBACK = 3;
+/** Two across (#5255), four at rest fill two rows where three leave a lone card. */
+const FIRST_LOOK_FALLBACK_PAIR = 4;
 /** A block shorter than this never folds (#3709 fork e). */
 const FOLD_UNDER = 5;
 
@@ -334,14 +343,18 @@ function BundledPriceLine({
   return <span className="cost">{item.cost_per_rank}</span>;
 }
 
-function partitionOffers(offers: VisibleOffer[], firstLook: boolean, foldUnder: number) {
+function partitionOffers(
+  offers: VisibleOffer[],
+  firstLook: boolean,
+  foldUnder: number,
+  fallback: number
+) {
   let atRest = offers;
   let folded: VisibleOffer[] = [];
   if (firstLook && offers.length >= foldUnder) {
     const pinned = offers.filter((o) => o.first_look);
-    atRest = pinned.length > 0 ? pinned : offers.slice(0, FIRST_LOOK_FALLBACK);
-    folded =
-      pinned.length > 0 ? offers.filter((o) => !o.first_look) : offers.slice(FIRST_LOOK_FALLBACK);
+    atRest = pinned.length > 0 ? pinned : offers.slice(0, fallback);
+    folded = pinned.length > 0 ? offers.filter((o) => !o.first_look) : offers.slice(fallback);
   }
   return { atRest, folded };
 }
@@ -387,6 +400,7 @@ export function ChapterOffers({
   wordHeld,
   exclusive = false,
   layout = 'list',
+  pair = false,
   maxPicks = null,
   pointsPicks = false,
   groupBy,
@@ -558,7 +572,12 @@ export function ChapterOffers({
   // The fold (#3709): the Beginning's pinned lines show at rest; when none is
   // pinned the first three by the server's order stand in; everything else waits
   // under one "See N more" line. A short block never folds.
-  const { atRest, folded } = partitionOffers(offers, firstLook, foldUnder);
+  const { atRest, folded } = partitionOffers(
+    offers,
+    firstLook,
+    foldUnder,
+    pair ? FIRST_LOOK_FALLBACK_PAIR : FIRST_LOOK_FALLBACK
+  );
   const seeMore = (wordSeeMore ?? 'See {count} more').replace('{count}', String(folded.length));
   // The groups (#4874): headings in first-seen order, the ungrouped cards last under
   // none; without `groupBy` one unnamed group holds every card at rest.
@@ -714,7 +733,14 @@ export function ChapterOffers({
       {groups.map(([group, members]) => (
         <div key={group || '\u0000'} className="offer-group">
           {group && <div className="group-h">{`${group} (${members.length})`}</div>}
-          <ul className={cn('stances', exclusive && 'oneof', layout === 'grid' && 'grid')}>
+          <ul
+            className={cn(
+              'stances',
+              exclusive && 'oneof',
+              layout === 'grid' && 'grid',
+              pair && 'pair'
+            )}
+          >
             {group === groups[0][0] &&
               bundled.map((item) => (
                 <li key={item.offer_id}>
@@ -754,7 +780,10 @@ export function ChapterOffers({
       {folded.length > 0 && (
         <details className="more">
           <summary>{seeMore}</summary>
-          <ul className="stances">{folded.map(renderOffer)}</ul>
+          {/* A folded grid keeps its cards (#5255, the Identity stage's Personality). */}
+          <ul className={cn('stances', layout === 'grid' && 'grid', pair && 'pair')}>
+            {folded.map(renderOffer)}
+          </ul>
         </details>
       )}
       {hint && <span className="hint">{hint}</span>}

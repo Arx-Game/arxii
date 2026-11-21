@@ -1,6 +1,9 @@
 # ADR-0279: An enemy is a priced flaw the world must collect, on two scales
 
 **Status:** Accepted (#3621, 2026-09-07, Apostate's rulings on the demo). Related ADR-0277, ADR-0269, ADR-0010.
+**Superseded in part by ADR-5255** (#5255, 2026-11-21): the enemy is no longer asked of
+every draft. It is asked only of a draft holding a card that starts the character with
+one. The two scales, the prices, the degree marks and what finalize collects stand.
 
 **Context.** Character generation had no way for a player to give their character an
 antagonist that the world would act on, and no reason to: flaws bought nothing. The

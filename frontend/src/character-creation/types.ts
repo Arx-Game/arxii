@@ -587,6 +587,7 @@ export interface CharacterDraft {
  */
 export type FinalTouchesPrompt =
   | 'crime'
+  | 'enemy'
   | 'prestige_story'
   | 'organization'
   | 'path_aspect'
@@ -1691,7 +1692,8 @@ export type OfferChapter =
   | 'actors_sheet'
   | 'enemy'
   | 'backgrounds'
-  | 'final_touches';
+  | 'final_touches'
+  | 'identity';
 
 /** One beat of the Backgrounds library as this draft meets it (#4124):
  * `GET /api/character-creation/drafts/{id}/beats/`. Its answers are the

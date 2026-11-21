@@ -3373,7 +3373,8 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   PRIMARY and the kin node); see `character_creation.md` "The Actor's Sheet".
 - **Actor's Sheet (#3621, ADR-0279):** Final Touches replaced personality with three questions
   (`Profile.never_do`/`protect`/`fear`), goals with a horizon and number, one priced enemy
-  (`character_creation/enemies.py`: `enemy_price`, `enemy_offers`, `resolve_enemy`;
+  (asked only of a draft holding a card whose `final_touches_prompt` is `enemy`, #5255, ADR-5255:
+  `enemy_is_open`, `enemy_answer`; `character_creation/enemies.py`: `enemy_price`, `enemy_offers`, `resolve_enemy`;
   `BeginningEnemyOffer` rows; `CharacterEnemy` written at finalize with reputation and heat
   seeds and, since #3709, the picked `EnemyReason`; the degree's mark is a bundled offer line
   on `OfferChapter.ENEMY`) and The Introductions (white journals by `JournalKind`; Whispers
@@ -3396,7 +3397,8 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   no contributor is linked and credited on the spot. Details: `src/web/admin/CLAUDE.md`.
 - **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
   Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
-  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet/enemy/backgrounds/final_touches],
+  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet/enemy/backgrounds/final_touches/identity;
+  an `identity` line, the Identity stage's Personality cards, takes no opener, #5255],
   `arrives_as` [`OfferArrival`: choice/bundled/carried], `name`, `player_line`, exactly one opener
   of its chapter's kind [`schooling_line`/`glimpse_tag`/`origin_choice`/`prompt`/`enemy_reason`/
   `enemy_degree`/`appearance_section`/`feature_rows`/`beat`/`unlocked_by` (#4846: the Final Touches chapter, the card a draft must hold for the line to show; `Distinction.final_touches_prompt` is the optional question a held card asks there, `final_touches_prompts`), #3709], `first_look` [M2M `Beginnings` through
