@@ -90,30 +90,36 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
 
   const save = (next: StrengthPicks) => onChange(weightsFromPicks(next, budget));
 
-  // The side she has chosen but not yet picked a resonance on. The saved list cannot hold it
-  // (a side is only written by its pick), so it is kept here until her pick arrives.
-  const [pendingSide, setPendingSide] = useState<'give' | 'take' | null>(null);
-  // Her answer about others: the saved second pick's side when there is one, else the side she
-  // has just chosen, else what the saved list says.
-  const lean: Lean | null = picks.outward != null ? picks.lean : (pendingSide ?? picks.lean);
+  // Her answer about other people is her own, in this visit. Until she gives one it reads the
+  // saved list: the second pick's side, "Neither" for a feeling alone (she finished that way
+  // before), nothing for an empty list. Once she acts in the step it is frozen at what she has
+  // given, so picking a feeling never presses or changes it, and a side chosen before any card
+  // is picked stays pressed though the saved list cannot hold it.
+  const [answer, setAnswer] = useState<Lean | null | undefined>(undefined);
+  const lean: Lean | null = answer !== undefined ? answer : picks.lean;
 
   const chooseLean = (next: Lean) => {
+    setAnswer(next);
     if (next === 'none') {
-      setPendingSide(null);
       save({ ...picks, lean: next, outward: null, primalPoints: budget });
       return;
     }
     // A side gives her no card: she picks one herself. Only a second pick left over from the
     // other side is cleared, in one write.
-    setPendingSide(next);
     if (picks.outward != null && picks.lean !== next) {
       save({ ...picks, lean: next, outward: null, primalPoints: budget });
     }
   };
 
+  const chooseFeeling = (id: number) => {
+    setAnswer(lean);
+    save({ ...picks, primal: id, lean: lean ?? 'none' });
+  };
+
   // A feeling that held every point gives up a share to the second pick (the demo's 7 of 10).
   const chooseOutward = (id: number) => {
     const primalPoints = picks.outward == null ? defaultPrimalPoints(budget) : picks.primalPoints;
+    setAnswer(lean);
     save({ ...picks, lean, outward: id, primalPoints });
   };
 
@@ -122,14 +128,14 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
   const outward = chosenSide && picks.lean === chosenSide ? nameOf(picks.outward) : undefined;
   // The balance exists once both picks do; before that the slider is off.
   const balanced = feeling != null && outward != null;
-  const neither = picks.lean === 'none' && feeling != null;
+  const neither = lean === 'none' && feeling != null;
   const outwardPoints = balanced ? budget - picks.primalPoints : 0;
   const main = mainAffinityOf(picks, budget);
   const otherSide = main === 'Primal' && chosenSide ? affinityOfLean(chosenSide) : 'Primal';
   // No name and no sentence before a feeling is chosen: the aura claims nothing she has not.
   let auraName: string | null = null;
   let said: string | null = null;
-  if (neither) {
+  if (feeling != null && !balanced) {
     auraName = 'Primal';
     said = text('gift_strength_aura_all_feeling', 'All your strength comes from what you feel.');
   } else if (balanced) {
@@ -174,7 +180,7 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
         label={text('gift_strength_feeling_question', 'Which feeling gives you strength')}
         resonances={primalCards}
         picked={picks.primal}
-        onPick={(id) => save({ ...picks, primal: id, lean: lean ?? 'none' })}
+        onPick={chooseFeeling}
       />
 
       <p className="strength-ask">

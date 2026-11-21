@@ -119,6 +119,51 @@ describe('StrengthStep', () => {
     expect(screen.getByRole('slider')).toBeEnabled();
   });
 
+  const SKIPPED =
+    'With no second pick there is nothing to balance. All 8 points go to the feeling.';
+
+  it('leaves all three answers unpressed and shows no skipped line for a feeling on an empty draft', async () => {
+    render(<Harness />);
+    await userEvent.click(screen.getByRole('button', { name: /Arderi/ }));
+    for (const name of ['Helping them', 'Hurting them', 'Neither']) {
+      expect(screen.getByRole('button', { name, pressed: false })).toBeInTheDocument();
+    }
+    expect(screen.queryByText(SKIPPED)).not.toBeInTheDocument();
+    // The plate shows the feeling alone, with its caption; the slider stays off.
+    expect(screen.getByText('Primal')).toBeInTheDocument();
+    expect(screen.getByRole('slider')).toBeDisabled();
+    // A second feeling picked later changes no answer either.
+    await userEvent.click(screen.getByRole('button', { name: /Sereni/ }));
+    expect(screen.getByRole('button', { name: 'Neither', pressed: false })).toBeInTheDocument();
+    expect(screen.queryByText(SKIPPED)).not.toBeInTheDocument();
+  });
+
+  it('shows no skipped line while a side is pressed with no card picked', async () => {
+    render(<Harness start={[{ resonance_id: 1, weight: 8 }]} />);
+    // Arrived as a feeling alone: Neither is pressed and the line shows.
+    expect(screen.getByRole('button', { name: 'Neither', pressed: true })).toBeInTheDocument();
+    expect(screen.getByText(SKIPPED)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Hurting them' }));
+    expect(screen.getByRole('button', { name: 'Hurting them', pressed: true })).toBeInTheDocument();
+    expect(screen.queryByText(SKIPPED)).not.toBeInTheDocument();
+    expect(screen.getByRole('slider')).toBeDisabled();
+    expect(screen.getByText('Primal')).toBeInTheDocument();
+    // Pressing Neither again brings the line back and saves the feeling at the full budget.
+    await userEvent.click(screen.getByRole('button', { name: 'Neither' }));
+    expect(screen.getByText(SKIPPED)).toBeInTheDocument();
+    expect(saved).toEqual([{ resonance_id: 1, weight: 8 }]);
+  });
+
+  it('shows the skipped line when Neither is pressed with a feeling picked', async () => {
+    render(<Harness />);
+    await userEvent.click(screen.getByRole('button', { name: 'Neither' }));
+    // No feeling yet: the line waits for one.
+    expect(screen.queryByText(SKIPPED)).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: /Arderi/ }));
+    expect(screen.getByRole('button', { name: 'Neither', pressed: true })).toBeInTheDocument();
+    expect(screen.getByText(SKIPPED)).toBeInTheDocument();
+  });
+
   it('reads its words from the copy keys', () => {
     render(<Harness copy={{ gift_strength_heading: 'Your strength, in the words staff wrote' }} />);
     expect(screen.getByText('Your strength, in the words staff wrote')).toBeInTheDocument();
@@ -128,7 +173,8 @@ describe('StrengthStep', () => {
     render(<Harness />);
     await userEvent.click(screen.getByRole('button', { name: /Arderi/ }));
     expect(saved).toEqual([{ resonance_id: 1, weight: 8 }]);
-    expect(screen.getByRole('button', { name: 'Neither', pressed: true })).toBeInTheDocument();
+    // Picking a feeling answers nothing about others.
+    expect(screen.getByRole('button', { name: 'Neither', pressed: false })).toBeInTheDocument();
 
     saved = [];
     await userEvent.click(screen.getByRole('button', { name: 'Hurting them' }));
