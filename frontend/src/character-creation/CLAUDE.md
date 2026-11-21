@@ -95,7 +95,15 @@ character-creation/
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection). A draft
     │                        #   with no saved statistics has the spread on screen saved when
-    │                        #   the stage opens, once (#5198), so the even spread needs no click
+    │                        #   the stage opens, once (#5198), so the even spread needs no click.
+    │                        #   Labels as the owner ruled (#5223): the Statistics frame reads
+    │                        #   "Min 10, Max 50", the four categories carry no gloss, a
+    │                        #   statistic's name shows what it governs on hover (`whyTitle`)
+    │                        #   and, pressed, in the side panel, never under its row; the
+    │                        #   Skills frame reads "Specialization at N in parent skill." and
+    │                        #   a bare spent/total, and the side panel has a "Skills" row
+    │                        #   under "Statistics" (SkillsSection reports through
+    │                        #   `onPointsChange`). The side panel's row is "Beginning", singular
     ├── GiftStage.tsx        # Stage 6 (Gift): vertical funnel — Tradition → Gift →
     │                        #   [magical training, #4659] → Techniques → Gift Resonance
     │                        #   (several resonances weighted by points, #5123: opens with

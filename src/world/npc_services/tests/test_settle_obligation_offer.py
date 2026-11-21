@@ -141,6 +141,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
         from world.character_creation.factories import make_unknown_upbringing
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
+        from world.character_creation.tests.finalization_fixtures import DEFAULT_STATS
         from world.magic.models import CharacterTechnique, Resonance, Tradition
         from world.magic.services.cg_catalog import get_gift_options, get_technique_options
         from world.npc_services.effects import run_train_offer
@@ -149,7 +150,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
             ACADEMY_GENERALIST_TRAINER_ROLE_NAME,
             ACADEMY_REGISTRAR_ROLE_NAME,
         )
-        from world.seeds.character_creation import DEFAULT_STAT_NAMES, ensure_shroudwatch_academy
+        from world.seeds.character_creation import ensure_shroudwatch_academy
         from world.societies.models import OrganizationObligation
         from world.societies.obligation_services import has_open_obligation
         from world.tarot.models import TarotCard
@@ -218,7 +219,8 @@ class SettleObligationLoopEndToEndTests(TestCase):
         draft_data = {
             "first_name": "Debtor",
             "description": "A fresh Unbound Prospect who owes the Academy a Hare.",
-            "stats": dict.fromkeys(DEFAULT_STAT_NAMES, 20),
+            # The whole creation budget placed, 350 (#5223).
+            "stats": dict(DEFAULT_STATS),
             "tarot_card_name": tarot.name,
             "tarot_reversed": False,
             "selected_gift_id": gift.id,

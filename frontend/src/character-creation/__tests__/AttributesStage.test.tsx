@@ -265,6 +265,57 @@ describe('AttributesStage', () => {
       const margin = within(screen.getByRole('complementary'));
       expect(margin.getByRole('status')).toHaveTextContent('Raw physical power and muscle.');
     });
+
+    // #5223, owner rulings 2026-11-20.
+    it('explains a statistic in the side panel and on hover, never under its row', async () => {
+      const draft: CharacterDraft = {
+        ...mockEmptyDraft,
+        draft_data: { stats: defaultStats() },
+      };
+      const { container } = renderAttributesStage(draft);
+      const strength = screen.getByRole('button', { name: /^strength$/i });
+      // Hover text, before anything is pressed.
+      expect(strength).toHaveAttribute('title', 'Raw physical power and muscle.');
+
+      await userEvent.click(strength);
+
+      // The explanation is on the page once, in the side panel.
+      expect(screen.getAllByText(/Raw physical power and muscle\./)).toHaveLength(1);
+      expect(
+        within(screen.getByRole('complementary')).getByText(/Raw physical power and muscle\./)
+      ).toBeInTheDocument();
+      expect(container.querySelector('.stat-gloss')).toBeNull();
+    });
+
+    it('heads the frame "Min 10, Max 50" and gives the four categories no gloss', () => {
+      const draft: CharacterDraft = {
+        ...mockEmptyDraft,
+        draft_data: { stats: defaultStats() },
+      };
+      renderAttributesStage(draft);
+
+      expect(screen.getByText('Min 10, Max 50')).toBeInTheDocument();
+      expect(screen.queryByText(/Twelve statistics/)).not.toBeInTheDocument();
+      for (const gloss of ['the body', 'the company', 'the mind', 'the self']) {
+        expect(screen.queryByText(gloss)).not.toBeInTheDocument();
+      }
+    });
+
+    it('names the side panel row "Beginning" and shows no Skills row without a path', () => {
+      const draft: CharacterDraft = {
+        ...mockEmptyDraft,
+        draft_data: { stats: defaultStats() },
+        stats_points_remaining: 110,
+        stats_budget: 350,
+      };
+      renderAttributesStage(draft);
+      const panel = within(screen.getByRole('complementary'));
+
+      expect(panel.getByText('Beginning')).toBeInTheDocument();
+      expect(panel.queryByText('Beginnings')).not.toBeInTheDocument();
+      expect(panel.getByText('240 of 350 spent')).toBeInTheDocument();
+      expect(panel.queryByText('Skills')).not.toBeInTheDocument();
+    });
   });
 
   describe('Stat Modification', () => {
