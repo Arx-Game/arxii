@@ -968,7 +968,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 {
                     "persona_id": persona.pk,
                     "persona_name": persona.name,
-                    "thumbnail_url": persona.thumbnail_url or "",
+                    "thumbnail_url": persona_face_url(persona),
                     "resonance_id": e.resonance_id,
                 }
             )
@@ -1012,7 +1012,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 {
                     "persona_id": persona.pk,
                     "persona_name": persona.name,
-                    "thumbnail_url": persona.thumbnail_url or "",
+                    "thumbnail_url": persona_face_url(persona),
                     "resonance_id": r.resonance_id,
                 }
             )

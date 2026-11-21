@@ -16,10 +16,10 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.combat.serializers import OpponentSerializer
 from world.roster.factories import MediaFactory
-from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 
 
@@ -41,7 +41,7 @@ class OpponentPortraitSerializerTests(TestCase):
         self.assertEqual(data["thumbnail_url"], "https://cdn.example/direct.png")
 
     def test_persona_without_thumbnail_returns_none_media_url(self) -> None:
-        persona = PersonaFactory(thumbnail=None, thumbnail_url="", persona_type=PersonaType.PRIMARY)
+        persona = CharacterSheetFactory().primary_persona
         opponent = CombatOpponentFactory(encounter=self.encounter, persona=persona)
 
         data = OpponentSerializer(opponent).data

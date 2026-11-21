@@ -80,8 +80,9 @@ def resolve_thumbnail(
         if alt_self_url is not None:
             return alt_self_url
 
-        # 4. Persona default
-        if persona.thumbnail_id is not None:
+        # 4. Persona default. A PRIMARY face's own picture is the real one (a story NPC's
+        # worn look is copied onto it), so it is skipped while an alternate self is worn.
+        if persona.thumbnail_id is not None and not _worn_self_hides_primary(persona):
             return persona.thumbnail.cloudinary_url
 
     # 5. ObjectDisplayData fallback
@@ -173,6 +174,15 @@ def _active_alternate_self(persona: "Persona") -> "AlternateSelf | None":
     if active is None or active.alternate_self_id is None:
         return None
     return active.alternate_self
+
+
+def _worn_self_hides_primary(persona: "Persona") -> bool:
+    """Whether ``persona`` is the PRIMARY face and an alternate self is worn over it."""
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    return (
+        persona.persona_type == PersonaType.PRIMARY and _active_alternate_self(persona) is not None
+    )
 
 
 def _is_presented(persona: "Persona") -> bool:

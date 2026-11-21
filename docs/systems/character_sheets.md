@@ -86,11 +86,11 @@ contribution. A **look** is a picture with a saved 4:5 crop (#4151). `_build_loo
 returns every look the character may show (the current tenure's and the character's
 art, through `gallery_for`; hidden art and NSFW pictures never), each at its cropped URL
 (`look_url`) with the `MoodOption` it shows, the worn one first, in two queries;
-`profile_picture` is the worn look's crop via the query-free `portrait_url`. The strip
+`profile_picture` is the worn look's crop via the query-free `portrait_url`. For a viewer of a mask or a worn alternate self (`shows_real_face` false: not the owner or staff, and the identity not revealed or a self worn) `profile_picture` is that face's own picture or the placeholder, `looks` is empty, and `viewer_is_friend` and `current_residence` are withheld, so the sheet never hands a masked character's real portrait, gallery looks, friend flag or home to a stranger (#4889). The strip
 labels each look by its mood and numbers a repeat ("Furious 2"); the owner clicking one
 calls `POST /api/roster/entries/{pk}/set_profile_picture/`, and the owner's **Add** tile
 opens the Add a look flow (pick or upload a picture, crop it). There is no instruction
-line on the plate. `viewer_is_friend` (owner, staff, or the owner's allow list) decides
+line on the plate. `viewer_is_friend` (owner, staff, or the owner's allow list, and only where the real face shows) decides
 whether the Gallery veils NSFW pictures. `plate_ink` (`PlateInk`: ember / verdigris / rose / night) is OOC chrome, ungated,
 and picked in settings rather than on the sheet.
 

@@ -388,7 +388,7 @@ def scene_cast_list(scene: Scene) -> list[CastListEntry]:
                 name=character.db_key,
                 roster_entry_id=entry.pk,
                 persona_id=persona.pk if persona is not None else None,
-                thumbnail_url=persona.thumbnail_url if persona is not None else "",
+                thumbnail_url=persona_face_url(persona) if persona is not None else "",
                 played_by=player.shown.name,
                 played_by_role=player.shown.role,
                 loan_id=player.loan.pk if player.loan is not None else None,

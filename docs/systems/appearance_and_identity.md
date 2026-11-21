@@ -121,7 +121,7 @@ artist changes persona with an *identical* body; a curse changes the body and
   `faces/` Cloudinary folder (no player or character number in its URL, no gallery owner, no
   media id in any payload) and counts against the player's storage; `persona_face_url` (poses,
   combat and battle rows, the persona list) and `resolve_thumbnail` (room state, the sheet's
-  persona entries) both end in `placeholder_portrait_url()` for a face that hides the real one
+  persona entries; it skips a PRIMARY face's own picture while an alternate self is worn) both end in `placeholder_portrait_url()` for a face that hides the real one
   and has no picture: staff's `FacePlaceholderConfig.placeholder`, else a built-in grey
   silhouette, never a letter and never the real face. A worn alternate self hides the real
   face the same way, and its picture reaches only the face presented now. The sheet payload's

@@ -81,7 +81,13 @@ def lock_player_media(player_data: PlayerData) -> None:
     query rather than ``get(pk=...)``: the identity map answers a pk ``get`` from memory
     and would never reach the database. Must be called inside ``transaction.atomic()``.
     """
-    list(PlayerData.objects.select_for_update().filter(pk=player_data.pk).values_list("pk"))
+    # ``no_key``: the quota check needs the lock between uploads, not a block on the other
+    # rows that point at this player (a tenure, a journal) while a file is in flight.
+    list(
+        PlayerData.objects.select_for_update(no_key=True)
+        .filter(pk=player_data.pk)
+        .values_list("pk")
+    )
 
 
 def _require_cloudinary() -> None:

@@ -125,7 +125,8 @@ Each log entry is one combined unit (card) containing:
   GM-attributed (amber accent), system-attributed (grey, lower opacity).
   Thumbnail source: `Persona.thumbnail` FK (to `evennia_extensions.PlayerMedia`)
   takes precedence over `Persona.thumbnail_url` (legacy URLField). Fallback
-  when neither is set: initial-letter avatar with persona-name-derived color.
+  when neither is set: initial-letter avatar with persona-name-derived color for the true
+  face; a mask or alternate self shows the placeholder portrait (#4889) instead.
   Both fields already exist on the model
   (`world/scenes/models.py:193-201`); no schema change.
 - **Action chip(s)** — when the entry has linked actions: one chip per action

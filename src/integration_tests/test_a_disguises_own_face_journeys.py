@@ -25,7 +25,7 @@ from django.forms import modelform_factory
 from django.test import RequestFactory, override_settings
 from evennia.utils.ansi import strip_ansi
 
-from evennia_extensions.factories import AccountFactory, MediaFactory
+from evennia_extensions.factories import AccountFactory, MediaFactory, RoomProfileFactory
 from evennia_extensions.models import Media
 from integration_tests.harness import JourneyCase
 from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
@@ -190,6 +190,8 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
 
     def test_hobb_reads_the_mask_portrait_everywhere_and_never_her_real_face(self) -> None:
         real_url = self.give_her_a_real_look()
+        self.sheet.current_residence = RoomProfileFactory(objectdb=self.lantern)
+        self.sheet.save(update_fields=["current_residence"])
         original = self.her_picture()
         self.start_scene()
         self.assertEqual(self.pick(original).status_code, 200)
@@ -201,6 +203,11 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
 
         self.assertEqual(sheet["profile_picture"], copy_url)
         self.assertEqual(sheet["looks"], [])
+        # Her home and her friend flag are facts about the real character: withheld too.
+        self.assertIsNone(sheet["current_residence"])
+        self.assertFalse(sheet["viewer_is_friend"])
+        mine = self.ysmay_api().get(f"/api/character-sheets/{self.sheet.pk}/").json()
+        self.assertEqual(mine["current_residence"]["name"], "The Lantern")
         self.assertIn(copy_url, poses)
         # Nothing Hobb can fetch carries her real look, the original, or a media id of hers.
         everything = str((sheet, feed))
@@ -565,6 +572,13 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         self.assertEqual(sheet["profile_picture"], BUILTIN_FACE_PLACEHOLDER_URL)
         self.assertEqual(sheet["looks"], [])
         self.assertNotIn(self.real_url, str(sheet))
+        # Her true face's own picture is the real one: it is skipped while a form is worn.
+        primary = self.sheet.primary_persona
+        primary.thumbnail = MediaFactory(player_data=self.player, cloudinary_public_id="real_face")
+        primary.save(update_fields=["thumbnail"])
+        listed = self.ysmay_api().get(f"/api/personas/?character_sheet={self.sheet.pk}").json()
+        by_name = {row["name"]: row["thumbnail_media_url"] for row in listed["results"]}
+        self.assertEqual(by_name["Ysmay"], BUILTIN_FACE_PLACEHOLDER_URL)
 
         staff_art = MediaFactory(player_data=None, slug="wolf-art", cloudinary_public_id="art/wolf")
         self.bare.thumbnail = staff_art
