@@ -50,9 +50,9 @@ import { GiftFacetsField } from './gift/GiftFacetsField';
 import { GiftSelector } from './gift/GiftSelector';
 import { GlimpseSection } from './gift/GlimpseSection';
 import { MagicTrainingBlock } from './gift/MagicTrainingBlock';
-import { ResonanceWeights } from './gift/ResonanceWeights';
+import { StrengthStep } from './gift/StrengthStep';
 import { StyleStep } from './gift/StyleStep';
-import { heaviestFirst, leadResonanceId, placedPoints } from '../resonanceWeights';
+import { heaviestFirst, leadResonanceId, strengthPicksComplete } from '../resonanceWeights';
 import { hasMagicTraining, isTrainingSpent, trainingHeading } from './gift/magicTraining';
 import { TechniqueSelector } from './gift/TechniqueSelector';
 import { TraditionStep } from './gift/TraditionStep';
@@ -221,8 +221,9 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
     tradition: draft.selected_tradition != null,
     gift: giftId != null,
     techniques: selectedTechniqueIds.length > 0,
-    // The step is done only when every creation point is placed (#5123).
-    resonance: resonanceWeights.length > 0 && placedPoints(resonanceWeights) === creationPoints,
+    // The step is done only when the picks obey the rule: one feeling, at most one second
+    // pick, every creation point placed (#5231). A draft saved under the old rule is not.
+    resonance: strengthPicksComplete(resonanceWeights, resonances, creationPoints),
     anima: draftData.anima_check_stat_id != null && draftData.anima_check_skill_id != null,
   };
 
@@ -246,9 +247,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const leadResonanceName = resonances.find(
     (r) => r.id === leadResonanceId(resonanceWeights)
   )?.name;
-  // A spread saved part-way has picked a resonance; it still has points to place (#5123).
-  const resonanceGate =
-    resonanceWeights.length > 0 ? 'Place all your points first' : 'Choose a resonance first';
+  const resonanceGate = 'Choose a resonance first';
   const techniqueCountLine = `${selectedTechniqueIds.length} of ${picks} chosen`;
 
   // Magical training (#4659) is its own step after the Resonance: its fit bonuses count
@@ -444,10 +443,11 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           gateReason="Choose your techniques first"
           open={completion.techniques && !completion.resonance}
         >
-          <ResonanceWeights
+          <StrengthStep
             resonances={resonances}
             weights={resonanceWeights}
             budget={creationPoints}
+            copy={copy}
             onChange={handleResonanceWeights}
           />
         </FunnelStep>
