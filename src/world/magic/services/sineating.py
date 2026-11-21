@@ -438,8 +438,9 @@ def _sineating_skill_terms() -> Any:
 def _grant(sheet: CharacterSheet, resonance: Resonance, amount: int) -> int:
     """Grant ``amount`` of ``resonance`` under SINEATING; 0 grants nothing.
 
-    Returns the amount the ledger row recorded, which is ``amount`` scaled by the character's
-    earn rate (#5181), so the result lines and the audit row report what was really earned.
+    Returns the amount the ledger row recorded, which is ``amount`` scaled by the earn
+    rate of the resonance's own affinity (#5231), so the result lines and the audit row report
+    what was really earned.
     """
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 

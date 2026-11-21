@@ -218,7 +218,8 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
                 worship_rite_performance=performance,
                 ledger_out=ledger,
             )
-            # What the ledger recorded: the award scaled by the character's earn rate (#5181).
+            # What the ledger recorded: the award scaled by the earn rate of the resonance's
+            # affinity (#5231).
             resonance_amount = ledger[-1].amount
             if resonance_amount != performance.resonance_granted:
                 performance.resonance_granted = resonance_amount

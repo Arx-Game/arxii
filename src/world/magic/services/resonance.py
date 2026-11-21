@@ -137,7 +137,7 @@ def grant_resonance(  # noqa: PLR0913
     it is written; authored/system sources (including DISTINCTION itself)
     are never accelerated. After that, unless ``source`` is in
     ``AFFINITY_RATE_EXEMPT_SOURCES``, ``amount`` is scaled by the earn rate of the
-    character's main affinity (#5181), to at least 1. The ``ResonanceGrant`` row records the
+    resonance's own affinity (#5231), to at least 1. The ``ResonanceGrant`` row records the
     scaled amount.
 
     Args:

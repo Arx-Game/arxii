@@ -39,10 +39,10 @@ class RitualBond:
     """What an Anima ritual with a partner did beyond restoring anima (#5181).
 
     ``resonance`` is the resonance the ritual names (None when it names none, and then nothing
-    else here is set). ``resonance_granted`` is what the ledger recorded after the earn rate
-    (0 when the roll earned nothing). ``partner_fatigue_setting`` is the sign of the affinity's
-    ``ritual_partner_fatigue`` (1 takes, -1 eases, 0 does nothing); ``fatigue_change`` is the
-    fatigue the partner actually gained (positive) or lost (negative).
+    else here is set). ``resonance_granted`` is what the ledger recorded after the earn rate of
+    the resonance's own affinity (0 when the roll earned nothing). ``partner_fatigue_setting``
+    is the sign of the affinity's ``ritual_partner_fatigue`` (1 takes, -1 eases, 0 does nothing);
+    ``fatigue_change`` is the fatigue the partner actually gained (positive) or lost (negative).
     """
 
     resonance: Resonance | None = None
