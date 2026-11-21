@@ -23,6 +23,7 @@ from world.conditions.factories import ConditionTemplateFactory
 from world.magic.constants import GainSource
 from world.magic.factories import (
     CharacterResonanceFactory,
+    DramaticMomentTagFactory,
     DramaticMomentTypeFactory,
     KindledDeedAwardFactory,
     KindledStrengthTierFactory,
@@ -177,6 +178,22 @@ class TheEndingPaysByTheResult(StandoffEndingBase):
         self.assertEqual(self.earned(), 0)
         self.assertFalse(self.deeds().exists())
         self.assertFalse(DramaticMomentTag.objects.exists())
+        self.assertNoCredit()
+
+
+class ASpentCapPaysNothingFromTheTable(StandoffEndingBase):
+    def test_a_moment_the_scene_already_paid_her_is_not_paid_again(self) -> None:
+        self.witness()
+        # A GM's hand-tag of the same moment type in this scene spent its per-scene cap.
+        DramaticMomentTagFactory(
+            moment_type=StandoffEndingAward.objects.get(outcome_tier=self.success).moment_type,
+            character_sheet=self.sheet,
+            scene=self.encounter.scene,
+        )
+        self.say(self.success)
+        self.assertEqual(self.encounter.standoff_groups.get().state, StandoffGroupState.SETTLED)
+        self.assertEqual(self.earned(), 0)
+        self.assertFalse(self.deeds().exists())
         self.assertNoCredit()
 
 
