@@ -144,6 +144,27 @@ class WhatEachResultDoesTests(InterventionTestBase):
         self.assertEqual(result.cost.favor_owed, 8)
         self.assertEqual((self._standing().favor, self._standing().owed_favor), (75, 8))
 
+    def _room_text(self, outcome_name: str) -> str:
+        with patch("world.worship.intervention_services.route_intervention_text") as route:
+            self._fire(outcome_name)
+        return route.call_args.args[1]
+
+    def test_the_room_reads_a_lesser_answers_text_and_the_condition_it_put_on(self) -> None:
+        text = self._room_text("Partial Success")
+
+        self.assertTrue(text.startswith("[A breath of respite]"), text)
+        self.assertIn("Respite", text)
+        # Never the roll, the difficulty or anyone's favor.
+        self.assertNotIn("Difficulty", text)
+        self.assertNotIn("favor", text.lower())
+
+    def test_the_room_reads_a_backfires_text_and_the_condition_it_put_on(self) -> None:
+        text = self._room_text("Critical Failure")
+
+        self.assertTrue(text.startswith("[The god turns away]"), text)
+        self.assertIn("Brand of Silence", text)
+        self.assertNotIn("Difficulty", text)
+
     def test_a_failure_is_unanswered_and_costs_only_the_wait(self) -> None:
         result = self._fire("Failure")
 

@@ -350,6 +350,15 @@ def _charge(  # noqa: PLR0913 - the cost's context is keyword data
     return InterventionCost(favor_spent=spend, favor_owed=debt, wait_hours=wait)
 
 
+def _room_text(drawn: Consequence, effects: tuple[str, ...]) -> str:
+    """What the room reads of a lesser answer or backfire: its authored text, then the visible
+    effects (a condition appearing). Never the roll, the difficulty or anyone's favor."""
+    text = _text_of(drawn)
+    if not effects:
+        return text
+    return f"{text} ({'; '.join(effects)})".strip()
+
+
 def _gm_context(
     *,
     result_outcome: CheckOutcome,
@@ -523,7 +532,7 @@ def _intervene(  # noqa: PLR0913 - the roll's whole context, keyword-only
     if drawn is not None and performance is None and level != SIGN_LEVEL:
         route_intervention_text(
             praying if level <= BOTCH_SUCCESS_LEVEL_MAX else target,
-            _text_of(drawn),
+            _room_text(drawn, effects),
             scene,
             context_text=_gm_context(
                 result_outcome=outcome,
