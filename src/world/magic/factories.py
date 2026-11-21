@@ -347,11 +347,21 @@ def primal_resonance(**kwargs: object) -> Resonance:
     """A Resonance on the canonical Primal affinity (test data only, #5231).
 
     Character creation takes one Primal feeling, so a creation test that needs a valid
-    ``gift_resonance_weights`` pick builds its resonance here.
+    ``gift_resonance_weights`` pick builds its resonance here. ``ResonanceFactory`` gets
+    or creates by name and drops ``affinity`` when the name already exists, so a name held
+    under another affinity raises here instead of coming back as a non-Primal row.
     """
     from world.magic.constants import AFFINITY_PRIMAL
 
-    return ResonanceFactory(affinity=AffinityFactory(name=AFFINITY_PRIMAL), **kwargs)
+    primal = AffinityFactory(name=AFFINITY_PRIMAL)
+    resonance = ResonanceFactory(affinity=primal, **kwargs)
+    if resonance.affinity_id != primal.pk:
+        msg = (
+            f"Resonance {resonance.name!r} already exists under another affinity, "
+            "so it is not a Primal resonance."
+        )
+        raise ValueError(msg)
+    return resonance
 
 
 class ResonanceTierFactory(factory.django.DjangoModelFactory):

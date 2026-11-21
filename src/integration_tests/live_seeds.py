@@ -56,6 +56,7 @@ def seed_motif_facet_spec(*, username: str) -> MotifFacetSeed:
     )
     from world.character_creation.models import CharacterDraft  # noqa: PLC0415
     from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
+    from world.magic.constants import AFFINITY_PRIMAL  # noqa: PLC0415
     from world.magic.factories import (  # noqa: PLC0415
         CharacterResonanceFactory,
         FacetFactory,
@@ -75,6 +76,11 @@ def seed_motif_facet_spec(*, username: str) -> MotifFacetSeed:
     resonance = Resonance.objects.filter(name=FACET_SPEC_RESONANCE).first()
     if resonance is None:
         resonance = primal_resonance(name=FACET_SPEC_RESONANCE)
+    elif resonance.affinity.name != AFFINITY_PRIMAL:
+        # The spec's character takes this as her one Primal feeling: a row of that name under
+        # another affinity would silently fail every creation check that reads it.
+        msg = f"Resonance {FACET_SPEC_RESONANCE!r} exists under {resonance.affinity.name}."
+        raise ValueError(msg)
     for name in FACET_SPEC_FACETS:
         if not Facet.objects.filter(name=name).exists():
             FacetFactory(name=name)
