@@ -14,7 +14,7 @@ Tests run in a **two-tier model**: a fast SQLite in-memory inner loop and a Post
 
 Prefer big **E2E user-journey integration tests** over many fine-grained unit tests. A single telnet-driven journey test that drives command → action → service → DB end-to-end is worth more than a dozen unit tests of individual layers. Don't create marginal unit tests that duplicate what the E2E already covers — they add maintenance cost without adding safety, and will be retired when E2E coverage matures anyway.
 
-Write focused unit tests only when logic is genuinely fiddly and wouldn't be observable from the E2E happy path: e.g. a parsing helper with multiple lookup branches, error-path exception mapping, or a pure-function edge case. When in doubt, skip the unit test and let the integration test carry the weight.
+A unit test is written in one case only: as the evidence of a bug fix (ADR-4248; the next section). A rule a journey cannot reach, such as a pure function's arithmetic or a parser's branches, gets a Hypothesis property in `integration_tests/fuzz/`, with its statement taken from a spec, a docstring or a ruling and never from what the code returns.
 
 **The harness is `integration_tests.harness.JourneyCase`** (#3657): `telnet()` types a line through the real command handler (never build a `Cmd` and call `.func()` by hand; that skips cmdset membership and `parse`, which is how #4352's unparsed switches stayed green), `web()` dispatches a registry action, `api()` is a signed-in REST client, `assertTold()` reads what a character was told. Journeys are PostgreSQL-only; the fuzz layer (`integration_tests/fuzz/`, Hypothesis) and the ledger rubric are in `docs/testing/README.md`.
 
@@ -25,8 +25,17 @@ Write focused unit tests only when logic is genuinely fiddly and wouldn't be obs
 1. Write the regression test and run it with the unfixed implementation. Record the code revision, test command, and failure output. Check that the failure demonstrates the reported behavior.
 2. Apply the fix. Run the same test unchanged with the same command and relevant environment. Record the fixed revision and passing output.
 3. Include both results in the PR or handoff, with log links when available. Keep sensitive data out of shared logs and excerpts.
+4. Mark the test `@tag("regression")` (from `django.test`) and begin its docstring with `Regression for #<issue>.` The test stays after the fix merges. A mutation run counts what it catches with the kept tests and never grades it for removal.
 
 If the fix already exists, apply only the test to an isolated checkout of the unfixed revision and record that run. For a PostgreSQL-only regression, capture test-only and fixed runs in the parity CI tier. If the unfixed code passes or fails for an unrelated reason, investigate the reproduction and report the gap. A passing run alone establishes coverage of the tested behavior and leaves the fix unverified.
+
+## Mutation runs (`just mutate`)
+
+`just mutate <source-file> --kept <labels> --units <labels>` shows, for each small change to one file, whether the kept tests, only the unit tests, or no test notices (`docs/testing/README.md`, "Mutation run"). It is the evidence for removing a unit test and the way to find what a property misses.
+
+- Locally it runs on the SQLite tier, one run at a time. Narrow it with `--functions` or `--lines`; it refuses a run it estimates above `--max-minutes` (60 by default).
+- A run changes the source file on disk and restores it at the end, on Ctrl-C too. Do not commit, push or run other tests in that worktree while it runs: a git hook that stashes the changed file spoils a result.
+- A run that needs journeys goes through the hand-started `Mutation run` workflow, one function per run: `gh workflow run mutation.yml -f source_file=... -f functions=... -f kept="..." -f units="..."`. It takes 30 to 100 minutes, so it is never a required check and never runs per push.
 
 ## Two-tier model: SQLite for the inner loop, Postgres for parity
 
@@ -82,6 +91,9 @@ just test <args>
 
 # Full-suite parity gate (CI runs this; not run locally):
 just regression                          # echo "yes" | arx test
+
+# Which test group notices each small change to one file (hand-run, never a gate):
+just mutate <file> --functions <name> --kept <labels> --units <labels>   # which test group notices each change
 ```
 
 ```bash
