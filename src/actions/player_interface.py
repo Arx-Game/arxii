@@ -810,13 +810,19 @@ def _combat_actions(
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
                 eligible_fury_resonances=eligible_fury_resonances,
-                cast_resonance_options=tuple(
-                    cast_resonance_options(
-                        character,
-                        technique,
-                        sheet=sheet,
-                        kindling=kindling,
-                        alt_resonance=alt_resonance,
+                # A Strike names no resonance, so a technique that enchants one is always worked
+                # in the default resonance and offers no options (#5231).
+                cast_resonance_options=(
+                    ()
+                    if technique.enchants_strike
+                    else tuple(
+                        cast_resonance_options(
+                            character,
+                            technique,
+                            sheet=sheet,
+                            kindling=kindling,
+                            alt_resonance=alt_resonance,
+                        )
                     )
                 ),
                 is_ultimate=technique.is_ultimate,

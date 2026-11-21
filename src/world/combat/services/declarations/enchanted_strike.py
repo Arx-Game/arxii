@@ -433,7 +433,6 @@ def resolve_enchanted_strike(
     from world.combat.services.techniques.technique_targets import (  # noqa: PLC0415
         _build_affected_targets,
         _resolve_primary_target_sheet,
-        stored_cast_resonance,
     )
     from world.magic.services import use_technique  # noqa: PLC0415
     from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
@@ -457,9 +456,10 @@ def resolve_enchanted_strike(
         finish_strike(participant, action, outcome, weapon, target, landing)
         return outcome
 
-    # The resonance she picked at declaration (#5231), when the Gift's thread still holds it;
-    # a pick it has lost is dropped to the default and never refuses the blow.
-    chosen_resonance = stored_cast_resonance(participant, action)
+    # A Strike names no resonance (#5231): an enchanted Strike is always worked in the default
+    # one, the Gift thread's leading resonance or a worn alternate self's. The cast carries that
+    # resonance so the effect's resonance-scoped targets follow it, and use_technique is given
+    # none to prefer.
     cast = EnchantedStrikeCast(
         participant=participant,
         action=action,
@@ -468,12 +468,11 @@ def resolve_enchanted_strike(
         strike_check_type=check_type,
         cast_check=cast_check,
         display_name=display_name,
-        cast_resonance=cast_resonance_for(character, technique, chosen_resonance),
+        cast_resonance=cast_resonance_for(character, technique),
     )
     use = use_technique(
         character=character,
         technique=technique,
-        preferred_resonance=chosen_resonance,
         resolve_fn=cast,
         confirm_soulfray_risk=action.confirm_soulfray_risk,
         strain_commitment=action.strain_commitment,
