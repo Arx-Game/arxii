@@ -396,7 +396,8 @@ test.describe('what gives a character strength', () => {
       await expect(card(outwards(page), name), `${name} is offered`).toBeVisible();
     }
     const slider = step.locator('input[type="range"]');
-    await expect(outwards(page).getByRole('button')).toHaveCount(8);
+    // No count of the cards: the database is shared with the other specs' seeds, which may add
+    // resonances of their own. Each named one is offered above.
     await expect(outwards(page).locator('[aria-pressed="true"]')).toHaveCount(0);
     await expect(slider).toBeDisabled();
     // She chose a side and has not picked from it yet: the step does not tell her there is
@@ -505,7 +506,6 @@ test.describe('what gives a character strength', () => {
       'aria-pressed',
       'true'
     );
-    await expect(outwards(page).getByRole('button')).toHaveCount(8);
     for (const name of CELESTIAL_EIGHT) {
       await expect(card(outwards(page), name), `${name} is offered`).toBeVisible();
     }
