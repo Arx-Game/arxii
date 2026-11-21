@@ -54,6 +54,7 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
  */
 
 const ACCOUNT = 'e2e_strength_account';
+const FIGHT_ACCOUNT = 'e2e_strength_fight_account';
 const PASSWORD = 'TestPass123!';
 /** A vivid colour set through admin; the plate must draw it and not the default grey. */
 const ADMIN_COLOUR = '#D4421E';
@@ -74,6 +75,24 @@ interface Seed {
   kindled_name: string;
   usual_row_id: number;
   kindled_row_id: number;
+  abyssal_affinity_id: number;
+  kindling_config_id: number;
+  corruption_config_id: number;
+  drift_config_id: number;
+  staff_username: string;
+  staff_password: string;
+}
+
+/** What `seed_strength_fight_spec` wrote for the fight test. */
+interface FightSeed {
+  character_id: number;
+  character_name: string;
+  encounter_id: number;
+  participant_id: number;
+  opponent_name: string;
+  technique_name: string;
+  usual_name: string;
+  kindled_name: string;
   staff_username: string;
   staff_password: string;
 }
@@ -84,6 +103,16 @@ interface Draft {
 }
 
 const PRIMAL_EIGHT = ['Arderi', 'Sereni', 'Audax', 'Medita', 'Fera', 'Civitas', 'Firma', 'Vola'];
+const CELESTIAL_EIGHT = [
+  'Bene',
+  'Liberare',
+  'Fidelis',
+  'Misera',
+  'Fortis',
+  'Honoris',
+  'Verax',
+  'Copperi',
+];
 const ABYSSAL_EIGHT = [
   'Praedari',
   'Dominari',
@@ -108,6 +137,12 @@ function readSeed(): Seed {
   ) as Seed;
 }
 
+function readFightSeed(): FightSeed {
+  return JSON.parse(
+    readFileSync(process.env.STRENGTH_FIGHT_SEED ?? '/tmp/strength-fight-seed.json', 'utf8')
+  ) as FightSeed;
+}
+
 const SHOT_DIR = join(process.cwd(), '..', 'docs', 'reviews', '5231');
 
 /** A screenshot of `target`, kept only when EVIDENCE_SHOTS is set (CI writes none). */
@@ -115,6 +150,13 @@ async function shot(target: Locator, name: string) {
   if (!process.env.EVIDENCE_SHOTS) return;
   mkdirSync(SHOT_DIR, { recursive: true });
   await target.screenshot({ path: join(SHOT_DIR, name) });
+}
+
+/** A screenshot of the visible part of `page`, kept only when EVIDENCE_SHOTS is set. */
+async function shotPage(page: Page, name: string) {
+  if (!process.env.EVIDENCE_SHOTS) return;
+  mkdirSync(SHOT_DIR, { recursive: true });
+  await page.screenshot({ path: join(SHOT_DIR, name) });
 }
 
 async function logIn(page: Page, username: string, password: string) {
@@ -263,6 +305,24 @@ test.describe('what gives a character strength', () => {
     const grey = await plate(page);
     expect(grey.n).toBeGreaterThan(1000);
     expect(grey.spread, `a grey plate, saw ${JSON.stringify(grey)}`).toBeLessThan(25);
+    // The step's own paragraph rules reach the page, past `.entry-prose p`: a question has
+    // 1.5rem above it and 0.2rem below, the intro 0.6rem below, at the page's root font size.
+    const rootPx = await page.evaluate(() =>
+      parseFloat(getComputedStyle(document.documentElement).fontSize)
+    );
+    const margins = await step
+      .locator('.strength-ask')
+      .first()
+      .evaluate((element) => ({
+        top: parseFloat(getComputedStyle(element).marginTop),
+        bottom: parseFloat(getComputedStyle(element).marginBottom),
+      }));
+    expect(margins.top).toBeCloseTo(1.5 * rootPx, 1);
+    expect(margins.bottom).toBeCloseTo(0.2 * rootPx, 1);
+    const introBottom = await step
+      .locator('.strength-intro')
+      .evaluate((element) => parseFloat(getComputedStyle(element).marginBottom));
+    expect(introBottom).toBeCloseTo(0.6 * rootPx, 1);
     await shot(step, 'built-screen1-empty.png');
 
     // A8, first form: nothing picked at all is refused in the player's words, in the API and
@@ -297,6 +357,18 @@ test.describe('what gives a character strength', () => {
     }
     await expect(step.locator('.strength-skipped')).toHaveCount(0);
     await shot(step, 'built-screen1-first-pick-step-open.png');
+    // The frame around the step: the funnel entry "Your Resonance", open, with its heading and
+    // its place in the funnel, and the step inside it.
+    const frame = page
+      .locator('ul[aria-label="Gift steps"] > li')
+      .filter({ has: page.locator('.entry-name', { hasText: 'Your Resonance' }) });
+    await expect(frame.locator('details.entry')).toHaveAttribute('open', '');
+    await expect(frame.locator('.entry-name')).toHaveText('Your Resonance');
+    await expect(frame.locator('.entry-tag')).toContainText('Step 4 of 5');
+    await expect(frame.locator('.strength-step')).toBeVisible();
+    await shot(frame, 'built-stage-frame.png');
+    await frame.scrollIntoViewIfNeeded();
+    await shotPage(page, 'built-stage-leaf.png');
     await expect(feelings(page).locator('[aria-pressed="true"]')).toHaveCount(1);
     saved = draftSaved(page);
     await audax.click();
@@ -399,6 +471,56 @@ test.describe('what gives a character strength', () => {
     await expect(step.locator('.strength-named')).toContainText('Abyssal');
     await shot(step, 'built-screen2-balance-5-5.png');
 
+    // The second resonance holds more points than the feeling: 2 and 8. The main side is
+    // Abyssal, the sentence says most strength comes from what she does to others, and the
+    // plate is mostly the dark mass, which keeps its lit rim.
+    saved = draftSaved(page);
+    await step.locator('input[type="range"]').fill('8');
+    expect((await saved).status()).toBe(200);
+    await expect(step.locator('.strength-pts')).toHaveText(
+      `${seed.feeling_name} 2 · ${seed.outward_name} 8`
+    );
+    await expect(step.locator('.strength-named')).toHaveText('Abyssal, with a Primal side');
+    await expect(step.locator('.strength-said')).toHaveText(
+      'Most of your strength comes from what you do to others.'
+    );
+    const darkMass = await plate(page);
+    expect(
+      darkMass.darkShare,
+      `a mostly dark mass, saw ${JSON.stringify(darkMass)}`
+    ).toBeGreaterThan(0.5);
+    await expect(step.locator('[data-layer="rim"]')).toBeVisible();
+    const rimOpacity = await step
+      .locator('[data-layer="rim"]')
+      .evaluate((element) => parseFloat(getComputedStyle(element).opacity));
+    expect(rimOpacity, 'the dark mass keeps a lit rim').toBeGreaterThan(0);
+    await shot(step, 'built-screen2-abyssal-main.png');
+
+    // "Helping them" swaps the side: the Abyssal pick is let go in one write, the eight
+    // Celestial resonances show with none pressed, and her pick of one makes 7 and 3.
+    saved = draftSaved(page);
+    await step.getByRole('button', { name: 'Helping them', exact: true }).click();
+    expect((await saved).status()).toBe(200);
+    await expect(step.getByRole('button', { name: 'Helping them', exact: true })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await expect(outwards(page).getByRole('button')).toHaveCount(8);
+    for (const name of CELESTIAL_EIGHT) {
+      await expect(card(outwards(page), name), `${name} is offered`).toBeVisible();
+    }
+    await expect(outwards(page).locator('[aria-pressed="true"]')).toHaveCount(0);
+    await expect(step.locator('input[type="range"]')).toBeDisabled();
+    saved = draftSaved(page);
+    await card(outwards(page), 'Bene').click();
+    expect((await saved).status()).toBe(200);
+    await expect(step.locator('.strength-pts')).toHaveText(`${seed.feeling_name} 7 · Bene 3`);
+    await expect(step.locator('.strength-named')).toHaveText('Primal, with a Celestial side');
+    await expect(step.locator('.strength-said')).toHaveText(
+      'Most of your strength comes from what you feel.'
+    );
+    await shot(step, 'built-screen2-celestial-side.png');
+
     // A5: "neither" drops the second pick and gives all ten points to the feeling.
     saved = draftSaved(page);
     await step.getByRole('button', { name: 'Neither', exact: true }).click();
@@ -409,6 +531,10 @@ test.describe('what gives a character strength', () => {
     await expect(step.locator('.strength-skipped')).toContainText(
       'All 10 points go to the feeling'
     );
+    const skippedTop = await step
+      .locator('.strength-skipped')
+      .evaluate((element) => parseFloat(getComputedStyle(element).marginTop));
+    expect(skippedTop).toBeCloseTo(0.6 * rootPx, 1);
     const only = (await savedDraft(page, seed)).draft_data.gift_resonance_weights ?? [];
     expect(only).toHaveLength(1);
     expect(only[0].weight).toBe(10);
@@ -484,6 +610,7 @@ test.describe('what gives a character strength', () => {
     ).toBeGreaterThan(after.g + 40);
     expect(after.r).toBeGreaterThan(after.b + 60);
     expect(after.spread).toBeGreaterThan(60);
+    await shot(step.locator('.strength-plate'), 'built-screen2-plate-admin-colour.png');
   });
 
   test('casting: the picker, a cast worked in the usual resonance and one in the kindled one', async ({
@@ -556,6 +683,9 @@ test.describe('what gives a character strength', () => {
         .getByTestId('cast-resonance-picker')
         .getByRole('button', { name: new RegExp(seed.kindled_name) })
     ).toHaveAttribute('aria-pressed', 'true');
+    await expect(rows.nth(0)).toHaveAttribute('aria-pressed', 'false');
+    await expect(rows.nth(1)).toHaveAttribute('aria-pressed', 'true');
+    await shot(list, 'built-screen4-picker-kindled-pressed.png');
     await page.getByRole('button', { name: new RegExp(`^Cast ${seed.technique_name}`) }).click();
     const abyssalResult = page.getByTestId('cast-ledger-result');
     await expect(abyssalResult).toBeVisible({ timeout: 20000 });
@@ -604,5 +734,194 @@ test.describe('what gives a character strength', () => {
     });
     expect(abyssalTotal).toBeGreaterThan(primalTotal);
     expect(abyssalTotal - primalTotal).toBe(9);
+  });
+  test('staff fields: the other five numbers are on their admin forms with the values the seed set', async ({
+    browser,
+  }) => {
+    const seed = readSeed();
+    const staff = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const admin = await staff.newPage();
+    await logIn(admin, seed.staff_username, seed.staff_password);
+
+    /** Scroll a field to the middle of the window, so the picture shows it with its form. */
+    const show = async (field: Locator) => {
+      await field.evaluate((element) => element.scrollIntoView({ block: 'center' }));
+      await expect(field).toBeInViewport();
+    };
+
+    // The Abyssal affinity's kindled boost, a percentage.
+    await admin.goto(`/admin/arxii/affinity/${seed.abyssal_affinity_id}/change/`);
+    const boost = admin.locator('#id_kindled_boost_percent');
+    await expect(boost).toHaveValue('150');
+    await show(boost);
+    await shotPage(admin, 'built-admin-affinity-kindled-boost.png');
+
+    // The strength row called Blazing, in the kindling configuration: its cast power.
+    await admin.goto(`/admin/arxii/kindlingconfig/${seed.kindling_config_id}/change/`);
+    const rowNames = await admin
+      .locator('input[name$="-name"]')
+      .evaluateAll((inputs) =>
+        inputs.map((input) => [input.getAttribute('name'), (input as HTMLInputElement).value])
+      );
+    const blazing = rowNames.find(([, value]) => value === 'Blazing');
+    expect(blazing, 'the Blazing strength row is on the page').toBeTruthy();
+    const prefix = (blazing as string[])[0].replace(/-name$/, '');
+    const castPower = admin.locator(`[name="${prefix}-cast_power"]`);
+    await expect(castPower).toHaveValue('6');
+    await show(castPower);
+    await shotPage(admin, 'built-admin-kindled-cast-power.png');
+
+    // The corruption configuration: the light part and where the full part starts.
+    await admin.goto(`/admin/arxii/corruptionconfig/${seed.corruption_config_id}/change/`);
+    const light = admin.locator('#id_light_corruption_percent');
+    const full = admin.locator('#id_full_corruption_from_share');
+    await expect(light).toHaveValue('10');
+    await expect(full).toHaveValue('50');
+    await show(light);
+    await expect(full).toBeInViewport();
+    await shotPage(admin, 'built-admin-corruption-config.png');
+
+    // The drift configuration: the own-side range.
+    await admin.goto(`/admin/arxii/driftconfig/${seed.drift_config_id}/change/`);
+    const ownSide = admin.locator('#id_own_side_tolerance_percent');
+    await expect(ownSide).toHaveValue('15');
+    await show(ownSide);
+    await shotPage(admin, 'built-admin-drift-config.png');
+    await staff.close();
+  });
+
+  test('reduced motion: the aura holds still under it and moves without it', async ({
+    browser,
+  }) => {
+    const seed = readSeed();
+
+    /** The plate's drawn pixels reduced to one number, so two looks can be compared. */
+    const sample = (page: Page) =>
+      page.locator('.strength-aura canvas').evaluate((canvas: HTMLCanvasElement) => {
+        const context = canvas.getContext('2d') as CanvasRenderingContext2D;
+        const { data } = context.getImageData(0, 0, canvas.width, canvas.height);
+        let hash = 0;
+        for (let i = 0; i < data.length; i += 1) hash = (hash * 31 + data[i]) | 0;
+        return hash;
+      });
+
+    const look = async (reducedMotion: 'reduce' | 'no-preference') => {
+      const context = await browser.newContext({
+        viewport: { width: 1280, height: 900 },
+        reducedMotion,
+      });
+      const page = await context.newPage();
+      await logIn(page, ACCOUNT, PASSWORD);
+      // Two picks, so the mass has two colours to swirl.
+      const listed = await page.request.get('/api/magic/resonances/');
+      const ids = new Map(
+        ((await listed.json()) as { id: number; name: string }[]).map((row) => [row.name, row.id])
+      );
+      const saved = await page.request.patch(`/api/character-creation/drafts/${seed.draft_id}/`, {
+        headers: { 'X-CSRFToken': await csrfToken(page) },
+        data: {
+          draft_data: {
+            gift_resonance_weights: [
+              { resonance_id: ids.get(seed.feeling_name), weight: 7 },
+              { resonance_id: ids.get(seed.outward_name), weight: 3 },
+            ],
+          },
+        },
+      });
+      expect(saved.ok(), await saved.text()).toBe(true);
+      await page.goto('/characters/create');
+      await openFinishedStep(page, `${seed.feeling_name}, ${seed.outward_name}`);
+      await expect(page.locator('.strength-aura canvas')).toBeVisible();
+      await page.waitForTimeout(500);
+      const first = await sample(page);
+      await page.waitForTimeout(1000);
+      const second = await sample(page);
+      await context.close();
+      return { first, second };
+    };
+
+    const still = await look('reduce');
+    test.info().annotations.push({
+      type: 'reduced motion, two samples a second apart',
+      description: `${still.first} and ${still.second}`,
+    });
+    expect(still.second).toBe(still.first);
+
+    const moving = await look('no-preference');
+    test.info().annotations.push({
+      type: 'no preference, two samples a second apart',
+      description: `${moving.first} and ${moving.second}`,
+    });
+    expect(moving.second).not.toBe(moving.first);
+  });
+
+  test('the fight: the picker offers both resonances and the declared action keeps the pick', async ({
+    page,
+    browser,
+  }) => {
+    const seed = readFightSeed();
+    await logIn(page, FIGHT_ACCOUNT, PASSWORD);
+    await page.goto('/game');
+    await page
+      .locator(
+        `button[title="Connect as ${seed.character_name}"], ` +
+          `button[title="Switch to ${seed.character_name}"], ` +
+          `button[title="${seed.character_name}"], button:has-text("${seed.character_name}")`
+      )
+      .first()
+      .click();
+    await page
+      .getByRole('navigation', { name: 'Sidebar modes' })
+      .getByRole('button', { name: 'Combat', exact: true })
+      .click({ timeout: 30000 });
+
+    // Her turn: choose the technique as her cast.
+    const turn = page.getByTestId('your-turn-section');
+    await expect(turn).toBeVisible({ timeout: 30000 });
+    // The technique is listed in the focused card first, then in each passive slot.
+    await turn.getByRole('button', { name: seed.technique_name }).first().click();
+    const target = turn.getByTestId('combatant-target-picker');
+    if (await target.isVisible()) {
+      await target.getByRole('button', { name: new RegExp(seed.opponent_name) }).click();
+    }
+
+    // The picker lists her usual resonance and the kindled Abyssal one, marked stronger.
+    const picker = turn.getByTestId('cast-resonance-picker');
+    await expect(picker).toBeVisible({ timeout: 15000 });
+    const rows = picker.getByRole('button');
+    await expect(rows).toHaveCount(2);
+    await expect(rows.nth(0)).toContainText(seed.usual_name);
+    await expect(rows.nth(0)).toContainText('your usual');
+    await expect(rows.nth(0)).not.toContainText('Stronger');
+    await expect(rows.nth(1)).toContainText(seed.kindled_name);
+    await expect(rows.nth(1)).toContainText('Kindled');
+    await expect(rows.nth(1)).toContainText('Stronger here than');
+
+    // Press the Abyssal one and declare.
+    await rows.nth(1).click();
+    await expect(rows.nth(1)).toHaveAttribute('aria-pressed', 'true');
+    await expect(rows.nth(0)).toHaveAttribute('aria-pressed', 'false');
+    await shot(picker, 'built-screen4-fight-picker.png');
+    await picker.scrollIntoViewIfNeeded();
+    await shotPage(page, 'built-screen4-fight-panel.png');
+    const declared = page.waitForResponse(
+      (r) => r.url().includes('/dispatch/') && r.request().method() === 'POST'
+    );
+    await turn.getByTestId('submit-declarations-btn').click();
+    expect((await declared).status()).toBe(200);
+
+    // Her declared action holds that resonance: staff read it from the action's admin page.
+    const staff = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+    const admin = await staff.newPage();
+    await logIn(admin, seed.staff_username, seed.staff_password);
+    await admin.goto(
+      `/admin/arxii/combatroundaction/?participant__id__exact=${seed.participant_id}`
+    );
+    await admin.locator('#result_list tbody tr th a').first().click();
+    // The admin page labels a resonance with its affinity: "Praedari (Abyssal)".
+    await expect(admin.locator('#id_cast_resonance option[selected]')).toHaveText(
+      new RegExp(`^${seed.kindled_name}\\b`)
+    );
+    await staff.close();
   });
 });

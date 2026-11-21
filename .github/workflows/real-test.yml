@@ -279,6 +279,23 @@ jobs:
           open('/tmp/strength-seed.json', 'w').write(json.dumps(dataclasses.asdict(strength_seed)))
           print({k: v for k, v in dataclasses.asdict(strength_seed).items() if k != 'staff_password'})
           "
+      - name: Seed the strength spec's fight caster
+        # #5231: the strength spec's fight test signs in as its own account,
+        # e2e_strength_fight_account, whose caster Corin Vale stands in a fight with her
+        # round open, so the scene caster's corruption numbers are never touched. Its ids go
+        # to the JSON file the spec reads (STRENGTH_FIGHT_SEED in
+        # frontend/e2e/strength-and-cast-resonance.spec.ts). It runs after the scene
+        # caster's seed, which writes the shared resonances.
+        run: |
+          uv run arx manage shell -c "
+          import dataclasses, json
+          from world.seeds.test_account import seed_test_account
+          print(seed_test_account(username='e2e_strength_fight_account', email='e2e_strength_fight@example.com', password='TestPass123!'))
+          from integration_tests.live_seeds import seed_strength_fight_spec
+          fight_seed = seed_strength_fight_spec(username='e2e_strength_fight_account')
+          open('/tmp/strength-fight-seed.json', 'w').write(json.dumps(dataclasses.asdict(fight_seed)))
+          print({k: v for k, v in dataclasses.asdict(fight_seed).items() if k != 'staff_password'})
+          "
       - name: Run the live-server Playwright specs
         working-directory: frontend
         # The only specs that talk to :4001 are these (the rest mock the API
