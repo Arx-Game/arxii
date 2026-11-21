@@ -3671,7 +3671,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="technique-training-check-type",
             label="Technique Training check type",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/technique_training.py:69 resolve_training_check()",
+            consumer="world/magic/services/technique_training.py resolve_training_check()",
             consequence=(
                 "Training a technique crashes with CheckType.DoesNotExist instead "
                 "of rolling the Technique Training check."

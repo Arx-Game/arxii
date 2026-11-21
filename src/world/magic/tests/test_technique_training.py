@@ -304,6 +304,20 @@ class ResolveTrainingCheckTest(TestCase):
 
         self.assertLess(academy["target_difficulty"], self_study["target_difficulty"])
 
+    def test_a_self_study_roll_also_carries_the_techniques_style_skill(self):
+        """Kept as a unit test: the Academy journey only covers the Academy path."""
+        steel = self._style_skill("Steelwork")
+        progress = TechniqueProgress.objects.create(
+            character_sheet=self.sheet,
+            technique=self._technique_in_style(steel),
+            total_required=50,
+            source="gift_acquisition",
+        )
+
+        rolled = self._roll_calls(progress)
+
+        self.assertEqual([term.trait.pk for term in rolled["extra_traits"]], [steel.pk])
+
     def _style_skill(self, name: str):
         from world.skills.factories import MagicSkillFactory
 
