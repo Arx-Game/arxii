@@ -2236,12 +2236,15 @@
   margin: 0 0 0.4rem;
   text-wrap: balance;
 }
-.interview .strength-intro {
+/* The intro, the questions and the skipped line are paragraphs inside the entry's prose, so
+   they are written under .strength-step to outrank `.interview .entry-prose p` (margin 0 0 1rem),
+   which would otherwise put every question flush under the block above it. */
+.interview .strength-step .strength-intro {
   margin: 0 0 0.6rem;
   font-style: italic;
   color: var(--cg-text-soft);
 }
-.interview .strength-ask {
+.interview .strength-step .strength-ask {
   font-family: 'Cinzel', serif;
   font-weight: 600;
   font-size: 0.82rem;
@@ -2384,7 +2387,7 @@
   font-variant-numeric: tabular-nums;
   color: var(--cg-text-soft);
 }
-.interview .strength-skipped {
+.interview .strength-step .strength-skipped {
   margin: 0.6rem 0 0;
   font-style: italic;
   color: var(--cg-text-soft);
