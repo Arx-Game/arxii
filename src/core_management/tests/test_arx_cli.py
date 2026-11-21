@@ -212,6 +212,10 @@ class TestEnvBackupRoundTrip(unittest.TestCase):
 class TestCleanupVerdict(unittest.TestCase):
     """`arx start` kills only this checkout's server and portal, never a neighbour's.
 
+    A unit test is the right layer: this is developer tooling with no player path, so no
+    journey seam reaches it, and the decision is one pure function over a process's
+    command line, working directory and interpreter path.
+
     Parallel agents each work in a worktree under ``<main>/.claude/worktrees/`` and share
     one machine; the start-up cleanup used to SIGKILL every process whose command line
     mentioned evennia, which ended other agents' test runs with no result (#5240).
@@ -252,11 +256,18 @@ class TestCleanupVerdict(unittest.TestCase):
         verdict = _cleanup_verdict(self._process(self.WORKTREE, "portal.py"), self.WORKTREE)
         self.assertTrue(verdict.kill)
 
-    def test_own_server_is_killed_when_only_the_interpreter_names_the_checkout(self) -> None:
+    def test_own_server_is_killed_when_only_the_interpreter_can_be_read(self) -> None:
         from cli.arx import _cleanup_verdict
 
-        proc = self._process(self.WORKTREE, cwd=Path("/"))
+        proc = self._process(self.WORKTREE, cwd=None)
         self.assertTrue(_cleanup_verdict(proc, self.WORKTREE).kill)
+
+    def test_a_process_whose_cwd_and_interpreter_disagree_is_left_alone(self) -> None:
+        """A worktree's server run on the main checkout's venv is not the main checkout's."""
+        from cli.arx import _cleanup_verdict
+
+        proc = self._process(self.WORKTREE, interpreter=self.MAIN / ".venv" / "bin" / "python")
+        self.assertFalse(_cleanup_verdict(proc, self.MAIN).kill)
 
     def test_another_worktrees_server_is_left_alone(self) -> None:
         from cli.arx import _cleanup_verdict
@@ -341,6 +352,33 @@ class TestCleanupVerdict(unittest.TestCase):
         self.assertIsNone(info.interpreter)
         self.assertEqual(info.state, "")
         self.assertEqual(info.ancestor_cmdlines, ())
+
+    @unittest.skipUnless(Path("/proc/self/stat").exists(), "needs a Linux /proc")
+    def test_a_live_process_is_described_from_the_real_proc_entries(self) -> None:
+        """A real child, launched through a symlink the way a venv's python is."""
+        import shutil
+        import subprocess
+        import tempfile
+
+        from cli.arx import _describe_process
+
+        workdir = Path(tempfile.mkdtemp()).resolve()
+        launcher = workdir / "venv" / "bin" / "sleep"
+        launcher.parent.mkdir(parents=True)
+        launcher.symlink_to(shutil.which("sleep"))
+        child = subprocess.Popen([str(launcher), "30"], cwd=workdir)
+        try:
+            info = _describe_process({"pid": child.pid, "cmdline": "sleep 30"})
+        finally:
+            child.kill()
+            child.wait()
+            shutil.rmtree(workdir)
+
+        self.assertEqual(info.cwd, workdir)
+        self.assertEqual(info.interpreter, launcher, "the symlink is kept, not resolved")
+        self.assertIn(info.state, {"S", "R"})
+        self.assertTrue(info.ancestor_cmdlines, "the test process is the child's parent")
+        self.assertEqual(info.cmdline, f"{launcher} 30")
 
     def test_test_run_pattern_ignores_paths_that_merely_contain_the_words(self) -> None:
         from cli.arx import _is_test_run

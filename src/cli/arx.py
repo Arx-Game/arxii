@@ -479,8 +479,12 @@ def _cleanup_verdict(proc: _ProcessInfo, checkout_root: Path) -> _CleanupVerdict
 
     The cleanup exists to remove this checkout's own stale server and portal after a
     crash. It leaves test runs, dead processes and anything from another checkout alone.
-    Where neither the working directory nor the interpreter can be read, the checkout
-    cannot be told and the process is treated as stale, as it was before.
+    The working directory names the checkout when it can be read, because a server's
+    working directory is its checkout's ``src``; the launched interpreter path
+    (``<checkout>/.venv/bin/python``) names it only when the working directory cannot be
+    read, so a process whose two paths disagree is never taken for this checkout's.
+    Where neither can be read, the checkout cannot be told and the process is treated
+    as stale, as it was before.
     """
     if proc.state == _ZOMBIE_STATE or _DEFUNCT_MARKER in proc.cmdline:
         return _CleanupVerdict(False, "already dead (defunct)")
@@ -488,13 +492,11 @@ def _cleanup_verdict(proc: _ProcessInfo, checkout_root: Path) -> _CleanupVerdict
         return _CleanupVerdict(False, "a test run")
     if any(_is_test_run(parent) for parent in proc.ancestor_cmdlines):
         return _CleanupVerdict(False, "started by a test run")
-    if proc.cwd is None and proc.interpreter is None:
+    where = proc.cwd if proc.cwd is not None else proc.interpreter
+    if where is None:
         return _CleanupVerdict(True, "checkout unknown, treated as stale")
-    if _inside_checkout(proc.cwd, checkout_root) or _inside_checkout(
-        proc.interpreter, checkout_root
-    ):
+    if _inside_checkout(where, checkout_root):
         return _CleanupVerdict(True, "belongs to this checkout")
-    where = proc.cwd or proc.interpreter
     return _CleanupVerdict(False, f"belongs to another checkout ({where})")
 
 
@@ -545,7 +547,11 @@ def _interpreter_path(argv: list[str], cwd: Path | None) -> Path | None:
 
 
 def _ancestor_cmdlines(pid: int) -> tuple[str, ...]:
-    """Return the command lines of a process's parents, nearest first."""
+    """Return the command lines of a process's parents, nearest first.
+
+    A daemonized server is reparented to init, so this only protects processes that
+    still have a living parent, such as the workers a test run forks.
+    """
     found: list[str] = []
     stat = _read_proc_stat(pid)
     for _ in range(_MAX_ANCESTOR_DEPTH):
@@ -562,12 +568,14 @@ def _describe_process(proc: dict) -> _ProcessInfo:
     pid = proc["pid"]
     stat = _read_proc_stat(pid)
     cwd = _read_proc_cwd(pid)
+    argv = _read_proc_argv(pid)
     return _ProcessInfo(
         pid=pid,
-        cmdline=proc["cmdline"],
+        # /proc holds the whole argument vector; ps and wmic text may be cut short.
+        cmdline=" ".join(argv) or proc["cmdline"],
         state=stat[0] if stat else "",
         cwd=cwd,
-        interpreter=_interpreter_path(_read_proc_argv(pid), cwd),
+        interpreter=_interpreter_path(argv, cwd),
         ancestor_cmdlines=_ancestor_cmdlines(pid),
     )
 
