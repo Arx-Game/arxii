@@ -377,6 +377,7 @@ class TestCleanupVerdict(unittest.TestCase):
         import shutil
         import subprocess
         import tempfile
+        import time
 
         from cli.arx import _describe_process
 
@@ -386,8 +387,13 @@ class TestCleanupVerdict(unittest.TestCase):
         launcher.symlink_to(shutil.which("sleep"))
         child = subprocess.Popen([str(launcher), "30"], cwd=workdir)
         try:
-            if not Path(f"/proc/{child.pid}/cmdline").read_bytes():
-                self.skipTest("this runner does not expose a child's /proc/<pid>/cmdline")
+            # The child's argv appears only once its exec has finished, so poll for it
+            # rather than reading it straight after Popen returns.
+            deadline = time.monotonic() + 2.0
+            while not Path(f"/proc/{child.pid}/cmdline").read_bytes():
+                if time.monotonic() > deadline:
+                    self.fail("the child's /proc/<pid>/cmdline stayed empty for two seconds")
+                time.sleep(0.02)
             info = _describe_process({"pid": child.pid, "cmdline": "sleep 30"})
         finally:
             child.kill()
