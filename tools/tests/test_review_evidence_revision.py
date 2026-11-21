@@ -271,3 +271,101 @@ def test_mixed_migration_clean_merge_and_evidence_cleanup(repo: Path):
     sh(repo, "merge", "--no-ff", "-qm", "merge main", "main")
     head = sh(repo, "rev-parse", "HEAD").strip()
     assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def anchored_commit(repo: Path, files: dict[str, str], message: str = "edit") -> tuple[str, str]:
+    """Return (anchor, head) where head is one commit that writes `files` on top of anchor."""
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    for name, text in files.items():
+        target = repo / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+    commit(repo, message)
+    return anchor, sh(repo, "rev-parse", "HEAD").strip()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/integration_tests/test_new_journeys.py",
+        "src/integration_tests/live_seeds.py",
+        "src/world/magic/tests/test_views.py",
+        "tools/tests/test_something.py",
+        "frontend/e2e/strength.spec.ts",
+        "frontend/src/magic/Card.test.tsx",
+        "frontend/src/magic/hooks.test.ts",
+        "frontend/src/magic/__tests__/fixtures.ts",
+        "frontend/src/test/setup.ts",
+    ],
+)
+def test_test_only_commit_is_carried(repo: Path, path: str):
+    anchor, head = anchored_commit(repo, {path: "changed\n"})
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/systems/magic.md",
+        "docs/adr/adr-1-x.md",
+        "README.md",
+        "src/world/magic/CLAUDE.md",
+        ".github/workflows/ci.yml",
+        ".github/CODEOWNERS",
+    ],
+)
+def test_docs_and_workflow_only_commit_is_carried(repo: Path, path: str):
+    anchor, head = anchored_commit(repo, {path: "changed\n"})
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def test_commit_touching_a_test_and_a_source_file_is_refused(repo: Path):
+    anchor, head = anchored_commit(
+        repo,
+        {"src/world/magic/tests/test_views.py": "t\n", "src/world/magic/views.py": "s\n"},
+    )
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/world/seeds/seed_things.py",
+        "src/world/contests/models.py",
+        "src/world/magic/factories.py",
+        "src/conftest.py",
+        "src/world/magic/mytests/helpers.py",
+        "src/world/magic/test_helpers_not_in_a_tests_dir.py",
+        "frontend/src/magic/Card.tsx",
+        "frontend/src/magic/Card.test.tsx.bak",
+        "frontend/src/magic/contest/Card.tsx",
+        "frontend/public/readme.txt",
+        "tests/outside_src.py",
+        "src/evennia_extensions/tests",
+    ],
+)
+def test_application_files_that_only_resemble_tests_are_refused(repo: Path, path: str):
+    anchor, head = anchored_commit(repo, {path: "changed\n"})
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_deleting_an_application_file_is_refused(repo: Path):
+    anchor, _ = anchored_commit(repo, {"src/world/magic/views.py": "s\n"}, "add view")
+    (repo / "src/world/magic/views.py").unlink()
+    commit(repo, "delete view")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_moving_a_source_file_into_a_tests_directory_is_refused(repo: Path):
+    anchor, _ = anchored_commit(repo, {"src/world/magic/views.py": "same content\n" * 20}, "add")
+    sh(repo, "mv", "src/world/magic/views.py", "src/world/magic/tests_views_moved.py")
+    (repo / "src/world/magic/tests").mkdir(parents=True)
+    sh(repo, "mv", "src/world/magic/tests_views_moved.py", "src/world/magic/tests/test_views.py")
+    commit(repo, "move source into tests")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
