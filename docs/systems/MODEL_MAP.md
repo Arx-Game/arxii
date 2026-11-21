@@ -2032,6 +2032,7 @@
 - `can_staff_edit_sheet(user: 'AbstractBaseUser | AnonymousUser', sheet: 'CharacterSheet') -> 'bool' - Whether this account may edit this sheet in place (#3988). Staff only.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `ensure_true_profile(sheet: 'CharacterSheet') -> 'Profile' - The sheet's true profile, created empty if an older character has none (#3988).`
+- `heritages_not_yet_appeared(ic_moment: 'datetime') -> 'list[str]' - Names of heritages whose first appearance is later than ``ic_moment`` (#5248).`
 - `rename_character(sheet: 'CharacterSheet', name: 'str') -> 'None' - Rename a character: its key and its primary persona's name together (#3988).`
 - `restore_profile_text_version(version: 'ProfileTextVersion', *, edited_by: 'Any') -> 'ProfileTextVersion' - Write a past version's text back as the current text (#3988).`
 - `set_physical_description(sheet: 'CharacterSheet', text: 'str', *, edited_by: 'Any | None' = None) -> 'ProfileTextVersion' - THE seam for setting a character's free-text physical description (#2632).`
@@ -4418,8 +4419,10 @@
 - `respond_to_invitation(invitation: world.events.models.EventInvitation, persona: world.scenes.models.Persona, *, response: str) -> world.events.models.EventInvitation - Record an invitee's RSVP (ACCEPTED / DECLINED) on a PERSONA invitation.`
 - `schedule_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from DRAFT to SCHEDULED.`
 - `set_room_description_overlay(event: world.events.models.Event, overlay_text: str) -> world.events.models.EventModification - Set or update the room description overlay for an event.`
+- `shift_upcoming_events(plan: world.game_clock.jump.JumpPlan, delta: datetime.timedelta) -> int - Plan moving every upcoming event's IC time by ``delta``; return how many (#5248).`
 - `start_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from SCHEDULED to ACTIVE and create a linked Scene.`
 - `tag_catered_provision(item_instance: 'ItemInstance', container_instance: 'ItemInstance', contributor: 'ObjectDB | None' = None) -> world.events.models.EventCatering | None - Tag a consumable set out in a catering vessel (#2869).`
+- `upcoming_events() -> django.db.models.query.QuerySet - Events that have not begun and whose real start is still ahead.`
 - `validate_location_gap(location_id: int, scheduled_real_time: datetime.datetime, exclude_event_id: int | None = None) -> bool - Check that no other event at this location is within LOCATION_GAP_HOURS.`
 
 
@@ -4693,8 +4696,9 @@
 - `moon_phase_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.MoonPhase - Derive the lunar phase from a concrete IC datetime (8 centered bins).`
 - `pause_clock(*, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock - Pause the game clock, freezing IC time at its current value.`
 - `phase_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.TimePhase - Derive the time-of-day phase from a concrete IC datetime.`
+- `preview_clock_jump(new_ic_time: datetime.datetime) -> world.game_clock.types.ClockJumpPreview - What ``set_clock(new_ic_time=...)`` would do, without writing anything (#5248).`
 - `season_from_ic_time(ic_now: datetime.datetime) -> world.game_clock.constants.Season - Derive the IC season from a concrete IC datetime.`
-- `set_clock(*, new_ic_time: datetime.datetime, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock - Set the game clock IC time, creating it if it doesn't exist.`
+- `set_clock(*, new_ic_time: datetime.datetime, changed_by: evennia.accounts.models.AccountDB, age_handling: world.game_clock.constants.AgeHandling, reason: str = '') -> world.game_clock.models.GameClock - Set the game clock IC time, creating it if it doesn't exist.`
 - `set_time_ratio(*, ratio: float, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock - Change the time ratio, re-anchoring IC time to preserve continuity.`
 - `unpause_clock(*, changed_by: evennia.accounts.models.AccountDB, reason: str = '') -> world.game_clock.models.GameClock - Unpause the game clock, resuming IC time from where it was paused.`
 

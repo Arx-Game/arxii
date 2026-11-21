@@ -5972,6 +5972,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/clock/adjust-preview/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET /adjust-preview/ — staff: what setting this date would do; writes nothing. */
+    get: operations['clock_adjust_preview_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/clock/convert/': {
     parameters: {
       query?: never;
@@ -5981,6 +5998,23 @@ export interface paths {
     };
     /** @description GET /convert/ — convert between IC and real dates. */
     get: operations['clock_convert_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/clock/history/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Staff: the recorded changes to the clock, newest first (#5248). */
+    get: operations['clock_history_list'];
     put?: never;
     post?: never;
     delete?: never;
@@ -28609,6 +28643,12 @@ export interface components {
       label: string;
       description: string;
     };
+    /**
+     * @description * `aged` - Characters age
+     *     * `kept` - Characters keep their ages
+     * @enum {string}
+     */
+    AgeHandlingEnum: 'aged' | 'kept';
     /** @description Read-only serializer for AggregateBeatContribution ledger rows. */
     AggregateBeatContribution: {
       readonly id: number;
@@ -32025,7 +32065,23 @@ export interface components {
       /** Format: date-time */
       ic_datetime: string;
       reason: string;
+      /**
+       * @description Whether characters age with the calendar or keep their ages (#5248). A change to an earlier date must keep them.
+       *
+       *     * `aged` - Characters age
+       *     * `kept` - Characters keep their ages
+       */
+      age_handling: components['schemas']['AgeHandlingEnum'];
     };
+    /**
+     * @description * `paused` - Paused
+     *     * `resumed` - Resumed
+     *     * `speed` - Speed changed
+     *     * `date_aged` - Date set, characters aged
+     *     * `date_kept` - Date set, characters kept their ages
+     * @enum {string}
+     */
+    ClockChangeEnum: 'paused' | 'resumed' | 'speed' | 'date_aged' | 'date_kept';
     /** @description Response serializer for date conversion results. */
     ClockConvertResponse: {
       /** Format: date-time */
@@ -32037,6 +32093,59 @@ export interface components {
     ClockDetail: {
       detail: string;
     };
+    /** @description One recorded change to the clock, for the staff page's Recent changes list. */
+    ClockHistory: {
+      readonly id: number;
+      /**
+       * Format: date-time
+       * @description When the change was made.
+       */
+      readonly changed_at: string;
+      /** @default  */
+      readonly changed_by_name: string;
+      /**
+       * @description The kind of change (#5248). The anchors and ratios alone cannot tell a pause from a change of date. Blank on rows written before the kind was recorded.
+       *
+       *     * `paused` - Paused
+       *     * `resumed` - Resumed
+       *     * `speed` - Speed changed
+       *     * `date_aged` - Date set, characters aged
+       *     * `date_kept` - Date set, characters kept their ages
+       */
+      readonly change: components['schemas']['ClockChangeEnum'];
+      /** Format: date-time */
+      readonly new_anchor_ic_time: string;
+      readonly new_date_display: string;
+      /** Format: double */
+      readonly old_time_ratio: number;
+      /** Format: double */
+      readonly new_time_ratio: number;
+      /** @description Years added to every character's birth year by this change, so their ages stayed as they were. Zero unless the date was set with ages kept. Subtract it to undo the change by hand. */
+      readonly birth_year_shift: number;
+      readonly reason: string;
+    };
+    /** @description What setting the clock to a date would do, before anything is written. */
+    ClockJumpPreview: {
+      /** Format: date-time */
+      current_ic_time: string;
+      /** @description The current IC date in full, for the sentence the dialog shows. */
+      current_date_display: string;
+      /** Format: date-time */
+      new_ic_time: string;
+      direction: components['schemas']['ClockJumpPreviewDirectionEnum'];
+      /** @description Calendar years between the dates: what birth years move by if ages are kept. */
+      year_shift: number;
+      characters_with_birth_year: number;
+      upcoming_events: number;
+      heritages_not_yet_appeared: string[];
+    };
+    /**
+     * @description * `forward` - Forward
+     *     * `back` - Back
+     *     * `none` - No change
+     * @enum {string}
+     */
+    ClockJumpPreviewDirectionEnum: 'forward' | 'back' | 'none';
     /** @description Request serializer for staff time-ratio change. */
     ClockRatioRequest: {
       /** Format: double */
@@ -32061,6 +32170,17 @@ export interface components {
       /** Format: double */
       light_level: number;
       paused: boolean;
+      /**
+       * Format: double
+       * @description IC seconds per real second.
+       */
+      time_ratio: number;
+      /** @description The twelve IC month names in order, for a date picker. */
+      month_names: string[];
+      /** @description The earliest year the clock may be set to. */
+      min_year: number;
+      /** @description The latest year the clock may be set to. */
+      max_year: number;
     };
     /**
      * @description Staff CRUD for clue-reveal-kind offer details (#3428).
@@ -42610,6 +42730,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['CheckType'][];
+    };
+    PaginatedClockHistoryList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['ClockHistory'][];
     };
     PaginatedClueRevealOfferDetailsList: {
       /** @example 123 */
@@ -64307,6 +64442,27 @@ export interface operations {
       };
     };
   };
+  clock_adjust_preview_retrieve: {
+    parameters: {
+      query: {
+        ic_datetime: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ClockJumpPreview'];
+        };
+      };
+    };
+  };
   clock_convert_retrieve: {
     parameters: {
       query?: {
@@ -64325,6 +64481,40 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ClockConvertResponse'];
+        };
+      };
+    };
+  };
+  clock_history_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description The kind of change (#5248). The anchors and ratios alone cannot tell a pause from a change of date. Blank on rows written before the kind was recorded.
+         *
+         *     * `paused` - Paused
+         *     * `resumed` - Resumed
+         *     * `speed` - Speed changed
+         *     * `date_aged` - Date set, characters aged
+         *     * `date_kept` - Date set, characters kept their ages
+         */
+        change?: 'date_aged' | 'date_kept' | 'paused' | 'resumed' | 'speed';
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedClockHistoryList'];
         };
       };
     };

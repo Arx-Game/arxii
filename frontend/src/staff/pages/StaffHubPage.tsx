@@ -2,6 +2,8 @@ import { Link } from 'react-router-dom';
 
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ClockStatePill } from '@/staff/clock/GameClockPage';
+import { useStaffClock } from '@/staff/clock/queries';
 import {
   useOpenSubmissionCount,
   usePendingApplicationCount,
@@ -12,6 +14,7 @@ export function StaffHubPage() {
   const { data: pendingAppCount } = usePendingApplicationCount();
   const { data: openInboxCount } = useOpenSubmissionCount();
   const { data: pendingRosterAppCount } = usePendingRosterApplicationCount();
+  const { data: clock } = useStaffClock();
 
   return (
     <div className="container mx-auto max-w-4xl px-4 py-8">
@@ -189,6 +192,22 @@ export function StaffHubPage() {
               <p className="text-sm text-muted-foreground">
                 The realms, their ladders of titles, the houses that hold them and the people in
                 them; plant a rung, publish a house, define a family.
+              </p>
+            </CardContent>
+          </Card>
+        </Link>
+
+        <Link to="/staff/clock">
+          <Card className="cursor-pointer transition-colors hover:bg-muted/50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                Game clock
+                {clock ? <ClockStatePill paused={clock.paused} /> : null}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                {clock ? clock.date_display : 'The date, the speed, pause and resume.'}
               </p>
             </CardContent>
           </Card>
