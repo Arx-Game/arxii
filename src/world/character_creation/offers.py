@@ -476,7 +476,8 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         # A card the draft holds unlocks the line (#4846); unpicking the card hides it
         # again, and ``reconcile_offer_picks`` drops whatever it had opened.
         return offer.unlocked_by_id is not None and offer.unlocked_by_id in ctx["held_ids"]
-    return False
+    # Identity (#5255): the chapter is its own opener, so every active line shows.
+    return chapter == OfferChapter.IDENTITY
 
 
 def _context(draft: CharacterDraft) -> dict:
@@ -486,7 +487,11 @@ def _context(draft: CharacterDraft) -> dict:
     """
     answers = DraftAnswers.from_draft(draft)
     visible = visible_slot_ids(draft)
-    enemy = draft.draft_data.get("enemy") or {}
+    from world.character_creation.enemies import enemy_answer  # noqa: PLC0415
+
+    # Empty unless a held card asks for an enemy (#5255), so a reason or a degree saved
+    # before its card was let go opens nothing.
+    enemy = enemy_answer(draft)
     return {
         "tag_ids": set(draft.draft_data.get("glimpse_tag_ids", [])),
         "choice_ids": {cid for sid, cid in answers.picks.items() if sid in visible},
@@ -831,6 +836,9 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
     for field in ("glimpse_tag", "schooling_line", "beat", "unlocked_by"):
         if getattr(offer, f"{field}_id"):
             return getattr(offer, field).name
+    # An Identity line has no opener row (#5255): the stage itself is where it came from.
+    if offer.chapter == OfferChapter.IDENTITY:
+        return OfferChapter.IDENTITY.label
     return ""
 
 

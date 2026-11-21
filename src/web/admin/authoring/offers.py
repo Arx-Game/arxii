@@ -17,10 +17,14 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 from django import forms
+from django.db import transaction
 
 from web.admin.authoring.copy import price_text
-from world.character_creation.constants import OfferChapter
+from web.admin.authoring.credit import stamp_written
+from world.character_creation.constants import OfferArrival, OfferChapter
 from world.character_creation.models import DistinctionOffer
+from world.contributors.models import ContentContributor
+from world.distinctions.models import Distinction
 
 #: Chapters in declared, player-facing order (the demo's own worked example:
 #: Gift/tradition step, Gift/Glimpse, Lineage, Appearance, Identity) - the
@@ -93,3 +97,48 @@ def preview_from_offers(offers: Iterable[DistinctionOffer]) -> PreviewLine | Non
         name=offer.name or offer.distinction.name,
         player_line=offer.player_line,
     )
+
+
+def offer_on_identity(
+    distinctions: Iterable[Distinction], contributor: ContentContributor | None
+) -> tuple[list[DistinctionOffer], list[Distinction]]:
+    """Place each card on the Identity stage, and say which already were (#5255).
+
+    The Identity chapter takes no opener, so placing a card there is one offer line with
+    nothing else to choose; this is the many-at-once form of adding that row on the
+    Distinction Builder, for the Distinction list's "Offer on the Identity stage" action.
+    A card with an Identity line already, active or switched off, is left as it is and
+    returned in the second list. New lines are taken by choice, sorted after the lines
+    already there in the order given, and credited to ``contributor`` when there is one.
+    """
+    cards = list(distinctions)
+    placed = set(
+        DistinctionOffer.objects.filter(
+            chapter=OfferChapter.IDENTITY, distinction__in=cards
+        ).values_list("distinction_id", flat=True)
+    )
+    last = (
+        DistinctionOffer.objects.filter(chapter=OfferChapter.IDENTITY)
+        .order_by("-sort_order")
+        .values_list("sort_order", flat=True)
+        .first()
+    )
+    next_order = 0 if last is None else last + 1
+    created: list[DistinctionOffer] = []
+    already: list[Distinction] = []
+    with transaction.atomic():
+        for card in cards:
+            if card.pk in placed:
+                already.append(card)
+                continue
+            offer = DistinctionOffer.objects.create(
+                distinction=card,
+                chapter=OfferChapter.IDENTITY,
+                arrives_as=OfferArrival.CHOICE,
+                sort_order=next_order,
+            )
+            next_order += 1
+            if contributor is not None:
+                stamp_written(offer, contributor)
+            created.append(offer)
+    return created, already

@@ -400,6 +400,8 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",
     "identity_quote_heading": "Quote",
+    # The cards picked on Identity (#5255): the block's heading, between quote and worship.
+    "identity_personality_heading": "Personality",
     "identity_worship_heading": "Worship",
     # The Actor's Sheet (#3621): the three questions and their example lines, the
     # reviewer's own wording. The set is fixed in code (ACTOR_SHEET_QUESTIONS); the
@@ -430,7 +432,8 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "so a goal can be named in play. Add more, and change these, from your sheet as "
         "the character goes on."
     ),  # PLACEHOLDER: Apostate rewrite
-    "finaltouches_enemy_heading": "Who wants you to fail",
+    # The enemy section is headed by the card that asks for it (#5255), so it has no
+    # heading key of its own; "finaltouches_enemy_heading" is retired and not read.
     "finaltouches_enemy_intro": (
         "A person or a group. Offered from your Lineage and your Beginning, or write your "
         "own. The price is what the world owes you for carrying them, and the worst of "

@@ -459,6 +459,38 @@ class BeatOpenerTest(PasteTestCase):
         assert (offer.beat, offer.group) == (self.youth_moments, "Rivals")
 
 
+class IdentityOpenerTest(PasteTestCase):
+    """``identity`` places a card on the Identity stage, which needs no opener (#5255)."""
+
+    def test_an_identity_token_names_no_row_and_may_carry_a_heading(self):
+        (row,) = parse_table(LAP + "identity")
+        assert row.status == "create", row.notes
+        (spec,) = row.offers
+        assert (spec.chapter, spec.arrives_as, spec.opener_field, spec.group) == (
+            OfferChapter.IDENTITY,
+            OfferArrival.CHOICE,
+            "",
+            "",
+        )
+        (headed,) = parse_table(LAP + "identity:Temperament")
+        assert headed.offers[0].group == "Temperament"
+        (long,) = parse_table(LAP + "identity:" + "x" * 61)
+        assert long.status == "error"
+
+    def test_create_makes_the_identity_line_with_its_heading_and_credit(self):
+        self.client.force_login(self.author)
+        text = LAP + "identity:Temperament"
+        digest = table_digest(parse_table(text))
+        resp = self.client.post(self.url, {"text": text, "action": "create", "digest": digest})
+        assert resp.status_code == 302
+        card = Distinction.objects.get(slug="the-lap-of-luxury")
+        offer = DistinctionOffer.objects.get(distinction=card)
+        assert (offer.chapter, offer.group) == (OfferChapter.IDENTITY, "Temperament")
+        assert offer.set_openers == []
+        assert offer.written_by == self.writer
+        offer.full_clean()
+
+
 class PasteStylingTest(PasteTestCase):
     """Every class paste.html emits must have a rule reaching THIS page (#3667 shape).
 

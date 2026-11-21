@@ -1,5 +1,34 @@
 # Character Creation & Identity
 
+## Built (2026-11-21, #5255: the enemy is asked only of a card that starts with one; personality cards are picked on Identity)
+
+Owner rulings 2026-11-21 on the last writing stages. The enemy section of Final Touches is
+no longer asked of every draft ("feels like a non-sequitur that wouldn't be applicable to
+many PCs"). It shows only to a draft holding a card that starts the character with an
+enemy (`FinalTouchesPrompt.ENEMY`, set by staff on the card), under that card's name; the
+words "Who wants you to fail" are gone from the page. Without such a card a saved enemy
+pays no CG points, opens no reason or degree offer and reaches no sheet, and the answer is
+kept for the card's return. Nothing about a finished character's enemy record changed.
+
+The personality cards have a home again: the Identity stage has a Personality block
+between the quote and worship, the life page's cards two across, three at rest and the
+rest under "See N more", or every card under its heading once staff group the lines. It
+reads a new offer chapter, Identity, which takes no opener, and the Distinction Builder
+and its paste table (`identity`, `identity:<heading>`) place cards there; for cards that
+already exist, the Distinction list has an "Offer on the Identity stage" action that
+places every selected card at once. Migration `identity_chapter_and_enemy_prompt` changes
+choices and help text only. The Required content page gains a row for an Identity stage
+with no card, and its row for enemy reasons is a gap only once a card asks for an enemy.
+See ADR-5255, which supersedes ADR-0279 in part.
+
+**Owed on production:** the Personality block is empty until staff place the cards: on
+the Distinction list, filter by the Personality category, select the cards and run "Offer
+on the Identity stage". No card asks for an enemy yet, so nobody sees the enemy section
+until the owner authors one (the Distinction Builder's "Final Touches prompt" field).
+Attractive, Leal Agent and Generational Talent still have no offer line anywhere, the
+three Actor's Sheet questions and the Appearance sections still offer no card, and the
+Appearance stage has no section to put one in.
+
 ## Built (2026-11-21, #5241: Appearance in compact controls, colour swatches, ten free points of feature qualities)
 
 Owner rulings 2026-11-21 on the Appearance stage. The birthday is typed as two numbers,

@@ -124,6 +124,20 @@ class OfferModelTests(TestCase):
         assert offer.opener_key == f"unlocked:{jailbird.pk}"
         assert offer.chapter_opener_fields == ("unlocked_by",)
 
+    def test_an_identity_offer_takes_no_opener(self):
+        """#5255: the Identity chapter is its own opener; any opener field is refused."""
+        offer = DistinctionOffer(
+            distinction=DistinctionFactory(name="Indolent"),
+            chapter=OfferChapter.IDENTITY,
+            arrives_as=OfferArrival.CHOICE,
+        )
+        offer.full_clean()
+        assert offer.chapter_opener_fields == ()
+        assert offer.opener_key == ""
+        offer.prompt = "never_do"
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+
     def test_offer_name_defaults_to_distinction_name(self):
         offer = DistinctionOfferFactory(distinction=DistinctionFactory(name="Impoverished"))
         assert offer.name == "Impoverished"

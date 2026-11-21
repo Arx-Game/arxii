@@ -1725,6 +1725,23 @@ class TestCharacterCreationGapProbes(TestCase):
         )
         self.assertTrue(rc._probe_feature_distinctions().present)
 
+    def test_enemy_reasons_are_wanted_only_once_a_card_asks_for_an_enemy(self) -> None:
+        """#5255: the enemy section shows only for a card that starts with an enemy."""
+        from world.character_creation.factories import EnemyReasonFactory
+        from world.distinctions.factories import DistinctionFactory
+
+        self.assertTrue(rc._probe_enemy_reasons().present)
+        card = DistinctionFactory(name="Old Grudge", final_touches_prompt="enemy")
+        result = rc._probe_enemy_reasons()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("EnemyReason",))
+        self.assertIn("Old Grudge", result.detail)
+        EnemyReasonFactory(name="You know what they did")
+        self.assertTrue(rc._probe_enemy_reasons().present)
+        card.is_active = False
+        card.save(update_fields=["is_active"])
+        self.assertTrue(rc._probe_enemy_reasons().present)
+
     def test_the_six_are_registered_with_admin_links(self) -> None:
         keys = {dep.key: dep for dep in rc.build_registry(rc._declarations())}
         for key in (

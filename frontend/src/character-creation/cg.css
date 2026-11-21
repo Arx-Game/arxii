@@ -1123,7 +1123,8 @@
 }
 /* A Glimpse tag's description is prose, sometimes several sentences, so its cards run
    two across in the reading column, where a third of the column is too narrow to read.
-   A row is as tall as its longer card. One across on a phone. */
+   A row is as tall as its longer card. One across on a phone. The Identity stage's
+   Personality cards sit in the same column and take the same class (#5255). */
 .interview .stances.grid.pair {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }

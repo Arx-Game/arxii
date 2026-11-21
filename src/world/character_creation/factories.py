@@ -311,3 +311,25 @@ def single_resonance_weights(resonance: "Resonance") -> list[dict[str, int]]:
     from world.magic.services.drift import get_drift_config
 
     return [{"resonance_id": resonance.pk, "weight": get_drift_config().creation_points}]
+
+
+def enemy_card_entry(name: str = "A Standing Grudge") -> dict[str, object]:
+    """A draft's held entry for a new card that starts the character with an enemy (#5255).
+
+    The enemy section is asked only of a draft holding such a card
+    (``FinalTouchesPrompt.ENEMY``), so a test about the enemy puts this in
+    ``draft_data["distinctions"]``. The entry carries no ``offer_ids`` key, the shape the
+    reconcile keeps as stored.
+    """
+    from world.character_creation.constants import FinalTouchesPrompt
+    from world.distinctions.factories import DistinctionFactory
+
+    card = DistinctionFactory(
+        name=name, cost_per_rank=0, max_rank=1, final_touches_prompt=FinalTouchesPrompt.ENEMY
+    )
+    return {
+        "distinction_id": card.pk,
+        "distinction_name": card.name,
+        "rank": 1,
+        "cost": 0,
+    }

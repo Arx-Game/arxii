@@ -2807,6 +2807,35 @@ def _realms_without_nobiliary_particles() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_enemy_reasons() -> ProbeResult:
+    """Reasons exist for the enemy a card starts a character with (#3709, #5255).
+
+    Consumer: the enemy section of Final Touches, which shows only to a draft holding a
+    card that asks for an enemy (``FinalTouchesPrompt.ENEMY``). While no active card asks,
+    nobody sees the section and an empty reason list is no gap. Once a card does, the
+    section's "Why they want it" list is empty without an active ``EnemyReason``, and the
+    cards a reason opens can never be offered.
+    """
+    from world.character_creation.constants import FinalTouchesPrompt  # noqa: PLC0415
+    from world.character_creation.models import EnemyReason  # noqa: PLC0415
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+
+    asking = list(
+        Distinction.objects.filter(is_active=True, final_touches_prompt=FinalTouchesPrompt.ENEMY)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not asking:
+        return ProbeResult(present=True, detail="No card starts a character with an enemy.")
+    if EnemyReason.objects.filter(is_active=True).exists():
+        return ProbeResult(present=True)
+    return ProbeResult(
+        present=False,
+        missing=("EnemyReason",),
+        detail="Asked by: " + ", ".join(asking),
+    )
+
+
 def _probe_feature_distinctions() -> ProbeResult:
     """The three feature quality rows exist and are active (#3739, #4104, #5241).
 
@@ -4935,6 +4964,23 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="NobiliaryParticle",
         ),
         ContentDependency(
+            key="character_creation.identity_cards",
+            label="Cards offered on the Identity stage",
+            tier=DependencyTier.REQUIRED,
+            consumer="IdentityStage's Personality block (#5255): the Identity chapter's offers",
+            consequence=(
+                "The Identity stage shows no Personality block, so a personality card can "
+                "be taken nowhere in character creation. Select the cards on the "
+                'Distinction list and run "Offer on the Identity stage".'
+            ),
+            probe=FilteredRowProbe(
+                label="DistinctionOffer",
+                filters=(("chapter", "identity"), ("is_active", True)),
+                absent_detail="No active offer line is on the Identity chapter.",
+            ),
+            admin_model="Distinction",
+        ),
+        ContentDependency(
             key="character_creation.appearance_sections",
             label="Appearance section headings",
             tier=DependencyTier.REQUIRED,
@@ -4963,12 +5009,15 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="character_sheets.enemy_reasons",
             label="Enemy reasons",
             tier=DependencyTier.REQUIRED,
-            consumer="Final Touches enemy picker (#3621, #3709)",
-            consequence=(
-                "The enemy picker offers no reason, so no enemy can be priced and the "
-                "Actor's Sheet's enemy line is unreachable."
+            consumer=(
+                "Final Touches enemy section, shown to a draft holding a card that starts "
+                "the character with an enemy (#3621, #3709, #5255)"
             ),
-            probe=AnyRowProbe(label="EnemyReason"),
+            consequence=(
+                "A card asks for an enemy and the section's reason list is empty, so no "
+                "reason can be picked and no card a reason opens is ever offered."
+            ),
+            probe=CustomProbe(fn=_probe_enemy_reasons),
             admin_model="EnemyReason",
         ),
         ContentDependency(

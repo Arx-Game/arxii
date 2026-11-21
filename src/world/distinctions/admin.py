@@ -5,7 +5,7 @@ Provides administrative interfaces for managing distinction definitions,
 effects, and character distinction grants.
 """
 
-from django.contrib import admin
+from django.contrib import admin, messages
 
 from world.admin_utils import OneRowPerFormSet
 from world.codex.admin import GrantReachOnSaveMixin
@@ -89,6 +89,7 @@ class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     filter_horizontal = ["tags", "mutually_exclusive_with"]
     inlines = [DistinctionEffectInline, DistinctionCodexGrantInline]
     readonly_fields = ["get_resonance_grants"]
+    actions = ["offer_on_identity"]
 
     fieldsets = (
         (None, {"fields": ("name", "slug", "description", "category")}),
@@ -148,6 +149,32 @@ class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     @admin.display(boolean=True, description="Has Variants")
     def has_variants(self, obj):
         return obj.is_variant_parent
+
+    @admin.action(description="Offer on the Identity stage", permissions=["change"])
+    def offer_on_identity(self, request, queryset):
+        """Place the selected cards on character creation's Identity stage (#5255).
+
+        The Identity chapter takes no opener, so there is nothing to ask per card: this
+        is the many-at-once form of adding an Identity row on the Distinction Builder.
+        A card already placed there is left as it is.
+        """
+        # Imported here: web.admin.authoring imports this app's models at load.
+        from web.admin.authoring.contributors import current_contributor  # noqa: PLC0415
+        from web.admin.authoring.offers import offer_on_identity  # noqa: PLC0415
+
+        created, already = offer_on_identity(
+            queryset.order_by("name"), current_contributor(request.user)
+        )
+        if created:
+            names = ", ".join(offer.distinction.name for offer in created)
+            self.message_user(
+                request, f"Now offered on the Identity stage: {names}.", messages.SUCCESS
+            )
+        if already:
+            names = ", ".join(card.name for card in already)
+            self.message_user(
+                request, f"Already placed on the Identity stage: {names}.", messages.WARNING
+            )
 
     @admin.display(description="Resonance grants/thresholds")
     def get_resonance_grants(self, obj: Distinction) -> str:

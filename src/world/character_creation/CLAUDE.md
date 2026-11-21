@@ -47,14 +47,21 @@ Character creation is a multi-stage process that guides players through creating
    (`CharacterDraft._append_feature_allowance`); past ten they cost CG points. The draft
    API reports `feature_points_spent` and `feature_points_free`. A colour option carries
    `forms.FormTraitOption.color_hex` for the page's swatches
-9. **Identity** - Name (shown; asked on Origin), concept, quote, worship
+9. **Identity** - Name (shown; asked on Origin), concept, quote, the Personality cards
+   (#5255, ADR-5255: `OfferChapter.IDENTITY` lines, a chapter that takes no opener, so
+   every active line shows; staff place cards there on the Distinction Builder, or many
+   at once with the Distinction list's "Offer on the Identity stage" action), worship
 10. **Final Touches** - The Background (#5178, ADR-5178: one free text,
     `draft_data.background`, written to `Profile.background` word for word at finalize;
     it replaced the per-stage notes and Recent History, whose keys the draft serializer
     refuses) and the Actor's Sheet (#3621): three questions, each with the
     distinctions that answer it under it (#3709), numbered goals, one priced enemy whose
     why is picked from the authored `EnemyReason` list before the own words and whose
-    reason and degree open offers, the Officially dead door (#4396, opened by a held
+    reason and degree open offers, asked only of a draft holding a card that starts the
+    character with an enemy (#5255, ADR-5255: `FinalTouchesPrompt.ENEMY` on the card;
+    `enemies.enemy_answer` is the one read of `draft_data.enemy` and is empty without
+    such a card, so the enemy is then not priced, opens no offer and is not written),
+    the Officially dead door (#4396, opened by a held
     Presumed Dead since #4856), the card-unlocked
     chapter (#4846: `OfferChapter.FINAL_TOUCHES` lines opened by `unlocked_by`, and the
     prompt a held card asks, `Distinction.final_touches_prompt`; Jailbird's crime in

@@ -89,6 +89,7 @@ _PROMPT_WORDS = {
 }
 _KIND_DEGREE = "degree"
 _KIND_BEAT = "beat"
+_KIND_IDENTITY = "identity"
 _PRESTIGE_WORD = "prestige"
 _FIGURE_WORD = "figure"
 _EFFECT_RE = re.compile(r"^([+-])\s*(\d+)?\s*(.+)$")
@@ -109,11 +110,13 @@ class EffectSpec:
 class OfferSpec:
     chapter: str
     arrives_as: str
+    #: Blank for a chapter that is its own opener (Identity, #5255).
     opener_field: str
     opener_value: int | str
     label: str
     #: The heading a Backgrounds answer is listed under on the life page (#4872), from
-    #: the beat token's third segment; blank for none.
+    #: the beat token's third segment, or an Identity card's from ``identity:<group>``;
+    #: blank for none.
     group: str = ""
 
 
@@ -286,10 +289,23 @@ def _beat_spec(value: str, token: str) -> tuple[OfferSpec | None, str]:
     return spec, ""
 
 
+def _identity_spec(value: str, token: str) -> tuple[OfferSpec | None, str]:
+    """``identity`` or ``identity:<group>`` -> a card picked on the Identity stage (#5255).
+
+    The chapter is its own opener, so the line names no row; the optional group is the
+    heading the card is listed under there, free text like a beat's.
+    """
+    if len(value) > DistinctionOffer._meta.get_field("group").max_length:  # noqa: SLF001
+        return None, f"group {value!r} in {token!r} is too long"
+    return OfferSpec(OfferChapter.IDENTITY, OfferArrival.CHOICE, "", "", token, group=value), ""
+
+
 def _opener_spec(kind: str, value: str, token: str) -> tuple[OfferSpec | None, str]:
     """One ``offered_under`` token -> the offer line it names, or why it cannot."""
     if kind == _KIND_BEAT:
         return _beat_spec(value, token)
+    if kind == _KIND_IDENTITY:
+        return _identity_spec(value, token)
     if kind in _PROMPT_WORDS:
         prompt = _PROMPT_WORDS[kind]
         spec = OfferSpec(OfferChapter.ACTORS_SHEET, OfferArrival.CHOICE, "prompt", prompt, token)
@@ -465,7 +481,8 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
                     arrives_as=spec.arrives_as,
                     player_line=row.player_line,
                     group=spec.group,
-                    **{spec.opener_field: spec.opener_value},
+                    # An Identity line has no opener to set (#5255).
+                    **({spec.opener_field: spec.opener_value} if spec.opener_field else {}),
                 )
                 stamp_written(offer, contributor)
                 OfferFirstLook.objects.bulk_create(

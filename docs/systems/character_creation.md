@@ -66,7 +66,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675); `CreditedContent` because `own_wording` is player-facing prose | `beginning`, `tradition`, `state`, `own_wording`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
 | `SchoolingLine` | One stance under a tradition whose state opens stances (LIVING_MASTERS ranks 0-2, TEACHERS_GONE ranks 0-1, #4457) and what it grants (#3675); the Magic-skill training points it gives are its `grants` distinction's `magic_training_points` effect at its rank (#4659; the `magic_skill_floor` column was dropped) | `rank`, `name`, `player_line`, `grants` |
-| `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`, `backgrounds` and `final_touches`, #4846), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section)/`beat` (#4124)/`unlocked_by` (#4846, Final Touches: the card a draft must hold for the line to show; never the line's own distinction); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `chapter_opener_fields`, `set_openers` |
+| `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`, `backgrounds`, `final_touches` (#4846) and `identity` (#5255, which takes no opener)), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section)/`beat` (#4124)/`unlocked_by` (#4846, Final Touches: the card a draft must hold for the line to show; never the line's own distinction); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `chapter_opener_fields`, `set_openers` |
 | `EnemyReason` | Why an enemy wants the character to fail, as staff wrote it once for every enemy (#3709); the enemy chapter's opener | `name`, `player_line`, `fits` (`EnemyReasonFits`: person/group/either), `sort_order`, `is_active`, credit |
 | `AppearanceSection` | A heading Appearance groups its offers under (#3709); one of the Appearance chapter's two openers | `name`, `player_line`, `sort_order`, credit |
 | `OfferFirstLook` | One Beginning pinning one offer line into the few shown at rest (#3709); `preselected` (#4865) makes the pin part of the beginning's suggested life | `offer`, `beginning` (unique together), `preselected` |
@@ -100,8 +100,8 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
 | 7 | Attributes & Skills | All 12 primary stats present, each 10-50 in steps of 10 (`STAT_MIN_VALUE`/`STAT_MAX_VALUE`/`STAT_ALLOCATION_STEP`, checked by `validators.stat_value_error`, #5091), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). No points in a Magic skill or one of its specializations (#4457). Draft allocations are in stored units and finalization writes stats as allocated (`sheet_writers.set_stat_values`, ADR-5091), and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (#2894) |
 | 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
-| 9 | Identity | `first_name` in draft_data |
-| 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, enemy, the Officially dead door (#4396), the card-unlocked chapter (#4846) and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
+| 9 | Identity | `first_name` in draft_data; the Personality block offers the `identity` chapter's cards (#5255), all optional |
+| 10 | Final Touches | Complete when CG points are in balance (`get_purse_errors`); the Actor's Sheet, goals, the enemy (asked only of a draft holding a card that starts with one, #5255), the Officially dead door (#4396), the card-unlocked chapter (#4846) and Introductions are all optional (#3621), and the Distinctions stage is retired -- #3675, distinctions are offered per CG chapter now, see `world.character_creation.offers` |
 | 11 | Review | Never "complete" -- final submission step |
 
 ---
@@ -249,7 +249,10 @@ from world.character_creation.services import (
 from world.character_creation.enemies import (
     enemy_price,                  # CG points awarded: (kind, reach or power tier, degree) (#3621)
     enemy_offers,                 # The persons and groups a draft may name (Lineage answers + Beginning offers)
-    resolve_enemy,                # The draft's pick, priced and placed (or pending staff placement)
+    resolve_enemy,                # The draft's pick, priced and placed (or pending staff placement);
+                                  #   None while no held card asks for an enemy (#5255)
+    enemy_is_open,                # Whether a held card starts the character with an enemy (#5255)
+    enemy_answer,                 # The saved enemy while such a card is held, else {} (#5255)
     price_tables,                 # Both scales, for the leaf's ledger lines
 )
 ```
@@ -262,7 +265,18 @@ goes through this module, never the model directly. `BACKGROUNDS` (#4124) is the
 chapter a beat's answers live in; `beat_pool` / `beats_for` / `taken_beat_ids` /
 `one_of_beat_conflicts` are its beat-side readers. `FINAL_TOUCHES` (#4846) is the chapter
 a held card unlocks lines in; `held_distinction_ids` / `final_touches_prompts` are its
-readers (see "The Final Touches chapter" below).
+readers (see "The Final Touches chapter" below). `IDENTITY` (#5255, owner ruling
+2026-11-21) is the chapter the Identity stage's Personality block reads: it is its own
+opener, so a line there sets no opener field (`DistinctionOffer.chapter_opener_fields` is
+empty and `clean()` refuses any), every active line shows to every draft, and its
+`opener_label` is the chapter's own name. A line's `group` is the heading its card is
+listed under. Staff place cards there three ways: a row on the Distinction Builder, the
+paste table's `identity` or `identity:<heading>` token for a new card, and, for cards that
+already exist, the Distinction list's "Offer on the Identity stage" action
+(`web.admin.authoring.offers.offer_on_identity`: one line per selected card, a card
+already placed left as it is, the lines credited to the operator). No migration places
+them: an offer line is authored content. The Required content row
+`character_creation.identity_cards` flags a stage with no active line.
 
 ```python
 from world.character_creation.offers import (
@@ -464,7 +478,15 @@ finalize numbers them within each horizon in list order (`CharacterGoal.ordinal`
 goal with words and no points as a note to yourself, and drops an empty row. Any number of
 goals may share a domain; the domain bonus sums across them (see [goals.md](goals.md)).
 
-**Who wants you to fail.** `draft_data.enemy` is `{kind, organization_id, name, power_tier,
+**The enemy a card starts the character with (#3621; asked only of a card since #5255,
+ADR-5255).** The section shows only to a draft holding a card whose
+`Distinction.final_touches_prompt` is `FinalTouchesPrompt.ENEMY`, set by staff on the
+Distinction Builder; the leaf heads it with that card's name and reads the gate from the
+draft's `final_touches_prompts`. On the server `enemies.enemy_is_open(draft)` is the gate
+and `enemies.enemy_answer(draft)` the one read of `draft_data.enemy`: with no such card
+held it returns nothing, so the saved enemy is not priced, opens no reason or degree offer
+(`offers._context`) and is not written at finalize. The saved answer itself is kept and
+counts again when a card asks for it. `draft_data.enemy` is `{kind, organization_id, name, power_tier,
 degree, why, public_line}`. `enemy_offers(draft)` assembles what may be picked: every
 visible answered GROUP question's organization and every PERSON question's figure from the
 Lineage (`source: lineage`), plus the Beginning's `BeginningEnemyOffer` rows (`source:

@@ -117,6 +117,12 @@ interface ChapterOffersProps {
    */
   layout?: 'list' | 'grid';
   /**
+   * A grid in the reading column (#5255, the Identity stage's Personality): two cards
+   * across and one on a phone (`.stances.grid.pair`, the Glimpse's rule), where the
+   * default three across is too narrow for a description.
+   */
+  pair?: boolean;
+  /**
    * How many of this block's offers may be picked at once (#4395): an age-scaled
    * beat's allowance. At the allowance the unpicked cards read disabled; the server
    * refuses the extra pick as well. `null` or omitted is any number.
@@ -387,6 +393,7 @@ export function ChapterOffers({
   wordHeld,
   exclusive = false,
   layout = 'list',
+  pair = false,
   maxPicks = null,
   pointsPicks = false,
   groupBy,
@@ -714,7 +721,14 @@ export function ChapterOffers({
       {groups.map(([group, members]) => (
         <div key={group || '\u0000'} className="offer-group">
           {group && <div className="group-h">{`${group} (${members.length})`}</div>}
-          <ul className={cn('stances', exclusive && 'oneof', layout === 'grid' && 'grid')}>
+          <ul
+            className={cn(
+              'stances',
+              exclusive && 'oneof',
+              layout === 'grid' && 'grid',
+              pair && 'pair'
+            )}
+          >
             {group === groups[0][0] &&
               bundled.map((item) => (
                 <li key={item.offer_id}>
@@ -754,7 +768,10 @@ export function ChapterOffers({
       {folded.length > 0 && (
         <details className="more">
           <summary>{seeMore}</summary>
-          <ul className="stances">{folded.map(renderOffer)}</ul>
+          {/* A folded grid keeps its cards (#5255, the Identity stage's Personality). */}
+          <ul className={cn('stances', layout === 'grid' && 'grid', pair && 'pair')}>
+            {folded.map(renderOffer)}
+          </ul>
         </details>
       )}
       {hint && <span className="hint">{hint}</span>}

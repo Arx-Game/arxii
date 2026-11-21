@@ -168,7 +168,10 @@ class OfferChapter(models.TextChoices):
     LINEAGE = "lineage", "Lineage"
     APPEARANCE = "appearance", "Appearance"
     ACTORS_SHEET = "actors_sheet", "The actor's sheet"
-    ENEMY = "enemy", "Who wants you to fail"
+    #: The reason or the degree of the enemy a card starts the character with. The enemy
+    #: section itself shows only to a draft holding a card that asks for one
+    #: (``FinalTouchesPrompt.ENEMY``, #5255).
+    ENEMY = "enemy", "An enemy's reason or degree"
     #: #4124: the beats of a life. Every answer on a beat is one of these lines,
     #: opened by the beat and priced at the distinction's own cost.
     BACKGROUNDS = "backgrounds", "Backgrounds, a beat"
@@ -176,6 +179,10 @@ class OfferChapter(models.TextChoices):
     #: ``DistinctionOffer.unlocked_by``; the chapter shows nothing to a draft that holds
     #: no unlocking card.
     FINAL_TOUCHES = "final_touches", "Final Touches, a card"
+    #: #5255 (owner ruling 2026-11-21): the cards a player picks on the Identity stage to
+    #: say who the character is, the personality cards first. The chapter is its own
+    #: opener: a line here names no row and shows to every draft.
+    IDENTITY = "identity", "Identity"
 
 
 class FinalTouchesPrompt(models.TextChoices):
@@ -192,6 +199,11 @@ class FinalTouchesPrompt(models.TextChoices):
     """
 
     CRIME = "crime", "Name the crime (Jailbird)"
+    #: The card starts the character with an enemy (#5255, owner ruling 2026-11-21: the
+    #: enemy section is "invisible unless someone has selected a distinction where they
+    #: start with an enemy"). Staff set it per card; ``offers.enemy_is_open`` reads it,
+    #: and with no such card held the draft's enemy is not shown, priced or written.
+    ENEMY = "enemy", "Name the enemy (a card that starts with one)"
     #: What people say happened: the story behind a starting prestige, kept as the pick's
     #: notes. Raised by ``societies.DistinctionPrestigeGrant``, never set by staff.
     PRESTIGE_STORY = "prestige_story", "What people say happened (a prestige grant)"

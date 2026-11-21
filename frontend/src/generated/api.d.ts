@@ -49407,6 +49407,7 @@ export interface components {
     };
     /**
      * @description * `crime` - Name the crime (Jailbird)
+     *     * `enemy` - Name the enemy (a card that starts with one)
      *     * `prestige_story` - What people say happened (a prestige grant)
      *     * `organization` - The organization that takes you in (an organization grant)
      *     * `path_aspect` - Your Path's stronger Aspect (a path aspect grant)
@@ -49417,6 +49418,7 @@ export interface components {
      */
     PromptEnum:
       | 'crime'
+      | 'enemy'
       | 'prestige_story'
       | 'organization'
       | 'path_aspect'
