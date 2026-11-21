@@ -3120,26 +3120,38 @@ def approve_application(
             comment_type=CommentType.MESSAGE,
         )
 
-    application.status = ApplicationStatus.APPROVED
-    application.reviewer = reviewer
-    application.reviewed_at = timezone.now()
+    # The application is an identity-mapped row: when finalize refuses (an incomplete
+    # draft) the rollback reverts the table but not this instance, so put back what the
+    # approval wrote before the refusal leaves (django_notes.md, "Idmapper Rollback
+    # Staleness"). Finalize's own checks cannot move ahead of the write, because the
+    # audit fields are read off the draft finalize deletes.
+    audited_fields = ["status", "reviewer", "reviewed_at", "player_account", "character_name"]
+    before = {name: getattr(application, name) for name in audited_fields}
+    finalized = False
+    try:
+        application.status = ApplicationStatus.APPROVED
+        application.reviewer = reviewer
+        application.reviewed_at = timezone.now()
 
-    # Preserve audit data before finalize_character deletes the draft
-    draft = application.draft
-    application.player_account = draft.account
-    application.character_name = draft.draft_data.get("first_name", "")
-    application.save(
-        update_fields=["status", "reviewer", "reviewed_at", "player_account", "character_name"]
-    )
-    DraftApplicationComment.objects.create(
-        application=application,
-        author=None,
-        text=f"Application approved by {reviewer.username}.",
-        comment_type=CommentType.STATUS_CHANGE,
-    )
+        # Preserve audit data before finalize_character deletes the draft
+        draft = application.draft
+        application.player_account = draft.account
+        application.character_name = draft.draft_data.get("first_name", "")
+        application.save(update_fields=audited_fields)
+        DraftApplicationComment.objects.create(
+            application=application,
+            author=None,
+            text=f"Application approved by {reviewer.username}.",
+            comment_type=CommentType.STATUS_CHANGE,
+        )
 
-    player_account = draft.account
-    character = finalize_character(draft, add_to_roster=False)
+        player_account = draft.account
+        character = finalize_character(draft, add_to_roster=False)
+        finalized = True
+    finally:
+        if not finalized:
+            for name, value in before.items():
+                setattr(application, name, value)
 
     # Move character from Pending → Active roster
     active_roster = Roster.objects.get(roster_type=RosterType.ACTIVE)
