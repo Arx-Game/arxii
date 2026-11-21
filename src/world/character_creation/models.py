@@ -2834,7 +2834,7 @@ class DistinctionOffer(
         max_length=60,
         blank=True,
         default="",
-        help_text="Backgrounds chapter only: the heading this answer is listed under.",
+        help_text="Backgrounds and Identity: the heading this card is listed under.",
     )
     sort_order = models.PositiveSmallIntegerField(default=0)
     is_active = models.BooleanField(default=True)
@@ -2874,14 +2874,14 @@ class DistinctionOffer(
         null=True,
         blank=True,
         related_name="distinction_offers",
-        help_text="Who wants you to fail only: the reason that opens this offer (#3709).",
+        help_text="An enemy only: the reason that opens this offer (#3709).",
     )
     enemy_degree = models.CharField(
         max_length=10,
         choices=EnemyDegree.choices,
         blank=True,
         help_text=(
-            "Who wants you to fail only: the degree (ruined or destroy) that opens this "
+            "An enemy only: the degree (ruined or destroy) that opens this "
             "offer; the mark a degree bundles (#3709)."
         ),
     )
@@ -2974,7 +2974,16 @@ class DistinctionOffer(
                     }
                 ),
                 name="distinctionoffer_at_most_one_opener",
-            )
+            ),
+            # Identity takes no opener (#5255), so nothing else tells two of a card's
+            # lines there apart: the card would be drawn twice, and the two rows would
+            # share one natural key. A partial unique index, PostgreSQL and SQLite both.
+            models.UniqueConstraint(
+                fields=["distinction"],
+                condition=models.Q(chapter=OfferChapter.IDENTITY),
+                name="distinctionoffer_one_identity_line",
+                violation_error_message="This card is already placed on the Identity stage.",
+            ),
         ]
 
     class NaturalKeyConfig:
@@ -3002,6 +3011,8 @@ class DistinctionOffer(
         OfferChapter.ENEMY: ("enemy_reason", "enemy_degree"),
         OfferChapter.BACKGROUNDS: ("beat",),
         OfferChapter.FINAL_TOUCHES: ("unlocked_by",),
+        # Identity (#5255) is its own opener: a line there names no row.
+        OfferChapter.IDENTITY: (),
     }
 
     def __str__(self) -> str:
@@ -3014,7 +3025,8 @@ class DistinctionOffer(
 
     @property
     def chapter_opener_fields(self) -> tuple[str, ...]:
-        """The opener fields this offer's chapter accepts (exactly one must be set)."""
+        """The opener fields this offer's chapter accepts: exactly one must be set, or
+        none where the tuple is empty (Identity, #5255)."""
         return self._OPENERS_FOR_CHAPTER[OfferChapter(self.chapter)]
 
     def _opener_is_set(self, field: str) -> bool:
@@ -3075,12 +3087,18 @@ class DistinctionOffer(
             raise ValidationError(
                 {set_openers[0]: "This chapter's offers are not opened by this field."}
             )
-        if not set_openers:
+        if not set_openers and wanted:
             raise ValidationError({wanted[0]: "This chapter's offers need an opener."})
         if self.enemy_degree and self.enemy_degree not in ENEMY_MARKING_DEGREES:
             raise ValidationError({"enemy_degree": "Only ruined and destroy mark the character."})
         if self.unlocked_by_id is not None and self.unlocked_by_id == self.distinction_id:
             raise ValidationError({"unlocked_by": "A card does not unlock itself."})
+        if self.chapter == OfferChapter.IDENTITY and self.arrives_as != OfferArrival.CHOICE:
+            # Every Identity line is open to every draft (#5255), so a bundled or carried
+            # one would hand the card to every character there is.
+            raise ValidationError(
+                {"arrives_as": "A card on the Identity stage is always a choice."}
+            )
 
 
 class OfferFirstLook(SharedMemoryModel):

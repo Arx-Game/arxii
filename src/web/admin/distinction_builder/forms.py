@@ -5,10 +5,10 @@ from __future__ import annotations
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect, FilteredSelectMultiple
-from django.forms import inlineformset_factory
+from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.utils.text import slugify
 
-from world.character_creation.constants import ENEMY_MARKING_DEGREES
+from world.character_creation.constants import ENEMY_MARKING_DEGREES, OfferChapter
 from world.character_creation.models import Beginnings, DistinctionOffer
 from world.character_sheets.types import EnemyDegree
 from world.distinctions.models import Distinction, DistinctionEffect
@@ -227,13 +227,41 @@ class OfferForm(forms.ModelForm):
 DistinctionEffectFormSet = inlineformset_factory(
     Distinction, DistinctionEffect, form=EffectForm, extra=1, can_delete=True
 )
+
+
 # ``fk_name`` since #4846: ``unlocked_by`` is a second FK from an offer to a Distinction
 # (the card that unlocks a Final Touches line), and this page edits the lines a
 # distinction is offered on, not the lines it unlocks.
+class BaseDistinctionOfferFormSet(BaseInlineFormSet):
+    """The offers of one distinction, checked together.
+
+    A card has one line on the Identity stage (#5255). The model holds that with a
+    partial unique constraint over ``distinction``, and an inline formset leaves its
+    parent's key out of each row's own validation, so a second Identity row passed every
+    row check and the save then raised ``IntegrityError`` (a server error page, seen on
+    the live pass). The rows are all on this page, so the page counts them itself.
+    """
+
+    def clean(self) -> None:
+        super().clean()
+        identity_rows = [
+            form
+            for form in self.forms
+            if form.cleaned_data
+            and not form.cleaned_data.get("DELETE")
+            and form.cleaned_data.get("chapter") == OfferChapter.IDENTITY
+        ]
+        if len(identity_rows) > 1:
+            # The same words the model's constraint uses, so every surface says one thing.
+            already_placed = "This card is already placed on the Identity stage."
+            raise forms.ValidationError(already_placed)
+
+
 DistinctionOfferFormSet = inlineformset_factory(
     Distinction,
     DistinctionOffer,
     form=OfferForm,
+    formset=BaseDistinctionOfferFormSet,
     fk_name="distinction",
     extra=1,
     can_delete=True,

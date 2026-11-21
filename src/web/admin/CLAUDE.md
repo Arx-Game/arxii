@@ -928,7 +928,8 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   qualities not showing (`FEATURE_ROW_NAMES`: Alluring, Menacing, Majestic; since #5241
   a row counts only when it is active, taken per feature and has an active Appearance
   offer on the feature rows, matched by name without regard to case), and no
-  `EnemyReason`.
+  `EnemyReason` (since #5255 a gap only once an active card asks for an enemy:
+  `_probe_enemy_reasons`, which names the asking cards).
   Each names the rows in `missing` so a realm can be filled from the panel rather
   than by walking a draft into every stage.
 - **Required-content sentinel** (`web/admin/tuning/required_content.py`) -
@@ -1034,7 +1035,17 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   offered" row renders every opener widget (`schooling_line`, `glimpse_tag`,
   `origin_choice`, `prompt`, `enemy_reason`, `enemy_degree`,
   `appearance_section`, `feature_rows`, `beat`, and since #4846 `unlocked_by`, the
-  Final Touches chapter's card; since #4872 each row also carries `group`, the heading a
+  Final Touches chapter's card; the Identity chapter, #5255, accepts none, so its row
+  shows no opener and the "not opened by anything" check skips it; a card has one line
+  there and it is always a choice, both refused by the model; the Builder's offers
+  formset (`BaseDistinctionOfferFormSet`) counts the Identity rows itself, because an
+  inline formset leaves the parent key out of each row's validation and the unique
+  constraint would otherwise surface as an `IntegrityError` page (cards that already exist
+  are placed there many at once by the Distinction list's "Offer on the Identity stage"
+  action, `authoring.offers.offer_on_identity`: superusers only, credited to the operator
+  with a contributor linked on the spot as the paste does, one log entry per card; a card
+  already placed, switched off there, or not active is left as it is and named; tests
+  `tests/test_offer_on_identity.py`); since #4872 each row also carries `group`, the heading a
   Backgrounds answer is listed under, and the "More" fieldset `asks_figure_name`) and
   `page.html`'s cascade shows the one(s) the row's
   chapter accepts (`live.opener_field_map` is chapter -> list now; the enemy
@@ -1056,7 +1067,9 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   rank, max rank, player line, description, effects as `+Target; -Target;
   immune:Target`, offered under as `rules|devotions|fears|reason:<name>|
   degree:ruined|degree:destroy|appearance:<section>|glimpse:<tag>|
-  lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>|unlocked:<card>`, first look for
+  lineage:<answer>|schooling:<line>|beat:<stage>/<beat name>|unlocked:<card>|identity|
+  identity:<heading>` (a card picked on the Identity stage, #5255; one such token per
+  row), first look for
   as Beginning names; a `beat:` token (#4655) looks up an existing Life beat by
   life stage and name and creates the Backgrounds answer on it, never the beat; an
   a leading star on a first-look name (`*Reavers`, #4865) also marks that pin as part of the

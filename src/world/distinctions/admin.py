@@ -5,7 +5,7 @@ Provides administrative interfaces for managing distinction definitions,
 effects, and character distinction grants.
 """
 
-from django.contrib import admin
+from django.contrib import admin, messages
 
 from world.admin_utils import OneRowPerFormSet
 from world.codex.admin import GrantReachOnSaveMixin
@@ -89,6 +89,7 @@ class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     filter_horizontal = ["tags", "mutually_exclusive_with"]
     inlines = [DistinctionEffectInline, DistinctionCodexGrantInline]
     readonly_fields = ["get_resonance_grants"]
+    actions = ["offer_on_identity"]
 
     fieldsets = (
         (None, {"fields": ("name", "slug", "description", "category")}),
@@ -148,6 +149,63 @@ class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     @admin.display(boolean=True, description="Has Variants")
     def has_variants(self, obj):
         return obj.is_variant_parent
+
+    def get_actions(self, request):
+        """The Identity action writes offer lines, as the Distinction Builder and the
+        paste do, so it is theirs alone: superusers (#5255)."""
+        actions = super().get_actions(request)
+        if not request.user.is_superuser:
+            actions.pop("offer_on_identity", None)
+        return actions
+
+    @admin.action(description="Offer on the Identity stage")
+    def offer_on_identity(self, request, queryset):
+        """Place the selected cards on character creation's Identity stage (#5255).
+
+        The Identity chapter takes no opener, so there is nothing to ask per card: this
+        is the many-at-once form of adding an Identity row on the Distinction Builder.
+        A card already placed there is left as it is. The lines are credited to the
+        operator, who is linked to a contributor on the spot when they have none, as
+        the table paste does.
+        """
+        # Imported here: web.admin loads this app's models and admins at import.
+        from web.admin.authoring.offers import offer_on_identity  # noqa: PLC0415
+        from web.admin.paste_common import paste_contributor  # noqa: PLC0415
+
+        if not request.user.is_superuser:
+            self.message_user(request, "Only a superuser places cards.", messages.ERROR)
+            return
+        try:
+            contributor = paste_contributor(request.user)
+        except ValueError as refusal:
+            self.message_user(request, str(refusal), messages.ERROR)
+            return
+        result = offer_on_identity(queryset.order_by("name"), contributor, request.user.pk)
+
+        def names(cards):
+            return ", ".join(card.name for card in cards)
+
+        if result.created:
+            placed = names(offer.distinction for offer in result.created)
+            self.message_user(
+                request, f"Now offered on the Identity stage: {placed}.", messages.SUCCESS
+            )
+        if result.already:
+            self.message_user(
+                request,
+                f"Already offered on the Identity stage: {names(result.already)}.",
+                messages.WARNING,
+            )
+        if result.switched_off:
+            self.message_user(
+                request,
+                f"Placed on the Identity stage and switched off: {names(result.switched_off)}.",
+                messages.WARNING,
+            )
+        if result.inactive:
+            self.message_user(
+                request, f"Not active, so not placed: {names(result.inactive)}.", messages.WARNING
+            )
 
     @admin.display(description="Resonance grants/thresholds")
     def get_resonance_grants(self, obj: Distinction) -> str:
