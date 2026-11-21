@@ -1,7 +1,6 @@
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.core.files.uploadedfile import UploadedFile
 from django.core.validators import FileExtensionValidator
 from django.db.models.manager import BaseManager
 from drf_spectacular.utils import extend_schema_field
@@ -19,7 +18,7 @@ from world.conditions.thumbnail_services import persona_face_url
 from world.justice.constants import HUMILIATION_MARK_EXPLANATION
 from world.justice.serializers import HumiliationMarkSerializer
 from world.missions.serializers import GroupBallotStateSerializer, GroupBeatResultSerializer
-from world.roster.serializers.media import ACCEPTED_IMAGE_EXTENSIONS, validate_player_image_file
+from world.roster.serializers.media import ACCEPTED_IMAGE_EXTENSIONS
 from world.scenes.constants import (
     PlayedByRole,
     ScenePrivacyMode,
@@ -925,10 +924,6 @@ class FacePortraitBodySerializer(serializers.Serializer):
         player_data = PlayerData.objects.filter(account=request.user).first() if signed_in else None
         fields["media_id"].queryset = pickable_portrait_media(player_data)
         return fields
-
-    def validate_image_file(self, value: UploadedFile) -> UploadedFile:
-        request = self.context.get("request")
-        return validate_player_image_file(value, is_staff=bool(request and request.user.is_staff))
 
     def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
         # Request field names, not discriminators.

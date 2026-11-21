@@ -682,6 +682,9 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   `clear: true`. Both routes go through `enforce_player_media_limits` under the player's row
   lock; a refusal stores nothing and says "This upload would exceed your media quota." or
   "This file is larger than the per-file limit."
+- Both writes (and the alternate self's `set-portrait`) refuse while the character cannot act at
+  all: the offscreen-act state gate `set_active` runs (dead, unconscious, captured, retired or
+  unaccounted for), through `face_services._require_face_editable`. A pick has no rate limit.
 - `GET /api/personas/portrait-choices/` (#4889) - The requester's own pictures a portrait may be
   picked from (`id`, `url`, `title`, `file_size_bytes`), paginated; their storage line is the
   Gallery's `tenure-media/usage/`. Face copies and NSFW pictures are never listed

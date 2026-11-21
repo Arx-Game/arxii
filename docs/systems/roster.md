@@ -629,7 +629,9 @@ incoming_bytes=)`: the per-file limit and the quota, staff exempt. `upload_image
 after the other and cannot both pass the quota. `upload_image(folder=)` stores under a given
 Cloudinary folder with no player or tenure number; `copy_image(player_data, source, *, folder)`
 stores a new copy of one of the player's pictures (used by face portraits, folder
-`FACE_PORTRAIT_FOLDER`) and checks again with the size Cloudinary reports, destroying the asset
+`FACE_PORTRAIT_FOLDER`). Both take `freed_bytes`, the size of the old copy a replaced face
+portrait deletes once the new one is stored, so a swap is judged on the total after it, inside
+the lock and checks again with the size Cloudinary reports, destroying the asset
 and refusing when that passes the quota. SQLite does not lock rows, so the concurrency is
 proved on Postgres. Both read the Django setting `CLOUDINARY_CLOUD_NAME` (from the
 `CLOUDINARY_CLOUD_NAME` environment variable) to know uploads are configured; until #4889 the

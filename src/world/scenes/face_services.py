@@ -8,6 +8,8 @@ character number, and both routes go through the one shared upload limit
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
 from django.db import transaction
@@ -20,6 +22,9 @@ from world.roster.models import TenureMedia
 from world.roster.services.gallery_services import FACE_PORTRAIT_FOLDER, CloudinaryGalleryService
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 # The longest a mask's description may be; the real description has no cap, and this keeps
 # ``look`` readable.
@@ -59,8 +64,26 @@ def sync_persona_portrait(persona: Persona, media: Media | None) -> None:
     persona.save(update_fields=["thumbnail", "thumbnail_url"])
 
 
+def _require_face_editable(sheet: CharacterSheet) -> None:
+    """Refuse an edit while the character cannot act at all (#4889).
+
+    The same state gate ``set_active_persona`` runs: a dead, unconscious, captured, retired
+    or unaccounted-for character's player cannot reach into their faces either. It is keyed
+    on the persona-swap action because editing a face is the same family of act; the gate's
+    other prerequisite for a swap, that the face is one of the character's own, is the
+    ownership check each write already makes.
+    """
+    from actions.constants import OffscreenActState  # noqa: PLC0415
+    from actions.offscreen_gate import offscreen_act_state  # noqa: PLC0415
+
+    gate = offscreen_act_state(sheet, "set_active_persona")
+    if gate.state != OffscreenActState.ALLOWED:
+        raise FaceError(gate.reason or "That cannot be done now.")
+
+
 def set_persona_description(persona: Persona, text: str) -> None:
     """Write the mask's own description; blank clears it. PRIMARY is refused."""
+    _require_face_editable(persona.character_sheet)
     if persona.persona_type == PersonaType.PRIMARY:
         msg = "Your true face is described on your character sheet."
         raise FaceError(msg)
@@ -100,22 +123,43 @@ def set_face_portrait(
         msg = "That picture can't be used as a portrait."
         raise FaceError(msg)
 
+    _require_face_editable(persona.character_sheet if persona is not None else face.character)
+    selves = _selves_rewritten(face, persona)
     with transaction.atomic():
-        new_media = _stored_portrait(player_data, media=media, image_file=image_file)
-        previous = _write_portrait(face, persona, new_media)
-        # One picture often sits on both a persona and its alternate self; it is deleted once.
-        for old in {media.pk: media for media in previous}.values():
-            _delete_if_unused_face_copy(old, player_data)
+        replaced = _replaced_pictures(persona, selves)
+        # What the swap frees is counted in the quota check, inside the lock, so a portrait
+        # can be replaced when the new one fits once the old copy is gone; the old copy is
+        # deleted only after the new one is stored.
+        freed = sum(
+            old.file_size_bytes or 0
+            for old in replaced
+            if _is_unused_face_copy(old, player_data, persona, selves)
+        )
+        new_media = _stored_portrait(
+            player_data, media=media, image_file=image_file, freed_bytes=freed
+        )
+        _write_portrait(persona, selves, new_media)
+        for old in replaced:
+            if _is_unused_face_copy(old, player_data, persona, selves):
+                CloudinaryGalleryService.delete_media(old)
 
 
 def _stored_portrait(
-    player_data: PlayerData, *, media: Media | None, image_file: UploadedFile | None
+    player_data: PlayerData,
+    *,
+    media: Media | None,
+    image_file: UploadedFile | None,
+    freed_bytes: int,
 ) -> Media | None:
     """The new private ``Media`` for a pick or an upload; None when the portrait is removed."""
     try:
         if media is not None:
             return CloudinaryGalleryService.copy_image(
-                player_data, media, folder=FACE_PORTRAIT_FOLDER, media_type=MediaType.PORTRAIT
+                player_data,
+                media,
+                folder=FACE_PORTRAIT_FOLDER,
+                media_type=MediaType.PORTRAIT,
+                freed_bytes=freed_bytes,
             )
         if image_file is not None:
             return CloudinaryGalleryService.upload_image(
@@ -123,6 +167,7 @@ def _stored_portrait(
                 image_file,
                 media_type=MediaType.PORTRAIT,
                 folder=FACE_PORTRAIT_FOLDER,
+                freed_bytes=freed_bytes,
             )
     except ValidationError as exc:
         message = exc.messages[0] if exc.messages else "The upload failed."
@@ -130,46 +175,59 @@ def _stored_portrait(
     return None
 
 
-def _write_portrait(
-    face: Persona | AlternateSelf, persona: Persona | None, new_media: Media | None
-) -> list[Media]:
-    """Point every copy of the portrait at ``new_media``; return the pictures it replaced."""
-    previous: list[Media] = []
-    if persona is not None:
-        if persona.thumbnail is not None:
-            previous.append(persona.thumbnail)
-        sync_persona_portrait(persona, new_media)
-
+def _selves_rewritten(
+    face: Persona | AlternateSelf, persona: Persona | None
+) -> list[AlternateSelf]:
+    """The alternate selves whose picture this write sets."""
     if isinstance(face, AlternateSelf):
-        selves = [face]
-    elif persona is not None and persona.persona_type == PersonaType.ALTERNATE:
-        selves = list(
+        return [face]
+    if persona is not None and persona.persona_type == PersonaType.ALTERNATE:
+        return list(
             AlternateSelf.objects.filter(persona=persona, character=persona.character_sheet)
         )
-    else:
-        selves = []
+    return []
+
+
+def _replaced_pictures(persona: Persona | None, selves: list[AlternateSelf]) -> list[Media]:
+    """The pictures this write replaces, each once: a persona and its form often share one."""
+    held = ([persona.thumbnail] if persona is not None else []) + [
+        alt_self.thumbnail for alt_self in selves
+    ]
+    return list({media.pk: media for media in held if media is not None}.values())
+
+
+def _write_portrait(
+    persona: Persona | None, selves: list[AlternateSelf], new_media: Media | None
+) -> None:
+    """Point every copy of the portrait at ``new_media``."""
+    if persona is not None:
+        sync_persona_portrait(persona, new_media)
     for alt_self in selves:
-        if alt_self.thumbnail is not None:
-            previous.append(alt_self.thumbnail)
         alt_self.thumbnail = new_media
         alt_self.save(update_fields=["thumbnail"])
-    return previous
 
 
-def _delete_if_unused_face_copy(old: Media, player_data: PlayerData) -> None:
-    """Delete a replaced picture only when it is this player's private face copy.
+def _is_unused_face_copy(
+    old: Media, player_data: PlayerData, persona: Persona | None, selves: list[AlternateSelf]
+) -> bool:
+    """Whether a replaced picture is this player's private face copy that nothing else uses.
 
     A staff-authored picture, a gallery picture and a copy another face still wears all stay.
+    The faces this write rewrites do not count as users: they are about to stop wearing it.
     """
     is_face_copy = old.player_data_id == player_data.pk and old.cloudinary_public_id.startswith(
         f"{FACE_PORTRAIT_FOLDER}/"
     )
     if not is_face_copy:
-        return
-    in_use = (
-        Persona.objects.filter(thumbnail=old).exists()
-        or AlternateSelf.objects.filter(thumbnail=old).exists()
+        return False
+    other_personas = Persona.objects.filter(thumbnail=old)
+    if persona is not None:
+        other_personas = other_personas.exclude(pk=persona.pk)
+    other_selves = AlternateSelf.objects.filter(thumbnail=old).exclude(
+        pk__in=[alt_self.pk for alt_self in selves]
+    )
+    return not (
+        other_personas.exists()
+        or other_selves.exists()
         or TenureMedia.objects.filter(media=old).exists()
     )
-    if not in_use:
-        CloudinaryGalleryService.delete_media(old)

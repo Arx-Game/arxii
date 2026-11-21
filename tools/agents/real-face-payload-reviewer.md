@@ -1,6 +1,6 @@
 ---
 name: real-face-payload-reviewer
-description: Checks that every payload field built from the real character's roster entry, gallery, portrait, home or friend list is gated on the reveal rule (identity_revealed_to_viewer, or privileged) before it reaches a viewer of a mask or a worn alternate self. Use when a diff adds or changes a field of CharacterSheetSerializer, a persona or roster payload, or a portrait reader, and when reviewing one. Catches the sheet that gates its description on the reveal rule and hands the real portrait and gallery looks to every viewer beside it.
+description: Checks that every payload field built from the real character's roster entry, gallery, portrait, home or friend list is gated on the reveal rule (identity_revealed_to_viewer, or privileged) before it reaches a viewer of a mask or a worn alternate self, and that every field that names the face worn now reads it fresh, never from a snapshot a long-lived state or cache took earlier. Use when a diff adds or changes a field of CharacterSheetSerializer, a room-state or persona or roster payload, or a portrait reader, and when reviewing one. Catches the sheet that gates its description on the reveal rule and hands the real portrait and gallery looks to every viewer beside it, and the room list that keeps naming the mask a character has since taken off.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -32,6 +32,19 @@ placeholder, never the real character's. The rule is `identity_revealed_to_viewe
 (`world/scenes/persona_display.py`); on the sheet it is `reveal_identity`, and
 `shows_real_face` adds the worn alternate self. The owner and staff always pass.
 
+## The second class: a cached presented face
+
+A room's `SceneDataManager` keeps its `BaseState` objects across commands, and a state
+resolved the worn persona once, in `__init__` (`_resolved_persona`, `thumbnail_url`). The name
+beside it was read live, so after a character put on another mask the room list still sent
+the previous mask's `persona_id` and portrait, and the persona menu opened the wrong face
+(found live by #4889). Any payload field that names the presented face (a persona id, a
+portrait, a description, a menu target) must come from `BaseState.presented_persona()` or
+`active_persona_for_sheet`, read at serialization time. A field read from `_resolved_persona`,
+from an attribute set in a state's `__init__`, or from any memo on a view, state or handler is
+a finding. The test shape: build the state, switch the face, serialize the same state, and
+assert the payload names the new face.
+
 ## How to check
 
 1. List every key of the sheet payload the diff adds or touches, and the helper that
@@ -42,7 +55,9 @@ placeholder, never the real character's. The rule is `identity_revealed_to_viewe
    alone is not enough: a viewer who has seen through the mask is not privileged.
 3. Check the fallback value. A gated field returns the mask's own value or an empty one,
    never the real one by a second path (a helper that falls back to the primary persona).
-4. Check the rows that read a persona's portrait without the sheet: `persona_face_url`
+4. For each field naming the worn face, find where its value is computed and when. A value
+   computed once at construction and read later is stale after a face switch.
+5. Check the rows that read a persona's portrait without the sheet: `persona_face_url`
    and `resolve_thumbnail` (`world/conditions/thumbnail_services.py`). A mask with no
    portrait shows the placeholder; a PRIMARY face shown while an alternate self is worn
    does not show its own copy.

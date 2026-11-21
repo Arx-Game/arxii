@@ -52,13 +52,17 @@ def media_bytes_used(player_data: PlayerData) -> int:
     return total or 0
 
 
-def enforce_player_media_limits(player_data: PlayerData, *, incoming_bytes: int) -> None:
+def enforce_player_media_limits(
+    player_data: PlayerData, *, incoming_bytes: int, freed_bytes: int = 0
+) -> None:
     """Refuse a file that passes the per-file limit or would pass the player's quota (#3164).
 
     The one check every stored file goes through: a new upload and a copy of an existing
     picture (#4889). Staff accounts are exempt from both limits. The quota is the sum of the
     player's own ``Media`` rows, so a caller that must hold the quota under simultaneous
-    requests calls this inside ``lock_player_media`` (see ``upload_image``).
+    requests calls this inside ``lock_player_media`` (see ``upload_image``). ``freed_bytes``
+    is what the caller deletes once the new file is stored (a replaced face portrait), so a
+    swap is judged on the total after it, not before.
 
     Raises:
         ValidationError: With the fixed per-file or quota message the Gallery shows.
@@ -68,7 +72,7 @@ def enforce_player_media_limits(player_data: PlayerData, *, incoming_bytes: int)
     if incoming_bytes > settings.MAX_PLAYER_MEDIA_FILE_BYTES:
         msg = "This file is larger than the per-file limit."
         raise ValidationError(msg)
-    if media_bytes_used(player_data) + incoming_bytes > player_data.media_quota_bytes:
+    if media_bytes_used(player_data) - freed_bytes + incoming_bytes > player_data.media_quota_bytes:
         msg = "This upload would exceed your media quota."
         raise ValidationError(msg)
 
@@ -125,6 +129,7 @@ class CloudinaryGalleryService:
         tenure: RosterTenure | None = None,
         created_by: Artist | None = None,
         folder: str | None = None,
+        freed_bytes: int = 0,
     ) -> Media:
         """Upload an image to Cloudinary and create media records.
 
@@ -138,6 +143,7 @@ class CloudinaryGalleryService:
             created_by: Optional artist who created the media
             folder: Optional Cloudinary folder. When given, the public id is
                 ``<folder>/<uuid>`` and no player or tenure number appears in it (#4889).
+            freed_bytes: Bytes the caller deletes right after this upload (#4889).
 
         Returns:
             Media: The created media record
@@ -164,7 +170,9 @@ class CloudinaryGalleryService:
         # simultaneous uploads cannot both pass the quota (#4889).
         with transaction.atomic():
             lock_player_media(player_data)
-            enforce_player_media_limits(player_data, incoming_bytes=incoming)
+            enforce_player_media_limits(
+                player_data, incoming_bytes=incoming, freed_bytes=freed_bytes
+            )
 
             if folder is None:
                 folder = (
@@ -216,6 +224,7 @@ class CloudinaryGalleryService:
         *,
         folder: str,
         media_type: str = "portrait",
+        freed_bytes: int = 0,
     ) -> Media:
         """Store a new copy of one of the player's pictures under an opaque folder (#4889).
 
@@ -232,7 +241,11 @@ class CloudinaryGalleryService:
         _require_cloudinary()
         with transaction.atomic():
             lock_player_media(player_data)
-            enforce_player_media_limits(player_data, incoming_bytes=source.file_size_bytes or 0)
+            enforce_player_media_limits(
+                player_data,
+                incoming_bytes=source.file_size_bytes or 0,
+                freed_bytes=freed_bytes,
+            )
             public_id = f"{folder}/{uuid.uuid4().hex}"
             try:
                 result = cloudinary.uploader.upload(
@@ -249,7 +262,11 @@ class CloudinaryGalleryService:
                 msg = "Failed to upload image."
                 raise ValidationError(msg) from e
             try:
-                enforce_player_media_limits(player_data, incoming_bytes=result.get("bytes") or 0)
+                enforce_player_media_limits(
+                    player_data,
+                    incoming_bytes=result.get("bytes") or 0,
+                    freed_bytes=freed_bytes,
+                )
             except ValidationError:
                 cls._destroy_remote(result["public_id"])
                 raise

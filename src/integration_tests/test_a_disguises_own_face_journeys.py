@@ -30,6 +30,7 @@ from evennia_extensions.models import Media
 from flows.factories import SceneDataManagerFactory
 from flows.service_functions.serializers.room_state import ObjectStateSerializer
 from integration_tests.harness import JourneyCase
+from world.character_sheets.types import LifecycleState
 from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
 from world.forms.factories import AlternateSelfFactory
 from world.forms.models import ActiveAlternateSelf, AlternateSelf
@@ -322,6 +323,40 @@ class TheUploadLimitHolds(DisguiseFaceCase):
         self.assert_nothing_stored(refused, "pdf")
         self.assertEqual(self.cloudinary.calls, [])
 
+    def test_a_portrait_is_replaced_when_the_new_copy_fits_once_the_old_one_goes(self) -> None:
+        """The swap is judged on the total after it, not before it."""
+        first = self.her_picture(size=700)
+        self.cloudinary.remote_sizes[first.cloudinary_url] = 700
+        self.assertEqual(
+            self.ysmay_api()
+            .post(SET_PORTRAIT, {"persona_id": self.mask.pk, "media_id": first.pk}, format="json")
+            .status_code,
+            200,
+        )
+        held = Persona.objects.get(pk=self.mask.pk).thumbnail
+        fits = self.her_picture(size=650)
+        too_big = self.her_picture(size=5000)
+        for picture in (fits, too_big):
+            self.cloudinary.remote_sizes[picture.cloudinary_url] = picture.file_size_bytes
+        self.make_nearly_full(100)
+
+        swapped = self.ysmay_api().post(
+            SET_PORTRAIT, {"persona_id": self.mask.pk, "media_id": fits.pk}, format="json"
+        )
+        self.assertEqual(swapped.status_code, 200, swapped.content)
+        now_held = Persona.objects.get(pk=self.mask.pk).thumbnail
+        self.assertNotEqual(now_held.pk, held.pk)
+        self.assertFalse(Media.objects.filter(pk=held.pk).exists())
+
+        refused = self.ysmay_api().post(
+            SET_PORTRAIT, {"persona_id": self.mask.pk, "media_id": too_big.pk}, format="json"
+        )
+        self.assertEqual(refused.status_code, 400, refused.content)
+        self.assertIn(QUOTA_MESSAGE, str(refused.json()))
+        # A refused swap keeps the picture she has.
+        self.assertEqual(Persona.objects.get(pk=self.mask.pk).thumbnail.pk, now_held.pk)
+        self.assertTrue(Media.objects.filter(pk=now_held.pk).exists())
+
     def test_staff_are_exempt_from_the_limits_as_the_gallery_exempts_them(self) -> None:
         self.account_of(self.ysmay).is_staff = True
         self.account_of(self.ysmay).save(update_fields=["is_staff"])
@@ -385,6 +420,27 @@ class OnlyHerOwnFacesAndPictures(DisguiseFaceCase):
         )
         self.assertEqual(refused.status_code, 400, refused.content)
         self.assertEqual(refused.json(), {"media_id": ["That is not one of your pictures."]})
+
+    def test_a_character_who_cannot_act_cannot_edit_a_face(self) -> None:
+        """The state gate a persona swap runs: dead, captured and the rest refuse edits too."""
+        for state, words in (
+            (LifecycleState.DEAD, "The dead have no further word to send."),
+            (LifecycleState.CAPTURED, "captive"),
+        ):
+            self.sheet.lifecycle_state = state
+            self.sheet.save(update_fields=["lifecycle_state"])
+            for path, body in (
+                (SET_DESCRIPTION, {"description": "Still me."}),
+                (SET_PORTRAIT, {"clear": True}),
+            ):
+                with self.subTest(state=state, path=path):
+                    response = self.ysmay_api().post(
+                        path, {"persona_id": self.mask.pk, **body}, format="json"
+                    )
+                    self.assertEqual(response.status_code, 400, response.content)
+                    self.assertIn(words, str(response.json()))
+        self.mask.refresh_from_db()
+        self.assertEqual(self.mask.description, "")
 
     def test_exactly_one_change_is_required_and_the_description_is_capped(self) -> None:
         one_change = "Choose a picture, upload one, or remove the portrait."
