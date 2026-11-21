@@ -27,7 +27,15 @@ Hand-worked from the spec:
 * Corruption: ordinary tick 20 * (10 / 10) * (10 / 10) = 20 on Praedari (Abyssal, tier 1). She
   is 20 percent Abyssal, under 50, so she takes the light 10 percent: 20 * 10 / 100 = 2,
   rounded up once to 2. Worked in Warmth (coefficient 0) the cast adds no corruption.
-* A cast that pulls a thread gets the pull and not the kindled boost.
+* A cast that pulls a thread gets the pull and not the kindled boost. The pulled thread is
+  woven on the technique at level 10 (one rung, so a multiplier of 1) with a tier 1 intensity
+  bump of 3: the ledger's "thread power" line is 3, the pull costs 1 Praedari, and the same
+  cast's deed then earns 15: 10 - 1 + 15 = 24.
+* In a fight a pull lasts the round but boosts only the casts its threads relate to. A cast
+  with no pull in its round gets the kindled line (9). A cast whose round holds a pull on a
+  thread of its own technique gets the pull's 3 and no kindled line. A cast whose round
+  holds only a pull on a thread of another technique (it rode that technique's clash
+  contribution) takes nothing from that pull, so it keeps the kindled line (9).
 """
 
 from __future__ import annotations
@@ -37,25 +45,34 @@ from commands import pending_actions
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.test_helpers import force_check_outcome
-from world.classes.factories import PathFactory
-from world.combat.constants import ActionCategory
+from world.combat.constants import ActionCategory, ClashActionSlot, ClashStatus, OpponentTier
+from world.combat.factories import (
+    ClashConfigFactory,
+    ClashFactory,
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
+)
+from world.combat.models import CombatPull, CombatRoundAction
+from world.combat.services import resolve_round
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
-from world.magic.constants import EffectKind, GainSource, TargetKind
+from world.fatigue.constants import EffortLevel
+from world.magic.constants import EffectKind, GainSource, PowerStage, TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterTechniqueFactory,
-    CharacterThreadWeavingUnlockFactory,
     GiftFactory,
     KindlingConfigFactory,
     ResonanceFactory,
     TechniqueFactory,
-    TechniqueStyleFactory,
+    ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
-    ThreadWeavingUnlockFactory,
     ensure_conversion_pairs,
     kindle_resonance,
 )
@@ -67,17 +84,62 @@ from world.magic.models import (
     ResonanceGrant,
 )
 from world.magic.services.corruption import get_corruption_config
-from world.magic.services.threads import weave_thread
 from world.magic.specialization.services import provision_latent_gift_thread
-from world.progression.factories import CharacterPathHistoryFactory
+from world.mechanics.factories import CharacterEngagementFactory
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
-from world.skills.factories import SkillFactory
+from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
-from world.traits.models import CharacterTraitValue, CheckOutcome, PointConversionRange, TraitType
+from world.traits.models import CheckOutcome, PointConversionRange, TraitType
+from world.traits.services import ensure_canonical_check_outcome
 from world.vitals.models import CharacterVitals
 
 CAST_URL = "/api/action-requests/cast/"
 KINDLED_LINE = "kindled cast power"
+
+
+def _corruption_condition(resonance) -> None:
+    """The condition a resonance's corruption lives in, as the accrual service finds it."""
+    template = ConditionTemplateFactory(
+        name=f"Corruption ({resonance.name})", has_progression=True, corruption_resonance=resonance
+    )
+    for order, threshold in enumerate([50, 200, 500, 1000, 1500], start=1):
+        ConditionStageFactory(condition=template, stage_order=order, severity_threshold=threshold)
+
+
+def _author_the_pull(resonance) -> None:
+    """A tier 1 pull costs 1 resonance and, on a thread of ``resonance``, adds 2 to the roll
+    (a flat bonus) and 3 to the power (an intensity bump), at the multiplier of one rung."""
+    ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
+    ThreadPullEffectFactory(
+        target_kind=TargetKind.TECHNIQUE,
+        resonance=resonance,
+        tier=1,
+        min_thread_level=0,
+        effect_kind=EffectKind.FLAT_BONUS,
+        flat_bonus_amount=2,
+    )
+    ThreadPullEffectFactory(
+        target_kind=TargetKind.TECHNIQUE,
+        resonance=resonance,
+        tier=1,
+        min_thread_level=0,
+        as_intensity_bump=True,
+        intensity_bump_amount=3,
+    )
+
+
+def _thread_on(sheet, resonance, technique, name: str):
+    """A thread woven on ``technique``; level 10 is stored x10, so it reads as one rung."""
+    return ThreadFactory(
+        owner=sheet,
+        resonance=resonance,
+        target_kind=TargetKind.TECHNIQUE,
+        target_trait=None,
+        target_technique=technique,
+        level=10,
+        name=name,
+    )
 
 
 class TheAbyssalTemptation(JourneyCase):
@@ -96,8 +158,6 @@ class TheAbyssalTemptation(JourneyCase):
         Affinity.objects.clear_cache()
         self.warmth = ResonanceFactory(name="Warmth", affinity=self.primal)
         self.praedari = ResonanceFactory(name="Praedari", affinity=self.abyssal)
-        self.skill = SkillFactory()
-        self.path = PathFactory(style=TechniqueStyleFactory(skill=self.skill))
         self.room = self.make_room("The Lantern")
         self.scene = SceneFactory(room=self.room)
 
@@ -114,14 +174,7 @@ class TheAbyssalTemptation(JourneyCase):
             action_category=ActionCategory.PHYSICAL,
             action_template=ActionTemplateFactory(check_type=cast_check),
         )
-        ThreadPullCostFactory(tier=1, resonance_cost=1, anima_per_thread=0)
-        ThreadPullEffectFactory(
-            target_kind=TargetKind.TRAIT,
-            resonance=self.praedari,
-            tier=1,
-            flat_bonus_amount=2,
-            effect_kind=EffectKind.FLAT_BONUS,
-        )
+        _author_the_pull(self.praedari)
         blazing = KindledStrengthTier.objects.get(rank=3)
         blazing.cast_power = 6
         blazing.earn_percent = 100
@@ -130,17 +183,15 @@ class TheAbyssalTemptation(JourneyCase):
         KindledDeedAward.objects.update_or_create(outcome_tier=success, defaults={"amount": 10})
         KindlingConfigFactory(instant_percent=100, claim_percent=50)
         self.assertEqual(self.technique.tier, 1)
-        self.make_the_corruption_condition()
+        _corruption_condition(self.praedari)
 
         self.ysmay = self.make_player("Ysmay", room=self.room)
         self.sheet = self.ysmay.sheet_data
-        CharacterPathHistoryFactory(character=self.sheet, path=self.path)
         CharacterTechniqueFactory(character=self.sheet, technique=self.technique)
         CharacterAnimaFactory(character=self.sheet, current=50, maximum=50)
         CharacterVitals.objects.create(
             character_sheet=self.sheet, health=50, max_health=50, base_max_health=50
         )
-        CharacterTraitValue.objects.create(character=self.sheet, trait=self.skill, value=10)
         CharacterAuraFactory(character=self.sheet, celestial="0", primal="80", abyssal="20")
         CharacterResonanceFactory(
             character_sheet=self.sheet, resonance=self.warmth, balance=10, lifetime_earned=80
@@ -150,12 +201,7 @@ class TheAbyssalTemptation(JourneyCase):
         )
         # Warmth is listed first, so it leads the Gift's thread.
         provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.warmth, self.praedari])
-        unlock = ThreadWeavingUnlockFactory(target_kind=TargetKind.TRAIT, unlock_trait=self.skill)
-        CharacterThreadWeavingUnlockFactory(character=self.sheet, unlock=unlock)
-        self.ysmay.weaving_unlocks.invalidate()
-        self.strand = weave_thread(
-            self.sheet, TargetKind.TRAIT, self.skill, self.praedari, name="Praedari Strand"
-        )
+        self.strand = _thread_on(self.sheet, self.praedari, self.technique, "Praedari Strand")
         # Her own feeling kindles Praedari at Blazing, through a real own-feeling situation
         # that any act she makes while bearing it feeds.
         kindle_resonance(self.sheet, self.praedari, blazing)
@@ -178,16 +224,6 @@ class TheAbyssalTemptation(JourneyCase):
         corruption.light_corruption_percent = 10
         corruption.full_corruption_from_share = 50
         corruption.save()
-
-    def make_the_corruption_condition(self) -> None:
-        """The condition Praedari's corruption lives in, as the accrual service finds it."""
-        template = ConditionTemplateFactory(
-            name="Corruption (Praedari)", has_progression=True, corruption_resonance=self.praedari
-        )
-        for order, threshold in enumerate([50, 200, 500, 1000, 1500], start=1):
-            ConditionStageFactory(
-                condition=template, stage_order=order, severity_threshold=threshold
-            )
 
     def cast(self, resonance, **body) -> dict:
         """Cast the technique on herself worked in ``resonance``; the response's result."""
@@ -260,15 +296,203 @@ class TheAbyssalTemptation(JourneyCase):
         self.assertEqual(self.earned(self.warmth), 0)
 
     def test_a_kindled_cast_that_pulls_a_thread_gains_no_cast_bonus(self) -> None:
+        balance_before = CharacterResonance.objects.get(
+            character_sheet=self.sheet, resonance=self.praedari
+        ).balance
+
         ledger = self.cast(
             self.praedari,
             pull={
-                "resonance_id": self.praedari.pk,
                 "tier": 1,
                 "thread_ids": [self.strand.pk],
+                "payers": {str(self.strand.pk): self.praedari.pk},
             },
         )
 
         self.assertEqual(self.line(ledger, KINDLED_LINE), 0)
-        # The pull did land: the thread's own line is on the ledger.
-        self.assertGreater(self.line(ledger, "thread power"), 0)
+        # The pull did land: its intensity bump of 3 is the ledger's "thread power" line, and
+        # the paying resonance fell by the pull's cost of 1 before the deed's 15 arrived.
+        self.assertEqual(self.line(ledger, "thread power"), 3)
+        balance = CharacterResonance.objects.get(
+            character_sheet=self.sheet, resonance=self.praedari
+        ).balance
+        self.assertEqual(balance - balance_before, -1 + 15)
+
+
+class TheAbyssalTemptationInAFight(JourneyCase):
+    """Ysmay declares Shadow Step in a round, worked in her kindled Praedari."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        for name in CANONICAL_OUTCOME_LEVELS:  # a clash round grades its result on these
+            ensure_canonical_check_outcome(name)
+        ClashConfigFactory()
+        _celestial, primal, abyssal = ensure_conversion_pairs()
+        abyssal.kindled_boost_percent = 150
+        abyssal.save()
+        Affinity.objects.clear_cache()
+        self.warmth = ResonanceFactory(name="Warmth", affinity=primal)
+        self.praedari = ResonanceFactory(name="Praedari", affinity=abyssal)
+        _corruption_condition(self.praedari)
+        blazing = KindledStrengthTier.objects.get(rank=3)
+        blazing.cast_power = 6
+        blazing.save()
+
+        room = self.make_room("The Ashen Court")
+        SceneFactory(room=room)
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.DECLARING, round_number=1, room=room
+        )
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool, base_damage=1)
+        self.opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            tier=OpponentTier.MOOK,
+            health=500,
+            max_health=500,
+            threat_pool=pool,
+        )
+        self.ysmay = self.make_player("Ysmay", room=room)
+        self.sheet = self.ysmay.sheet_data
+        CombatParticipantFactory(encounter=self.encounter, character_sheet=self.sheet)
+        CharacterEngagementFactory(character=self.sheet)
+        CharacterAnimaFactory(character=self.sheet, current=50, maximum=50)
+        CharacterVitals.objects.create(
+            character_sheet=self.sheet, health=50, max_health=50, base_max_health=50
+        )
+        CharacterAuraFactory(character=self.sheet, celestial="0", primal="80", abyssal="20")
+
+        gift = GiftFactory()
+        self.shadow_step = self.technique("Shadow Step", gift)
+        self.ember_lash = self.technique("Ember Lash", GiftFactory())
+        for technique in (self.shadow_step, self.ember_lash):
+            CharacterTechniqueFactory(character=self.sheet, technique=technique)
+        CharacterResonanceFactory(
+            character_sheet=self.sheet, resonance=self.warmth, balance=10, lifetime_earned=80
+        )
+        CharacterResonanceFactory(
+            character_sheet=self.sheet, resonance=self.praedari, balance=10, lifetime_earned=20
+        )
+        provision_latent_gift_thread(self.sheet, gift, resonances=[self.warmth, self.praedari])
+        _author_the_pull(self.praedari)
+        self.shadow_thread = _thread_on(self.sheet, self.praedari, self.shadow_step, "Shadow")
+        self.ember_thread = _thread_on(self.sheet, self.praedari, self.ember_lash, "Ember")
+        kindle_resonance(self.sheet, self.praedari, blazing)
+
+    @staticmethod
+    def technique(name: str, gift):
+        """A clash-capable technique rolled on its own check, one stat of its own."""
+        check = CheckTypeFactory()
+        CheckTypeTraitFactory(check_type=check, trait=StatTraitFactory(), weight=1)
+        return TechniqueFactory(
+            name=name,
+            gift=gift,
+            intensity=10,
+            control=40,
+            anima_cost=1,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_category=ActionCategory.PHYSICAL,
+            action_template=ActionTemplateFactory(check_type=check),
+            clash_capable=True,
+        )
+
+    def dispatch(self, ref: dict, kwargs: dict) -> None:
+        with self.captureOnCommitCallbacks(execute=True):
+            response = self.api(self.account_of(self.ysmay)).post(
+                f"/api/actions/characters/{self.ysmay.pk}/dispatch/",
+                {"ref": ref, "kwargs": kwargs},
+                format="json",
+            )
+        self.assertEqual(response.status_code, 200, response.data)
+
+    @staticmethod
+    def pull_of(thread) -> dict:
+        return {
+            "pull_resonance_id": thread.resonance_id,
+            "pull_tier": 1,
+            "pull_thread_ids": [thread.pk],
+        }
+
+    def declare_shadow_step_in_praedari(self, **pull) -> None:
+        self.dispatch(
+            {"backend": "combat", "technique_id": self.shadow_step.pk, "action_slot": "focused"},
+            {
+                "effort_level": EffortLevel.MEDIUM,
+                "focused_opponent_target_id": self.opponent.pk,
+                "confirm_soulfray_risk": True,
+                "preferred_resonance_id": self.praedari.pk,
+                **pull,
+            },
+        )
+
+    def put_a_pull_on_an_ember_lash_clash(self) -> None:
+        """The pull rides her Ember Lash clash contribution, as the client sends it."""
+        clash = ClashFactory(
+            encounter=self.encounter,
+            npc_opponent=self.opponent,
+            status=ClashStatus.ACTIVE,
+            started_round=1,
+        )
+        self.dispatch(
+            {
+                "backend": "combat",
+                "clash_id": clash.pk,
+                "clash_action_slot": ClashActionSlot.FOCUSED,
+            },
+            {
+                "technique_id": self.ember_lash.pk,
+                "strain_commitment": 0,
+                **self.pull_of(self.ember_thread),
+            },
+        )
+
+    def resolve_and_read_the_cast(self) -> list[dict]:
+        """Resolve the round; the power ledger the combat log shows for her Shadow Step."""
+        resolve_round(self.encounter)
+        action = CombatRoundAction.objects.get(participant__character_sheet=self.sheet)
+        self.assertIsNotNone(action.interaction_id, "Her action left no log entry.")
+        response = self.api(self.account_of(self.ysmay)).get(
+            "/api/combat/action-outcome-details/",
+            {"action_interaction_ids": str(action.interaction_id)},
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        return response.data[0]["power_ledger"]["entries"]
+
+    @staticmethod
+    def line(entries: list[dict], label: str) -> int:
+        return sum(row["amount"] for row in entries if row["source_label"] == label)
+
+    @staticmethod
+    def pull_lines(entries: list[dict]) -> list[int]:
+        return [row["amount"] for row in entries if row["stage"] == PowerStage.COMBAT_PULL]
+
+    def test_a_cast_in_a_round_with_no_pull_reads_the_kindled_line(self) -> None:
+        self.declare_shadow_step_in_praedari()
+
+        entries = self.resolve_and_read_the_cast()
+
+        self.assertEqual(self.line(entries, KINDLED_LINE), 9)  # 6 * 150 // 100
+        self.assertEqual(self.pull_lines(entries), [])
+
+    def test_a_pull_on_a_thread_of_the_cast_takes_the_kindled_line_for_its_own(self) -> None:
+        self.declare_shadow_step_in_praedari(**self.pull_of(self.shadow_thread))
+        self.assertTrue(CombatPull.objects.filter(threads=self.shadow_thread).exists())
+
+        entries = self.resolve_and_read_the_cast()
+
+        self.assertEqual(self.line(entries, KINDLED_LINE), 0)
+        self.assertEqual(self.pull_lines(entries), [3])  # the pull's intensity bump
+
+    def test_a_pull_on_another_techniques_thread_leaves_the_kindled_line_in_place(self) -> None:
+        self.declare_shadow_step_in_praedari()
+        self.put_a_pull_on_an_ember_lash_clash()
+        self.assertTrue(CombatPull.objects.filter(threads=self.ember_thread).exists())
+
+        entries = self.resolve_and_read_the_cast()
+
+        # The round holds a pull, but none of its threads relate to Shadow Step: it gives the
+        # cast nothing, so it takes nothing: 6 * 150 // 100 = 9 stays.
+        self.assertEqual(self.pull_lines(entries), [])
+        self.assertEqual(self.line(entries, KINDLED_LINE), 9)

@@ -727,36 +727,59 @@ def kindled_cast_strength(resonance: Resonance, tier: KindledStrengthTier | None
     return tier.cast_power * resonance.affinity.kindled_boost_percent // 100
 
 
-def _pulled_this_round(ctx: PowerTermContext) -> bool:
-    """True when the caster has a thread pull behind this cast.
+def _pull_boosts_this_cast(ctx: PowerTermContext) -> bool:
+    """True when a thread pull behind this cast boosts it (#5231, Decision 18).
 
     A scene cast merges its declared pull into ``applicable_threads`` with a pull tier. A
-    combat cast passes no threads to ``use_technique``: the round's pull lives in her
-    ``CombatPull`` rows, one per round, read for the fight this cast resolves in.
+    combat cast passes no threads to ``use_technique``: the round's pulls live in her
+    ``CombatPull`` rows, and one boosts this cast only when it carries an intensity or
+    flat bonus that reaches it. That is ``round_pull_bonus``'s own test, the one the
+    cast's power and hit roll use, so a pull on threads unrelated to the cast (a pull for
+    the round on another thread, an automatic defensive pull) takes nothing from it.
     """
     if any(applicable.pull_tier > 0 for applicable in ctx.applicable_threads):
         return True
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
 
-    if not isinstance(ctx.situation_ctx, CombatRoundContext):
+    combat = ctx.situation_ctx
+    if not isinstance(combat, CombatRoundContext) or ctx.technique is None:
         return False
-    encounter = ctx.situation_ctx.participant.encounter
-    return bool(ctx.sheet.character.combat_pulls.active_for_encounter(encounter))
+    participant = combat.participant
+    character = ctx.sheet.character
+    if not character.combat_pulls.active_for_encounter(participant.encounter):
+        return False
+    from world.combat.pull_helpers import round_pull_bonus  # noqa: PLC0415
+    from world.magic.constants import EffectKind  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
+
+    cast_check = resolve_cast_check(character, ctx.technique)
+    return any(
+        round_pull_bonus(
+            participant, kind=kind, technique_id=ctx.technique.pk, cast_check=cast_check
+        )
+        != 0
+        for kind in (EffectKind.INTENSITY_BUMP, EffectKind.FLAT_BONUS)
+    )
 
 
 def kindled_cast_power_term(ctx: PowerTermContext) -> int:
     """A cast worked in a kindled resonance is stronger, and more for an Abyssal one (#5231).
 
-    Adds ``kindled_cast_strength`` of the cast's resonance. A cast that pulls a thread gains
+    Adds ``kindled_cast_strength`` of the cast's resonance. A cast whose pull boosts it gains
     nothing here: the pull is the way to draw strength from a feeling, and a cast does not
-    get both (Decision 18). 0 for a cast with no resonance or one that is not kindled.
+    get both (Decision 18). A pull that gives this cast nothing takes nothing from it.
+    0 for a cast with no resonance or one that is not kindled.
     """
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.services.kindling import kindled_strength_now  # noqa: PLC0415
 
-    if ctx.cast_resonance is None or _pulled_this_round(ctx):
+    if ctx.cast_resonance is None or _pull_boosts_this_cast(ctx):
         return 0
+    # In a fight the cast's own round context is the resolution: no second lookup of it.
+    resolution = ctx.situation_ctx if isinstance(ctx.situation_ctx, CombatRoundContext) else None
     return kindled_cast_strength(
-        ctx.cast_resonance, kindled_strength_now(ctx.sheet, ctx.cast_resonance)
+        ctx.cast_resonance,
+        kindled_strength_now(ctx.sheet, ctx.cast_resonance, resolution=resolution),
     )
 
 
