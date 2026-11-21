@@ -1268,7 +1268,7 @@ Proven end-to-end by
 
 Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
 
-- **The resonance.** `cast_resonance_for(character, technique, preferred, *, refuse_off_thread=True)`
+- **The resonance.** `cast_resonance_for(character, technique, preferred, *, refuse_off_thread=True, sheet=, alt_resonance=)`
   (`specialization/services.py`): the named resonance, else a worn alternate self's, else the leading
   resonance of the Gift's thread (`_effective_variant_resonance`'s order); a caster with no thread on
   the Gift works the resonance she named when a role thread holds it, else the Gift's first in the order
@@ -1283,8 +1283,9 @@ Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
   Choosing the base form does not change it.
 - **Where the choice is stored.** Fights: `CombatRoundAction.cast_resonance`, the record of the resonance
   the declared cast is worked in (every other combat declaration writes it back to None; a passive-slot
-  call keeps the focused cast's, dropped to None when the thread has lost it; an enchanted Strike reads it
-  through `stored_cast_resonance` like a focused cast). The combat doors refuse an off-thread pick with
+  call keeps the focused cast's, dropped to None when the thread has lost it; an enchanted Strike names no
+  resonance and has no picker, so it is always worked in the default resonance and its combat descriptor
+  carries no `cast_resonance_options`). The combat doors refuse an off-thread pick with
   `refuse_resonance_off_thread` before the pull is committed. Scenes: the body key `preferred_resonance_id`,
   stored on `SceneActionRequest.cast_resonance` by the consent-gated and hostile-awaiting-consent routes and
   used when the request resolves. The field has one meaning, the resonance the player named while the
@@ -1308,7 +1309,7 @@ Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
   scaling the pull levels use too) of the cast's resonance, read with `kindled_strength_now`, whether or not the
   cast pulls a thread: kindling's levers stack (giving in, Dig deep, a pull's boost, the cast power) and staff tune
   `cast_power`; suppression by a pull was tried and removed.
-- **The options.** `cast_resonance_options(character, technique, sheet=, kindling=)`
+- **The options.** `cast_resonance_options(character, technique, sheet=, kindling=, alt_resonance=)`
   (`services/cast_resonance_options.py`, separate from `available_technique_forms`, which still lists only
   variant forms): one `CastResonanceOption` per resonance on the Gift's thread, leading first, with a worn
   alternate self's off-thread default added as its own first entry marked `is_default` (a caster with no thread

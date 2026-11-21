@@ -2353,7 +2353,7 @@ Characters draw strength from a feeling (a Primal resonance) and from what they 
 or an Abyssal one). In casting that becomes a choice: a cast is worked in exactly one resonance, and the
 cast's power and its corruption both follow it. The record of why is `docs/adr/adr-5231-a-cast-is-worked-in-one-resonance.md`.
 
-- **Which resonance.** `cast_resonance_for(character, technique, preferred, *, refuse_off_thread=True)`
+- **Which resonance.** `cast_resonance_for(character, technique, preferred, *, refuse_off_thread=True, sheet=, alt_resonance=)`
   (`world/magic/specialization/services.py`) returns the named resonance, else a worn alternate self's, else the
   leading resonance of the Gift's thread (`_effective_variant_resonance`'s order). A caster with no thread on the
   Gift (a role-granted technique on a Gift she does not hold, a sheetless NPC) works the resonance she named when a
@@ -2383,8 +2383,9 @@ cast's power and its corruption both follow it. The record of why is `docs/adr/a
   `CombatRoundAction.cast_resonance`, the record of the resonance the declared cast is worked in; the web body key
   and telnet's `variant=<resonance>` both arrive as `preferred_resonance_id`; every other combat declaration
   writes the field back to None, while a passive-slot call keeps the focused cast's value unless the thread has
-  lost it since, which drops it to None. An enchanted Strike honours the stored pick through the same test as a
-  focused cast (`stored_cast_resonance`). A scene cast confirmed after the Soulfray warning carries the resonance, the
+  lost it since, which drops it to None. An enchanted Strike names no resonance and shows no picker: it is always
+  worked in the default resonance (a worn alternate self's, else the Gift thread's leading one), and its combat
+  descriptor carries no `cast_resonance_options`. A scene cast confirmed after the Soulfray warning carries the resonance, the
   form, `cast_openly`, the strain commitment and any pull.
 - **Corruption follows it.** `_build_resonance_involvements(character=, runtime_intensity=, cast_resonance=, ...)`
   gives the whole intensity to the cast's resonance as its `stat_bonus_contribution` and gives no other resonance
@@ -2423,7 +2424,7 @@ cast's power and its corruption both follow it. The record of why is `docs/adr/a
   Dig deep, a pull's kindled boost and the kindled cast power can all feed one cast, so with a `cast_power` of 6 at
   Abyssal's 150 percent the cast term is 9 on top of whatever intensity Fury bought. That is the rule, not a
   double count; staff tune `cast_power`.
-- **The list of options.** `cast_resonance_options(character, technique, *, sheet=, kindling=)`
+- **The list of options.** `cast_resonance_options(character, technique, *, sheet=, kindling=, alt_resonance=)`
   (`world/magic/services/cast_resonance_options.py`) returns one `CastResonanceOption` per resonance on the Gift's
   thread, leading first; a worn alternate self's resonance that is not on the thread is added as its own first entry
   marked `is_default`. A caster with no thread on the Gift has only her default entry, so no picker shows and

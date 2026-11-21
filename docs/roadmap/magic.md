@@ -1444,7 +1444,8 @@ others gives her strength. Built as one PR (one migration, eight columns, no tab
   resonance, used at declaration, at round resolution and at scene consent, and a resonance the thread has lost falls
   back to the default and never refuses a round. The choice rides `preferred_resonance_id` and is stored on
   `CombatRoundAction.cast_resonance` and, while a request is pending, `SceneActionRequest.cast_resonance`, so every scene
-  route and every fight (an enchanted Strike included) honours it. A named resonance is accepted on any thread her forms
+  route and every focused fight cast honours it. An enchanted Strike names no resonance and shows no picker, so it is
+  always worked in the default resonance. A named resonance is accepted on any thread her forms
   come from, a covenant role's thread included, and a caster with no thread on the Gift gets no choice and a default in
   the order Primal, Celestial, Abyssal.
 - **Corruption follows the cast's resonance and how Abyssal the caster is.** The whole intensity goes to that resonance
