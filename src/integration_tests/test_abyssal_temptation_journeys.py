@@ -165,6 +165,9 @@ class _AnAbyssalCasterInAScene(JourneyCase):
     """
 
     kindle_praedari = True
+    # A technique holds one thread per owner, so a subclass that weaves its own thread on the
+    # technique sets this false and the base weaves none.
+    weave_strand = True
 
     def setUp(self) -> None:
         super().setUp()
@@ -223,7 +226,8 @@ class _AnAbyssalCasterInAScene(JourneyCase):
         )
         # Warmth is listed first, so it leads the Gift's thread.
         provision_latent_gift_thread(self.sheet, self.gift, resonances=[self.warmth, self.praedari])
-        self.strand = _thread_on(self.sheet, self.praedari, self.technique, "Praedari Strand")
+        if self.weave_strand:
+            self.strand = _thread_on(self.sheet, self.praedari, self.technique, "Praedari Strand")
         # Her own feeling kindles Praedari at Blazing, through a real own-feeling situation
         # that any act she makes while bearing it feeds.
         if self.kindle_praedari:
@@ -401,6 +405,7 @@ class TheKindledPullInAScene(_AnAbyssalCasterInAScene):
     """
 
     kindle_praedari = False
+    weave_strand = False
 
     def setUp(self) -> None:
         super().setUp()
@@ -468,7 +473,7 @@ class TheAbyssalTemptationInAFight(JourneyCase):
         self.warmth = ResonanceFactory(name="Warmth", affinity=primal)
         self.praedari = ResonanceFactory(name="Praedari", affinity=abyssal)
         _corruption_condition(self.praedari)
-        KindledStrengthTierFactory(rank=3, name="Blazing", cast_power=6)
+        blazing = KindledStrengthTierFactory(rank=3, name="Blazing", cast_power=6)
 
         room = self.make_room("The Ashen Court")
         SceneFactory(room=room)
