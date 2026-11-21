@@ -771,7 +771,11 @@ offers no gift on the Path named by `?path_id=`, or on any Path when none is nam
   personalization" section)
 - Magic selections (`selected_gift_id`, `selected_technique_ids`, `gift_resonance_weights` (a list of
   `{resonance_id, weight}`: the weights spread `DriftConfig.creation_points` across the picked
-  resonances, #5123),
+  resonances, #5123; since #5231 exactly one Primal pick, the feeling that gives the character
+  strength, and at most one Celestial or Abyssal pick, what she does to others, each with at least
+  one point, checked by `resonance_weights_error` with "Pick the feeling that gives you strength.",
+  "Pick one feeling." and "Pick one resonance for what you do to others, or none."; a draft saved
+  under the old rule reads the Gift stage incomplete),
   `anima_check_stat_id`, `anima_check_skill_id`, `anima_ritual_name`, `motif_description`,
   `glimpse_story`) are stored in `draft_data` JSON via draft PATCH — see `GiftStage` (frontend)
   and `compute_magic_errors` (validation)

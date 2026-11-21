@@ -194,12 +194,23 @@ for the five-branch validation gate this data must satisfy before submission.
   uses for path-crossing grants. No-op (early return, nothing created) when the
   draft has no `selected_gift_id` — only legacy/test-only draft_data reaches this,
   since `compute_magic_errors` requires the key on any draft that reaches submission.
-- **Several weighted resonances (#5123).** The picks are read from
+- **One feeling and at most one other (#5231, replacing the #5123 weighted collection).** The picks are read from
   `draft.draft_data["gift_resonance_weights"]` (`GIFT_RESONANCE_WEIGHTS_KEY`), a list of
   `{resonance_id, weight}` parsed in one place, `resonance_weights.py` (heaviest first, a tie
   keeping the order given). `compute_magic_errors` requires distinct, existing resonances,
   each weighted at least 1, summing to `DriftConfig.creation_points` (a stale or missing
-  pick reads "Select a gift resonance"). `provision_magic` writes them in order: the Gift
+  pick reads "Select a gift resonance"), exactly one of them Primal (the feeling that gives
+  the character strength) and at most one other, which must be Celestial or Abyssal (what she
+  does to others), through `_affinity_picks_error` in `validators.py`. The three refusals are
+  "Pick the feeling that gives you strength." (no Primal pick), "Pick one feeling." (more than one
+  Primal pick) and "Pick one resonance for what you do to others, or none." (a second pick that is
+  not Celestial or Abyssal, or a third pick). The draft serializer applies the same check
+  while a draft is saved, minus the full spread and minus the Primal requirement (a second pick
+  may be made first); the stage itself still asks for both before it reads complete, and a draft
+  saved under the old rule reads incomplete with the reason above. The Gift stage's player text
+  is fifteen `gift_strength_*` keys in `CG_EXPLANATION_COPY` (`world/seeds/character_creation.py`),
+  staff-editable, with the plain wording as the fallback; the aura's name line is built in the
+  frontend from affinity names and is not a key. `provision_magic` writes them in order: the Gift
   thread (and species gift threads) are provisioned with a `ThreadResonance` row per pick at
   amount 0, the heaviest leading, on first provision (an existing thread ignores the list);
   the settled shares start as the weights, the Glimpse nudge moves them (the one place it is

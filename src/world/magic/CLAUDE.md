@@ -87,7 +87,7 @@ The magic system for Arx II. Power flows from identity and connection.
 
 ### Character State
 - `CharacterAura.cached_glimpse_tags` (#5193) - the aura's chosen glimpse tags as a `PrunedCachedProperty`, read by the character sheet and cleared by `set_glimpse_tags` and by a `CharacterGlimpseTag` row's save or delete; any new writer of those rows clears it too. `GlimpseTag.stands_alone` marks a tag that cannot be chosen with another tag of its axis (`set_glimpse_tags` refuses it, `keep_stand_alone` reduces a list)
-- `CharacterAura` - A character's aura; the affinity percentages are `CharacterAuraShare` rows (one per affinity, read through `cached_shares` / `percent_for(affinity)` / `dominant_affinity`). Each share carries `percent` (the aura now, from lifetime resonance via `recompute_aura`) and `settled_percent` (who the character IS, 0-100, summing to 100 once set; #5123): written at creation (`set_settled_shares`, weights plus the Glimpse nudge) and by `accept_aura_change`. The main affinity is the largest `settled_percent` (a tie to the lowest affinity id). `set_aura_shares` keeps a share row whose `settled_percent` is above zero even at `percent` 0, so a faded streak's line survives
+- `CharacterAura` - A character's aura; the affinity percentages are `CharacterAuraShare` rows (one per affinity, read through `cached_shares` / `percent_for(affinity)` / `dominant_affinity`). Each share carries `percent` (the aura now, from lifetime resonance via `recompute_aura`) and `settled_percent` (who the character IS, 0-100, summing to 100 once set; #5123): written at creation (`set_settled_shares`, weights plus the Glimpse nudge) and by `accept_aura_change`. The main affinity is the largest `settled_percent` (a tie goes to Primal, then to the lowest affinity id, in `_main_affinity` and in `CharacterAura.dominant_affinity` alike, #5231). `set_aura_shares` keeps a share row whose `settled_percent` is above zero even at `percent` 0, so a faded streak's line survives
 - `CharacterResonance` - Per-character per-resonance row. Identity anchor AND
   spendable currency bucket. Fields: `character_sheet` FK, `resonance` FK,
   `balance` (spendable), `lifetime_earned` (monotonic audit), `claimed_at`,
@@ -1205,8 +1205,9 @@ also standalone-callable. (`world/covenants/discovery.py` re-exports it as
 **GIFT anchor cap (#1580, #4585):** `compute_anchor_cap` handles `TargetKind.GIFT` by
 returning `compute_level_cap(thread.owner)` (character level × 10). GIFT threads are
 always in-action (`_ALWAYS_IN_ACTION_KINDS`; a species gift is intrinsic). The frontend CG
-resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
-`gift_resonance_weights`). Proven end-to-end by
+resonance step is built (`GiftStage`'s `StrengthStep`, #1620/#2426 Task 10, rebuilt in #5231), which
+writes `gift_resonance_weights` as one Primal pick and at most one Celestial or Abyssal pick.
+Proven end-to-end by
 `world/magic/tests/integration/test_gift_specialization_e2e.py` (#1578) and
 `world/magic/tests/integration/test_species_gift_e2e.py` (#1580).
 - **Species gift provisioning** — `SpeciesGiftGrant` (`world/species/models.py`; natural key
@@ -1214,7 +1215,7 @@ resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
   `drawback_condition` FK. `provision_species_gifts(sheet, *, resonances=())`
   (`world/species/services.py`) is called from `finalize_magic_data` after the Major-gift
   block; mints the MINOR `CharacterGift` via `grant_gift_to_character`, applies any
-  drawback idempotently. Character creation passes its weighted picks (heaviest first), so a
+  drawback idempotently. Character creation passes its picks (one Primal and at most one Celestial or Abyssal, heaviest first), so a
   species gift's thread starts with the same rows; empty `resonances` lets the shared resolver
   anchor the Minor Gift's thread to the character's Major-gift thread's leading resonance,
   since that thread already exists by the time species gifts provision
@@ -1262,6 +1263,52 @@ resonance picker is built (`GiftStage`, #1620/#2426 Task 10 — writes
   (`AudereMajoraThreshold` rows). A POTENTIAL (level-3) "pre-crossing" reuses the identical
   machinery; its lesser-ceremony wording is authored on the threshold row.
 - Proven end-to-end by `world/magic/tests/integration/test_path_crossing_grant_e2e.py`.
+
+### A cast is worked in one resonance (#5231, ADR-5231)
+
+Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
+
+- **The resonance.** `cast_resonance_for(character, technique, preferred, *, refuse_off_thread=True)`
+  (`specialization/services.py`): the named resonance, else a worn alternate self's, else the leading
+  resonance of the Gift's thread (`_effective_variant_resonance`'s order), else the Gift's own first
+  resonance for a caster with no thread on it; a technique with no Gift or a Gift with no resonance is
+  worked in none. `resonance_on_gift_thread` is the one test of whether a named resonance has a row on
+  the Gift's thread: `cast_resonance_for` raises `ResonanceNotOnGiftThread` ("That resonance is not part
+  of this Gift's thread.") when it fails, declaration (`declare_action`, the telnet cast, the web dispatch)
+  and scene requests refuse the same way before anything is charged, and a stored choice for which it
+  fails is dropped to the default at round resolution (`resolve_combat_technique`) and at scene consent
+  (`_stored_cast_resonance_still_held`), never a refusal or an aborted round. `use_technique` reads it first.
+  Choosing the base form does not change it.
+- **Where the choice is stored.** Fights: `CombatRoundAction.cast_resonance` (every other combat
+  declaration writes it back to None; a passive-slot call keeps the focused cast's). Scenes: the body key
+  `preferred_resonance_id`, stored on `SceneActionRequest.cast_resonance` by the consent-gated and hostile
+  routes (the hostile route stores the named choice, since the fight's round records the one used) and
+  used when the request resolves. Telnet: `variant=<resonance>`.
+- **Corruption follows it.** `_build_resonance_involvements` gives the whole `runtime_intensity` to the
+  cast's resonance; a pull's spend still attaches to the resonance that paid for it. In
+  `accrue_corruption_for_cast`, `cast_corruption_part` is 100 once the Abyssal share of the caster's true
+  aura reaches `CorruptionConfig.full_corruption_from_share`, else `light_corruption_percent` (no aura counts as
+  100); it reduces the ordinary tick (the cast's resonance and a pull paid in an Abyssal resonance), never
+  the hasty-fall part, and is read only when some ordinary tick is above zero. The tick is
+  `ceil((ordinary * part / 100 + hasty_fall) * leak_percent / 100)`, one rounding up (`_raw_tick` is exact).
+- **Power follows it.** `PowerTermContext.cast_resonance`; `kindled_cast_power_term` adds
+  `kindled_cast_strength` (`KindledStrengthTier.cast_power * Affinity.kindled_boost_percent // 100`) of the
+  cast's resonance, read with `kindled_strength_now`. It adds nothing when a pull that boosts that cast is in
+  play (`_pull_boosts_this_cast`): in a fight `round_pull_bonus` decides that, so a pull on unrelated threads
+  takes nothing from the cast; in a scene any charged declared pull (a thread with a pull tier above 0 in
+  `applicable_threads`) suppresses it, whether or not its threads relate to the cast.
+- **The options.** `cast_resonance_options(character, technique, sheet=, kindling=)`
+  (`services/cast_resonance_options.py`, separate from `available_technique_forms`, which still lists only
+  variant forms): one `CastResonanceOption` per resonance on the Gift's thread, leading first, with a worn
+  alternate self's off-thread default added as its own first entry marked `is_default`; each carries the
+  kindled strength and reasons, `stronger` (the single entry with the highest cast strength, above the
+  default's; a tie marks none, `stronger_marks`) and `adds_corruption` (its affinity's coefficient above 0). A
+  caller listing several techniques reads the kindling once with `kindling_by_resonance`. The scene cast
+  payload (`resonance_options`) and the combat availability descriptor (`cast_resonance_options`) carry it,
+  and the pickers send `preferred_resonance_id` only for a non-default option.
+- **Earning.** `grant_resonance` scales by `resonance.affinity.earn_rate_percent`; the learn rate still
+  follows the main affinity (`drift.learn_rate_percent`). The deed decides what is earned, whichever
+  resonance powered the cast.
 
 ### Resonance Gain Surfaces (Resonance Pivot Spec C)
 
@@ -1412,17 +1459,24 @@ with a roll that moves it onto the Sineater, who carries it as **the Mire** and 
   `world/roster/services/npc_lending.py`, the loan-aware current player of each sheet; a sheet nobody plays
   shares none): `SoulTetherFormationError` / `SineatingValidationError`. A plea needs the asker to hold the
   tether's SINNER side, so reversing the pair is refused. Sineating, the
-  rescue and the stage-advance offer use it. `sineater_has_fallen` (aura `dominant_affinity` Abyssal) makes
+  rescue and the stage-advance offer use it. `sineater_has_fallen` (aura `dominant_affinity` Abyssal; an even split is Primal) makes
   Sineating and the rescue refuse with `SineaterFallenError`.
 - **Sineating** (`services/sineating.py`). `request_sineating` is the Sinner's plea (a
   `SineatingPendingOffer`, one per pair, clamped to the per-plea cap); `perform_sineating` is the Sineater's
   ritual: refusals first (no plea, stale scene, fallen, already performed this scene, not set up, Mire at
   its stage cap), then in one transaction `ensure_sineater_thread`, roll `sineating_check_type` (with the
   activity terms of `MagicActivity.SINEATING`), `take_on_corruption` (`units x corruption_per_unit`, never
-  more than the Sinner's own corruption (what they carry less what they hold as a Sineater for someone else) or than fits under `CorruptionConfig.sineater_max_stage`, whatever the roll),
+  more than the Sinner's own corruption (what they carry less what they hold as a Sineater for someone else, `mire.own_corruption`) or than fits under `CorruptionConfig.sineater_max_stage`, whatever the roll),
   refill the Hollow, `lifetime_helped += units`, and each party earns
-  `floor(units x resonance_per_unit x earned_share)` (the rolled tier's `SineatingOutcomeAward`) of the
-  resonance of their own thread, as `GainSource.SINEATING`. No anima and no fatigue. `decline_sineating`,
+  `floor(units x resonance_per_unit x earned_share)` (the rolled tier's `SineatingOutcomeAward`), as `GainSource.SINEATING`
+  (#5231). The corruption moves in the resonance on the Sinner's thread in which she has the most of
+  her own to shed (`_plea_resonance`; a tie goes to the row with more imbued, then the lower resonance
+  id), the plea stores that resonance, and the Hollow refills on the thread that has a row for it. The
+  Sineater earns it all in the resonance of their own thread; the Sinner's earning is split across the
+  thread's rows by the amounts imbued, the leading row taking the remainder, a part of 0 granting
+  nothing, and a thread with nothing imbued paying its leading resonance (`_earning_parts`; each part is
+  its own grant, and the result carries `sinner_earned_parts`). A Sinner with nothing of her own to shed
+  is not refused: the ritual performs and says "you carried no corruption to shed". No anima and no fatigue. `decline_sineating`,
   `sineating_lines` (both parties' result lines), `sineating_is_ready` (check type set and an award per
   outcome tier; the Required content probe reads the same), `sineating_options_for(sheet)`.
 - **A pose carries it**, as it carries a reflection: pose fields `sineating_role` (`entreat` / `perform`,
@@ -1931,8 +1985,8 @@ attacker affinity); `working_affinities` puts a cast in the worn self's affinity
 Tether and the sheet display keep the true `CharacterAura`. See `docs/systems/magic.md`.
 
 **Unsettled and Resonance Conflict (#4732, #5123):** `services/drift.py` holds `drift_for(sheet)`
-(whether the character is unsettled: on the TRUE aura, each non-main affinity's own share of
-lifetime resonance against its `CharacterAuraShare.settled_percent` plus the range before Unsettled; the
+(whether the character is unsettled: on the TRUE aura, each affinity read (see below) holds its own share of
+lifetime resonance against its `CharacterAuraShare.settled_percent` plus the range that applies to it; the
 Mire is corruption now, not a share of the aura, so it has no part in this reading, #5177) and `check_resonance_focus(character,
 technique)`, called once per cast from `_complete_technique_cast` inside
 `use_technique` (after anima, before `resolve_fn` runs), so every cast path rolls it; a pull is
@@ -1954,6 +2008,14 @@ nullable, and `_unsettled_numbers(main, cfg)` in `services/drift.py` returns the
 values when set, else the `DriftConfig` ones. Staff set them on the Affinity admin page: Celestial's range
 is small (a Celestial-led character unsettles early by her own Abyssal acts), Primal and Abyssal keep the
 general value. Never call the range "room" or "headroom" (the glossary's term is "range before Unsettled").
+**Drift reads by side (#5231)**, `_range_for` in `services/drift.py`, and the step is always the main
+affinity's: a Celestial main reads Primal and Abyssal at Celestial's range; an Abyssal main reads
+Celestial only (Primal never) at Abyssal's range; a Primal main that leans to a side (`_lean_of`: the
+larger settled share of Celestial and Abyssal, equal shares including both zero meaning no lean) reads
+the opposite side at the range of the affinity she leans to and her own side at
+`DriftConfig.own_side_tolerance_percent` (15, the own-side range); a Primal main with no lean reads
+Celestial and Abyssal at Primal's range. So growth in Primal never unsettles a Primal character, and
+unsettles a Celestial one.
 The reading `drift_for` returns is a `DriftReading` (`types/drift.py`):
 `steps_past`, `main_affinity`, `leading_excess_resonance` (the resonance named in "Your X has
 grown strong enough to make you unsettled"), `shares` (each affinity's percent of lifetime
@@ -2417,7 +2479,9 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
   rank, blank reads it from the bond tier or condition severity and `clean` refuses blank where there
   is no source), `KindledStrengthTier` (natural key `rank`; the staff-named strength and every number
   that follows from it: `min_bond_tier`, `min_severity`, `pull_levels`, `give_in_max_depth`,
-  `give_in_bonus_percent`, `give_in_ease_tenths`, `dig_deep_scale_percent`, `earn_percent`),
+  `give_in_bonus_percent`, `give_in_ease_tenths`, `dig_deep_scale_percent`, `earn_percent`,
+  `cast_power`, #5231; `Affinity.kindled_boost_percent`, default 100, scales `pull_levels` and
+  `cast_power` per affinity so Abyssal's can be larger),
   `KindlingConfig` (singleton, `harm_property`), `KindledDeedAward` and `RallyKindlingStrength`
   (`OutcomeTierAward` tables), `Kindling` (Rally or GM only, `encounter` XOR `scene`).
   `Resonance.feeling` (Property FK) is what the feeling situations match; `missions.MissionTheme`
@@ -2433,8 +2497,14 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
   `world/covenants/perks/constants.py` with evaluators that call the same finders
   (`KINDLING_EVIDENCE_FINDERS`), so a vow perk and a kindling read one logic.
 - **Uses.** Drawing strength: `resolve_pull_effects(..., kindled=)` adds the payer's tier
-  `pull_levels` to the level the multiplier reads (resolution only, never the thread; never lowers
-  a read). Giving in: `fury.give_in_strength`, `give_in_refusal` (an unkindled resonance is refused
+  `pull_levels` times its affinity's `kindled_boost_percent // 100` to the level the multiplier reads
+  (resolution only, never the thread; never lowers a read). Since #5231 a second kindled resonance on
+  the thread adds too (`_second_resonance_boost`): one that has a row on the thread, is kindled and is
+  Primal where the payer is not, or the reverse, adds its boost times its share of everything imbued
+  (`boost * amount // total`), whether or not the payer is kindled; the largest such addition counts and
+  none counts while nothing is imbued. A payer that brings no perks never competes for the stronger
+  mark in the pull preview (`PayerOption.stronger`). A cast worked in a kindled resonance is stronger
+  (`kindled_cast_power_term`, below). Giving in: `fury.give_in_strength`, `give_in_refusal` (an unkindled resonance is refused
   in words, a tier deeper than the strength reaches is refused; Fury reads kindling with no act).
   Dig deep and Rally name a resonance (`dig_deep(participant, resonance=)`,
   `declare_rally(participant, ally, resonance=)`; a rallier sees whether the ally's resonance is
@@ -2458,7 +2528,8 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
 (one store), feels it pull. The same code serves a Sinner and a Sineater because it reads corruption, not
 the tether.
 
-- **Config.** `CorruptionConfig`: `intrusive_thoughts_stage` (1), `compulsion_stage` (2), `sineater_max_stage`
+- **Config.** `CorruptionConfig`: `light_corruption_percent` (10) and `full_corruption_from_share` (50, #5231; see "A cast
+  is worked in one resonance"), `intrusive_thoughts_stage` (1), `compulsion_stage` (2), `sineater_max_stage`
   (2; `clean` keeps it and `compulsion_stage` at or above the first), `compulsion_condition` (nullable FK to a `ConditionTemplate`
   staff author with a scene duration and a check modifier that scales with severity),
   `compulsion_indulge_corruption` (5). `Resonance.impulse_text` is the words staff write for a resonance's

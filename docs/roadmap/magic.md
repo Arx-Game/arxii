@@ -1310,7 +1310,7 @@ A mixed character is the normal case. Built, as one PR:
   every held resonance's perks per thread, and the pull dialog's Pay with list and Inspect perks
   show them. Telnet `pull=<thread>:<resonance>`, `imbue ... resonance=`.
 - **Unsettled replaces drift.** `CharacterAuraShare.settled_percent` is who the character is
-  (set at creation from the weighted picks, nudged by the Glimpse, moved by accepting). (This
+  (set at creation from the picks, one Primal and at most one Celestial or Abyssal since #5231, nudged by the Glimpse, moved by accepting). (This
   work also gave a Sineater a Mire share with its own allowance, `CharacterResonance.mire_lifetime`;
   #5177 removed it, because the Mire is now carried corruption.) A
   non-main affinity grown past its settled share plus the range before Unsettled (per main affinity since #4751) makes the character
@@ -1422,7 +1422,8 @@ authoring it leaves is listed in #5179). Built as one PR:
   (`Affinity.ritual_partner_fatigue`: positive takes, negative eases, zero does nothing); the partner
   reads which before agreeing. The solo ritual still earns nothing.
 - **Earn rate and learn rate.** `Affinity.earn_rate_percent` scales what a character earns and
-  `Affinity.learn_rate_percent` scales technique training, applied by the character's main affinity;
+  `Affinity.learn_rate_percent` scales technique training. The learn rate is applied by the character's
+  main affinity; since #5231 the earn rate is applied by the affinity of the resonance earned, whoever earns it;
   staff grants, character creation and resonance that is only moved or converted are exempt
   (`AFFINITY_RATE_EXEMPT_SOURCES`). This is how Abyssal magic can be faster than Celestial.
 - **Journeys:** `integration_tests/test_claiming_kindled_journeys.py`,
@@ -1432,6 +1433,41 @@ authoring it leaves is listed in #5179). Built as one PR:
   whether an entrance flourish lifts a Compulsion. Staff must author each Affinity's claiming verb,
   earn rate, learn rate and ritual partner fatigue, the instant and claim percentages and the ritual's
   award table; none is seeded (#5179).
+
+## Characters draw strength from a feeling and from what they do to others (#5231, ADR-5231, BUILT 2026-11-21)
+
+Primal resonance is the feeling that drives a character; Celestial and Abyssal are whether helping or hurting
+others gives her strength. Built as one PR (one migration, eight columns, no table):
+
+- **A cast is worked in one resonance.** `cast_resonance_for` finds it (named, else a worn alternate self's, else the
+  Gift thread's leading resonance, else the Gift's first); `resonance_on_gift_thread` is the one test of a named
+  resonance, used at declaration, at round resolution and at scene consent, and a resonance the thread has lost falls
+  back to the default and never refuses a round. The choice rides `preferred_resonance_id` and is stored on
+  `CombatRoundAction.cast_resonance` and `SceneActionRequest.cast_resonance`, so every scene route and every fight honours it.
+- **Corruption follows the cast's resonance and how Abyssal the caster is.** The whole intensity goes to that resonance
+  (a cast worked in a Primal or Celestial resonance adds none); a pull still corrupts by the resonance that paid.
+  `CorruptionConfig.light_corruption_percent` (10) applies to the ordinary tick and to a pull paid in Abyssal while the
+  caster's aura is below `full_corruption_from_share` (50) Abyssal; the hasty-fall part is never reduced; one rounding
+  up, so any corruption added is at least 1 (a few results differ from the old two-step rounding even at 100).
+- **Power follows it.** A cast worked in a kindled resonance gains `KindledStrengthTier.cast_power` times the affinity's
+  `kindled_boost_percent`, unless a pull that boosts that cast is in play (a fight decides that with `round_pull_bonus`;
+  in a scene any charged pull still suppresses it, related or not). On a pull a second kindled resonance of the other kind
+  adds its boost scaled by its share of the thread, and a payer that brings no perks never takes the stronger mark.
+- **The caster sees the choice.** `cast_resonance_options` lists each resonance with its colour, whether it is her usual,
+  kindled, stronger and adds corruption; the scene cast panel and the combat declaration show `CastResonancePicker`; the
+  pull dialog tags the stronger payer. The technique forms stay separate.
+- **Earning and drift.** The earn rate is that of the resonance earned (the learn rate still follows the main affinity).
+  Drift reads by side with a new own-side range (`own_side_tolerance_percent`, 15), and a tie in the main affinity goes to Primal.
+- **Sineating** moves corruption in the resonance on the bond's thread with the most of the Sinner's own, pays her across
+  the thread by the amounts imbued, and the Hollow guards any Abyssal resonance on the thread.
+- **Creation** asks for one Primal feeling and at most one Celestial or Abyssal resonance, then the split, with the aura
+  drawn as one swirling mass in each resonance's `color_hex` (`StrengthStep`, `AuraSwirl`); fifteen `gift_strength_*` text keys;
+  a stored list that breaks the rule shows nothing chosen. `ResonanceWeights.tsx` is gone. Staff's Grant magic is unchanged.
+- **Journeys:** `integration_tests/test_strength_in_creation_journeys.py`, `test_cast_resonance_journeys.py`,
+  `test_abyssal_temptation_journeys.py`.
+- **Not built (by decision):** the character sheet's aura keeps `AuraHalo` (only creation gets the swirl); two characters
+  serving as each other's Sineater. Staff must author each resonance's colour, Abyssal's kindled boost and earn rate, and each
+  kindled strength's `cast_power`; the starting values are grey, 100, 0.
 
 ## Audere earlier with control; Soulfray's anima-0 stage (#4740, slice 4 of #4727, BUILT 2026-10-27)
 

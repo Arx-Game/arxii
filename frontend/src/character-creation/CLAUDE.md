@@ -97,9 +97,11 @@ character-creation/
     │                        #   side, then the split of the server's
     │                        #   `resonance_creation_points` with the aura drawn beside it;
     │                        #   saves `draft_data.gift_resonance_weights` as one whole list
-    │                        #   obeying the server's rule; the step stays open for a draft
-    │                        #   saved under the old rule; `resonanceWeights.ts` holds the
-    │                        #   pure helpers)
+    │                        #   obeying the server's rule; the whole step is drawn from the
+    │                        #   start (the aura is grey for a feeling not yet picked and the
+    │                        #   slider is disabled), and a stored list that breaks the rule
+    │                        #   shows nothing chosen so the player picks again;
+    │                        #   `resonanceWeights.ts` holds the pure helpers)
     │                        #   → Anima Check, plus an
     │                        #   always-visible Motif textarea and the guided Glimpse
     │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
