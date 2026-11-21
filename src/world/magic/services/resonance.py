@@ -1612,16 +1612,21 @@ def _options_for_thread(  # noqa: PLR0913 - one preview row's whole resolution c
     """One thread's payer options, the stronger one marked (#5231).
 
     Each option reads the thread at its own level and, kindled, at the boosted level
-    ``_kindled_level`` gives it. The option whose boosted level is strictly the highest, and
-    above its own unboosted level, is the stronger one; a tie marks none.
+    ``_kindled_level`` gives it. Among the options that bring perks, the one whose boosted
+    level is strictly the highest, and above its own unboosted level, is the stronger one; a
+    tie marks none, and an option with no perks never competes.
     """
-    reads = [_option_level_read(thread, cr.resonance) for cr in held]
-    boosted = [
-        _kindled_level(read, cr.resonance, kindled, thread)
-        for cr, read in zip(held, reads, strict=True)
-    ]
-    top = max(boosted, default=0)
-    leaders = [i for i, level in enumerate(boosted) if level == top]
+    perk_levels = [payer_level_read(thread, cr.resonance) for cr in held]
+    reads = [thread.level if level is None else level for level in perk_levels]
+    # Only a payer that brings perks competes for the mark: one the thread holds no row for,
+    # or a row of nothing, reads the thread's own level but gives nothing to read higher.
+    boosted = {
+        i: _kindled_level(read, cr.resonance, kindled, thread)
+        for i, (cr, read, perk_level) in enumerate(zip(held, reads, perk_levels, strict=True))
+        if perk_level is not None
+    }
+    top = max(boosted.values(), default=0)
+    leaders = [i for i, level in boosted.items() if level == top]
     stronger = leaders[0] if len(leaders) == 1 and top > reads[leaders[0]] else None
     return [
         PayerOption(
@@ -1664,12 +1669,6 @@ def _effects_if_paid_by(  # noqa: PLR0913 - one preview row's whole resolution c
     return _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, threads=[thread], payers=payers
     )
-
-
-def _option_level_read(thread: Thread, payer: ResonanceModel) -> int:
-    """The level ``payer``'s perks read at in a preview; the thread's own when it has no perks."""
-    level = payer_level_read(thread, payer)
-    return thread.level if level is None else level
 
 
 #: The effect kinds a ``CombatPullResolvedEffect`` may carry a narrative snippet for; the

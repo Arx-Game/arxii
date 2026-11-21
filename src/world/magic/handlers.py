@@ -80,7 +80,7 @@ class CharacterThreadHandler:
         out: dict[int, list[tuple[Resonance, int]]] = {}
         rows = ThreadResonance.objects.filter(
             thread__owner_id=self.character.pk, thread__retired_at__isnull=True
-        ).select_related("resonance")
+        ).select_related("resonance__affinity")
         for row in rows:
             out.setdefault(row.thread_id, []).append((row.resonance, row.amount))
         return out

@@ -12,14 +12,21 @@ from world.magic.exceptions import InvalidImbueAmount, PullValidationError
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterResonanceFactory,
+    KindledStrengthTierFactory,
     ResonanceFactory,
     ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
+    kindle_resonance,
 )
 from world.magic.models import CharacterResonance
 from world.magic.services import preview_resonance_pull, spend_resonance_for_pull
 from world.magic.services.pull_payers import resolve_pull_payers
+from world.magic.services.thread_rows import (
+    add_to_resonance_row,
+    refresh_leading_resonance,
+    write_resonance_rows,
+)
 from world.magic.services.threads import pull_resonance_costs
 from world.magic.types import PullActionContext
 from world.magic.types.pull import CastPullDeclaration
@@ -174,6 +181,49 @@ class PullPayerTests(TestCase):
         self.assertEqual(options[self.guile.pk].balance, 10)
         self.assertTrue(options[self.guile.pk].affordable)
         self.assertEqual(options[self.guile.pk].effects, [])
+
+    def _stronger(self, thread) -> dict[str, bool]:
+        """Which of the thread's payer options the preview marks as the stronger one."""
+        preview = preview_resonance_pull(self.sheet, 1, [thread], payers={})
+        return {o.resonance.name: o.stronger for o in preview.per_thread[0].options}
+
+    def test_a_kindled_resonance_with_a_zero_row_is_never_marked_stronger(self) -> None:
+        # Fury leads a thread at 25 (a row of 0); Guile has a row of 0 too, so it pays and
+        # brings no perks. Guile is kindled at 20 levels. Read at the thread's own 25 it would
+        # become 25 + 20 = 45, the highest, but an option with no perks never competes.
+        # Fury is not kindled and adds nothing: 25 is not above its own 25, so nobody is marked.
+        thread = ThreadFactory(owner=self.sheet, resonance=self.fury, level=25)
+        write_resonance_rows(thread, [self.guile])
+        self.sheet.character.threads.invalidate()
+        kindle_resonance(
+            self.sheet, self.guile, KindledStrengthTierFactory(rank=1, name="Lit", pull_levels=20)
+        )
+
+        self.assertEqual(self._stronger(thread), {"Fury": False, "Guile": False})
+
+    def test_two_payers_whose_boosted_levels_tie_mark_nobody(self) -> None:
+        # Both imbued (Fury 60, Guile 40) on a thread at 25, in affinities that are not Primal
+        # so no second resonance adds. Fury leads and reads 25; kindled at 10 levels it
+        # reads 25 + 10 = 35. Guile reads 25 - 10 = 15; kindled at 20 levels it reads
+        # 15 + 20 = 35. A tie marks nobody; with Guile's strength raised to 30 levels it reads
+        # 15 + 30 = 45, strictly the highest and above its own 15, and it alone is marked.
+        thread = ThreadFactory(owner=self.sheet, resonance=self.fury, level=25)
+        add_to_resonance_row(thread, self.fury, 60)
+        add_to_resonance_row(thread, self.guile, 40)
+        refresh_leading_resonance(thread)
+        self.sheet.character.threads.invalidate()
+        kindle_resonance(
+            self.sheet, self.fury, KindledStrengthTierFactory(rank=1, name="Lit", pull_levels=10)
+        )
+        guile_tier = KindledStrengthTierFactory(rank=2, name="Bright", pull_levels=20)
+        kindle_resonance(self.sheet, self.guile, guile_tier)
+
+        self.assertEqual(self._stronger(thread), {"Fury": False, "Guile": False})
+
+        guile_tier.pull_levels = 30
+        guile_tier.save()
+
+        self.assertEqual(self._stronger(thread), {"Fury": False, "Guile": True})
 
     def test_a_preview_without_options_still_says_whether_it_is_affordable(self) -> None:
         full = preview_resonance_pull(self.sheet, 1, [self.first], payers={})
