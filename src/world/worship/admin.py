@@ -542,6 +542,7 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
         "roll_rule",
         "owing_favor_now",
         "intervention_odds",
+        "intervention_costs",
         "miracles_above_the_gate",
         "beings_without_answers",
     )
@@ -569,7 +570,10 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
                 )
             },
         ),
-        ("Odds at these settings (read only)", {"fields": ("intervention_odds",)}),
+        (
+            "Odds and cost at these settings (read only)",
+            {"fields": ("intervention_odds", "intervention_costs")},
+        ),
         (
             "Context",
             {"fields": ("miracles_above_the_gate", "beings_without_answers")},
@@ -632,57 +636,85 @@ class DivineInterventionConfigAdmin(admin.ModelAdmin):
             for row in rows
         )
 
-    @admin.display(description="Odds by favor")
+    @admin.display(description="Odds by example character")
     def intervention_odds(self, obj: DivineInterventionConfig) -> SafeString | str:
-        """The chance of each result for the reference roller, by favor band, read from the
-        real result charts at the invocation difficulty (never listed here, #4349)."""
-        from world.worship.sacrifice_services import sacrifice_odds  # noqa: PLC0415
+        """The chance of each result for four example characters, each row stating the favor,
+        invocation modifier and difficulty behind it, read from the real result charts (#4349)."""
+        from world.worship.intervention_tables import RESULT_WORDS, odds_rows  # noqa: PLC0415
+        from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
 
         del obj
-        cases = intervention_odds_cases()
-        rows = [(label, difficulty, sacrifice_odds(difficulty)) for label, difficulty in cases]
-        rows = [(label, difficulty, odds) for label, difficulty, odds in rows if odds is not None]
+        rows = odds_rows()
         if not rows:
             return "No result charts are authored for this roller."
-        # Charts differ in which outcomes they hold, so the columns are every outcome any row
-        # has, lowest first, and a chart without one reads 0%.
-        levels = {
-            line.outcome_name: line.success_level for _, _, odds in rows for line in odds.lines
-        }
-        names = sorted(levels, key=lambda name: levels[name])
-        head = format_html_join(
-            "", "<th>{}</th>", ((_RESULT_WORDS.get(levels[name], name),) for name in names)
-        )
+        levels = sorted(RESULT_WORDS)
+        head = format_html_join("", "<th>{}</th>", ((RESULT_WORDS[n],) for n in levels))
         body = format_html_join(
             "",
-            "<tr><td>{} ({})</td>{}</tr>",
+            "<tr><td>{}<br><small>{}</small></td>{}</tr>",
             (
                 (
-                    label,
-                    _difficulty_words(difficulty),
+                    row.archetype,
+                    row.inputs,
                     format_html_join(
-                        "",
-                        "<td>{}%</td>",
-                        (
-                            (
-                                next(
-                                    (line.percent for line in odds.lines if line.outcome_name == n),
-                                    0,
-                                ),
-                            )
-                            for n in names
-                        ),
+                        "", "<td>{}%</td>", ((row.percents.get(n, 0),) for n in levels)
                     ),
                 )
-                for label, difficulty, odds in rows
+                for row in rows
+            ),
+        )
+        roller = get_devotion_config().odds_reference_roller_points
+        return format_html(
+            "<table><tr><th>Archetype</th>{}</tr>{}</table>"
+            "<p>For a roller of {} points (the reference roller in Devotion config), at the "
+            "invocation difficulty. Botch immunity turns a Backfire into Unanswered.</p>",
+            head,
+            body,
+            roller,
+        )
+
+    @admin.display(description="What an answer costs")
+    def intervention_costs(self, obj: DivineInterventionConfig) -> SafeString | str:
+        """Spend, owed favor and wait for each result from the award rows, with the favor
+        softening applied at each band (#4349)."""
+        del obj
+        from world.worship.intervention_tables import cost_rows  # noqa: PLC0415
+        from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+        from world.worship.services import get_divine_intervention_config  # noqa: PLC0415
+
+        config = get_devotion_config()
+        cooldown = get_divine_intervention_config().cooldown_hours
+        rows = cost_rows()
+        if not rows:
+            return "No check outcomes are authored."
+        low, high = config.favor_ease_low_threshold, config.favor_ease_high_threshold
+        bands = (f"below {low}", f"{low} to {high - 1}", f"{high} or more")
+        head = format_html_join(
+            "",
+            "<th>Owed, favor {}</th>",
+            ((band,) for band in bands),
+        ) + format_html_join("", "<th>Wait (h), favor {}</th>", ((band,) for band in bands))
+        body = format_html_join(
+            "",
+            "<tr><td>{}</td><td>{}</td>{}{}</tr>",
+            (
+                (
+                    row.result,
+                    row.spent,
+                    format_html_join("", "<td>{}</td>", ((n,) for n in row.owed)),
+                    format_html_join("", "<td>{}</td>", ((n,) for n in row.wait_hours)),
+                )
+                for row in rows
             ),
         )
         return format_html(
-            "<table><tr><th>Favor</th>{}</tr>{}</table>"
-            "<p>For a {} roller, at the invocation difficulty in Devotion config.</p>",
+            "<table><tr><th>Result</th><th>Favor spent</th>{}</tr>{}</table>"
+            "<p>Spent only on a rescue or a bigger miracle. Owed favor and a wait row are "
+            "reduced at the favor bands and rounded up; a result with no wait row waits "
+            "{} hours.</p>",
             head,
             body,
-            rows[0][2].reference_rank_name,
+            cooldown,
         )
 
     @admin.display(description="Miracles whose own favor threshold is above the gate")
@@ -1113,46 +1145,6 @@ class DevotionConfigAdmin(admin.ModelAdmin):
         return super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
         )
-
-
-#: What each result tier is called on the odds table, by its success level.
-_RESULT_WORDS = {
-    -2: "Backfire",
-    -1: "Unanswered",
-    0: "Lesser answer",
-    1: "Rescue",
-    2: "Bigger miracle",
-}
-
-
-def _difficulty_words(points: int) -> str:
-    return f"{_band_label(points)} {points}"
-
-
-def intervention_odds_cases() -> list[tuple[str, int]]:
-    """The favor bands the Divine Intervention Config's odds table reads, each with the
-    invocation difficulty in points a character in it rolls at: the base difficulty eased by
-    the favor band, and by the Chosen distinction's favor invocation modifier where one is
-    designated."""
-    from world.mechanics.constants import FAVOR_INVOCATION_CATEGORY_NAME  # noqa: PLC0415
-    from world.worship.favor_services import chosen_distinction_patron_value  # noqa: PLC0415
-    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
-
-    config = get_devotion_config()
-    base = DIFFICULTY_VALUES[config.base_difficulty]
-    chosen = chosen_distinction_patron_value(FAVOR_INVOCATION_CATEGORY_NAME)
-    high = f"{config.favor_ease_high_threshold} or more"
-    low = f"{config.favor_ease_low_threshold} to {config.favor_ease_high_threshold - 1}"
-    below = f"below {config.favor_ease_low_threshold}"
-    cases = []
-    if chosen:
-        cases.append(
-            (f"{high}, with the Chosen's +{chosen}", base - config.favor_ease_high_points - chosen)
-        )
-    cases.append((high, base - config.favor_ease_high_points))
-    cases.append((low, base - config.favor_ease_low_points))
-    cases.append((below, base))
-    return [(label, max(points, MIN_DIFFICULTY_POINTS)) for label, points in cases]
 
 
 def sacrifice_odds_rows() -> list[tuple[str, str, str, str]]:
