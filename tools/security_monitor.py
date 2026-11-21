@@ -724,7 +724,12 @@ def run_check(gh: GhCli, config: Config, now: datetime, *, dry_run: bool) -> Rep
     for alert in alerts:
         track, events = reconcile_alert(alert, state.tracks.get(alert.number), now)
         if track is None:
-            continue
+            item = index.get(alert.number)
+            if item is None or item.state != "open":
+                continue
+            # A fixed alert whose public item is still open but whose track was never saved
+            # (a failed notification, a lost state directory): the fresh fixed read closes it.
+            track = Track(last_state=alert.state, wanted_issue_state="closed")
         decided[alert.number] = (alert, track)
         report.events.extend(events)
     if dry_run:

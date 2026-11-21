@@ -306,6 +306,18 @@ def test_the_item_closes_only_when_a_fresh_read_says_fixed(env):
     assert "fixed" in [e["kind"] for e in env.notices()]
 
 
+def test_a_fixed_alert_whose_item_is_open_without_a_saved_track_still_closes_it(env):
+    env.gh.add_alert(7, 3)
+    env.run()
+    (env.state_dir / "state.json").unlink()
+    env.gh.open_alerts.clear()
+    env.gh.by_number[7]["state"] = "fixed"
+
+    env.run(at=NOW + timedelta(hours=4))
+
+    assert env.gh.issues[0]["state"] == "closed"
+
+
 def test_a_reopened_alert_reopens_the_item_and_keeps_its_original_age(env):
     env.gh.add_alert(7, 60)
     env.run()
