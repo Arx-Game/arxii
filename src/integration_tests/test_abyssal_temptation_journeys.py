@@ -27,10 +27,11 @@ Hand-worked from the spec:
 * Corruption: ordinary tick 20 * (10 / 10) * (10 / 10) = 20 on Praedari (Abyssal, tier 1). She
   is 20 percent Abyssal, under 50, so she takes the light 10 percent: 20 * 10 / 100 = 2,
   rounded up once to 2. Worked in Warmth (coefficient 0) the cast adds no corruption.
-* A cast that pulls a thread gets the pull and not the kindled boost. The pulled thread is
-  woven on the technique at level 10 (one rung, so a multiplier of 1) with a tier 1 intensity
-  bump of 3: the ledger's "thread power" line is 3, the pull costs 1 Praedari, and the same
-  cast's deed then earns 15: 10 - 1 + 15 = 24.
+* A cast that pulls a thread gets the pull and the kindled boost, both: kindling's other
+  benefits stack with a pull the same way, so the kindled cast power always applies. The
+  pulled thread is woven on the technique at level 10 (one rung, so a multiplier of 1) with a
+  tier 1 intensity bump of 3: the ledger's "thread power" line is 3 and its kindled line is
+  still 9, the pull costs 1 Praedari, and the same cast's deed then earns 15: 10 - 1 + 15 = 24.
 * The cast list: her Gift's thread holds Warmth (leading, so the default) and Praedari. Warmth
   is not kindled, so its strength is 0 and it has no strength word; Praedari is kindled at
   Blazing, so its strength is the 9 above. The one entry with the highest strength, above the
@@ -38,9 +39,9 @@ Hand-worked from the spec:
   Abyssal coefficient of 10; Primal's is 0). The same two entries come back in a fight.
 * In a fight a pull lasts the round but boosts only the casts its threads relate to. A cast
   with no pull in its round gets the kindled line (9). A cast whose round holds a pull on a
-  thread of its own technique gets the pull's 3 and no kindled line. A cast whose round
+  thread of its own technique gets the pull's 3 and the kindled line (9). A cast whose round
   holds only a pull on a thread of another technique (it rode that technique's clash
-  contribution) takes nothing from that pull, so it keeps the kindled line (9).
+  contribution) takes nothing from that pull, so it has the kindled line (9) and no pull line.
 """
 
 from __future__ import annotations
@@ -340,7 +341,7 @@ class TheAbyssalTemptation(JourneyCase):
         self.assertNotIn("kindled_cast_power", praedari)
         self.assertNotIn("cast_power", praedari)
 
-    def test_a_kindled_cast_that_pulls_a_thread_gains_no_cast_bonus(self) -> None:
+    def test_a_kindled_cast_that_pulls_a_thread_gets_the_pull_and_the_cast_bonus(self) -> None:
         balance_before = CharacterResonance.objects.get(
             character_sheet=self.sheet, resonance=self.praedari
         ).balance
@@ -354,10 +355,11 @@ class TheAbyssalTemptation(JourneyCase):
             },
         )
 
-        self.assertEqual(self.line(ledger, KINDLED_LINE), 0)
-        # The pull did land: its intensity bump of 3 is the ledger's "thread power" line, and
-        # the paying resonance fell by the pull's cost of 1 before the deed's 15 arrived.
+        # Both lines are on the ledger: the pull's intensity bump of 3 is the "thread power"
+        # line, and the kindled line stays 6 * 150 // 100 = 9 beside it. The paying resonance
+        # fell by the pull's cost of 1 before the deed's 15 arrived.
         self.assertEqual(self.line(ledger, "thread power"), 3)
+        self.assertEqual(self.line(ledger, KINDLED_LINE), 9)
         balance = CharacterResonance.objects.get(
             character_sheet=self.sheet, resonance=self.praedari
         ).balance
@@ -545,14 +547,15 @@ class TheAbyssalTemptationInAFight(JourneyCase):
         self.assertEqual(self.line(entries, KINDLED_LINE), 9)  # 6 * 150 // 100
         self.assertEqual(self.pull_lines(entries), [])
 
-    def test_a_pull_on_a_thread_of_the_cast_takes_the_kindled_line_for_its_own(self) -> None:
+    def test_a_pull_on_a_thread_of_the_cast_adds_its_line_beside_the_kindled_one(self) -> None:
         self.declare_shadow_step_in_praedari(**self.pull_of(self.shadow_thread))
         self.assertTrue(CombatPull.objects.filter(threads=self.shadow_thread).exists())
 
         entries = self.resolve_and_read_the_cast()
 
-        self.assertEqual(self.line(entries, KINDLED_LINE), 0)
-        self.assertEqual(self.pull_lines(entries), [3])  # the pull's intensity bump
+        # The pull's intensity bump is 3, and the kindled line is still 6 * 150 // 100 = 9.
+        self.assertEqual(self.pull_lines(entries), [3])
+        self.assertEqual(self.line(entries, KINDLED_LINE), 9)
 
     def test_a_pull_on_another_techniques_thread_leaves_the_kindled_line_in_place(self) -> None:
         self.declare_shadow_step_in_praedari()
@@ -562,7 +565,7 @@ class TheAbyssalTemptationInAFight(JourneyCase):
         entries = self.resolve_and_read_the_cast()
 
         # The round holds a pull, but none of its threads relate to Shadow Step: it gives the
-        # cast nothing, so it takes nothing: 6 * 150 // 100 = 9 stays.
+        # cast no pull line, and the kindled line is 6 * 150 // 100 = 9 as with no pull.
         self.assertEqual(self.pull_lines(entries), [])
         self.assertEqual(self.line(entries, KINDLED_LINE), 9)
 
