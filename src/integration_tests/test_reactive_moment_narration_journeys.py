@@ -29,13 +29,17 @@ from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactor
 from integration_tests.test_holding_the_line_journeys import (
     GRACE_HEALTH,
     GRACE_SWING,
+    PC_HEALTH,
     _TheGuardedYard,
     _TheYard,
 )
 from world.checks.constants import EffectType
 from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+from world.checks.services import perform_check_with_modifiers
 from world.checks.test_helpers import SeededLevelLadderMixin, force_check_outcome
-from world.conditions.constants import DurationType
+from world.combat.constants import EngagementLockStatus, ParticipantStatus
+from world.combat.factories import EngagementLockFactory
+from world.conditions.constants import FORCE_FIELD_CONDITION_NAME, DurationType
 from world.conditions.factories import (
     ConditionCategoryFactory,
     ConditionCheckModifierFactory,
@@ -45,6 +49,7 @@ from world.conditions.factories import (
 )
 from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.conditions.services import apply_condition, spend_condition_use
+from world.magic.effect_palette_content import ensure_force_field_content
 from world.scenes.constants import InteractionMode, PersonaType
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import Interaction
@@ -129,6 +134,33 @@ class StrikeBackIsNarrated(_TheYardWatched):
         self._round()
         self.assertRoomHeard(f"Cassian's Thorn Ward strikes {BRUTE} back.", mark)
 
+    def test_a_line_written_around_the_form_still_strikes_back_with_the_plain_line(self) -> None:
+        # Staff text that bypassed validation (a direct write to the row) must not fail the round.
+        rotten = ConditionTemplateFactory(
+            name="Rotten Thorn",
+            retaliation_damage=5,
+            retaliation_damage_type=DamageTypeFactory(name="Rot"),
+        )
+        ConditionTemplate.objects.filter(pk=rotten.pk).update_with_reason(
+            reason="a line written around the admin form's validation",
+            retaliation_narration="Thorns lash from {hero} and rake {attacker}!",
+        )
+        ConditionTemplate.flush_cached_instance(rotten)
+        apply_condition(
+            self.cassian,
+            ConditionTemplate.objects.get(pk=rotten.pk),
+            source_character=self.brenna,
+        )
+
+        mark = self._mark()
+        self._round()
+
+        self.assertRoomHeard(f"Cassian's Rotten Thorn strikes {BRUTE} back.", mark)
+        self.brute.refresh_from_db()
+        # The brute's 50 health, less the 5 of the Thorn Ward in setUp and the 5 of this ward.
+        self.assertEqual(self.brute.health, 50 - 5 - 5)
+        self.assertNotIn("{hero}", " ".join(self._lines_since(mark)))
+
     def test_the_line_names_the_face_a_character_presents(self) -> None:
         veil = PersonaFactory(
             character_sheet=self.brenna.sheet_data,
@@ -210,6 +242,36 @@ class ProvokeIsNarrated(_TheYardWatched):
         mark = self._mark()
         self._round()
         self.assertRoomHeard(f"{BRUTE} turns on Brenna.", mark)
+
+    def test_a_provoke_that_chose_nothing_is_not_told(self) -> None:
+        self._set_line(self.called_out, "provoke_narration", "{bearer} rounds on {source}!")
+        apply_condition(self.brute.objectdb, self.called_out, source_character=self.brenna)
+        lock = EngagementLockFactory(
+            encounter=self.encounter,
+            opponent=self.brute,
+            participant=self.cassian_seat,
+            status=EngagementLockStatus.ACTIVE,
+        )
+        told = [f"{BRUTE} rounds on Brenna!", f"{BRUTE} turns on Brenna."]
+
+        # An engagement lock on Cassian wins over the provoke: the brute still hits Cassian.
+        mark = self._mark()
+        self._round()
+        self.assertEqual(self._swing_targets(round_number=1), [self.cassian_seat])
+        for line in told:
+            self.assertNotInRoomFeed(line, mark)
+
+        # With Cassian gone, Brenna is the brute's only target: the provoke chose nothing.
+        lock.status = EngagementLockStatus.BROKEN
+        lock.save(update_fields=["status"])
+        self.cassian_seat.status = ParticipantStatus.FLED
+        self.cassian_seat.save(update_fields=["status"])
+        self._next_round()
+        mark = self._mark()
+        self._round()
+        self.assertEqual(self._swing_targets(round_number=2), [self.brenna_seat])
+        for line in told:
+            self.assertNotInRoomFeed(line, mark)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # the Endurance check type gates on #2698
@@ -303,3 +365,98 @@ class SpentIsNarrated(_TheYardWatched):
         spend_condition_use(instance)
 
         self.assertRoomHeard(f"{BRUTE}'s Stone Skin is spent.", mark)
+
+    def test_a_once_only_condition_from_the_brute_names_it_by_its_combat_name(self) -> None:
+        # The brute is the condition's source, and has no sheet: it is named by its opponent
+        # row, never by the key of its object.
+        self.assertNotEqual(self.brute.objectdb.db_key, BRUTE)
+        hex_ = ConditionTemplateFactory(
+            name="Brute's Hex",
+            default_duration_type=DurationType.UNTIL_USED,
+            spent_narration="{bearer} shakes off {source}'s hex.",
+        )
+        apply_condition(self.brenna, hex_, source_character=self.brute.objectdb)
+        instance = ConditionInstance.objects.get(target=self.brenna, condition=hex_)
+
+        mark = self._mark()
+        spend_condition_use(instance)
+
+        self.assertRoomHeard(f"Brenna shakes off {BRUTE}'s hex.", mark)
+
+    def test_a_hidden_spent_line_is_told_only_to_the_bearer_and_the_source(self) -> None:
+        # Not visible to others: the spend after Brenna's roll is told to Brenna and her
+        # source Cassian, and Dara is shown nothing.
+        self.steadying_word.is_visible_to_others = False
+        self.steadying_word.save(update_fields=["is_visible_to_others"])
+        apply_condition(self.brenna, self.steadying_word, source_character=self.cassian)
+        line = "Brenna's resolve is used up."
+        self._brenna_declares(self.plain)
+
+        mark = self._mark()
+        self._round()
+
+        self.assertNotInRoomFeed(line, mark)
+        self.assertShownRow(self.brenna, line)
+        self.assertShownRow(self.cassian, line)
+        self.assertToldInFightScene(line)
+
+        # A once-only condition that conceals its bearer is spent: it is hidden for the
+        # spend itself, though the spend removes the very condition that hid it.
+        veil = ConditionTemplateFactory(
+            name="Veil of Shadow",
+            category=ConditionCategoryFactory(conceals_from_perception=True),
+            default_duration_type=DurationType.UNTIL_USED,
+            spent_narration="{bearer}'s veil falls away.",
+        )
+        apply_condition(self.brenna, veil, source_character=self.cassian)
+        instance = ConditionInstance.objects.get(target=self.brenna, condition=veil)
+
+        mark = self._mark()
+        spend_condition_use(instance)
+
+        self.assertNotInRoomFeed("Brenna's veil falls away.", mark)
+        self.assertShownRow(self.brenna, "Brenna's veil falls away.")
+        self.assertShownRow(self.cassian, "Brenna's veil falls away.")
+
+    def test_a_once_only_ward_spent_by_a_blow_is_told_to_the_room_once(self) -> None:
+        # An Aegis Field soaks one blow (the brute's swing of 12 against its buffer of 20) and
+        # is used up by it: the room hears the spent line once, authored and then plain.
+        ensure_force_field_content()
+        aegis = ConditionTemplate.objects.get(name=FORCE_FIELD_CONDITION_NAME)
+        aegis.default_duration_type = DurationType.UNTIL_USED
+        aegis.upkeep_anima_per_round = 0
+        aegis.spent_narration = "{bearer}'s field gutters out."
+        aegis.save(
+            update_fields=["default_duration_type", "upkeep_anima_per_round", "spent_narration"]
+        )
+        apply_condition(self.cassian, aegis, source_character=self.brenna)
+
+        mark = self._mark()
+        self._round()
+        self.assertEqual(self._health(self.cassian), PC_HEALTH)
+        self.assertFalse(self._has(self.cassian, aegis))
+        self.assertRoomHeard("Cassian's field gutters out.", mark)
+
+        self._set_line(aegis, "spent_narration", "")
+        apply_condition(self.cassian, aegis, source_character=self.brenna)
+        self._next_round()
+        mark = self._mark()
+        self._round()
+        self.assertEqual(self._health(self.cassian), PC_HEALTH)
+        self.assertFalse(self._has(self.cassian, aegis))
+        self.assertRoomHeard(f"Cassian's {FORCE_FIELD_CONDITION_NAME} is spent.", mark)
+
+    def test_a_blessing_spent_by_a_roll_outside_the_fight_is_told_privately(self) -> None:
+        # Dara is not in the fight. Her once-only blessing, laid by Cassian, is used up by a
+        # roll of her own, and no fight's room is there to hear it.
+        apply_condition(self.dara, self.steadying_word, source_character=self.cassian)
+        line = "Dara's resolve is used up."
+
+        mark = self._mark()
+        perform_check_with_modifiers(self.dara, self.technique_check_type)
+
+        self.assertFalse(self._has(self.dara, self.steadying_word))
+        self.assertNotIn(line, self._lines_since(mark))
+        self.assertShownRow(self.dara, line)
+        self.assertShownRow(self.cassian, line)
+        self.assertFalse(any(line in row for row in self.mailbox(self.brenna).rows))
