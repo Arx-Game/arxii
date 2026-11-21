@@ -11,7 +11,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 
 from web.api.pagination import DefaultPagination
-from world.game_clock.constants import IC_MONTH_NAMES
+from world.game_clock.constants import IC_MONTH_NAMES, MAX_CLOCK_YEAR, MIN_CLOCK_YEAR
 from world.game_clock.filters import ClockHistoryFilter
 from world.game_clock.models import GameClock, GameClockHistory
 from world.game_clock.serializers import (
@@ -90,6 +90,8 @@ class ClockViewSet(viewsets.ViewSet):
             "paused": clock.paused,
             "time_ratio": clock.time_ratio,
             "month_names": [IC_MONTH_NAMES[month] for month in sorted(IC_MONTH_NAMES)],
+            "min_year": MIN_CLOCK_YEAR,
+            "max_year": MAX_CLOCK_YEAR,
         }
         serializer = ClockStateSerializer(data)
         return Response(serializer.data)

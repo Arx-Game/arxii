@@ -23,14 +23,19 @@ export const clockKeys = {
 
 const TEN_SECONDS = 10 * 1000;
 
+/** An answer from the server is the truth and is not asked for again; a dropped
+ * connection is retried twice. "No clock yet" is a 503 and is an answer. */
+function retryUnlessAnswered(count: number, error: Error): boolean {
+  return !(error instanceof ApiError) && count < 2;
+}
+
 /** The clock, re-read every ten seconds so a running date moves on the page. */
 export function useStaffClock() {
   return useQuery({
     queryKey: clockKeys.state,
     queryFn: fetchClock,
     refetchInterval: TEN_SECONDS,
-    // An answer from the server is not retried: "no clock yet" is a 503 and is the truth.
-    retry: (count, error) => !(error instanceof ApiError) && count < 2,
+    retry: retryUnlessAnswered,
   });
 }
 
@@ -38,6 +43,7 @@ export function useClockHistory(page: number) {
   return useQuery({
     queryKey: clockKeys.history(page),
     queryFn: () => fetchClockHistory(page),
+    retry: retryUnlessAnswered,
   });
 }
 
@@ -48,6 +54,7 @@ export function useJumpPreview(icDatetime: string | null) {
     queryFn: () => fetchJumpPreview(icDatetime ?? ''),
     enabled: icDatetime !== null,
     staleTime: 0,
+    retry: retryUnlessAnswered,
   });
 }
 

@@ -32139,6 +32139,10 @@ export interface components {
       time_ratio: number;
       /** @description The twelve IC month names in order, for a date picker. */
       month_names: string[];
+      /** @description The earliest year the clock may be set to. */
+      min_year: number;
+      /** @description The latest year the clock may be set to. */
+      max_year: number;
     };
     /**
      * @description Staff CRUD for clue-reveal-kind offer details (#3428).

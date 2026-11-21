@@ -262,6 +262,129 @@ class StaffRunTheGameClock(JourneyCase):
         self.assertEqual(coming.scheduled_ic_time, _ic(1020, 1, 22))
         self.assertEqual(ended.scheduled_ic_time, _ic(999, 12, 10), "the past keeps its date")
 
+    def test_a_jump_inside_one_year_keeping_ages_skips_the_birthdays_between(self) -> None:
+        """Three months later, ages kept: no birth year moves and nobody has the birthday
+        that fell in between."""
+        self._clock(_ic(1000, 4, 1), paused=True)
+        sheet = self._character(born=970)  # birthday the 12th of Vowing
+        record = self._stamp_birthday_task(_ic(1000, 4, 1))
+
+        response = self._set_date(_ic(1000, 8, 1), "kept")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(sheet.ic_birth_year, 970)
+        self.assertEqual(record.last_ic_run_at, _ic(1000, 8, 1))
+        aging_birthday_tick_task()
+        self.assertEqual(sheet.matured_years, 24)
+        row = GameClockHistory.objects.latest("pk")
+        self.assertEqual((row.change, row.birth_year_shift), ("date_kept", 0))
+
+    def test_the_same_jump_with_characters_aging_gives_the_birthday(self) -> None:
+        self._clock(_ic(1000, 4, 1), paused=True)
+        sheet = self._character(born=970)
+        self._stamp_birthday_task(_ic(1000, 4, 1))
+
+        self.assertEqual(self._set_date(_ic(1000, 8, 1), "aged").status_code, 200)
+
+        aging_birthday_tick_task()
+        self.assertEqual(sheet.matured_years, 25)
+        self.assertEqual(sheet.chronological_age, 30, "the calendar year did not change")
+
+    def test_keeping_ages_moves_every_tasks_stamp_and_aging_leaves_them(self) -> None:
+        self._clock(_ic(1000), paused=True)
+        birthday = self._stamp_birthday_task(_ic(1000))
+        weather = ScheduledTaskRecord.objects.create(
+            task_key="weather.roll", last_ic_run_at=_ic(999, 12, 31)
+        )
+        never_ran = ScheduledTaskRecord.objects.create(task_key="aging.decline_check")
+
+        self.assertEqual(self._set_date(_ic(1010), "aged").status_code, 200)
+        self.assertEqual(
+            (birthday.last_ic_run_at, weather.last_ic_run_at), (_ic(1000), _ic(999, 12, 31))
+        )
+        self.assertEqual(
+            never_ran.last_ic_run_at,
+            _ic(1000),
+            "a task that never ran starts from where the jump began, so it walks the gap",
+        )
+
+        self.assertEqual(self._set_date(_ic(1020), "kept").status_code, 200)
+        self.assertEqual(
+            (birthday.last_ic_run_at, weather.last_ic_run_at, never_ran.last_ic_run_at),
+            (_ic(1020), _ic(1020), _ic(1020)),
+        )
+
+    def test_a_dying_window_follows_a_change_to_an_earlier_date(self) -> None:
+        self._clock(_ic(1020), paused=True)
+        vitals = CharacterVitalsFactory(
+            character_sheet=self._character(born=950),
+            aging_death_ic_deadline=_ic(1020) + timedelta(days=10),
+        )
+
+        self.assertEqual(self._set_date(_ic(1000), "kept").status_code, 200)
+
+        self.assertEqual(vitals.aging_death_ic_deadline, _ic(1000) + timedelta(days=10))
+        self.assertEqual(run_death_sweep(ic_now=get_ic_now()), 0)
+
+    def test_a_character_with_no_birth_year_and_an_event_under_way_are_left_alone(self) -> None:
+        self._clock(_ic(1000), paused=True)
+        sleeper = CharacterSheetFactory(character=CharacterFactory(), ic_birth_year=None)
+        draft = EventFactory(
+            status=EventStatus.DRAFT,
+            scheduled_real_time=timezone.now() + timedelta(days=3),
+            scheduled_ic_time=_ic(1000, 1, 10),
+        )
+        under_way = EventFactory(
+            status=EventStatus.ACTIVE,
+            scheduled_real_time=timezone.now() + timedelta(hours=1),
+            scheduled_ic_time=_ic(1000, 1, 1),
+        )
+
+        self.assertEqual(self._set_date(_ic(1020), "kept").status_code, 200)
+
+        self.assertIsNone(sleeper.ic_birth_year)
+        self.assertEqual(draft.scheduled_ic_time, _ic(1020, 1, 10))
+        self.assertEqual(under_way.scheduled_ic_time, _ic(1000, 1, 1))
+
+    def test_a_date_something_cannot_follow_is_refused_and_nothing_changes(self) -> None:
+        """An event dated near the calendar's end cannot move twenty years on. The whole
+        change is refused, and the clock, the character and the event are as they were."""
+        clock = self._clock(_ic(1000), paused=True)
+        sheet = self._character(born=970)
+        record = self._stamp_birthday_task(_ic(1000))
+        far = EventFactory(
+            status=EventStatus.SCHEDULED,
+            scheduled_real_time=timezone.now() + timedelta(days=7),
+            scheduled_ic_time=_ic(9990),
+        )
+
+        response = self._set_date(_ic(1020), "kept")
+
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(
+            response.json()["detail"],
+            "That date is too far away: something already dated cannot follow the jump.",
+        )
+        self.assertEqual(clock.anchor_ic_time, _ic(1000))
+        self.assertEqual(self._state()["year"], 1000)
+        self.assertEqual(sheet.ic_birth_year, 970)
+        self.assertEqual(record.last_ic_run_at, _ic(1000))
+        self.assertEqual(far.scheduled_ic_time, _ic(9990))
+        self.assertFalse(GameClockHistory.objects.exists())
+
+    def test_the_history_can_be_narrowed_to_one_kind(self) -> None:
+        self._clock(_ic(1000))
+        self.client.post("/api/clock/pause/")
+        self.client.post("/api/clock/unpause/")
+        self.client.post("/api/clock/pause/")
+
+        paused = self.client.get("/api/clock/history/", {"change": "paused"}).json()
+        everything = self.client.get("/api/clock/history/").json()
+
+        self.assertEqual(paused["count"], 2)
+        self.assertEqual({row["change"] for row in paused["results"]}, {"paused"})
+        self.assertEqual(everything["count"], 3)
+
     # -- the preview ------------------------------------------------------
 
     def test_the_preview_says_what_a_change_would_do_and_writes_nothing(self) -> None:

@@ -54098,12 +54098,20 @@ components:
           items:
             type: string
           description: The twelve IC month names in order, for a date picker.
+        min_year:
+          type: integer
+          description: The earliest year the clock may be set to.
+        max_year:
+          type: integer
+          description: The latest year the clock may be set to.
       required:
       - date_display
       - day
       - hour
       - ic_datetime
       - light_level
+      - max_year
+      - min_year
       - minute
       - month
       - month_name

@@ -14,16 +14,7 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { extractErrorMessage } from '@/lib/errors';
 
-import {
-  type GameDate,
-  MAX_YEAR,
-  MIN_YEAR,
-  daysInMonth,
-  describeJump,
-  gameDateOf,
-  isValidGameDate,
-  toIso,
-} from './clockDate';
+import { type GameDate, describeJump, gameDateOf, isValidGameDate, toIso } from './clockDate';
 import { useJumpPreview, useSetClockDate } from './queries';
 import type { AgeHandling, ClockJumpPreview, ClockState } from './types';
 
@@ -89,7 +80,9 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, reset]);
 
-  const valid = isValidGameDate(date);
+  const years = { min: clock.min_year, max: clock.max_year };
+  const inRange = date.year >= years.min && date.year <= years.max;
+  const valid = isValidGameDate(date, years);
   const jump = valid ? describeJump(current, date) : null;
   const { data: preview, error: previewError } = useJumpPreview(
     open && valid && jump ? toIso(date) : null
@@ -99,9 +92,13 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
   const ready = Boolean(jump && preview && chosen && reason.trim());
 
   const setField = (field: keyof GameDate, raw: string) => {
-    const value = Number.parseInt(raw, 10);
-    setDate((previous) => ({ ...previous, [field]: Number.isNaN(value) ? 0 : value }));
+    const value = /^\d+$/.test(raw) ? Number.parseInt(raw, 10) : Number.NaN;
+    setDate((previous) => ({ ...previous, [field]: value }));
+    // A choice was made about one jump. A different date is a different jump, so the
+    // choice is asked again rather than carried over.
+    setAgeHandling(null);
   };
+  const shown = (value: number) => (Number.isNaN(value) ? '' : String(value));
 
   const submit = (event: React.FormEvent) => {
     event.preventDefault();
@@ -112,11 +109,9 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
     );
   };
 
-  const dayCount = daysInMonth(date.year, date.month);
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent {...NO_DESCRIPTION} className="max-w-lg">
+      <DialogContent {...NO_DESCRIPTION} className="max-w-xl">
         <DialogHeader>
           <DialogTitle>Set the date</DialogTitle>
         </DialogHeader>
@@ -126,10 +121,8 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
               <Label htmlFor="clock-year">Year</Label>
               <Input
                 id="clock-year"
-                type="number"
-                min={MIN_YEAR}
-                max={MAX_YEAR}
-                value={date.year || ''}
+                inputMode="numeric"
+                value={shown(date.year)}
                 onChange={(event) => setField('year', event.target.value)}
               />
             </div>
@@ -152,10 +145,8 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
               <Label htmlFor="clock-day">Day</Label>
               <Input
                 id="clock-day"
-                type="number"
-                min={1}
-                max={dayCount}
-                value={date.day || ''}
+                inputMode="numeric"
+                value={shown(date.day)}
                 onChange={(event) => setField('day', event.target.value)}
               />
             </div>
@@ -163,10 +154,8 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
               <Label htmlFor="clock-hour">Hour</Label>
               <Input
                 id="clock-hour"
-                type="number"
-                min={0}
-                max={23}
-                value={date.hour}
+                inputMode="numeric"
+                value={shown(date.hour)}
                 onChange={(event) => setField('hour', event.target.value)}
               />
             </div>
@@ -174,10 +163,8 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
               <Label htmlFor="clock-minute">Minute</Label>
               <Input
                 id="clock-minute"
-                type="number"
-                min={0}
-                max={59}
-                value={date.minute}
+                inputMode="numeric"
+                value={shown(date.minute)}
                 onChange={(event) => setField('minute', event.target.value)}
               />
             </div>
@@ -185,7 +172,9 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
 
           {!valid && (
             <p role="alert" className="text-sm text-destructive">
-              That date does not exist.
+              {inRange || Number.isNaN(date.year)
+                ? 'That date does not exist.'
+                : `The year must be between ${years.min} and ${years.max}.`}
             </p>
           )}
 
@@ -228,30 +217,6 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
                   </label>
                 </RadioGroup>
               )}
-
-              <ul className="space-y-1 text-sm text-muted-foreground">
-                <li>
-                  {clock.paused
-                    ? 'The clock is paused and stays paused.'
-                    : 'The clock keeps running from the new date.'}
-                </li>
-                {preview.upcoming_events > 0 && (
-                  <li>
-                    {countOf(
-                      preview.upcoming_events,
-                      'upcoming event moves',
-                      'upcoming events move'
-                    )}{' '}
-                    with it.
-                  </li>
-                )}
-                {preview.heritages_not_yet_appeared.map((name) => (
-                  <li key={name} className="text-amber-700 dark:text-amber-400">
-                    {name} first appeared after this date. Character creation would offer {name} at
-                    the youngest age only.
-                  </li>
-                ))}
-              </ul>
             </>
           )}
 
@@ -270,6 +235,28 @@ export function SetDateDialog({ clock, open, onOpenChange }: SetDateDialogProps)
               onChange={(event) => setReason(event.target.value)}
             />
           </div>
+
+          {jump && preview && (
+            <ul className="space-y-1 text-sm text-muted-foreground">
+              <li>
+                {clock.paused
+                  ? 'The clock is paused and stays paused.'
+                  : 'The clock keeps running from the new date.'}
+              </li>
+              {preview.upcoming_events > 0 && (
+                <li>
+                  {countOf(preview.upcoming_events, 'upcoming event moves', 'upcoming events move')}{' '}
+                  with it.
+                </li>
+              )}
+              {preview.heritages_not_yet_appeared.map((name) => (
+                <li key={name} className="text-amber-700 dark:text-amber-400">
+                  {name} first appeared after this date. Character creation would offer {name} at
+                  the youngest age only.
+                </li>
+              ))}
+            </ul>
+          )}
 
           {mutation.error && (
             <p role="alert" className="text-sm text-destructive">

@@ -68,11 +68,11 @@ class TestGameClockAdminChange(TestCase):
             {"time_ratio": "9.0", "_save": "Save"},
         )
 
-        self.assertEqual(response.status_code, 302, response.content[:500])
         clock = GameClock.get_active()
         assert clock is not None
         self.assertTrue(clock.paused, "the admin form must not be able to unpause the clock")
         self.assertEqual(clock.time_ratio, 3.0)
+        self.assertEqual(response.status_code, 403, "an existing clock is never saved here")
 
     def test_the_change_form_points_at_the_staff_clock_page(self) -> None:
         clock = GameClock.objects.create(
@@ -85,3 +85,4 @@ class TestGameClockAdminChange(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'href="/staff/clock"')
+        self.assertNotContains(response, 'name="_save"')

@@ -89,6 +89,14 @@ class MoonPhase(TextChoices):
 MOON_SYNODIC_IC_DAYS = 30.0
 
 
+#: The years the clock may be set to (#5248). The calendar is Python's, which ends at
+#: year 9999 and begins at year 1; the clock keeps running after it is set, and a jump
+#: moves other stored dates by its length, so the ends are kept well clear. A running
+#: clock that reached year 9999 would raise on every read of the time.
+MIN_CLOCK_YEAR = 100
+MAX_CLOCK_YEAR = 9000
+
+
 class AgeHandling(TextChoices):
     """What a change of the clock's date does to characters' ages (#5248).
 

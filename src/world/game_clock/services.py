@@ -19,6 +19,7 @@ from world.game_clock.constants import (
     Season,
     TimePhase,
 )
+from world.game_clock.jump import JumpPlan
 from world.game_clock.models import GameClock, GameClockHistory, ScheduledTaskRecord
 from world.game_clock.types import ClockError, ClockJumpPreview
 
@@ -285,11 +286,13 @@ def set_clock(
       every task's IC last-run stamp is set to the new time, so the aging tasks
       neither replay the gap nor wait for the calendar to catch up.
 
-    Order matters. The refusal and the history row come first, because they are the
-    steps that can fail and a rolled-back transaction does not undo a change already
-    made to an identity-mapped instance. The clock's anchors and the task stamps are
-    then changed in memory together, so the task loop cannot read new anchors against
-    old stamps for longer than those assignments take.
+    Nothing is changed until every new value is known. The refusals come first, then a
+    ``JumpPlan`` collects each field the jump will set without setting it, so a date
+    that cannot be shifted (it would leave the calendar) refuses the whole change while
+    the clock, the stamps and every row are still as they were. The history row is
+    written next, and only then does the plan assign and write. Every model here is
+    identity-mapped: a value assigned to an instance is live at once and a rollback does
+    not take it back, which is why the plan restores them itself if its write fails.
     """
     from world.events.services import shift_upcoming_events  # noqa: PLC0415
     from world.vitals.aging import rebase_ages_for_clock_jump  # noqa: PLC0415
@@ -310,34 +313,37 @@ def set_clock(
         raise ClockError(ClockError.EARLIER_KEEPS_AGES)
     keep_ages = age_handling == AgeHandling.KEPT
 
+    plan = JumpPlan()
+    plan.set(clock, "anchor_real_time", now)
+    plan.set(clock, "anchor_ic_time", new_ic_time)
+    # KEPT: every stamp moves to the new time, so no task replays the gap or waits for
+    # the calendar to catch up. AGED: the stamps stay, so the birthday task walks the
+    # gap; a task that has never run gets the time the jump started from, or its first
+    # run would look back one day and miss the gap.
+    stamps = ScheduledTaskRecord.objects.all()
+    if keep_ages:
+        for record in stamps.filter(last_ic_run_at__isnull=False):
+            plan.set(record, "last_ic_run_at", new_ic_time)
+    else:
+        for record in stamps.filter(last_ic_run_at__isnull=True):
+            plan.set(record, "last_ic_run_at", old_ic_now)
+    try:
+        year_shift = rebase_ages_for_clock_jump(
+            plan, old_ic_now=old_ic_now, new_ic_now=new_ic_time, keep_ages=keep_ages
+        )
+        shift_upcoming_events(plan, new_ic_time - old_ic_now)
+    except OverflowError as exc:
+        raise ClockError(ClockError.JUMP_TOO_FAR) from exc
+
     _log_clock_change(
         old_state=_clock_state(clock),
         new_state=(now, new_ic_time, clock.time_ratio),
         changed_by=changed_by,
         reason=reason,
         change=ClockChange.DATE_KEPT if keep_ages else ClockChange.DATE_AGED,
-        birth_year_shift=new_ic_time.year - old_ic_now.year if keep_ages else 0,
+        birth_year_shift=year_shift,
     )
-
-    # Identity-mapped rows: load, change the instances, write them back. A queryset
-    # .update() would leave the cached records the task loop reads on the old stamp.
-    stamped = (
-        list(ScheduledTaskRecord.objects.filter(last_ic_run_at__isnull=False)) if keep_ages else []
-    )
-    clock.anchor_real_time = now
-    clock.anchor_ic_time = new_ic_time
-    for record in stamped:
-        record.last_ic_run_at = new_ic_time
-    clock.save(update_fields=["anchor_real_time", "anchor_ic_time"])
-    if stamped:
-        ScheduledTaskRecord.objects.bulk_update_with_reason(
-            stamped,
-            ["last_ic_run_at"],
-            reason="clock jump: cached instances changed in place, then written",
-        )
-
-    rebase_ages_for_clock_jump(old_ic_now=old_ic_now, new_ic_now=new_ic_time, keep_ages=keep_ages)
-    shift_upcoming_events(new_ic_time - old_ic_now)
+    plan.apply()
     return clock
 
 

@@ -10,6 +10,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 
+import { extractErrorMessage } from '@/lib/errors';
+
 import { HISTORY_PAGE_SIZE } from './api';
 import { describeChange } from './changes';
 import { useClockHistory } from './queries';
@@ -26,7 +28,14 @@ function when(iso: string): string {
 /** Who changed the clock, when, how and why, newest first. */
 export function RecentChanges() {
   const [page, setPage] = useState(1);
-  const { data } = useClockHistory(page);
+  const { data, error } = useClockHistory(page);
+  if (error) {
+    return (
+      <p role="alert" className="text-sm text-destructive">
+        {extractErrorMessage(error)}
+      </p>
+    );
+  }
   if (!data) return null;
   const pages = Math.max(1, Math.ceil(data.count / HISTORY_PAGE_SIZE));
 
@@ -38,7 +47,7 @@ export function RecentChanges() {
       {data.results.length === 0 ? (
         <p className="text-sm text-muted-foreground">No changes yet.</p>
       ) : (
-        <Table>
+        <Table className="min-w-[40rem]">
           <TableHeader>
             <TableRow>
               <TableHead>When</TableHead>

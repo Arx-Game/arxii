@@ -6,7 +6,14 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from world.game_clock.constants import AgeHandling, JumpDirection, Season, TimePhase
+from world.game_clock.constants import (
+    MAX_CLOCK_YEAR,
+    MIN_CLOCK_YEAR,
+    AgeHandling,
+    JumpDirection,
+    Season,
+    TimePhase,
+)
 from world.game_clock.models import GameClockHistory
 from world.game_clock.services import format_ic_date, format_ic_date_long
 
@@ -49,6 +56,8 @@ class ClockStateSerializer(serializers.Serializer):
         child=serializers.CharField(),
         help_text="The twelve IC month names in order, for a date picker.",
     )
+    min_year = serializers.IntegerField(help_text="The earliest year the clock may be set to.")
+    max_year = serializers.IntegerField(help_text="The latest year the clock may be set to.")
 
 
 class ClockConvertSerializer(serializers.Serializer):
@@ -74,10 +83,18 @@ class ClockConvertResponseSerializer(serializers.Serializer):
     real_date = serializers.DateTimeField(required=False)
 
 
+def validate_clock_year(value: datetime) -> datetime:
+    """Keep a date the clock is set to inside the years it can run in."""
+    if not MIN_CLOCK_YEAR <= value.year <= MAX_CLOCK_YEAR:
+        msg = f"The year must be between {MIN_CLOCK_YEAR} and {MAX_CLOCK_YEAR}."
+        raise serializers.ValidationError(msg)
+    return value
+
+
 class ClockAdjustSerializer(serializers.Serializer):
     """Request serializer for staff clock adjustment."""
 
-    ic_datetime = serializers.DateTimeField()
+    ic_datetime = serializers.DateTimeField(validators=[validate_clock_year])
     reason = serializers.CharField(max_length=500)
     age_handling = serializers.ChoiceField(
         choices=AgeHandling.choices,
@@ -91,7 +108,7 @@ class ClockAdjustSerializer(serializers.Serializer):
 class ClockJumpPreviewRequestSerializer(serializers.Serializer):
     """Query serializer for the preview of a date change."""
 
-    ic_datetime = serializers.DateTimeField()
+    ic_datetime = serializers.DateTimeField(validators=[validate_clock_year])
 
 
 class ClockJumpPreviewSerializer(serializers.Serializer):

@@ -144,7 +144,7 @@ class StaffClockAdjustViewTests(TestCase):
         response = self.client.post(
             "/api/clock/adjust/",
             {
-                "ic_datetime": "0001-06-15T12:00:00Z",
+                "ic_datetime": "1001-06-15T12:00:00Z",
                 "reason": "Test adjustment",
                 "age_handling": "aged",
             },
@@ -152,6 +152,37 @@ class StaffClockAdjustViewTests(TestCase):
         )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_a_year_the_clock_cannot_run_in_is_refused(self) -> None:
+        """A date near the calendar's ends is refused before anything is written.
+
+        A running clock set to the last year of the calendar would raise on every read
+        of the time a few seconds later, and nothing on the page could undo it.
+        """
+        clock = GameClockFactory(anchor_ic_time=datetime(1000, 1, 1, tzinfo=UTC), paused=True)
+        self.client.force_authenticate(user=self.staff_account)
+
+        for year in ("0099", "9001", "9999"):
+            response = self.client.post(
+                "/api/clock/adjust/",
+                {
+                    "ic_datetime": f"{year}-06-15T12:00:00Z",
+                    "reason": "Too far",
+                    "age_handling": "kept",
+                },
+                format="json",
+            )
+            self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, year)
+            self.assertEqual(
+                response.json()["ic_datetime"], ["The year must be between 100 and 9000."]
+            )
+            preview = self.client.get(
+                "/api/clock/adjust-preview/", {"ic_datetime": f"{year}-06-15T12:00:00Z"}
+            )
+            self.assertEqual(preview.status_code, status.HTTP_400_BAD_REQUEST, year)
+        self.assertEqual(clock.anchor_ic_time, datetime(1000, 1, 1, tzinfo=UTC))
+        state = self.client.get("/api/clock/").json()
+        self.assertEqual((state["min_year"], state["max_year"]), (100, 9000))
 
     def test_non_staff_gets_403_on_adjust(self) -> None:
         """Non-staff should get 403 on POST /adjust/."""

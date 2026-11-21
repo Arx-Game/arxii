@@ -16,8 +16,11 @@ export interface GameDate {
   minute: number;
 }
 
-export const MIN_YEAR = 1;
-export const MAX_YEAR = 9999;
+/** The years the clock may be set to; the clock read carries them (`min_year`, `max_year`). */
+export interface YearRange {
+  min: number;
+  max: number;
+}
 
 function isLeapYear(year: number): boolean {
   return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
@@ -59,12 +62,12 @@ export function gameDateOf(clock: {
   };
 }
 
-export function isValidGameDate(date: GameDate): boolean {
+export function isValidGameDate(date: GameDate, years: YearRange): boolean {
   const whole = [date.year, date.month, date.day, date.hour, date.minute].every(Number.isInteger);
   return (
     whole &&
-    date.year >= MIN_YEAR &&
-    date.year <= MAX_YEAR &&
+    date.year >= years.min &&
+    date.year <= years.max &&
     date.month >= 1 &&
     date.month <= 12 &&
     date.day >= 1 &&

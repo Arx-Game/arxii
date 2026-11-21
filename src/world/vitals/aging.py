@@ -44,6 +44,7 @@ from world.vitals.services import (
 if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.conditions.models import ConditionTemplate
+    from world.game_clock.jump import JumpPlan
     from world.vitals.models import VitalsConsequenceConfig
 
 logger = logging.getLogger(__name__)
@@ -297,11 +298,6 @@ def run_death_sweep(*, ic_now: datetime) -> int:
     return deaths
 
 
-#: Why a clock jump may bulk-write identity-mapped rows: it loads them, changes the
-#: cached instances in place and writes those same instances, so the map stays true.
-_JUMP_WRITE_REASON = "clock jump: cached instances changed in place, then written"
-
-
 def characters_with_birth_year() -> int:
     """How many character sheets carry a birth year: the characters whose age a change
     of the clock's date moves (#5248). Sleepers and characters made before the clock
@@ -310,12 +306,15 @@ def characters_with_birth_year() -> int:
 
 
 def rebase_ages_for_clock_jump(
-    *, old_ic_now: datetime, new_ic_now: datetime, keep_ages: bool
+    plan: "JumpPlan", *, old_ic_now: datetime, new_ic_now: datetime, keep_ages: bool
 ) -> int:
-    """Carry the aging state across a jump of the game clock (#5248).
+    """Plan how the aging state follows a jump of the game clock (#5248).
 
-    Called by ``game_clock.services.set_clock`` when staff set the date. Returns the
-    number of years added to every birth year (zero when ages were not kept).
+    Called by ``game_clock.services.set_clock`` when staff set the date. It records the
+    new values on ``plan`` and changes nothing itself; ``set_clock`` applies the plan
+    once every value is known. Returns the number of years every birth year will move
+    by (zero when ages are not kept). Raises ``OverflowError`` if a deadline would
+    leave the calendar, which ``set_clock`` turns into a refusal.
 
     * Always: every open dying window moves by the length of the jump, so a character
       in their dying days keeps the days they had left. Without this a long jump
@@ -324,28 +323,14 @@ def rebase_ages_for_clock_jump(
     * ``keep_ages``: every ``ic_birth_year`` moves by the calendar years jumped.
       Chronological age is ``IC year - ic_birth_year``, so every age stays exactly as
       it was.
-
-    Both models are identity-mapped, so the rows are loaded, changed on the instance
-    and written back; a queryset ``.update()`` would leave the cached sheets, which
-    the aging tasks read, holding the old values.
     """
     jump = new_ic_now - old_ic_now
-    windows = list(CharacterVitals.objects.filter(aging_death_ic_deadline__isnull=False))
-    for vitals in windows:
-        vitals.aging_death_ic_deadline += jump
-    if windows:
-        CharacterVitals.objects.bulk_update_with_reason(
-            windows, ["aging_death_ic_deadline"], reason=_JUMP_WRITE_REASON
-        )
+    for vitals in CharacterVitals.objects.filter(aging_death_ic_deadline__isnull=False):
+        plan.set(vitals, "aging_death_ic_deadline", vitals.aging_death_ic_deadline + jump)
 
     year_shift = new_ic_now.year - old_ic_now.year
     if not keep_ages or year_shift == 0:
         return 0
-    sheets = list(CharacterSheet.objects.filter(ic_birth_year__isnull=False))
-    for sheet in sheets:
-        sheet.ic_birth_year += year_shift
-    if sheets:
-        CharacterSheet.objects.bulk_update_with_reason(
-            sheets, ["ic_birth_year"], reason=_JUMP_WRITE_REASON
-        )
+    for sheet in CharacterSheet.objects.filter(ic_birth_year__isnull=False):
+        plan.set(sheet, "ic_birth_year", sheet.ic_birth_year + year_shift)
     return year_shift

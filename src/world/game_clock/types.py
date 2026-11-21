@@ -16,6 +16,7 @@ _CLOCK_ERROR_MESSAGES: dict[str, str] = {
         "Cannot convert IC-to-real while clock is paused or has zero ratio."
     ),
     "EARLIER_KEEPS_AGES": "A change to an earlier date keeps characters' ages.",
+    "JUMP_TOO_FAR": ("That date is too far away: something already dated cannot follow the jump."),
 }
 
 
@@ -33,6 +34,7 @@ class ClockError(Exception):
     INVALID_RATIO = _CLOCK_ERROR_MESSAGES["INVALID_RATIO"]
     CONVERSION_UNAVAILABLE = _CLOCK_ERROR_MESSAGES["CONVERSION_UNAVAILABLE"]
     EARLIER_KEEPS_AGES = _CLOCK_ERROR_MESSAGES["EARLIER_KEEPS_AGES"]
+    JUMP_TOO_FAR = _CLOCK_ERROR_MESSAGES["JUMP_TOO_FAR"]
 
     @property
     def user_message(self) -> str:

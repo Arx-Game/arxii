@@ -67,6 +67,12 @@ class GameClockAdmin(admin.ModelAdmin):
         """The clock is a singleton: Add is available only until it exists."""
         return not GameClock.objects.exists()
 
+    def has_change_permission(self, request: HttpRequest, obj: GameClock | None = None) -> bool:
+        """An existing clock is shown, never saved here: the change page has no Save."""
+        if obj is not None:
+            return False
+        return super().has_change_permission(request, obj)
+
     def has_delete_permission(self, _request, _obj=None):
         """Prevent deletion via admin."""
         return False

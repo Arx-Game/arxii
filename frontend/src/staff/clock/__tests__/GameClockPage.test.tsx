@@ -50,6 +50,8 @@ function makeClock(overrides: Partial<ClockState> = {}): ClockState {
     paused: false,
     time_ratio: 3,
     month_names: MONTHS,
+    min_year: 100,
+    max_year: 9000,
     ...overrides,
   };
 }
@@ -235,7 +237,7 @@ describe('GameClockPage', () => {
       await openDialog();
 
       const dialog = await screen.findByRole('dialog');
-      expect(within(dialog).getByLabelText('Year')).toHaveValue(1000);
+      expect(within(dialog).getByLabelText('Year')).toHaveValue('1000');
       expect(within(dialog).getByLabelText('Month')).toHaveValue('3');
       expect(within(dialog).getByRole('option', { name: 'Dreaming' })).toBeInTheDocument();
       expect(within(dialog).getAllByRole('option')).toHaveLength(12);
@@ -317,6 +319,33 @@ describe('GameClockPage', () => {
       );
     });
 
+    it('asks the choice again when the date is changed after choosing', async () => {
+      vi.mocked(api.fetchJumpPreview).mockResolvedValue(makePreview());
+      const user = await openDialog();
+
+      await setYear(user, '1002');
+      await user.click(await screen.findByRole('radio', { name: /Characters age/ }));
+      expect(screen.getByRole('radio', { name: /Characters age/ })).toBeChecked();
+
+      // A choice made for a two-year nudge must not ride along to a twenty-year jump.
+      await setYear(user, '1020');
+
+      expect(await screen.findByRole('radio', { name: /Characters age/ })).not.toBeChecked();
+      expect(screen.getByRole('radio', { name: /Characters keep their ages/ })).not.toBeChecked();
+    });
+
+    it('says which years the clock may be set to', async () => {
+      const user = await openDialog();
+
+      await setYear(user, '9500');
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'The year must be between 100 and 9000.'
+      );
+      expect(screen.getByRole('button', { name: 'Set the date' })).toBeDisabled();
+      expect(api.fetchJumpPreview).not.toHaveBeenCalledWith('9500-03-09T16:20:00Z');
+    });
+
     it('refuses a date that does not exist without asking the server', async () => {
       const user = await openDialog();
 
@@ -347,6 +376,17 @@ describe('GameClockPage', () => {
       );
       expect(screen.getByRole('dialog')).toBeVisible();
     });
+  });
+
+  it('says so when the changes cannot be read', async () => {
+    vi.mocked(api.fetchClock).mockResolvedValue(makeClock());
+    vi.mocked(api.fetchClockHistory).mockRejectedValue(
+      new ApiError('The changes could not be read.', { status: 500 })
+    );
+
+    renderWithProviders(<GameClockPage />);
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('The changes could not be read.');
   });
 
   it('changes the speed with a number and a reason', async () => {

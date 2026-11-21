@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from world.items.models import ItemInstance
 from world.events.types import EventError
 from world.game_clock.constants import TimePhase
+from world.game_clock.jump import JumpPlan
 from world.game_clock.models import GameClock
 from world.progression.services.scene_rewards import on_scene_finished
 from world.scenes.constants import ScenePrivacyMode
@@ -668,23 +669,18 @@ def upcoming_events() -> QuerySet[Event]:
     )
 
 
-def shift_upcoming_events(delta: timedelta) -> int:
-    """Move every upcoming event's IC time by ``delta``; return how many moved (#5248).
+def shift_upcoming_events(plan: JumpPlan, delta: timedelta) -> int:
+    """Plan moving every upcoming event's IC time by ``delta``; return how many (#5248).
 
     Called by ``game_clock.services.set_clock`` when staff jump the date, so an event
-    still to come stays on the calendar the world is now on. An IC time someone
-    adjusted by hand keeps its distance from the calendar. Events that have begun or
-    ended keep the IC moment they captured.
+    still to come stays on the calendar the world is now on. It records the new times
+    on ``plan`` and changes nothing itself. An IC time someone adjusted by hand keeps
+    its distance from the calendar. Events that have begun or ended keep the IC moment
+    they captured. Raises ``OverflowError`` if a time would leave the calendar.
     """
     if not delta:
         return 0
     events = list(upcoming_events())
     for event in events:
-        event.scheduled_ic_time += delta
-    if events:
-        Event.objects.bulk_update_with_reason(
-            events,
-            ["scheduled_ic_time"],
-            reason="clock jump: cached instances changed in place, then written",
-        )
+        plan.set(event, "scheduled_ic_time", event.scheduled_ic_time + delta)
     return len(events)

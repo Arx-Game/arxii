@@ -4418,7 +4418,7 @@
 - `respond_to_invitation(invitation: world.events.models.EventInvitation, persona: world.scenes.models.Persona, *, response: str) -> world.events.models.EventInvitation - Record an invitee's RSVP (ACCEPTED / DECLINED) on a PERSONA invitation.`
 - `schedule_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from DRAFT to SCHEDULED.`
 - `set_room_description_overlay(event: world.events.models.Event, overlay_text: str) -> world.events.models.EventModification - Set or update the room description overlay for an event.`
-- `shift_upcoming_events(delta: datetime.timedelta) -> int - Move every upcoming event's IC time by ``delta``; return how many moved (#5248).`
+- `shift_upcoming_events(plan: world.game_clock.jump.JumpPlan, delta: datetime.timedelta) -> int - Plan moving every upcoming event's IC time by ``delta``; return how many (#5248).`
 - `start_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from SCHEDULED to ACTIVE and create a linked Scene.`
 - `tag_catered_provision(item_instance: 'ItemInstance', container_instance: 'ItemInstance', contributor: 'ObjectDB | None' = None) -> world.events.models.EventCatering | None - Tag a consumable set out in a catering vessel (#2869).`
 - `upcoming_events() -> django.db.models.query.QuerySet - Events that have not begun and whose real start is still ahead.`

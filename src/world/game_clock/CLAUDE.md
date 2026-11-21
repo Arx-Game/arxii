@@ -77,7 +77,8 @@ a Recent changes list. **Every change goes through the four services**, which re
 clock and write `GameClockHistory`. The Django admin's change form is read-only for that
 reason: saving `paused` or `time_ratio` there stored the field without moving the anchors,
 so the date jumped (unticking Paused counted all the real time the clock had sat paused).
-The admin still creates the one row.
+An existing clock has no change permission there, so its page shows the fields and has no
+Save. The admin still creates the one row.
 
 **Resume counts nothing.** `unpause_clock` moves only the real-time anchor, so the clock
 carries on from the date it showed. The date can be set while paused; it stays paused.
@@ -105,12 +106,28 @@ due when `ic_now - last_ic_run_at >= interval`, which stayed negative until the 
 passed the old date again. The re-stamp in `KEPT` is what ends that. After such a change a
 birthday that falls between the new date and the old one happens again as time passes.
 
-**Write contract.** `set_clock` runs in one transaction: the refusal and the history row
-first (the steps that can fail; a rollback does not undo a change already made to an
-identity-mapped instance), then the anchors and the task stamps changed in memory together,
-then `vitals.aging.rebase_ages_for_clock_jump` and `events.services.shift_upcoming_events`.
-Each loads the rows, changes the cached instances and writes them with
-`bulk_update_with_reason`, so the instances the tasks read are the ones written.
+**Write contract (`jump.py`).** Nothing is changed until every new value is known. Every
+model a jump touches is identity-mapped, so a value assigned to an instance is live for the
+whole process at once and a rolled-back transaction does not take it back. `set_clock`
+therefore builds a `JumpPlan`: `plan.set(instance, field, value)` records an intended value
+and changes nothing. The clock's anchors, the task stamps,
+`vitals.aging.rebase_ages_for_clock_jump(plan, ...)` and
+`events.services.shift_upcoming_events(plan, delta)` all record onto it. A date that cannot
+be shifted (it would leave the calendar) raises while everything is still as it was, and
+`set_clock` refuses the whole change (`ClockError.JUMP_TOO_FAR`). The history row is written
+next, then `plan.apply()` assigns and writes with `bulk_update_with_reason`; if that write
+fails it puts every instance back before raising.
+
+**The years the clock may be set to** are `MIN_CLOCK_YEAR` to `MAX_CLOCK_YEAR` (100 to 9000),
+checked by the adjust and preview serializers and carried on the clock read for the page.
+The calendar is Python's, which ends at year 9999: a running clock set there would raise on
+every read of the time seconds later, which stops the task loop and every clock control.
+
+**Task stamps.** Under `AGED` a task that has never run is stamped with the time the jump
+started from, so its first run walks the gap rather than looking back one day. And
+`task_registry._ic_stamp` never stamps a task later than the clock reads: a tick reads the
+time once, and a clock set back while it runs would otherwise leave later tasks stamped
+with the old time, waiting for the calendar to pass it.
 
 Known and out of scope (#5250): population growth and sun exposure convert a stored real
 time through the clock's current anchor, so they count a pause on resume and never see a jump.
@@ -194,7 +211,8 @@ money bands rather than being one task.
 ## API Endpoints
 
 - `GET /api/clock/` — current IC time, phase, season, light level, `month_name`,
-  `date_display`, `paused`, `time_ratio`, `month_names` (the twelve names, for a date picker)
+  `date_display`, `paused`, `time_ratio`, `month_names` (the twelve names, for a date
+  picker), `min_year` and `max_year` (the years the clock may be set to)
 - `GET /api/clock/convert/` — date conversion (IC<>real)
 - `POST /api/clock/adjust/` — set IC time: `ic_datetime`, `reason`, `age_handling` (staff only)
 - `GET /api/clock/adjust-preview/?ic_datetime=` — what that would do: direction, the year
