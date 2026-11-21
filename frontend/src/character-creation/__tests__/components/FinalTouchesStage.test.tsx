@@ -75,8 +75,6 @@ const hedonistic: VisibleOffer = {
   held: false,
   effect_line: '',
   taken_per_feature: false,
-  opens_feature: false,
-  requires_feature_opened: false,
   cg_max_rank: 0,
   group: '',
   asks_figure_name: false,
@@ -102,8 +100,6 @@ const voracious: VisibleOffer = {
   held: false,
   effect_line: '',
   taken_per_feature: false,
-  opens_feature: false,
-  requires_feature_opened: false,
   cg_max_rank: 0,
   group: '',
   asks_figure_name: false,
@@ -270,8 +266,6 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
       cost_per_rank: -5,
       effect_line: '-Daily AP',
       taken_per_feature: false,
-      opens_feature: false,
-      requires_feature_opened: false,
       cg_max_rank: 0,
     };
     offersResponse = { offers: [hedonistic, voracious, lightSleeper], terms: [] };

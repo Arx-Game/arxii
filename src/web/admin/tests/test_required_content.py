@@ -1684,16 +1684,46 @@ class TestCharacterCreationGapProbes(TestCase):
         self.assertTrue(rc._realms_without_nobiliary_particles().present)
 
     def test_feature_rows_must_all_exist_and_be_active(self) -> None:
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
         from world.distinctions.factories import DistinctionFactory
         from world.seeds.distinctive_features import FEATURE_ROW_NAMES
 
+        def quality(name: str, **overrides: bool):
+            row = DistinctionFactory(name=name, taken_per_feature=True, **overrides)
+            DistinctionOfferFactory(
+                distinction=row, chapter=OfferChapter.APPEARANCE, feature_rows=True
+            )
+            return row
+
+        self.assertEqual(FEATURE_ROW_NAMES, ("Alluring", "Menacing", "Majestic"))
         self.assertEqual(set(rc._probe_feature_distinctions().missing), set(FEATURE_ROW_NAMES))
-        for name in FEATURE_ROW_NAMES[:-1]:
-            DistinctionFactory(name=name)
-        DistinctionFactory(name=FEATURE_ROW_NAMES[-1], is_active=False)
+        # Staff capitalise as they see fit; the probe matches without regard to case.
+        quality("alluring")
+        quality("Menacing")
+        quality("Majestic", is_active=False)
         result = rc._probe_feature_distinctions()
         self.assertFalse(result.present)
-        self.assertEqual(result.missing, (FEATURE_ROW_NAMES[-1],))
+        self.assertEqual(result.missing, ("Majestic",))
+
+    def test_a_feature_row_with_no_feature_rows_offer_is_missing(self) -> None:
+        """The row alone shows nothing on the page: it needs its Appearance offer (#5241)."""
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+        from world.distinctions.factories import DistinctionFactory
+
+        for name in ("Alluring", "Menacing"):
+            DistinctionOfferFactory(
+                distinction=DistinctionFactory(name=name, taken_per_feature=True),
+                chapter=OfferChapter.APPEARANCE,
+                feature_rows=True,
+            )
+        majestic = DistinctionFactory(name="Majestic", taken_per_feature=True)
+        self.assertEqual(rc._probe_feature_distinctions().missing, ("Majestic",))
+        DistinctionOfferFactory(
+            distinction=majestic, chapter=OfferChapter.APPEARANCE, feature_rows=True
+        )
+        self.assertTrue(rc._probe_feature_distinctions().present)
 
     def test_the_six_are_registered_with_admin_links(self) -> None:
         keys = {dep.key: dep for dep in rc.build_registry(rc._declarations())}

@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0467_carry_flat_worship_amounts_to_award_rows"),
+        ("arxii", "0469_carry_flat_worship_amounts_to_award_rows"),
     ]
 
     operations = [

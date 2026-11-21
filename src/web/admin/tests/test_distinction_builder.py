@@ -123,6 +123,40 @@ class BuilderGetTest(BuilderTestCase):
         assert expected_href in body
 
 
+class BuilderEveryFieldTest(BuilderTestCase):
+    """The page draws every field its form saves (#5241).
+
+    The form is a ModelForm, so a field it lists and the page does not draw is posted
+    absent and saved as its empty value: a tick box goes back to off, a number to 0.
+    The page shipped without "taken per feature", the CG rank cap and the Final Touches
+    prompt, so none of the three could be authored there and a save through the page
+    cleared all three on the distinction it saved.
+    """
+
+    def test_the_page_draws_an_input_for_every_field_the_form_saves(self):
+        from web.admin.distinction_builder.forms import DistinctionForm
+
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_distinction_builder", args=[self.distinction.pk]))
+        html = resp.content.decode()
+        missing = [name for name in DistinctionForm.base_fields if f'name="{name}"' not in html]
+        assert missing == []
+
+    def test_the_page_shows_a_feature_quality_as_one(self):
+        quality = DistinctionFactory(
+            name="Alluring", category=self.category, taken_per_feature=True, cg_max_rank=3
+        )
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_distinction_builder", args=[quality.pk]))
+        html = resp.content.decode()
+        box = re.search(r'<input[^>]*name="taken_per_feature"[^>]*>', html)
+        assert box is not None
+        assert "checked" in box.group(0)
+        cap = re.search(r'<input[^>]*name="cg_max_rank"[^>]*>', html)
+        assert cap is not None
+        assert 'value="3"' in cap.group(0)
+
+
 class BuilderSaveTest(BuilderTestCase):
     def _post_data(self, **overrides):
         data = {
@@ -496,6 +530,42 @@ class BuilderNewRouteTest(BuilderTestCase):
         resp = self.client.post(reverse("admin_distinction_builder_new"), data)
         assert resp.status_code == 302
         assert Distinction.objects.filter(name="Fresh Distinction").exists()
+
+    def test_new_route_makes_the_slug_from_the_name_when_it_is_left_blank(self):
+        """The slug sits under the folded "More" section (#5241).
+
+        Required and empty there, the browser could not focus it and Save did nothing
+        at all, with no message. Blank now means "from the name", as the table paste
+        has always made it, and the folded field no longer carries ``required``.
+        """
+        self.client.force_login(self.author)
+        page = self.client.get(reverse("admin_distinction_builder_new")).content.decode()
+        slug_input = re.search(r'<input[^>]*name="slug"[^>]*>', page)
+        assert slug_input is not None
+        assert "required" not in slug_input.group(0)
+
+        data = {
+            "name": "Fresh And Slugless",
+            "category": str(self.category.pk),
+            "cost_per_rank": "0",
+            "max_rank": "1",
+            "description": "",
+            "slug": "",
+            "is_active": "on",
+            "default_secret_level": "1",
+            "mutually_exclusive_with": [],
+            "effects-TOTAL_FORMS": "0",
+            "effects-INITIAL_FORMS": "0",
+            "effects-MIN_NUM_FORMS": "0",
+            "effects-MAX_NUM_FORMS": "1000",
+            "offers-TOTAL_FORMS": "0",
+            "offers-INITIAL_FORMS": "0",
+            "offers-MIN_NUM_FORMS": "0",
+            "offers-MAX_NUM_FORMS": "1000",
+        }
+        resp = self.client.post(reverse("admin_distinction_builder_new"), data)
+        assert resp.status_code == 302
+        assert Distinction.objects.get(name="Fresh And Slugless").slug == "fresh-and-slugless"
 
     def test_new_route_get_renders_with_no_rail(self):
         self.client.force_login(self.author)

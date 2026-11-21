@@ -31549,6 +31549,10 @@ export interface components {
       readonly cg_points_spent: number;
       /** @description Get remaining CG points. */
       readonly cg_points_remaining: number;
+      /** @description What the draft's feature qualities cost, before the free allowance (#5241). */
+      readonly feature_points_spent: number;
+      /** @description How many points of feature qualities cost no CG points (#5241). */
+      readonly feature_points_free: number;
       /** @description Get stat bonuses from all sources (heritage + distinctions). */
       readonly stat_bonuses: {
         [key: string]: number;
@@ -35467,6 +35471,8 @@ export interface components {
       /** @description Display name for UI */
       display_name: string;
       sort_order?: number;
+      /** @description The colour shown for this option where a player picks it (#5241), as #rrggbb. Leave blank for an option that is not a colour, or has no single colour (Prismatic, Mismatched); it is then drawn as a striped swatch. */
+      color_hex?: string;
     };
     /**
      * @description * `color` - Color
@@ -56078,8 +56084,6 @@ export interface components {
       held: boolean;
       effect_line: string;
       taken_per_feature: boolean;
-      opens_feature: boolean;
-      requires_feature_opened: boolean;
       cg_max_rank: number;
       group: string;
       asks_figure_name: boolean;

@@ -85,7 +85,9 @@ reason; a page extending `base_site.html` directly does not get it for free.
             <summary>More</summary>
             <table class="tuning-table db-table">
               <tbody>
-                <tr><th>{{ form.slug.label_tag }}</th><td>{{ form.slug }}</td></tr>
+                <tr><th>{{ form.slug.label_tag }}</th>
+                  <td>{{ form.slug.errors }}{{ form.slug }}
+                    <div class="help">{{ form.slug.help_text }}</div></td></tr>
                 <tr><th>{{ form.is_active.label_tag }}</th><td>{{ form.is_active }}</td></tr>
                 <tr><th>{{ form.tags.label_tag }}</th><td>{{ form.tags }}</td></tr>
                 <tr><th>{{ form.secret_by_default.label_tag }}</th>
@@ -95,12 +97,19 @@ reason; a page extending `base_site.html` directly does not get it for free.
                 <tr><th>{{ form.parent_distinction.label_tag }}</th>
                   <td>{{ form.parent_distinction }}</td></tr>
                 <tr><th>{{ form.allow_other.label_tag }}</th><td>{{ form.allow_other }}</td></tr>
-                <tr><th>{{ form.trust_value.label_tag }}</th><td>{{ form.trust_value }}</td></tr>
-                <tr><th>{{ form.trust_category.label_tag }}</th>
-                  <td>{{ form.trust_category }}</td></tr>
                 <tr><th>{{ form.is_automatic.label_tag }}</th><td>{{ form.is_automatic }}</td></tr>
                 <tr><th>{{ form.requires_slot_filled.label_tag }}</th>
                   <td>{{ form.requires_slot_filled }}</td></tr>
+                {# A feature quality (#3739, #5241). Every field the form saves has a row here: one it lists and this page does not draw is posted absent and saved as off, 0 or blank. #}
+                <tr><th>{{ form.taken_per_feature.label_tag }}</th>
+                  <td>{{ form.taken_per_feature.errors }}{{ form.taken_per_feature }}
+                    <div class="help">{{ form.taken_per_feature.help_text }}</div></td></tr>
+                <tr><th>{{ form.cg_max_rank.label_tag }}</th>
+                  <td>{{ form.cg_max_rank.errors }}{{ form.cg_max_rank }}
+                    <div class="help">{{ form.cg_max_rank.help_text }}</div></td></tr>
+                <tr><th>{{ form.final_touches_prompt.label_tag }}</th>
+                  <td>{{ form.final_touches_prompt.errors }}{{ form.final_touches_prompt }}
+                    <div class="help">{{ form.final_touches_prompt.help_text }}</div></td></tr>
                 <tr><th>{{ form.asks_figure_name.label_tag }}</th>
                   <td>{{ form.asks_figure_name }}
                     <div class="help">{{ form.asks_figure_name.help_text }}</div></td></tr>

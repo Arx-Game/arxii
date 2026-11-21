@@ -63,7 +63,7 @@ def carry_amounts(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0466_worship_scaled_outcomes_schema"),
+        ("arxii", "0468_worship_scaled_outcomes_schema"),
     ]
 
     operations = [

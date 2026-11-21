@@ -1,5 +1,28 @@
 # Character Creation & Identity
 
+## Built (2026-11-21, #5241: Appearance in compact controls, colour swatches, ten free points of feature qualities)
+
+Owner rulings 2026-11-21 on the Appearance stage. The birthday is typed as two numbers,
+month then day, on one line with the age, and read back as "Day 14 of <the game's name for
+that month>"; the row of twelve month names is gone. Height band and build are dropdowns on
+one line with the height in inches. Each physical feature is one compact control, two
+across: a dropdown for a list of names, and for a colour a strip of swatches drawn in each
+option's own colour (`FormTraitOption.color_hex`, new; a first pass of values for the 62
+single-colour options production held, which staff correct in the admin with a colour
+picker). A marking's name, kind and region are asked on one line, the kind and region as
+dropdowns. The qualities (Alluring, Menacing, Majestic) sit on one line under every feature
+and marking, always visible, and a click sets a tier: the one-point "Make It Distinctive"
+pick of #3739 and the two flags behind it are removed, a feature holding any tier is
+distinctive, and the first ten points of qualities cost no CG points
+(`FEATURE_FREE_POINTS`), further tiers costing CG points at the quality's own price. The
+page and the side panel say how many of the ten are spent. Migrations
+`feature_qualities_and_swatch_colour` and `swatch_colour_fill`. See ADR-5241, which
+supersedes ADR-0287 in part.
+
+**Owed on production:** the three quality rows are authored content and production has
+none, so the qualities line shows nothing there until staff add them (the walkthrough is
+on #5241; the Required content page lists them as "Per-feature Appearance distinctions").
+
 ## Built (2026-11-17, #5178: one Background box on Final Touches)
 
 Character creation asks for the character's history once. The owner ruled that a text box
@@ -119,6 +142,9 @@ builder for beats and beginnings; a Glimpse row "you remember a life you never l
 (a past-life source exists, `PAST_LIFE`, the option is content).
 
 ## Built (2026-09-10, #3739: distinctive physical features)
+
+*Changed by #5241 (above): there is no one-point pick any more, a tier costs 1, and the
+first ten points are free.*
 
 A feature is any trait row or any marking, species-required markers included.
 One CG point on "Make It Distinctive" opens that feature's description, widens

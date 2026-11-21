@@ -781,17 +781,16 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
     ) -> dict[tuple[str, int], str]:
         """Validate every entry's feature and return each one's display label (#3739).
 
-        Called by ``_build_sync_entries``. Four things are checked, because a
+        Called by ``_build_sync_entries``. Three things are checked, because a
         per-feature pick is priced per feature and the feature is the only thing
         that keeps two picks of one distinction apart:
 
         * a ``taken_per_feature`` distinction names exactly one feature;
         * anything else names none;
         * a named trait is a real ``FormTrait`` and a named marking is one of *this*
-          draft's own ``DraftMarking`` rows (never another player's);
-        * a ``requires_feature_opened`` axis is bought on a feature this same payload
-          also unlocks -- the sync is the whole truth about the draft's CHOICE picks,
-          so the unlock has to be in it.
+          draft's own ``DraftMarking`` rows (never another player's).
+
+        A quality needs no pick before it (#5241): any feature takes one directly.
 
         The returned mapping is keyed by ``(trait name, draft marking id)`` and holds
         the feature's own display name, which becomes the entry's source.
@@ -810,9 +809,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             m.pk: (m.name or m.get_kind_display())
             for m in draft.markings.filter(pk__in={m for _, m in named if m})
         }
-        labels = self._feature_labels(named, traits, markings)
-        self._check_feature_unlocks(distinction_entries, by_id)
-        return labels
+        return self._feature_labels(named, traits, markings)
 
     @staticmethod
     def _named_sync_features(
@@ -851,31 +848,6 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                 traits[trait_name] if trait_name else markings[marking_id]
             )
         return labels
-
-    @staticmethod
-    def _check_feature_unlocks(
-        distinction_entries: list[dict], by_id: dict[int, Distinction]
-    ) -> None:
-        """Raise unless every axis pick sits on a feature the payload also unlocks.
-
-        Called by ``_resolve_sync_features``. ``sync`` replaces the draft's whole
-        CHOICE list, so "already unlocked" can only mean "unlocked in this payload";
-        a client that drops the unlock and keeps the axes is asking for an axis on a
-        feature that is no longer distinctive.
-        """
-        opened = {
-            (e["feature_trait"], e["feature_marking"])
-            for e in distinction_entries
-            if by_id[e["id"]].opens_feature
-        }
-        for entry in distinction_entries:
-            distinction = by_id[entry["id"]]
-            if not distinction.requires_feature_opened:
-                continue
-            if (entry["feature_trait"], entry["feature_marking"]) not in opened:
-                raise ValidationError(
-                    {"detail": (f"{distinction.name} needs that feature made distinctive first.")}
-                )
 
     def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:
         """
