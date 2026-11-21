@@ -397,3 +397,37 @@ class CancelSheetUpdateRequestTests(TestCase):
         )
         with self.assertRaises(SheetUpdateRequestError):
             cancel_sheet_update_request(req, account)
+
+
+class DeleteCharacterDistinctionTests(TestCase):
+    """The teardown ``remove_distinction`` and the beta progress reset share (#3055)."""
+
+    def test_modifiers_sources_secret_and_row_all_go(self):
+        from world.distinctions.models import CharacterDistinction
+        from world.distinctions.services import (
+            delete_character_distinction,
+            mint_distinction_secret,
+        )
+        from world.mechanics.factories import CharacterModifierFactory
+        from world.mechanics.models import CharacterModifier, ModifierSource
+        from world.secrets.models import Secret
+
+        held = CharacterDistinctionFactory(
+            character=CharacterSheetFactory(), distinction=DistinctionFactory()
+        )
+        secret = mint_distinction_secret(held)
+        modifier = CharacterModifierFactory(
+            character=held.character, source__character_distinction=held
+        )
+        source_pk = modifier.source_id
+        bystander = CharacterDistinctionFactory(
+            character=held.character, distinction=DistinctionFactory()
+        )
+
+        delete_character_distinction(held)
+
+        assert not CharacterDistinction.objects.filter(pk=held.pk).exists()
+        assert not CharacterModifier.objects.filter(pk=modifier.pk).exists()
+        assert not ModifierSource.objects.filter(pk=source_pk).exists()
+        assert not Secret.objects.filter(pk=secret.pk).exists()
+        assert CharacterDistinction.objects.filter(pk=bystander.pk).exists()

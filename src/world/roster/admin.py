@@ -550,7 +550,7 @@ class RosterTenureAdmin(admin.ModelAdmin):
 class RosterApplicationAdmin(admin.ModelAdmin):
     list_display = ["player_data", "character", "status", "applied_date", "reviewed_by"]
     list_filter = ["status", "applied_date", "reviewed_date"]
-    search_fields = ["player_data__account__username", "character__name"]
+    search_fields = ["player_data__account__username", "character__character__db_key"]
     readonly_fields = ["applied_date", "reviewed_date"]
     date_hierarchy = "applied_date"
 
@@ -580,12 +580,13 @@ class RosterApplicationAdmin(admin.ModelAdmin):
             )
             return
 
+        from world.roster.services.activity import ReservedForCreatorError  # noqa: PLC0415
         from world.roster.services.slots import SlotsFullError  # noqa: PLC0415
 
         for application in queryset.filter(status="pending"):
             try:
                 approved = application.approve(staff_player_data)
-            except SlotsFullError as exc:
+            except (SlotsFullError, ReservedForCreatorError) as exc:
                 self.message_user(
                     request,
                     f"Application {application.pk} not approved: {exc.user_message}",

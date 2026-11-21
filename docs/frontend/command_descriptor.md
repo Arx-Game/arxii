@@ -1,71 +1,26 @@
 # CommandDescriptor Format
 
-`CommandDescriptor` objects describe actions the webclient can present to the player. They appear in command payloads from the server and drive UI elements such as context menus, toolbar icons, and prompts. The format matches the dataclass defined on the backend and includes the following fields:
+> **Status (ADR-4034, #4034):** the web client does not read these descriptors. It renders no
+> form, drawer, menu or prompt for a telnet command. A person types a command into the composer,
+> acts on a person through the persona menu (ADR-4030), and acts in combat through the typed
+> panels. The server still builds and sends the descriptors, and this page records their shape
+> for whoever decides what to do with them.
 
-| field  | type | purpose |
-|--------|------|---------|
-| `label` | string | Human readable label shown to the player |
-| `action` | string | Command verb sent back to the server |
-| `params` | object | Additional parameters for the action |
-| `params_schema` | object \| null | Description of arguments the client must collect |
-| `icon` | string \| null | Optional icon identifier used by the UI |
+`CommandDescriptor` objects describe a command that has a web form. The server builds one per
+command (`ArxCommand.to_payload()`, or `FrontendMetadataMixin.to_payload()` for a command that
+is not an action), `serialize_cmdset()` gathers them for a character and its account, and
+`commands_frame()` sends them as the args of the `commands` frame. The frame's kwargs carry
+`names`, every name the character can type a command by, which the composer does read
+(`Session.commandNames`).
 
-## Examples
+The fields the server sends include an `action` (the command verb), a `prompt` template naming
+each argument, a `params_schema` describing those arguments, and an optional `icon`, `name`,
+`category` and `help`. The dataclass in `src/commands/` is the source of truth for the shape.
 
-### Context menu
+## Why the client stopped using them
 
-A list of descriptors can populate a right‑click menu for an object:
-
-```json
-[
-  {
-    "label": "Examine",
-    "action": "look",
-    "params": { "target": 42 },
-    "icon": "search"
-  },
-  {
-    "label": "Get",
-    "action": "get",
-    "params": { "target": 42 },
-    "icon": "hand"
-  }
-]
-```
-
-### Icon action
-
-Icons hint at the intent of quick‑access commands, such as toolbar buttons:
-
-```json
-{
-  "label": "Inventory",
-  "action": "open_panel",
-  "params": { "target": "inventory" },
-  "icon": "briefcase"
-}
-```
-
-### Prompt
-
-Descriptors can trigger a client‑side prompt before sending a command back to the server:
-
-```json
-{
-  "label": "Rename",
-  "action": "prompt",
-  "params": {
-    "command": "rename",
-    "prompt": "Enter a new name"
-  },
-  "icon": "edit"
-}
-```
-
-### Collecting parameters
-
-Descriptors with a `params_schema` tell the client which inputs to gather before dispatching the command. If the schema defines one or two simple text fields, the webclient opens a modal dialog. More complex schemas open a side drawer with a form. The collected values merge into `params` when the `action` is sent back to the server.
-
-When `icon` is omitted, the frontend should supply a generic placeholder.
-
-The webclient consumes these descriptors to build interactive elements, as outlined in the [Webclient Game Plan](./game_client_plan.md). Each descriptor supplied in a command payload maps directly to a UI component that collects any needed parameters and dispatches the chosen `action` back to the server.
+The descriptors began as a "Quick Actions" panel (PRs #153, #154, #158 and #159, August 2025): a
+side drawer that built a form from `params_schema` and sent the filled-in command text back. The
+three-column game layout (PR #285, February 2026) removed its last mount, and nothing replaced it
+with a form-driven surface for telnet commands. #4034 removed the components and the stored
+descriptors from the client.

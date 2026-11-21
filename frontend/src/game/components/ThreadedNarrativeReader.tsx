@@ -328,6 +328,9 @@ function findTopVisiblePoseId(container: HTMLElement): { poseId: string; offsetP
   return poseId ? { poseId, offsetPx: bestOffset } : null;
 }
 
+/** How many animation frames the Chronological restore waits for its anchored row to mount. */
+const CHRONO_SETTLE_FRAMES = 8;
+
 interface ThreadedNarrativeReaderProps {
   sceneId: string;
   /** Stable account scope for reading anchors. */
@@ -363,6 +366,9 @@ interface ThreadedNarrativeReaderProps {
   notes?: FeedNote[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
+  /** Only a historical reference has a later page; the live feed ends at now. */
+  hasLaterPage?: boolean;
+  fetchLaterPage?: () => void;
   retention?: { retained: number; evicted: number; warning: boolean; gap: boolean };
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   onAddTarget?: (name: string) => void;
@@ -445,6 +451,8 @@ export function ThreadedNarrativeReader({
   notes = NO_NOTES,
   hasNextPage,
   fetchNextPage,
+  hasLaterPage,
+  fetchLaterPage,
   retention,
   onAvatarClick,
   onAddTarget,
@@ -1005,13 +1013,36 @@ export function ThreadedNarrativeReader({
       chronoVirtualizer.scrollToEnd();
       return;
     }
-    // Deliberately reduced scope (see file-level note above the
-    // Chronological branch below): restores to the nearest loaded index at
-    // the top of the viewport, not the exact recorded pixel offset.
+    // Land on the row first (a virtualized list cannot place a row it has not
+    // mounted and measured), then move it to the recorded offset once it is
+    // on screen (`settleChronoOffset`).
     // The reader is back where they stopped, which is not the newest row:
     // say so, or the next row to arrive would pull them to the bottom.
     chronoStick.pinnedRef.current = false;
     chronoVirtualizer.scrollToIndex(idx, { align: 'start' });
+    settleChronoOffset(anchor);
+  };
+
+  // The second pass of the Chronological restore: once the virtualizer has mounted and
+  // measured the anchored row, shift the scroll by however far its top sits from the
+  // recorded offset -- the same arithmetic Threads view's restore uses, in the same
+  // container-relative coordinates. The row mounts over the next few frames, so the
+  // pass looks again a bounded number of times and then leaves the index landing as is.
+  const settleChronoOffset = (anchor: ReadingAnchor, attemptsLeft = CHRONO_SETTLE_FRAMES) => {
+    requestAnimationFrame(() => {
+      const container = chronoParentRef.current;
+      if (!container) return;
+      const target = container.querySelector<HTMLElement>(`[data-pose-id="${anchor.poseId}"]`);
+      if (!target) {
+        if (attemptsLeft > 0) settleChronoOffset(anchor, attemptsLeft - 1);
+        return;
+      }
+      const shift =
+        target.getBoundingClientRect().top -
+        container.getBoundingClientRect().top -
+        anchor.offsetPx;
+      if (Math.abs(shift) >= 1) container.scrollTop += shift;
+    });
   };
 
   const restoreAnchor = () => {
@@ -1424,16 +1455,9 @@ export function ThreadedNarrativeReader({
               </p>
             </div>
           ) : (
-            // Anchor restore here is deliberately reduced-scope (#3759 Wave
-            // 6): it calls chronoVirtualizer.scrollToIndex (see
-            // restoreChronoAnchor above) rather than reproducing Threads
-            // view's exact-pixel-offset restore. A virtualized list can't
-            // measure an off-screen row until it's mounted, so landing on
-            // the precise recorded offsetPx would need a further
-            // measure/re-scroll pass once the target row renders; the
-            // simpler nearest-index landing was judged good enough for this
-            // less-used view. A follow-up wanting pixel parity here would
-            // add that second pass once the target row's ref resolves.
+            // Anchor restore here is two passes (`restoreChronoAnchor`): the virtualizer's
+            // scrollToIndex lands on the anchored row, then `settleChronoOffset` moves that
+            // row to the recorded offsetPx once it has mounted and been measured.
             <div
               ref={setChronoParent}
               onScroll={handleChronoScroll}
@@ -1746,15 +1770,26 @@ export function ThreadedNarrativeReader({
             No more local "Jump to latest": since every thread is always
             visible and each has its own window, there's no longer a single
             local window to jump back from. */}
-        {hasNextPage && (
+        {(hasNextPage || (hasLaterPage && fetchLaterPage)) && (
           <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={fetchNextPage}
-              className="flex-1 rounded border px-3 py-2 text-sm"
-            >
-              Load earlier history
-            </button>
+            {hasNextPage && (
+              <button
+                type="button"
+                onClick={fetchNextPage}
+                className="flex-1 rounded border px-3 py-2 text-sm"
+              >
+                Load earlier history
+              </button>
+            )}
+            {hasLaterPage && fetchLaterPage && (
+              <button
+                type="button"
+                onClick={fetchLaterPage}
+                className="flex-1 rounded border px-3 py-2 text-sm"
+              >
+                Load later history
+              </button>
+            )}
           </div>
         )}
       </div>

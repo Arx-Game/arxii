@@ -284,6 +284,26 @@ def compute_sheet_update_xp_cost(
 compute_distinction_change_xp_cost = compute_sheet_update_xp_cost
 
 
+def delete_character_distinction(character_distinction: CharacterDistinction) -> None:
+    """Tear a held distinction down and delete the row, reconciling what hangs off it.
+
+    The teardown ``remove_distinction`` runs once its request is approved, without the
+    request or the narrative message, so the beta cutover's progress reset can shed a
+    play-time distinction the same way. Order: ``delete_distinction_modifiers`` removes the
+    CharacterModifier + ModifierSource rows, the home's comfort modifier is re-read while
+    the row still says which effects it carried (#4394), ``clear_distinction_secret``
+    drops the Secret, then ``CharacterDistinction.delete()`` cascades the rest.
+    """
+    from world.locations.comfort_effect import refresh_comfort_lever  # noqa: PLC0415
+    from world.mechanics.services import delete_distinction_modifiers  # noqa: PLC0415
+
+    with transaction.atomic():
+        delete_distinction_modifiers(character_distinction)
+        refresh_comfort_lever(character_distinction)
+        clear_distinction_secret(character_distinction)
+        character_distinction.delete()
+
+
 def remove_distinction(
     character_distinction: CharacterDistinction,
     *,
@@ -321,8 +341,6 @@ def remove_distinction(
         SheetUpdateRequestStatus,
         SheetUpdateRequestType,
     )
-    from world.locations.comfort_effect import refresh_comfort_lever  # noqa: PLC0415
-    from world.mechanics.services import delete_distinction_modifiers  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
@@ -336,16 +354,9 @@ def remove_distinction(
         msg = "This request does not target this distinction."
         raise SheetUpdateRequestError(msg)
 
-    with transaction.atomic():
-        delete_distinction_modifiers(character_distinction)
-        # #4394: the modifiers are gone, so the home's comfort modifier is re-read now,
-        # while the distinction row still says which effects it carried.
-        refresh_comfort_lever(character_distinction)
-        clear_distinction_secret(character_distinction)
-
-        distinction_name = character_distinction.distinction.name
-        character_sheet = sheet_update_request.character_sheet
-        character_distinction.delete()
+    distinction_name = character_distinction.distinction.name
+    character_sheet = sheet_update_request.character_sheet
+    delete_character_distinction(character_distinction)
 
     send_narrative_message(
         recipients=[character_sheet],

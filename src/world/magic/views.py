@@ -1740,6 +1740,8 @@ class RitualPerformView(APIView):
             payload["result"] = {
                 "outcome": result.outcome.name,
                 "anima_recovered": result.anima_recovered,
+                "patron_bonus": result.patron_bonus,
+                "patron_name": result.patron_name,
                 "severity_reduced": result.severity_reduced,
                 "soulfray_resolved": result.soulfray_resolved,
             }

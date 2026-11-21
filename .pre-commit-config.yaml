@@ -354,6 +354,21 @@ repos:
         # this codebase is that the function returns the row to a caller that
         # delivers it itself (`world/magic/audere_majora.py`'s `_post_declaration`,
         # whose row `cross_threshold` pushes after finishing the crossing).
+      - id: interaction-visible-to
+        name: Reject Interaction visible_to without the block check
+        entry: uv run python tools/lint_interaction_visible_to.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*\.py$
+        exclude: (/tests/|/migrations/|/test_[^/]*\.py$)
+        # #3751 (2026-11-20): three player-facing reads called `visible_to` alone and
+        # reached main - a reply's parent chip leaked a blocked author's pose id, the
+        # top-bar badge counted a blocked author's whispers, and the reply-target and
+        # nomination checks accepted a blocked author's pose by id. `visible_to` says
+        # whether a row may be read; a player's read also drops blocked faces, which is
+        # `InteractionQuerySet.readable_by`. Suppress with `# noqa: VISIBLE_TO` plus a
+        # reason, only for a call that is not a player read.
       - id: destroyed-at-writes
         name: Reject a destroyed_at write outside the canonical destroy helper
         entry: uv run python tools/lint_destroyed_at_writes.py

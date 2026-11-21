@@ -1262,6 +1262,15 @@ class GMPrompt(RelatedCacheClearingMixin, SharedMemoryModel):
             "the Crossing vision. Spoiler-private: shown only to the addressed GM."
         ),
     )
+    context_text = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "What happened, for the addressed GM only: a miracle prompt's result tier, what "
+            "was drawn and who prayed (#4349). Never narrated; the room and private lines "
+            "above are what the GM may send."
+        ),
+    )
     prepared_for_character = models.BooleanField(
         default=False,
         help_text="True when the defaults came from the character's prepared text.",

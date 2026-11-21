@@ -19,9 +19,10 @@ Redux Toolkit store for global client state management. Minimal use of Redux - o
   survive a room change on purpose: the feed is the character's own history. The
   older `messages` array is still written by the three non-text legacy frames
   (login, VN, reaction) but has had no reader since `SystemLane` went.
-  `commandNames` (#4346) is the `commands` frame's `names`, written with
-  `commands` by `setSessionCommands`; the composer reads it to tell `@desc` (a
-  command) from `@Nyx` (someone to address).
+  `commandNames` (#4346) is the `commands` frame's `names`, written by
+  `setSessionCommandNames`; the composer reads it to tell `@desc` (a
+  command) from `@Nyx` (someone to address). The frame's per-command descriptors
+  are not stored (ADR-4034, #4034).
   `consoleLines` (#3857) holds the staff console's lines (`addConsoleLine`, bounded
   at 500, never counted as unread; `clearConsoleLines`).
   `minimizedFeed` / `dismissedFeed` (#3856 PR 2) hold the `feedItemKey`s of blocks

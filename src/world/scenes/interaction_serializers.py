@@ -323,8 +323,13 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 if (parent_id := self._parent_id_for(row)) is not None
             }
             if parent_ids:
+                # The same gate the page's own rows came through (``readable_by``, with
+                # the viewer's persona ids), so a parent the list hides from this viewer,
+                # a blocked face's pose above all, never leaks as a chip.
                 self.context[cache_key] = dict(
-                    Interaction.objects.visible_to(user)
+                    Interaction.objects.readable_by(
+                        user, persona_ids=list(self.context.get("persona_ids", ()))
+                    )
                     .filter(pk__in=parent_ids)
                     .values_list("pk", "timestamp")
                 )

@@ -117,7 +117,7 @@ nested thread, the way a mailing list nests, not a new data structure.
 
 Two things fell out of this shape, and they are evidence for the decision rather than
 decoration. First, `get_reply_to` derives the parent id from the thread-member aggregates
-and the enclosing thread, then performs a page-wide `visible_to` lookup. The chip's whole
+and the enclosing thread, then performs a page-wide `readable_by` lookup. The chip's whole
 payload is `{id, timestamp}`, with the timestamp read from the parent interaction; no
 `InteractionReplyHandler` or per-row edge lookup is needed. Second,
 `InteractionThread.parent` had existed since #3757 with no writer anywhere in the codebase,
@@ -134,7 +134,7 @@ precedent for adding one.
 
 **The two channels gate the parent edge differently, and the WS gate is the weaker one.**
 REST derives the parent id from thread membership and gates it per viewer on
-`visible_to(request.user)` (`InteractionListSerializer.get_reply_to`). The live WebSocket
+`readable_by` (`visible_to` plus the viewer's blocks, `InteractionListSerializer.get_reply_to`). The live WebSocket
 push has no single viewer, so it uses a structural gate evaluated once
 (`interaction_services._reply_parent_payload`): the parent goes on the wire only when it
 is room-heard in the same scene, using the shared `managers.ROOM_HEARD` classification.

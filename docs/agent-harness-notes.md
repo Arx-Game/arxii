@@ -113,6 +113,19 @@ cancels every sibling in that batch, and most of the intended work silently does
 not run. This is why repo-mutating operations go one per message; read-only
 fan-out can still be batched.
 
+## `arx start` killed other worktrees' test runs (#5240)
+
+On 2026-11-21 nine builders worked in parallel worktrees and one builder's `arx start`
+printed "Killed 2 stale process(es)" twice with nothing listening on 4001 or 4002: the
+dead processes were other builders' `arx test` runs, which ended with no result and were
+read as test failures. The cleanup matched every Python process whose command line named
+`evennia`, `twistd`, `server.py` or `portal.py`, so a test run and a neighbour's server
+looked the same as this checkout's stale server. It now kills only the server and portal
+of its own checkout (working directory or launched interpreter path inside the checkout
+root, a worktree nested under the main checkout counting as its own checkout) and prints
+what it left alone. `arx stop --hard` and `evennia stop` (`just stop`) still act on every
+checkout.
+
 ## Retired
 
 - **`workflow-friction-audit` skill (2026-09-25).** Designed 2026-05-26

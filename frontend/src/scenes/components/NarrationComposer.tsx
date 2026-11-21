@@ -167,6 +167,12 @@ export function NarrationComposer({
           </span>
         </div>
 
+        {prompt.context_text && (
+          <p className="text-sm" data-testid="composer-context">
+            {prompt.context_text}
+          </p>
+        )}
+
         <div className="space-y-2">
           <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
             Audience

@@ -41,6 +41,8 @@ import { useBoardForRoomQuery } from '@/boards/queries';
 import { RoomAuraPicker } from './room-panel/RoomAuraPicker';
 import { SceneHighlightsPanel } from './room-panel/SceneHighlightsPanel';
 import { PrimumPanel } from './room-panel/PrimumPanel';
+import { PrayDialog } from '@/worship/components/PrayDialog';
+import type { PrayerTarget } from '@/worship/types';
 
 /** Resolves the room's LOCATION board and renders it once loaded (#3286). */
 function RoomBoardPanel({
@@ -319,6 +321,10 @@ export function RoomPanel({
     send(character, exit.name);
   };
 
+  const prayerTargets: PrayerTarget[] = room.characters.flatMap((other) =>
+    other.persona_id != null ? [{ personaId: other.persona_id, name: other.name }] : []
+  );
+
   return (
     <div className="flex flex-col gap-0">
       <RoomHeader
@@ -404,7 +410,22 @@ export function RoomPanel({
         viewerPersonaId={viewerPersonaId}
         viewerInScene={scene?.viewer_entered ?? null}
       />
-      <HolySiteBlock characterId={characterId} viewerEntryId={viewerEntryId} roomId={room.id} />
+      <HolySiteBlock
+        characterId={characterId}
+        viewerEntryId={viewerEntryId}
+        roomId={room.id}
+        others={prayerTargets}
+      />
+      {characterId != null && prayerTargets.length > 0 && (
+        <div className="border-b px-3 py-2">
+          <PrayDialog
+            characterId={characterId}
+            others={prayerTargets}
+            triggerLabel="Pray for someone"
+            forRequired
+          />
+        </div>
+      )}
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
       <ObjectsList objects={room.objects} characterId={characterId} accountId={accountId} />
       {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}

@@ -44912,6 +44912,57 @@ paths:
               schema:
                 $ref: '#/components/schemas/Miracle'
           description: ''
+  /api/worship/owed-favor/:
+    get:
+      operationId: worship_owed_favor_list
+      description: 'The beings a character owes favor to (#4349): the owner reads
+        their own, staff anyone''s.'
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOwedFavorList'
+          description: ''
+  /api/worship/owed-favor/{id}/:
+    get:
+      operationId: worship_owed_favor_retrieve
+      description: 'The beings a character owes favor to (#4349): the owner reads
+        their own, staff anyone''s.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - worship
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OwedFavor'
+          description: ''
   /api/worship/pledge-cards/:
     get:
       operationId: worship_pledge_cards_list
@@ -62107,6 +62158,12 @@ components:
           description: 'Resolved authored private line for the character this concerns,
             e.g. the Crossing vision. Spoiler-private: shown only to the addressed
             GM.'
+        context_text:
+          type: string
+          readOnly: true
+          description: 'What happened, for the addressed GM only: a miracle prompt''s
+            result tier, what was drawn and who prayed (#4349). Never narrated; the
+            room and private lines above are what the GM may send.'
         prepared_for_character:
           type: boolean
           readOnly: true
@@ -62120,6 +62177,7 @@ components:
       - being_answer_summary
       - being_answer_table
       - character_sheet
+      - context_text
       - created_at
       - id
       - kind
@@ -64220,7 +64278,13 @@ components:
           type: string
         site:
           type: string
+        ap_left:
+          type: integer
+        ap_cap:
+          type: integer
       required:
+      - ap_cap
+      - ap_left
       - being_id
       - being_name
       - site
@@ -68789,8 +68853,12 @@ components:
         favor_threshold:
           type: integer
           readOnly: true
-          description: Minimum DevotionStanding.favor required for this miracle to
-            fire.
+          description: Minimum favor with the being for this miracle to be a candidate.
+            0 means only the Divine Intervention Config's prayer favor gate applies.
+        min_outcome_tier:
+          type: string
+          readOnly: true
+          default: Success
         narrative_text:
           type: string
           readOnly: true
@@ -68808,6 +68876,7 @@ components:
       - id
       - intervention_trigger
       - is_active
+      - min_outcome_tier
       - name
       - narrative_text
       - resonance_pool_cost
@@ -74626,6 +74695,31 @@ components:
       - character_sheet
       - name
       - wardrobe
+    OwedFavor:
+      type: object
+      description: |-
+        Favor a character owes a being after a weaker answer (#4349): while any is owed the
+        being ignores their calls for intervention.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        being_id:
+          type: integer
+        being_name:
+          type: string
+        owed_favor:
+          type: integer
+          readOnly: true
+          description: Favor owed to the being after a weaker answer to divine intervention
+            (#4349). While any is owed the being ignores this character's intervention
+            rolls; base favor the character earns pays it first, before the earning
+            rate.
+      required:
+      - being_id
+      - being_name
+      - id
+      - owed_favor
     OwnerModeEnum:
       enum:
       - PERSONAL
@@ -78131,6 +78225,29 @@ components:
       - next
       - previous
       - results
+    PaginatedOwedFavorList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/OwedFavor'
     PaginatedPactCardList:
       type: object
       required:
@@ -87107,7 +87224,13 @@ components:
         devotion_granted:
           type: integer
           readOnly: true
-          description: Favor paid by the weekly holy-site prayer; 0 for every other.
+          description: Favor paid by a holy-site prayer; 0 for every other.
+        ap_spent:
+          type: integer
+          readOnly: true
+          description: Action points spent praying at a holy site of the being (#4349).
+            The weekly limit is the sum of these for the character, being and game
+            week.
         dire_straits:
           allOf:
           - $ref: '#/components/schemas/DireStraitsEnum'
@@ -87121,6 +87244,7 @@ components:
           readOnly: true
       required:
       - answered
+      - ap_spent
       - being
       - being_name
       - character_sheet

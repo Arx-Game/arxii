@@ -81,6 +81,7 @@ class AccountAttentionTests(TestCase):
             interaction_id=whisper.pk,
             timestamp=whisper.timestamp,
             persona=self.persona_one,
+            account=self.account,
         )
 
         result = account_attention(account=self.account, entries=self.entries)
@@ -258,7 +259,7 @@ class AccountAttentionTests(TestCase):
         )
 
     def test_query_count_is_flat_as_characters_are_added(self) -> None:
-        # Five queries, none per character: (1) directed-unread UNION,
+        # Six queries, none per character: (0) the account's block list, (1) directed-unread UNION,
         # (2) open SceneParticipation rows (+ each scene's location id),
         # (3) pose-derived scene attribution, (4) presence-derived scene
         # attribution (Finding 1, #3774 final review - who is standing in an
@@ -267,9 +268,9 @@ class AccountAttentionTests(TestCase):
         # has a location, whether or not it finds anyone there.
         InteractionFactory(scene=self.scene, persona=self.outsider, mode=InteractionMode.POSE)
 
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6):
             account_attention(account=self.account, entries=self.entries[:1])
-        with self.assertNumQueries(5):
+        with self.assertNumQueries(6):
             account_attention(account=self.account, entries=self.entries)
 
     def test_silent_participant_in_an_open_scene_gets_ambient(self) -> None:

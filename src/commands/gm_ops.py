@@ -566,6 +566,8 @@ class CmdGMDashboard(ArxCommand):
                 self.msg(f"  private: {p.private_text}")
             if p.room_text:
                 self.msg(f"  room: {p.room_text}")
+            if p.context_text:
+                self.msg(f"  what happened: {p.context_text}")
             self.msg(f"  {prompt_telnet_commands(p)}")
 
     def _handle_prompt(self, rest: str) -> None:

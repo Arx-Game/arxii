@@ -160,8 +160,9 @@ def take_pledge(sheet: CharacterSheet, pledge: Pledge, *, prayer_text: str = "")
     """Open ``pledge`` for ``sheet``: a PLEDGE project and its sidecar.
 
     The favor target is the project's threshold and the span its time limit. A
-    prayer, when given, is logged through ``pray`` after the pledge opens, so a
-    holy-site prayer's devotion already counts toward it.
+    prayer, when given, is logged through ``pray`` after the pledge opens. It spends no action
+    points, so it earns no favor (favor from prayer comes from the AP a character spends
+    praying at a holy site, #4349); that later prayer counts toward the pledge.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.projects.models import Project  # noqa: PLC0415
@@ -219,14 +220,19 @@ def record_pledge_credit(  # noqa: PLR0913 - the calculation's parts are keyword
     rate: int,
     credited: int,
     source: FavorSource | None,
+    owed_paid: int = 0,
 ) -> PledgeCredit | None:
     """Credit ``credited`` favor to the character's pledge to ``being``, if any.
 
     Called by ``bump_devotion`` for every positive favor write. An open pledge
     to ``being`` gains the amount on ``Project.current_progress`` and a
     ``PledgeCredit`` row; a closing or lapse award names its pledge on
-    ``source`` and is recorded without adding progress.
+    ``source`` and is recorded without adding progress. ``owed_paid`` is the base favor
+    the write paid toward owed favor first (#4349); it is recorded on the row and adds no
+    progress, so a write that went entirely to the debt still shows on the card.
     """
+    if credited <= 0 and owed_paid <= 0:
+        return None
     source = source or FavorSource()
     details = source.pledge_details or open_pledge_for(sheet)
     if details is None or details.pledge.being_id != being.pk:
@@ -243,10 +249,12 @@ def record_pledge_credit(  # noqa: PLR0913 - the calculation's parts are keyword
         base=max(base, 0),
         earning_rate_percent=rate,
         credited=credited,
+        owed_paid=owed_paid,
         game_week=get_current_game_week(),
         resonance_grant=source.resonance_grant,
         offering=source.offering,
         rite_performance=source.rite_performance,
+        outcome_tier=source.outcome_tier,
     )
 
 
@@ -438,6 +446,7 @@ def close_pledge(
         award_base=award.base if award is not None else 0,
         award=award.credited if award is not None else 0,
         earning_rate_percent=award.earning_rate_percent if award is not None else 0,
+        award_owed_paid=award.owed_paid if award is not None else 0,
         delivery=delivery,
         pact=pact,
         pact_refusal=pact_refusal,
@@ -613,12 +622,14 @@ def sacrifice_calculation(
     base: int,
     rate: int | None = None,
     credited: int | None = None,
+    owed_paid: int = 0,
 ) -> str:
     """How a sacrifice's favor came about, in plain words (#4500).
 
     The offering's signals, their sum, the favored-facet multiplier, the roll's outcome and
-    its base favor; with ``rate`` and ``credited`` the earning rate and the favor paid. It
-    reads the signals snapshotted when the item was given up, never its price.
+    its base favor; with ``rate`` and ``credited`` the earning rate and the favor paid, and
+    with ``owed_paid`` the part of the base that paid owed favor first (``base`` is then what
+    was left). It reads the signals snapshotted when the item was given up, never its price.
     """
     from world.ceremonies.models import get_ceremony_config  # noqa: PLC0415
 
@@ -647,7 +658,11 @@ def sacrifice_calculation(
     effective = points * percent // 100 if offering.facet_id is not None else points
     text += f", eased {effective * get_devotion_config().sacrifice_ease_per_point}"
     outcome = offering.outcome_tier.name if offering.outcome_tier_id is not None else "No roll"
-    text += f". {outcome}: {base} base"
+    text += f". {outcome}: {base + owed_paid} base"
+    if owed_paid:
+        text += f", {owed_paid} paid what you owe"
+        if base > 0:
+            text += f", {base} left"
     if rate is not None and credited is not None and base > 0:
         text += f", at {rate}% = +{credited} favor"
     return text
@@ -678,6 +693,11 @@ def _credit_label(credit: PledgeCredit) -> tuple[str, str]:
             f"Performed {credit.rite_performance.rite.name}",
             f"rite award {credit.base} base",
         )
+    if source == PledgeCreditSource.CEREMONY and credit.outcome_tier is not None:
+        return (
+            "Ceremony (officiant)",
+            f"Rites result {credit.outcome_tier.name}: {credit.base} base",
+        )
     if source in _RESOLUTION_SOURCES:
         performance = credit.rite_performance
         tier = performance.outcome_tier.name if performance is not None else "Partial Success"
@@ -699,15 +719,17 @@ def credit_lines(details: PledgeDetails) -> list[PledgeCreditLine]:
         "offering__outcome_tier",
         "rite_performance__rite",
         "rite_performance__outcome_tier",
+        "outcome_tier",
     ).prefetch_related("offering__signals"):  # noqa: PREFETCH_STRING - read as .signals.all()
         label, before_rate = _credit_label(credit)
+        owed = f"{credit.owed_paid} to owed favor, " if credit.owed_paid else ""
         lines.append(
             PledgeCreditLine(
                 id=credit.pk,
                 source=credit.source,
                 label=label,
                 calculation=(
-                    f"{before_rate}, at {credit.earning_rate_percent}% = +{credit.credited}"
+                    f"{owed}{before_rate}, at {credit.earning_rate_percent}% = +{credit.credited}"
                 ),
                 credited=credit.credited,
                 counts_toward_progress=credit.source not in _RESOLUTION_SOURCES,
@@ -785,14 +807,19 @@ def holy_sites_here(sheet: CharacterSheet) -> list[HolySite]:
     """The beings holy where ``sheet`` stands: the room's shrine, then the temple
     over it. Empty anywhere else."""
     from world.worship.consecration_services import shrine_at, temple_over  # noqa: PLC0415
+    from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
+    from world.worship.prayer_services import prayer_ap_left_this_week  # noqa: PLC0415
 
+    cap = get_devotion_config().prayer_weekly_ap_cap
     location = sheet.character.location
     room = location.room_profile_or_none if location is not None else None
     sites: list[HolySite] = []
     shrine = shrine_at(room)
     if shrine is not None and shrine.being.is_active:
-        sites.append(HolySite(being=shrine.being, site=SITE_SHRINE))
+        left = prayer_ap_left_this_week(sheet, shrine.being)
+        sites.append(HolySite(being=shrine.being, site=SITE_SHRINE, ap_left=left, ap_cap=cap))
     temple = temple_over(room)
     if temple is not None and temple.being.is_active:
-        sites.append(HolySite(being=temple.being, site=SITE_TEMPLE))
+        left = prayer_ap_left_this_week(sheet, temple.being)
+        sites.append(HolySite(being=temple.being, site=SITE_TEMPLE, ap_left=left, ap_cap=cap))
     return sites

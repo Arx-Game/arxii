@@ -464,6 +464,8 @@ export interface GMPrompt {
   resolution_note?: string;
   room_text: string;
   private_text: string;
+  /** What happened, for the GM only: a miracle prompt's result, what was drawn, who prayed (#4349). */
+  context_text?: string;
   prepared_for_character: boolean;
   created_at: string;
 }

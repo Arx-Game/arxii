@@ -57,7 +57,7 @@ def _visible_interaction_sheet(
     if interaction.timestamp < game_week.started_at:
         raise ProgressionError(ProgressionError.NOT_THIS_WEEK)
     visible = (
-        Interaction.objects.visible_to(
+        Interaction.objects.readable_by(
             account,
             persona_ids=_persona_ids_for(account),
             since=game_week.started_at.isoformat(),

@@ -263,6 +263,81 @@ class RequiredContentSnapshot:
     present_tuning: list[DependencyRow]
 
 
+#: What a missing row of each ``FavorAwardKind`` means in play: (label, consumer, consequence).
+#: One entry per kind; a test fails when a kind is added without one.
+_FAVOR_AWARD_MEANING: dict[str, tuple[str, str, str]] = {
+    "invocation": (
+        "invocation bonuses",
+        "world/worship/invocation_services.py invocation_bonus_for()",
+        "An invocation that succeeds adds no bonus to the check it was made for.",
+    ),
+    "closing": (
+        "closing awards",
+        "world/worship/pledge_services.py resolve_pledge_project()",
+        "A pledge closed by its closing rite, or one that lapses at half its target "
+        "or more, pays no closing award.",
+    ),
+    "sacrifice": (
+        "sacrifice awards",
+        "world/ceremonies/services.py sacrifice_items()",
+        "A sacrifice whose check lands on that tier earns no favor.",
+    ),
+    "officiant": (
+        "officiant awards",
+        "world/ceremonies/services.py _pay_officiant_favor()",
+        "An officiant whose Rites result has no row earns no favor with the being, "
+        "however well the ceremony went.",
+    ),
+    "chosen_anima": (
+        "Chosen anima",
+        "world/magic/services/anima.py apply_anima_ritual_outcome()",
+        "A Chosen's patron adds no anima to an anima ritual that lands on that tier.",
+    ),
+    "intervention_spend": (
+        "intervention spend",
+        "world/worship/intervention_services.py _charge()",
+        "A rescue or bigger miracle costs no favor: the rescue is free.",
+    ),
+    "intervention_debt": (
+        "intervention debt",
+        "world/worship/intervention_services.py _charge()",
+        "A weaker answer leaves no favor owed, so the being never ignores the character "
+        "afterward: the answer is debt-free.",
+    ),
+    "intervention_wait": (
+        "intervention wait",
+        "world/worship/intervention_services.py _charge()",
+        "A result with no wait row uses the Divine Intervention Config cooldown hours "
+        "instead of its own minimum wait.",
+    ),
+}
+
+
+def _favor_award_dependencies() -> list[ContentDependency]:
+    """One tuning probe per ``FavorAwardKind``, each naming what a missing row means."""
+    from world.worship.constants import FavorAwardKind  # noqa: PLC0415
+
+    return [
+        ContentDependency(
+            key=f"favor-{kind.value.replace('_', '-')}-awards",
+            label=f"Favor outcome awards: {_FAVOR_AWARD_MEANING[kind.value][0]}",
+            tier=DependencyTier.TUNING,
+            consumer=_FAVOR_AWARD_MEANING[kind.value][1],
+            consequence=_FAVOR_AWARD_MEANING[kind.value][2],
+            probe=FilteredRowProbe(
+                label="FavorOutcomeAward",
+                filters=(("kind", kind.value),),
+                absent_detail=(
+                    f"No {_FAVOR_AWARD_MEANING[kind.value][0]} row is authored for any "
+                    "outcome tier."
+                ),
+            ),
+            admin_model="DevotionConfig",
+        )
+        for kind in FavorAwardKind
+    ]
+
+
 def build_registry(dependencies: Iterable[ContentDependency]) -> tuple[ContentDependency, ...]:
     """Freeze `dependencies` into a tuple, rejecting a duplicate `key`.
 
@@ -3230,7 +3305,9 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consumer="world/worship/invocation_services.py invocation_refusal()",
             consequence=(
                 "No one can call on a being's favor unless that being has its own "
-                "invocation check type: every Call on favor is refused as not set up."
+                "invocation check type: every Call on favor is refused as not set up, and "
+                "divine intervention (a prayer, a prayer for another, a being stepping in) "
+                "stops without it too."
             ),
             probe=FilteredRowProbe(
                 label="DevotionConfig",
@@ -3238,35 +3315,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 absent_detail="Devotion config has no default invocation check type.",
             ),
         ),
-        ContentDependency(
-            key="favor-invocation-awards",
-            label="Favor outcome awards: invocation bonuses",
-            tier=DependencyTier.TUNING,
-            consumer="world/worship/invocation_services.py invocation_bonus_for()",
-            consequence="An invocation that succeeds adds no bonus to the check it was made for.",
-            probe=FilteredRowProbe(
-                label="FavorOutcomeAward",
-                filters=(("kind", "invocation"),),
-                absent_detail="No invocation bonus is authored for any outcome tier.",
-            ),
-            admin_model="DevotionConfig",
-        ),
-        ContentDependency(
-            key="favor-closing-awards",
-            label="Favor outcome awards: closing awards",
-            tier=DependencyTier.TUNING,
-            consumer="world/worship/pledge_services.py resolve_pledge_project()",
-            consequence=(
-                "A pledge closed by its closing rite, or one that lapses at half its target "
-                "or more, pays no closing award."
-            ),
-            probe=FilteredRowProbe(
-                label="FavorOutcomeAward",
-                filters=(("kind", "closing"),),
-                absent_detail="No closing award is authored for any outcome tier.",
-            ),
-            admin_model="DevotionConfig",
-        ),
+        *_favor_award_dependencies(),
         ContentDependency(
             key="savaged-condition",
             label="Savaged condition template",

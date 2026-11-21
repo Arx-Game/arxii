@@ -32,6 +32,10 @@ class RitualOutcome:
     anima_recovered: int
     soulfray_stage_after: ConditionStage | None
     soulfray_resolved: bool
+    #: Anima of ``anima_recovered`` that the Chosen's patron added (#4349), 0 for anyone else,
+    #: for a result whose patron row pays nothing and for a critical success (which refills).
+    patron_bonus: int = 0
+    patron_name: str = ""
 
 
 @dataclass(frozen=True)

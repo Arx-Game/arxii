@@ -447,7 +447,7 @@ combat action records whom it targeted.
   separate column. Answering a reply nests a child thread, and the top of the tree is
   derived by walking `parent` rather than stored separately. A row's `thread` identifies
   the thread containing its answer. `get_reply_to()` derives the parent from these
-  relationships and batch-checks the parent with `visible_to`; its `{id, timestamp}`
+  relationships and batch-checks the parent with `readable_by`; its `{id, timestamp}`
   payload comes from the parent interaction. Rendered as the reader's parent chip (web
   only - telnet can only quote). See
   [`scene-interaction-threads.md`](../systems/scene-interaction-threads.md) and ADR-0293,
