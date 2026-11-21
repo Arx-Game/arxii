@@ -128,6 +128,18 @@ external = ["STRING_LITERAL", "PREFETCH_STRING", "SHARED_MEMORY", "USE_FILTERSET
     "E501", "EM101", "EM102", "PLR2004", "S603", "TRY003",
 ]
 
+# Mutation-run driver (#4248): every child process is a fixed argv run without a shell
+# (uvx, uv, git), and a refusal is one sentence the person reads on stderr, so the
+# long-message rules for exceptions do not fit it. The token constant names an env var.
+"tools/mutation_run.py" = [
+    "S105",    # _TOKEN_ENV names an environment variable, not a password
+    "S603",    # subprocess calls with a fixed argv, no shell
+    "S607",    # partial executable path for uvx, uv and git
+    "TRY003",  # long exception messages: the message is the refusal shown to the person
+    "EM101",   # string literal in exception: the refusal text
+    "EM102",   # f-string in exception: the refusal text
+]
+
 # Test files can be more lenient
 "**/test_*.py" = [
     "S101",    # asserts are expected in tests

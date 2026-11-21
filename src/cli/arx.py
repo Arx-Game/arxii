@@ -105,6 +105,14 @@ EXCLUDE_TAG_OPTION = typer.Option(
         "to Django's test runner. Use with --sqlite to skip @tag('postgres')."
     ),
 )
+TAG_OPTION = typer.Option(
+    [],
+    "--tag",
+    help=(
+        "Run only tests decorated with @tag(<name>). Repeatable. Passed through "
+        "to Django's test runner."
+    ),
+)
 SHELL_COMMAND_OPTION = typer.Option(
     None,
     "-c",
@@ -171,6 +179,7 @@ def run_tests(  # noqa: C901
     production_settings: bool = PRODUCTION_SETTINGS_OPTION,
     sqlite: bool = SQLITE_OPTION,
     exclude_tag: list[str] = EXCLUDE_TAG_OPTION,
+    tag: list[str] = TAG_OPTION,
 ) -> None:
     """Run Evennia tests with optimized test settings for performance.
 
@@ -218,8 +227,10 @@ def run_tests(  # noqa: C901
         command.append("--keepdb")
     if failfast:
         command.append("--failfast")
-    for tag in exclude_tag:
-        command += ["--exclude-tag", tag]
+    for name in exclude_tag:
+        command += ["--exclude-tag", name]
+    for name in tag:
+        command += ["--tag", name]
 
     # Add verbosity
     MIN_VERBOSITY_FOR_TIMING = 2

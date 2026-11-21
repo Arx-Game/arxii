@@ -261,6 +261,18 @@ coverage-journeys *args: _fs-warn
     uv run coverage json --data-file=src/.coverage -o .coverage-journeys.json -q
     uv run python tools/coverage_gaps.py .coverage-journeys.json {{args}}
 
+# Which test group notices each small change to one source file (#4248): changes the
+# file one small edit at a time, runs the kept group (journeys and properties) and the
+# units group against each, and writes .mutation/<file stem>/report.md. It changes the
+# file on disk while it runs and puts it back, so the file must be committed first.
+# Never a gate and never a target; the lists are for a person to read.
+#   just mutate src/world/magic/services/primum.py --functions points_to_power \
+#       --kept integration_tests.fuzz.test_primum_curve_fuzz \
+#       --units world.magic.tests.test_primum_math.PowerCurveTests
+#   just mutate src/world/magic/services/primum.py --lines 434-435 --kept <label> --units <label>
+mutate *args: _fs-warn
+    uv run python tools/mutation_run.py {{args}}
+
 # --- Lint / format -----------------------------------------------------------
 
 # Run ruff check.
