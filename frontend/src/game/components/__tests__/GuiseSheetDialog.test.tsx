@@ -50,6 +50,8 @@ const hollowForm: SwitchableAlternateSelf = {
   thumbnail_url: '',
 };
 
+// A unit the journeys cannot reach: which face the dialog writes to, and which fields it
+// hides for a self with no persona. What a stranger then sees is in the journey file.
 describe('GuiseSheetDialog', () => {
   it('shows a mask its portrait controls and its own description', () => {
     portraitMutate.mockClear();

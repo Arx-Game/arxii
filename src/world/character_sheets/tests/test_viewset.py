@@ -3246,7 +3246,7 @@ class TestPrefetchCompleteness(TestCase):
     def test_profile_picture_zero_queries(self) -> None:
         sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_profile_picture(sheet, None, True)
+            _build_profile_picture(sheet, active=None, shows_real_face=True)
 
 
 class TestCurrentResidenceField(TestCase):

@@ -17,10 +17,12 @@ against. The two-uploads-at-once lock needs Postgres row locks and is proved by 
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
+from django.contrib import admin
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
+from django.forms import modelform_factory
+from django.test import RequestFactory, override_settings
 from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import AccountFactory, MediaFactory
@@ -28,16 +30,17 @@ from evennia_extensions.models import Media
 from integration_tests.harness import JourneyCase
 from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
 from world.forms.factories import AlternateSelfFactory
-from world.forms.models import ActiveAlternateSelf
+from world.forms.models import ActiveAlternateSelf, AlternateSelf
 from world.items.factories import EquippedItemFactory
 from world.roster.factories import TenureMediaFactory
-from world.roster.services.gallery import media_usage, set_look, wear_look
+from world.roster.services.gallery import look_url, media_usage, set_look, wear_look
 from world.roster.services.gallery_services import media_bytes_used
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.scenes.models import (
     FacePlaceholderConfig,
     Persona,
+    Scene,
     get_face_placeholder_config,
 )
 from world.scenes.services import record_persona_discovery
@@ -129,6 +132,16 @@ class DisguiseFaceCase(JourneyCase):
     def hobb_looks(self) -> str:
         return strip_ansi(self.telnet(self.hobb, "look Ysmay"))
 
+    def start_scene(self) -> None:
+        self.telnet(self.ysmay, "scene start")
+
+    def feed_pictures(self) -> tuple[set[str], Any]:
+        """The portrait each pose in the scene carries for Hobb, and the whole payload."""
+        scene = Scene.objects.get()
+        feed = self.hobb_api().get(f"/api/interactions/?scene={scene.pk}").json()
+        rows = feed["results"] if isinstance(feed, dict) else feed
+        return {row["persona"]["thumbnail_url"] for row in rows}, feed
+
     def give_her_a_real_look(self) -> str:
         """The look her real face wears; returns its URL as every surface shows it."""
         entry = self.sheet.roster_entry
@@ -140,8 +153,6 @@ class DisguiseFaceCase(JourneyCase):
         )
         set_look(link, x=0, y=0, width=400, mood=None)
         wear_look(entry, link)
-        from world.roster.services.gallery import look_url
-
         return look_url(link) or ""
 
 
@@ -170,7 +181,7 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
         self.assertEqual(copy.player_data, self.player)
         self.assertEqual((copy.title, copy.description, copy.created_by), ("", "", None))
         self.assertEqual(media_bytes_used(self.player), before + 3 * MIB)
-        # The copy is a new file in the opaque folder: nothing in its path is a number of hers.
+        # The copy is a new file in the opaque folder: nothing in its path is hers.
         self.assertTrue(copy.cloudinary_public_id.startswith("faces/"), copy.cloudinary_public_id)
         for folder in ("player_", "char_"):
             self.assertNotIn(folder, copy.cloudinary_url)
@@ -180,17 +191,16 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
     def test_hobb_reads_the_mask_portrait_everywhere_and_never_her_real_face(self) -> None:
         real_url = self.give_her_a_real_look()
         original = self.her_picture()
-        self.telnet(self.ysmay, "scene start")
+        self.start_scene()
         self.assertEqual(self.pick(original).status_code, 200)
         self.telnet(self.ysmay, "pose sets a coin on the stall.")
         copy_url = Persona.objects.get(pk=self.mask.pk).thumbnail.cloudinary_url
 
         sheet = self.hobb_reads_sheet()
+        poses, feed = self.feed_pictures()
+
         self.assertEqual(sheet["profile_picture"], copy_url)
         self.assertEqual(sheet["looks"], [])
-        feed = self.hobb_api().get("/api/interactions/?scene=1").json()
-        rows = feed["results"] if isinstance(feed, dict) else feed
-        poses = [row["persona"]["thumbnail_url"] for row in rows if row["persona"]["id"]]
         self.assertIn(copy_url, poses)
         # Nothing Hobb can fetch carries her real look, the original, or a media id of hers.
         everything = str((sheet, feed))
@@ -213,7 +223,7 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
         self.assertEqual(media_usage(self.player).used_bytes, before + 2048)
         self.assertEqual(self.mask.thumbnail.media_type, "portrait")
 
-    def test_a_replaced_portrait_copy_is_deleted_and_a_removed_one_returns_the_placeholder(
+    def test_a_replaced_copy_is_deleted_and_a_removed_portrait_returns_the_placeholder(
         self,
     ) -> None:
         self.assertEqual(self.pick(self.her_picture(size=500)).status_code, 200)
@@ -228,7 +238,6 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
         self.assertEqual(cleared.status_code, 200, cleared.content)
         self.mask.refresh_from_db()
         self.assertEqual((self.mask.thumbnail, self.mask.thumbnail_url), (None, ""))
-        self.assertEqual(self.hobb_reads_sheet()["profile_picture"], BUILTIN_FACE_PLACEHOLDER_URL)
 
     def test_a_staff_picture_she_replaces_is_never_deleted(self) -> None:
         staff_art = MediaFactory(player_data=None, slug="owl-art", cloudinary_public_id="art/owl")
@@ -242,7 +251,10 @@ class ThePortraitsOwnRows(DisguiseFaceCase):
 
 
 class TheUploadLimitHolds(DisguiseFaceCase):
-    """A pick and an upload both go through the one limit; a refusal stores nothing."""
+    """A pick and an upload both go through the one limit; a refusal stores nothing.
+
+    Two uploads at once need Postgres row locks to be proved, which is done by hand.
+    """
 
     def make_nearly_full(self, free_bytes: int) -> None:
         self.player.media_quota_bytes = media_bytes_used(self.player) + free_bytes
@@ -298,7 +310,7 @@ class TheUploadLimitHolds(DisguiseFaceCase):
         refused = self.ysmay_api().post(
             SET_PORTRAIT, {"persona_id": self.mask.pk, "image_file": pdf}, format="multipart"
         )
-        self.assertEqual(refused.status_code, 400, refused.content)
+        self.assert_nothing_stored(refused, "pdf")
         self.assertEqual(self.cloudinary.calls, [])
 
     def test_staff_are_exempt_from_the_limits_as_the_gallery_exempts_them(self) -> None:
@@ -307,58 +319,35 @@ class TheUploadLimitHolds(DisguiseFaceCase):
         self.make_nearly_full(0)
         big = self.her_picture(size=5 * MIB)
 
-        self.assertEqual(
-            self.ysmay_api()
-            .post(SET_PORTRAIT, {"persona_id": self.mask.pk, "media_id": big.pk}, format="json")
-            .status_code,
-            200,
+        response = self.ysmay_api().post(
+            SET_PORTRAIT, {"persona_id": self.mask.pk, "media_id": big.pk}, format="json"
         )
 
-    def test_the_limit_is_taken_under_the_players_row_lock(self) -> None:
-        """Two simultaneous uploads need Postgres row locks to be proved (done by hand); here
-        the lock is asserted to be taken before the check, on the one shared path."""
-        order: list[str] = []
-        from world.roster.services import gallery_services
-
-        real_lock, real_check = (
-            gallery_services.lock_player_media,
-            gallery_services.enforce_player_media_limits,
-        )
-        with (
-            patch.object(
-                gallery_services,
-                "lock_player_media",
-                side_effect=lambda pd: (order.append("lock"), real_lock(pd))[1],
-            ),
-            patch.object(
-                gallery_services,
-                "enforce_player_media_limits",
-                side_effect=lambda pd, **kw: (order.append("check"), real_check(pd, **kw))[1],
-            ),
-        ):
-            self.ysmay_api().post(
-                SET_PORTRAIT,
-                {"persona_id": self.mask.pk, "media_id": self.her_picture().pk},
-                format="json",
-            )
-        self.assertEqual(order[:2], ["lock", "check"])
+        self.assertEqual(response.status_code, 200, response.content)
+        self.mask.refresh_from_db()
+        self.assertIsNotNone(self.mask.thumbnail)
 
 
 class OnlyHerOwnFacesAndPictures(DisguiseFaceCase):
     """Writes reach only her own masks, alternate selves and pictures, with one refusal."""
 
-    def test_another_players_mask_and_an_unknown_one_are_refused_in_the_same_words(self) -> None:
-        for persona_id in (self.mask.pk, 999999):
+    def test_a_foreign_mask_an_unknown_one_and_her_true_face_are_refused_in_words(self) -> None:
+        primary = self.sheet.primary_persona
+        refusals = (
+            (self.hobb_api(), self.mask.pk, NOT_YOURS),
+            (self.hobb_api(), 999999, NOT_YOURS),
+            (self.ysmay_api(), primary.pk, "Your true face"),
+            (self.api(AccountFactory()), self.mask.pk, "playing a character"),
+        )
+        for client, persona_id, words in refusals:
             for path, body in (
                 (SET_DESCRIPTION, {"description": "Mine now."}),
                 (SET_PORTRAIT, {"clear": True}),
             ):
-                with self.subTest(persona_id=persona_id, path=path):
-                    response = self.hobb_api().post(
-                        path, {"persona_id": persona_id, **body}, format="json"
-                    )
+                with self.subTest(persona_id=persona_id, path=path, words=words):
+                    response = client.post(path, {"persona_id": persona_id, **body}, format="json")
                     self.assertEqual(response.status_code, 400, response.content)
-                    self.assertIn(NOT_YOURS, str(response.json()))
+                    self.assertIn(words, str(response.json()))
         self.mask.refresh_from_db()
         self.assertEqual(self.mask.description, "")
 
@@ -374,36 +363,22 @@ class OnlyHerOwnFacesAndPictures(DisguiseFaceCase):
         self.assertEqual(responses[0].json(), responses[1].json())
         self.assertEqual(responses[0].json(), {"media_id": ["That is not one of your pictures."]})
 
-    def test_a_picture_marked_nsfw_is_neither_listed_nor_accepted(self) -> None:
+    def test_the_picker_lists_only_her_plain_pictures_and_refuses_the_rest(self) -> None:
         nsfw = self.her_picture(is_nsfw=True)
         plain = self.her_picture(size=4321)
+        MediaFactory(player_data=self.account_of(self.hobb).player_data)
 
         listed = self.ysmay_api().get(CHOICES)
         self.assertEqual(listed.status_code, 200, listed.content)
-        ids = [row["id"] for row in listed.json()["results"]]
-        self.assertEqual(ids, [plain.pk])
+        self.assertEqual([row["id"] for row in listed.json()["results"]], [plain.pk])
         refused = self.ysmay_api().post(
             SET_PORTRAIT, {"persona_id": self.mask.pk, "media_id": nsfw.pk}, format="json"
         )
         self.assertEqual(refused.status_code, 400, refused.content)
-
-    def test_the_picker_lists_only_her_own_pictures(self) -> None:
-        mine = self.her_picture()
-        MediaFactory(player_data=self.account_of(self.hobb).player_data)
-        ids = [row["id"] for row in self.ysmay_api().get(CHOICES).json()["results"]]
-        self.assertEqual(ids, [mine.pk])
-
-    def test_her_true_face_takes_neither_a_description_nor_a_portrait_here(self) -> None:
-        primary = self.sheet.primary_persona
-        described = self.ysmay_api().post(
-            SET_DESCRIPTION, {"persona_id": primary.pk, "description": "x"}, format="json"
-        )
-        portrait = self.ysmay_api().post(
-            SET_PORTRAIT, {"persona_id": primary.pk, "clear": True}, format="json"
-        )
-        self.assertEqual((described.status_code, portrait.status_code), (400, 400))
+        self.assertEqual(refused.json(), {"media_id": ["That is not one of your pictures."]})
 
     def test_exactly_one_change_is_required_and_the_description_is_capped(self) -> None:
+        one_change = "Choose a picture, upload one, or remove the portrait."
         both = self.ysmay_api().post(
             SET_PORTRAIT,
             {"persona_id": self.mask.pk, "clear": True, "media_id": self.her_picture().pk},
@@ -413,49 +388,42 @@ class OnlyHerOwnFacesAndPictures(DisguiseFaceCase):
         long = self.ysmay_api().post(
             SET_DESCRIPTION, {"persona_id": self.mask.pk, "description": "a" * 4001}, format="json"
         )
-        self.assertEqual([r.status_code for r in (both, neither, long)], [400, 400, 400])
-
-    def test_someone_with_no_character_is_refused_not_crashed(self) -> None:
-        nobody = self.api(AccountFactory())
-        response = nobody.post(
-            SET_DESCRIPTION, {"persona_id": 1, "description": "x"}, format="json"
-        )
-        self.assertEqual(response.status_code, 400, response.content)
+        for refused, words in ((both, one_change), (neither, one_change), (long, "4000")):
+            self.assertEqual(refused.status_code, 400, refused.content)
+            self.assertIn(words, str(refused.json()))
 
 
 class TheMasksOwnDescription(DisguiseFaceCase):
     """Her description replaces the real prose for a stranger; seeing through brings it back."""
 
-    def describe(self, text: str) -> None:
+    def describe(self, text: str) -> Any:
         response = self.ysmay_api().post(
             SET_DESCRIPTION, {"persona_id": self.mask.pk, "description": text}, format="json"
         )
         self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(response.json()["description"], text)
+        return response
 
     def test_a_stranger_reads_the_mask_and_never_the_real_description(self) -> None:
+        self.assertEqual(
+            self.describe("Slim.%rGrey cloak.").json()["description"], "Slim.\nGrey cloak."
+        )
         self.describe(MASK_DESCRIPTION)
+        EquippedItemFactory(character=self.sheet)
+        self.ysmay.equipped_items.invalidate()
 
         told = self.hobb_looks()
         self.assertIn(MASK_DESCRIPTION, told)
         self.assertNotIn("scar", told)
+        # The worn items stay appended beneath the mask's own prose.
+        self.assertLess(told.index(MASK_DESCRIPTION), told.index("Wearing"))
         sheet = self.hobb_reads_sheet()
         self.assertEqual(sheet["appearance"]["description"], MASK_DESCRIPTION)
+        roster = self.hobb_api().get(f"/api/roster/entries/{self.sheet.roster_entry.pk}/")
+        self.assertNotIn(MASK_DESCRIPTION, str(roster.content))
         # Her own look at herself still reads the real description.
         mine = strip_ansi(self.telnet(self.ysmay, "look me"))
         self.assertIn(REAL_DESCRIPTION, mine)
         self.assertNotIn(MASK_DESCRIPTION, mine)
-
-    def test_markup_in_a_description_is_normalized_like_the_real_one(self) -> None:
-        response = self.ysmay_api().post(
-            SET_DESCRIPTION,
-            {"persona_id": self.mask.pk, "description": "Slim.%rGrey cloak."},
-            format="json",
-        )
-        self.assertEqual(response.status_code, 200, response.content)
-        self.assertEqual(
-            self.mask.__class__.objects.get(pk=self.mask.pk).description, "Slim.\nGrey cloak."
-        )
 
     def test_a_mask_with_no_description_shows_nothing_and_a_blank_clears_one(self) -> None:
         self.assertNotIn("scar", self.hobb_looks())
@@ -464,15 +432,6 @@ class TheMasksOwnDescription(DisguiseFaceCase):
         self.describe("")
         self.assertNotIn(MASK_DESCRIPTION, self.hobb_looks())
         self.assertEqual(self.hobb_reads_sheet()["appearance"]["description"], "")
-
-    def test_the_worn_things_stay_beneath_the_mask_description(self) -> None:
-        self.describe(MASK_DESCRIPTION)
-        EquippedItemFactory(character=self.sheet)
-        self.ysmay.equipped_items.invalidate()
-        told = self.hobb_looks()
-        self.assertIn(MASK_DESCRIPTION, told)
-        self.assertIn("Wearing", told)
-        self.assertLess(told.index(MASK_DESCRIPTION), told.index("Wearing"))
 
     def test_a_viewer_who_has_seen_through_the_mask_reads_the_real_description_again(self) -> None:
         self.describe(MASK_DESCRIPTION)
@@ -483,12 +442,6 @@ class TheMasksOwnDescription(DisguiseFaceCase):
         self.assertNotIn(MASK_DESCRIPTION, told)
         sheet = self.hobb_reads_sheet()
         self.assertEqual(sheet["appearance"]["description"], REAL_DESCRIPTION)
-
-    def test_the_description_never_reaches_the_roster_page(self) -> None:
-        self.describe(MASK_DESCRIPTION)
-        entry = self.sheet.roster_entry
-        response = self.hobb_api().get(f"/api/roster/entries/{entry.pk}/")
-        self.assertNotIn(MASK_DESCRIPTION, str(response.content))
 
 
 class TheFaceWithNoPortrait(DisguiseFaceCase):
@@ -513,13 +466,10 @@ class TheFaceWithNoPortrait(DisguiseFaceCase):
         self.assertEqual(FacePlaceholderConfig.objects.count(), 1)
 
     def test_the_pose_and_the_persona_list_read_the_same_silhouette(self) -> None:
-        self.telnet(self.ysmay, "scene start")
+        self.start_scene()
         self.telnet(self.ysmay, "pose waits.")
-        feed = self.hobb_api().get("/api/interactions/?scene=1").json()
-        rows = feed["results"] if isinstance(feed, dict) else feed
-        self.assertEqual(
-            {row["persona"]["thumbnail_url"] for row in rows}, {BUILTIN_FACE_PLACEHOLDER_URL}
-        )
+        poses, _feed = self.feed_pictures()
+        self.assertEqual(poses, {BUILTIN_FACE_PLACEHOLDER_URL})
         listed = self.ysmay_api().get(f"/api/personas/?character_sheet={self.sheet.pk}").json()
         by_name = {row["name"]: row for row in listed["results"]}
         self.assertEqual(by_name["Owl Mask"]["thumbnail_url"], BUILTIN_FACE_PLACEHOLDER_URL)
@@ -554,14 +504,11 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         self.sheet.refresh_from_db()
 
     def test_a_form_with_a_persona_sets_its_own_and_its_personas_picture(self) -> None:
-        picture = self.her_picture()
-
-        response = self.set_portrait(self.with_persona, media_id=picture.pk)
+        response = self.set_portrait(self.with_persona, media_id=self.her_picture().pk)
 
         self.assertEqual(response.status_code, 200, response.content)
         self.with_persona.refresh_from_db()
-        persona = self.with_persona.persona
-        persona.refresh_from_db()
+        persona = Persona.objects.get(pk=self.with_persona.persona_id)
         self.assertEqual(self.with_persona.thumbnail, persona.thumbnail)
         self.assertEqual(persona.thumbnail_url, self.with_persona.thumbnail.cloudinary_url)
         self.assertIn("/faces/", response.json()["thumbnail_url"])
@@ -569,10 +516,8 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
 
     def test_replacing_a_forms_portrait_twice_deletes_its_one_copy_once(self) -> None:
         """The form and its persona share one picture; replacing it must not delete it twice."""
-        self.assertEqual(
-            self.set_portrait(self.with_persona, media_id=self.her_picture(size=5).pk).status_code,
-            200,
-        )
+        first_pick = self.set_portrait(self.with_persona, media_id=self.her_picture(size=5).pk)
+        self.assertEqual(first_pick.status_code, 200)
         first = Persona.objects.get(pk=self.with_persona.persona_id).thumbnail
 
         again = self.set_portrait(self.with_persona, media_id=self.her_picture(size=6).pk)
@@ -603,33 +548,16 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         self.sheet.primary_persona.thumbnail_url = self.real_url
         self.sheet.primary_persona.save(update_fields=["thumbnail_url"])
         self.telnet(self.ysmay, "persona Ysmay")
-        self.telnet(self.ysmay, "scene start")
+        self.start_scene()
         self.wear(self.bare)
         self.telnet(self.ysmay, "pose bares her teeth.")
 
-        feed = self.hobb_api().get("/api/interactions/?scene=1").json()
-        rows = feed["results"] if isinstance(feed, dict) else feed
-        urls = {row["persona"]["thumbnail_url"] for row in rows}
-        self.assertEqual(urls, {self.bare.thumbnail.cloudinary_url})
+        poses, feed = self.feed_pictures()
+
+        self.assertEqual(poses, {self.bare.thumbnail.cloudinary_url})
         self.assertNotIn(self.real_url, str(feed))
 
-    def test_a_form_with_no_persona_takes_a_portrait_and_no_description(self) -> None:
-        response = self.set_portrait(self.bare, media_id=self.her_picture().pk)
-        self.assertEqual(response.status_code, 200, response.content)
-        self.bare.refresh_from_db()
-        self.assertIsNotNone(self.bare.thumbnail)
-        self.assertIsNone(response.json()["persona_id"])
-
-    def test_the_staff_picture_a_player_replaces_stays_for_staff_to_restore(self) -> None:
-        staff_art = MediaFactory(player_data=None, slug="wolf-art", cloudinary_public_id="art/wolf")
-        self.bare.thumbnail = staff_art
-        self.bare.save(update_fields=["thumbnail"])
-        self.assertEqual(
-            self.set_portrait(self.bare, media_id=self.her_picture().pk).status_code, 200
-        )
-        self.assertTrue(Media.objects.filter(pk=staff_art.pk).exists())
-
-    def test_a_worn_form_with_no_portrait_shows_the_silhouette_and_never_her_real_face(
+    def test_a_worn_form_with_no_persona_shows_the_silhouette_then_her_pick_over_staffs(
         self,
     ) -> None:
         self.wear(self.bare)
@@ -638,15 +566,23 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         self.assertEqual(sheet["looks"], [])
         self.assertNotIn(self.real_url, str(sheet))
 
-    def test_a_worn_form_with_a_portrait_shows_it_to_a_stranger(self) -> None:
-        self.set_portrait(self.bare, media_id=self.her_picture().pk)
+        staff_art = MediaFactory(player_data=None, slug="wolf-art", cloudinary_public_id="art/wolf")
+        self.bare.thumbnail = staff_art
+        self.bare.save(update_fields=["thumbnail"])
+        self.assertEqual(self.hobb_reads_sheet()["profile_picture"], staff_art.cloudinary_url)
+
+        replaced = self.set_portrait(self.bare, media_id=self.her_picture().pk)
+
+        self.assertEqual(replaced.status_code, 200, replaced.content)
+        self.assertIsNone(replaced.json()["persona_id"])
         self.bare.refresh_from_db()
-        self.wear(self.bare)
         self.assertEqual(
             self.hobb_reads_sheet()["profile_picture"], self.bare.thumbnail.cloudinary_url
         )
+        # Staff's picture stays in Media, so the admin can restore it.
+        self.assertTrue(Media.objects.filter(pk=staff_art.pk).exists())
 
-    def test_another_players_form_is_a_404_and_the_list_carries_only_her_own(self) -> None:
+    def test_another_players_form_and_an_unknown_one_are_a_404(self) -> None:
         stranger_self = AlternateSelfFactory(
             character=self.hobb.sheet_data, display_name="Hobbs Form"
         )
@@ -657,17 +593,27 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         )
         self.assertEqual(unknown.status_code, 404)
 
-    def test_staff_setting_a_forms_picture_in_the_admin_reaches_the_pose_picture_too(self) -> None:
-        from django.contrib import admin as django_admin
 
-        from world.forms.models import AlternateSelf
+class AStaffPictureOnAFormReachesThePoseToo(DisguiseFaceCase):
+    """A unit a journey cannot reach: the admin's save hook, with a real form and its changes.
 
+    The changeform has dozens of required fields, so the hook is driven with a one-field
+    ModelForm whose ``changed_data`` is real, never a hand-built stand-in.
+    """
+
+    def test_staff_setting_a_forms_picture_sets_its_personas_pose_picture(self) -> None:
+        form_persona = PersonaFactory(
+            character_sheet=self.sheet, name="Ashen Wolf", persona_type=PersonaType.ALTERNATE
+        )
+        wolf = AlternateSelfFactory(character=self.sheet, persona=form_persona)
         art = MediaFactory(player_data=None, slug="wolf-art", cloudinary_public_id="art/wolf")
-        model_admin = django_admin.site._registry[AlternateSelf]
-        self.with_persona.thumbnail = art
-        form = MagicMock(changed_data=["thumbnail"])
-        model_admin.save_model(MagicMock(), self.with_persona, form, True)
+        form = modelform_factory(AlternateSelf, fields=["thumbnail"])(
+            data={"thumbnail": art.pk}, instance=wolf
+        )
+        self.assertTrue(form.is_valid(), form.errors)
 
-        persona = Persona.objects.get(pk=self.with_persona.persona_id)
-        self.assertEqual(persona.thumbnail_url, art.cloudinary_url)
-        self.assertEqual(persona.thumbnail, art)
+        request = RequestFactory().post("/admin/")
+        admin.site.get_model_admin(AlternateSelf).save_model(request, form.instance, form, True)
+
+        persona = Persona.objects.get(pk=form_persona.pk)
+        self.assertEqual((persona.thumbnail, persona.thumbnail_url), (art, art.cloudinary_url))

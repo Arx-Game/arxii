@@ -2,7 +2,6 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.services import create_character_with_sheet
-from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
 from world.consent.factories import SocialConsentPreferenceFactory
 from world.roster.constants import NOBLE_KIND_NAME, MembershipBasis
 from world.roster.factories import (
@@ -25,17 +24,10 @@ from world.societies.houses.models import NobiliaryParticle
 class PersonaSerializerThumbnailMediaUrlTestCase(TestCase):
     def test_thumbnail_media_url_is_none_when_thumbnail_fk_is_null(self) -> None:
         """A true face with no thumbnail has none; the client draws its letter avatar."""
-        persona = PersonaFactory(thumbnail=None, persona_type=PersonaType.PRIMARY)
+        persona = CharacterSheetFactory().primary_persona
         data = PersonaSerializer(persona).data
         assert data["thumbnail_media_url"] is None
         assert data["thumbnail_url"] == ""
-
-    def test_a_mask_with_no_thumbnail_shows_the_placeholder_not_none(self) -> None:
-        """#4889: a face that is not the true one never has no picture."""
-        persona = PersonaFactory(thumbnail=None, persona_type=PersonaType.TEMPORARY)
-        data = PersonaSerializer(persona).data
-        assert data["thumbnail_media_url"] == BUILTIN_FACE_PLACEHOLDER_URL
-        assert data["thumbnail_url"] == BUILTIN_FACE_PLACEHOLDER_URL
 
     def test_thumbnail_media_url_returns_cloudinary_url_when_set(self) -> None:
         """thumbnail_media_url equals Persona.thumbnail.cloudinary_url when set."""
