@@ -253,6 +253,24 @@ class TakePledgeTests(PledgeTestBase):
         self.assertEqual(details.prayer, Prayer.objects.get(character_sheet=self.sheet))
         self.assertEqual(details.prayer.text, "[player-written prayer]")
 
+    def test_the_officiant_credit_names_the_rites_result_that_earned_it(self) -> None:
+        from world.worship.pledge_services import credit_lines
+        from world.worship.types import FavorSource
+
+        details = take_pledge(self.sheet, self.pledge)
+        success = CheckOutcomeFactory(name="Success", success_level=1)
+
+        bump_devotion(
+            self.sheet,
+            self.being,
+            10,
+            source=FavorSource(kind=PledgeCreditSource.CEREMONY, outcome_tier=success),
+        )
+
+        (line,) = credit_lines(details)
+        self.assertEqual(line.label, "Ceremony (officiant)")
+        self.assertTrue(line.calculation.startswith("Rites result Success: 10 base, at "))
+
     def test_one_open_pledge_per_character(self) -> None:
         take_pledge(self.sheet, self.pledge)
         other = PledgeFactory(being=self.being)

@@ -711,7 +711,7 @@ def _pay_officiant_favor(
         officiant_sheet,
         being,
         amount,
-        source=FavorSource(kind=PledgeCreditSource.CEREMONY),
+        source=FavorSource(kind=PledgeCreditSource.CEREMONY, outcome_tier=outcome),
     )
 
 

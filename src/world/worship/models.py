@@ -2019,6 +2019,17 @@ class PledgeCredit(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="pledge_credits",
     )
+    outcome_tier = models.ForeignKey(
+        "arxii.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+        help_text=(
+            "The Rites result an officiant's ceremony credit was paid for (#4349), so the "
+            "pledge card can say which result earned it. Empty for every other source."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

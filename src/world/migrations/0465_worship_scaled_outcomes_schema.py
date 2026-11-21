@@ -126,6 +126,18 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="pledgecredit",
+            name="outcome_tier",
+            field=models.ForeignKey(
+                blank=True,
+                help_text="The Rites result an officiant's ceremony credit was paid for (#4349), so the pledge card can say which result earned it. Empty for every other source.",
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                related_name="+",
+                to="arxii.checkoutcome",
+            ),
+        ),
+        migrations.AddField(
+            model_name="pledgecredit",
             name="owed_paid",
             field=models.PositiveIntegerField(
                 default=0,

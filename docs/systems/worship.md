@@ -1028,7 +1028,9 @@ Majora crossings.
   `debt_softening_low_percent`/`debt_softening_high_percent` at the Devotion config's favor ease
   thresholds, read before the spend, rounded up. A positive tier that delivered nothing spends
   and owes nothing, and still waits. `bump_devotion` pays `owed_favor` first from the base amount,
-  before the earning rate, for every source (`DevotionBump.owed_paid`, `PledgeCredit.owed_paid`).
+  before the earning rate, for every source (`DevotionBump.owed_paid`, `PledgeCredit.owed_paid`). An officiant's ceremony credit stores the
+  Rites result that earned it (`PledgeCredit.outcome_tier`), so the pledge card reads "Ceremony
+  (officiant): Rites result Success: 10 base, at 200% = +20".
   The fallen character is sent who prayed and what landed on them as stored notices (nothing on a Failure or a backfire); with no scene and no GM prompt the room hears the authored text and the one it touched is sent it too. A failure inside divine intercession at incapacitation is logged and never breaks the incapacitation. `finish_ceremony` returns a `CeremonyFinish` (the ceremony and the officiant's `DevotionBump`). `intervention_lines` builds the one praying's private lines; `prayed_for_you_line` and
   `prayer_room_line` are the fallen character's and the room's. The `MIRACLE` GM prompt
   carries `GMPrompt.context_text` (tier, what was drawn, who prayed).

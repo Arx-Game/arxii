@@ -117,6 +117,8 @@ class FavorSource:
     offering: CeremonyOffering | None = None
     rite_performance: WorshipRitePerformance | None = None
     pledge_details: PledgeDetails | None = None
+    #: The Rites result an officiant's ceremony favor was paid for (#4349).
+    outcome_tier: CheckOutcome | None = None
 
 
 @dataclass(frozen=True)

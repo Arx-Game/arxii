@@ -254,6 +254,7 @@ def record_pledge_credit(  # noqa: PLR0913 - the calculation's parts are keyword
         resonance_grant=source.resonance_grant,
         offering=source.offering,
         rite_performance=source.rite_performance,
+        outcome_tier=source.outcome_tier,
     )
 
 
@@ -692,6 +693,11 @@ def _credit_label(credit: PledgeCredit) -> tuple[str, str]:
             f"Performed {credit.rite_performance.rite.name}",
             f"rite award {credit.base} base",
         )
+    if source == PledgeCreditSource.CEREMONY and credit.outcome_tier is not None:
+        return (
+            "Ceremony (officiant)",
+            f"Rites result {credit.outcome_tier.name}: {credit.base} base",
+        )
     if source in _RESOLUTION_SOURCES:
         performance = credit.rite_performance
         tier = performance.outcome_tier.name if performance is not None else "Partial Success"
@@ -713,6 +719,7 @@ def credit_lines(details: PledgeDetails) -> list[PledgeCreditLine]:
         "offering__outcome_tier",
         "rite_performance__rite",
         "rite_performance__outcome_tier",
+        "outcome_tier",
     ).prefetch_related("offering__signals"):  # noqa: PREFETCH_STRING - read as .signals.all()
         label, before_rate = _credit_label(credit)
         owed = f"{credit.owed_paid} to owed favor, " if credit.owed_paid else ""

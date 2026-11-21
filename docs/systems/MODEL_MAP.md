@@ -12454,6 +12454,7 @@
   - resonance_grant -> magic.ResonanceGrant [OneToOne] (nullable)
   - offering -> ceremonies.CeremonyOffering [OneToOne] (nullable)
   - rite_performance -> worship.WorshipRitePerformance [FK] (nullable)
+  - outcome_tier -> traits.CheckOutcome [FK] (nullable)
 
 ### PledgeDetails
 **Foreign Keys:**
