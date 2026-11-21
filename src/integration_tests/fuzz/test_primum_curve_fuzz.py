@@ -101,6 +101,8 @@ class PointsToPowerHoldsItsContract(unittest.TestCase):
     # These two cases check one point and minus one point, on a curve whose first row is at one.
     @example(([(1, 1)], 1, 1), 1)
     @example(([(1, 1)], -1, -1), 1)
+    # This case sits half way up the first segment, so the exact power is one half and rounds down.
+    @example(([(2, 1)], 1, 0), 1)
     def test_between_rows_it_is_the_straight_line(self, curve_and_totals, cap) -> None:
         """The docstring of ``points_to_power`` says the curve is as follows.
 
