@@ -1065,7 +1065,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         """Baseline: 6 total poses, 1 of them a reply."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=1)
-        with self.assertNumQueries(27):  # 76->27 by #3816, 27->26 by #4101, 26->27 by #4413
+        with self.assertNumQueries(28):  # 76->27 #3816, 27->26 #4101, 26->27 #4413, 27->28 #3751
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -1076,7 +1076,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         replies adds no query."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=3)
-        with self.assertNumQueries(27):  # 76->27 by #3816, 27->26 by #4101, 26->27 by #4413
+        with self.assertNumQueries(28):  # 76->27 #3816, 27->26 #4101, 26->27 #4413, 27->28 #3751
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -1096,7 +1096,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         request -- verified directly against the captured query log, not
         inferred from the count alone.
 
-        8 is the measured floor for what's left, none of it something this
+        9 is the measured floor for what's left, none of it something this
         plan touched: (1) the session lookup, (2) the account's `Block` list
         (a relationship gate, re-checked fresh every request by design), (3)
         the outer paginated `Interaction` select itself -- idmapper reuses the
@@ -1104,7 +1104,9 @@ class PlayPosesQueryBudgetTests(APITestCase):
         way to know in advance which rows a filter/order will return without
         asking the database, (4) `_thread_roots`' parent-id lookup, (5)
         `_thread_anchors`' MIN(id) aggregate, (6) the read-receipt batch, (7)
-        the mute-list batch, and (8) `_visible_parents`. (4)-(8) are batched
+        the mute-list batch, (8) `_visible_parents`, and (9) the `Block` list read a
+        second time for `_visible_parents`' own gate (#3751: a parent chip passes the
+        same block-aware gate as the page's rows). (4)-(9) are batched
         page-wide queries keyed by thread/scene id, not by already-cached
         instance, so unlike the 5 satellite relations they have no
         cached_property to go stale-free through -- and (2)/(6)/(7) are
@@ -1117,7 +1119,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         url = f"/api/play/poses/?conversation=scene:{scene.pk}"
         first = self.client.get(url)
         assert first.status_code == 200
-        with self.assertNumQueries(8):
+        with self.assertNumQueries(9):
             second = self.client.get(url)
         assert second.status_code == 200
         assert len(second.json()["results"]) == 6

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
@@ -150,10 +150,11 @@ function sceneFeedProps(
     : never,
   hasNextPage: boolean,
   fetchNextPage: () => void,
-  retention?: { retained: number; evicted: number; warning: boolean; gap: boolean }
+  retention?: { retained: number; evicted: number; warning: boolean; gap: boolean },
+  later?: { hasLaterPage: boolean; fetchLaterPage: () => void }
 ): ComponentProps<typeof GameWindow>['sceneFeed'] {
   if (!sceneId) return undefined;
-  return { sceneId, interactions, hasNextPage, fetchNextPage, retention };
+  return { sceneId, interactions, hasNextPage, fetchNextPage, retention, ...later };
 }
 
 /** How the composer labels the speaker, when a character is assumed. */
@@ -439,6 +440,12 @@ function GameCenter({ sceneId, accountId, gameWindow, mapEncounterId }: GameCent
   );
 }
 
+/** The cursor that asks for the page before or after the ones a reference has loaded. */
+interface ReferencePageParam {
+  before?: string;
+  after?: string;
+}
+
 /** Keep the historical reader and browser navigation in sync. */
 function usePlayReference() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -510,11 +517,15 @@ function usePlayReference() {
   }, [setSearchParams]);
   const referenceSceneId = reference?.key.startsWith('scene:') ? reference.key.slice(6) : undefined;
   const {
-    data: referencePage,
+    data: referencePages,
     error: referenceError,
     isPending: referenceLoading,
     refetch: refetchReference,
-  } = useQuery<PlayPage<Interaction>>({
+    hasPreviousPage: hasEarlierPage,
+    fetchPreviousPage: fetchEarlierPage,
+    hasNextPage: hasLaterPage,
+    fetchNextPage: fetchLaterPage,
+  } = useInfiniteQuery({
     queryKey: [
       'play-reference',
       reference?.kind,
@@ -522,7 +533,12 @@ function usePlayReference() {
       reference?.poseId,
       reference?.timestamp,
     ],
-    queryFn: () =>
+    // The first page is the passage around the target (or the latest page of the
+    // conversation); each cursor the server returns pages one step further away. Every
+    // later request repeats the first one's filters, because the server binds a cursor
+    // to them.
+    initialPageParam: {} as ReferencePageParam,
+    queryFn: ({ pageParam }): Promise<PlayPage<Interaction>> =>
       reference?.poseId
         ? fetchPlayContext({
             id: reference.poseId,
@@ -536,25 +552,49 @@ function usePlayReference() {
                   return start.toISOString();
                 })()
               : undefined,
+            ...pageParam,
           }).then((context) => ({
             results: context.results,
             before: context.before,
             after: context.after,
             snapshot: new Date().toISOString(),
           }))
-        : fetchPlayPoses({ scene: referenceSceneId, conversation: reference?.key }),
+        : fetchPlayPoses({ scene: referenceSceneId, conversation: reference?.key, ...pageParam }),
+    getPreviousPageParam: (firstPage): ReferencePageParam | undefined =>
+      firstPage.before ? { before: firstPage.before } : undefined,
+    getNextPageParam: (lastPage): ReferencePageParam | undefined =>
+      lastPage.after ? { after: lastPage.after } : undefined,
     enabled: Boolean(reference),
   });
+  // Pages arrive in reading order (earlier ones prepended, later ones appended); a row
+  // the server returns on two pages is shown once.
+  const referenceResults = useMemo(() => {
+    const seen = new Set<number>();
+    return (referencePages?.pages ?? [])
+      .flatMap((page) => page.results)
+      .filter((row) => !seen.has(row.id) && seen.add(row.id));
+  }, [referencePages]);
+  // A failed earlier or later page leaves the passage already read in place: only a
+  // reference with nothing loaded yet shows the unavailable or retry states, and the
+  // page's own button tries it again.
+  const referenceHasPages = Boolean(referencePages);
   const referenceStatus =
     referenceError instanceof PlayFetchError ? referenceError.status : undefined;
-  const referenceUnavailable = referenceStatus === 403 || referenceStatus === 404;
-  const referenceRetryable = Boolean(referenceError) && !referenceUnavailable;
+  const referenceUnavailable =
+    !referenceHasPages && (referenceStatus === 403 || referenceStatus === 404);
+  const referenceRetryable = !referenceHasPages && Boolean(referenceError) && !referenceUnavailable;
   return {
     reference,
     openReference,
     returnToLive,
     referenceSceneId,
-    referencePage,
+    referenceResults,
+    referencePaging: {
+      hasEarlierPage,
+      fetchEarlierPage: () => void fetchEarlierPage(),
+      hasLaterPage,
+      fetchLaterPage: () => void fetchLaterPage(),
+    },
     referenceLoading: Boolean(reference && referenceLoading),
     refetchReference,
     referenceUnavailable: Boolean(reference && referenceUnavailable),
@@ -986,7 +1026,8 @@ export function GamePage() {
     openReference,
     returnToLive,
     referenceSceneId,
-    referencePage,
+    referenceResults,
+    referencePaging,
     referenceLoading,
     refetchReference,
     referenceUnavailable,
@@ -1188,7 +1229,17 @@ export function GamePage() {
   // there's no active session yet.
   const roomTabLabel = deriveRoomTabLabel(focus.current, roomData?.name);
   const displaySceneFeed = reference
-    ? sceneFeedProps(referenceSceneId ?? 'history', referencePage?.results ?? [], false, () => {})
+    ? sceneFeedProps(
+        referenceSceneId ?? 'history',
+        referenceResults,
+        referencePaging.hasEarlierPage,
+        referencePaging.fetchEarlierPage,
+        undefined,
+        {
+          hasLaterPage: referencePaging.hasLaterPage,
+          fetchLaterPage: referencePaging.fetchLaterPage,
+        }
+      )
     : sceneFeedProps(sceneId, tabInteractions, hasNextPage, fetchNextPage, retention);
 
   const gameWindowProps: ComponentProps<typeof GameWindow> = {

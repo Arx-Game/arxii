@@ -1420,7 +1420,7 @@ describe('ThreadedNarrativeReader', () => {
       expect(loadConversationAnchor('scene:1')).toBeNull();
     });
 
-    it('restores by virtualized index when mounted directly into Chronological view (documented reduced scope: nearest loaded index, not exact pixel offset)', async () => {
+    it('restores by virtualized index when mounted directly into Chronological view', async () => {
       savePlayPreferences({ ...DEFAULT_PLAY_PREFERENCES, readerMode: 'chronological' });
       const many = Array.from({ length: 50 }, (_, i) => {
         const id = i + 1;
@@ -1466,11 +1466,48 @@ describe('ThreadedNarrativeReader', () => {
       // scroll events, none of which jsdom actually runs, so the window
       // this test can observe converges toward, but does not reliably reach,
       // the target row. That reconciliation gap is a test-environment
-      // limitation, not evidence about the production restore logic, which
-      // is why Chronological view's restore is documented (see
-      // restoreChronoAnchor's own comment) as reduced-scope in the first
-      // place. Threads view's restore, covered exhaustively above, is exact.
+      // limitation, not evidence about the production restore logic. The
+      // recorded offset is covered separately below, with few enough rows
+      // that every one mounts.
       expect(chronoContainer.scrollTop).toBeGreaterThan(0);
+    });
+
+    it('moves the anchored pose to its recorded offset once the virtualizer has mounted it (#3751)', async () => {
+      savePlayPreferences({ ...DEFAULT_PLAY_PREFERENCES, readerMode: 'chronological' });
+      const poses = [1, 2, 3].map((id) => interaction(id, `pose ${id}`, 'thread-a'));
+      // The anchored pose's top always sits at the container's top, so the only thing
+      // that can move the final scroll between two restores is the recorded offset.
+      poseOffsets = { '3': 0 };
+
+      const restoredScrollTop = async (key: string, offsetPx: number) => {
+        saveConversationAnchor(key, {
+          anchors: {
+            threads: null,
+            chronological: { poseId: '3', threadId: 'thread-a', offsetPx },
+          },
+          expanded: [],
+        });
+        const { getByTestId, unmount } = render(
+          <ThreadedNarrativeReader
+            sceneId="1"
+            conversationKey={key}
+            conversationRef={key}
+            interactions={poses}
+            fetchNextPage={vi.fn()}
+          />
+        );
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const top = getByTestId('chrono-scroll-container').scrollTop;
+        unmount();
+        return top;
+      };
+
+      const flush = await restoredScrollTop('scene:1', 0);
+      const scrolledPast = await restoredScrollTop('scene:2', -40);
+
+      // A pose recorded 40px scrolled past the top (offset -40) is shown 40px further
+      // down than one recorded flush with it.
+      expect(scrolledPast - flush).toBe(40);
     });
 
     it('falls back to the end of the loaded Chronological page when the anchored pose is not found (#3759 review finding I3)', () => {

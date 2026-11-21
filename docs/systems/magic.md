@@ -5415,9 +5415,9 @@ narrates condition interplay that reads as authored magic.
 is how the resolved audience is persisted. It sits between `DEFAULT` and `VERY_PRIVATE`:
 writer + `InteractionReceiver` rows can read it, **plus staff and the scene's GM** — a
 scene must stay runnable for the person adjudicating it. The GM exception is a scene-log
-read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a non-staff
-GM is denied on the REST object-access permission (`CanViewInteraction`) and the
-reaction-witness gate (`can_view_interaction`), both staff-only. `VERY_PRIVATE` is
+read guarantee (`InteractionQuerySet.visible_to`'s `gm_visible` branch), shared by the REST list,
+search, context and detail; a non-staff GM is denied on the reaction-witness gate
+(`can_view_interaction`), which is staff-only. `VERY_PRIVATE` is
 stricter and admits no exception, staff included; the two tiers are deliberately not
 interchangeable (ADR-0170). `world.scenes.cast_services.create_cast_outcome_pose` writes up to three
 Narrator OUTCOME poses when concealed — one per non-empty tier, each with that tier's
@@ -5464,10 +5464,9 @@ through those other doors instead:
    implies "I saw that"). It was kept and taught the `PERCEIVED_ONLY` tier: writer or
    receiver, plus staff (unlike `VERY_PRIVATE`, which is writer/receiver-only).
 
-These three surfaces stay legitimately distinct rather than collapsing into one
-predicate: `visible_to` filters a **queryset** (the scene log feed), `CanViewInteraction`
-(`interaction_permissions.py`) gates a **REST object** (single-interaction fetch/delete),
-and `can_view_interaction` gates an **IC action** (can this persona react as a witness).
+These surfaces stay legitimately distinct rather than collapsing into one
+predicate: `visible_to` and `readable_by` filter a **queryset** (the scene log feed, and the
+REST detail through `get_queryset`), and `can_view_interaction` gates an **IC action** (can this persona react as a witness).
 A viewer's account being permitted to read a row and a viewer's *character* having
 witnessed the underlying event are different questions.
 
