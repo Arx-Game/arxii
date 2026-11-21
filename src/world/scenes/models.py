@@ -457,12 +457,19 @@ class Persona(RelatedCacheClearingMixin, SharedMemoryModel):
         blank=True,
         help_text="Name with color formatting codes",
     )
-    # NOTE (#2632): the vestigial ``description`` TextField (from the pre-forms #347
-    # identity model) was removed — nothing ever wrote it. Free-text physical
-    # description lives on ``CharacterSheet.additional_desc`` (written via
-    # ``character_sheets.services.set_physical_description``); per-persona
-    # presentation flavor lives on ``PersonaTraitDescriptor``. A future mask-desc
-    # variation surface (appearance architecture slices 3-4) designs its own shape.
+    # #4033: the mask's own prose, written by its player. A previous ``description`` field
+    # (the pre-forms #347 identity model) was removed in #2632 because nothing wrote it and the
+    # roster page's description chain read it first, so it rendered empty forever. This one
+    # has a writer (``world.scenes.face_services.set_persona_description``), exactly two
+    # readers (``look`` and the character sheet, through ``persona_display.mask_description``)
+    # and a stated precedence: it replaces the real prose only for a viewer who has not seen
+    # through the face. The roster page never reads it. The real face's description lives on
+    # ``CharacterSheet.additional_desc``; per-persona trait wording on ``PersonaTraitDescriptor``.
+    description = models.TextField(
+        blank=True,
+        help_text="The mask's own prose, shown instead of the real description to a viewer "
+        "who has not seen through it.",
+    )
     # #1270 — the bio this face presents. The PRIMARY persona points at the sheet's
     # true_profile (the real bio); an established/cover persona may own its own Profile (a
     # fabricated bio) so it does not out itself with an empty one. Null falls back to the
@@ -1918,6 +1925,46 @@ def get_scene_round_defaults_config() -> SceneRoundDefaultsConfig:
     obj = SceneRoundDefaultsConfig.objects.cached_singleton()
     if obj is None:
         obj, _ = SceneRoundDefaultsConfig.objects.get_or_create(pk=1)
+    return obj
+
+
+class FacePlaceholderConfig(SharedMemoryModel):
+    """Singleton (pk=1): the one picture a face with no portrait shows (#4889).
+
+    A mask or alternate self a player has not given a portrait shows this image to every
+    viewer, so it says nothing about who wears it. Staff choose it in the admin; until they
+    do, ``world.conditions.thumbnail_services`` shows the built-in grey silhouette.
+    """
+
+    objects = ArxSharedMemoryManager()
+
+    placeholder = models.ForeignKey(
+        "arxii.Media",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="face_placeholder_configs",
+        limit_choices_to={"player_data__isnull": True},
+        help_text="The one picture a face shows when it has no portrait. "
+        "Only staff-authored pictures are listed.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.ForeignKey(
+        ACCOUNT_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="face_placeholder_updates",
+    )
+
+    def __str__(self) -> str:
+        return f"FacePlaceholderConfig(pk={self.pk})"
+
+
+def get_face_placeholder_config() -> FacePlaceholderConfig:
+    obj = FacePlaceholderConfig.objects.cached_singleton()
+    if obj is None:
+        obj, _ = FacePlaceholderConfig.objects.get_or_create(pk=1)
     return obj
 
 

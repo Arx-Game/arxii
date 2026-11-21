@@ -267,6 +267,21 @@ class AlternateSelfAdmin(admin.ModelAdmin):
     def has_thumbnail(self, obj):
         return bool(obj.thumbnail)
 
+    def save_model(self, request, obj, form, change):
+        """A staff-set Thumbnail reaches the pose picture too (#4889).
+
+        Room state reads this self's thumbnail and poses read its persona's text copy, so
+        the persona's two fields are set with it, the way a player's pick sets them.
+        """
+        super().save_model(request, obj, form, change)
+        # A form field name, not a discriminator.
+        if "thumbnail" in form.changed_data and obj.persona_id is not None:  # noqa: STRING_LITERAL
+            from world.scenes.constants import PersonaType  # noqa: PLC0415
+            from world.scenes.face_services import sync_persona_portrait  # noqa: PLC0415
+
+            if obj.persona.persona_type != PersonaType.PRIMARY:
+                sync_persona_portrait(obj.persona, obj.thumbnail)
+
 
 @admin.register(ActiveAlternateSelf)
 class ActiveAlternateSelfAdmin(admin.ModelAdmin):

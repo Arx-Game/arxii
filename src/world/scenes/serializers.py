@@ -1,11 +1,13 @@
 from typing import Any
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.core.files.uploadedfile import UploadedFile
+from django.core.validators import FileExtensionValidator
 from django.db.models.manager import BaseManager
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from evennia_extensions.models import RoomProfile
+from evennia_extensions.models import Media, PlayerData, RoomProfile
 from world.areas.positioning.serializers import (
     PersonaPositionSerializer,
     PositionAdjacencyItemSerializer,
@@ -13,15 +15,18 @@ from world.areas.positioning.serializers import (
     PositionNodeSerializer,
     PositionSummarySerializer,
 )
+from world.conditions.thumbnail_services import persona_face_url
 from world.justice.constants import HUMILIATION_MARK_EXPLANATION
 from world.justice.serializers import HumiliationMarkSerializer
 from world.missions.serializers import GroupBallotStateSerializer, GroupBeatResultSerializer
+from world.roster.serializers.media import ACCEPTED_IMAGE_EXTENSIONS, validate_player_image_file
 from world.scenes.constants import (
     PlayedByRole,
     ScenePrivacyMode,
     SceneRoundMode,
     SceneRoundStartReason,
 )
+from world.scenes.face_services import MAX_FACE_DESCRIPTION_CHARS, pickable_portrait_media
 from world.scenes.models import (
     Persona,
     PersonaType,
@@ -31,6 +36,7 @@ from world.scenes.models import (
     SceneRound,
     SceneSummaryRevision,
 )
+from world.scenes.persona_display import mask_description
 from world.societies.constants import RenownRisk
 from world.societies.houses.constants import NameDegree, TitleSuffixMode
 
@@ -125,6 +131,11 @@ class PersonaSerializer(serializers.ModelSerializer):
     )
     roster_entry = serializers.SerializerMethodField()
     thumbnail_media_url = serializers.SerializerMethodField()
+    # The face's portrait from its text copy, or the placeholder for a face that is not the
+    # PRIMARY one (#4889): the same answer every pose and combat row reads.
+    thumbnail_url = serializers.SerializerMethodField()
+    # #4033 — the mask's own prose; empty for the PRIMARY face and for a mask with none.
+    description = serializers.SerializerMethodField()
     allow_social_actions = serializers.SerializerMethodField()
     # #3261 — the particled composed name at this persona's preferred degree.
     display_name = serializers.SerializerMethodField()
@@ -155,6 +166,7 @@ class PersonaSerializer(serializers.ModelSerializer):
             "persona_type",
             "thumbnail_url",
             "thumbnail_media_url",
+            "description",
             "roster_entry",
             "allow_social_actions",
             "guise_concept",
@@ -221,6 +233,12 @@ class PersonaSerializer(serializers.ModelSerializer):
 
     def get_guise_background(self, obj: Persona) -> str:
         return obj.profile.background if obj.profile_id else ""
+
+    def get_thumbnail_url(self, obj: Persona) -> str:
+        return persona_face_url(obj)
+
+    def get_description(self, obj: Persona) -> str:
+        return mask_description(obj)
 
     def get_thumbnail_media_url(self, obj: Persona) -> str | None:
         from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
@@ -865,6 +883,77 @@ class SetPersonaProfileRequestSerializer(serializers.Serializer):
     protect = serializers.CharField(required=False, allow_blank=True)
     fear = serializers.CharField(required=False, allow_blank=True)
     background = serializers.CharField(required=False, allow_blank=True)
+
+
+class SetFaceDescriptionRequestSerializer(serializers.Serializer):
+    """POST body for set-description: a mask's own prose (#4033). Blank clears it."""
+
+    persona_id = serializers.IntegerField(min_value=1)
+    description = serializers.CharField(
+        allow_blank=True, max_length=MAX_FACE_DESCRIPTION_CHARS, trim_whitespace=False
+    )
+
+
+class FacePortraitBodySerializer(serializers.Serializer):
+    """A face's portrait change (#4889): pick one of the player's pictures, upload a new
+    one, or remove it. Exactly one of ``media_id``, ``image_file`` and ``clear``.
+
+    ``media_id`` is checked against the requester's own pickable pictures, so another
+    player's picture, an NSFW one and an unknown id fail the same way.
+    """
+
+    media_id = serializers.PrimaryKeyRelatedField(
+        source="media",
+        queryset=Media.objects.none(),
+        required=False,
+        error_messages={
+            "does_not_exist": "That is not one of your pictures.",
+            "incorrect_type": "That is not one of your pictures.",
+        },
+    )
+    image_file = serializers.FileField(
+        required=False,
+        validators=[FileExtensionValidator(allowed_extensions=ACCEPTED_IMAGE_EXTENSIONS)],
+    )
+    clear = serializers.BooleanField(required=False, default=False)
+
+    def get_fields(self) -> dict[str, serializers.Field]:
+        fields = super().get_fields()
+        request = self.context.get("request")
+        player_data = PlayerData.objects.filter(account=request.user).first() if request else None
+        fields["media_id"].queryset = pickable_portrait_media(player_data)
+        return fields
+
+    def validate_image_file(self, value: UploadedFile) -> UploadedFile:
+        request = self.context.get("request")
+        return validate_player_image_file(value, is_staff=bool(request and request.user.is_staff))
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        # Request field names, not discriminators.
+        chosen = [
+            attrs.get("media") is not None,
+            "image_file" in attrs,  # noqa: STRING_LITERAL
+            attrs["clear"],
+        ]
+        if sum(chosen) != 1:
+            msg = "Choose a picture, upload one, or remove the portrait."
+            raise serializers.ValidationError(msg)
+        return attrs
+
+
+class SetFacePortraitRequestSerializer(FacePortraitBodySerializer):
+    """POST body for a persona's set-portrait: the face, then the change (#4889)."""
+
+    persona_id = serializers.IntegerField(min_value=1)
+
+
+class FacePortraitChoiceSerializer(serializers.Serializer):
+    """One of the player's own pictures in the portrait picker (#4889)."""
+
+    id = serializers.IntegerField()
+    url = serializers.CharField(source="cloudinary_url")
+    title = serializers.CharField()
+    file_size_bytes = serializers.IntegerField(allow_null=True)
 
 
 class SetRoundModeRequestSerializer(serializers.Serializer):

@@ -95,10 +95,27 @@ class CharacterState(BaseState):
         (``identity_revealed_to_viewer``). ``looker`` is typed like the sibling
         ``get_display_worn``/``get_display_markings`` display components — it arrives via
         ``return_appearance``'s ``**kwargs`` and isn't always a ``BaseState``.
+
+        A viewer who hasn't seen through the face reads the mask's own description in its
+        place (#4033), empty when its player wrote none; the worn items and markings are
+        separate display components and stay appended.
         """
         if not self._identity_revealed_to(looker):
-            return ""
+            return self._mask_description()
         return super().get_display_desc(mode=mode, **kwargs)
+
+    def _mask_description(self) -> str:
+        from world.scenes.models import Persona  # noqa: PLC0415
+        from world.scenes.persona_display import mask_description  # noqa: PLC0415
+        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+        sheet = self.obj.character_sheet
+        if sheet is None:
+            return ""
+        try:
+            return mask_description(active_persona_for_sheet(sheet))
+        except Persona.DoesNotExist:
+            return ""
 
     def _identity_revealed_to(self, looker: "BaseState | object | None") -> bool:
         from world.scenes.models import Persona  # noqa: PLC0415

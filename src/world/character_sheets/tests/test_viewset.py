@@ -46,6 +46,7 @@ from world.character_sheets.serializers import (
 from world.character_sheets.types import SheetVisibility
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
 from world.covenants.factories import (
     CharacterCovenantRoleFactory,
     CovenantFactory,
@@ -1889,12 +1890,12 @@ class TestPersonasSection(TestCase):
         assert iron["thumbnail"] == ("https://res.cloudinary.com/test/image/upload/iron_voice.jpg")
 
     def test_persona_without_thumbnail(self) -> None:
-        """Persona without thumbnail returns null."""
+        """A mask with no thumbnail shows the placeholder, never nothing (#4889)."""
         personas = self._get_personas()
         by_name = {g["name"]: g for g in personas}
         shadow = by_name["Shadow"]
         assert shadow["id"] == self.persona_no_thumb.pk
-        assert shadow["thumbnail"] is None
+        assert shadow["thumbnail"] == BUILTIN_FACE_PLACEHOLDER_URL
 
 
 class TestPersonasEmpty(TestCase):
@@ -3245,7 +3246,7 @@ class TestPrefetchCompleteness(TestCase):
     def test_profile_picture_zero_queries(self) -> None:
         sheet = self._get_sheet()
         with self.assertNumQueries(0):
-            _build_profile_picture(sheet)
+            _build_profile_picture(sheet, None, True)
 
 
 class TestCurrentResidenceField(TestCase):

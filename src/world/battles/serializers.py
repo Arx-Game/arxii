@@ -30,6 +30,7 @@ from world.battles.models import (
     BlueprintFortification,
     Fortification,
 )
+from world.conditions.thumbnail_services import persona_face_url
 from world.mechanics.models import Property
 from world.societies.models import LegendEntry
 
@@ -250,7 +251,7 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         return {
             "id": persona.id,
             "name": persona.name,
-            "thumbnail_url": persona.thumbnail_url or None,
+            "thumbnail_url": persona_face_url(persona) or None,
             "thumbnail_media_url": thumbnail_media_url,
         }
 

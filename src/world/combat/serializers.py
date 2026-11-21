@@ -58,6 +58,7 @@ from world.conditions.serializers import (
     serialize_compulsion_summary,
 )
 from world.conditions.services import get_active_conditions
+from world.conditions.thumbnail_services import persona_face_url
 from world.fatigue.services import get_fatigue_capacities
 from world.magic.constants import AudereCeremony
 from world.magic.models import CharacterTechnique, Technique
@@ -398,7 +399,7 @@ class OpponentSerializer(serializers.ModelSerializer):
         """
         if obj.persona_id is None:
             return None
-        return obj.persona.thumbnail_url
+        return persona_face_url(obj.persona)
 
     def get_thumbnail_media_url(self, obj: CombatOpponent) -> str | None:
         """Media portrait URL, dynamically resolved (#2196).
@@ -1162,7 +1163,7 @@ class ParticipantSerializer(serializers.ModelSerializer):
         (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
         """
         persona = self._presented_persona(obj)
-        return None if persona is None else persona.thumbnail_url
+        return None if persona is None else persona_face_url(persona)
 
     def get_thumbnail_media_url(self, obj: CombatParticipant) -> str | None:
         """Media portrait URL, dynamically resolved (#2196).

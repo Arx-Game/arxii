@@ -60,6 +60,20 @@ class MediaSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+def validate_player_image_file(value: UploadedFile, *, is_staff: bool) -> UploadedFile:
+    """Reject an oversized file for a non-staff requester before it reaches the service.
+
+    The one per-file check on a request, shared by the Gallery upload and a face portrait
+    upload (#4889). The service re-checks it, and the quota, under the player's row lock.
+    """
+    if not is_staff:
+        size = value.size or 0
+        if size > settings.MAX_PLAYER_MEDIA_FILE_BYTES:
+            msg = "This file is larger than the per-file limit."
+            raise serializers.ValidationError(msg)
+    return value
+
+
 # The per-file size check here mirrors the service's own check (#3164) with the
 # same fixed message, so an oversized upload is rejected before the network call
 # instead of after; the quota check stays service-only since it needs a DB
@@ -87,13 +101,7 @@ class MediaUploadSerializer(serializers.Serializer):
     def validate_image_file(self, value: UploadedFile) -> UploadedFile:
         """Reject an oversized file for non-staff before it ever reaches the service."""
         request = self.context.get("request")
-        is_staff = bool(request and request.user.is_staff)
-        if not is_staff:
-            size = value.size or 0
-            if size > settings.MAX_PLAYER_MEDIA_FILE_BYTES:
-                msg = "This file is larger than the per-file limit."
-                raise serializers.ValidationError(msg)
-        return value
+        return validate_player_image_file(value, is_staff=bool(request and request.user.is_staff))
 
     def create(self, validated_data: dict) -> Media:
         """Upload through the service, translating its ValidationError to a 4xx."""

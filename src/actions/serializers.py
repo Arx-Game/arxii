@@ -256,6 +256,9 @@ class PersonaMenuSerializer(serializers.Serializer):
     """The persona menu for one viewer and one target persona (#4030)."""
 
     persona_id = serializers.IntegerField(source="persona.pk")
+    # The face's own prose for its card (#4033): a mask's description, empty for the true face
+    # and for a mask whose player wrote none. The same answer ``look`` gives an onlooker.
+    description = serializers.SerializerMethodField()
     is_self = serializers.BooleanField()
     scene_id = serializers.SerializerMethodField()
     viewer_persona_id = serializers.SerializerMethodField()
@@ -264,6 +267,11 @@ class PersonaMenuSerializer(serializers.Serializer):
     groups = PersonaMenuGroupSerializer(many=True)
     scene_actions = PlayerActionSerializer(many=True)
     anima_ritual_available = serializers.BooleanField()
+
+    def get_description(self, obj: PersonaMenu) -> str:
+        from world.scenes.persona_display import mask_description  # noqa: PLC0415
+
+        return mask_description(obj.persona)
 
     @extend_schema_field(serializers.IntegerField(allow_null=True))
     def get_scene_id(self, obj: PersonaMenu) -> int | None:

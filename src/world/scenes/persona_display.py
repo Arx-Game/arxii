@@ -79,6 +79,20 @@ def compose_sdesc(persona: Persona) -> str:
     return f"a {noun} wearing {_with_indefinite_article(persona.name)}"
 
 
+def mask_description(persona: Persona | None) -> str:
+    """The prose a viewer who has not seen through ``persona`` reads in place of the real one.
+
+    A mask's own description (#4033), written by its player. The PRIMARY face has none: its
+    prose is the character's real description, which a viewer reads only when the identity
+    is revealed to them. Empty for a mask whose player wrote nothing. This and
+    ``identity_revealed_to_viewer`` are the whole rule; ``look`` and the character sheet
+    read it and nothing else does.
+    """
+    if persona is None or persona.persona_type == PersonaType.PRIMARY:
+        return ""
+    return persona.description
+
+
 def _with_indefinite_article(name: str) -> str:
     """*name* with the indefinite article English wants, typed by the player or not.
 

@@ -5,13 +5,26 @@ following ADR-0014 (no persisted derived data — derive on read).
 """
 
 from typing import TYPE_CHECKING
+from urllib.parse import quote
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import Media
     from world.conditions.models import ConditionInstance
+    from world.forms.models import AlternateSelf
     from world.scenes.models import Persona
+
+# The picture a face with no portrait shows until staff choose one in the admin (#4889): a
+# plain grey head and shoulders, the same for every face. It is a data URI so it needs no
+# file served beside the page and no per-face lookup; it never carries a letter or a name.
+BUILTIN_FACE_PLACEHOLDER_URL = "data:image/svg+xml," + quote(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
+    '<rect width="100" height="100" fill="#d4d4d8"/>'
+    '<circle cx="50" cy="38" r="18" fill="#a1a1aa"/>'
+    '<path d="M14 100c0-24 16-38 36-38s36 14 36 38z" fill="#a1a1aa"/>'
+    "</svg>"
+)
 
 
 def resolve_thumbnail(
@@ -30,8 +43,11 @@ def resolve_thumbnail(
     3. Active alternate self's thumbnail
     4. Persona's Media thumbnail FK
     5. ObjectDisplayData.thumbnail fallback, skipped when ``persona`` is a face other
-       than the PRIMARY one: the object's own image is the true face a mask hides (#4802)
+       than the PRIMARY one or an alternate self is worn: the object's own image is the
+       true face a mask hides (#4802, #4889)
     6. ``fallback_media`` (e.g. CombatOpponent.portrait for persona-less NPCs)
+    7. The placeholder portrait, for a face that hides the real face and found no image
+       above (#4889): never the real face, never nothing
 
     Args:
         obj: The ObjectDB to resolve a thumbnail for.
@@ -69,9 +85,7 @@ def resolve_thumbnail(
             return persona.thumbnail.cloudinary_url
 
     # 5. ObjectDisplayData fallback
-    from world.scenes.constants import PersonaType  # noqa: PLC0415
-
-    hides_true_face = persona is not None and persona.persona_type != PersonaType.PRIMARY
+    hides_true_face = persona is not None and _face_hides_true_face(persona)
     display_url = None if hides_true_face else _resolve_display_data_thumbnail(obj)
     if display_url is not None:
         return display_url
@@ -80,7 +94,82 @@ def resolve_thumbnail(
     if fallback_media is not None:
         return fallback_media.cloudinary_url
 
+    # 7. A face that hides the real one shows the placeholder, never the real face.
+    if hides_true_face:
+        return placeholder_portrait_url()
+
     return None
+
+
+def placeholder_portrait_url() -> str:
+    """The one picture a face with no portrait shows (#4889).
+
+    Staff's chosen ``FacePlaceholderConfig.placeholder`` while it exists, else the built-in
+    grey silhouette, so a face with no portrait never shows a letter, the real face or a
+    broken image.
+    """
+    from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
+
+    from evennia_extensions.models import Media  # noqa: PLC0415
+    from world.scenes.models import get_face_placeholder_config  # noqa: PLC0415
+
+    media_id = get_face_placeholder_config().placeholder_id
+    if media_id is None:
+        return BUILTIN_FACE_PLACEHOLDER_URL
+    try:
+        media = Media.objects.get(pk=media_id)
+    except ObjectDoesNotExist:
+        return BUILTIN_FACE_PLACEHOLDER_URL
+    # Only staff-authored art can be the placeholder; a player's private picture never is,
+    # whatever wrote the link.
+    return media.cloudinary_url if media.player_data_id is None else BUILTIN_FACE_PLACEHOLDER_URL
+
+
+def persona_face_url(persona: "Persona") -> str:
+    """The portrait URL a pose, combat or battle row shows for ``persona`` (#4889).
+
+    The persona's own picture (the text copy a writer sets beside the Media link), else its
+    Media link, else, for a face that is not the PRIMARY one, the placeholder. An empty
+    string for a PRIMARY face with no picture, which the client draws as the letter avatar.
+    One answer for every list that reads a persona's portrait from its text copy, so none of
+    them can fall back to something else. It reads no alternate self, so a list of rows costs
+    no query per row; a writer of an alternate self's picture sets the persona's copy too.
+    """
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    if persona.thumbnail_url:
+        return persona.thumbnail_url
+    if persona.thumbnail_id is not None:
+        return persona.thumbnail.cloudinary_url
+    if persona.persona_type != PersonaType.PRIMARY:
+        return placeholder_portrait_url()
+    return ""
+
+
+def _active_alternate_self(persona: "Persona") -> "AlternateSelf | None":
+    """The alternate self the persona's character is wearing now, or None."""
+    try:
+        sheet = persona.character_sheet
+    except AttributeError:
+        return None
+    if sheet is None:
+        return None
+    try:
+        active = sheet.active_alternate_self
+    except AttributeError:
+        return None
+    if active is None or active.alternate_self_id is None:
+        return None
+    return active.alternate_self
+
+
+def _face_hides_true_face(persona: "Persona") -> bool:
+    """Whether the real face must not show for ``persona``: a mask, or a worn alternate self."""
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    return (
+        persona.persona_type != PersonaType.PRIMARY or _active_alternate_self(persona) is not None
+    )
 
 
 def _resolve_condition_thumbnail(
@@ -133,19 +222,7 @@ def _resolve_condition_thumbnail(
 
 def _resolve_alternate_self_thumbnail(persona: "Persona") -> str | None:
     """Check if the persona's character has an active alternate self with a thumbnail."""
-    try:
-        sheet = persona.character_sheet
-    except AttributeError:
-        return None
-    if sheet is None:
-        return None
-    try:
-        active = sheet.active_alternate_self
-    except AttributeError:
-        return None
-    if active is None or active.alternate_self_id is None:
-        return None
-    alt_self = active.alternate_self
+    alt_self = _active_alternate_self(persona)
     if alt_self is None or alt_self.thumbnail_id is None:
         return None
     return alt_self.thumbnail.cloudinary_url

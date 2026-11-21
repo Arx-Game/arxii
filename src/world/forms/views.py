@@ -7,6 +7,7 @@ from drf_spectacular.utils import extend_schema
 from rest_framework import mixins, permissions, serializers, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -33,6 +34,7 @@ from world.forms.serializers import (
     ShiftFormRequestSerializer,
 )
 from world.forms.services import get_apparent_form, get_cg_builds, get_cg_height_bands
+from world.scenes.serializers import FacePortraitBodySerializer
 
 
 class FormTraitViewSet(viewsets.ReadOnlyModelViewSet):
@@ -182,11 +184,50 @@ class AlternateSelfViewSet(
         character = character_for_request(self.request, entry_id=None)
         sheet = character.character_sheet if character is not None else None
         queryset = AlternateSelf.objects.select_related(
-            "persona", "form", "combat_profile"
+            "persona", "persona__thumbnail", "thumbnail", "form", "combat_profile"
         ).prefetch_related("techniques")  # noqa: PREFETCH_STRING
         if sheet is not None:
             return queryset.filter(character=sheet).order_by("display_name")
         return queryset.none()
+
+    @extend_schema(
+        request={
+            "multipart/form-data": FacePortraitBodySerializer,
+            "application/json": FacePortraitBodySerializer,
+        },
+        responses={200: AlternateSelfSerializer},
+        tags=["alternate-selves"],
+    )
+    @action(
+        detail=True,
+        methods=[HTTPMethod.POST],
+        url_path="set-portrait",
+        permission_classes=[permissions.IsAuthenticated],
+        parser_classes=[JSONParser, MultiPartParser, FormParser],
+    )
+    def set_portrait(self, request: Request, pk: str | None = None) -> Response:
+        """#4889 - pick, upload or remove one of the played character's alternate self's portrait.
+
+        The queryset is limited to the played sheet, so another player's alternate self is a 404.
+        """
+        from world.scenes.face_services import FaceError, set_face_portrait  # noqa: PLC0415
+
+        alt_self = self.get_object()
+        body = FacePortraitBodySerializer(data=request.data, context={"request": request})
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        try:
+            set_face_portrait(
+                alt_self,
+                player_data=request.user.player_data,
+                media=data.get("media"),
+                image_file=data.get("image_file"),
+                clear=data["clear"],
+            )
+        except FaceError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        serializer = self.get_serializer(alt_self)
+        return Response(serializer.data)
 
     @extend_schema(
         request=ShiftFormRequestSerializer,
