@@ -8743,6 +8743,29 @@ paths:
               schema:
                 $ref: '#/components/schemas/ClockDetail'
           description: ''
+  /api/clock/adjust-preview/:
+    get:
+      operationId: clock_adjust_preview_retrieve
+      description: 'GET /adjust-preview/ — staff: what setting this date would do;
+        writes nothing.'
+      parameters:
+      - in: query
+        name: ic_datetime
+        schema:
+          type: string
+          format: date-time
+        required: true
+      tags:
+      - game-clock
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClockJumpPreview'
+          description: ''
   /api/clock/convert/:
     get:
       operationId: clock_convert_retrieve
@@ -8768,6 +8791,52 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ClockConvertResponse'
+          description: ''
+  /api/clock/history/:
+    get:
+      operationId: clock_history_list
+      description: 'Staff: the recorded changes to the clock, newest first (#5248).'
+      parameters:
+      - in: query
+        name: change
+        schema:
+          type: string
+          enum:
+          - date_aged
+          - date_kept
+          - paused
+          - resumed
+          - speed
+        description: |-
+          The kind of change (#5248). The anchors and ratios alone cannot tell a pause from a change of date. Blank on rows written before the kind was recorded.
+
+          * `paused` - Paused
+          * `resumed` - Resumed
+          * `speed` - Speed changed
+          * `date_aged` - Date set, characters aged
+          * `date_kept` - Date set, characters kept their ages
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - game-clock
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedClockHistoryList'
           description: ''
   /api/clock/pause/:
     post:
@@ -46462,6 +46531,14 @@ components:
       - description
       - key
       - label
+    AgeHandlingEnum:
+      enum:
+      - aged
+      - kept
+      type: string
+      description: |-
+        * `aged` - Characters age
+        * `kept` - Characters keep their ages
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.
@@ -53872,9 +53949,32 @@ components:
           type: string
           minLength: 1
           maxLength: 500
+        age_handling:
+          allOf:
+          - $ref: '#/components/schemas/AgeHandlingEnum'
+          description: |-
+            Whether characters age with the calendar or keep their ages (#5248). A change to an earlier date must keep them.
+
+            * `aged` - Characters age
+            * `kept` - Characters keep their ages
       required:
+      - age_handling
       - ic_datetime
       - reason
+    ClockChangeEnum:
+      enum:
+      - paused
+      - resumed
+      - speed
+      - date_aged
+      - date_kept
+      type: string
+      description: |-
+        * `paused` - Paused
+        * `resumed` - Resumed
+        * `speed` - Speed changed
+        * `date_aged` - Date set, characters aged
+        * `date_kept` - Date set, characters kept their ages
     ClockConvertResponse:
       type: object
       description: Response serializer for date conversion results.
@@ -53893,6 +53993,116 @@ components:
           type: string
       required:
       - detail
+    ClockHistory:
+      type: object
+      description: One recorded change to the clock, for the staff page's Recent changes
+        list.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        changed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          description: When the change was made.
+        changed_by_name:
+          type: string
+          readOnly: true
+          default: ''
+        change:
+          allOf:
+          - $ref: '#/components/schemas/ClockChangeEnum'
+          readOnly: true
+          description: |-
+            The kind of change (#5248). The anchors and ratios alone cannot tell a pause from a change of date. Blank on rows written before the kind was recorded.
+
+            * `paused` - Paused
+            * `resumed` - Resumed
+            * `speed` - Speed changed
+            * `date_aged` - Date set, characters aged
+            * `date_kept` - Date set, characters kept their ages
+        new_anchor_ic_time:
+          type: string
+          format: date-time
+          readOnly: true
+        new_date_display:
+          type: string
+          readOnly: true
+        old_time_ratio:
+          type: number
+          format: double
+          readOnly: true
+        new_time_ratio:
+          type: number
+          format: double
+          readOnly: true
+        birth_year_shift:
+          type: integer
+          readOnly: true
+          description: Years added to every character's birth year by this change,
+            so their ages stayed as they were. Zero unless the date was set with ages
+            kept. Subtract it to undo the change by hand.
+        reason:
+          type: string
+          readOnly: true
+      required:
+      - birth_year_shift
+      - change
+      - changed_at
+      - changed_by_name
+      - id
+      - new_anchor_ic_time
+      - new_date_display
+      - new_time_ratio
+      - old_time_ratio
+      - reason
+    ClockJumpPreview:
+      type: object
+      description: What setting the clock to a date would do, before anything is written.
+      properties:
+        current_ic_time:
+          type: string
+          format: date-time
+        current_date_display:
+          type: string
+          description: The current IC date in full, for the sentence the dialog shows.
+        new_ic_time:
+          type: string
+          format: date-time
+        direction:
+          $ref: '#/components/schemas/ClockJumpPreviewDirectionEnum'
+        year_shift:
+          type: integer
+          description: 'Calendar years between the dates: what birth years move by
+            if ages are kept.'
+        characters_with_birth_year:
+          type: integer
+        upcoming_events:
+          type: integer
+        heritages_not_yet_appeared:
+          type: array
+          items:
+            type: string
+      required:
+      - characters_with_birth_year
+      - current_date_display
+      - current_ic_time
+      - direction
+      - heritages_not_yet_appeared
+      - new_ic_time
+      - upcoming_events
+      - year_shift
+    ClockJumpPreviewDirectionEnum:
+      enum:
+      - forward
+      - back
+      - none
+      type: string
+      description: |-
+        * `forward` - Forward
+        * `back` - Back
+        * `none` - No change
     ClockRatioRequest:
       type: object
       description: Request serializer for staff time-ratio change.
@@ -53941,18 +54151,37 @@ components:
           format: double
         paused:
           type: boolean
+        time_ratio:
+          type: number
+          format: double
+          description: IC seconds per real second.
+        month_names:
+          type: array
+          items:
+            type: string
+          description: The twelve IC month names in order, for a date picker.
+        min_year:
+          type: integer
+          description: The earliest year the clock may be set to.
+        max_year:
+          type: integer
+          description: The latest year the clock may be set to.
       required:
       - date_display
       - day
       - hour
       - ic_datetime
       - light_level
+      - max_year
+      - min_year
       - minute
       - month
       - month_name
+      - month_names
       - paused
       - phase
       - season
+      - time_ratio
       - year
     ClueRevealOfferDetails:
       type: object
@@ -75832,6 +76061,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/CheckType'
+    PaginatedClockHistoryList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClockHistory'
     PaginatedClueRevealOfferDetailsList:
       type: object
       required:

@@ -10936,7 +10936,12 @@ combat, poison, spells, exhaustion, and any damage source.
   `run_death_sweep` (resolves `CharacterVitals.aging_death_ic_deadline` via `_mark_dead` →
   estates settlement). Config knobs live on `VitalsConsequenceConfig` (all PLACEHOLDER);
   registered as `aging.birthday_tick`/`aging.decline_check`/`aging.death_sweep`
-  (`FrequencyType.IC`) in `game_clock/tasks.py`.
+  (`FrequencyType.IC`) in `game_clock/tasks.py`. When staff jump the game clock's date
+  (#5248, ADR-5248), `rebase_ages_for_clock_jump(old_ic_now, new_ic_now, keep_ages)` moves
+  every open dying window by the length of the jump (a jump never kills anyone by itself)
+  and, with `keep_ages`, every `ic_birth_year` by the calendar years jumped;
+  `characters_with_birth_year()` counts who that touches. Called only by
+  `game_clock.services.set_clock`; the rules live in `src/world/game_clock/CLAUDE.md`.
 - **Key Services (`world/vitals/services.py`):**
   - `is_dead(sheet)`, `is_alive(sheet)`, `can_act(sheet)` — mortality/agency gates.
   - `derive_character_status(sheet) -> str` — compute dead/dying/incapacitated/alive at read time.

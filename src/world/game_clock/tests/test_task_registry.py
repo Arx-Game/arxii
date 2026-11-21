@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 from django.utils import timezone
 
+from world.game_clock.factories import GameClockFactory
 from world.game_clock.models import ScheduledTaskRecord
 from world.game_clock.task_registry import (
     CronDefinition,
@@ -328,3 +329,44 @@ class CronPhaseOrderingTests(TestCase):
         run_due_tasks()
 
         assert self.calls == ["upkeep", "unphased", "cleanup"]
+
+
+class IcStampTests(TestCase):
+    """A task is never stamped later than the clock reads (#5248).
+
+    A tick reads the IC time once and stamps it after each task. Staff setting the clock
+    to an earlier date while a tick is running must not leave tasks stamped with the old,
+    later time: they would then wait for the calendar to pass it again.
+    """
+
+    def setUp(self) -> None:
+        clear_registry()
+
+    def tearDown(self) -> None:
+        clear_registry()
+
+    def _run_one_ic_task(self, tick_ic_now):
+        register_task(
+            CronDefinition(
+                task_key="test.ic_stamp",
+                callable=MagicMock(),
+                interval=timedelta(days=1),
+                frequency_type=FrequencyType.IC,
+            )
+        )
+        run_due_tasks(ic_now=tick_ic_now)
+        return ScheduledTaskRecord.objects.get(task_key="test.ic_stamp").last_ic_run_at
+
+    def test_a_clock_set_back_during_the_tick_stamps_the_new_earlier_time(self) -> None:
+        tick_time = timezone.now().replace(year=1020, month=6, day=1, microsecond=0)
+        set_back_to = tick_time.replace(year=1000)
+        GameClockFactory(anchor_ic_time=set_back_to, paused=True)
+
+        self.assertEqual(self._run_one_ic_task(tick_time), set_back_to)
+
+    def test_a_clock_set_forward_during_the_tick_keeps_the_ticks_time(self) -> None:
+        """So the next run still walks the gap a forward jump opened."""
+        tick_time = timezone.now().replace(year=1000, month=6, day=1, microsecond=0)
+        GameClockFactory(anchor_ic_time=tick_time.replace(year=1020), paused=True)
+
+        self.assertEqual(self._run_one_ic_task(tick_time), tick_time)

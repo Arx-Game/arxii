@@ -134,7 +134,7 @@ def run_due_tasks(*, ic_now: datetime | None = None) -> list[str]:
                 task_def.callable()
                 record.last_run_at = now
                 if ic_now is not None:
-                    record.last_ic_run_at = ic_now
+                    record.last_ic_run_at = _ic_stamp(ic_now)
                 record.save(update_fields=["last_run_at", "last_ic_run_at"])
                 executed.append(task_def.task_key)
                 logger.info("Executed task: %s", task_def.task_key)
@@ -142,6 +142,23 @@ def run_due_tasks(*, ic_now: datetime | None = None) -> list[str]:
                 logger.exception("Task failed: %s", task_def.task_key)
 
     return executed
+
+
+def _ic_stamp(tick_ic_now: datetime) -> datetime:
+    """The IC time to stamp a task that just ran: the tick's, unless the clock is now
+    earlier (#5248).
+
+    A tick reads the IC time once and stamps it after each task. If staff set the clock
+    to an earlier date while the tick is running, the tick's time is later than the
+    clock, and a task stamped with it would not come due again until the calendar
+    passed that time: the stall a change of date is built to end. So the stamp is never
+    later than the clock reads now. It is never moved later either: a forward jump with
+    characters aging relies on the stamp staying behind, so the next run walks the gap.
+    """
+    from world.game_clock.services import get_ic_now  # noqa: PLC0415
+
+    current = get_ic_now()
+    return tick_ic_now if current is None else min(tick_ic_now, current)
 
 
 def _is_task_due(
