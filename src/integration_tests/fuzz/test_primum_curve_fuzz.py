@@ -119,9 +119,9 @@ class PointsToPowerHoldsItsContract(unittest.TestCase):
             self.assertEqual(abs(result), min(curve[-1][1], cap))
             return
         exact = _exact_power(magnitude, curve)
-        # The docstring does not say which way a value between rows is rounded: either is
-        # accepted, so a floor or a ceiling both pass.
-        self.assertLess(abs(abs(result) - min(exact, cap)), 1)
+        # The ``points_to_power`` docstring says "A value between two rows is rounded down
+        # before the sign is applied (#4248)."
+        self.assertEqual(abs(result), min(floor(exact), cap))
 
 
 class ApportionPowerHoldsItsContract(unittest.TestCase):
