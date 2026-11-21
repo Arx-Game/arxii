@@ -6398,8 +6398,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -16548,6 +16547,39 @@ paths:
         required: true
       tags:
       - forms
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AlternateSelf'
+          description: ''
+  /api/forms/alternate-selves/{id}/set-portrait/:
+    post:
+      operationId: forms_alternate_selves_set_portrait_create
+      description: |-
+        #4889 - pick, upload or remove one of the played character's alternate self's portrait.
+
+        The queryset is limited to the played sheet, so another player's alternate self is a 404.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this alternate self.
+        required: true
+      tags:
+      - alternate-selves
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/FacePortraitBodyRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FacePortraitBodyRequest'
       security:
       - cookieAuth: []
       responses:
@@ -31964,6 +31996,36 @@ paths:
               schema:
                 $ref: '#/components/schemas/Persona'
           description: ''
+  /api/personas/portrait-choices/:
+    get:
+      operationId: personas_portrait_choices_list
+      description: |-
+        #4889 - the requester's own pictures a portrait may be picked from (never another
+        player's). Their storage line is the Gallery's own ``tenure-media/usage/``.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - personas
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedFacePortraitChoiceList'
+          description: ''
   /api/personas/set-active/:
     post:
       operationId: personas_set_active_create
@@ -31989,6 +32051,59 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ActivePersonaResult'
+          description: ''
+  /api/personas/set-description/:
+    post:
+      operationId: personas_set_description_create
+      description: |-
+        #4033 - write a mask's own description (what a stranger reads on look).
+
+        Own-sheet personas only; PRIMARY is refused by the service (the real description
+        is on the character sheet). A blank description clears it.
+      tags:
+      - personas
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetFaceDescriptionRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
+          description: ''
+  /api/personas/set-portrait/:
+    post:
+      operationId: personas_set_portrait_create
+      description: |-
+        #4889 - pick, upload or remove a mask's portrait.
+
+        Own-sheet personas only, one uniform refusal otherwise. A pick is copied and an
+        upload stored under an opaque folder, both through the one shared upload limit.
+      tags:
+      - personas
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SetFacePortraitRequestRequest'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetFacePortraitRequestRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Persona'
           description: ''
   /api/personas/set-profile/:
     post:
@@ -47290,6 +47405,19 @@ components:
           - $ref: '#/components/schemas/Compulsion'
           nullable: true
           readOnly: true
+        persona_id:
+          type: integer
+          nullable: true
+          description: The persona this self wears, so the editor opens its description
+            (#4889).
+          readOnly: true
+        thumbnail_url:
+          type: string
+          description: |-
+            The picture this self shows: its own, its persona's, else the placeholder.
+
+            Never the character's real face, the same order the room list resolves (#4889).
+          readOnly: true
       required:
       - compulsion
       - form_name
@@ -47297,8 +47425,10 @@ components:
       - has_techniques
       - id
       - is_active
+      - persona_id
       - persona_name
       - resonance_name
+      - thumbnail_url
     AlternateSelfRequest:
       type: object
       description: |-
@@ -60663,6 +60793,42 @@ components:
       - net
       - pressure
       - sheltered
+    FacePortraitBodyRequest:
+      type: object
+      description: |-
+        A face's portrait change (#4889): pick one of the player's pictures, upload a new
+        one, or remove it. Exactly one of ``media_id``, ``image_file`` and ``clear``.
+
+        ``media_id`` is checked against the requester's own pickable pictures, so another
+        player's picture, an NSFW one and an unknown id fail the same way.
+      properties:
+        media_id:
+          type: integer
+        image_file:
+          type: string
+          format: binary
+          pattern: (?:jpg|jpeg|png|gif|webp)$
+        clear:
+          type: boolean
+          default: false
+    FacePortraitChoice:
+      type: object
+      description: One of the player's own pictures in the portrait picker (#4889).
+      properties:
+        id:
+          type: integer
+        url:
+          type: string
+        title:
+          type: string
+        file_size_bytes:
+          type: integer
+          nullable: true
+      required:
+      - file_size_bytes
+      - id
+      - title
+      - url
     Facet:
       type: object
       description: Serializer for the flat Facet vocabulary.
@@ -76801,6 +76967,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ExitBarsDetails'
+    PaginatedFacePortraitChoiceList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/FacePortraitChoice'
     PaginatedFashionPresentationList:
       type: object
       required:
@@ -85774,15 +85963,14 @@ components:
             * `temporary` - Temporary
             * `alternate` - Alternate
         thumbnail_url:
-          oneOf:
-          - type: string
-            format: uri
-            maxLength: 500
-          - type: string
-            maxLength: 0
+          type: string
+          readOnly: true
         thumbnail_media_url:
           type: string
           nullable: true
+          readOnly: true
+        description:
+          type: string
           readOnly: true
         roster_entry:
           type: object
@@ -85831,6 +86019,7 @@ components:
       - allow_social_actions
       - believed_deceased
       - character_sheet
+      - description
       - display_name
       - guise_background
       - guise_concept
@@ -85843,6 +86032,7 @@ components:
       - name
       - roster_entry
       - thumbnail_media_url
+      - thumbnail_url
     PersonaHeat:
       type: object
       description: |-
@@ -85890,6 +86080,9 @@ components:
       properties:
         persona_id:
           type: integer
+        description:
+          type: string
+          readOnly: true
         is_self:
           type: boolean
         scene_id:
@@ -85918,6 +86111,7 @@ components:
           type: boolean
       required:
       - anima_ritual_available
+      - description
       - groups
       - is_self
       - items
@@ -92561,6 +92755,39 @@ components:
       type: object
       description: 'POST body for the #981 set-active-persona endpoint.'
       properties:
+        persona_id:
+          type: integer
+          minimum: 1
+      required:
+      - persona_id
+    SetFaceDescriptionRequestRequest:
+      type: object
+      description: 'POST body for set-description: a mask''s own prose (#4033). Blank
+        clears it.'
+      properties:
+        persona_id:
+          type: integer
+          minimum: 1
+        description:
+          type: string
+          maxLength: 4000
+      required:
+      - description
+      - persona_id
+    SetFacePortraitRequestRequest:
+      type: object
+      description: 'POST body for a persona''s set-portrait: the face, then the change
+        (#4889).'
+      properties:
+        media_id:
+          type: integer
+        image_file:
+          type: string
+          format: binary
+          pattern: (?:jpg|jpeg|png|gif|webp)$
+        clear:
+          type: boolean
+          default: false
         persona_id:
           type: integer
           minimum: 1

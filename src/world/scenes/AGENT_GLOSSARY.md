@@ -13,6 +13,18 @@ _Avoid_: lurker, hidden watcher, silent observer (this system explicitly guarant
 **Viewer** (of the reveal rule; #1109, #4413, ADR-4413-A):
 The one character doing the looking, as a `CharacterSheet`: the puppet or actor's own sheet on telnet, the account's selected character (`relationships.reads.resolve_viewer_sheet`) on the web. Its own faces render real, its own `PersonaDiscovery` rows and its own `disguise_sight` reveal a mask; the account's other characters' faces, discoveries and sight are not its own. Staff are universal discoverers. _Avoid_: viewer account, "any of your characters", owned sheets (the account-wide shape #4413 retired).
 
+**Placeholder portrait** (`FacePlaceholderConfig`, #4889):
+The one picture every face with no portrait shows, whoever wears it, so it says nothing about the wearer: staff's chosen staff-authored `Media` while it exists, else a built-in grey silhouette. A mask or alternate self with no portrait of its own shows it, never the character's real face and never a letter.
+_Avoid_: default avatar, fallback face, silhouette (item templates use "silhouette" for garment shape).
+
+**Mask description** (`Persona.description`, #4033):
+A mask's own prose, written by its player, shown instead of the character's real description to a viewer who has not seen through the face (`persona_display.mask_description`). Not a Guise Sheet field, keeps no history, and the PRIMARY face has none.
+_Avoid_: persona desc, fake description, cover description.
+
+**Face portrait**:
+The picture a mask or alternate self shows: a private copy of one of the player's pictures, or a new upload, stored under the opaque `faces/` folder so its web address carries no player or character number, and counted against the player's storage.
+_Avoid_: mask avatar, persona thumbnail (that is the field, not the thing).
+
 **Guise Sheet**:
 The fabricated bio a non-primary (cover/established) persona presents as its own — its `Persona.profile` (a `character_sheets.Profile`: concept/quote/personality/background), so the *absence* of a bio doesn't out the cover as fake. Distinct from the sheet's `true_profile` (the real face's bio, presented by PRIMARY). Authored via `set_persona_profile`; lineage stays display-only (mechanical reads pin to `true_profile`).
 _Avoid_: fake sheet, alt bio, cover profile (the model is `Profile`; the surface is the Guise Sheet).

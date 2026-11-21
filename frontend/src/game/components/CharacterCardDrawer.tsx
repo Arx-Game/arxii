@@ -11,6 +11,7 @@ import { JournalComposerDialog } from '@/journals/components/JournalComposerDial
 import { MessagePlayerDialog } from './MessagePlayerDialog';
 import { MissiveComposeDialog } from '@/missives/components/MissiveComposeDialog';
 import { NO_DESCRIPTION } from '@/components/ui/dialog';
+import { usePersonaMenuQuery } from '../persona-menu/personaMenuApi';
 
 export interface CharacterCardDrawerProps {
   /** The clicked bubble's persona identity; `null` means the drawer is closed. */
@@ -82,6 +83,13 @@ export function CharacterCardDrawer({
   const matchId = match?.id;
   const { data: entry } = useRosterEntryQuery(matchId ?? 0);
   const liveTenure = entry?.tenures.find((tenure) => tenure.end_date === null) ?? null;
+  // A face off the public roster has no sheet to read, so its own description comes from
+  // the persona menu (#4033): the mask's prose, empty when its player wrote none.
+  const { data: menu } = usePersonaMenuQuery(
+    viewerCharacterId,
+    persona?.id ?? 0,
+    persona !== null && matchId == null
+  );
 
   const [journalOpen, setJournalOpen] = useState(false);
   const [messageOpen, setMessageOpen] = useState(false);
@@ -120,7 +128,15 @@ export function CharacterCardDrawer({
       );
     }
     return (
-      <p className="mt-4 text-sm text-muted-foreground">This face isn't on the public roster.</p>
+      <>
+        {menu?.description && (
+          <section className="mt-4 space-y-1">
+            <h3 className="text-sm font-semibold">As they appear</h3>
+            <p className="whitespace-pre-line text-sm">{menu.description}</p>
+          </section>
+        )}
+        <p className="mt-4 text-sm text-muted-foreground">This face isn't on the public roster.</p>
+      </>
     );
   };
 

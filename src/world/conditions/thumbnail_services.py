@@ -132,11 +132,23 @@ def persona_face_url(persona: "Persona") -> str:
     Media link, else, for a face that is not the PRIMARY one, the placeholder. An empty
     string for a PRIMARY face with no picture, which the client draws as the letter avatar.
     One answer for every list that reads a persona's portrait from its text copy, so none of
-    them can fall back to something else. It reads no alternate self, so a list of rows costs
-    no query per row; a writer of an alternate self's picture sets the persona's copy too.
+    them can fall back to something else.
+
+    A PRIMARY face that holds a picture (a story NPC's worn look is copied onto it) and is
+    presented while the character wears an alternate self that has no persona shows that
+    self's picture, or the placeholder: never the real face its own copy holds. Only such a
+    row asks which self is worn, so a list of masks and of player characters costs no query
+    per row; a writer of a self's picture sets its persona's copy too.
     """
     from world.scenes.constants import PersonaType  # noqa: PLC0415
 
+    holds_a_picture = bool(persona.thumbnail_url) or persona.thumbnail_id is not None
+    if persona.persona_type == PersonaType.PRIMARY and holds_a_picture:
+        alt_self = _active_alternate_self(persona) if _is_presented(persona) else None
+        if alt_self is not None:
+            if alt_self.thumbnail_id is not None:
+                return alt_self.thumbnail.cloudinary_url
+            return placeholder_portrait_url()
     if persona.thumbnail_url:
         return persona.thumbnail_url
     if persona.thumbnail_id is not None:
@@ -161,6 +173,16 @@ def _active_alternate_self(persona: "Persona") -> "AlternateSelf | None":
     if active is None or active.alternate_self_id is None:
         return None
     return active.alternate_self
+
+
+def _is_presented(persona: "Persona") -> bool:
+    """Whether ``persona`` is the face its character presents right now."""
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+    sheet = persona.character_sheet
+    if sheet.active_persona_id is not None:
+        return sheet.active_persona_id == persona.pk
+    return persona.persona_type == PersonaType.PRIMARY
 
 
 def _face_hides_true_face(persona: "Persona") -> bool:
@@ -223,7 +245,9 @@ def _resolve_condition_thumbnail(
 def _resolve_alternate_self_thumbnail(persona: "Persona") -> str | None:
     """Check if the persona's character has an active alternate self with a thumbnail."""
     alt_self = _active_alternate_self(persona)
-    if alt_self is None or alt_self.thumbnail_id is None:
+    # Only on the face presented now: a hidden mask of the same character must not read the
+    # same picture as the face on show, or the identical URL would link the two (#4889).
+    if alt_self is None or alt_self.thumbnail_id is None or not _is_presented(persona):
         return None
     return alt_self.thumbnail.cloudinary_url
 

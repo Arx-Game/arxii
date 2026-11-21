@@ -14,12 +14,20 @@ vi.mock('../../personaQueries', () => ({
   useSetActivePersonaMutation: () => ({ mutate, isPending: false }),
   useSetPersonaProfileMutation: () => ({
     mutate: vi.fn(),
+    mutateAsync: vi.fn(),
     reset: vi.fn(),
     isPending: false,
     isError: false,
     error: null,
   }),
 }));
+
+vi.mock('../../faceQueries', () => ({
+  useFacePortraitMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetFaceDescriptionMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  usePortraitChoicesQuery: () => ({ data: [], isError: false }),
+}));
+vi.mock('@/roster/gallery', () => ({ useMediaUsageQuery: () => ({ data: undefined }) }));
 
 function persona(
   id: number,
@@ -39,6 +47,7 @@ function persona(
     guise_protect: '',
     guise_fear: '',
     guise_background: '',
+    description: '',
   };
 }
 

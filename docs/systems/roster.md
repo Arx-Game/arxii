@@ -613,9 +613,25 @@ read needs an account (#3904 item 0, #4151).
 - `DELETE /api/roster/media/{id}/` - Delete a file: `perform_destroy` calls
   `CloudinaryGalleryService.delete_media`, so the Cloudinary asset goes with the row
   (#4151; the stock destroy used to leave it stored)
+- A face portrait's private copy (public id under `FACE_PORTRAIT_FOLDER`, `faces/`) belongs to its
+  face: `MediaViewSet` never lists, fetches, deletes, attaches or makes a profile picture of it
+  (#4889). Its bytes count in `media_bytes_used` like any other file
 - `POST /api/roster/media/{id}/associate_tenure/` - Link media to a tenure (staff and scripts)
 - `POST /api/roster/media/{id}/set_profile_picture/` - Set as account profile picture
   (`PlayerData.profile_picture`, the player's own avatar, not a character's look)
+
+### One upload limit (`gallery_services`, #3164, #4889)
+
+Every stored player file goes through `enforce_player_media_limits(player_data,
+incoming_bytes=)`: the per-file limit and the quota, staff exempt. `upload_image` and
+`copy_image` take `lock_player_media` (a `select_for_update` on the `PlayerData` row, inside
+`transaction.atomic`) before the check, so two simultaneous uploads by one player run one
+after the other and cannot both pass the quota. `upload_image(folder=)` stores under a given
+Cloudinary folder with no player or tenure number; `copy_image(player_data, source, *, folder)`
+stores a new copy of one of the player's pictures (used by face portraits, folder
+`FACE_PORTRAIT_FOLDER`) and checks again with the size Cloudinary reports, destroying the asset
+and refusing when that passes the quota. SQLite does not lock rows, so the concurrency is
+proved on Postgres.
 
 ### Gallery (`/api/roster/tenure-media/`, #4151)
 

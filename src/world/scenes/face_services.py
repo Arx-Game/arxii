@@ -14,6 +14,7 @@ from django.db import transaction
 from django.db.models import QuerySet
 
 from evennia_extensions.models import Media, MediaType, PlayerData
+from server.conf.mush_markup import normalize_mush_markup
 from world.forms.models import AlternateSelf
 from world.roster.models import TenureMedia
 from world.roster.services.gallery_services import FACE_PORTRAIT_FOLDER, CloudinaryGalleryService
@@ -63,7 +64,7 @@ def set_persona_description(persona: Persona, text: str) -> None:
     if persona.persona_type == PersonaType.PRIMARY:
         msg = "Your true face is described on your character sheet."
         raise FaceError(msg)
-    persona.description = text
+    persona.description = normalize_mush_markup(text)
     persona.save(update_fields=["description"])
 
 
@@ -102,7 +103,8 @@ def set_face_portrait(
     with transaction.atomic():
         new_media = _stored_portrait(player_data, media=media, image_file=image_file)
         previous = _write_portrait(face, persona, new_media)
-        for old in previous:
+        # One picture often sits on both a persona and its alternate self; it is deleted once.
+        for old in {media.pk: media for media in previous}.values():
             _delete_if_unused_face_copy(old, player_data)
 
 

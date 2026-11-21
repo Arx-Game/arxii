@@ -257,7 +257,8 @@ class PersonaMenuSerializer(serializers.Serializer):
 
     persona_id = serializers.IntegerField(source="persona.pk")
     # The face's own prose for its card (#4033): a mask's description, empty for the true face
-    # and for a mask whose player wrote none. The same answer ``look`` gives an onlooker.
+    # and for a mask whose player wrote none. The card shows the mask to everyone, including a
+    # viewer who has seen through it; only ``look`` returns to the real description then.
     description = serializers.SerializerMethodField()
     is_self = serializers.BooleanField()
     scene_id = serializers.SerializerMethodField()

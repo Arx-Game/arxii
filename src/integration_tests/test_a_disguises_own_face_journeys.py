@@ -446,6 +446,17 @@ class TheMasksOwnDescription(DisguiseFaceCase):
         self.assertIn(REAL_DESCRIPTION, mine)
         self.assertNotIn(MASK_DESCRIPTION, mine)
 
+    def test_markup_in_a_description_is_normalized_like_the_real_one(self) -> None:
+        response = self.ysmay_api().post(
+            SET_DESCRIPTION,
+            {"persona_id": self.mask.pk, "description": "Slim.%rGrey cloak."},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            self.mask.__class__.objects.get(pk=self.mask.pk).description, "Slim.\nGrey cloak."
+        )
+
     def test_a_mask_with_no_description_shows_nothing_and_a_blank_clears_one(self) -> None:
         self.assertNotIn("scar", self.hobb_looks())
         self.assertEqual(self.hobb_reads_sheet()["appearance"]["description"], "")
@@ -555,6 +566,52 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         self.assertEqual(persona.thumbnail_url, self.with_persona.thumbnail.cloudinary_url)
         self.assertIn("/faces/", response.json()["thumbnail_url"])
         self.assertEqual(response.json()["persona_id"], persona.pk)
+
+    def test_replacing_a_forms_portrait_twice_deletes_its_one_copy_once(self) -> None:
+        """The form and its persona share one picture; replacing it must not delete it twice."""
+        self.assertEqual(
+            self.set_portrait(self.with_persona, media_id=self.her_picture(size=5).pk).status_code,
+            200,
+        )
+        first = Persona.objects.get(pk=self.with_persona.persona_id).thumbnail
+
+        again = self.set_portrait(self.with_persona, media_id=self.her_picture(size=6).pk)
+
+        self.assertEqual(again.status_code, 200, again.content)
+        self.assertFalse(Media.objects.filter(pk=first.pk).exists())
+        self.assertEqual(self.cloudinary.destroyed, [first.cloudinary_public_id])
+
+    def test_a_forms_picture_is_read_only_on_the_face_that_is_presented(self) -> None:
+        """A hidden face of the same character must not read the form's picture too."""
+        self.set_portrait(self.bare, media_id=self.her_picture().pk)
+        self.bare.refresh_from_db()
+        self.wear(self.bare)
+
+        listed = self.ysmay_api().get(f"/api/personas/?character_sheet={self.sheet.pk}").json()
+        by_name = {row["name"]: row["thumbnail_media_url"] for row in listed["results"]}
+
+        self.assertEqual(by_name["Owl Mask"], self.bare.thumbnail.cloudinary_url)
+        self.assertNotEqual(by_name["Ysmay"], self.bare.thumbnail.cloudinary_url)
+        self.assertNotEqual(by_name["Ashen Wolf"], self.bare.thumbnail.cloudinary_url)
+
+    def test_a_worn_form_with_no_persona_shows_its_picture_in_poses_never_the_real_face(
+        self,
+    ) -> None:
+        self.set_portrait(self.bare, media_id=self.her_picture().pk)
+        self.bare.refresh_from_db()
+        # Her barefaced face is the one presented, with the real look copied onto it.
+        self.sheet.primary_persona.thumbnail_url = self.real_url
+        self.sheet.primary_persona.save(update_fields=["thumbnail_url"])
+        self.telnet(self.ysmay, "persona Ysmay")
+        self.telnet(self.ysmay, "scene start")
+        self.wear(self.bare)
+        self.telnet(self.ysmay, "pose bares her teeth.")
+
+        feed = self.hobb_api().get("/api/interactions/?scene=1").json()
+        rows = feed["results"] if isinstance(feed, dict) else feed
+        urls = {row["persona"]["thumbnail_url"] for row in rows}
+        self.assertEqual(urls, {self.bare.thumbnail.cloudinary_url})
+        self.assertNotIn(self.real_url, str(feed))
 
     def test_a_form_with_no_persona_takes_a_portrait_and_no_description(self) -> None:
         response = self.set_portrait(self.bare, media_id=self.her_picture().pk)

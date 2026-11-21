@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from evennia.utils.utils import iter_to_str
 
+from flows.consts import GLANCE_MODE
 from flows.object_states.base_state import BaseState
 from world.items.services.appearance import visible_worn_items_for
 
@@ -100,6 +101,8 @@ class CharacterState(BaseState):
         place (#4033), empty when its player wrote none; the worn items and markings are
         separate display components and stay appended.
         """
+        if mode == GLANCE_MODE:
+            return ""
         if not self._identity_revealed_to(looker):
             return self._mask_description()
         return super().get_display_desc(mode=mode, **kwargs)

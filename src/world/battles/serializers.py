@@ -41,7 +41,7 @@ def _persona_thumbnail(character, persona, cached_conditions):
 
     if character is not None:
         return resolve_thumbnail(character, persona=persona, cached_conditions=cached_conditions)
-    return persona.thumbnail.cloudinary_url if persona.thumbnail_id else None
+    return persona_face_url(persona) or None
 
 
 class FortificationSerializer(serializers.ModelSerializer):

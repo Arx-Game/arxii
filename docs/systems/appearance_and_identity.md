@@ -109,6 +109,24 @@ artist changes persona with an *identical* body; a curse changes the body and
   now, so a mask never shares a square with the face behind it. Combat's roster applies the
   same rule to `character_sheet_id` (#4802), and the combat map matches bystanders by
   `persona_id`.
+- **A face has its own description and portrait (#4033, #4889).** A player writes a
+  description (`Persona.description`, one text, no history, 4000 characters) and picks or
+  uploads a portrait for each of her masks, and a portrait for each alternate self
+  (`world.scenes.face_services`). The reveal rule picks the prose: a viewer who has not seen
+  through the face reads `mask_description(persona)` where the real description used to be
+  hidden, in `look` (`CharacterState.get_display_desc`) and on the sheet (`_build_appearance`),
+  and the worn items and markings stay appended; a viewer who has seen through it, the owner
+  and staff read the real one. A mask with no description shows only its short line. The
+  portrait is one picture everywhere: a pick is stored as a private copy under the opaque
+  `faces/` Cloudinary folder (no player or character number in its URL, no gallery owner, no
+  media id in any payload) and counts against the player's storage; `persona_face_url` (poses,
+  combat and battle rows, the persona list) and `resolve_thumbnail` (room state, the sheet's
+  persona entries) both end in `placeholder_portrait_url()` for a face that hides the real one
+  and has no picture: staff's `FacePlaceholderConfig.placeholder`, else a built-in grey
+  silhouette, never a letter and never the real face. A worn alternate self hides the real
+  face the same way, and its picture reaches only the face presented now. The sheet payload's
+  real-character fields (`profile_picture`, `looks`, `viewer_is_friend`, `current_residence`)
+  are withheld from a viewer of a mask or a worn alternate self (`shows_real_face`).
 - **Two kinds of secret**, both driving mystery loops:
   - **Hidden link** between two *public* faces (Bob *is* Robert) — the protected
     unit; discovered via `PersonaDiscovery` / investigation. Showing each public

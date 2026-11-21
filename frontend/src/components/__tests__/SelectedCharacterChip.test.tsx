@@ -80,6 +80,7 @@ function persona(
     guise_protect: '',
     guise_fear: '',
     guise_background: '',
+    description: '',
   };
 }
 

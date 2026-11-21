@@ -1724,6 +1724,15 @@ descriptor overlay, cosmetic editing, and shapeshift slots.
   render composition (viewer-gated); real-vs-fake truth ledger; cosmetic vs disguise;
   PC-to-PC identification loop (familiarity-staged intellect+Investigation check vs.
   the illusion-piercing contest, kept distinct)
+- **A face's own description and portrait (#4033, #4889, BUILT):** `Persona.description`
+  (`mask_description`, read by `look` and the sheet for a viewer who has not seen through the
+  face), `world.scenes.face_services` (`set_persona_description`, `set_face_portrait`,
+  `sync_persona_portrait`, `pickable_portrait_media`), `FacePlaceholderConfig` +
+  `placeholder_portrait_url` / `persona_face_url` (`world.conditions.thumbnail_services`),
+  `CloudinaryGalleryService.copy_image` and `enforce_player_media_limits` under
+  `lock_player_media` (`world.roster.services.gallery_services`), the `set-description`,
+  `set-portrait` and `portrait-choices` persona actions and the alternate self's `set-portrait`.
+  See [appearance_and_identity.md](appearance_and_identity.md) and [scenes.md](scenes.md).
 - **Status:** design (slices 1-4); **slice 5 (PC-to-PC identification loop) BUILT,
   #1107** — `identify` registry action + telnet `CmdIdentify` + `PersonaMenu`
   web dispatch; depends on #1044. **Look now gated the same way as the sheet (#4030,

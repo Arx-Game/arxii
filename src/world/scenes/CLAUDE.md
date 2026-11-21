@@ -24,6 +24,13 @@ the unified Persona identity system, and non-combat scene rounds.
   See "Scene Administration" in `docs/systems/scenes.md` for the full design.
 - **`Persona`**: Unified identity model with PersonaType (PRIMARY/ESTABLISHED/TEMPORARY/ALTERNATE). FK to CharacterSheet
   (source of truth); partial unique constraint ensures one PRIMARY per sheet
+- **`Persona.description`** (#4033): a mask's own prose, written by its player through
+  `face_services.set_persona_description`; read only by `look` and the sheet via
+  `persona_display.mask_description` (PRIMARY has none). **`FacePlaceholderConfig`** (#4889,
+  singleton): the one picture a face with no portrait shows, `get_face_placeholder_config()`;
+  `face_services.set_face_portrait` writes a face's portrait (a private copy under the opaque
+  `faces/` folder, through the one upload limit) and `sync_persona_portrait` sets a persona's
+  `thumbnail` and `thumbnail_url` together.
 - **`PersonaDiscovery`**: Records that a character discovered two personas are the same person
 - **`Block`** (#1278): one player blocking another, persona-scoped by default (`blocker_persona` ↔
   `blocked_persona`) with an `account_level` opt-in; keyed on `PlayerData` so it follows the person

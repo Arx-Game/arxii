@@ -920,7 +920,9 @@ class FacePortraitBodySerializer(serializers.Serializer):
     def get_fields(self) -> dict[str, serializers.Field]:
         fields = super().get_fields()
         request = self.context.get("request")
-        player_data = PlayerData.objects.filter(account=request.user).first() if request else None
+        # The schema generator builds this with an anonymous request; it has no pictures.
+        signed_in = request is not None and request.user.is_authenticated
+        player_data = PlayerData.objects.filter(account=request.user).first() if signed_in else None
         fields["media_id"].queryset = pickable_portrait_media(player_data)
         return fields
 

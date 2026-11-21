@@ -1540,7 +1540,7 @@ def _resolve_persona_thumbnail(
     try:
         character = persona.character_sheet.character
     except AttributeError:
-        return persona.thumbnail.cloudinary_url if persona.thumbnail_id else None
+        return persona_face_url(persona) or None
     return resolve_thumbnail(
         character,
         persona=persona,
@@ -2486,8 +2486,11 @@ class CharacterSheetSerializer(serializers.Serializer):
             "profile_picture": _build_profile_picture(sheet, active, shows_real_face),
             # #4151: the Gallery veils NSFW pictures for anyone who is not a friend; the
             # owner and staff count as friends here (they see everything plain).
-            "viewer_is_friend": privileged or access >= 1 or _viewer_is_friend(sheet, user),
-            "current_residence": _build_current_residence(sheet),
+            # Both name the real character to a viewer of a mask or a worn alternate self (a
+            # friend list that holds you, a home), so they follow the same rule as the portrait.
+            "viewer_is_friend": shows_real_face
+            and (privileged or access >= 1 or _viewer_is_friend(sheet, user)),
+            "current_residence": _build_current_residence(sheet) if shows_real_face else None,
             # #3898 — the plate: which images the character can wear, and the ground
             # colour it is printed on. `plate_ink` is OOC chrome and ungated; it says
             # nothing about the character, only how their page is printed.

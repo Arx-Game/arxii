@@ -154,6 +154,7 @@
   - item_templates <- items.ItemTemplate
   - item_instances <- items.ItemInstance
   - persona_thumbnails <- scenes.Persona
+  - face_placeholder_configs <- scenes.FacePlaceholderConfig
 
 ### ObjectDisplayData
 **Foreign Keys:**
@@ -9673,6 +9674,11 @@
 ### DistinctionPersonaGrant
 **Foreign Keys:**
   - distinction -> distinctions.Distinction [OneToOne]
+
+### FacePlaceholderConfig
+**Foreign Keys:**
+  - placeholder -> evennia_extensions.Media [FK] (nullable)
+  - updated_by -> evennia.AccountDB [FK] (nullable)
 
 ### Friendship
 **Foreign Keys:**
