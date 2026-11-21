@@ -9,10 +9,11 @@ standoff proposal is a GM decision prompt, and GM-run is derived), and ADR-4361-
 placement's profile is stamped on each opponent at spawn), and ADR-4373-A (a named NPC's
 group reads its persona live and stamps nothing on it), and ADR-4415-A (a broken hold asks
 the NPC's cause again, and the cause decides), and ADR-4441-A (a player character stands as a
-persona group only on opt-in). Issue #4145 (missions),
+persona group only on opt-in), and ADR-4323 (the terms that end a standoff pay, and nothing
+before them does). Issue #4145 (missions),
 #4354 (GM-run scenes), #4361 (placement edits and inherited faction rules), #4373 (named
 NPCs and the language gate), #4415 (Hunger, Hatred, Territory and the broken hold), #4441
-(player-character profiles), umbrella #4121.
+(player-character profiles), #4323 (what ending a standoff earns), umbrella #4121.
 Later slices are listed at the end.
 
 ## Lifecycle
@@ -55,8 +56,9 @@ Later slices are listed at the end.
 |---|---|
 | `CreatureDrive` (:28) | A property a creature template wants, with `DriveStrength` (1 Minor, 2 Major, 3 Defining). Unique per template and property. |
 | `FactionRule` (:62, was `RegardRule`, renamed #4354) | How a group stands toward particular characters: predicate `rule` (the one ratified JSON field, ADR-0007), `deed_archetype` FK, `difficulty_shift_bands`, `drive` + `drive_shift`, `cause_effect` (#4415, `CauseEffect`: NONE, SUPPRESS, PROVOKE; was the boolean `suppresses_cause`), `angle_text` (was `spark_text`), `revealed_text`. Owned by exactly one of `creature_template`, `organization` or `society` (#4361, check constraint `faction_rule_one_owner`). |
-| `StandoffApproach` (:141) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `is_verbal` (#4373: spoken, so the language gate applies), `archetypes`, `display_order`, and (#4759) `target_condition` / `ally_condition`, nullable `ConditionTemplate` FKs a successful press lays on its target / an ally of the actor. Laid by `standoff_press` since #4808 (see Press). |
-| `StandoffTerms` (:195) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `critical_effect` (applied instead on a critical), `required_drive`, `difficulty_shift_bands`, `archetypes`, `display_order`. |
+| `StandoffApproach` (:141) | A press: `check_type`, `capability` (aims at drives through `Application`), `sway_target` modifier target, `damages_morale`, `is_verbal` (#4373: spoken, so the language gate applies), `archetypes` (stored; no feature reads an approach's archetypes, because only the ending terms pay, #4323), `display_order`, and (#4759) `target_condition` / `ally_condition`, nullable `ConditionTemplate` FKs a successful press lays on its target / an ally of the actor. Laid by `standoff_press` since #4808 (see Press). |
+| `StandoffTerms` (:195) | `effect` (`TermsEffect`: PASS, FLEE, TURN, TOLL), `critical_effect` (applied instead on a critical), `required_drive`, `difficulty_shift_bands`, `archetypes` (#4323: the archetypes of the deed these terms make when they end the standoff), `display_order`. |
+| `StandoffEndingAward` (#4323) | An `OutcomeTierAward`: one row per roll result, naming the `DramaticMomentType` the ending terms count as at that result and the `legend_value` of the deed a witnessed ending writes (0 none). A result with no row pays nothing. Staff author it in admin; the Required content page lists it (TUNING `standoff-ending-awards`). |
 | `StandoffConfig` (:257) | Singleton: `read_check_type`, `terms_check_type`, `pass_condition`, `turn_condition`, `botch_force_bands`, `band_force_percent`, `over_level_percent_per_tier`, `falter_force_percent`, `break_force_percent`, and (#4415) `hunger_margin_step` (default 10) and `territory_patience` (default 3, at least 1). `load()` returns it. |
 | `StandoffApproach.casts_technique` / `StandoffConfig.terms_ease_faltering`, `terms_ease_broken` | #4147: a casting approach (the display of power) and the bands terms ease by morale (see "Display of power and morale"). |
 | `StandoffCauseGloss` (:338, #4354) | The one-line player-facing gloss under a revealed cause, one row per `CauseKind`, authored in admin (was a hardcoded dict). |
@@ -224,6 +226,38 @@ admins in `world/standoffs/admin.py`.
   `broadcast_action_outcome` (web and telnet). Refusals announce nothing. Admin inlines sit
   on the approach and terms pages. Distinct from `NPCReactionLine` (NPC role, banded on a
   character metric).
+- **What ending a standoff earns** (#4323, ADR-4323; `services/ending.py`, `pay_standoff_ending`).
+  Only the terms whose acceptance settles the last live group pay: a read, a press, an earlier
+  group's terms, a fight that breaks out and a group that empties pay nothing, so a long press
+  cannot be farmed. `_terms_accepted` calls it before `complete_standoff`, inside the verb's
+  transaction, and the grade is that terms check's `CheckOutcome`. Three things follow, none with
+  an amount in code. (1) The ending is one social `KindlingAct` fed to `award_kindled_deeds`,
+  read with an explicit `KindlingContext` of no combat round (so `DURING_NEGOTIATION` holds, as
+  it does for the standoff's own rolls) and the character's live mission; it pays through the
+  staff-authored `KindledDeedAward` and `KindledStrengthTier` rows exactly as any kindled deed
+  does, and nothing in it names a covenant or a role. (2) `StandoffEndingAward` for the result
+  names a `DramaticMomentType`; `create_dramatic_moment_tag` grants the character's own
+  resonance (`_resolve_moment_resonance`, never one fixed by content) and renown, with the
+  terms' `archetypes` standing in for the moment type's own when the terms carry any. A spent
+  per-scene cap on the moment type pays nothing. (3) When the ending was witnessed, a legend
+  deed of `legend_value` is written for the persona the character presents
+  (`create_legend_event`, titled "<terms>: <group>", the terms' archetypes on it, which is what
+  `FactionRule.deed_archetype` reads). Witnessed means the scene list
+  (`scene_witness_personas`, the one witness notion legend uses) holds a character some other
+  account plays; a narrator, a story NPC nobody plays and the actor's own account's characters
+  do not count. A standoff with a group that is a character the actor's own account plays pays
+  nothing at all. The room reads one credit line after the terms line ("Ysmay ends it with Spare
+  Them: it is written into their legend.", or "their name carries further" when no deed was
+  written), sent by the action layer through `broadcast_action_outcome` like every other standoff
+  line (`StandoffActionResult.credit_line`). It names only what is public by nature; the
+  resonance that grew goes to the actor alone, as a private narrative message ("You earned 30
+  Mercy."), like the kindled deed's own "You earned ..." line. `legend_value` is a flat authored
+  worth per result (the deed carries station 0, so it is legend for fame and spread and never
+  advances a level; advancement needs a priced stakes contract, ADR-0249); the roll is the
+  grade. A spent per-scene cap on the moment type, which a GM's hand-tag on the same type also
+  spends, pays nothing, a deed included. The renown award applies the terms' archetypes to
+  society reputation at once and the deed applies them again as it spreads, the same pairing
+  `fire_renown_award` already makes for a mission deed.
 - **Angles**: acting on an angle (press or terms by the matched character while that rule
   shifts their grade) auto-records the share.
 
@@ -582,6 +616,8 @@ Plan from #4121 (the proposed slice cut there):
 - **Slice 3, named NPCs and language:** built in #4373 (section above).
 - **Slice 4, the remaining causes and the broken hold:** built in #4415 (section above).
 - **Slice 5:** opt-in profiles for player characters: built in #4441 (section above).
-- **Separately:** resonance from acts via archetype tags. `StandoffApproach.archetypes` and
-  `StandoffTerms.archetypes` are stored for it and unread today.
+- **Resonance from acts via archetype tags:** built in #4323 (see "What ending a standoff
+  earns"); only `StandoffTerms.archetypes` is read, `StandoffApproach.archetypes` stays unread.
+- **A GM confirming the ending's pay in a GM-run standoff** (the issue's PRD) is not built: the
+  ending pays on its own.
 - **Reaction narration** (deviation 5) has no slice yet.

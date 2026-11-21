@@ -83,3 +83,7 @@ _Avoid_: NPC reaction line (`NPCReactionLine` is a different thing: an NPC role'
 **Profile** (player character, `CharacterStandoffProfile`, #4441, ADR-4441-A):
 A player's own standoff entry for their character: whether other player characters may read and press them (`opted_in`), a cause and drives picked from the creature catalogs. Only an opted-in player character can be a group. It cannot change while the character stands in a standoff.
 _Avoid_: creature template (shared authored content), flag, consent form
+
+**Ending terms** / **Ending award** (`StandoffEndingAward`, #4323, ADR-4323):
+The terms whose acceptance settles the last live group are the one act that pays for ending a standoff. The ending award is the staff-authored row for the roll's result that names the dramatic moment those terms count as (the character's own resonance and renown) and the worth of the legend deed a witnessed ending writes. A result with no row pays nothing.
+_Avoid_: reward (any amount), per-press pay (nothing before the ending pays), completion bonus

@@ -6326,6 +6326,7 @@
 **Pointed to by:**
   - tags <- magic.DramaticMomentTag
   - suggestions <- gm.GMPrompt
+  - standoff_ending_awards <- standoffs.StandoffEndingAward
 
 ### DriftConfig
 **Foreign Keys:**
@@ -11440,6 +11441,11 @@
   - pass_condition -> conditions.ConditionTemplate [FK] (nullable)
   - turn_condition -> conditions.ConditionTemplate [FK] (nullable)
 
+### StandoffEndingAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+  - moment_type -> magic.DramaticMomentType [FK]
+
 ### StandoffGroup
 **Foreign Keys:**
   - encounter -> combat.CombatEncounter [FK]
@@ -12059,6 +12065,7 @@
   - being_answers <- worship.Answer
   - project_outcomes <- projects.Project
   - project_contributions <- projects.Contribution
+  - arxii_standoffendingaward <- standoffs.StandoffEndingAward
   - beat_completions <- stories.BeatCompletion
 
 ### CheckRank
