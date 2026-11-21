@@ -1545,6 +1545,10 @@ def seed_strength_spec(*, username: str) -> StrengthSpecSeed:  # noqa: PLR0915 -
             character_sheet__character__db_key=STRENGTH_SPEC_CASTER
         ).first()
         if entry is None:
+            # The three strengths a migration seeds on a real database; a database built
+            # from the models (CI's, a real-testing one) has none, so they are written here.
+            for rank, tier_name in ((1, "Faint"), (2, "Strong"), (3, "Blazing")):
+                KindledStrengthTier.objects.get_or_create(rank=rank, defaults={"name": tier_name})
             blazing = KindledStrengthTier.objects.get(rank=3)
             blazing.cast_power = 6
             blazing.earn_percent = 100
