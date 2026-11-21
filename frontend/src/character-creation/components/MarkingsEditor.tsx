@@ -25,7 +25,9 @@ import {
   listDraftMarkings,
   type DraftMarkingCreate,
 } from '../api';
+import { distinctionKeys } from '@/hooks/useDistinctions';
 import { Entry, EntryList, Field } from '../folio';
+import { characterCreationKeys } from '../queries';
 import { FeatureDistinctions } from './offers/FeatureDistinctions';
 import type { CharacterDraft } from '../types';
 
@@ -89,7 +91,21 @@ export function MarkingsEditor({ draft }: MarkingsEditorProps = {}) {
   });
   const removeMutation = useMutation({
     mutationFn: deleteDraftMarking,
-    onSuccess: () => void invalidate(),
+    onSuccess: () => {
+      void invalidate();
+      // The server drops every quality held on the marking in the same request and
+      // refunds its points (#3739), so the picks and every total change with it. Left
+      // with the old list, the page kept counting the removed marking's points and
+      // sent its pick again with the next quality clicked, which the server refuses.
+      if (!draft) return;
+      void queryClient.invalidateQueries({
+        queryKey: distinctionKeys.draftDistinctions(draft.id),
+      });
+      void queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
+      void queryClient.invalidateQueries({
+        queryKey: characterCreationKeys.draftCGPoints(draft.id),
+      });
+    },
   });
 
   // The disabled door says why (accessibility floor, #3630). Only the name is

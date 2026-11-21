@@ -6,6 +6,7 @@ from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect, FilteredSelectMultiple
 from django.forms import inlineformset_factory
+from django.utils.text import slugify
 
 from world.character_creation.constants import ENEMY_MARKING_DEGREES
 from world.character_creation.models import Beginnings, DistinctionOffer
@@ -37,6 +38,20 @@ class DistinctionForm(forms.ModelForm):
     def clean_cg_max_rank(self) -> int:
         """Blank means 0 -- the model's own "no separate CG cap" value."""
         return self.cleaned_data.get("cg_max_rank") or 0
+
+    # The slug sits under the folded "More" section. Left to the ModelForm default it
+    # is required, and a required field the browser cannot focus stops Save with no
+    # message at all (#5241). Blank means "made from the name", as the table paste
+    # (``paste.py``) has always made it.
+    slug = forms.SlugField(
+        required=False,
+        max_length=100,
+        help_text="Blank means it is made from the name.",
+    )
+
+    def clean_slug(self) -> str:
+        """A blank slug is the name, slugified."""
+        return self.cleaned_data.get("slug") or slugify(self.cleaned_data.get("name", ""))
 
     class Meta:
         model = Distinction

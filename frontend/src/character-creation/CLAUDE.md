@@ -148,7 +148,11 @@ character-creation/
     │                        #   list are a dashed swatch or a "Distinctive" group
     ├── MarkingsEditor.tsx   # Markings (#2985): the form asks name, kind and region on one
     │                        #   line, kind and region as dropdowns (#5241); each saved
-    │                        #   marking carries the qualities line
+    │                        #   marking carries the qualities line. Removing a marking
+    │                        #   also refetches the draft's picks, the draft and its CG
+    │                        #   points: the server drops the marking's qualities in the
+    │                        #   same request, and a stale list was sent again with the
+    │                        #   next quality clicked and refused
     ├── IdentityStage.tsx    # Stage 9: Identity (concept, quote, worship); the name is a
     │                        #   read-only line since #4874, asked on Origin. The Background
     │                        #   is Final Touches' (#5178); this stage neither reads nor

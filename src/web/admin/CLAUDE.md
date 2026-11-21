@@ -1118,6 +1118,14 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   for both rather than relying on the transitive import). The widget also
   needs the jsi18n catalog (`{% url 'admin:jsi18n' %}` in `extrahead`,
   loaded automatically by `change_form.html` but not by `base_site.html`).
+- **Every field the form saves is drawn (#5241).** `DistinctionForm` is a ModelForm, so a
+  field it lists and `page.html` does not draw is posted absent and saved as off, 0 or
+  blank. The page shipped without `taken_per_feature`, `cg_max_rank` and
+  `final_touches_prompt`: none could be authored here, and every save cleared all three.
+  `BuilderEveryFieldTest` walks `DistinctionForm.base_fields` against the rendered page.
+  The slug is not required: blank means "made from the name" (`clean_slug`, as the table
+  paste makes it), because a required field under the folded "More" cannot be focused and
+  the browser then stops Save with no message.
 - **Rendering** - the top module's five main fields and the collapsed "More"
   fieldset (every other field the stock admin exposes) are plain
   `tuning-table` rows, not `admin/includes/fieldset.html` - "More" is a bare
