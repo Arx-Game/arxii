@@ -496,6 +496,7 @@ class CombatRoundContext(RoundContext):
     ) -> None:
         """Upsert a CombatRoundAction and clear any competing challenge declaration."""
         from world.magic.models import Technique  # noqa: PLC0415
+        from world.magic.specialization.services import resonance_on_gift_thread  # noqa: PLC0415
 
         if _EFFORT_LEVEL_KEY not in kwargs:
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
@@ -516,6 +517,9 @@ class CombatRoundContext(RoundContext):
         from world.combat.services import declare_action  # noqa: PLC0415
         from world.combat.services.declarations.declaration_validation import (  # noqa: PLC0415
             DeclarationRefusedError,
+        )
+        from world.combat.services.declarations.declare_action import (  # noqa: PLC0415
+            refuse_resonance_off_thread,
         )
         from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
@@ -545,6 +549,12 @@ class CombatRoundContext(RoundContext):
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:
             _refuse_weapon_technique(technique)
+            # Refused before the pull is committed, as telnet does: declare_action would
+            # refuse it too, but only after the pull had changed an identity-mapped balance.
+            try:
+                refuse_resonance_off_thread(participant, technique, cast_resonance)
+            except DeclarationRefusedError as exc:
+                raise ActionDispatchError(exc.code) from exc
             self._commit_focused_pull(participant, technique, kwargs)
 
         # The frontend dispatches the focused action and each passive as SEPARATE
@@ -569,9 +579,18 @@ class CombatRoundContext(RoundContext):
         ) = self._merge_slot_into_existing(slot, technique, existing, kwargs)
 
         # The focused cast and each passive arrive as separate calls; a passive call names
-        # no resonance and must not wipe the one the focused cast chose.
+        # no resonance and must not wipe the one the focused cast chose. The Gift's thread may
+        # have lost it since, and a passive call is never refused over a resonance it did not
+        # name: a carried pick the thread no longer holds is dropped, and the cast then runs in
+        # the default (#5231).
         if cast_resonance is None and slot != CombatActionSlot.FOCUSED and existing:
-            cast_resonance = existing.cast_resonance
+            cast_resonance = (
+                resonance_on_gift_thread(
+                    participant.character_sheet.character, focused, existing.cast_resonance
+                )
+                if focused is not None
+                else None
+            )
 
         effort = (
             kwargs.get(_EFFORT_LEVEL_KEY)

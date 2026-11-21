@@ -30,10 +30,14 @@ if TYPE_CHECKING:
     from world.magic.models import FuryTier, Resonance, Technique
 
 
-def _refuse_resonance_off_thread(
+def refuse_resonance_off_thread(
     participant: CombatParticipant, technique: Technique | None, resonance: Resonance | None
 ) -> None:
-    """Refuse a declared cast resonance the Gift's thread holds no row for (#5231)."""
+    """Refuse a declared cast resonance no thread her forms come from holds a row for (#5231).
+
+    The one refusal: ``declare_action`` runs it, and so do the doors that charge a pull before
+    declaring (the web dispatch, the telnet cast), so a refused choice is never charged.
+    """
     from world.magic.specialization.services import resonance_on_gift_thread  # noqa: PLC0415
 
     if technique is None or resonance is None or technique.gift_id is None:
@@ -168,7 +172,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
 
     # A resonance the cast is to be worked in must be one the Gift's thread holds (#5231).
     # Refused here, before anything is recorded or charged.
-    _refuse_resonance_off_thread(participant, focused_action, cast_resonance)
+    refuse_resonance_off_thread(participant, focused_action, cast_resonance)
 
     action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
