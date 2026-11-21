@@ -786,16 +786,24 @@ class Measured:
     results: dict[str, dict[str, RawResult]]
 
 
-def _baselines(args: Args, limit: int) -> tuple[Baseline, Baseline, Baseline]:
+def _baselines(args: Args, limit: int) -> tuple[Baseline, Baseline, Baseline, Baseline]:
+    """Run each group once on unchanged code: kept, units timed, units ids, marked ids.
+
+    The timed units run uses the default verbosity, which is what every graded run uses.
+    It also warms the runner's schema cache, because a cache miss at verbosity 2 costs
+    minutes where a miss at the default verbosity costs under one.
+    """
     print("Baseline: kept group on unchanged code.", file=sys.stderr)
     kept = _baseline(_test_command(args.tier, args.kept), "kept", limit, must_pass=True)
     print("Baseline: units group on unchanged code.", file=sys.stderr)
-    units_cmd = _test_command(args.tier, args.units, ["--verbosity", "2"])
-    units = _baseline(units_cmd, "units", limit, must_pass=True)
+    units = _baseline(_test_command(args.tier, args.units), "units", limit, must_pass=True)
+    print("Baseline: unit test ids.", file=sys.stderr)
+    ids_cmd = _test_command(args.tier, args.units, ["--verbosity", "2"])
+    ids = _baseline(ids_cmd, "units", limit, must_pass=True)
     print("Baseline: marked regression tests among the units.", file=sys.stderr)
     marked_cmd = _test_command(args.tier, args.units, ["--tag", "regression", "--verbosity", "2"])
     marked = _baseline(marked_cmd, "regression", limit, must_pass=False)
-    return kept, units, marked
+    return kept, units, ids, marked
 
 
 def _generate(
@@ -823,7 +831,7 @@ def _execute(out: Path, group: str, count: int) -> dict[str, RawResult]:
 def _measure(args: Args, source: Path, original: bytes, max_minutes: int) -> Measured:
     out = _prepare_out(args, source)
     _check_operators()
-    kept_base, units_base, marked_base = _baselines(args, max_minutes * 60)
+    kept_base, units_base, ids_base, marked_base = _baselines(args, max_minutes * 60)
     timeouts = {"kept": 3 * kept_base.seconds + 60, "units": 3 * units_base.seconds + 60}
     changes, dropped, generated = _generate(args, source, original, out, timeouts)
     estimate = len(changes) * (kept_base.seconds + units_base.seconds) / 60
@@ -847,7 +855,7 @@ def _measure(args: Args, source: Path, original: bytes, max_minutes: int) -> Mea
         kept_seconds=kept_base.seconds,
         units_seconds=units_base.seconds,
         marked=set(_TEST_ID_RE.findall(marked_base.output)),
-        baseline_ids=set(_TEST_ID_RE.findall(units_base.output)),
+        baseline_ids=set(_TEST_ID_RE.findall(ids_base.output)),
         results=results,
     )
 
