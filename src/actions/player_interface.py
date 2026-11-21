@@ -713,7 +713,8 @@ def _combat_actions(
     # Per-technique performability filter: skip techniques the character cannot
     # currently perform (dead, or any unmet capability requirement). Combat
     # techniques per character are bounded (a handful), so a clear per-technique
-    # loop is acceptable for v1 — no batching needed.
+    # loop is acceptable for v1. What is the same for every technique (her kindling, read
+    # for the cast resonance options) is read once before the loop, never inside it.
     # Soulfray + fury declaration context (#1543). One soulfray lookup per
     # character; fury tiers are a small authored catalog; anchors are the
     # caster's consented relationships with a non-zero bond.
@@ -723,6 +724,7 @@ def _combat_actions(
     )
     from world.magic.services.cast_resonance_options import (  # noqa: PLC0415
         cast_resonance_options,
+        kindling_by_resonance,
     )
     from world.magic.services.magic_skills import cast_check_type  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
@@ -757,6 +759,10 @@ def _combat_actions(
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
 
     lethal = ctx.participant.encounter.is_lethal if isinstance(ctx, CombatRoundContext) else True
+    # Her kindling is the same for every technique: read it once, in this round when there is one.
+    kindling = kindling_by_resonance(
+        sheet, resolution=ctx if isinstance(ctx, CombatRoundContext) else None
+    )
     result: list[PlayerAction] = []
     # #5125: the Primum lines of one gift in this room, read once for all its techniques.
     lines_cache: dict = {}
@@ -800,7 +806,9 @@ def _combat_actions(
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
                 eligible_fury_resonances=eligible_fury_resonances,
-                cast_resonance_options=tuple(cast_resonance_options(character, technique)),
+                cast_resonance_options=tuple(
+                    cast_resonance_options(character, technique, sheet=sheet, kindling=kindling)
+                ),
                 is_ultimate=technique.is_ultimate,
                 cast_preview=_cast_preview(
                     character, technique, lethal=lethal, lines_cache=lines_cache

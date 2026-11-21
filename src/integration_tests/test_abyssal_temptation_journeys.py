@@ -105,6 +105,7 @@ from world.vitals.models import CharacterVitals
 
 CAST_URL = "/api/action-requests/cast/"
 KINDLED_LINE = "kindled cast power"
+PRAEDARI_COLOR = "#7A1F5C"
 
 
 def _corruption_condition(resonance) -> None:
@@ -166,7 +167,9 @@ class TheAbyssalTemptation(JourneyCase):
         self.set_the_affinity_numbers()
         Affinity.objects.clear_cache()
         self.warmth = ResonanceFactory(name="Warmth", affinity=self.primal)
-        self.praedari = ResonanceFactory(name="Praedari", affinity=self.abyssal)
+        self.praedari = ResonanceFactory(
+            name="Praedari", affinity=self.abyssal, color_hex=PRAEDARI_COLOR
+        )
         self.room = self.make_room("The Lantern")
         self.scene = SceneFactory(room=self.room)
 
@@ -332,7 +335,8 @@ class TheAbyssalTemptation(JourneyCase):
         self.assertTrue(praedari["stronger"])
         self.assertTrue(praedari["adds_corruption"])
         # The colour is the staff-set one; only the strength word is sent, never a number.
-        self.assertEqual(praedari["color_hex"], self.praedari.color_hex)
+        self.assertEqual(praedari["color_hex"], PRAEDARI_COLOR)
+        self.assertEqual(warmth["color_hex"], "#8C8C8C")
         self.assertNotIn("kindled_cast_power", praedari)
         self.assertNotIn("cast_power", praedari)
 

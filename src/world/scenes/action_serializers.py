@@ -414,9 +414,13 @@ class CastableTechniqueSerializer(serializers.Serializer):
         character = self.context.get("character")
         if character is None:
             return []
-        return list(
-            CastResonanceOptionSerializer(cast_resonance_options(character, obj), many=True).data
+        options = cast_resonance_options(
+            character,
+            obj,
+            sheet=self.context.get("character_sheet"),
+            kindling=self.context.get("cast_kindling"),
         )
+        return list(CastResonanceOptionSerializer(options, many=True).data)
 
     def get_hostile(self, obj: Technique) -> bool:
         # Read off the same summary the block ships, so the two can never disagree.

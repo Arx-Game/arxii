@@ -30819,13 +30819,7 @@ export interface components {
       /** @description Which pulled resonance the burn comes from (#5066); needed only when the pull's threads mix resonances. */
       burn_resonance_id?: number | null;
     };
-    /**
-     * @description One resonance a cast may be worked in (#5231), for the scene cast panel and the combat
-     *     cast declaration; the picker sends ``resonance_id`` back as ``preferred_resonance_id``.
-     *
-     *     Lives here, beside the Fury option, because ``world.magic.serializers`` imports this
-     *     module. Only the strength word staff wrote is sent, never the number behind it.
-     */
+    /** @description One resonance a cast may be worked in, with its colour and its kindled strength word. */
     CastResonanceOption: {
       readonly resonance_id: number;
       readonly name: string;

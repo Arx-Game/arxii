@@ -944,6 +944,9 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
         Requires ?initiator_persona=<id> query param. Returns only techniques
         with an action_template (castable standalone) known by that character.
         """
+        from world.magic.services.cast_resonance_options import (  # noqa: PLC0415
+            kindling_by_resonance,
+        )
         from world.scenes.cast_services import (  # noqa: PLC0415
             castable_technique_links_for_sheet,
         )
@@ -983,6 +986,8 @@ class SceneActionRequestViewSet(PuppetActorMixin, viewsets.ModelViewSet):
             "character_techniques": {ct.technique_id: ct for ct in links},
             # #5125: the Primum lines of one gift here, read once for all its techniques.
             "substance_lines": {},
+            # #5231: her kindling, read once for the resonance options of every technique.
+            "cast_kindling": kindling_by_resonance(sheet),
         }
         return Response(
             CastableTechniqueSerializer(

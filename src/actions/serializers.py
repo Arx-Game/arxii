@@ -118,12 +118,11 @@ class FuryResonanceOptionSerializer(serializers.Serializer):
 
 
 class CastResonanceOptionSerializer(serializers.Serializer):
-    """One resonance a cast may be worked in (#5231), for the scene cast panel and the combat
-    cast declaration; the picker sends ``resonance_id`` back as ``preferred_resonance_id``.
+    """One resonance a cast may be worked in, with its colour and its kindled strength word."""
 
-    Lives here, beside the Fury option, because ``world.magic.serializers`` imports this
-    module. Only the strength word staff wrote is sent, never the number behind it.
-    """
+    # Lives here, beside the Fury option, because ``world.magic.serializers`` imports this
+    # module. The picker sends ``resonance_id`` back as ``preferred_resonance_id``. Only the
+    # strength word staff wrote is sent, never the number behind it.
 
     resonance_id = serializers.IntegerField(source="resonance.pk", read_only=True)
     name = serializers.CharField(source="resonance.name", read_only=True)
