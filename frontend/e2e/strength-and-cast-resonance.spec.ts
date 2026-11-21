@@ -34,9 +34,21 @@ import { test, expect, type Locator, type Page } from '@playwright/test';
  * (each 10 tenths, so 1.0) = 20, of which the caster, 20 percent Abyssal and under the
  * full-from share of 50, takes the light 10 percent: 20 * 10 / 100 = 2.
  *
- * The casting test runs once per fresh seed. Each cast worked in Praedari earns her 15 more
- * Praedari, so after the fourth her Abyssal share reaches 50 percent and she takes the full
- * corruption (20) instead of the light part (2); the spec's "+ 2" holds only before then.
+ * Also expected, from the fixes made after the first live run: the resonance step stays open
+ * once the player has picked in it (a draft that arrives already complete shows it folded, as
+ * any finished step is); "hurting" presses no card, saves nothing and leaves the slider off
+ * until the player picks; the aura caption and its sentence read at 4.5 to 1 or better on the
+ * plate; a draft with nothing picked says "Pick the feeling that gives you strength."; the
+ * result of a cast worked in a kindled resonance says "Your kindled Praedari strengthened the
+ * cast." above the power ledger, and the result of one worked in the usual resonance says no
+ * such thing; the "You earned N Praedari." line reaches her in the Messages section of her
+ * character sheet.
+ *
+ * Run it once per freshly seeded database, never twice on one. The first test changes Fera's
+ * colour and the draft's picks, and each cast worked in Praedari earns her 15 more Praedari, so
+ * after the fourth her Abyssal share reaches 50 percent and she takes the full corruption (20)
+ * instead of the light part (2); the "+ 2" holds only on a fresh seed. The workflow seeds a
+ * fresh database for every run.
  *
  * Screenshots go to docs/reviews/5231/ under the repo root only with EVIDENCE_SHOTS=1.
  */
@@ -45,8 +57,6 @@ const ACCOUNT = 'e2e_strength_account';
 const PASSWORD = 'TestPass123!';
 /** A vivid colour set through admin; the plate must draw it and not the default grey. */
 const ADMIN_COLOUR = '#D4421E';
-/** The default a resonance's colour starts at. */
-const DEFAULT_GREY = '#8c8c8c';
 
 interface Seed {
   draft_id: number;
@@ -89,6 +99,8 @@ const ABYSSAL_EIGHT = [
 const GIFT_STAGE = '6';
 const FEELING_QUESTION = 'Which feeling gives you strength';
 const OUTWARD_QUESTION = 'Which of these gives you strength';
+const STRENGTH_CASTER = 'Ysmay Vale';
+const NO_FEELING = 'Pick the feeling that gives you strength.';
 
 function readSeed(): Seed {
   return JSON.parse(
@@ -170,33 +182,59 @@ function card(group: Locator, name: string) {
   return group.getByRole('button', { name: new RegExp(`^${name}\\b`) });
 }
 
-/**
- * The resonance step's own entry in the Gift funnel. It is a closed fold once the step is
- * complete, so a player who has picked a feeling must open it again to go on. The spec opens
- * it the way a player does (a click on its heading), and records every time it had to.
- */
-async function openStep(page: Page, when: string) {
-  const entry = page
+/** The resonance step's own fold in the Gift funnel. */
+function stepEntry(page: Page) {
+  return page
     .locator('details.entry')
     .filter({ has: page.locator('.entry-name', { hasText: 'Your Resonance' }) });
+}
+
+/**
+ * A draft that arrives with the step already complete shows it folded, with its summary line,
+ * as any finished step is. The player opens it by clicking its heading.
+ */
+async function openFinishedStep(page: Page, summary: string) {
+  const entry = stepEntry(page);
   await expect(entry).toBeVisible({ timeout: 20000 });
-  // The fold opens while the resonance list is still loading and shuts when it arrives, so
-  // look again after the page has settled.
-  await page.waitForTimeout(1500);
-  if (await page.locator('.strength-step').isVisible()) return;
-  test.info().annotations.push({
-    type: 'FINDING: resonance step folded shut',
-    description: when,
-  });
-  await shot(entry, `finding-step-folded-${when.replace(/\W+/g, '-')}.png`);
+  await expect(entry.locator('.entry-gloss')).toHaveText(summary, { timeout: 20000 });
+  await expect(page.locator('.strength-step')).toBeHidden({ timeout: 10000 });
   await entry.locator('summary').click();
   await expect(page.locator('.strength-step')).toBeVisible();
+}
+
+/** The colour `css` names as [r, g, b], read through a canvas so any computed format works. */
+async function rgbOf(locator: Locator, property: 'color' | 'backgroundColor') {
+  return locator.evaluate((element, prop) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    const context = canvas.getContext('2d') as CanvasRenderingContext2D;
+    context.fillStyle = getComputedStyle(element)[prop as 'color'];
+    context.fillRect(0, 0, 1, 1);
+    const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+    return [r, g, b];
+  }, property);
+}
+
+/** WCAG contrast ratio between two [r, g, b] colours. */
+function contrastRatio(a: number[], b: number[]): number {
+  const luminance = ([r, g, bl]: number[]) => {
+    const [lr, lg, lb] = [r, g, bl].map((channel) => {
+      const c = channel / 255;
+      return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    });
+    return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+  };
+  const [light, dark] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (light + 0.05) / (dark + 0.05);
 }
 
 test.describe.configure({ mode: 'serial' });
 
 test.describe('what gives a character strength', () => {
   test.use({ viewport: { width: 1280, height: 900 } });
+  // Two logins, an admin context, two casts and a six-second wait between them.
+  test.setTimeout(90_000);
 
   test('creation: a feeling, a side and a balance, with the aura following', async ({
     page,
@@ -204,12 +242,6 @@ test.describe('what gives a character strength', () => {
   }) => {
     const seed = readSeed();
     await logIn(page, ACCOUNT, PASSWORD);
-    // A draft this spec left with picks starts again from none, so a rerun begins fresh.
-    const cleared = await page.request.patch(`/api/character-creation/drafts/${seed.draft_id}/`, {
-      headers: { 'X-CSRFToken': await csrfToken(page) },
-      data: { draft_data: { gift_resonance_weights: [] } },
-    });
-    expect(cleared.ok(), await cleared.text()).toBe(true);
     await page.goto('/characters/create');
     const step = page.locator('.strength-step');
     await expect(step).toBeVisible({ timeout: 20000 });
@@ -233,14 +265,12 @@ test.describe('what gives a character strength', () => {
     expect(grey.spread, `a grey plate, saw ${JSON.stringify(grey)}`).toBeLessThan(25);
     await shot(step, 'built-screen1-empty.png');
 
-    // A8, first form: nothing picked at all. The server's reason is recorded either way.
+    // A8, first form: nothing picked at all is refused in the player's words, in the API and
+    // in the contents rail beside the Gift stage.
     const fresh = await savedDraft(page, seed);
-    test.info().annotations.push({
-      type: 'stage 6 errors, nothing picked',
-      description: JSON.stringify(fresh.stage_errors[GIFT_STAGE]),
-    });
     expect(fresh.draft_data.gift_resonance_weights ?? []).toEqual([]);
-    expect((fresh.stage_errors[GIFT_STAGE] ?? []).length).toBeGreaterThan(0);
+    expect(fresh.stage_errors[GIFT_STAGE]).toEqual([NO_FEELING]);
+    await expect(page.locator('.toc-note').first()).toContainText(NO_FEELING);
 
     // A2: exactly one feeling at a time.
     const arderi = card(feelings(page), seed.feeling_name);
@@ -248,8 +278,16 @@ test.describe('what gives a character strength', () => {
     let saved = draftSaved(page);
     await arderi.click();
     expect((await saved).status()).toBe(200);
-    await openStep(page, 'after the first feeling is picked');
+    // The step stays open after the first pick, with no click on its heading: the second
+    // question, the slider and the plate are still in view.
+    await expect(step).toBeVisible();
+    await expect(
+      step.getByText('Does what you do to other people give you strength')
+    ).toBeVisible();
+    await expect(step.locator('input[type="range"]')).toBeVisible();
+    await expect(page.locator('.strength-aura canvas')).toBeVisible();
     await expect(arderi).toHaveAttribute('aria-pressed', 'true');
+    await shot(step, 'built-screen1-first-pick-step-open.png');
     await expect(feelings(page).locator('[aria-pressed="true"]')).toHaveCount(1);
     saved = draftSaved(page);
     await audax.click();
@@ -267,31 +305,23 @@ test.describe('what gives a character strength', () => {
       orange.b + 40
     );
 
-    // A3: "hurting" shows the eight Abyssal resonances.
+    // A3: "hurting" shows the eight Abyssal resonances and presses none of them: nothing is
+    // saved and the slider stays off until the player picks one herself.
     const hurting = step.getByRole('button', { name: 'Hurting them', exact: true });
-    saved = draftSaved(page);
     await hurting.click();
-    expect((await saved).status()).toBe(200);
     await expect(hurting).toHaveAttribute('aria-pressed', 'true');
     await expect(step.getByText(OUTWARD_QUESTION, { exact: true })).toBeVisible();
     for (const name of ABYSSAL_EIGHT) {
       await expect(card(outwards(page), name), `${name} is offered`).toBeVisible();
     }
     const slider = step.locator('input[type="range"]');
-    // Recorded as seen: whether the slider is on before the player picks an Abyssal card.
-    test.info().annotations.push({
-      type: 'slider enabled right after choosing hurting',
-      description: String(await slider.isEnabled()),
-    });
-    test.info().annotations.push({
-      type: 'abyssal cards pressed right after choosing hurting',
-      description: String(await outwards(page).locator('[aria-pressed="true"]').count()),
-    });
-    test.info().annotations.push({
-      type: 'abyssal card pressed right after choosing hurting',
-      description: await outwards(page).locator('[aria-pressed="true"]').innerText(),
-    });
-    await shot(step, 'finding-hurting-prepicked.png');
+    await expect(outwards(page).getByRole('button')).toHaveCount(8);
+    await expect(outwards(page).locator('[aria-pressed="true"]')).toHaveCount(0);
+    await expect(slider).toBeDisabled();
+    await page.waitForTimeout(1000); // time for a save, were one going to be sent
+    const afterSide = (await savedDraft(page, seed)).draft_data.gift_resonance_weights ?? [];
+    expect(afterSide, 'only the feeling is saved').toHaveLength(1);
+    await shot(step, 'built-screen1-hurting-chosen.png');
     const praedari = card(outwards(page), seed.outward_name);
     saved = draftSaved(page);
     await praedari.click();
@@ -319,15 +349,17 @@ test.describe('what gives a character strength', () => {
       type: 'plate at 8 and 2',
       description: JSON.stringify(mostlyOrange),
     });
-    test.info().annotations.push({
-      type: 'caption colours on the aura plate',
-      description: JSON.stringify(
-        await step.locator('.strength-named').evaluate((element) => ({
-          text: getComputedStyle(element).color,
-          plate: getComputedStyle(element.parentElement as HTMLElement).backgroundColor,
-        }))
-      ),
-    });
+    // The caption and its sentence read on the night plate at 4.5 to 1 or better.
+    const plateColour = await rgbOf(step.locator('.strength-plate'), 'backgroundColor');
+    for (const selector of ['.strength-named', '.strength-said']) {
+      const text = await rgbOf(step.locator(selector), 'color');
+      const ratio = contrastRatio(text, plateColour);
+      test.info().annotations.push({
+        type: `contrast of ${selector}`,
+        description: `${ratio.toFixed(1)} to 1 (${text} on ${plateColour})`,
+      });
+      expect(ratio, `${selector} on the plate`).toBeGreaterThanOrEqual(4.5);
+    }
     await shot(step, 'built-screen2-balance-8-2.png');
 
     // A7: the server holds exactly the two weights, and a reload shows the same picks.
@@ -335,7 +367,8 @@ test.describe('what gives a character strength', () => {
     expect(kept).toHaveLength(2);
     expect(kept.map((pick) => pick.weight).sort((a, b) => b - a)).toEqual([8, 2]);
     await page.reload();
-    await openStep(page, 'on a fresh load of a draft with picks');
+    // The draft arrives complete, so the step is folded with its summary line.
+    await openFinishedStep(page, `${seed.feeling_name}, ${seed.outward_name}`);
     await expect(card(feelings(page), seed.feeling_name)).toHaveAttribute('aria-pressed', 'true');
     await expect(card(outwards(page), seed.outward_name)).toHaveAttribute('aria-pressed', 'true');
     await expect(step.locator('input[type="range"]')).toHaveValue('2');
@@ -389,12 +422,10 @@ test.describe('what gives a character strength', () => {
     );
     expect(outwardOnly.ok(), await outwardOnly.text()).toBe(true);
     const refused = await savedDraft(page, seed);
-    expect(refused.stage_errors[GIFT_STAGE]).toEqual(['Pick the feeling that gives you strength.']);
+    expect(refused.stage_errors[GIFT_STAGE]).toEqual([NO_FEELING]);
     await page.reload();
-    await openStep(page, 'on a fresh load with a second pick only');
-    await expect(page.locator('.toc-note').first()).toContainText(
-      'Pick the feeling that gives you strength.'
-    );
+    await expect(step).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('.toc-note').first()).toContainText(NO_FEELING);
 
     // A6: a colour set in admin is the colour drawn. Fera has none yet, so it draws grey.
     const staff = await browser.newContext({ viewport: { width: 1280, height: 900 } });
@@ -402,21 +433,13 @@ test.describe('what gives a character strength', () => {
     await logIn(admin, seed.staff_username, seed.staff_password);
     const adminPage = `/admin/arxii/resonance/${seed.admin_feeling_id}/change/`;
     await admin.goto(adminPage);
-    const picker = admin.locator('#id_color_hex');
-    await expect(picker).toHaveAttribute('type', 'color');
-    if ((await picker.inputValue()).toLowerCase() !== DEFAULT_GREY) {
-      // A rerun on a database this spec already coloured: back to the default first.
-      await picker.fill(DEFAULT_GREY);
-      await admin.locator('input[name="_continue"]').click();
-      await expect(admin.locator('.messagelist .success')).toBeVisible();
-      await page.reload();
-      await openStep(page, 'on a fresh load (rerun)');
-    }
+    await expect(admin.locator('#id_color_hex')).toHaveAttribute('type', 'color');
     const fera = card(feelings(page), seed.admin_feeling_name);
     saved = draftSaved(page);
     await fera.click();
     expect((await saved).status()).toBe(200);
-    await openStep(page, 'after a feeling completes a draft that held only a second pick');
+    // The pick completes a draft that held only a second pick; the step stays open.
+    await expect(step).toBeVisible();
     await expect(fera).toHaveAttribute('aria-pressed', 'true');
     const before = await plate(page);
     expect(before.spread, `Fera starts grey, saw ${JSON.stringify(before)}`).toBeLessThan(25);
@@ -430,7 +453,7 @@ test.describe('what gives a character strength', () => {
     await staff.close();
 
     await page.reload();
-    await openStep(page, 'after the colour was changed in admin');
+    await openFinishedStep(page, `${seed.admin_feeling_name}, ${seed.outward_name}`);
     await expect(card(feelings(page), seed.admin_feeling_name)).toHaveAttribute(
       'aria-pressed',
       'true'
@@ -501,6 +524,7 @@ test.describe('what gives a character strength', () => {
     await expect(primalResult).toBeVisible({ timeout: 20000 });
     await expect(page.getByTestId('power-ledger-panel')).toBeVisible();
     await expect(primalResult).not.toContainText('kindled cast power');
+    await expect(primalResult).not.toContainText(/strengthened the cast/i);
     const primalTotal = Number(await page.getByTestId('power-ledger-total').innerText());
     const primalText = await primalResult.innerText();
     await shot(primalResult, 'built-screen4-result-primal.png');
@@ -528,12 +552,37 @@ test.describe('what gives a character strength', () => {
     });
     await expect(kindledLine).toBeVisible();
     await expect(kindledLine).toContainText('+9');
+    // The result says so in words, above the power ledger.
+    const strengthened = abyssalResult.getByText(
+      `Your kindled ${seed.kindled_name} strengthened the cast.`,
+      { exact: true }
+    );
+    await expect(strengthened).toBeVisible();
+    const sentenceBox = await strengthened.boundingBox();
+    const ledgerBox = await page.getByTestId('power-ledger-panel').boundingBox();
+    expect(sentenceBox && ledgerBox && sentenceBox.y < ledgerBox.y).toBe(true);
     const abyssalTotal = Number(await page.getByTestId('power-ledger-total').innerText());
     const abyssalText = await abyssalResult.innerText();
     await shot(abyssalResult, 'built-screen4-result-abyssal.png');
     expect(await corruption(seed.kindled_row_id)).toBe(kindledBefore + 2);
     expect(await corruption(seed.usual_row_id)).toBe(usualBefore);
     await staff.close();
+
+    // The "You earned N Praedari." line is a private narrative message, not part of the result
+    // card. It is listed under Messages in the Growth section of her character sheet.
+    const mine = await page.request.get('/api/roster/entries/mine/');
+    expect(mine.ok()).toBe(true);
+    const entry = ((await mine.json()) as { id: number; name: string }[]).find(
+      (row) => row.name === STRENGTH_CASTER
+    );
+    expect(entry, `${STRENGTH_CASTER} is one of the account's characters`).toBeTruthy();
+    await page.goto(`/characters/${entry!.id}`);
+    await page.getByRole('button', { name: 'Growth', exact: true }).click();
+    const earned = page
+      .locator('#messages')
+      .getByText(new RegExp(`You earned \\d+ ${seed.kindled_name}\\.`));
+    await expect(earned.first()).toBeVisible({ timeout: 20000 });
+    await shot(page.locator('#messages'), 'built-earned-message.png');
 
     // B4: the two results differ plainly on the page.
     expect(abyssalText).not.toEqual(primalText);

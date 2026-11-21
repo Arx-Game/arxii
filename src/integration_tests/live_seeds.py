@@ -1553,10 +1553,11 @@ def seed_strength_spec(*, username: str) -> StrengthSpecSeed:  # noqa: PLR0915 -
             blazing.cast_power = 6
             blazing.earn_percent = 100
             blazing.save()
-            success = CheckOutcome.objects.filter(name="Success").first()
-            if success is not None:
+            # A live roll lands on any outcome, so every outcome earns the deed: the spec's
+            # "You earned" line then does not depend on the dice.
+            for outcome in CheckOutcome.objects.all():
                 KindledDeedAward.objects.update_or_create(
-                    outcome_tier=success, defaults={"amount": 10}
+                    outcome_tier=outcome, defaults={"amount": 10}
                 )
             KindlingConfigFactory(instant_percent=100, claim_percent=50)
             template = ConditionTemplateFactory(
