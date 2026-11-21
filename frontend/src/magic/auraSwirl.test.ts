@@ -1,13 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-  cloud,
-  hexToOklch,
-  noise,
-  oklchToHex,
-  ramp,
-  swirlThreshold,
-  type Oklch,
-} from '@/magic/auraSwirl';
+import { cloud, hexToOklch, noise, ramp, swirlThreshold } from '@/magic/auraSwirl';
 
 function cloudSamples(count: number): Float32Array {
   const side = Math.sqrt(count);
@@ -39,11 +31,11 @@ describe('hexToOklch', () => {
     expect(hexToOklch('#000000')[0]).toBeCloseTo(0, 2);
   });
 
-  it('round-trips the demo colour Arderi through hex', () => {
-    const arderi: Oklch = [0.68, 0.19, 45];
-    const back = hexToOklch(oklchToHex(arderi));
-    expect(Math.abs(back[0] - arderi[0])).toBeLessThan(0.01);
-    expect(Math.abs(back[1] - arderi[1])).toBeLessThan(0.01);
+  it('reads #ff0000 as the CSS Color 4 reference gives it, oklch(0.628 0.2577 29.23)', () => {
+    const [lightness, chroma, hue] = hexToOklch('#ff0000');
+    expect(lightness).toBeCloseTo(0.628, 3);
+    expect(chroma).toBeCloseTo(0.2577, 3);
+    expect(hue).toBeCloseTo(29.2, 1);
   });
 
   it('refuses a string that is not #RRGGBB', () => {

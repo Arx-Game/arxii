@@ -8,7 +8,7 @@
  * that colour covers exactly its share of the disc however the noise falls.
  *
  * Colours are OKLCH triples, `[lightness, chroma, hue in degrees]`. The server sends hex
- * strings, so `hexToOklch` is the way in and `oklchToHex` the way back.
+ * strings, so `hexToOklch` is the way in.
  */
 
 export type Oklch = [number, number, number];
@@ -79,17 +79,6 @@ export function hexToOklch(hex: string): Oklch {
   const chroma = Math.sqrt(A * A + B * B);
   const hue = ((Math.atan2(B, A) * 180) / Math.PI + 360) % 360;
   return [L, chroma, hue];
-}
-
-/** OKLCH to `#RRGGBB`. */
-export function oklchToHex(c: Oklch): string {
-  const [L, A, B] = lab(c);
-  return (
-    '#' +
-    rgbOf(L, A, B)
-      .map((v) => Math.round(v).toString(16).padStart(2, '0'))
-      .join('')
-  );
 }
 
 /** A brighter stand-in for a dark colour, so its rim can be seen against a night plate. */
