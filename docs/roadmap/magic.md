@@ -1443,15 +1443,20 @@ others gives her strength. Built as one PR (one migration, eight columns, no tab
   Gift thread's leading resonance, else the Gift's first); `resonance_on_gift_thread` is the one test of a named
   resonance, used at declaration, at round resolution and at scene consent, and a resonance the thread has lost falls
   back to the default and never refuses a round. The choice rides `preferred_resonance_id` and is stored on
-  `CombatRoundAction.cast_resonance` and `SceneActionRequest.cast_resonance`, so every scene route and every fight honours it.
+  `CombatRoundAction.cast_resonance` and, while a request is pending, `SceneActionRequest.cast_resonance`, so every scene
+  route and every fight (an enchanted Strike included) honours it. A named resonance is accepted on any thread her forms
+  come from, a covenant role's thread included, and a caster with no thread on the Gift gets no choice and a default in
+  the order Primal, Celestial, Abyssal.
 - **Corruption follows the cast's resonance and how Abyssal the caster is.** The whole intensity goes to that resonance
   (a cast worked in a Primal or Celestial resonance adds none); a pull still corrupts by the resonance that paid.
   `CorruptionConfig.light_corruption_percent` (10) applies to the ordinary tick and to a pull paid in Abyssal while the
   caster's aura is below `full_corruption_from_share` (50) Abyssal; the hasty-fall part is never reduced; one rounding
   up, so any corruption added is at least 1 (a few results differ from the old two-step rounding even at 100).
-- **Power follows it.** A cast worked in a kindled resonance gains `KindledStrengthTier.cast_power` times the affinity's
-  `kindled_boost_percent`, unless a pull that boosts that cast is in play (a fight decides that with `round_pull_bonus`;
-  in a scene any charged pull still suppresses it, related or not). On a pull a second kindled resonance of the other kind
+- **Power follows it.** Every resonance-tied power term (touchstones, resonance standing, aura alignment, resonance-scoped
+  power and effect targets, the place's reaction) reads the cast's one resonance (`cast_working_resonances`). A cast
+  worked in a kindled resonance gains `KindledStrengthTier.cast_power` times the affinity's `kindled_boost_percent`,
+  with or without a pull (suppression by a pull was tried and removed; kindling's levers stack and staff tune
+  `cast_power`). On a pull a second kindled resonance of the other kind
   adds its boost scaled by its share of the thread, and a payer that brings no perks never takes the stronger mark.
 - **The caster sees the choice.** `cast_resonance_options` lists each resonance with its colour, whether it is her usual,
   kindled, stronger and adds corruption; the scene cast panel and the combat declaration show `CastResonancePicker`; the

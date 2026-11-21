@@ -1270,40 +1270,53 @@ Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
 
 - **The resonance.** `cast_resonance_for(character, technique, preferred, *, refuse_off_thread=True)`
   (`specialization/services.py`): the named resonance, else a worn alternate self's, else the leading
-  resonance of the Gift's thread (`_effective_variant_resonance`'s order), else the Gift's own first
-  resonance for a caster with no thread on it; a technique with no Gift or a Gift with no resonance is
-  worked in none. `resonance_on_gift_thread` is the one test of whether a named resonance has a row on
-  the Gift's thread: `cast_resonance_for` raises `ResonanceNotOnGiftThread` ("That resonance is not part
+  resonance of the Gift's thread (`_effective_variant_resonance`'s order); a caster with no thread on
+  the Gift works the resonance she named when a role thread holds it, else the Gift's first in the order
+  Primal, Celestial, Abyssal; a technique with no Gift or a Gift with no resonance is worked in none.
+  `resonance_on_gift_thread` is the one test of whether a named resonance has a row on a thread her forms
+  come from (the Gift's thread and the threads `technique_forms._candidate_threads` lists, a covenant
+  role's thread included): `cast_resonance_for` raises `ResonanceNotOnGiftThread` ("That resonance is not part
   of this Gift's thread.") when it fails, declaration (`declare_action`, the telnet cast, the web dispatch)
   and scene requests refuse the same way before anything is charged, and a stored choice for which it
   fails is dropped to the default at round resolution (`resolve_combat_technique`) and at scene consent
   (`_stored_cast_resonance_still_held`), never a refusal or an aborted round. `use_technique` reads it first.
   Choosing the base form does not change it.
-- **Where the choice is stored.** Fights: `CombatRoundAction.cast_resonance` (every other combat
-  declaration writes it back to None; a passive-slot call keeps the focused cast's). Scenes: the body key
-  `preferred_resonance_id`, stored on `SceneActionRequest.cast_resonance` by the consent-gated and hostile
-  routes (the hostile route stores the named choice, since the fight's round records the one used) and
-  used when the request resolves. Telnet: `variant=<resonance>`.
+- **Where the choice is stored.** Fights: `CombatRoundAction.cast_resonance`, the record of the resonance
+  the declared cast is worked in (every other combat declaration writes it back to None; a passive-slot
+  call keeps the focused cast's, dropped to None when the thread has lost it; an enchanted Strike reads it
+  through `stored_cast_resonance` like a focused cast). The combat doors refuse an off-thread pick with
+  `refuse_resonance_off_thread` before the pull is committed. Scenes: the body key `preferred_resonance_id`,
+  stored on `SceneActionRequest.cast_resonance` by the consent-gated and hostile-awaiting-consent routes and
+  used when the request resolves. The field has one meaning, the resonance the player named while the
+  request is pending (null: she named none); an immediate cast or an accepted hostile cast writes nothing to
+  it. Telnet: `variant=<resonance>`.
 - **Corruption follows it.** `_build_resonance_involvements` gives the whole `runtime_intensity` to the
   cast's resonance; a pull's spend still attaches to the resonance that paid for it. In
   `accrue_corruption_for_cast`, `cast_corruption_part` is 100 once the Abyssal share of the caster's true
-  aura reaches `CorruptionConfig.full_corruption_from_share`, else `light_corruption_percent` (no aura counts as
-  100); it reduces the ordinary tick (the cast's resonance and a pull paid in an Abyssal resonance), never
+  aura reaches `CorruptionConfig.full_corruption_from_share`, else `light_corruption_percent` (no aura, or a game with no Abyssal
+  affinity row, counts as 100: a missing row never raises out of a cast); it reduces the ordinary tick (the cast's resonance and a pull paid in an Abyssal resonance), never
   the hasty-fall part, and is read only when some ordinary tick is above zero. The tick is
   `ceil((ordinary * part / 100 + hasty_fall) * leak_percent / 100)`, one rounding up (`_raw_tick` is exact).
-- **Power follows it.** `PowerTermContext.cast_resonance`; `kindled_cast_power_term` adds
-  `kindled_cast_strength` (`KindledStrengthTier.cast_power * Affinity.kindled_boost_percent // 100`) of the
-  cast's resonance, read with `kindled_strength_now`. It adds nothing when a pull that boosts that cast is in
-  play (`_pull_boosts_this_cast`): in a fight `round_pull_bonus` decides that, so a pull on unrelated threads
-  takes nothing from the cast; in a scene any charged declared pull (a thread with a pull tier above 0 in
-  `applicable_threads`) suppresses it, whether or not its threads relate to the cast.
+- **Power follows it.** `PowerTermContext.cast_resonance`. Every resonance-tied power term reads the cast's one
+  resonance through `cast_working_resonances(character, technique, cast_resonance)`
+  (`specialization/services.py`; every Gift-thread resonance only where no cast resonance exists): the
+  touchstone term, the aura term's standing and alignment (pulled threads' payers still join the alignment),
+  the resonance scope of POWER and maneuver-effect targets (`technique_effect_context(cast_resonance=)`) and
+  the place's reaction (`evaluate_resonance_environment(cast_resonance=)`, a worn alternate self's affinity still
+  winning). A clash contribution reads the default (`cast_resonance_for`, nothing named). `kindled_cast_power_term`
+  adds `kindled_cast_strength` (`cast_power` through `scale_by_kindled_boost` in `services/kindled_math.py`, the
+  scaling the pull levels use too) of the cast's resonance, read with `kindled_strength_now`, whether or not the
+  cast pulls a thread: kindling's levers stack (giving in, Dig deep, a pull's boost, the cast power) and staff tune
+  `cast_power`; suppression by a pull was tried and removed.
 - **The options.** `cast_resonance_options(character, technique, sheet=, kindling=)`
   (`services/cast_resonance_options.py`, separate from `available_technique_forms`, which still lists only
   variant forms): one `CastResonanceOption` per resonance on the Gift's thread, leading first, with a worn
-  alternate self's off-thread default added as its own first entry marked `is_default`; each carries the
+  alternate self's off-thread default added as its own first entry marked `is_default` (a caster with no thread
+  on the Gift gets only her default entry); each carries the
   kindled strength and reasons, `stronger` (the single entry with the highest cast strength, above the
-  default's; a tie marks none, `stronger_marks`) and `adds_corruption` (its affinity's coefficient above 0). A
-  caller listing several techniques reads the kindling once with `kindling_by_resonance`. The scene cast
+  default's; a tie marks none, `stronger_marks` in `services/kindled_math.py`, the rule the pull dialog's payer options
+  share) and `adds_corruption` (its affinity's coefficient above 0). A caller listing several techniques reads
+  the kindling once with `kindling_by_resonance`, and her sheet and worn alternate self's resonance once. The scene cast
   payload (`resonance_options`) and the combat availability descriptor (`cast_resonance_options`) carry it,
   and the pickers send `preferred_resonance_id` only for a non-default option.
 - **Earning.** `grant_resonance` scales by `resonance.affinity.earn_rate_percent`; the learn rate still
