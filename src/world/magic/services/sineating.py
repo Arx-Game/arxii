@@ -70,6 +70,7 @@ from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
     from world.magic.models import Thread
+    from world.magic.models.threads import ThreadResonance
     from world.scenes.models import Scene
 
 _MSG_NO_PENDING_OFFER = "No pending Sineating offer found."
@@ -195,6 +196,19 @@ def _refuse_if_performed(
         raise SineatingValidationError(msg)
 
 
+def _thread_rows(thread: Thread | None) -> list[ThreadResonance]:
+    """``thread``'s resonance rows, leading first (Meta ordering); none for no thread (#5231).
+
+    The one read of a thread's rows for a plea and for an earning, so both see the same
+    list and handle "no rows" from the same starting point.
+    """
+    from world.magic.models.threads import ThreadResonance  # noqa: PLC0415
+
+    if thread is None:
+        return []
+    return list(ThreadResonance.objects.filter(thread=thread).select_related("resonance"))
+
+
 def _plea_resonance(sinner_sheet: CharacterSheet, thread: Thread) -> Resonance:
     """The resonance on the Sinner's thread a plea moves corruption in (#5231).
 
@@ -202,9 +216,7 @@ def _plea_resonance(sinner_sheet: CharacterSheet, thread: Thread) -> Resonance:
     (``own_corruptions``). A tie goes to the row with more imbued, then to the lower resonance
     id. A thread with no rows reads as its leading resonance.
     """
-    from world.magic.models.threads import ThreadResonance  # noqa: PLC0415
-
-    rows = list(ThreadResonance.objects.filter(thread=thread).select_related("resonance"))
+    rows = _thread_rows(thread)
     if not rows:
         return thread.resonance
     own = own_corruptions(sinner_sheet, [row.resonance for row in rows])
@@ -221,13 +233,7 @@ def _earning_parts(
     parts always sum to ``earned``. A thread with nothing imbued, or no thread at all, gives all
     of it to the leading resonance (``resonance`` when there is no thread).
     """
-    from world.magic.models.threads import ThreadResonance  # noqa: PLC0415
-
-    rows = (
-        list(ThreadResonance.objects.filter(thread=thread).select_related("resonance"))
-        if thread is not None
-        else []
-    )
+    rows = _thread_rows(thread)
     total = sum(row.amount for row in rows)
     if not rows or total == 0:
         return [(rows[0].resonance if rows else resonance, earned)]
