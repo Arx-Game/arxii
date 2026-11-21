@@ -54,6 +54,7 @@ import { UpbringingPrompts } from './lineage/UpbringingPrompts';
 import { LifeGrids } from './lineage/LifeGrids';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
 import { LineageRecord } from './lineage/LineageRecord';
+import { cgRecord } from '../cgRecord';
 
 interface LineageStageProps {
   draft: CharacterDraft;
@@ -92,6 +93,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   const influence = path === 'claimed' ? (draft.family?.influence ?? 0) : 0;
   // The points as the page shows them, so the panel's line moves with a card click (#5141).
   const shown = useShownPicks(draft);
+  const record = cgRecord(draft, { points: shown });
 
   // If no area selected, prompt user
   if (!draft.selected_area) {
@@ -124,19 +126,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
   // The same panel as every other stage (#5148): the selections so far and the points
   // line. The life's choices are listed under it by `LifeGrids`, through the leaf's slot.
   const rail = (
-    <RecordRail
-      rows={[
-        { label: 'Origin', value: draft.selected_area.name },
-        { label: 'Beginning', value: draft.selected_beginnings.name },
-        { label: 'Species', value: draft.selected_species?.name },
-        { label: 'Gender', value: draft.selected_gender?.display_name },
-        {
-          label: 'CG points',
-          value: `${shown.spent} of ${shown.spent + shown.remaining} spent`,
-        },
-      ]}
-      ledger={stageEyebrow(draft.current_stage)}
-    />
+    <RecordRail rows={[...record.head, record.points]} ledger={stageEyebrow(draft.current_stage)} />
   );
 
   return (

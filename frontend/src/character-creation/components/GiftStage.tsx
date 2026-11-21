@@ -34,7 +34,6 @@ import {
   useCGExplanations,
   useCGCombatStyles,
   useCGGifts,
-  useCGPointBudget,
   useDraftOffers,
   useResonances,
   useSkills,
@@ -56,6 +55,7 @@ import { heaviestFirst, leadResonanceId, placedPoints } from '../resonanceWeight
 import { hasMagicTraining, isTrainingSpent, trainingHeading } from './gift/magicTraining';
 import { TechniqueSelector } from './gift/TechniqueSelector';
 import { TraditionStep } from './gift/TraditionStep';
+import { cgRecord } from '../cgRecord';
 
 interface GiftStageProps {
   draft: CharacterDraft;
@@ -207,7 +207,6 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
   const { data: resonances = [] } = useResonances();
-  const { data: cgBudget } = useCGPointBudget();
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
 
   const draftData = draft.draft_data;
@@ -288,9 +287,8 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const { data: glimpseOffersData } = useDraftOffers(draft.id, 'glimpse');
   const glimpseRows = glimpseRailRows(draftDistinctions, glimpseOffersData?.offers);
 
-  // The same CG-points source HeritageStage's rail row reads.
-  const startingCGPoints = cgBudget?.starting_points ?? 100;
-  const { spent } = useShownPicks(draft);
+  const shownPoints = useShownPicks(draft);
+  const record = cgRecord(draft, { tradition: traditionValue, points: shownPoints });
 
   // The Anima Check step's gloss and rail row need the names behind the two
   // ids the draft stores, so read the same two catalogs AnimaCheckStep picks
@@ -349,25 +347,14 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
     <>
       <RecordRail
         rows={[
-          { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Beginning', value: draft.selected_beginnings?.name },
-          { label: 'Species', value: draft.selected_species?.name },
-          { label: 'Path', value: draft.selected_path?.name },
-          { label: 'Tradition', value: traditionValue },
-          {
-            label: 'Techniques to pick',
-            value: completion.tradition ? String(picks) : undefined,
-          },
+          ...record.head,
           { label: 'Gift', value: giftName },
           { label: 'Techniques', value: completion.gift ? techniqueCountLine : undefined },
           { label: 'Resonance', value: resonanceName },
           ...(showStyle ? [{ label: 'Style', value: chosenStyle?.name }] : []),
           { label: 'Anima check', value: animaCheckLine },
           ...glimpseRows,
-          {
-            label: 'CG points',
-            value: `${spent} of ${startingCGPoints} spent`,
-          },
+          record.points,
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />

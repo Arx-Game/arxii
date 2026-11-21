@@ -44,6 +44,7 @@ import { MarkingsEditor } from './MarkingsEditor';
 import { useDraftDistinctions } from '@/hooks/useDistinctions';
 import { Stage } from '../types';
 import type { Build, CharacterDraft, FormTraitOption, HeightBand } from '../types';
+import { cgRecord } from '../cgRecord';
 
 interface AppearanceStageProps {
   draft: CharacterDraft;
@@ -70,6 +71,7 @@ export function AppearanceStage({
   isStaff = false,
   onRegisterBeforeLeave,
 }: AppearanceStageProps) {
+  const record = cgRecord(draft);
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
   // The chapter's own offers, read once here to know its sections (#3709); each
@@ -302,8 +304,7 @@ export function AppearanceStage({
     <>
       <RecordRail
         rows={[
-          { label: 'Origin', value: draft.selected_area?.name },
-          { label: 'Species', value: draft.selected_species?.name },
+          ...record.head,
           { label: 'Age', value: draft.age !== null ? String(draft.age) : undefined },
           {
             label: 'Height',
@@ -313,6 +314,7 @@ export function AppearanceStage({
                 : undefined,
           },
           { label: 'Build', value: draft.build?.display_name },
+          record.points,
         ]}
         ledger={stageEyebrow(draft.current_stage)}
       />

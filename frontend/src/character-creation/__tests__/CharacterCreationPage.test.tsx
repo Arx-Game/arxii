@@ -241,6 +241,41 @@ describe('CharacterCreationPage', () => {
       expect(screen.queryByRole('button', { name: /^restart: clear/i })).not.toBeInTheDocument();
     });
 
+    // #5199, owner ruling 2026-11-18: Next is held only on Origin, until a realm is
+    // chosen. No later stage holds it; an unfinished stage is shown by the stage list.
+    it.each([
+      ['Heritage', Stage.HERITAGE],
+      ['Lineage', Stage.LINEAGE],
+      ['Path', Stage.PATH],
+      ['Gift', Stage.GIFT],
+      ['Attributes & Skills', Stage.ATTRIBUTES],
+      ['Appearance', Stage.APPEARANCE],
+      ['Identity', Stage.IDENTITY],
+      ['Final Touches', Stage.FINAL_TOUCHES],
+    ])('leaves Next open on %s with the stage unfinished', async (_label, stage) => {
+      const queryClient = createTestQueryClient();
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        // Nothing chosen past the realm: every stage here has something left to ask.
+        draft: {
+          ...mockDraftWithArea,
+          current_stage: stage,
+          stage_errors: { [stage]: ['Something is still asked here'] },
+        },
+        startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
+      });
+
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, {
+        queryClient,
+        account: mockPlayerAccount,
+      });
+
+      const next = await screen.findByRole('button', { name: /^next:/i });
+      expect(next).toBeEnabled();
+      expect(next).not.toHaveAttribute('aria-disabled');
+    });
+
     // Origin and Review are the first and last chapters; the shell renders no
     // generic PageTurn for either (each owns its own door, per the brief -
     // Origin/Review get theirs in Task 2). This replaces the old
