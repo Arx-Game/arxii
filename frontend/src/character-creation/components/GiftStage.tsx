@@ -15,7 +15,7 @@
  * explains nothing (Decision 8).
  */
 
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import type { ReactNode } from 'react';
 import { useDraftDistinctions } from '@/hooks/useDistinctions';
@@ -306,7 +306,13 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       ? `${capitalize(animaStatName)} + ${animaSkillName}`
       : undefined;
 
+  // The step stays open once the player has picked in it this visit, even though one feeling
+  // alone completes it: its second question, slider and aura are still in front of her. A draft
+  // that arrives complete shows it folded, like every finished step.
+  const [resonancePicked, setResonancePicked] = useState(false);
+
   const handleResonanceWeights = (weights: ResonanceWeightPick[]) => {
+    setResonancePicked(true);
     updateDraft.mutate({
       draftId: draft.id,
       data: { draft_data: { gift_resonance_weights: weights } },
@@ -441,7 +447,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           done={completion.resonance}
           gated={!completion.techniques}
           gateReason="Choose your techniques first"
-          open={completion.techniques && !completion.resonance}
+          open={completion.techniques && (!completion.resonance || resonancePicked)}
         >
           <StrengthStep
             resonances={resonances}

@@ -187,6 +187,33 @@ describe('GiftStage (folio)', () => {
       expect(steps[4]).not.toHaveClass('closed');
     });
 
+    it('stays open after a pick completes it, and arrives folded when already complete', async () => {
+      const complete = [{ resonance_id: 2, weight: 10 }];
+      const { rerender } = renderWithCharacterCreationProviders(
+        <GiftStage draft={pickedDraft([])} onRegisterBeforeLeave={vi.fn()} />
+      );
+      expect(resonanceStepRows()[3].querySelector('details')).toHaveAttribute('open');
+      await userEvent.click(screen.getByRole('button', { name: /Flame/ }));
+      // The save lands and one feeling alone completes the step.
+      rerender(<GiftStage draft={pickedDraft(complete)} onRegisterBeforeLeave={vi.fn()} />);
+      const steps = resonanceStepRows();
+      expect(steps[3]).toHaveClass('chosen');
+      expect(steps[3].querySelector('details')).toHaveAttribute('open');
+      expect(screen.getByRole('button', { name: 'Helping them' })).toBeInTheDocument();
+    });
+
+    it('shows a step that arrives already complete folded', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage
+          draft={pickedDraft([{ resonance_id: 2, weight: 10 }])}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      );
+      const steps = resonanceStepRows();
+      expect(steps[3]).toHaveClass('chosen');
+      expect(steps[3].querySelector('details')).not.toHaveAttribute('open');
+    });
+
     it('is not done for a draft saved under the old rule with three picks', () => {
       renderWithCharacterCreationProviders(
         <GiftStage
