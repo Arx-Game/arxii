@@ -65,8 +65,21 @@ runs the PR code and records the tree. `push` holds the PAT, runs no PR code, an
 pushes only an identical re-derived tree. To
 re-run it for one PR: `gh workflow run migration-conflict-rebase.yml -f pr=<N>`.
 
-**The manual fix is `rebase_migration`, not hand-renumbering.**
-django-linear-migrations (the thing that makes `max_migration.txt` conflict
+**When the bot has not run and `max_migration.txt` is the PR's only conflict, run the
+same transform yourself:** `just migration-rebase-like-bot` (it fetches main, then
+runs `uv run python tools/auto_rebase_migration.py --main-ref origin/main`). Run it
+from a clean tree on the PR's branch. It merges main in, renumbers the chain, updates
+the documents that name it, runs the same graph and lint checks, and commits the merge
+under your own git identity, then you push. Its commit is not the bot's by author, but
+the review-evidence check rebuilds the same tree and finds it identical, so a visual
+review report on the PR carries across the merge (#5254). It refuses in the same
+cases as the bot, and it makes no commit when it does.
+
+**When the bot or `just migration-rebase-like-bot` refuses, the manual fix is
+`rebase_migration`, not hand-renumbering.** Its merge is not byte-identical to the
+transform's (on #5252 it left the dependency list in a different layout), so the
+review-evidence check will not carry a visual review across it: refresh the review
+after using it. django-linear-migrations (the thing that makes `max_migration.txt` conflict
 loudly on purpose) ships the automation:
 
 **Leave the conflict markers IN `max_migration.txt`.** `rebase_migration` reads

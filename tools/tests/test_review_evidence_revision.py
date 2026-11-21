@@ -4,9 +4,17 @@ import os
 from pathlib import Path
 import subprocess
 
-from auto_rebase_migration import RefusalError, run
+from auto_rebase_migration import RefusalError, main as rebase_main, run
 import pytest
-from review_evidence_revision import BOT_EMAIL, BOT_NAME, BOT_SUBJECT, reviewed_revision
+from review_evidence_revision import (
+    BOT_EMAIL,
+    BOT_NAME,
+    BOT_SUBJECT,
+    cannot_change_a_rendered_screen,
+    is_migration_update,
+    reviewed_revision,
+    verify_migration_update,
+)
 
 
 def sh(repo: Path, *args: str) -> str:
@@ -271,3 +279,277 @@ def test_mixed_migration_clean_merge_and_evidence_cleanup(repo: Path):
     sh(repo, "merge", "--no-ff", "-qm", "merge main", "main")
     head = sh(repo, "rev-parse", "HEAD").strip()
     assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def anchored_commit(repo: Path, files: dict[str, str], message: str = "edit") -> tuple[str, str]:
+    """Return (anchor, head) where head is one commit that writes `files` on top of anchor."""
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    for name, text in files.items():
+        target = repo / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text)
+    commit(repo, message)
+    return anchor, sh(repo, "rev-parse", "HEAD").strip()
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/integration_tests/test_new_journeys.py",
+        "src/integration_tests/live_seeds.py",
+        "src/world/magic/tests/test_views.py",
+        "tools/tests/test_something.py",
+        "frontend/e2e/strength.spec.ts",
+        "frontend/src/magic/Card.test.tsx",
+        "frontend/src/magic/hooks.test.ts",
+        "frontend/src/magic/__tests__/fixtures.ts",
+        "frontend/src/test/setup.ts",
+    ],
+)
+def test_test_only_commit_is_carried(repo: Path, path: str):
+    anchor, head = anchored_commit(repo, {path: "changed\n"})
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "docs/systems/magic.md",
+        "docs/adr/adr-1-x.md",
+        "README.md",
+        "src/world/magic/CLAUDE.md",
+        ".github/workflows/ci.yml",
+        ".github/CODEOWNERS",
+    ],
+)
+def test_docs_and_workflow_only_commit_is_carried(repo: Path, path: str):
+    anchor, head = anchored_commit(repo, {path: "changed\n"})
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def test_commit_touching_a_test_and_a_source_file_is_refused(repo: Path):
+    anchor, head = anchored_commit(
+        repo,
+        {"src/world/magic/tests/test_views.py": "t\n", "src/world/magic/views.py": "s\n"},
+    )
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "src/world/seeds/seed_things.py",
+        "src/world/contests/models.py",
+        "src/world/magic/factories.py",
+        "src/conftest.py",
+        "src/world/magic/mytests/helpers.py",
+        "src/world/magic/test_helpers_not_in_a_tests_dir.py",
+        "frontend/src/magic/Card.tsx",
+        "frontend/src/magic/Card.test.tsx.bak",
+        "frontend/src/magic/contest/Card.tsx",
+        "frontend/public/readme.txt",
+        "tests/outside_src.py",
+        "src/evennia_extensions/tests",
+        # Near misses of each neutral group: a longer name, a different segment or extension.
+        "frontend/src/testing/a.ts",
+        "src/integration_testsx/a.py",
+        ".githubx/a",
+        "docsx/a.py",
+        "a/b.md.py",
+        "a.mdx",
+        "src/a.test.ts",  # a .test.ts file outside frontend/
+        "src/world/__tests__/a.py",  # __tests__ only counts under frontend/
+        "tools/foo/__tests__/a.py",
+        "frontend/src/tests/a.ts",  # a tests directory only counts under src/ and tools/
+        "scripts/tests/a.py",
+    ],
+)
+def test_application_files_that_only_resemble_tests_are_refused(repo: Path, path: str):
+    anchor, head = anchored_commit(repo, {path: "changed\n"})
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_deleting_an_application_file_is_refused(repo: Path):
+    anchor, _ = anchored_commit(repo, {"src/world/magic/views.py": "s\n"}, "add view")
+    (repo / "src/world/magic/views.py").unlink()
+    commit(repo, "delete view")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_moving_a_source_file_into_a_tests_directory_is_refused(repo: Path):
+    anchor, _ = anchored_commit(repo, {"src/world/magic/views.py": "same content\n" * 20}, "add")
+    sh(repo, "mv", "src/world/magic/views.py", "src/world/magic/tests_views_moved.py")
+    (repo / "src/world/magic/tests").mkdir(parents=True)
+    sh(repo, "mv", "src/world/magic/tests_views_moved.py", "src/world/magic/tests/test_views.py")
+    commit(repo, "move source into tests")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="changes reviewed content"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+HAND = "Ordinary Author <author@example.com>"
+
+
+def hand_merge(repo: Path) -> tuple[str, str]:
+    """Make the bot's renumbering merge, then re-sign it as an ordinary author's merge.
+
+    Returns (anchor, head). The tree is the one the bot would produce, so only the author
+    and subject differ from a bot commit.
+    """
+    anchor = sh(repo, "rev-parse", "HEAD^1").strip()
+    update(repo)
+    sh(
+        repo,
+        "commit",
+        "--amend",
+        "-q",
+        "-m",
+        "Merge main and renumber my migration",
+        "--author",
+        HAND,
+    )
+    return anchor, sh(repo, "rev-parse", "HEAD").strip()
+
+
+def test_hand_merge_that_matches_the_rebuilt_renumbering_is_carried(repo: Path):
+    anchor, head = hand_merge(repo)
+    assert "Ordinary Author" in sh(repo, "log", "-1", "--format=%an", head)
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def test_hand_merge_with_one_extra_changed_line_is_refused(repo: Path):
+    anchor, _ = hand_merge(repo)
+    (repo / "feature.txt").write_text("base\none extra line\n")
+    sh(repo, "add", "feature.txt")
+    sh(repo, "commit", "--amend", "--no-edit", "-q")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_hand_merge_of_something_main_does_not_contain_is_refused(repo: Path):
+    anchor, head = hand_merge(repo)
+    old_main = sh(repo, "rev-parse", "main^1").strip()
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, old_main, anchor=anchor)
+
+
+def as_ordinary_author(repo: Path) -> None:
+    sh(repo, "config", "user.name", "Ordinary Author")
+    sh(repo, "config", "user.email", "author@example.com")
+
+
+def formatted_feature_migration(repo: Path) -> str:
+    """Give the branch's migration the multi-line dependency list that ruff format writes."""
+    path = repo / "src/world/migrations/0002_feature.py"
+    path.write_text(
+        "from django.db import migrations\n\n\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [\n        ("arxii", "0001_initial"),\n    ]\n\n'
+        "    operations = []\n"
+    )
+    commit(repo, "format the migration as ruff does")
+    sh(repo, "update-ref", "refs/remotes/origin/main", "main")
+    return sh(repo, "rev-parse", "HEAD").strip()
+
+
+def test_local_rebase_command_run_by_a_person_carries_the_report(repo: Path):
+    as_ordinary_author(repo)
+    anchor = formatted_feature_migration(repo)
+    assert (
+        rebase_main(["--repo", str(repo), "--main-ref", "origin/main", "--skip-graph-check"]) == 0
+    )
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    assert len(sh(repo, "show", "-s", "--format=%P", head).split()) == 2
+    assert sh(repo, "log", "-1", "--format=%an", head).strip() == "Ordinary Author"
+    assert not is_migration_update(repo, head)  # carried by the rebuild, not by the bot's name
+    assert reviewed_revision(repo, head, "main", anchor=anchor) == anchor
+
+
+def test_hand_renumbering_with_a_one_line_dependency_list_is_refused(repo: Path):
+    as_ordinary_author(repo)
+    anchor = formatted_feature_migration(repo)
+    merge = subprocess.run(
+        ["git", "merge", "--no-commit", "--no-ff", "main"], cwd=repo, check=False
+    )
+    assert merge.returncode != 0  # max_migration.txt conflicts
+    directory = repo / "src/world/migrations"
+    sh(repo, "mv", "src/world/migrations/0002_feature.py", "src/world/migrations/0003_feature.py")
+    (directory / "0003_feature.py").write_text(
+        "from django.db import migrations\n\n\n"
+        "class Migration(migrations.Migration):\n"
+        '    dependencies = [("arxii", "0002_main")]\n\n'
+        "    operations = []\n"
+    )
+    (directory / "max_migration.txt").write_text("0003_feature\n")
+    sh(repo, "add", "-A")
+    sh(repo, "commit", "-qm", "Merge main by hand (rebase_migration)")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="differs from the reproduced tree"):
+        verify_migration_update(repo, head, "main")  # only the one-line list differs
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_octopus_merge_between_the_anchor_and_the_head_is_refused(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    for branch, name in (("side-a", "a.txt"), ("side-b", "b.txt")):
+        sh(repo, "checkout", "-qb", branch, anchor)
+        (repo / name).write_text(name)
+        commit(repo, name)
+    sh(repo, "checkout", "-q", "pr")
+    sh(repo, "merge", "-q", "--no-ff", "-m", "octopus", "side-a", "side-b")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    assert len(sh(repo, "show", "-s", "--format=%P", head).split()) == 3
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_walk_that_reaches_a_root_commit_before_the_anchor_is_refused(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()  # not an ancestor of the history below
+    sh(repo, "checkout", "-q", "--orphan", "rooted")
+    sh(repo, "rm", "-rqf", ".")
+    (repo / "docs").mkdir()
+    (repo / "docs/a.md").write_text("a root commit with only a document\n")
+    commit(repo, "root")
+    sh(repo, "commit", "--allow-empty", "-qm", "neutral follow-up")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+@pytest.mark.parametrize("path", ["docs/../src/world/models.py", "frontend/e2e/../src/a.ts"])
+def test_a_dot_segment_is_never_neutral(path: str):
+    # Git never emits one, so this guards a future caller that feeds the function anything else.
+    assert not cannot_change_a_rendered_screen(path)
+    assert not cannot_change_a_rendered_screen(path.encode())
+    assert not cannot_change_a_rendered_screen("docs/./a.md")
+
+
+def unrelated_history_merge(repo: Path) -> tuple[str, str]:
+    """Merge a branch that shares no history with the PR; return (anchor, head)."""
+    sh(repo, "checkout", "-q", "--orphan", "elsewhere")
+    sh(repo, "rm", "-rqf", ".")
+    (repo / "other.txt").write_text("unrelated\n")
+    commit(repo, "unrelated root")
+    sh(repo, "checkout", "-q", "pr")
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    sh(repo, "merge", "-q", "--no-ff", "--allow-unrelated-histories", "-m", "merge", "elsewhere")
+    return anchor, sh(repo, "rev-parse", "HEAD").strip()
+
+
+def test_unrelated_history_merge_makes_the_rebuild_fail_and_the_walk_refuses(repo: Path):
+    anchor, head = unrelated_history_merge(repo)
+    # "elsewhere" is an ancestor of itself, so the ancestor test passes and the rebuild runs
+    # into a git failure (no merge base). That is "not a matching renumbering", not a crash.
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "elsewhere", anchor=anchor)
+
+
+def test_unrelated_history_merge_without_an_anchor_keeps_the_legacy_result(repo: Path):
+    _, head = unrelated_history_merge(repo)
+    assert reviewed_revision(repo, head, "elsewhere") == sh(repo, "rev-parse", f"{head}^1").strip()
