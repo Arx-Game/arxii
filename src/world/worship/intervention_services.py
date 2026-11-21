@@ -77,6 +77,7 @@ if TYPE_CHECKING:
         DevotionConfig,
         DivineInterventionConfig,
         Miracle,
+        MiraclePerformance,
         WorshippedBeing,
     )
 
@@ -418,6 +419,79 @@ def fire_divine_intervention(  # noqa: PLR0913 - one roll, every branch of its r
         )
 
 
+def _answer(  # noqa: PLR0913 - the roll's whole context, keyword-only
+    *,
+    level: int,
+    being: WorshippedBeing,
+    outcome: CheckOutcome,
+    check_result: CheckResult,
+    praying: CharacterSheet,
+    target: CharacterSheet,
+    trigger: str,
+    trigger_event: str,
+    favor: int,
+    cfg: DivineInterventionConfig,
+    scene: Scene | None,
+) -> tuple[MiraclePerformance | None, Consequence | None, tuple[str, ...], bool]:
+    """What the being does for a roll that landed at ``level``: (the miracle performed, the
+    answer drawn, its visible effects, whether favor is spent).
+
+    A rescue or better brings the best miracle the roll qualifies for, else a lesser answer
+    drawn from the Partial Success rows. A lesser answer lands on the one in danger and spins the
+    wheel; a backfire lands on the one praying; a Failure draws only its sign and applies nothing.
+    """
+    if level >= RESCUE_LEVEL:
+        candidates = _candidate_miracles(
+            praying=praying, being=being, trigger=trigger, favor=favor, cfg=cfg
+        )
+        miracle = _miracle_for(candidates, outcome)
+        if miracle is not None:
+            performance = perform_divine_intervention(
+                target,
+                being,
+                miracle,
+                scene=scene,
+                trigger_event=trigger_event,
+                outcome_tier=outcome,
+                context_text=_gm_context(
+                    result_outcome=outcome,
+                    being=being,
+                    praying=praying,
+                    target=target,
+                    what=f"miracle: {miracle.name}",
+                ),
+            )
+            effects = tuple(
+                f"condition applied, {row.condition.name}"
+                for row in miracle.condition_applications.select_related("condition")
+            )
+            return performance, None, effects, True
+        drawn, effects = _draw(
+            being=being,
+            outcome=_lesser_tier(outcome),
+            check_result=check_result,
+            praying=praying,
+            lands_on=target,
+            apply=True,
+            wheel=True,
+            scene=scene,
+        )
+        return None, drawn, effects, False
+    lesser = level >= LESSER_LEVEL
+    applies = lesser or level <= BOTCH_SUCCESS_LEVEL_MAX
+    drawn, effects = _draw(
+        being=being,
+        outcome=outcome,
+        check_result=check_result,
+        praying=praying,
+        lands_on=target if lesser else praying,
+        apply=applies,
+        wheel=lesser,
+        scene=scene,
+    )
+    return None, drawn, effects if applies else (), False
+
+
 def _intervene(  # noqa: PLR0913 - the roll's whole context, keyword-only
     praying: CharacterSheet,
     target: CharacterSheet,
@@ -442,82 +516,20 @@ def _intervene(  # noqa: PLR0913 - the roll's whole context, keyword-only
     outcome = check_result.outcome
     level = outcome.success_level
 
-    performance = None
-    drawn = None
-    effects: tuple[str, ...] = ()
-    spends = False
+    performance, drawn, effects, spends = _answer(
+        level=level,
+        being=being,
+        outcome=outcome,
+        check_result=check_result,
+        praying=praying,
+        target=target,
+        trigger=trigger,
+        trigger_event=trigger_event,
+        favor=favor,
+        cfg=cfg,
+        scene=scene,
+    )
     cost_tier = outcome
-    if level >= RESCUE_LEVEL:
-        candidates = _candidate_miracles(
-            praying=praying, being=being, trigger=trigger, favor=favor, cfg=cfg
-        )
-        miracle = _miracle_for(candidates, outcome)
-        if miracle is not None:
-            context_text = _gm_context(
-                result_outcome=outcome,
-                being=being,
-                praying=praying,
-                target=target,
-                what=f"miracle: {miracle.name}",
-            )
-            performance = perform_divine_intervention(
-                target,
-                being,
-                miracle,
-                scene=scene,
-                trigger_event=trigger_event,
-                outcome_tier=outcome,
-                context_text=context_text,
-            )
-            spends = True
-            effects = tuple(
-                f"condition applied, {row.condition.name}"
-                for row in miracle.condition_applications.select_related("condition")
-            )
-        else:
-            drawn, effects = _draw(
-                being=being,
-                outcome=_lesser_tier(outcome),
-                check_result=check_result,
-                praying=praying,
-                lands_on=target,
-                apply=True,
-                wheel=True,
-                scene=scene,
-            )
-    elif level >= LESSER_LEVEL:
-        drawn, effects = _draw(
-            being=being,
-            outcome=outcome,
-            check_result=check_result,
-            praying=praying,
-            lands_on=target,
-            apply=True,
-            wheel=True,
-            scene=scene,
-        )
-    elif level <= BOTCH_SUCCESS_LEVEL_MAX:
-        drawn, effects = _draw(
-            being=being,
-            outcome=outcome,
-            check_result=check_result,
-            praying=praying,
-            lands_on=praying,
-            apply=True,
-            wheel=False,
-            scene=scene,
-        )
-    else:
-        drawn, _ = _draw(
-            being=being,
-            outcome=outcome,
-            check_result=check_result,
-            praying=praying,
-            lands_on=praying,
-            apply=False,
-            wheel=False,
-            scene=scene,
-        )
 
     delivered = performance is not None or (drawn is not None and level >= LESSER_LEVEL)
     cost = _charge(
