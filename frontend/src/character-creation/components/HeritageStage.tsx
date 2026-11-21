@@ -30,7 +30,6 @@ import {
   useBeginnings,
   useBeginningsPerspectives,
   useCGExplanations,
-  useCGPointBudget,
   useGenders,
   useSpecies,
   useUpdateDraft,
@@ -40,6 +39,7 @@ import type { Beginnings, CharacterDraft, Species } from '../types';
 import { countNoun } from '../utils';
 import { Stage } from '../types';
 import { PerspectivesPanel } from './PerspectivesPanel';
+import { cgRecord } from '../cgRecord';
 
 interface HeritageStageProps {
   draft: CharacterDraft;
@@ -69,14 +69,13 @@ type SpeciesEntryItem =
 export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
-  const { data: cgBudget } = useCGPointBudget();
+  const record = cgRecord(draft);
   const { data: beginnings, isLoading: beginningsLoading } = useBeginnings(draft.selected_area?.id);
   const { data: allSpecies, isLoading: speciesLoading } = useSpecies();
   const { data: genders, isLoading: gendersLoading } = useGenders();
   const { data: perspectives } = useBeginningsPerspectives(draft.selected_beginnings?.id);
 
   const remaining = draft.cg_points_remaining;
-  const starting = cgBudget?.starting_points ?? 100;
 
   // Species allowed by the selected beginnings (unchanged filter:
   // allowed_species_ids only ever lists leaves, never a parent "hub").
@@ -212,13 +211,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
   const rail = (
     <>
       <RecordRail
-        rows={[
-          { label: 'Origin', value: draft.selected_area.name },
-          { label: 'Beginning', value: draft.selected_beginnings?.name },
-          { label: 'Species', value: draft.selected_species?.name },
-          { label: 'Gender', value: draft.selected_gender?.display_name },
-          { label: 'CG points', value: `${draft.cg_points_spent} of ${starting} spent` },
-        ]}
+        rows={[...record.head, record.points]}
         ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-heritage">

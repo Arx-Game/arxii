@@ -199,11 +199,15 @@ describe('LineageStage', () => {
         row.querySelector('dt')?.textContent,
         row.querySelector('dd')?.textContent,
       ]);
+      // The one record every stage shows (#5199); the draft has no first name, so no Name row.
       expect(rows).toEqual([
         ['Origin', draft.selected_area!.name],
         ['Beginning', draft.selected_beginnings!.name],
         ['Species', draft.selected_species?.name ?? 'not yet chosen'],
         ['Gender', draft.selected_gender?.display_name ?? 'not yet chosen'],
+        ['Family', 'not yet chosen'],
+        ['Path', 'not yet chosen'],
+        ['Tradition', 'not yet chosen'],
         ['CG points', '20 of 100 spent'],
       ]);
       expect(within(panel).getByText('Stage 3 of 10')).toHaveClass('rail-ledger');
