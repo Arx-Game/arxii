@@ -289,6 +289,24 @@ class TestCleanupVerdict(unittest.TestCase):
         verdict = _cleanup_verdict(self._process(self.WORKTREE), self.MAIN)
         self.assertFalse(verdict.kill)
 
+    def test_the_start_command_and_what_launched_it_are_left_alone(self) -> None:
+        """A shell whose command line merely mentions evennia must not be killed."""
+        from cli.arx import _cleanup_verdict
+
+        proc = self._process(self.WORKTREE, is_this_start=True)
+        verdict = _cleanup_verdict(proc, self.WORKTREE)
+        self.assertFalse(verdict.kill)
+
+    @unittest.skipUnless(Path("/proc/self/stat").exists(), "needs a Linux /proc")
+    def test_the_start_lineage_holds_this_process_and_its_parent(self) -> None:
+        import os
+
+        from cli.arx import _this_start_lineage
+
+        lineage = _this_start_lineage()
+        self.assertIn(os.getpid(), lineage)
+        self.assertIn(os.getppid(), lineage)
+
     def test_test_run_in_this_checkout_is_left_alone(self) -> None:
         from cli.arx import _cleanup_verdict
 
@@ -397,6 +415,7 @@ class TestCleanupVerdict(unittest.TestCase):
             mock.patch("cli.arx.PROJECT_ROOT", self.WORKTREE),
             mock.patch("cli.arx._find_evennia_processes", return_value=[{}, {}]),
             mock.patch("cli.arx._describe_process", side_effect=[own, neighbour]),
+            mock.patch("cli.arx._this_start_lineage", return_value=frozenset()),
             mock.patch("cli.arx._kill_process", return_value=True) as kill,
             mock.patch("cli.arx.typer.echo") as echo,
             mock.patch("time.sleep"),

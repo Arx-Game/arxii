@@ -448,6 +448,7 @@ class _ProcessInfo:
     cwd: Path | None = None
     interpreter: Path | None = None
     ancestor_cmdlines: tuple[str, ...] = ()
+    is_this_start: bool = False
 
 
 @dataclass(frozen=True)
@@ -486,6 +487,8 @@ def _cleanup_verdict(proc: _ProcessInfo, checkout_root: Path) -> _CleanupVerdict
     Where neither can be read, the checkout cannot be told and the process is treated
     as stale, as it was before.
     """
+    if proc.is_this_start:
+        return _CleanupVerdict(False, "this start command or what launched it")
     if proc.state == _ZOMBIE_STATE or _DEFUNCT_MARKER in proc.cmdline:
         return _CleanupVerdict(False, "already dead (defunct)")
     if _is_test_run(proc.cmdline):
@@ -546,24 +549,33 @@ def _interpreter_path(argv: list[str], cwd: Path | None) -> Path | None:
     return launched.parent.resolve() / launched.name
 
 
+def _ancestor_pids(pid: int) -> tuple[int, ...]:
+    """Return the pids of a process's parents, nearest first, stopping at init."""
+    found: list[int] = []
+    stat = _read_proc_stat(pid)
+    for _ in range(_MAX_ANCESTOR_DEPTH):
+        if stat is None or stat[1] <= 1:
+            break
+        found.append(stat[1])
+        stat = _read_proc_stat(stat[1])
+    return tuple(found)
+
+
 def _ancestor_cmdlines(pid: int) -> tuple[str, ...]:
     """Return the command lines of a process's parents, nearest first.
 
     A daemonized server is reparented to init, so this only protects processes that
     still have a living parent, such as the workers a test run forks.
     """
-    found: list[str] = []
-    stat = _read_proc_stat(pid)
-    for _ in range(_MAX_ANCESTOR_DEPTH):
-        if stat is None or stat[1] <= 1:
-            break
-        parent_pid = stat[1]
-        found.append(" ".join(_read_proc_argv(parent_pid)))
-        stat = _read_proc_stat(parent_pid)
-    return tuple(found)
+    return tuple(" ".join(_read_proc_argv(parent)) for parent in _ancestor_pids(pid))
 
 
-def _describe_process(proc: dict) -> _ProcessInfo:
+def _this_start_lineage() -> frozenset[int]:
+    """Return the pids of this ``arx start`` and the shells and tools that launched it."""
+    return frozenset({os.getpid(), *_ancestor_pids(os.getpid())})
+
+
+def _describe_process(proc: dict, this_start: frozenset[int] = frozenset()) -> _ProcessInfo:
     """Build a _ProcessInfo for a discovered process, reading /proc where it exists."""
     pid = proc["pid"]
     stat = _read_proc_stat(pid)
@@ -577,6 +589,7 @@ def _describe_process(proc: dict) -> _ProcessInfo:
         cwd=cwd,
         interpreter=_interpreter_path(argv, cwd),
         ancestor_cmdlines=_ancestor_cmdlines(pid),
+        is_this_start=pid in this_start,
     )
 
 
@@ -596,7 +609,8 @@ def _cleanup_stale_processes() -> int:
     Prints one line per candidate: what was killed and what was left alone and why, so a
     developer can see that another checkout's server or test run was not touched.
     """
-    processes = [_describe_process(proc) for proc in _find_evennia_processes()]
+    this_start = _this_start_lineage()
+    processes = [_describe_process(proc, this_start) for proc in _find_evennia_processes()]
     if not processes:
         return 0
 
