@@ -15,17 +15,24 @@ the plain fallback.
 
 The round's narration reaches the room two ways, as an OUTCOME row in the scene log and as
 the row pushed live to everyone standing there; the journeys assert both carry the same line.
-A moment that is hidden by design (a condition not visible to others, a concealed source) is
-told only to the two people it concerns.
+A moment that is hidden by design (a condition not visible to others, a concealed source, a
+once-only condition that conceals its bearer) is told only to the two people it concerns, and so
+is a spend that happens outside any fight. A line written around the admin form's validation
+still plays as the plain line, a foe that is a condition's source is named by its combat name,
+and a provoke that chose nothing (an engagement lock won, or there was one target) is not told.
+Staff write a line on the condition's admin page, which refuses a placeholder the moment lacks.
 """
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.contrib.auth import get_user_model
 from django.test import override_settings
+from django.urls import reverse
 
 from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+from integration_tests.harness import JourneyCase
 from integration_tests.test_holding_the_line_journeys import (
     GRACE_HEALTH,
     GRACE_SWING,
@@ -62,6 +69,66 @@ if TYPE_CHECKING:
     from world.traits.models import CheckOutcome
 
 BRUTE = "Hired Brute"
+
+
+def _posted(page) -> dict[str, str | list[str]]:
+    """What a browser posts for the change form and its inlines, every field untouched."""
+    bound_forms = [page.context["adminform"].form]
+    for inline in page.context["inline_admin_formsets"]:
+        bound_forms.append(inline.formset.management_form)
+        bound_forms.extend(inline.formset.forms)
+    data: dict[str, str | list[str]] = {}
+    for form in bound_forms:
+        for bound in form:
+            value = bound.value()
+            if isinstance(value, bool):
+                if value:
+                    data[bound.html_name] = "on"
+            elif isinstance(value, (list, tuple)):
+                data[bound.html_name] = [str(item) for item in value]
+            else:
+                data[bound.html_name] = "" if value is None else str(value)
+    return data
+
+
+class AuthoringAReactiveLine(JourneyCase):
+    """Staff write a guard line on a condition's own admin page."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        staff = get_user_model().objects.create_user(
+            username="warden", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(staff)
+        self.guard = ConditionTemplateFactory(name="Bodyguard's Oath", source_guards_bearer=True)
+        self.url = reverse("admin:arxii_conditiontemplate_change", args=[self.guard.pk])
+
+    def _post_line(self, line: str):
+        page = self.client.get(self.url)
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, "guard_narration")
+        data = _posted(page)
+        data["guard_narration"] = line
+        return self.client.post(self.url, data)
+
+    def test_a_line_naming_a_placeholder_the_moment_lacks_is_refused_and_a_good_one_saves(
+        self,
+    ) -> None:
+        refused = self._post_line("{hero} steps in for {bearer}.")
+
+        self.assertContains(
+            refused,
+            "Use only these placeholders here, written plainly: {attacker}, {bearer}, {source}.",
+        )
+        self.assertEqual(ConditionTemplate.objects.get(pk=self.guard.pk).guard_narration, "")
+
+        saved = self._post_line("{source} steps in for {bearer} against {attacker}.")
+
+        self.assertEqual(saved.status_code, 302)
+        self.assertEqual(
+            ConditionTemplate.objects.get(pk=self.guard.pk).guard_narration,
+            "{source} steps in for {bearer} against {attacker}.",
+        )
 
 
 class _TheYardWatched(_TheYard):
