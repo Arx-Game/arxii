@@ -419,7 +419,7 @@ def plan_opponent_round(
     condition sits on it (#4584). It narrows the pool to that participant after the lock
     check: an engagement lock that narrowed the pool wins, and a provoker outside the pool
     leaves it as it was. When a provoke does choose the target (more than one in the pool, no
-    lock winning, no companion order overriding), the room is told in the declaring phase
+    lock winning, no companion order overriding), the room is told as the opponent plans
     (``provoke_narration``, #4587). Player characters ignore the flag because PCs choose their
     own targets; charmed, turned and summoned opponents ignore it because they do not target the
     PC side (``targeting_participants`` is false).
@@ -565,8 +565,9 @@ def _round_target_pool(opponent: CombatOpponent, ctx: NpcRoundContext) -> tuple[
 def _narrate_provoke(opponent: CombatOpponent, ctx: NpcRoundContext) -> None:
     """Tell the room that a provoked opponent turned on the condition's source (#4587).
 
-    Told in the declaring phase, as the opponent picks its target, the way a wind-up is
-    telegraphed. The provoke condition's ``provoke_narration``, else a plain line.
+    Told as the opponent picks its target, which happens as the round starts to resolve
+    (``resolve_round`` plans the opponents' actions). The line is the provoke condition's
+    ``provoke_narration``, else a plain one.
     """
     from world.conditions.constants import ReactiveMoment  # noqa: PLC0415
     from world.conditions.reactive_narration import narrate_reactive_moment  # noqa: PLC0415

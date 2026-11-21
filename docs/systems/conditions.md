@@ -611,7 +611,7 @@ and the delivery:
 | --- | --- | --- | --- |
 | Strike back | `retaliation_narration` | `strike_back` landed its answer | `{bearer}`, `{source}`, `{attacker}` |
 | Guard steps in | `guard_narration` | a standing guard (`source_guards_bearer`) stopped or softened a blow (`_narrate_standing_guard`); a failed roll, a declined attempt and a declared interpose are not told | `{bearer}` (the ward), `{source}` (the guard), `{attacker}` |
-| Provoked foe turns | `provoke_narration` | the provoke actually chose the foe's target at planning: more than one target in the pool, no engagement lock winning, no companion order overriding | `{bearer}` (the foe), `{source}` |
+| Provoked foe turns | `provoke_narration` | the provoke actually chose the foe's target as the opponents plan their round (at the start of `resolve_round`, not when the round opens): more than one target in the pool, no engagement lock winning, no companion order overriding | `{bearer}` (the foe), `{source}` |
 | Grace holds | `grace_narration` | `_process_knockout_tier` found a grace and skipped the roll | `{bearer}`, `{source}` |
 | Once-only spent | `spent_narration` | `spend_condition_use` ended the condition | `{bearer}`, `{source}` |
 
