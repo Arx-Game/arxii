@@ -721,6 +721,9 @@ def _combat_actions(
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
         technique_performable,
     )
+    from world.magic.services.cast_resonance_options import (  # noqa: PLC0415
+        cast_resonance_options,
+    )
     from world.magic.services.magic_skills import cast_check_type  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
     from world.magic.services.targeting import (  # noqa: PLC0415
@@ -797,6 +800,7 @@ def _combat_actions(
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
                 eligible_fury_resonances=eligible_fury_resonances,
+                cast_resonance_options=tuple(cast_resonance_options(character, technique)),
                 is_ultimate=technique.is_ultimate,
                 cast_preview=_cast_preview(
                     character, technique, lethal=lethal, lines_cache=lines_cache

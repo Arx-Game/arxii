@@ -117,6 +117,26 @@ class FuryResonanceOptionSerializer(serializers.Serializer):
     weakest_depth_name = serializers.CharField(read_only=True)
 
 
+class CastResonanceOptionSerializer(serializers.Serializer):
+    """One resonance a cast may be worked in (#5231), for the scene cast panel and the combat
+    cast declaration; the picker sends ``resonance_id`` back as ``preferred_resonance_id``.
+
+    Lives here, beside the Fury option, because ``world.magic.serializers`` imports this
+    module. Only the strength word staff wrote is sent, never the number behind it.
+    """
+
+    resonance_id = serializers.IntegerField(source="resonance.pk", read_only=True)
+    name = serializers.CharField(source="resonance.name", read_only=True)
+    color_hex = serializers.CharField(source="resonance.color_hex", read_only=True)
+    is_default = serializers.BooleanField(read_only=True)
+    kindled_strength = serializers.CharField(
+        source="kindled_strength.name", allow_null=True, default=None, read_only=True
+    )
+    reasons = serializers.ListField(child=serializers.CharField(), read_only=True)
+    stronger = serializers.BooleanField(read_only=True)
+    adds_corruption = serializers.BooleanField(read_only=True)
+
+
 class AvailableEnhancementSerializer(serializers.Serializer):
     """Read-only serializer for AvailableEnhancement (technique enhancement option)."""
 
@@ -193,6 +213,7 @@ class PlayerActionSerializer(serializers.Serializer):
     soulfray_warning = SoulfrayWarningSerializer(read_only=True, allow_null=True)
     available_fury_tiers = FuryTierOptionSerializer(many=True, read_only=True)
     eligible_fury_resonances = FuryResonanceOptionSerializer(many=True, read_only=True)
+    cast_resonance_options = CastResonanceOptionSerializer(many=True, read_only=True)
     cast_preview = CastPreviewSerializer(read_only=True, allow_null=True)
     is_ultimate = serializers.BooleanField(read_only=True)
     enchants_strike = serializers.BooleanField(read_only=True)

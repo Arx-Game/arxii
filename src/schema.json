@@ -51151,6 +51151,51 @@ components:
       required:
       - thread_ids
       - tier
+    CastResonanceOption:
+      type: object
+      description: |-
+        One resonance a cast may be worked in (#5231), for the scene cast panel and the combat
+        cast declaration; the picker sends ``resonance_id`` back as ``preferred_resonance_id``.
+
+        Lives here, beside the Fury option, because ``world.magic.serializers`` imports this
+        module. Only the strength word staff wrote is sent, never the number behind it.
+      properties:
+        resonance_id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        color_hex:
+          type: string
+          readOnly: true
+        is_default:
+          type: boolean
+          readOnly: true
+        kindled_strength:
+          type: string
+          readOnly: true
+          nullable: true
+        reasons:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        stronger:
+          type: boolean
+          readOnly: true
+        adds_corruption:
+          type: boolean
+          readOnly: true
+      required:
+      - adds_corruption
+      - color_hex
+      - is_default
+      - kindled_strength
+      - name
+      - reasons
+      - resonance_id
+      - stronger
     CastableTechnique:
       type: object
       description: |-
@@ -51210,6 +51255,11 @@ components:
           items:
             $ref: '#/components/schemas/TechniqueForm'
           readOnly: true
+        resonance_options:
+          type: array
+          items:
+            $ref: '#/components/schemas/CastResonanceOption'
+          readOnly: true
         reactive_anima_cost:
           type: integer
           nullable: true
@@ -51239,6 +51289,7 @@ components:
       - name
       - reach
       - reactive_anima_cost
+      - resonance_options
       - target_spec
       - target_type
       - tier
@@ -84551,6 +84602,8 @@ components:
         kindled_strength:
           type: string
           nullable: true
+        stronger:
+          type: boolean
       required:
       - affordable
       - balance
@@ -84559,6 +84612,7 @@ components:
       - level_read
       - resonance_id
       - resonance_name
+      - stronger
     PendingAlteration:
       type: object
       description: Read-only serializer for pending alterations shown on character
@@ -85973,6 +86027,11 @@ components:
           items:
             $ref: '#/components/schemas/FuryResonanceOption'
           readOnly: true
+        cast_resonance_options:
+          type: array
+          items:
+            $ref: '#/components/schemas/CastResonanceOption'
+          readOnly: true
         cast_preview:
           allOf:
           - $ref: '#/components/schemas/CastPreview'
@@ -85995,6 +86054,7 @@ components:
       - available_fury_tiers
       - backend
       - cast_preview
+      - cast_resonance_options
       - check_type
       - description
       - difficulty
@@ -89421,10 +89481,16 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        color_hex:
+          type: string
+          readOnly: true
+          title: Colour
+          description: Picked with a colour picker. The aura is drawn in it.
       required:
       - affinity
       - affinity_name
       - codex_entry_id
+      - color_hex
       - description
       - id
       - name

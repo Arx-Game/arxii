@@ -31,6 +31,11 @@ Hand-worked from the spec:
   woven on the technique at level 10 (one rung, so a multiplier of 1) with a tier 1 intensity
   bump of 3: the ledger's "thread power" line is 3, the pull costs 1 Praedari, and the same
   cast's deed then earns 15: 10 - 1 + 15 = 24.
+* The cast list: her Gift's thread holds Warmth (leading, so the default) and Praedari. Warmth
+  is not kindled, so its strength is 0 and it has no strength word; Praedari is kindled at
+  Blazing, so its strength is the 9 above. The one entry with the highest strength, above the
+  default's 0, is Praedari, so it alone is "stronger". Only Praedari adds corruption (an
+  Abyssal coefficient of 10; Primal's is 0). The same two entries come back in a fight.
 * In a fight a pull lasts the round but boosts only the casts its threads relate to. A cast
   with no pull in its round gets the kindled line (9). A cast whose round holds a pull on a
   thread of its own technique gets the pull's 3 and no kindled line. A cast whose round
@@ -299,6 +304,38 @@ class TheAbyssalTemptation(JourneyCase):
         self.assertEqual(self.earned(self.praedari) - earned_before, 15)
         self.assertEqual(self.earned(self.warmth), 0)
 
+    def castable_entry(self) -> dict:
+        """The technique's row in the scene's castable list, as the cast panel reads it."""
+        response = self.api(self.account_of(self.ysmay)).get(
+            "/api/action-requests/castable-techniques/",
+            {"initiator_persona": self.sheet.primary_persona.pk},
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        return next(row for row in response.json() if row["id"] == self.technique.pk)
+
+    def test_the_cast_list_marks_the_kindled_abyssal_option_stronger_and_corrupting(self) -> None:
+        options = self.castable_entry()["resonance_options"]
+
+        # Leading resonance first: Warmth is the default, Praedari follows.
+        self.assertEqual([o["name"] for o in options], ["Warmth", "Praedari"])
+        warmth, praedari = options
+        self.assertEqual(warmth["resonance_id"], self.warmth.pk)
+        self.assertTrue(warmth["is_default"])
+        self.assertIsNone(warmth["kindled_strength"])
+        self.assertEqual(warmth["reasons"], [])
+        self.assertFalse(warmth["stronger"])
+        self.assertFalse(warmth["adds_corruption"])
+        self.assertEqual(praedari["resonance_id"], self.praedari.pk)
+        self.assertFalse(praedari["is_default"])
+        self.assertEqual(praedari["kindled_strength"], "Blazing")
+        self.assertTrue(praedari["reasons"])
+        self.assertTrue(praedari["stronger"])
+        self.assertTrue(praedari["adds_corruption"])
+        # The colour is the staff-set one; only the strength word is sent, never a number.
+        self.assertEqual(praedari["color_hex"], self.praedari.color_hex)
+        self.assertNotIn("kindled_cast_power", praedari)
+        self.assertNotIn("cast_power", praedari)
+
     def test_a_kindled_cast_that_pulls_a_thread_gains_no_cast_bonus(self) -> None:
         balance_before = CharacterResonance.objects.get(
             character_sheet=self.sheet, resonance=self.praedari
@@ -471,6 +508,30 @@ class TheAbyssalTemptationInAFight(JourneyCase):
     @staticmethod
     def pull_lines(entries: list[dict]) -> list[int]:
         return [row["amount"] for row in entries if row["stage"] == PowerStage.COMBAT_PULL]
+
+    def test_the_combat_declaration_offers_the_same_options(self) -> None:
+        response = self.api(self.account_of(self.ysmay)).get(
+            reverse("actions:available-actions", kwargs={"character_id": self.ysmay.pk})
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        by_technique = {
+            row["ref"].get("technique_id"): row["cast_resonance_options"]
+            for row in response.json()["results"]
+            if row["ref"].get("technique_id") is not None
+        }
+        warmth, praedari = by_technique[self.shadow_step.pk]
+        self.assertEqual([warmth["name"], praedari["name"]], ["Warmth", "Praedari"])
+        self.assertTrue(warmth["is_default"])
+        self.assertFalse(warmth["stronger"])
+        self.assertFalse(warmth["adds_corruption"])
+        self.assertEqual(praedari["resonance_id"], self.praedari.pk)
+        self.assertEqual(praedari["kindled_strength"], "Blazing")
+        self.assertTrue(praedari["reasons"])
+        self.assertTrue(praedari["stronger"])
+        self.assertTrue(praedari["adds_corruption"])
+        # Ember Lash's Gift has no thread of hers and no listed resonance: nothing to choose.
+        self.assertEqual(by_technique[self.ember_lash.pk], [])
 
     def test_a_cast_in_a_round_with_no_pull_reads_the_kindled_line(self) -> None:
         self.declare_shadow_step_in_praedari()

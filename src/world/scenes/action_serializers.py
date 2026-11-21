@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
-from actions.serializers import CastPreviewSerializer
+from actions.serializers import CastPreviewSerializer, CastResonanceOptionSerializer
 from world.combat.cast_seed import encounter_requiring_risk_acknowledgement
 from world.fatigue.constants import EffortLevel
 from world.magic.constants import MAX_RESONANCE_BURN
@@ -16,6 +16,7 @@ from world.magic.serializers import (
     TechniqueEffectSummarySerializer,
     TechniqueFormSerializer,
 )
+from world.magic.services.cast_resonance_options import cast_resonance_options
 from world.magic.services.hostility import is_technique_hostile
 from world.magic.services.technique_forms import (
     available_technique_forms,
@@ -335,6 +336,8 @@ class CastableTechniqueSerializer(serializers.Serializer):
     target_spec = serializers.SerializerMethodField()
     effect_summary = serializers.SerializerMethodField()
     forms = serializers.SerializerMethodField()
+    # #5231: the resonances a cast may be worked in, beside (never inside) the forms.
+    resonance_options = serializers.SerializerMethodField()
     # #3573: flat reactive anima fee of the technique's protective condition, or
     # None when the technique carries no protective reactive-trigger handler.
     # Lets the standalone-cast UI offer a Soulfray consent toggle up front, the
@@ -399,6 +402,20 @@ class CastableTechniqueSerializer(serializers.Serializer):
             TechniqueFormSerializer(
                 [form for form in forms if not form["is_locked"]], many=True
             ).data
+        )
+
+    @extend_schema_field(CastResonanceOptionSerializer(many=True))
+    def get_resonance_options(self, obj: Technique) -> list[dict]:
+        """The resonances this caster may work the cast in, leading first (#5231).
+
+        Empty with no character in context (the schema-generation path), so the field is
+        never absent. The scene panel shows the list when it has two or more entries.
+        """
+        character = self.context.get("character")
+        if character is None:
+            return []
+        return list(
+            CastResonanceOptionSerializer(cast_resonance_options(character, obj), many=True).data
         )
 
     def get_hostile(self, obj: Technique) -> bool:

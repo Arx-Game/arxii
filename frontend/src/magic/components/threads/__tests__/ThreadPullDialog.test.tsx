@@ -291,6 +291,7 @@ describe('ThreadPullDialog', () => {
       affordable: balance >= 3,
       effects,
       level_read: 3,
+      stronger: false,
     });
     const previewOf = (perThread: PullPreviewResponse['per_thread']): PullPreviewResponse => ({
       resonance_cost: 3,

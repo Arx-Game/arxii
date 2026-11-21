@@ -34,6 +34,7 @@ const option = (
   affordable: balance >= 3,
   effects,
   level_read: levelRead,
+  stronger: false,
 });
 
 const makeThread = (overrides: Partial<Thread> = {}): Thread =>
