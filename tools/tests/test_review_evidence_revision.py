@@ -10,6 +10,7 @@ from review_evidence_revision import (
     BOT_EMAIL,
     BOT_NAME,
     BOT_SUBJECT,
+    cannot_change_a_rendered_screen,
     is_migration_update,
     reviewed_revision,
     verify_migration_update,
@@ -350,6 +351,18 @@ def test_commit_touching_a_test_and_a_source_file_is_refused(repo: Path):
         "frontend/public/readme.txt",
         "tests/outside_src.py",
         "src/evennia_extensions/tests",
+        # Near misses of each neutral group: a longer name, a different segment or extension.
+        "frontend/src/testing/a.ts",
+        "src/integration_testsx/a.py",
+        ".githubx/a",
+        "docsx/a.py",
+        "a/b.md.py",
+        "a.mdx",
+        "src/a.test.ts",  # a .test.ts file outside frontend/
+        "src/world/__tests__/a.py",  # __tests__ only counts under frontend/
+        "tools/foo/__tests__/a.py",
+        "frontend/src/tests/a.ts",  # a tests directory only counts under src/ and tools/
+        "scripts/tests/a.py",
     ],
 )
 def test_application_files_that_only_resemble_tests_are_refused(repo: Path, path: str):
@@ -480,3 +493,63 @@ def test_hand_renumbering_with_a_one_line_dependency_list_is_refused(repo: Path)
         verify_migration_update(repo, head, "main")  # only the one-line list differs
     with pytest.raises(RefusalError, match="cannot verify update"):
         reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_octopus_merge_between_the_anchor_and_the_head_is_refused(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    for branch, name in (("side-a", "a.txt"), ("side-b", "b.txt")):
+        sh(repo, "checkout", "-qb", branch, anchor)
+        (repo / name).write_text(name)
+        commit(repo, name)
+    sh(repo, "checkout", "-q", "pr")
+    sh(repo, "merge", "-q", "--no-ff", "-m", "octopus", "side-a", "side-b")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    assert len(sh(repo, "show", "-s", "--format=%P", head).split()) == 3
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+def test_walk_that_reaches_a_root_commit_before_the_anchor_is_refused(repo: Path):
+    anchor = sh(repo, "rev-parse", "HEAD").strip()  # not an ancestor of the history below
+    sh(repo, "checkout", "-q", "--orphan", "rooted")
+    sh(repo, "rm", "-rqf", ".")
+    (repo / "docs").mkdir()
+    (repo / "docs/a.md").write_text("a root commit with only a document\n")
+    commit(repo, "root")
+    sh(repo, "commit", "--allow-empty", "-qm", "neutral follow-up")
+    head = sh(repo, "rev-parse", "HEAD").strip()
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "main", anchor=anchor)
+
+
+@pytest.mark.parametrize("path", ["docs/../src/world/models.py", "frontend/e2e/../src/a.ts"])
+def test_a_dot_segment_is_never_neutral(path: str):
+    # Git never emits one, so this guards a future caller that feeds the function anything else.
+    assert not cannot_change_a_rendered_screen(path)
+    assert not cannot_change_a_rendered_screen(path.encode())
+    assert not cannot_change_a_rendered_screen("docs/./a.md")
+
+
+def unrelated_history_merge(repo: Path) -> tuple[str, str]:
+    """Merge a branch that shares no history with the PR; return (anchor, head)."""
+    sh(repo, "checkout", "-q", "--orphan", "elsewhere")
+    sh(repo, "rm", "-rqf", ".")
+    (repo / "other.txt").write_text("unrelated\n")
+    commit(repo, "unrelated root")
+    sh(repo, "checkout", "-q", "pr")
+    anchor = sh(repo, "rev-parse", "HEAD").strip()
+    sh(repo, "merge", "-q", "--no-ff", "--allow-unrelated-histories", "-m", "merge", "elsewhere")
+    return anchor, sh(repo, "rev-parse", "HEAD").strip()
+
+
+def test_unrelated_history_merge_makes_the_rebuild_fail_and_the_walk_refuses(repo: Path):
+    anchor, head = unrelated_history_merge(repo)
+    # "elsewhere" is an ancestor of itself, so the ancestor test passes and the rebuild runs
+    # into a git failure (no merge base). That is "not a matching renumbering", not a crash.
+    with pytest.raises(RefusalError, match="cannot verify update"):
+        reviewed_revision(repo, head, "elsewhere", anchor=anchor)
+
+
+def test_unrelated_history_merge_without_an_anchor_keeps_the_legacy_result(repo: Path):
+    _, head = unrelated_history_merge(repo)
+    assert reviewed_revision(repo, head, "elsewhere") == sh(repo, "rev-parse", f"{head}^1").strip()

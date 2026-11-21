@@ -153,12 +153,13 @@ def verify_hand_migration_update(repo: Path, revision: str, main_ref: str) -> st
 
     Authorship proves nothing: the same independent rebuild and whole-tree comparison as the
     bot's merge decide it. A refusal or a nothing-to-do result only means this merge is not a
-    matching renumbering, so the caller goes on to refuse it as it did before. Any other
-    error is a real failure and propagates.
+    matching renumbering, so the caller goes on to refuse it as it did before. So does a git
+    failure while rebuilding (unrelated histories, or no max_migration.txt at main): the
+    rebuild could not be made, which proves nothing. Any other error propagates.
     """
     try:
         return verify_migration_update(repo, revision, main_ref)
-    except (RefusalError, NothingToDoError):
+    except (RefusalError, NothingToDoError, RuntimeError):
         return None
 
 
@@ -176,6 +177,8 @@ def cannot_change_a_rendered_screen(path: bytes | str) -> bool:
     """
     text = os.fsdecode(path)
     parts = text.split("/")
+    if "." in parts or ".." in parts:
+        return False  # git never emits one; a future caller must not climb out of a prefix
     directories = parts[:-1]  # a tests segment must be a whole directory, never a file name
     name = parts[-1]
     top = parts[0]
