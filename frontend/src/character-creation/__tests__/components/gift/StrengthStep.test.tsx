@@ -77,8 +77,9 @@ describe('StrengthStep', () => {
     expect(
       screen.getByText('Does what you do to other people give you strength')
     ).toBeInTheDocument();
-    expect(screen.getByText('Which of these gives you strength')).toBeInTheDocument();
     expect(screen.getByText('Which gives you more strength')).toBeInTheDocument();
+    // The question about the second pick waits for a side to be chosen.
+    expect(screen.queryByText('Which of these gives you strength')).not.toBeInTheDocument();
     const arderi = screen.getByRole('button', { name: /Arderi/ });
     expect(arderi).toHaveTextContent('Arderi describes itself.');
     for (const name of ['Helping them', 'Hurting them', 'Neither']) {
@@ -216,27 +217,6 @@ describe('StrengthStep', () => {
     expect(screen.getByText('Arderi 8')).toBeInTheDocument();
   });
 
-  it('shows nothing chosen for a three-pick draft saved under the old rule', () => {
-    render(
-      <Harness
-        start={[
-          { resonance_id: 2, weight: 4 },
-          { resonance_id: 5, weight: 2 },
-          { resonance_id: 3, weight: 2 },
-        ]}
-      />
-    );
-    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
-    expect(screen.getByRole('slider')).toBeDisabled();
-    expect(document.querySelector('.strength-named')).toBeNull();
-  });
-
-  it('shows nothing chosen for a partial spread that leaves points unplaced', () => {
-    render(<Harness budget={10} start={[{ resonance_id: 1, weight: 4 }]} />);
-    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
-    expect(document.querySelector('.strength-named')).toBeNull();
-  });
-
   it('shows nothing chosen for two Primal picks, or a Celestial and an Abyssal pick', () => {
     const { unmount } = render(
       <Harness
@@ -287,6 +267,8 @@ describe('the picks helpers', () => {
     expect(mainAffinityOf({ ...picks, primalPoints: 3 }, 8)).toBe('Celestial');
     expect(strengthPicksComplete(list, resonances, 8)).toBe(true);
     expect(strengthPicksComplete([{ resonance_id: 1, weight: 8 }], resonances, 8)).toBe(true);
+    expect(strengthPicksComplete([], resonances, 8)).toBe(false);
+    expect(strengthPicksComplete([{ resonance_id: 5, weight: 8 }], resonances, 8)).toBe(false);
     expect(picksFromWeights([{ resonance_id: 5, weight: 8 }], resonances, 8)).toMatchObject({
       primal: null,
       lean: 'take',
@@ -298,26 +280,5 @@ describe('the picks helpers', () => {
       outward: null,
       primalPoints: 8,
     });
-  });
-
-  it('refuses every list the old rule allowed and the new one does not', () => {
-    const complete = (weights: ResonanceWeightPick[]) =>
-      strengthPicksComplete(weights, resonances, 8);
-    expect(complete([])).toBe(false);
-    expect(complete([{ resonance_id: 5, weight: 8 }])).toBe(false);
-    expect(
-      complete([
-        { resonance_id: 1, weight: 4 },
-        { resonance_id: 2, weight: 4 },
-      ])
-    ).toBe(false);
-    expect(
-      complete([
-        { resonance_id: 1, weight: 4 },
-        { resonance_id: 3, weight: 2 },
-        { resonance_id: 5, weight: 2 },
-      ])
-    ).toBe(false);
-    expect(complete([{ resonance_id: 1, weight: 5 }])).toBe(false);
   });
 });

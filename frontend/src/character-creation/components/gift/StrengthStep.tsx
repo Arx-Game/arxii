@@ -185,19 +185,17 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
         ))}
       </div>
 
-      {picks.lean !== 'none' && (
+      {chosenSide && (
         <>
           <p className="strength-ask">
             {text('gift_strength_outward_question', 'Which of these gives you strength')}
           </p>
-          {chosenSide && (
-            <ResonanceCards
-              label={text('gift_strength_outward_question', 'Which of these gives you strength')}
-              resonances={sideCards(chosenSide)}
-              picked={picks.outward}
-              onPick={(id) => save({ ...picks, outward: id })}
-            />
-          )}
+          <ResonanceCards
+            label={text('gift_strength_outward_question', 'Which of these gives you strength')}
+            resonances={sideCards(chosenSide)}
+            picked={picks.outward}
+            onPick={(id) => save({ ...picks, outward: id })}
+          />
         </>
       )}
 
