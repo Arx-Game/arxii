@@ -11,8 +11,10 @@
 import { describe, expect, it } from 'vitest';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
 import {
+  chargedCost,
   choiceEntries,
   choiceOfferId,
+  featureCost,
   picksCost,
   shownPicks,
 } from '../../../components/offers/syncHelpers';
@@ -227,5 +229,33 @@ describe('shownPicks (#5141)', () => {
       ['scar', 3],
       ['eyes', 3],
     ]);
+  });
+});
+
+describe('the free feature points (#5241)', () => {
+  const plain = { cost: 4 };
+  const onHair = { cost: 6, feature_trait: 'hair_color' };
+  const onScar = { cost: 5, feature_marking: 12 };
+
+  it('featureCost adds up only the picks that name a feature', () => {
+    expect(featureCost([plain, onHair, onScar])).toBe(11);
+    expect(featureCost([plain])).toBe(0);
+    expect(featureCost(undefined)).toBe(0);
+  });
+
+  it('qualities inside the allowance cost no CG points', () => {
+    expect(chargedCost([onHair], 10)).toBe(0);
+    expect(chargedCost([plain, onHair], 10)).toBe(4);
+  });
+
+  it('past the allowance each further point is a CG point', () => {
+    // 11 points of qualities, 10 of them free.
+    expect(chargedCost([onHair, onScar], 10)).toBe(1);
+    expect(chargedCost([plain, onHair, onScar], 10)).toBe(5);
+  });
+
+  it('the allowance never pays for a pick that names no feature', () => {
+    expect(chargedCost([plain], 10)).toBe(4);
+    expect(chargedCost([{ cost: -10 }, onHair], 10)).toBe(-10);
   });
 });

@@ -53,10 +53,35 @@ class BuildAdmin(admin.ModelAdmin):
     ordering = ["sort_order"]
 
 
-class FormTraitOptionInline(admin.TabularInline):
+#: The colour picker's script (#5241). It pairs a browser colour input with every
+#: text input marked ``data-swatch``; see the file for why the field stays text.
+SWATCH_WIDGET_JS = "admin/js/swatch_widget.js"
+#: The model field the picker belongs to.
+SWATCH_FIELD = "color_hex"
+
+
+class SwatchFieldMixin:
+    """Draws ``color_hex`` as a short text input the colour picker script pairs with.
+
+    Shared by the option's own admin page and its inline on the trait page. Each of
+    those also lists ``SWATCH_WIDGET_JS`` in its own ``Media``.
+    """
+
+    def formfield_for_dbfield(self, db_field, request, **kwargs):
+        if db_field.name == SWATCH_FIELD:
+            kwargs["widget"] = forms.TextInput(
+                attrs={"data-swatch": "1", "size": 8, "placeholder": "#rrggbb"}
+            )
+        return super().formfield_for_dbfield(db_field, request, **kwargs)
+
+
+class FormTraitOptionInline(SwatchFieldMixin, admin.TabularInline):
     model = FormTraitOption
     formset = OneRowPerFormSet
     extra = 1
+
+    class Media:
+        js = (SWATCH_WIDGET_JS,)
 
 
 @admin.register(FormTrait)
@@ -68,7 +93,10 @@ class FormTraitAdmin(admin.ModelAdmin):
 
 
 @admin.register(FormTraitOption)
-class FormTraitOptionAdmin(admin.ModelAdmin):
+class FormTraitOptionAdmin(SwatchFieldMixin, admin.ModelAdmin):
+    class Media:
+        js = (SWATCH_WIDGET_JS,)
+
     list_display = [
         "display_name",
         "trait",

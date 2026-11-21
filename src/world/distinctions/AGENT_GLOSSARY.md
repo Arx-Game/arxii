@@ -26,20 +26,23 @@ Any single physical thing about a character that a distinction can be aimed at: 
 (a scar, a tattoo). A species-required marker is a feature like any other.
 _Avoid_: characteristic (retired model name), body part, appearance slot.
 
-**Distinctive** (#3739):
-The state of a feature the character paid to single out — a `Distinction` with
-`opens_feature` held on that feature. A distinctive feature reaches every option of
-its trait (the off-species Unnatural umbrella included), carries a written
-description, and can hold the presence axes. Say "made distinctive", never
-"unlocked", when writing player-facing words.
+**Distinctive** (#3739, #5241):
+The state of a feature that holds at least one tier of a quality. A distinctive feature
+reaches every option of its trait (the off-species Unnatural umbrella included) and
+carries a written description. There is no pick that makes a feature distinctive on its
+own; until #5241 a one-point "Make It Distinctive" row did (ADR-5241). Say "made
+distinctive", never "unlocked", when writing player-facing words.
 _Avoid_: enhanced, upgraded, special.
 
-**Presence axis** (#3739):
-Alluring, Menacing or Majestic — a `Distinction` with `requires_feature_opened`, bought
-on a distinctive feature, adding to the `allure` / `menace` / `majesty`
+**Feature quality** (#3739, renamed from "presence axis" in #5241):
+Alluring, Menacing or Majestic (the page says "qualities"; in code and docs say "feature
+quality", since an item has a quality of its own): a `Distinction` with `taken_per_feature`, put on any
+feature directly, adding to the `allure` / `menace` / `majesty`
 `mechanics.ModifierTarget` the item accents share (#2886). "Tier" is the unit
-(1 to 3 in character creation); a rank of an ordinary distinction is a "rank".
-_Avoid_: aura, presence stat, accent (that word belongs to items).
+(1 to 3 in character creation); a rank of an ordinary distinction is a "rank". The first
+ten points of qualities a new character takes are **feature points** and cost no CG
+points (`FEATURE_FREE_POINTS`).
+_Avoid_: presence axis (the old name), aura, presence stat, accent (that word belongs to items).
 
 **Per-feature distinction** (#3739):
 A `Distinction` with `taken_per_feature` — one a character holds once per feature

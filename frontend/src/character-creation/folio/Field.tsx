@@ -5,12 +5,14 @@ interface FieldProps {
   id: string;
   label: string;
   hint?: string;
+  /** A width class for a field that sits in a `.field-row` (#5241), e.g. `narrow`. */
+  className?: string;
   children: ReactNode;
 }
 
-export function Field({ id, label, hint, children }: FieldProps) {
+export function Field({ id, label, hint, className, children }: FieldProps) {
   return (
-    <div className="field">
+    <div className={className ? `field ${className}` : 'field'}>
       <label htmlFor={id}>{label}</label>
       {children}
       {hint && <span className="hint">{hint}</span>}

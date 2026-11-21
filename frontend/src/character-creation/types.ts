@@ -400,6 +400,11 @@ export interface FormTraitOption {
   name: string;
   display_name: string;
   sort_order: number;
+  /**
+   * The colour drawn for a colour option, as `#rrggbb` (#5241). Blank for an option
+   * that is not a colour or has no single colour; the page draws that one striped.
+   */
+  color_hex: string;
 }
 
 export interface FormTrait {
@@ -501,6 +506,13 @@ export interface CharacterDraft {
   secret_worship: WorshippedBeingRef | null;
   cg_points_spent: number;
   cg_points_remaining: number;
+  /**
+   * Feature qualities (#5241): what the draft's qualities cost before the free
+   * allowance, and the allowance. The first `feature_points_free` of them cost no CG
+   * points; `cg_points_spent` already has that taken off.
+   */
+  feature_points_spent: number;
+  feature_points_free: number;
   stat_bonuses: Record<string, number>;
   draft_data: DraftData;
   stage_completion: Record<Stage, boolean>;
