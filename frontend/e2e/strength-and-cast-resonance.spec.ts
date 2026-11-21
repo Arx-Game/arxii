@@ -287,6 +287,15 @@ test.describe('what gives a character strength', () => {
     await expect(step.locator('input[type="range"]')).toBeVisible();
     await expect(page.locator('.strength-aura canvas')).toBeVisible();
     await expect(arderi).toHaveAttribute('aria-pressed', 'true');
+    // Picking a feeling answers nothing about other people: none of the three answers is
+    // pressed for her, and nothing says her points all go to the feeling yet.
+    for (const answer of ['Helping them', 'Hurting them', 'Neither']) {
+      await expect(step.getByRole('button', { name: answer, exact: true })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      );
+    }
+    await expect(step.locator('.strength-skipped')).toHaveCount(0);
     await shot(step, 'built-screen1-first-pick-step-open.png');
     await expect(feelings(page).locator('[aria-pressed="true"]')).toHaveCount(1);
     saved = draftSaved(page);
@@ -318,6 +327,9 @@ test.describe('what gives a character strength', () => {
     await expect(outwards(page).getByRole('button')).toHaveCount(8);
     await expect(outwards(page).locator('[aria-pressed="true"]')).toHaveCount(0);
     await expect(slider).toBeDisabled();
+    // She chose a side and has not picked from it yet: the step does not tell her there is
+    // no second pick.
+    await expect(step.locator('.strength-skipped')).toHaveCount(0);
     await page.waitForTimeout(1000); // time for a save, were one going to be sent
     const afterSide = (await savedDraft(page, seed)).draft_data.gift_resonance_weights ?? [];
     expect(afterSide, 'only the feeling is saved').toHaveLength(1);
