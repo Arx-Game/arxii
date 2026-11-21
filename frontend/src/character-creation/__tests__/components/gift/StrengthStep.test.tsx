@@ -70,15 +70,47 @@ beforeEach(() => {
 });
 
 describe('StrengthStep', () => {
-  it('asks only for the feeling until one is chosen, with no side words on a card', () => {
+  it('renders every question and the plate from the start, with nothing chosen', () => {
     render(<Harness />);
     expect(screen.getByText('Where your strength comes from')).toBeInTheDocument();
     expect(screen.getByText('Which feeling gives you strength')).toBeInTheDocument();
+    expect(
+      screen.getByText('Does what you do to other people give you strength')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Which of these gives you strength')).toBeInTheDocument();
+    expect(screen.getByText('Which gives you more strength')).toBeInTheDocument();
     const arderi = screen.getByRole('button', { name: /Arderi/ });
     expect(arderi).toHaveTextContent('Arderi describes itself.');
-    expect(arderi).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.queryByRole('button', { name: /Bene/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    for (const name of ['Helping them', 'Hurting them', 'Neither']) {
+      expect(screen.getByRole('button', { name, pressed: false })).toBeInTheDocument();
+    }
+    expect(screen.queryByRole('button', { name: /Bene|Praedari/ })).not.toBeInTheDocument();
+    // The plate is there, in grey, naming nothing; the slider waits for both picks.
+    expect(document.querySelector('.strength-plate canvas')).not.toBeNull();
+    expect(document.querySelector('.strength-named')).toBeNull();
+    expect(document.querySelector('.strength-said')).toBeNull();
+    expect(screen.getByRole('slider')).toBeDisabled();
+    expect(screen.queryByText(/nothing to balance/)).not.toBeInTheDocument();
+  });
+
+  it('writes a valid one-pick list when the side and its card are picked before a feeling', async () => {
+    render(<Harness />);
+    await userEvent.click(screen.getByRole('button', { name: 'Hurting them' }));
+    expect(saved).toEqual([{ resonance_id: 5, weight: 8 }]);
+    expect(screen.getByRole('button', { name: /Praedari/, pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('slider')).toBeDisabled();
+    expect(document.querySelector('.strength-named')).toBeNull();
+
+    await userEvent.click(screen.getByRole('button', { name: /Dominari/ }));
+    expect(saved).toEqual([{ resonance_id: 6, weight: 8 }]);
+
+    // The feeling then joins it, the Primal pick first, and the slider wakes.
+    await userEvent.click(screen.getByRole('button', { name: /Arderi/ }));
+    expect(saved).toEqual([
+      { resonance_id: 1, weight: 6 },
+      { resonance_id: 6, weight: 2 },
+    ]);
+    expect(screen.getByRole('slider')).toBeEnabled();
   });
 
   it('reads its words from the copy keys', () => {
@@ -184,30 +216,61 @@ describe('StrengthStep', () => {
     expect(screen.getByText('Arderi 8')).toBeInTheDocument();
   });
 
-  it('shows a draft saved under the old rule as only its first Primal and outward picks', () => {
+  it('shows nothing chosen for a three-pick draft saved under the old rule', () => {
     render(
       <Harness
         start={[
-          { resonance_id: 2, weight: 3 },
+          { resonance_id: 2, weight: 4 },
           { resonance_id: 5, weight: 2 },
-          { resonance_id: 1, weight: 1 },
           { resonance_id: 3, weight: 2 },
         ]}
       />
     );
-    expect(screen.getByRole('button', { name: /Sereni/, pressed: true })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Arderi/, pressed: false })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Hurting them', pressed: true })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Praedari/, pressed: true })).toBeInTheDocument();
-    expect(
-      screen.getByRole('button', { name: 'Helping them', pressed: false })
-    ).toBeInTheDocument();
+    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+    expect(screen.getByRole('slider')).toBeDisabled();
+    expect(document.querySelector('.strength-named')).toBeNull();
   });
 
-  it('shows nothing chosen for a draft saved with no Primal pick', () => {
+  it('shows nothing chosen for a partial spread that leaves points unplaced', () => {
+    render(<Harness budget={10} start={[{ resonance_id: 1, weight: 4 }]} />);
+    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+    expect(document.querySelector('.strength-named')).toBeNull();
+  });
+
+  it('shows nothing chosen for two Primal picks, or a Celestial and an Abyssal pick', () => {
+    const { unmount } = render(
+      <Harness
+        start={[
+          { resonance_id: 1, weight: 4 },
+          { resonance_id: 2, weight: 4 },
+        ]}
+      />
+    );
+    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+    unmount();
+    render(
+      <Harness
+        start={[
+          { resonance_id: 3, weight: 4 },
+          { resonance_id: 5, weight: 4 },
+        ]}
+      />
+    );
+    expect(document.querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+  });
+
+  it('still shows a valid feeling-only list with every point as chosen', () => {
+    render(<Harness start={[{ resonance_id: 1, weight: 8 }]} />);
+    expect(screen.getByRole('button', { name: /Arderi/, pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Neither', pressed: true })).toBeInTheDocument();
+  });
+
+  it('shows a valid second-pick-only list as chosen, with no aura name', () => {
     render(<Harness start={[{ resonance_id: 5, weight: 8 }]} />);
+    expect(screen.getByRole('button', { name: 'Hurting them', pressed: true })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Praedari/, pressed: true })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Arderi/, pressed: false })).toBeInTheDocument();
-    expect(screen.queryByRole('slider')).not.toBeInTheDocument();
+    expect(document.querySelector('.strength-named')).toBeNull();
   });
 });
 
@@ -224,6 +287,17 @@ describe('the picks helpers', () => {
     expect(mainAffinityOf({ ...picks, primalPoints: 3 }, 8)).toBe('Celestial');
     expect(strengthPicksComplete(list, resonances, 8)).toBe(true);
     expect(strengthPicksComplete([{ resonance_id: 1, weight: 8 }], resonances, 8)).toBe(true);
+    expect(picksFromWeights([{ resonance_id: 5, weight: 8 }], resonances, 8)).toMatchObject({
+      primal: null,
+      lean: 'take',
+      outward: 5,
+    });
+    expect(picksFromWeights([{ resonance_id: 1, weight: 3 }], resonances, 8)).toEqual({
+      primal: null,
+      lean: null,
+      outward: null,
+      primalPoints: 8,
+    });
   });
 
   it('refuses every list the old rule allowed and the new one does not', () => {

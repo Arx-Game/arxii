@@ -15,6 +15,7 @@ import { AuraSwirl } from '@/magic/components/AuraSwirl';
 import type { CGExplanations, Resonance, ResonanceWeightPick } from '../../types';
 import {
   affinityOfLean,
+  defaultPrimalPoints,
   mainAffinityOf,
   picksFromWeights,
   weightsFromPicks,
@@ -31,8 +32,8 @@ interface StrengthStepProps {
   onChange: (weights: ResonanceWeightPick[]) => void;
 }
 
-/** The share of the budget a second pick gets when it is first chosen, as the demo does. */
-const FIRST_OUTWARD_SHARE = 0.3;
+/** The grey drawn for the feeling that has not been chosen yet. */
+const NEUTRAL_HEX = '#8C8C8C';
 
 const LEANS: { lean: Lean; key: string; fallback: string }[] = [
   { lean: 'give', key: 'gift_strength_answer_helping', fallback: 'Helping them' },
@@ -93,43 +94,58 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
 
   const chooseLean = (lean: Lean) => {
     if (lean === 'none') {
-      save({ primal: picks.primal, lean, outward: null, primalPoints: budget });
+      save({ ...picks, lean, outward: null, primalPoints: budget });
       return;
     }
     // A pick already on this side stays; a new side starts at its first card, and a feeling
     // that held every point gives up a share to it (the demo's 7 of 10).
     const kept = lean === picks.lean ? picks.outward : null;
     const outward = kept ?? sideCards(lean)[0]?.id ?? null;
-    const heldAll = picks.lean === 'none' || picks.outward == null;
-    const primalPoints = heldAll
-      ? budget - Math.max(1, Math.round(budget * FIRST_OUTWARD_SHARE))
-      : picks.primalPoints;
-    save({ primal: picks.primal, lean, outward, primalPoints });
+    const heldAll = picks.lean !== 'give' && picks.lean !== 'take';
+    const primalPoints = heldAll ? defaultPrimalPoints(budget) : picks.primalPoints;
+    save({ ...picks, lean, outward, primalPoints });
   };
 
   const feeling = nameOf(picks.primal);
-  const outward = picks.lean === 'none' ? undefined : nameOf(picks.outward);
-  const skipped = picks.lean === 'none' || outward == null;
-  const outwardPoints = skipped ? 0 : budget - picks.primalPoints;
+  const chosenSide = picks.lean === 'give' || picks.lean === 'take' ? picks.lean : null;
+  const outward = chosenSide ? nameOf(picks.outward) : undefined;
+  // The balance exists once both picks do; before that the slider is off.
+  const balanced = feeling != null && outward != null;
+  const neither = picks.lean === 'none' && feeling != null;
+  const outwardPoints = balanced ? budget - picks.primalPoints : 0;
   const main = mainAffinityOf(picks, budget);
-  const otherSide =
-    main === 'Primal' && picks.lean !== 'none' ? affinityOfLean(picks.lean) : 'Primal';
-  const auraName = skipped ? 'Primal' : `${main}, with ${withArticle(otherSide)} side`;
-  let said = text('gift_strength_aura_all_feeling', 'All your strength comes from what you feel.');
-  if (!skipped && main === 'Primal') {
-    said = text(
-      'gift_strength_aura_mostly_feeling',
-      'Most of your strength comes from what you feel.'
-    );
-  } else if (!skipped) {
-    said = text(
-      'gift_strength_aura_mostly_others',
-      'Most of your strength comes from what you do to others.'
-    );
+  const otherSide = main === 'Primal' && chosenSide ? affinityOfLean(chosenSide) : 'Primal';
+  // No name and no sentence before a feeling is chosen: the aura claims nothing she has not.
+  let auraName: string | null = null;
+  let said: string | null = null;
+  if (neither) {
+    auraName = 'Primal';
+    said = text('gift_strength_aura_all_feeling', 'All your strength comes from what you feel.');
+  } else if (balanced) {
+    auraName = `${main}, with ${withArticle(otherSide)} side`;
+    said =
+      main === 'Primal'
+        ? text(
+            'gift_strength_aura_mostly_feeling',
+            'Most of your strength comes from what you feel.'
+          )
+        : text(
+            'gift_strength_aura_mostly_others',
+            'Most of your strength comes from what you do to others.'
+          );
   }
-  const pointsLine = skipped
-    ? `${feeling?.name ?? ''} ${budget}`
-    : `${feeling?.name ?? ''} ${picks.primalPoints} · ${outward.name} ${outwardPoints}`;
+  let pointsLine = '';
+  if (balanced) {
+    pointsLine = `${feeling.name} ${picks.primalPoints} · ${outward.name} ${outwardPoints}`;
+  } else if (neither) {
+    pointsLine = `${feeling.name} ${budget}`;
+  } else if (feeling || outward) {
+    pointsLine = `${(feeling ?? outward)?.name} ${budget}`;
+  }
+  // The aura is drawn in the feeling's colour, the second pick's when only it is chosen, and
+  // the neutral grey when neither is.
+  const primaryHex = feeling?.color_hex ?? outward?.color_hex ?? NEUTRAL_HEX;
+  const secondaryHex = balanced ? outward.color_hex : null;
 
   return (
     <div className="strength-step">
@@ -147,91 +163,89 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
         label={text('gift_strength_feeling_question', 'Which feeling gives you strength')}
         resonances={primalCards}
         picked={picks.primal}
-        onPick={(id) => save({ ...picks, primal: id })}
+        onPick={(id) => save({ ...picks, primal: id, lean: picks.lean ?? 'none' })}
       />
 
-      {feeling && (
+      <p className="strength-ask">
+        {text(
+          'gift_strength_others_question',
+          'Does what you do to other people give you strength'
+        )}
+      </p>
+      <div className="strength-row">
+        {LEANS.map(({ lean, key, fallback }) => (
+          <button
+            key={lean}
+            type="button"
+            aria-pressed={picks.lean === lean}
+            onClick={() => chooseLean(lean)}
+          >
+            {text(key, fallback)}
+          </button>
+        ))}
+      </div>
+
+      {picks.lean !== 'none' && (
         <>
           <p className="strength-ask">
-            {text(
-              'gift_strength_others_question',
-              'Does what you do to other people give you strength'
-            )}
+            {text('gift_strength_outward_question', 'Which of these gives you strength')}
           </p>
-          <div className="strength-row">
-            {LEANS.map(({ lean, key, fallback }) => (
-              <button
-                key={lean}
-                type="button"
-                aria-pressed={picks.lean === lean}
-                onClick={() => chooseLean(lean)}
-              >
-                {text(key, fallback)}
-              </button>
-            ))}
-          </div>
-
-          {picks.lean !== 'none' && (
-            <>
-              <p className="strength-ask">
-                {text('gift_strength_outward_question', 'Which of these gives you strength')}
-              </p>
-              <ResonanceCards
-                label={text('gift_strength_outward_question', 'Which of these gives you strength')}
-                resonances={sideCards(picks.lean)}
-                picked={picks.outward}
-                onPick={(id) => save({ ...picks, outward: id })}
-              />
-            </>
+          {chosenSide && (
+            <ResonanceCards
+              label={text('gift_strength_outward_question', 'Which of these gives you strength')}
+              resonances={sideCards(chosenSide)}
+              picked={picks.outward}
+              onPick={(id) => save({ ...picks, outward: id })}
+            />
           )}
-
-          <p className="strength-ask">
-            {text('gift_strength_balance_question', 'Which gives you more strength')}
-          </p>
-          <div className="strength-balance">
-            <div className="strength-plate">
-              <AuraSwirl
-                className="strength-aura"
-                primaryHex={feeling.color_hex}
-                secondaryHex={skipped ? null : outward.color_hex}
-                secondShare={outwardPoints / budget}
-              />
-              <p className="strength-named">{auraName}</p>
-              <p className="strength-said">{said}</p>
-            </div>
-            <div className="strength-slide">
-              <label htmlFor={sliderId}>
-                <span>{text('gift_strength_slider_feeling', 'What you feel')}</span>
-                <span>{text('gift_strength_slider_others', 'What you do to others')}</span>
-              </label>
-              <input
-                id={sliderId}
-                type="range"
-                min={1}
-                max={budget - 1}
-                step={1}
-                value={skipped ? 1 : outwardPoints}
-                disabled={skipped}
-                aria-describedby={pointsId}
-                onChange={(event) =>
-                  save({ ...picks, primalPoints: budget - Number(event.target.value) })
-                }
-              />
-              <div className="strength-pts" id={pointsId}>
-                {pointsLine}
-              </div>
-              {skipped && (
-                <p className="strength-skipped">
-                  {text(
-                    'gift_strength_skipped',
-                    'With no second pick there is nothing to balance. All {points} points go to the feeling.'
-                  ).replace('{points}', String(budget))}
-                </p>
-              )}
-            </div>
-          </div>
         </>
       )}
+
+      <p className="strength-ask">
+        {text('gift_strength_balance_question', 'Which gives you more strength')}
+      </p>
+      <div className="strength-balance">
+        <div className="strength-plate">
+          <AuraSwirl
+            className="strength-aura"
+            primaryHex={primaryHex}
+            secondaryHex={secondaryHex}
+            secondShare={outwardPoints / budget}
+          />
+          {auraName && <p className="strength-named">{auraName}</p>}
+          {said && <p className="strength-said">{said}</p>}
+        </div>
+        <div className="strength-slide">
+          <label htmlFor={sliderId}>
+            <span>{text('gift_strength_slider_feeling', 'What you feel')}</span>
+            <span>{text('gift_strength_slider_others', 'What you do to others')}</span>
+          </label>
+          <input
+            id={sliderId}
+            type="range"
+            min={1}
+            max={budget - 1}
+            step={1}
+            value={balanced ? outwardPoints : 1}
+            disabled={!balanced}
+            aria-describedby={pointsId}
+            onChange={(event) =>
+              save({ ...picks, primalPoints: budget - Number(event.target.value) })
+            }
+          />
+          <div className="strength-pts" id={pointsId}>
+            {pointsLine}
+          </div>
+          {neither && (
+            <p className="strength-skipped">
+              {text(
+                'gift_strength_skipped',
+                'With no second pick there is nothing to balance. All {points} points go to the feeling.'
+              ).replace('{points}', String(budget))}
+            </p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

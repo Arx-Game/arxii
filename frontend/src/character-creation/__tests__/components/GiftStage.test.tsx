@@ -203,11 +203,21 @@ describe('GiftStage (folio)', () => {
       expect(steps[3].querySelector('details')).toHaveAttribute('open');
       expect(steps[4]).toHaveClass('closed');
       expect(steps[4]).toHaveTextContent('Choose a resonance first');
-      // It shows only what the rule allows: the Primal pick and the first outward pick.
-      expect(screen.getByRole('button', { name: /Flame/, pressed: true })).toBeInTheDocument();
-      expect(
-        screen.getByRole('button', { name: 'Hurting them', pressed: true })
-      ).toBeInTheDocument();
+      // What she sees is what she must redo: nothing in the step reads as chosen.
+      expect(steps[3].querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+    });
+
+    it('is not done for a partial spread, and shows it as chosen nowhere', () => {
+      renderWithCharacterCreationProviders(
+        <GiftStage
+          draft={pickedDraft([{ resonance_id: 2, weight: 4 }])}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      );
+      const steps = resonanceStepRows();
+      expect(steps[3]).not.toHaveClass('chosen');
+      expect(steps[3].querySelectorAll('[aria-pressed="true"]')).toHaveLength(0);
+      expect(steps[4]).toHaveClass('closed');
     });
   });
 
