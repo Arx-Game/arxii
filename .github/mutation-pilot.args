@@ -2,6 +2,6 @@
 # A push to the pilot branch that changes this file starts .github/workflows/mutation.yml
 # with these inputs. One name=value per line; the value is everything after the first "=".
 source_file=src/world/conditions/services.py
-functions=decay_condition_severity
+functions=remove_condition
 kept=integration_tests.test_conditions_journeys integration_tests.test_conditions_that_reach_the_fight_journeys integration_tests.test_emotional_condition_journeys integration_tests.test_opponent_scope_condition_journeys integration_tests.test_technique_effect_condition_journeys integration_tests.fuzz.test_compulsion_never_refuses
-units=world.conditions.tests.test_decay_corruption_sync world.conditions.tests.test_decay_severity world.conditions.tests.test_stage_entry_aftermath world.conditions.tests.test_unseen_observer_wiring
+units=world.conditions.tests.test_condition_handler world.conditions.tests.test_condition_modifier_effect world.conditions.tests.test_reactive_integration world.conditions.tests.test_services world.conditions.tests.test_settled_effects_tick world.conditions.tests.test_stories_reactivity world.conditions.tests.test_unseen_observer_wiring
