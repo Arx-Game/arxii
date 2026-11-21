@@ -1343,6 +1343,23 @@ class TestPathMajorGiftUltimatesProbe(TestCase):
         self.assertTrue(_probe_path_major_gift_ultimates().present)
 
 
+class TestResonanceColourProbe(TestCase):
+    """#5231: a resonance still on the default grey is a dashboard row."""
+
+    def test_a_default_grey_resonance_is_missing_then_fixed(self) -> None:
+        from world.magic.factories import ResonanceFactory
+
+        self.assertTrue(rc._probe_resonances_have_a_colour().present)
+        grey = ResonanceFactory(name="Dusk")
+        ResonanceFactory(name="Ember", color_hex="#C0392B")
+        result = rc._probe_resonances_have_a_colour()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Dusk",))
+        grey.color_hex = "#4455AA"
+        grey.save()
+        self.assertTrue(rc._probe_resonances_have_a_colour().present)
+
+
 class TestManifestOptionProbes(TestCase):
     """#4118: a manifest option that cannot arrive or act is a dashboard row."""
 
