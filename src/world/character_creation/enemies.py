@@ -16,11 +16,13 @@ from world.character_creation.constants import (
     ENEMY_PRICE_GROUP,
     ENEMY_PRICE_PENDING,
     ENEMY_PRICE_PERSON,
+    FinalTouchesPrompt,
     QuestionKind,
 )
 from world.character_creation.models import EnemyReason
 from world.character_creation.questionnaire import DraftAnswers, anchor_for
 from world.character_sheets.types import EnemyDegree, EnemyKind, EnemyPowerTier, EnemyStatus
+from world.distinctions.models import Distinction
 from world.societies.models import Organization
 
 if TYPE_CHECKING:
@@ -245,14 +247,47 @@ def _enemy_details(
     return tier, tier, "", name
 
 
+def enemy_is_open(draft: CharacterDraft) -> bool:
+    """Whether a card the draft holds starts the character with an enemy (#5255).
+
+    The enemy section is asked of nobody else (owner ruling 2026-11-21): a card says so
+    with ``Distinction.final_touches_prompt = FinalTouchesPrompt.ENEMY``, set by staff on
+    the Distinction Builder. Called by ``enemy_answer``; the page reads the same fact from
+    the draft's ``final_touches_prompts``.
+    """
+    from world.character_creation.offers import held_distinction_ids  # noqa: PLC0415
+
+    held = held_distinction_ids(draft)
+    if not held:
+        return False
+    return Distinction.objects.filter(
+        pk__in=held, final_touches_prompt=FinalTouchesPrompt.ENEMY
+    ).exists()
+
+
+def enemy_answer(draft: CharacterDraft) -> dict:
+    """The draft's saved enemy while a held card asks for one, else an empty dict (#5255).
+
+    The one read of ``draft_data["enemy"]`` on the server: the price (``resolve_enemy``),
+    finalize and the enemy chapter's openers (``offers._context``) all come through here,
+    so an enemy saved before its card was let go pays nothing, opens no offer and is not
+    written. The saved answer itself is kept, and counts again once a card asks for it.
+    """
+    data = draft.draft_data.get("enemy") or {}
+    if not data or not enemy_is_open(draft):
+        return {}
+    return data
+
+
 def resolve_enemy(draft: CharacterDraft) -> ResolvedEnemy | None:
     """Price and place the draft's enemy pick, or None when the draft named nobody.
 
-    A group with a real Organization takes its reach from the matching offer (so a
-    Beginning's override holds) or from its type; a person with a power tier is placed.
-    Anything else is pending: priced at ``ENEMY_PRICE_PENDING`` until staff link it.
+    None as well when no held card asks for an enemy (``enemy_answer``, #5255). A group
+    with a real Organization takes its reach from the matching offer (so a Beginning's
+    override holds) or from its type; a person with a power tier is placed. Anything
+    else is pending: priced at ``ENEMY_PRICE_PENDING`` until staff link it.
     """
-    data = draft.draft_data.get("enemy") or {}
+    data = enemy_answer(draft)
     degree = data.get("degree", "")
     if degree not in EnemyDegree.values:
         return None

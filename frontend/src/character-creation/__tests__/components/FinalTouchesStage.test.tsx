@@ -8,7 +8,7 @@ import { vi } from 'vitest';
 import { FinalTouchesStage } from '../../components/FinalTouchesStage';
 import { createMockDraft, mockCGExplanations } from '../fixtures';
 import { renderWithCharacterCreationProviders } from '../testUtils';
-import type { EnemyOffer, OffersResponse, VisibleOffer } from '../../types';
+import type { EnemyOffer, FinalTouchesCard, OffersResponse, VisibleOffer } from '../../types';
 import { unreachableClasses } from './offers/classGuard';
 
 vi.mock('../../goals', async (importOriginal) => ({
@@ -127,6 +127,19 @@ const republic: EnemyOffer = {
   reason_id: null,
 };
 
+/** The card that starts the character with an enemy (#5255): it alone opens the section. */
+const grudge: FinalTouchesCard = {
+  distinction_id: 90,
+  name: 'Old Grudge',
+  prompt: 'enemy',
+  detail: '',
+  choices: [],
+};
+const enemyAsked = {
+  final_touches_prompts: ['enemy' as const],
+  final_touches_cards: [grudge],
+};
+
 describe("FinalTouchesStage (Actor's Sheet)", () => {
   beforeEach(() => {
     offersResponse = { offers: [hedonistic, voracious], terms: [] };
@@ -168,9 +181,37 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     expect(screen.getAllByLabelText('Goal 2')).toHaveLength(2);
   });
 
+  it('asks for an enemy only when a held card starts the character with one (#5255)', () => {
+    const { unmount } = renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({ enemy_offers: [rouault, republic] })}
+        onRegisterBeforeLeave={vi.fn()}
+      />
+    );
+    expect(screen.queryByRole('list', { name: 'Enemies offered' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Kind of enemy' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Who wants you to fail')).not.toBeInTheDocument();
+    expect(screen.queryByText('Enemy')).not.toBeInTheDocument();
+    // The enemy card by itself opens no "cards leave to settle" section either.
+    unmount();
+
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({ ...enemyAsked, enemy_offers: [rouault, republic] })}
+        onRegisterBeforeLeave={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('heading', { name: 'Old Grudge' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: 'Enemies offered' })).toBeInTheDocument();
+    expect(screen.queryByText('Who wants you to fail')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'What the cards leave to settle' })
+    ).not.toBeInTheDocument();
+  });
+
   it('prices an offered group at each degree and writes the ledger line', async () => {
     const user = userEvent.setup();
-    const draft = createMockDraft({ enemy_offers: [rouault, republic] });
+    const draft = createMockDraft({ ...enemyAsked, enemy_offers: [rouault, republic] });
     renderWithCharacterCreationProviders(
       <FinalTouchesStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
     );
@@ -273,6 +314,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     renderWithCharacterCreationProviders(
       <FinalTouchesStage
         draft={createMockDraft({
+          ...enemyAsked,
           enemy_offers: [rouault],
           enemy_reasons: [
             {
@@ -322,6 +364,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
       <div className="interview">
         <FinalTouchesStage
           draft={createMockDraft({
+            ...enemyAsked,
             enemy_offers: [rouault],
             draft_data: {
               goals: [{ domain_id: 1, notes: 'A', points: 1, horizon: 'short_term' }],
@@ -419,7 +462,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     let leave: (() => Promise<boolean>) | null = null;
     renderWithCharacterCreationProviders(
       <FinalTouchesStage
-        draft={createMockDraft({ enemy_offers: [rouault] })}
+        draft={createMockDraft({ ...enemyAsked, enemy_offers: [rouault] })}
         onRegisterBeforeLeave={(check) => {
           leave = check;
         }}

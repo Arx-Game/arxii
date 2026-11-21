@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0470_drop_flat_worship_amount_columns"),
-    ]
+    dependencies = [("arxii", "0472_identity_chapter_and_enemy_prompt")]
 
     operations = [
         migrations.AddField(

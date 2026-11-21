@@ -8,16 +8,25 @@
  * computes; the one mechanically-loaded explanation (a secret worship mints
  * a Secret others might uncover) lives in the margin rather than under a
  * section heading (Decision 8).
+ *
+ * Between the quote and worship, the Personality block (#5255, owner ruling
+ * 2026-11-21: the personality cards are picked here): this chapter's own offered
+ * distinctions (`ChapterOffers chapter="identity"`), the life page's cards two
+ * across. Four show at rest and the rest under "See N more"; where staff gave the
+ * lines headings every card shows under its heading instead. The section is absent
+ * when staff have placed no card here.
  */
 
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { ChapterLeaf, Field, Marginalia, Note, RecordRail, stageEyebrow } from '../folio';
-import { useCGExplanations, useUpdateDraft, useWorshippedBeings } from '../queries';
+import { useCGExplanations, useDraftOffers, useUpdateDraft, useWorshippedBeings } from '../queries';
 import type { CharacterDraft } from '../types';
 import { Stage } from '../types';
 import { composeFullName } from '../utils';
 import { cgRecord } from '../cgRecord';
+import { useShownPicks } from '../useShownPicks';
+import { ChapterOffers } from './offers/ChapterOffers';
 
 interface IdentityStageProps {
   draft: CharacterDraft;
@@ -33,7 +42,13 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
   const { data: beings } = useWorshippedBeings();
-  const record = cgRecord(draft);
+  // The cards this stage offers (#5255). The points line reads the picks as the page
+  // shows them, so it moves with a card click (#5141).
+  const { data: identityOffers } = useDraftOffers(draft.id, 'identity');
+  const cards = identityOffers?.offers ?? [];
+  const cardsAreGrouped = cards.some((offer) => offer.group);
+  const shown = useShownPicks(draft);
+  const record = cgRecord(draft, { points: shown });
   const draftData = draft.draft_data;
 
   const handleWorshipChange = (
@@ -140,6 +155,29 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           maxLength={500}
         />
       </Field>
+
+      {cards.length > 0 && (
+        <>
+          <h2 className="section-h">{copy?.identity_personality_heading ?? 'Personality'}</h2>
+          <ChapterOffers
+            draft={draft}
+            chapter="identity"
+            showOpener={false}
+            layout="grid"
+            pricing="signed"
+            terms={identityOffers?.terms ?? []}
+            groupBy={(offer) => offer.group}
+            firstLook={!cardsAreGrouped}
+            syncErrorHint={copy?.offers_sync_error}
+            wordPerRank={copy?.offers_word_per_rank}
+            wordSpent={copy?.offers_word_spent}
+            wordAwards={copy?.offers_word_awards}
+            wordSeeMore={copy?.offers_word_see_more}
+            wordHeld={copy?.offers_word_held}
+            pair
+          />
+        </>
+      )}
 
       <h2 className="section-h">{copy?.identity_worship_heading ?? 'Worship'}</h2>
       <Field id="public_worship" label="Public worship">

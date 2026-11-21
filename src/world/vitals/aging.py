@@ -44,6 +44,7 @@ from world.vitals.services import (
 if TYPE_CHECKING:
     from world.checks.models import CheckType
     from world.conditions.models import ConditionTemplate
+    from world.game_clock.jump import JumpPlan
     from world.vitals.models import VitalsConsequenceConfig
 
 logger = logging.getLogger(__name__)
@@ -295,3 +296,41 @@ def run_death_sweep(*, ic_now: datetime) -> int:
         _mark_dead(vitals.character_sheet)
         deaths += 1
     return deaths
+
+
+def characters_with_birth_year() -> int:
+    """How many character sheets carry a birth year: the characters whose age a change
+    of the clock's date moves (#5248). Sleepers and characters made before the clock
+    have none."""
+    return CharacterSheet.objects.filter(ic_birth_year__isnull=False).count()
+
+
+def rebase_ages_for_clock_jump(
+    plan: "JumpPlan", *, old_ic_now: datetime, new_ic_now: datetime, keep_ages: bool
+) -> int:
+    """Plan how the aging state follows a jump of the game clock (#5248).
+
+    Called by ``game_clock.services.set_clock`` when staff set the date. It records the
+    new values on ``plan`` and changes nothing itself; ``set_clock`` applies the plan
+    once every value is known. Returns the number of years every birth year will move
+    by (zero when ages are not kept). Raises ``OverflowError`` if a deadline would
+    leave the calendar, which ``set_clock`` turns into a refusal.
+
+    * Always: every open dying window moves by the length of the jump, so a character
+      in their dying days keeps the days they had left. Without this a long jump
+      forward would end every window at once, since ``run_death_sweep`` resolves any
+      deadline that has passed. A jump never kills anyone by itself.
+    * ``keep_ages``: every ``ic_birth_year`` moves by the calendar years jumped.
+      Chronological age is ``IC year - ic_birth_year``, so every age stays exactly as
+      it was.
+    """
+    jump = new_ic_now - old_ic_now
+    for vitals in CharacterVitals.objects.filter(aging_death_ic_deadline__isnull=False):
+        plan.set(vitals, "aging_death_ic_deadline", vitals.aging_death_ic_deadline + jump)
+
+    year_shift = new_ic_now.year - old_ic_now.year
+    if not keep_ages or year_shift == 0:
+        return 0
+    for sheet in CharacterSheet.objects.filter(ic_birth_year__isnull=False):
+        plan.set(sheet, "ic_birth_year", sheet.ic_birth_year + year_shift)
+    return year_shift

@@ -12,6 +12,7 @@ from evennia.utils.create import create_object
 from world.character_sheets.models import (
     _PROFILE_FIELDS,
     CharacterSheet,
+    Heritage,
     Profile,
     ProfileTextVersion,
 )
@@ -21,6 +22,8 @@ from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from world.magic.models import CharacterAura
 
 
@@ -435,3 +438,17 @@ def _staff_edit_sheet(sheet: CharacterSheet, changes: dict[str, Any], *, edited_
     # A species carries its gifts, languages and codex, as it does in CG (#4221).
     if changes.get("species") is not None:
         _grant_species_consequences(sheet)
+
+
+def heritages_not_yet_appeared(ic_moment: datetime) -> list[str]:
+    """Names of heritages whose first appearance is later than ``ic_moment`` (#5248).
+
+    The staff clock page warns with these before the date is set earlier than a
+    heritage's first appearance: character creation's age ceiling for such a heritage
+    falls to its floor (``character_creation.services.age_bounds``).
+    """
+    return list(
+        Heritage.objects.filter(first_appeared_ic__gt=ic_moment.date())
+        .order_by("name")
+        .values_list("name", flat=True)
+    )

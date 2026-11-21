@@ -87,3 +87,48 @@ class MoonPhase(TextChoices):
 # PLACEHOLDER tuning (#2845): synodic cycle length in IC days, and the fixed IC
 # epoch anchoring a NEW moon. 30 IC days ≈ one IC month per cycle.
 MOON_SYNODIC_IC_DAYS = 30.0
+
+
+#: The years the clock may be set to (#5248). The calendar is Python's, which ends at
+#: year 9999 and begins at year 1; the clock keeps running after it is set, and a jump
+#: moves other stored dates by its length, so the ends are kept well clear. A running
+#: clock that reached year 9999 would raise on every read of the time.
+MIN_CLOCK_YEAR = 100
+MAX_CLOCK_YEAR = 9000
+
+
+class AgeHandling(TextChoices):
+    """What a change of the clock's date does to characters' ages (#5248).
+
+    ``AGED``: the calendar moves under the characters. Birth years stay, so every
+    chronological age changes by the years jumped, and the birthday task matures each
+    character by the birthdays skipped. ``KEPT``: the calendar moves and the characters
+    move with it. Every birth year shifts by the years jumped, so nobody's age changes.
+    A change to an earlier date is always ``KEPT``: maturation is recorded and does not
+    go down, so a calendar cannot make anyone younger.
+    """
+
+    AGED = "aged", "Characters age"
+    KEPT = "kept", "Characters keep their ages"
+
+
+class ClockChange(TextChoices):
+    """The kind of change one ``GameClockHistory`` row records (#5248).
+
+    The row's anchors and ratios cannot tell a pause from a change of date, so the kind
+    is stored. Rows written before #5248 carry a blank.
+    """
+
+    PAUSED = "paused", "Paused"
+    RESUMED = "resumed", "Resumed"
+    SPEED = "speed", "Speed changed"
+    DATE_AGED = "date_aged", "Date set, characters aged"
+    DATE_KEPT = "date_kept", "Date set, characters kept their ages"
+
+
+class JumpDirection(TextChoices):
+    """Which way a change of the clock's date moves the calendar (#5248)."""
+
+    FORWARD = "forward", "Forward"
+    BACK = "back", "Back"
+    NONE = "none", "No change"

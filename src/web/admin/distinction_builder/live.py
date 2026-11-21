@@ -125,7 +125,10 @@ def _effect_target_check(distinction: Distinction) -> tuple[str, str]:
 
 
 def _opener_checks(distinction: Distinction) -> list[tuple[str, str]]:
-    """An offer line whose chapter wants an opener and has none is never shown (#3709)."""
+    """An offer line whose chapter wants an opener and has none is never shown (#3709).
+
+    An Identity line wants none (#5255): the chapter accepts no opener field.
+    """
     offers = DistinctionOffer.objects.filter(distinction=distinction, is_active=True)
     return [
         (
@@ -134,7 +137,7 @@ def _opener_checks(distinction: Distinction) -> list[tuple[str, str]]:
             "a player never sees it until it is.",
         )
         for offer in offers
-        if not offer.set_openers
+        if offer.chapter_opener_fields and not offer.set_openers
     ]
 
 
