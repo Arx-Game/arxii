@@ -386,6 +386,8 @@ class TestCleanupVerdict(unittest.TestCase):
         launcher.symlink_to(shutil.which("sleep"))
         child = subprocess.Popen([str(launcher), "30"], cwd=workdir)
         try:
+            if not Path(f"/proc/{child.pid}/cmdline").read_bytes():
+                self.skipTest("this runner does not expose a child's /proc/<pid>/cmdline")
             info = _describe_process({"pid": child.pid, "cmdline": "sleep 30"})
         finally:
             child.kill()
