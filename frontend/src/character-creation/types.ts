@@ -404,7 +404,7 @@ export interface FormTraitOption {
    * The colour drawn for a colour option, as `#rrggbb` (#5241). Blank for an option
    * that is not a colour or has no single colour; the page draws that one striped.
    */
-  swatch_hex: string;
+  color_hex: string;
 }
 
 export interface FormTrait {

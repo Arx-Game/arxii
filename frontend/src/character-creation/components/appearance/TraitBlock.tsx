@@ -78,7 +78,7 @@ export function TraitBlock({
             options={options.map((o) => ({
               value: o.id,
               label: o.display_name,
-              hex: o.swatch_hex,
+              hex: o.color_hex,
               beyond: !ownIds.has(o.id),
             }))}
             value={selectedId}

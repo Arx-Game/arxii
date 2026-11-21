@@ -757,7 +757,7 @@ offers no gift on the Path named by `?path_id=`, or on any Path when none is nam
 - `GET /api/character-creation/traditions/?beginning_id=X` - Traditions for a beginning; each carries `schooling` rows cut to the stances its state opens, each with `training_points` and `grants_distinction_name` (#4659), plus `favored_gift_names` and `favored_affinity_names` on the Tradition
 - `GET /api/character-creation/tarot-cards/` - Tarot cards for naming ritual
 - `GET /api/character-creation/form-options/{species_id}/` - Form traits for a species; each
-  option carries `swatch_hex`, the colour the page draws for a colour option (#5241)
+  option carries `color_hex`, the colour the page draws for a colour option (#5241)
 - `GET /api/character-creation/can-create/` - Eligibility check
 - `GET /api/character-creation/beginnings/{id}/perspectives/` - That beginning's
   `is_perspective=True` codex grants, ungated by codex knowledge (CG shop window,

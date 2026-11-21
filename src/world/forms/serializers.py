@@ -18,7 +18,7 @@ from world.forms.models import (
 class FormTraitOptionSerializer(serializers.ModelSerializer):
     class Meta:
         model = FormTraitOption
-        fields = ["id", "name", "display_name", "sort_order", "swatch_hex"]
+        fields = ["id", "name", "display_name", "sort_order", "color_hex"]
 
 
 class FormTraitSerializer(serializers.ModelSerializer):

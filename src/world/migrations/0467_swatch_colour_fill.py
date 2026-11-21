@@ -1,6 +1,6 @@
 """Give the colour options production already holds a first-pass colour value (#5241).
 
-The migration before this one added ``FormTraitOption.swatch_hex``, blank on every
+The migration before this one added ``FormTraitOption.color_hex``, blank on every
 row. The Appearance stage draws that value beside a colour's name. The owner, asked
 on 2026-11-21 who supplies the values for the 62 single-colour options, chose a first
 pass written here that staff then correct on the option's admin page.
@@ -95,7 +95,7 @@ SWATCHES = {
 def fill_blank_swatches(apps, schema_editor):
     FormTraitOption = apps.get_model("arxii", "FormTraitOption")
     blank = list(
-        FormTraitOption.objects.filter(trait__name__in=SWATCHES, swatch_hex="").select_related(
+        FormTraitOption.objects.filter(trait__name__in=SWATCHES, color_hex="").select_related(
             "trait"
         )
     )
@@ -103,9 +103,9 @@ def fill_blank_swatches(apps, schema_editor):
     for option in blank:
         colour = SWATCHES[option.trait.name].get(option.name)
         if colour:
-            option.swatch_hex = colour
+            option.color_hex = colour
             changed.append(option)
-    FormTraitOption.objects.bulk_update(changed, ["swatch_hex"])
+    FormTraitOption.objects.bulk_update(changed, ["color_hex"])
 
 
 class Migration(migrations.Migration):

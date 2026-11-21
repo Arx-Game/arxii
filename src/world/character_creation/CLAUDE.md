@@ -46,7 +46,7 @@ Character creation is a multi-stage process that guides players through creating
    the qualities cost are free, taken back off the CG total by one breakdown line
    (`CharacterDraft._append_feature_allowance`); past ten they cost CG points. The draft
    API reports `feature_points_spent` and `feature_points_free`. A colour option carries
-   `forms.FormTraitOption.swatch_hex` for the page's swatches
+   `forms.FormTraitOption.color_hex` for the page's swatches
 9. **Identity** - Name (shown; asked on Origin), concept, quote, worship
 10. **Final Touches** - The Background (#5178, ADR-5178: one free text,
     `draft_data.background`, written to `Profile.background` word for word at finalize;

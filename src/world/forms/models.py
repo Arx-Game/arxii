@@ -177,7 +177,7 @@ class FormTraitOption(NaturalKeyMixin, SharedMemoryModel):
     name = models.CharField(max_length=50, help_text="Internal key")
     display_name = models.CharField(max_length=100, help_text="Display name for UI")
     sort_order = models.PositiveSmallIntegerField(default=0)
-    swatch_hex = models.CharField(
+    color_hex = models.CharField(
         max_length=7,
         blank=True,
         validators=[RegexValidator(r"^#[0-9a-fA-F]{6}$", "Enter a colour as #rrggbb.")],

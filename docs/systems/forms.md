@@ -32,7 +32,7 @@ from world.forms.models import (
 | `HeightBand` | Height ranges mapping to descriptive bands; `CreditedContent` because `cg_hint` is player-facing prose (#3675) | `name`, `display_name`, `min_inches`, `max_inches`, `weight_min`, `weight_max`, `is_cg_selectable`, `cg_hint` (staff copy shown on the CG option, e.g. what opens a band players cannot normally take), `hide_build`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `Build` | Body type with weight calculation factor | `name`, `display_name`, `weight_factor` (Decimal), `is_cg_selectable`, `sort_order` |
 | `FormTrait` | Physical characteristic type (e.g., hair_color) | `name`, `display_name`, `trait_type` (TraitType), `sort_order`, `composite_option` (the blend umbrella, #2632), `unnatural_option` (the off-species umbrella, #3739 — never in a CG palette, see below) |
-| `FormTraitOption` | Valid value for a trait (e.g., "black" for hair_color) | `trait` (FK), `name`, `display_name`, `swatch_hex` (the colour drawn for a colour option where a player picks it, `#rrggbb`, blank for an option with no single colour, #5241), `height_modifier_inches` (nullable), `sort_order` |
+| `FormTraitOption` | Valid value for a trait (e.g., "black" for hair_color) | `trait` (FK), `name`, `display_name`, `color_hex` (the colour drawn for a colour option where a player picks it, `#rrggbb`, blank for an option with no single colour, #5241), `height_modifier_inches` (nullable), `sort_order` |
 | `SpeciesFormTrait` | Links species to available traits/options in CG | `species` (FK), `trait` (FK), `is_available_in_cg`, `is_required` (species identity marker, #2815), `allowed_options` (M2M, empty = all) |
 
 ### Character Data (models.Model - per-character instances)
@@ -369,7 +369,7 @@ All models registered with appropriate filters, search, and inline editing:
 - **`BuildAdmin`** - List-editable weight factor and CG selectability.
 - **`FormTraitAdmin`** - Inline `FormTraitOptionInline` for managing options.
 - **`FormTraitOptionAdmin`** - Custom changelist template with grouped display by trait. List-editable height modifier.
-- **The colour field** (#5241) - on both of those, `swatch_hex` is a short text input with a
+- **The colour field** (#5241) - on both of those, `color_hex` is a short text input with a
   browser colour picker beside it (`SwatchFieldMixin`, `admin/js/swatch_widget.js`). The
   field stays text because an option that is not a colour leaves it blank, and a colour
   input can never be blank; the picker has no name and only writes into the text input.
@@ -407,7 +407,7 @@ qualities").
 
 ### Colour swatches (#5241)
 
-A colour option carries `FormTraitOption.swatch_hex`, and the Appearance stage draws each
+A colour option carries `FormTraitOption.color_hex`, and the Appearance stage draws each
 colour trait (`TraitType.COLOR`) as a strip of swatches in those colours, the chosen
 colour's name printed beside the trait's name. An option with a blank value (Prismatic,
 Multihued, Mismatched, Mottled, or one staff have not set) is drawn striped. A first pass

@@ -57,11 +57,11 @@ class BuildAdmin(admin.ModelAdmin):
 #: text input marked ``data-swatch``; see the file for why the field stays text.
 SWATCH_WIDGET_JS = "admin/js/swatch_widget.js"
 #: The model field the picker belongs to.
-SWATCH_FIELD = "swatch_hex"
+SWATCH_FIELD = "color_hex"
 
 
 class SwatchFieldMixin:
-    """Draws ``swatch_hex`` as a short text input the colour picker script pairs with.
+    """Draws ``color_hex`` as a short text input the colour picker script pairs with.
 
     Shared by the option's own admin page and its inline on the trait page. Each of
     those also lists ``SWATCH_WIDGET_JS`` in its own ``Media``.

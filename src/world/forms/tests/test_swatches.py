@@ -25,23 +25,23 @@ class SwatchFieldTests(TestCase):
         )
 
     def test_a_colour_is_six_hex_digits_after_a_hash(self):
-        option = FormTraitOptionFactory(trait=self.trait, name="auburn", swatch_hex="#7a3220")
+        option = FormTraitOptionFactory(trait=self.trait, name="auburn", color_hex="#7a3220")
         option.full_clean()
 
     def test_blank_is_allowed_for_an_option_with_no_single_colour(self):
         option = FormTraitOptionFactory(trait=self.trait, name="prismatic")
-        assert option.swatch_hex == ""
+        assert option.color_hex == ""
         option.full_clean()
 
     def test_anything_else_is_refused(self):
         for bad in ("red", "#abc", "7a3220", "#7a322g", "#7a3220;"):
-            option = FormTraitOptionFactory.build(trait=self.trait, name="bad", swatch_hex=bad)
+            option = FormTraitOptionFactory.build(trait=self.trait, name="bad", color_hex=bad)
             with self.assertRaises(ValidationError, msg=bad):
                 option.full_clean()
 
     def test_the_option_serializer_carries_it(self):
-        option = FormTraitOptionFactory(trait=self.trait, name="auburn", swatch_hex="#7a3220")
-        assert FormTraitOptionSerializer(option).data["swatch_hex"] == "#7a3220"
+        option = FormTraitOptionFactory(trait=self.trait, name="auburn", color_hex="#7a3220")
+        assert FormTraitOptionSerializer(option).data["color_hex"] == "#7a3220"
 
 
 class DefaultSwatchTests(TestCase):
@@ -67,7 +67,7 @@ class FormOptionsSwatchTests(TestCase):
         trait = FormTraitFactory(
             name="hair_color", display_name="Hair Color", trait_type=TraitType.COLOR
         )
-        cls.auburn = FormTraitOptionFactory(trait=trait, name="auburn", swatch_hex="#7a3220")
+        cls.auburn = FormTraitOptionFactory(trait=trait, name="auburn", color_hex="#7a3220")
         cls.prismatic = FormTraitOptionFactory(trait=trait, name="prismatic")
         link = SpeciesFormTrait.objects.create(
             species=cls.species, trait=trait, is_available_in_cg=True
@@ -81,6 +81,6 @@ class FormOptionsSwatchTests(TestCase):
         assert resp.status_code == status.HTTP_200_OK
         (row,) = resp.data["traits"]
         assert row["trait"]["trait_type"] == "color"
-        by_name = {o["name"]: o["swatch_hex"] for o in row["options"]}
+        by_name = {o["name"]: o["color_hex"] for o in row["options"]}
         assert by_name == {"auburn": "#7a3220", "prismatic": ""}
-        assert {o["name"]: o["swatch_hex"] for o in row["all_options"]} == by_name
+        assert {o["name"]: o["color_hex"] for o in row["all_options"]} == by_name

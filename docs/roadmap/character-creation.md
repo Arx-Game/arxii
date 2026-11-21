@@ -7,7 +7,7 @@ month then day, on one line with the age, and read back as "Day 14 of <the game'
 that month>"; the row of twelve month names is gone. Height band and build are dropdowns on
 one line with the height in inches. Each physical feature is one compact control, two
 across: a dropdown for a list of names, and for a colour a strip of swatches drawn in each
-option's own colour (`FormTraitOption.swatch_hex`, new; a first pass of values for the 62
+option's own colour (`FormTraitOption.color_hex`, new; a first pass of values for the 62
 single-colour options production held, which staff correct in the admin with a colour
 picker). A marking's name, kind and region are asked on one line, the kind and region as
 dropdowns. The qualities (Alluring, Menacing, Majestic) sit on one line under every feature

@@ -18,7 +18,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddField(
             model_name="formtraitoption",
-            name="swatch_hex",
+            name="color_hex",
             field=models.CharField(
                 blank=True,
                 help_text="The colour shown for this option where a player picks it (#5241), as #rrggbb. Leave blank for an option that is not a colour, or has no single colour (Prismatic, Mismatched); it is then drawn as a striped swatch.",

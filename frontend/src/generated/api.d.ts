@@ -35438,7 +35438,7 @@ export interface components {
       display_name: string;
       sort_order?: number;
       /** @description The colour shown for this option where a player picks it (#5241), as #rrggbb. Leave blank for an option that is not a colour, or has no single colour (Prismatic, Mismatched); it is then drawn as a striped swatch. */
-      swatch_hex?: string;
+      color_hex?: string;
     };
     /**
      * @description * `color` - Color

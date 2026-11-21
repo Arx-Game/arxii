@@ -27,17 +27,17 @@ const mutate = vi.fn();
 let heightBands: (typeof mockHeightBandAverage)[] = [mockHeightBandAverage, mockHeightBandTall];
 let copy: Record<string, string> = mockCGExplanations;
 
-const black = { id: 5, name: 'black', display_name: 'Black', sort_order: 1, swatch_hex: '#1c1a1a' };
+const black = { id: 5, name: 'black', display_name: 'Black', sort_order: 1, color_hex: '#1c1a1a' };
 const prismatic = {
   id: 7,
   name: 'prismatic',
   display_name: 'Prismatic',
   sort_order: 2,
-  swatch_hex: '',
+  color_hex: '',
 };
-const blue = { id: 6, name: 'blue', display_name: 'Blue', sort_order: 9, swatch_hex: '#3a6ea8' };
-const pointed = { id: 11, name: 'pointed', display_name: 'Pointed', sort_order: 1, swatch_hex: '' };
-const feline = { id: 12, name: 'feline', display_name: 'Feline', sort_order: 2, swatch_hex: '' };
+const blue = { id: 6, name: 'blue', display_name: 'Blue', sort_order: 9, color_hex: '#3a6ea8' };
+const pointed = { id: 11, name: 'pointed', display_name: 'Pointed', sort_order: 1, color_hex: '' };
+const feline = { id: 12, name: 'feline', display_name: 'Feline', sort_order: 2, color_hex: '' };
 
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),

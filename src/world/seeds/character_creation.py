@@ -2235,7 +2235,7 @@ def _seed_form_traits(species: Species | None) -> None:
                     "display_name": opt_display,
                     "sort_order": opt_sort_idx,
                     # A first-pass colour for a colour option (#5241); blank otherwise.
-                    "swatch_hex": default_swatch(name, opt_name),
+                    "color_hex": default_swatch(name, opt_name),
                 },
                 trait=trait,
                 name=opt_name,

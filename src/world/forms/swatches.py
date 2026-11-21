@@ -1,6 +1,6 @@
 """A first pass of colour values for the colour trait options (#5241).
 
-``FormTraitOption.swatch_hex`` is what the Appearance stage draws beside a colour's
+``FormTraitOption.color_hex`` is what the Appearance stage draws beside a colour's
 name, so a player can see which red "Rust" is beside "Copper". Staff own the values
 and correct them on the option's admin page; this table is only the starting point
 the owner asked for (2026-11-21: "I write a first pass"), used by the sample seed
