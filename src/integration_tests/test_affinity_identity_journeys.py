@@ -55,10 +55,14 @@ class FallAndCorruptionOnAFreshlySeededDatabase(TestCase):
         )
         sheet = CharacterSheetFactory()
         set_aura_split(
-            CharacterAuraFactory(character=sheet), celestial="50", primal="45", abyssal="5"
+            CharacterAuraFactory(character=sheet), celestial="56", primal="44", abyssal="0"
         )
+        # The grants recompute the aura from what she has earned: 100 Celestial against 80
+        # Primal is 55.56 / 44.44, so Celestial leads and Primal is past the Fall's 40 percent.
+        # An even 100 / 100 would tie, and a tie reads Primal, so a Fall to Primal would be
+        # refused as "already dominant".
         grant_resonance(sheet, bene, 100, source=GainSource.STAFF_GRANT)
-        grant_resonance(sheet, praedari, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(sheet, praedari, 80, source=GainSource.STAFF_GRANT)
 
         result = perform_fall(sheet, target_affinity=self.primal)
 
@@ -68,7 +72,8 @@ class FallAndCorruptionOnAFreshlySeededDatabase(TestCase):
         self.assertEqual(record.conversion_type, "FALL")
         self.assertEqual(
             CharacterResonance.objects.get(character_sheet=sheet, resonance=praedari).balance,
-            220,
+            # Her own 80 plus Bene's 100 converted at 1.20 (120).
+            200,
         )
         self.assertEqual(result.conversion_type, "FALL")
 

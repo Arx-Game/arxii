@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from world.checks.models import Consequence
     from world.checks.types import CheckResult
     from world.conditions.models import ConditionStage
-    from world.magic.models import Resonance, Restriction, Technique
+    from world.magic.models import KindledStrengthTier, Resonance, Restriction, Technique
     from world.magic.types.drift import FocusOutcome
     from world.magic.types.substance import SubstanceCallUp
     from world.mechanics.types import AppliedEffect
@@ -134,6 +134,27 @@ class ResonanceInvolvement:
     # Celestial or Primal resonance. Valued as Abyssal and accrued at the Abyssal
     # coefficient times CorruptionConfig.hasty_fall_multiplier.
     hasty_fall_points: int = 0
+
+
+@dataclass(frozen=True)
+class CastResonanceOption:
+    """One resonance a cast may be worked in, as the cast panel and the combat declaration
+    show it (#5231).
+
+    ``is_default`` marks the resonance the cast uses when none is named. ``kindled_strength``
+    is the strength row she is kindled at in this resonance now, or None, and ``reasons`` are
+    its player-word lines (already masked by persona). ``stronger`` marks the one option whose
+    kindled cast power is the highest and above the default's, and ``adds_corruption`` that
+    working a cast in it adds corruption (its affinity's coefficient is above 0). No tuning
+    number is held here: the strength is sent as the word staff wrote for it.
+    """
+
+    resonance: Resonance
+    is_default: bool
+    kindled_strength: KindledStrengthTier | None
+    reasons: tuple[str, ...]
+    stronger: bool
+    adds_corruption: bool
 
 
 @dataclass

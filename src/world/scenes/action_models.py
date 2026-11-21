@@ -243,6 +243,17 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         related_name="+",
         help_text="Optional resonance filter from ritual check spec at fire time",
     )
+    cast_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The resonance the player named for the requested cast, held while the request "
+            "is pending (#5231); null means she named none and the cast uses the default."
+        ),
+    )
     snapshot_check_type = models.ForeignKey(
         "arxii.CheckType",
         on_delete=models.SET_NULL,

@@ -22,6 +22,7 @@ from world.character_creation.models import (
 )
 from world.character_creation.services import (
     CharacterCreationError,
+    DraftIncompleteError,
     add_application_comment,
     approve_application,
     claim_application,
@@ -38,13 +39,15 @@ from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
     PathGiftGrantFactory,
-    ResonanceFactory,
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.seeds_cast import get_standalone_cast_template
+from world.roster.models import Roster
+from world.roster.models.choices import RosterType
 from world.roster.seeds import ensure_rosters
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.skills.factories import SkillFactory
@@ -432,6 +435,47 @@ class ApproveApplicationTests(TestCase):
         with self.assertRaises(CharacterCreationError):
             approve_application(app, reviewer=self.staff)
 
+    def test_a_refused_incomplete_draft_leaves_the_application_in_review_in_memory(self):
+        """The identity-mapped application is not left APPROVED when finalize refuses."""
+        fury = primal_resonance(name="Fury")
+        rage = primal_resonance(name="Rage")
+        draft = CharacterDraftFactory(
+            account=self.account,
+            draft_data={
+                "gift_resonance_weights": [
+                    {"resonance_id": fury.pk, "weight": 5},
+                    {"resonance_id": rage.pk, "weight": 5},
+                ]
+            },
+        )
+        app = DraftApplicationFactory(
+            draft=draft, status=ApplicationStatus.IN_REVIEW, reviewer=self.staff
+        )
+        with self.assertRaises(DraftIncompleteError):
+            approve_application(app, reviewer=self.staff)
+        self.assertEqual(app.status, ApplicationStatus.IN_REVIEW)
+        stored = DraftApplication.objects.filter(pk=app.pk).values_list("status", flat=True)
+        self.assertEqual(list(stored), [ApplicationStatus.IN_REVIEW])
+        # A second approval is refused for the draft, not for a status it never reached.
+        with self.assertRaises(DraftIncompleteError):
+            approve_application(app, reviewer=self.staff)
+
+    @patch("world.character_creation.services.finalize_character")
+    def test_a_failure_after_finalize_leaves_the_application_in_review_in_memory(
+        self,
+        mock_finalize,  # noqa: ARG002
+    ):
+        """With no Active roster the roster step raises after finalize returned, and the
+        cached application still reads In Review, as the rolled-back table does."""
+        Roster.objects.filter(roster_type=RosterType.ACTIVE).delete()
+        draft = CharacterDraftFactory(account=self.account)
+        app = DraftApplicationFactory(
+            draft=draft, status=ApplicationStatus.IN_REVIEW, reviewer=self.staff
+        )
+        with self.assertRaises(Roster.DoesNotExist):
+            approve_application(app, reviewer=self.staff)
+        self.assertEqual(app.status, ApplicationStatus.IN_REVIEW)
+
 
 class RequestRevisionsTests(TestCase):
     """Tests for request_revisions service function."""
@@ -728,7 +772,7 @@ class ApproveApplicationIntegrationTests(TestCase):
             minimum_level=1,
         )
         cls.effect_type = EffectTypeFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         cls.tradition = TraditionFactory()
 
         # Gift-stage validator fixtures (#2426): a gift available for (tradition, path)

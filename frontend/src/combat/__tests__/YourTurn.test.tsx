@@ -2165,6 +2165,143 @@ describe('YourTurn — soulfray and fury declaration wiring (issue-1543)', () =>
     mockActionDeclarationCard.mockImplementation(defaultCardImpl);
   });
 
+  it.each([
+    ['a resonance other than her usual one is picked', ['cast-resonance-9'], 9],
+    ['she switches back to her usual one', ['cast-resonance-9', 'cast-resonance-3'], undefined],
+    ['she never touches the picker', [], undefined],
+  ])('sends preferred_resonance_id only when %s (#5231)', async (_case, clicks, expected) => {
+    setupMocks();
+    const cast = makeCastPlayerAction(9, 'Ember Touch', {
+      soulfray_warning: null,
+      cast_resonance_options: [
+        {
+          resonance_id: 3,
+          name: 'Arderi',
+          color_hex: '#d4a017',
+          is_default: true,
+          kindled_strength: null,
+          reasons: [],
+          stronger: false,
+          adds_corruption: false,
+        },
+        {
+          resonance_id: 9,
+          name: 'Praedari',
+          color_hex: '#7a1f3d',
+          is_default: false,
+          kindled_strength: 'Blazing',
+          reasons: ['Someone is at your mercy.'],
+          stronger: true,
+          adds_corruption: true,
+        },
+      ],
+    });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          <button
+            type="button"
+            data-testid={`card-select-technique-${slot}`}
+            onClick={() =>
+              onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId: 9 })
+            }
+          >
+            select technique
+          </button>
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [cast] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused'));
+    for (const id of clicks) await userEvent.click(screen.getByTestId(id));
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).toMatchObject({ effort_level: 'medium' });
+    expect(calls[0][0].kwargs.preferred_resonance_id).toBe(expected);
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
+  it('does not carry a resonance picked for one technique onto the next (#5231)', async () => {
+    setupMocks();
+    const options = [
+      {
+        resonance_id: 3,
+        name: 'Arderi',
+        color_hex: '#d4a017',
+        is_default: true,
+        kindled_strength: null,
+        reasons: [],
+        stronger: false,
+        adds_corruption: false,
+      },
+      {
+        resonance_id: 9,
+        name: 'Praedari',
+        color_hex: '#7a1f3d',
+        is_default: false,
+        kindled_strength: 'Blazing',
+        reasons: [],
+        stronger: true,
+        adds_corruption: true,
+      },
+    ];
+    const castA = makeCastPlayerAction(9, 'Ember Touch', { cast_resonance_options: options });
+    const castB = makeCastPlayerAction(10, 'Ash Veil', { cast_resonance_options: options });
+
+    mockActionDeclarationCard.mockImplementation(({ actionContext, onContextChange, readOnly }) => {
+      const slot = actionContext.slot as string;
+      return (
+        <div data-testid={`action-card-${slot}`} data-readonly={String(readOnly ?? false)}>
+          {[9, 10].map((techniqueId) => (
+            <button
+              key={techniqueId}
+              type="button"
+              data-testid={`card-select-technique-${slot}-${techniqueId}`}
+              onClick={() =>
+                onContextChange({ slot, effort: 'MEDIUM', strainCommitment: 0, techniqueId })
+              }
+            >
+              select technique
+            </button>
+          ))}
+        </div>
+      );
+    });
+
+    render(<YourTurn {...defaultProps({ availableActions: [castA, castB] })} />, {
+      wrapper: createWrapper(),
+    });
+
+    await userEvent.click(screen.getByTestId('card-select-technique-focused-9'));
+    await userEvent.click(screen.getByTestId('cast-resonance-9'));
+    expect(screen.getByTestId('cast-resonance-9')).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByTestId('card-select-technique-focused-10'));
+    expect(screen.getByTestId('cast-resonance-3')).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByTestId('submit-declarations-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('ready-badge')).toBeInTheDocument();
+    });
+
+    const calls = mockMutateAsync.mock.calls as Array<[{ kwargs: Record<string, unknown> }]>;
+    expect(calls[0][0].kwargs).toMatchObject({ effort_level: 'medium' });
+    expect(calls[0][0].kwargs).not.toHaveProperty('preferred_resonance_id');
+
+    mockActionDeclarationCard.mockImplementation(defaultCardImpl);
+  });
+
   it('drops a give-in back to holding steady when the resonance stops being kindled', async () => {
     setupMocks();
     const kindledCast = makeCastPlayerAction(9, 'Fury Cast', {

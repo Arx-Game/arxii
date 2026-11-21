@@ -26,6 +26,12 @@ class MagicError(Exception):
             self.user_message = args[0]
 
 
+class ResonanceNotOnGiftThread(MagicError):
+    """A cast named a resonance that the Gift's thread holds no row for (#5231)."""
+
+    user_message = "That resonance is not part of this Gift's thread."
+
+
 class ResonanceInsufficient(MagicError):
     user_message = "You do not have enough resonance for this."
 

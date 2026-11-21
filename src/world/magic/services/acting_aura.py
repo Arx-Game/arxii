@@ -44,12 +44,12 @@ def working_affinities(
 ) -> list[Affinity]:
     """The distinct affinities a cast works in, in the order the resonances give them.
 
-    ``resonances`` are the gift's resonances for this character
-    (``gift_resonances_for``). While an alternate self with a resonance is worn, that
-    resonance replaces them, as it does in variant resolution
+    ``resonances`` are the ones the cast draws on (``cast_working_resonances``: the one
+    resonance the cast is worked in, #5231). While an alternate self with a resonance is worn,
+    that resonance replaces them, as it does in variant resolution
     (``_effective_variant_resonance``), so her own techniques work in the affinity she
     acts with (#4731). Read by the aura-alignment power term and the cast-time
-    resonance of place. Empty when the gift has no resonance for her.
+    resonance of place. Empty when the cast draws on no resonance.
     """
     resonances = list(resonances)
     if not resonances:

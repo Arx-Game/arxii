@@ -992,6 +992,8 @@ export interface Resonance {
   affinity_name: string;
   description: string;
   codex_entry_id: number | null;
+  /** The resonance's colour as `#RRGGBB`: the swatch on its card and the aura it makes. */
+  color_hex: string;
 }
 
 /**

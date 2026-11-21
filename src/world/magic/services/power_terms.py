@@ -16,11 +16,14 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+from world.magic.services.kindled_math import scale_by_kindled_boost
+
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import (
         AuraPowerConfig,
         CovenantRoleBlendConfig,
+        KindledStrengthTier,
         LevelPowerConfig,
         Resonance,
         Technique,
@@ -83,6 +86,9 @@ class PowerTermContext:
     #: nothing. Never re-derived here: the power, narration, consumption and condition
     #: must all follow the same decision.
     price_payment: PricePayment | None = None
+    #: The one resonance this cast is worked in (#5231), resolved once by ``use_technique``
+    #: through ``cast_resonance_for``. ``None`` = a cast with no resonance (no Gift).
+    cast_resonance: Resonance | None = None
 
 
 PowerTermProvider = Callable[[PowerTermContext], int]
@@ -166,9 +172,9 @@ def _aura_alignment(ctx: PowerTermContext, config: AuraPowerConfig, resonances: 
     """Affinity-alignment contribution: one bonus, the best over the cast's affinities.
 
     A worn alternate self keeps its acting-aura reading: the aura's percent in the
-    affinity she acts in. Otherwise the cast works in the gift's affinities and
-    those of the resonances paying its pulled threads, so pulling never lowers the bonus,
-    and a mixed character is never penalised for it (#5123, ruling 26): the bonus is the
+    affinity she acts in. Otherwise the cast works in the affinity of the resonance it is
+    worked in and those of the resonances paying its pulled threads, so pulling never lowers
+    the bonus, and a mixed character is never penalised for it (#5123, ruling 26): the bonus is the
     largest over those affinities, the full ``affinity_alignment_bonus`` for an affinity
     that is part of who she is (a settled share above zero), else her current percent of it.
     """
@@ -227,10 +233,11 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     """Aura contribution to power: affinity-alignment + resonance standing (#768).
 
     Affinity axis: the caster's acting aura % in each working affinity of the cast
-    (the gift's resonances, or the worn alternate self's resonance, #4731),
-    proportional to ``affinity_alignment_bonus``.
+    (the one resonance the cast is worked in, #5231, or the worn alternate self's resonance,
+    #4731, with the payers of any pulled threads joining), proportional to
+    ``affinity_alignment_bonus``.
     Standing axis ("aura farming"): summed CharacterResonance.lifetime_earned
-    in those resonances x ``resonance_standing_bonus``, then capped per character
+    in the cast's resonance x ``resonance_standing_bonus``, then capped per character
     level by the applicable ``StandingCapBand`` (HARD clamp / SOFT diminish; #853).
     Returns 0 when unconfigured or when the cast has no technique.
     """
@@ -238,9 +245,9 @@ def aura_power_term(ctx: PowerTermContext) -> int:
     if config is None or ctx.technique is None:
         return 0
 
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    from world.magic.specialization.services import cast_working_resonances  # noqa: PLC0415
 
-    resonances = list(gift_resonances_for(ctx.sheet.character, ctx.technique.gift))
+    resonances = cast_working_resonances(ctx.sheet.character, ctx.technique, ctx.cast_resonance)
     if not resonances:
         return 0
 
@@ -292,18 +299,18 @@ def price_power_term(ctx: PowerTermContext) -> int:
 
 
 def touchstone_power_term(ctx: PowerTermContext) -> int:
-    """Flat bonus from attuned touchstones matching the technique's gift resonance (#2023).
+    """Flat bonus from attuned touchstones matching the resonance the cast is worked in (#2023).
 
     Scans the character's equipped items for touchstones whose ``tied_resonance``
-    matches any of the technique's gift resonances. The bonus is modest and
-    tier-scaled via ``TouchstoneCastConfig``.
+    matches the cast's resonance (#5231; every Gift resonance only when the cast has none).
+    The bonus is modest and tier-scaled via ``TouchstoneCastConfig``.
     """
     if ctx.technique is None:
         return 0
     from world.magic.services.touchstone import touchstone_cast_bonus  # noqa: PLC0415
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    from world.magic.specialization.services import cast_working_resonances  # noqa: PLC0415
 
-    resonances = gift_resonances_for(ctx.sheet.character, ctx.technique.gift)
+    resonances = cast_working_resonances(ctx.sheet.character, ctx.technique, ctx.cast_resonance)
     if not resonances:
         return 0
     return sum(touchstone_cast_bonus(ctx.sheet, resonance) for resonance in resonances)
@@ -710,6 +717,40 @@ def vow_situational_power_term(ctx: PowerTermContext) -> int:
     return sum_potency_scaled_magnitudes(fired)
 
 
+def kindled_cast_strength(resonance: Resonance, tier: KindledStrengthTier | None) -> int:
+    """Cast power a kindled ``resonance`` at ``tier`` adds to a cast worked in it (#5231).
+
+    The strength row's ``cast_power`` scaled by the resonance's own affinity's staff-set
+    ``kindled_boost_percent`` (rounded down), so an Abyssal resonance can pay more than a
+    Primal one at the same strength. 0 when it is not kindled. The cast options show this
+    number as it stands.
+    """
+    if tier is None:
+        return 0
+    return scale_by_kindled_boost(resonance, tier.cast_power)
+
+
+def kindled_cast_power_term(ctx: PowerTermContext) -> int:
+    """A cast worked in a kindled resonance is stronger, and more for an Abyssal one (#5231).
+
+    Adds ``kindled_cast_strength`` of the cast's resonance, whether or not the cast pulls a
+    thread: kindling's other benefits (giving in, Dig deep) stack with a pull the same way, so
+    stacking is the rule and staff tune ``cast_power``. 0 for a cast with no resonance or one
+    that is not kindled.
+    """
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.magic.services.kindling import kindled_strength_now  # noqa: PLC0415
+
+    if ctx.cast_resonance is None:
+        return 0
+    # In a fight the cast's own round context is the resolution: no second lookup of it.
+    resolution = ctx.situation_ctx if isinstance(ctx.situation_ctx, CombatRoundContext) else None
+    return kindled_cast_strength(
+        ctx.cast_resonance,
+        kindled_strength_now(ctx.sheet, ctx.cast_resonance, resolution=resolution),
+    )
+
+
 _PROVIDERS: list[PowerTermProvider] = [
     level_power_term,
     aura_power_term,
@@ -720,6 +761,7 @@ _PROVIDERS: list[PowerTermProvider] = [
     covenant_role_specialty_power_term,
     vow_situational_power_term,
     price_power_term,
+    kindled_cast_power_term,
 ]
 
 

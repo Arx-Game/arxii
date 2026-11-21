@@ -34,6 +34,7 @@ const option = (
   affordable: balance >= 3,
   effects,
   level_read: levelRead,
+  stronger: false,
 });
 
 const makeThread = (overrides: Partial<Thread> = {}): Thread =>
@@ -105,6 +106,36 @@ describe('PayerOptions', () => {
     expect(screen.getByTestId('payer-kindled-1-1')).toHaveTextContent('Kindled, blazing');
     expect(screen.queryByTestId('payer-kindled-1-2')).not.toBeInTheDocument();
     expect(screen.queryByTestId('payer-kindled-1-3')).not.toBeInTheDocument();
+  });
+
+  it('marks the stronger payer and no other', () => {
+    const options = [OPTIONS[0], { ...OPTIONS[1], stronger: true }, OPTIONS[2]];
+    render(
+      <PayerOptions
+        thread={makeThread()}
+        options={options}
+        selectedResonanceId={1}
+        onSelect={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('payer-stronger-1-2')).toHaveTextContent('Stronger');
+    expect(screen.queryByTestId('payer-stronger-1-1')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('payer-stronger-1-3')).not.toBeInTheDocument();
+  });
+
+  it('marks the stronger payer in the fixed layout of a one-resonance thread', () => {
+    render(
+      <PayerOptions
+        thread={makeThread({
+          resonances: [{ resonance_id: 1, resonance_name: 'Fury', amount: 30, leads: true }],
+        })}
+        options={[{ ...OPTIONS[0], stronger: true }]}
+        selectedResonanceId={1}
+        onSelect={vi.fn()}
+      />
+    );
+    expect(screen.getByTestId('payer-fixed-1')).toBeInTheDocument();
+    expect(screen.getByTestId('payer-stronger-1-1')).toHaveTextContent('Stronger');
   });
 
   it('draws each perk as a shaded bar with the value in its own right-hand cell', () => {

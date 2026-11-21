@@ -13,6 +13,7 @@ from world.magic.models.soul_tether import Sineating, SoulTetherRescue
 from world.relationships.models import CharacterRelationship
 
 if TYPE_CHECKING:
+    from world.magic.models import Thread
     from world.scenes.models import Scene
 
 
@@ -65,6 +66,21 @@ class MireForSinner:
 
 
 @dataclass(frozen=True, slots=True)
+class CheckedPlea:
+    """A Sinner's plea after every refusal has passed, before anything is written (#5231).
+
+    ``units`` is the number offered after clamping to the scene's cap. ``resonance`` is the one
+    on the Sinner's tether ``thread`` in which the plea moves her corruption.
+    """
+
+    relationship: CharacterRelationship
+    thread: Thread
+    scene: Scene
+    units: int
+    resonance: Resonance
+
+
+@dataclass(frozen=True, slots=True)
 class SineatingOffer:
     """A Sinner's plea for Sineating, as recorded (#5177)."""
 
@@ -83,8 +99,10 @@ class SineatingOffer:
 class SineatingResult:
     """What a Sineating did, or a declined plea (#5177).
 
-    ``resonance`` is the tether's resonance, the one the Sinner's corruption was in and the
-    Sinner's thread channels. ``sineater_resonance`` is the resonance of the Sineater's own
+    ``resonance`` is the one the Sinner's corruption moved in: the resonance on her tether thread
+    in which she had the most of her own to shed. ``sinner_resonance_earned`` is her total
+    earning and ``sinner_earned_parts`` what each grant recorded, one pair per resonance on
+    her thread that was paid (#5231). ``sineater_resonance`` is the resonance of the Sineater's own
     thread, None when they hold no resonance for it to channel, in which case they earned
     nothing. ``cut_by_ceiling`` is True when the Sineater could take on only part of the
     corruption the units would have moved.
@@ -103,6 +121,7 @@ class SineatingResult:
     cut_by_ceiling: bool = False
     outcome_name: str = ""
     sinner_resonance_earned: int = 0
+    sinner_earned_parts: tuple[tuple[Resonance, int], ...] = ()
     sineater_resonance: Resonance | None = None
     sineater_resonance_earned: int = 0
 

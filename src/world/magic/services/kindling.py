@@ -698,6 +698,27 @@ def kindled_for(
     return _evaluate(sheet, [resonance], resolution=resolution, mission=mission, act=act)[0]
 
 
+def kindled_strength_now(
+    sheet: CharacterSheet, resonance: Resonance, *, resolution: object | None = None
+) -> KindledStrengthTier | None:
+    """The strength row ``resonance`` is kindled at for the character now, or None.
+
+    None unless she holds the resonance (``sheet.cached_resonances``). Read in her live
+    fight and mission (``kindling_context_for``) with no act, the same context the "Your
+    resonances" panel, a cast and giving in to Fury read, so they never disagree. A caller
+    that already holds the round it is resolving in passes it as ``resolution`` and the
+    fight is not looked up again; her mission is still her newest active one.
+    """
+    if not any(held.resonance_id == resonance.pk for held in sheet.cached_resonances):
+        return None
+    if resolution is None:
+        context = kindling_context_for(sheet)
+        resolution, mission = context.resolution, context.mission
+    else:
+        mission = active_mission_for(sheet)
+    return kindled_for(sheet, resonance, resolution=resolution, mission=mission).tier
+
+
 def kindled_for_each(
     sheet: CharacterSheet,
     resonances: list[Resonance],

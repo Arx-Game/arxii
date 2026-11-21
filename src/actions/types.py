@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import TYPE_CHECKING, Any
 
 from actions.constants import ActionBackend, ActionCategory, CombatActionSlot, TargetKind
-from world.magic.types.techniques import SoulfrayWarning
+from world.magic.types.techniques import CastResonanceOption, SoulfrayWarning
 from world.mechanics.constants import DifficultyIndicator
 
 if TYPE_CHECKING:
@@ -350,6 +350,9 @@ class PlayerAction:
     soulfray_warning: SoulfrayWarning | None = None
     available_fury_tiers: tuple[FuryTierOption, ...] = ()
     eligible_fury_resonances: tuple[FuryResonanceOption, ...] = ()
+    # #5231: the resonances a cast may be worked in, as the combat declaration lists them;
+    # empty for non-cast actions. The picker sends the choice as ``preferred_resonance_id``.
+    cast_resonance_options: tuple[CastResonanceOption, ...] = ()
     # Runtime stats and cost the cast card shows (#4799); None for non-cast actions.
     cast_preview: CastPreview | None = None
 

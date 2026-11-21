@@ -65,18 +65,9 @@ def give_in_strength(
     """
     if character is None or resonance is None:
         return None
-    from world.magic.services.kindling import (  # noqa: PLC0415
-        kindled_for,
-        kindling_context_for,
-    )
+    from world.magic.services.kindling import kindled_strength_now  # noqa: PLC0415
 
-    sheet = _sheet_of(character)
-    if not any(held.resonance_id == resonance.pk for held in sheet.cached_resonances):
-        return None
-    context = kindling_context_for(sheet)
-    return kindled_for(
-        sheet, resonance, resolution=context.resolution, mission=context.mission
-    ).tier
+    return kindled_strength_now(_sheet_of(character), resonance)
 
 
 def provocation_cap(strength: KindledStrengthTier | None) -> int:

@@ -10,10 +10,13 @@ Hand-worked numbers used below (StrainConfig curve 10 per point for the first 5 
 then 9): 4 strain units give 40 power, 6 give 59, 10 give 95. The technique channels 20
 intensity before strain, so a scene cast's "channeled intensity" is 20 plus that. A pull
 costs 1 resonance. Corruption
-(tier 1 coefficient 10, Abyssal coefficient 10, Primal 0, Celestial 0):
+(tier 1 coefficient 10, Abyssal coefficient 10, Primal 0, Celestial 0; a caster whose aura
+has less than 50 percent Abyssal takes the light 10 percent of an Abyssal tick, rounded up
+once, #5231):
 - a hasty fall of 4 Celestial points at the 1.50 Fall rate is valued 6 Abyssal; the
   tick is ceil(6 x 1.0 x 1.0 x 2.0 hasty) = 12 on the burned Celestial resonance;
-- a Celestial caster burning 4 Abyssal raw beside a 1-point pull: ceil(5 x 1.0) = 5.
+- a Celestial caster (no Abyssal share) burning 4 Abyssal raw beside a 1-point pull spends 5,
+  and takes the light 10 percent of it: ceil(5 x 1.0 x 10 / 100) = 1.
 """
 
 from __future__ import annotations
@@ -350,7 +353,7 @@ class BurningResonanceOutOfCombat(_BurningResonance):
         self.assertIn(f"You burn 4 of 6 {resonance.name} resonance.", told)
         self.assertNotIn("pair rate", told)
         self.assertEqual(channeled, 20 + 40)
-        self.assertEqual(self.corruption(ysmay, resonance), 5)
+        self.assertEqual(self.corruption(ysmay, resonance), 1)
 
     def test_celestial_burning_its_own_resonance_costs_only_the_resonance(self) -> None:
         ysmay = self.caster("Ysmay", aura="celestial")

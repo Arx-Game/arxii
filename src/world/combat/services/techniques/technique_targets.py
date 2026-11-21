@@ -18,7 +18,23 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import Technique
+    from world.magic.models import Resonance, Technique
+
+
+def stored_cast_resonance(
+    participant: CombatParticipant, action: CombatRoundAction
+) -> Resonance | None:
+    """The resonance the player chose at declaration, when the Gift's thread still holds it.
+
+    A round never fails on a pick the thread has lost since (#5231): ``None`` then, and the
+    cast is worked in the default. Every kind of cast that offers the resonance choice
+    (a focused cast, an enchanted Strike) resolves it through here.
+    """
+    from world.magic.specialization.services import resonance_on_gift_thread  # noqa: PLC0415
+
+    return resonance_on_gift_thread(
+        participant.character_sheet.character, action.focused_action, action.cast_resonance
+    )
 
 
 def _resolve_condition_target(

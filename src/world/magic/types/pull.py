@@ -200,6 +200,8 @@ class PayerOption:
     the thread level those perks are read at; both are filled by the perk lookup by payer.
     ``kindled_strength`` (#5124) is the strength tier this resonance is kindled at when the
     pull is read, or None; the effects are already read at the higher level it gives.
+    ``stronger`` (#5231) is True for the one option whose kindled boost raised it to the
+    strictly highest level read on this thread; a tie, or no boost, marks none.
     """
 
     resonance: Resonance
@@ -209,6 +211,7 @@ class PayerOption:
     effects: list[ResolvedPullEffect] = field(default_factory=list)
     level_read: int = 0
     kindled_strength: KindledStrengthTier | None = None
+    stronger: bool = False
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0472_identity_chapter_and_enemy_prompt")]
+    dependencies = [("arxii", "0473_affinity_kindled_boost_percent_and_more")]
 
     operations = [
         migrations.AddField(

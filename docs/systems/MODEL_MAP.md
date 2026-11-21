@@ -2719,6 +2719,7 @@
   - focused_opponent_target -> combat.CombatOpponent [FK] (nullable)
   - focused_ally_target -> combat.CombatParticipant [FK] (nullable)
   - rally_resonance -> magic.Resonance [FK] (nullable)
+  - cast_resonance -> magic.Resonance [FK] (nullable)
   - item_instance -> items.ItemInstance [FK] (nullable)
   - physical_passive -> magic.Technique [FK] (nullable)
   - social_passive -> magic.Technique [FK] (nullable)
@@ -3005,7 +3006,7 @@
 - `combatants_hostile_to(actor: 'CombatParticipant | CombatOpponent', *, allegiances: 'dict[int, Allegiance] | None' = None, opponents: 'list[CombatOpponent] | None' = None) -> 'dict[str, list]' - Return the combatants *actor* may attack, grouped by kind (#1584, #4091).`
 - `complete_encounter(encounter: 'CombatEncounter', *, outcome: 'EncounterOutcome') -> 'None' - Single completion seam for round resolution and the GM end endpoint (#876).`
 - `compute_intensity_for_clash(participant: 'CombatParticipant', action: 'CombatRoundAction') -> 'int' - Return technique.intensity + related INTENSITY_BUMP pull bonuses for the clash floor gate.`
-- `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_resonance: 'Resonance | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
+- `declare_action(participant: 'CombatParticipant', *, focused_action: 'Technique | None' = None, focused_category: 'str | None' = None, effort_level: 'str', focused_opponent_target: 'CombatOpponent | None' = None, focused_ally_target: 'CombatParticipant | None' = None, physical_passive: 'Technique | None' = None, social_passive: 'Technique | None' = None, mental_passive: 'Technique | None' = None, confirm_soulfray_risk: 'bool' = False, strain_commitment: 'int' = 0, fury_commitment: 'FuryTier | None' = None, fury_resonance: 'Resonance | None' = None, cast_destination: 'Position | None' = None, cast_position_a: 'Position | None' = None, cast_position_b: 'Position | None' = None, cast_resonance: 'Resonance | None' = None) -> 'CombatRoundAction' - Declare a PC's action for the current round.`
 - `declare_await_opening(participant: 'CombatParticipant', technique: 'Technique', *, confirm_soulfray_risk: 'bool' = False) -> 'CombatRoundAction' - Declare a waiting strike with ``technique`` for the current round.`
 - `declare_charge(participant: 'CombatParticipant', technique: 'Technique', opponent: 'CombatOpponent') -> 'CombatRoundAction' - Declare a mounted charge — closes distance to *opponent*, then attacks (#1843).`
 - `declare_clash_contribution(*, participant: 'CombatParticipant', clash: 'Clash', action_slot: 'str', technique: 'Technique', strain_commitment: 'int') -> 'ClashContributionDeclaration' - Write (or overwrite) a PC's clash contribution declaration for the current round.`
@@ -10076,6 +10077,7 @@
   - snapshot_skill -> skills.Skill [FK] (nullable)
   - snapshot_specialization -> skills.Specialization [FK] (nullable)
   - snapshot_resonance -> magic.Resonance [FK] (nullable)
+  - cast_resonance -> magic.Resonance [FK] (nullable)
   - snapshot_check_type -> checks.CheckType [FK] (nullable)
   - result_interaction -> scenes.Interaction [OneToOne] (nullable)
   - action_interaction -> scenes.Interaction [OneToOne] (nullable)

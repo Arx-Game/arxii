@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     )
     from world.combat.types import ActionOutcome, StrikeWeapon
     from world.conditions.models import DamageType
-    from world.magic.models import Technique
+    from world.magic.models import Resonance, Technique
     from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types import CastCheck
     from world.magic.types.power_ledger import PowerLedger
@@ -235,6 +235,8 @@ class EnchantedStrikeCast:
     strike_check_type: CheckType
     cast_check: CastCheck
     display_name: str
+    # The one resonance the cast is worked in (#5231), for resonance-scoped modifiers.
+    cast_resonance: Resonance | None = None
     enchantment: StrikeEnchantment | None = None
     landing: StrikeLanding | None = None
     fired: list = field(default_factory=list)
@@ -273,6 +275,7 @@ class EnchantedStrikeCast:
             fatigue_category=ActionCategory.PHYSICAL,
             offense_check_type=self.cast_check.check_type,
             offense_check_fn=None,
+            cast_resonance=self.cast_resonance,
             offense_extra_traits=self.cast_check.extra_traits,
         )
         combat_ledger = (
@@ -316,7 +319,10 @@ class EnchantedStrikeCast:
             resolver=resolver,
             # Kind-wide damage modifiers reach the Strike once, through its weapon part.
             technique_bonus=TechniqueDamageBonus.for_cast(
-                sheet, technique, technique_scoped_only=True
+                sheet,
+                technique,
+                technique_scoped_only=True,
+                cast_resonance=self.cast_resonance,
             ),
             profiles=profiles,
             eff_intensity=eff_intensity,
@@ -436,6 +442,7 @@ def resolve_enchanted_strike(
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
         technique_display_name,
     )
+    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
 
     character = participant.character_sheet.character
     technique = action.focused_action
@@ -449,6 +456,10 @@ def resolve_enchanted_strike(
         finish_strike(participant, action, outcome, weapon, target, landing)
         return outcome
 
+    # A Strike names no resonance (#5231): an enchanted Strike is always worked in the default
+    # one, the Gift thread's leading resonance or a worn alternate self's. The cast carries that
+    # resonance so the effect's resonance-scoped targets follow it, and use_technique is given
+    # none to prefer.
     cast = EnchantedStrikeCast(
         participant=participant,
         action=action,
@@ -457,6 +468,7 @@ def resolve_enchanted_strike(
         strike_check_type=check_type,
         cast_check=cast_check,
         display_name=display_name,
+        cast_resonance=cast_resonance_for(character, technique),
     )
     use = use_technique(
         character=character,

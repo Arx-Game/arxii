@@ -186,10 +186,8 @@ class TechniqueUseResultFieldTests(TestCase):
         assert isinstance(inv, ResonanceInvolvement)
         assert inv.resonance == self.resonance
 
-    def test_use_technique_resonance_involvements_split_intensity_equally_for_two_resonance_gift(
-        self,
-    ) -> None:
-        """stat_bonus_contribution splits runtime intensity equally across resonances."""
+    def test_use_technique_works_a_two_resonance_gift_in_one_resonance(self) -> None:
+        """The whole runtime intensity goes to the one resonance the cast is worked in (#5231)."""
         resonance_b = ResonanceFactory()
         two_res_gift = GiftFactory()
         two_res_gift.resonances.add(self.resonance, resonance_b)
@@ -206,11 +204,13 @@ class TechniqueUseResultFieldTests(TestCase):
             resolve_fn=MagicMock(return_value="ok"),
         )
 
-        assert len(result.resonance_involvements) == 2
-        for inv in result.resonance_involvements:
-            # runtime_intensity = 6 (no engagement modifiers set here, just CharacterEngagement
-            # with no modifiers); split = 6 // 2 = 3
-            assert inv.stat_bonus_contribution == 3
+        # runtime_intensity = 6 (no engagement modifiers set here, just CharacterEngagement
+        # with no modifiers); the caster has no thread on the gift, so the cast is worked in
+        # the gift's first resonance and the other resonance is not involved at all.
+        assert len(result.resonance_involvements) == 1
+        (inv,) = result.resonance_involvements
+        assert inv.resonance == two_res_gift.cached_resonances[0]
+        assert inv.stat_bonus_contribution == 6
 
     def test_use_technique_resonance_involvements_includes_combat_pull_spent(self) -> None:
         """thread_pull_resonance_spent sums what active CombatPulls spent, per thread resonance."""

@@ -188,7 +188,15 @@ class ResonanceSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Resonance
-        fields = ["id", "name", "affinity", "affinity_name", "description", "codex_entry_id"]
+        fields = [
+            "id",
+            "name",
+            "affinity",
+            "affinity_name",
+            "description",
+            "codex_entry_id",
+            "color_hex",
+        ]
         read_only_fields = fields
 
 
@@ -1895,6 +1903,8 @@ class PayerOptionSerializer(serializers.Serializer):
     kindled_strength = serializers.CharField(
         source="kindled_strength.name", allow_null=True, default=None
     )
+    # True for the one option a kindled boost makes the strongest read on this thread.
+    stronger = serializers.BooleanField()
 
 
 class ThreadPayerPreviewSerializer(serializers.Serializer):
