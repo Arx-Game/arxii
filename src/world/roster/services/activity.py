@@ -60,6 +60,17 @@ class ReleaseError(InactivityServiceError):
     """A player-initiated give-up is invalid."""
 
 
+class ReservedForCreatorError(InactivityServiceError):
+    """An original character is reserved to the account that created it (#3055).
+
+    Raised by ``RosterApplication.approve`` so every approval path (staff API, GM queue,
+    admin action) refuses a rival application, including one filed before the reservation
+    began. ``code`` and ``user_message`` match ``SlotsFullError`` so callers handle both alike.
+    """
+
+    code = "reserved_for_creator"
+
+
 def current_roster_entry(sheet: CharacterSheet) -> RosterEntry | None:
     """The RosterEntry for this sheet, or None when one doesn't exist.
 
@@ -384,17 +395,17 @@ def release_inactive_character(
     if available_roster is None:
         available_roster = Roster.objects.get(roster_type=RosterType.AVAILABLE)
 
-    _end_tenure_to_available(entry, tenure, available_roster)
+    end_tenure_to_available(entry, tenure, available_roster)
     return True
 
 
-def _end_tenure_to_available(
+def end_tenure_to_available(
     entry: RosterEntry, tenure: RosterTenure, available_roster: Roster
 ) -> None:
     """End ``tenure`` and put ``entry`` back on the Available shelf.
 
-    Shared by the inactivity sweep and a player's own give-up. The tenure is
-    ended, never deleted, so a returning player is re-seated onto the same row.
+    Shared by the inactivity sweep, a player's own give-up and the beta cutover. The
+    tenure is ended, never deleted, so a returning player is re-seated onto the same row.
     """
     tenure.end_date = timezone.now()
     tenure.save(update_fields=["end_date"])
@@ -402,6 +413,42 @@ def _end_tenure_to_available(
     # The tenure caches memoise the pre-release state; the caller may go on to read
     # accepts_applications, which would otherwise still see an open tenure.
     entry.invalidate_tenure_cache()
+
+
+def end_all_tenures_to_available(entry: RosterEntry, available_roster: Roster) -> int:
+    """End every open tenure on ``entry`` and put it on the Available shelf (#3055).
+
+    The beta cutover ends all roster tenures regardless of activity or origin, which the
+    single-character release above refuses to do for an original character. An entry with
+    no open tenure is left where it is: it is already unclaimed, and its shelf (Pending,
+    Restricted, ...) is staff's choice. Returns how many tenures ended.
+    """
+    entry.invalidate_tenure_cache()
+    open_tenures = [tenure for tenure in entry.cached_tenures if tenure.is_current]
+    for tenure in open_tenures:
+        end_tenure_to_available(entry, tenure, available_roster)
+    return len(open_tenures)
+
+
+def reserving_account_id(entry: RosterEntry) -> int | None:
+    """The account an original character is reserved to, or None when it is not reserved.
+
+    An original character (PLAYER provenance) belongs to the account that authored it
+    (``created_by_account``), so only that account may ever claim it again. A staff or
+    GM-table character, or an original character with no recorded author, is open to
+    anyone. No separate flag: the two roster fields already carry the reservation (#3055).
+    """
+    from world.roster.models.choices import CreationProvenance  # noqa: PLC0415
+
+    if entry.creation_provenance != CreationProvenance.PLAYER:
+        return None
+    return entry.created_by_account_id
+
+
+def is_reserved_against(entry: RosterEntry, account_id: int) -> bool:
+    """Whether ``entry`` is reserved to some other account than ``account_id``."""
+    reserved_to = reserving_account_id(entry)
+    return reserved_to is not None and reserved_to != account_id
 
 
 @transaction.atomic
@@ -430,7 +477,7 @@ def release_tenure(sheet: CharacterSheet, *, player_data: PlayerData) -> None:
         raise ReleaseError(msg, user_message="Leave the world as this character first.")
 
     available_roster = Roster.objects.get(roster_type=RosterType.AVAILABLE)
-    _end_tenure_to_available(entry, tenure, available_roster)
+    end_tenure_to_available(entry, tenure, available_roster)
 
 
 def mark_character_active(sheet: CharacterSheet) -> bool:

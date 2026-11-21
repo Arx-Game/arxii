@@ -8,12 +8,15 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django.test import TestCase
+from django.apps import apps
+from django.db import models
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.achievements.factories import CharacterAchievementFactory, DiscoveryFactory
 from world.achievements.models import CharacterAchievement, Discovery
+from world.assets.factories import NPCAssetFactory
 from world.beta_reset.exceptions import (
     AlreadyReleasedError,
     BackupNotVerifiedError,
@@ -24,6 +27,7 @@ from world.beta_reset.exceptions import (
 from world.beta_reset.models import ReleaseLatch
 from world.beta_reset.services import (
     CONFIRMATION_PHRASE,
+    SCOPE_TABLE,
     mark_released,
     wipe_pristine_world,
 )
@@ -34,6 +38,9 @@ from world.currency.models import CharacterPurse, CurrencyTransfer
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.distinctions.models import CharacterDistinction
 from world.distinctions.types import DistinctionOrigin
+from world.events.constants import GrandeurCategory
+from world.events.factories import EventFactory
+from world.events.models import EventGrandeurContribution
 from world.gm.factories import GMProfileFactory
 from world.journals.factories import JournalEntryFactory, WeeklyJournalXPFactory
 from world.journals.models import JournalEntry, WeeklyJournalXP
@@ -43,17 +50,24 @@ from world.magic.factories import (
     CharacterTechniqueFactory,
     GiftFactory,
     TechniqueFactory,
+    ThreadFactory,
+    ThreadLevelUnlockFactory,
 )
-from world.magic.models import CharacterGift, CharacterTechnique
+from world.magic.models import CharacterGift, CharacterTechnique, Thread, ThreadLevelUnlock
 from world.npc_services.factories import NPCStandingFactory
 from world.npc_services.models import NPCStanding
 from world.progression.factories import CharacterXPTransactionFactory
 from world.progression.models import CharacterXPTransaction
+from world.relationships.factories import RelationshipCapstoneFactory
+from world.relationships.models import RelationshipCapstone
+from world.scenes.factories import PersonaFactory
 from world.scenes.models import Scene
 from world.secrets.factories import SecretFactory
 from world.secrets.models import Secret
-from world.societies.factories import LegendEntryFactory
-from world.societies.models import LegendEntry
+from world.societies.factories import LegendEntryFactory, LegendHonorFactory
+from world.societies.models import LegendEntry, LegendHonor
+from world.tasking.listener_services import create_listener_post
+from world.tasking.models import ListenerHarvest
 from world.traits.factories import TraitFactory
 from world.traits.models import CharacterTraitChange, TraitChangeSource
 
@@ -327,3 +341,121 @@ class ProtectOrderingTests(TestCase):
         self.assertTrue(report.executed)
         self.assertFalse(CombatEncounter.objects.filter(pk=encounter.pk).exists())
         self.assertFalse(Scene.objects.filter(pk=scene_pk).exists())
+
+
+class PlayStateRowsBlockingTheWipeTests(TestCase):
+    """Rows whose PROTECT foreign keys point at wiped tables must not stop the wipe."""
+
+    def _wipe(self) -> None:
+        wipe_pristine_world(
+            execute=True,
+            confirm=CONFIRMATION_PHRASE,
+            backup_verified_at=timezone.now(),
+        )
+
+    def test_journal_capstones_and_legend_honors_do_not_block_the_journal_wipe(self) -> None:
+        capstone_entry = JournalEntryFactory()
+        capstone = RelationshipCapstoneFactory(
+            journal_entry=capstone_entry, is_ritual_capstone=False
+        )
+        honor = LegendHonorFactory()
+
+        self._wipe()
+
+        self.assertFalse(RelationshipCapstone.objects.filter(pk=capstone.pk).exists())
+        self.assertFalse(LegendHonor.objects.filter(pk=honor.pk).exists())
+        self.assertFalse(JournalEntry.objects.filter(pk=capstone_entry.pk).exists())
+        self.assertFalse(JournalEntry.objects.filter(pk=honor.journal_entry_id).exists())
+
+    def test_a_thread_anchored_on_a_capstone_goes_and_other_threads_stay(self) -> None:
+        capstone_thread = ThreadFactory(as_capstone_thread=True)
+        unlock = ThreadLevelUnlockFactory(thread=capstone_thread)
+        trait_thread = ThreadFactory()
+
+        self._wipe()
+
+        self.assertFalse(Thread.objects.filter(pk=capstone_thread.pk).exists())
+        self.assertFalse(ThreadLevelUnlock.objects.filter(pk=unlock.pk).exists())
+        self.assertFalse(RelationshipCapstone.objects.exists())
+        self.assertTrue(Thread.objects.filter(pk=trait_thread.pk).exists())
+
+    def test_a_listener_harvest_does_not_block_the_secret_wipe(self) -> None:
+        asset = NPCAssetFactory()
+        post = create_listener_post(asset, RoomProfileFactory(), asset.promoter_persona)
+        secret = SecretFactory()
+        harvest = ListenerHarvest.objects.create(post=post, secret=secret)
+
+        self._wipe()
+
+        self.assertFalse(ListenerHarvest.objects.filter(pk=harvest.pk).exists())
+        self.assertFalse(Secret.objects.filter(pk=secret.pk).exists())
+
+    def test_an_event_grandeur_spend_does_not_block_the_currency_transfer_wipe(self) -> None:
+        purse = CharacterPurse.objects.create(character_sheet=CharacterSheetFactory(), balance=50)
+        transfer = CurrencyTransfer.objects.create(amount=5, reason="grandeur", from_purse=purse)
+        contribution = EventGrandeurContribution.objects.create(
+            event=EventFactory(),
+            category=GrandeurCategory.values[0],
+            contributed_by=PersonaFactory(),
+            amount_spent=5,
+            transfer=transfer,
+        )
+
+        self._wipe()
+
+        self.assertFalse(EventGrandeurContribution.objects.filter(pk=contribution.pk).exists())
+        self.assertFalse(CurrencyTransfer.objects.filter(pk=transfer.pk).exists())
+
+
+def _first_step_that_deletes() -> dict[type[models.Model], int]:
+    """For each model the wipe deletes, the first ``SCOPE_TABLE`` step that does.
+
+    A step deletes its own table and everything that cascades from it.
+    """
+    cascades: dict[type[models.Model], list[type[models.Model]]] = {}
+    for model in apps.get_models():
+        for field in model._meta.get_fields():
+            if (
+                isinstance(field, models.ForeignKey | models.OneToOneField)
+                and field.remote_field.on_delete is models.CASCADE
+                and isinstance(field.related_model, type)
+            ):
+                cascades.setdefault(field.related_model, []).append(model)
+    first: dict[type[models.Model], int] = {}
+    for index, entry in enumerate(SCOPE_TABLE):
+        pending = [entry.model]
+        while pending:
+            current = pending.pop()
+            if current in first and first[current] <= index:
+                continue
+            first.setdefault(current, index)
+            pending.extend(cascades.get(current, []))
+    return first
+
+
+class ScopeTableDeleteOrderTests(SimpleTestCase):
+    """A protected reference from a table the wipe does not clear first would crash it."""
+
+    def test_every_protected_reference_onto_a_scope_table_is_cleared_first(self) -> None:
+        deleted_at = _first_step_that_deletes()
+        scope_models = {entry.model for entry in SCOPE_TABLE}
+        late = []
+        for model in apps.get_models():
+            for field in model._meta.get_fields():
+                if not isinstance(field, models.ForeignKey | models.OneToOneField):
+                    continue
+                if field.remote_field.on_delete not in (models.PROTECT, models.RESTRICT):
+                    continue
+                target = field.related_model
+                if target not in scope_models:
+                    continue
+                if model not in deleted_at or deleted_at[model] > deleted_at[target]:
+                    late.append(f"{model.__name__}.{field.name} -> {target.__name__}")
+        self.assertEqual(
+            sorted(late),
+            [],
+            "Each of these PROTECT relations points at a table SCOPE_TABLE deletes, and the "
+            "table holding it is not deleted at or before that step (itself or by cascade), "
+            "so the wipe raises ProtectedError as soon as one such row exists. Add the "
+            "holding table to SCOPE_TABLE ahead of its target.",
+        )

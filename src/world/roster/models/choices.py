@@ -106,6 +106,7 @@ class ValidationErrorCodes:
     ALREADY_PLAYING_CHARACTER = "already_playing_character"
     CHARACTER_ALREADY_PLAYED = "character_already_played"
     DUPLICATE_PENDING_APPLICATION = "duplicate_pending_application"
+    RESERVED_FOR_CREATOR = "reserved_for_creator"
 
     # Policy validation errors
     RESTRICTED_REQUIRES_REVIEW = "restricted_requires_review"
@@ -126,6 +127,7 @@ class ValidationMessages:
     ALREADY_PLAYING_CHARACTER = "You are already playing this character"
     CHARACTER_ALREADY_PLAYED = "Character is already being played"
     DUPLICATE_PENDING_APPLICATION = "You already have a pending application for this character"
+    RESERVED_FOR_CREATOR = "This character is reserved for the player who created it"
 
     # Policy validation messages
     RESTRICTED_REQUIRES_REVIEW = "Character requires special approval"
