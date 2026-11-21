@@ -121,7 +121,6 @@ _TOKEN_ENV = "ARXII_MUTATION_RUN"
 _TOKEN = uuid.uuid4().hex
 
 _DEFAULT_MAX_MINUTES = 60
-_CI_MAX_MINUTES = 300
 _TAIL_LINES = 20
 _PERCENT = 100
 _GRACE_SECONDS = 3.0
@@ -1010,10 +1009,7 @@ def _run(args: Args, command_line: str) -> int:
     _check_labels([*args.kept, *args.units])
     source = _resolve_source(args.source)
     _check_clean(source)
-    ci = bool(os.environ.get("CI"))
-    if args.tier == "postgres" and not ci:
-        raise Refusal("The postgres tier runs only in CI; use --tier sqlite on this machine.")
-    max_minutes = args.max_minutes or (_CI_MAX_MINUTES if ci else _DEFAULT_MAX_MINUTES)
+    max_minutes = args.max_minutes or _DEFAULT_MAX_MINUTES
     original = source.read_bytes()
     try:
         measured = _measure(args, source, original, max_minutes)

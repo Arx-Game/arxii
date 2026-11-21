@@ -11,8 +11,8 @@ change at a time (cosmic-ray 8.9.0 through a pinned `uvx`, never a project depen
 a kept group and a unit group of tests against each change, and reports each change as
 guarded, units only or unguarded (`.mutation/<file>/report.md`, `changes.csv` and
 `unit_tests.csv`). `arx test --tag <name>` runs only the tests carrying a Django tag.
-`.github/workflows/mutation.yml` runs the same tool on the Postgres tier for one function per
-run; it is started by hand (`workflow_dispatch` only) and is never a required check. A bug-fix
+`--tier postgres` runs it locally against journeys, one function per run; it has no CI job,
+because one function takes 30 to 100 minutes on Postgres. A bug-fix
 test carries `@tag("regression")` and a docstring beginning `Regression for #<issue>.`
 ADR-4248 sets the rule: a unit test is written only as the failing-first evidence of a bug
 fix, and an existing unit test is removed only on mutation evidence, with the property or

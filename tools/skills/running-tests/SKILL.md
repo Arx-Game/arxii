@@ -35,7 +35,7 @@ If the fix already exists, apply only the test to an isolated checkout of the un
 
 - Locally it runs on the SQLite tier, one run at a time. Narrow it with `--functions` or `--lines`; it refuses a run it estimates above `--max-minutes` (60 by default).
 - A run changes the source file on disk and restores it at the end, on Ctrl-C too. Do not commit, push or run other tests in that worktree while it runs: a git hook that stashes the changed file spoils a result.
-- A run that needs journeys goes through the hand-started `Mutation run` workflow, one function per run: `gh workflow run mutation.yml -f source_file=... -f functions=... -f kept="..." -f units="..."`. It takes 30 to 100 minutes, so it is never a required check and never runs per push.
+- A run that needs journeys passes `--tier postgres` and runs locally, one function per run, after `just build-test-schema`. This is the one sanctioned local use of the Postgres tier, for the session retiring those unit tests. It takes 30 to 100 minutes per function, so it never runs in CI.
 
 ## Two-tier model: SQLite for the inner loop, Postgres for parity
 

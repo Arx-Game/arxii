@@ -573,7 +573,8 @@ iteration (`just test-fast <app>`), Postgres for parity (`just test-parity` /
 
 **Locally, run only the test module you added or changed**, on the SQLite tier,
 serially, one app per invocation (`just test-fast <app>.tests.test_module`). Never
-the Postgres tier locally, and never several apps in one run (that turns on
+the Postgres tier locally, except a `just mutate --tier postgres` run made to retire
+unit tests (ADR-4248), and never several apps in one run (that turns on
 `--parallel` and can crash the shared devcontainer); the `running-tests` skill
 has the detail (#4924).
 

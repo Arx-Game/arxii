@@ -119,13 +119,13 @@ has to come from a spec, a docstring or a ruling.
 
 Limits. Each change costs one test start-up per group (12 to 19 seconds on
 SQLite; 50 to 250 seconds for a journey group on Postgres), so narrow a run with
-`--functions` or `--lines`, and use `--sample N` on a large function. Locally a
-run is SQLite only, one at a time, and it changes the source file on disk while
-it runs: do not commit, push or run other tests in that worktree until it
-exits. A run that needs journeys uses the hand-started `Mutation run` workflow
-(`.github/workflows/mutation.yml`), one function per run. It is never a required
-check and never runs per push, because a job over 5 minutes does not belong on a
-per-push trigger.
+`--functions` or `--lines`, and use `--sample N` on a large function. A run goes
+one at a time, and it changes the source file on disk while it runs: do not
+commit, push or run other tests in that worktree until it exits. A run whose
+kept group includes journeys passes `--tier postgres` and runs locally, after
+`just build-test-schema`; it is for the session that is retiring those unit
+tests, one function per run. It never runs in CI: one function takes 30 to 100
+minutes on Postgres.
 
 ## Writing a journey
 
