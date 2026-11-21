@@ -605,8 +605,6 @@ def _filter_changes(
 
     remaining.sort(key=_file_order)
     total = len(remaining)
-    if total == 0:
-        raise Refusal("No change is left after the filters; widen --functions or --lines.")
     if args.sample is not None and total > args.sample:
         keep = [remaining[i * total // args.sample] for i in range(args.sample)]
         remaining = drop(_SAMPLE_REASON, keep)
@@ -964,6 +962,8 @@ def _measure(args: Args, source: Path, original: bytes, max_minutes: int) -> Mea
         f"Estimated {estimate:.0f} minutes (limit {max_minutes}).",
         file=sys.stderr,
     )
+    if not changes:
+        raise Refusal("No change is left after the filters; widen --functions or --lines.")
     if estimate > max_minutes:
         raise Refusal(
             f"The estimate of {estimate:.0f} minutes is over {max_minutes}; narrow "
