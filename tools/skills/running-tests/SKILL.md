@@ -12,7 +12,7 @@ Tests run in a **two-tier model**: a fast SQLite in-memory inner loop and a Post
 
 ## Testing philosophy
 
-Prefer big **E2E user-journey integration tests** over many fine-grained unit tests. A single telnet-driven journey test that drives command → action → service → DB end-to-end is worth more than a dozen unit tests of individual layers. Don't create marginal unit tests that duplicate what the E2E already covers — they add maintenance cost without adding safety, and will be retired when E2E coverage matures anyway.
+Prefer big **E2E user-journey integration tests** over many fine-grained unit tests. A single telnet-driven journey test that drives command → action → service → DB end-to-end is worth more than a dozen unit tests of individual layers. Don't create marginal unit tests that duplicate what the E2E already covers — they add maintenance cost without adding safety, and an existing one is removed only on mutation-run evidence (ADR-4248).
 
 A unit test is written in one case only: as the evidence of a bug fix (ADR-4248; the next section). A rule a journey cannot reach, such as a pure function's arithmetic or a parser's branches, gets a Hypothesis property in `integration_tests/fuzz/`, with its statement taken from a spec, a docstring or a ruling and never from what the code returns.
 
@@ -92,7 +92,6 @@ just test <args>
 # Full-suite parity gate (CI runs this; not run locally):
 just regression                          # echo "yes" | arx test
 
-# Which test group notices each small change to one file (hand-run, never a gate):
 just mutate <file> --functions <name> --kept <labels> --units <labels>   # which test group notices each change
 ```
 

@@ -34,7 +34,7 @@ test goes (#4248, ADR-4248).
 |---|---|---|
 | `journeys.md` | The curated list of stories the suite protects: seam, covering test, gaps | people, in tandem with the change (CLAUDE.md "Docs Are Directives") |
 | `journey-inventory.md` | Every surface the registries know (actions, commands, API routes, frontend routes) and the tests naming it | nobody: `uv run python tools/journey_inventory.py > docs/testing/journey-inventory.md` |
-| `ledger/<app>.csv` | The confirmed ledger for an app, written in its removal tranche: the tool's columns plus `confirmed` (the grade a person settled on) and `note` (why, and which journey covers a removal). A package ruled on over several tranches (`commands.csv`, `actions.csv`) carries every module; a row with an empty `confirmed` is still the tool's proposal, not a ruling | the tranche's PR |
+| `ledger/<app>.csv` | The confirmed ledger for an app, written in its removal tranche: the tool's columns plus `confirmed` (the grade a person settled on) and `note` (why, and which journey covers a removal). These files record the hand grades made before ADR-4248; a removal is now shown by a mutation run. A package ruled on over several tranches (`commands.csv`, `actions.csv`) carries every module; a row with an empty `confirmed` is still the tool's proposal, not a ruling | the tranche's PR |
 
 ## Recipes
 
@@ -69,7 +69,7 @@ longer removes a test.
 | `J` | drives the real seam (`JourneyCase`, `execute_cmd`, `dispatch_player_action`) and asserts what the player saw; a pre-harness journey that calls `Cmd.func()` by hand is `J` too, with a note to move it | yes |
 | `F` | Hypothesis at a seam | yes |
 | `X` | reaches two or more other `world.*` packages' services | yes |
-| `U-keep` | a unit a journey cannot reach; the default when the signals are quiet | until a mutation run shows the kept tests catch what it catches |
+| `U-keep` | a unit test no journey is known to cover; the default when the signals are quiet | until a mutation run shows the kept tests catch what it catches |
 | `R` | `builtin` (Django or DRF behaviour), `shape` (dict, queryset or instance shape), `dup` (a named journey already asserts the outcome), `mock-pinned` (the assertion is that a mock was called), `smoke` (factory builds, `__str__`, `Meta`) | no, once a mutation run confirms it |
 
 A removal PR carries the mutation run that shows it: for each removed test, the
@@ -84,8 +84,8 @@ change to the code, which tests notice. `just mutate` (`tools/mutation_run.py`,
 cosmic-ray underneath) makes one change at a time, such as `<=` to `<` or
 `- 1` to `- 2`, runs two groups of tests against it, and restores the file. The
 caller names both groups: `--kept` for journeys, properties and cross-system
-tests, `--units` for unit tests. The driver does not guess which test belongs
-where.
+tests, `--units` for unit tests. Each of the two takes one or more test labels.
+The driver does not guess which test belongs where.
 
 The report (`.mutation/<file>/report.md`, with `changes.csv` and
 `unit_tests.csv`) sorts every change into one of three lists:
@@ -106,7 +106,9 @@ How to use it:
   change that cannot alter behaviour, which a person marks by reading it, or a
   missing rule. State a missing rule from the spec, the docstring or a ruling,
   never from what the code returns. A surviving change that no written rule
-  covers is a question for the maintainer.
+  covers is a question for the maintainer. An unguarded change can also be a
+  rule the property states and its generator never reaches in 50 examples; pin
+  that boundary with `@example`, or give the generator an arm of small values.
 - **Choose the kept group widely.** With six journey modules the journeys caught
   2 of the 14 changes unit tests catch in `apply_condition`; with all 27 modules
   that name the function they caught 9.
