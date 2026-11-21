@@ -4293,8 +4293,7 @@ must all pass before `--execute` touches a row; defaults to a dry-run.
   (roster characters, reserved original characters and `--carry-over` characters are released
   to Available and progress-reset, then the wipe runs, one transaction);
   `world.beta_reset.progress.reset_character_progress` / `plan_progress_reset`;
-  `world.beta_reset.classification` (`KEPT_WITH_REASON`, `UNDECIDED_AWAITING_RULING`,
-  `wiped_models`, `protect_blockers`); `world.roster.services.activity.is_reserved_against` /
+  `world.roster.services.activity.is_reserved_against` /
   `end_all_tenures_to_available`; `world.distinctions.services.delete_character_distinction`
 - **Commands:** `arx manage beta_reset [--execute --confirm "..." --backup-verified-at ...
   --carry-over <sheet id>]`,

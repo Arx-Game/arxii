@@ -22,9 +22,8 @@ The policy steps run BEFORE the wipe, because the progress reset reads the play-
 rows the wipe deletes. Both run in one transaction. Alpha accounts, and their kudos, blocks
 and friendships, are never touched.
 
-Not decided here, and so not built: who deletes the alpha characters that fall into none of
-the three kinds, and what the wipe should do about the tables in
-``world.beta_reset.classification.UNDECIDED_AWAITING_RULING``.
+The wipe deletes what ``SCOPE_TABLE`` names and nothing else. No step deletes an alpha
+character that is none of the three kinds.
 """
 
 from __future__ import annotations
@@ -39,7 +38,6 @@ from django.core.exceptions import ObjectDoesNotExist
 from django.db import DatabaseError, transaction
 from django.db.models import ProtectedError, QuerySet
 
-from world.beta_reset.classification import UNDECIDED_AWAITING_RULING
 from world.beta_reset.constants import CutoverPolicy
 from world.beta_reset.exceptions import (
     BetaResetError,
@@ -140,7 +138,6 @@ class CutoverReport:
     executed: bool
     plan: CutoverPlan
     wipe: WipeReport
-    undecided_models: int
 
 
 def _entries(queryset: QuerySet[RosterEntry]) -> list[RosterEntry]:
@@ -361,10 +358,9 @@ def run_beta_cutover(
     (or any other database error) is turned into a ``BetaResetError`` that names what blocked
     it, after the rollback.
     """
-    undecided = len(UNDECIDED_AWAITING_RULING)
     if not execute:
         plan = plan_cutover(carry_over_sheet_ids=carry_over_sheet_ids)
-        return CutoverReport(False, plan, preview_pristine_world_wipe(), undecided)
+        return CutoverReport(False, plan, preview_pristine_world_wipe())
 
     check_beta_reset_enabled()
     check_release_latch()
@@ -394,4 +390,4 @@ def run_beta_cutover(
         raise
     except (DatabaseError, ObjectDoesNotExist) as exc:
         raise CutoverFailedError(exc) from exc
-    return CutoverReport(True, plan, wipe, undecided)
+    return CutoverReport(True, plan, wipe)

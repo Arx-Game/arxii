@@ -137,11 +137,6 @@ class Command(BaseCommand):
                     + ". --execute refuses these unless --allow-incomplete-ledger is given."
                 )
             )
-        self.stdout.write(
-            f"{report.undecided_models} character-linked table(s) are awaiting a ruling "
-            "(world.beta_reset.classification.UNDECIDED_AWAITING_RULING) and are left "
-            "untouched by this command."
-        )
         if not report.executed:
             self.stdout.write(
                 "The wipe counts below are computed BEFORE the policy steps run, so rows the "

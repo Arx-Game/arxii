@@ -91,8 +91,7 @@ play-state, keep provenance-tagged CG rows" plumbing.
   against ``JournalEntry`` — both are deleted before it.
 - ``Thread.target_capstone`` is ``PROTECT`` against ``RelationshipCapstone`` — the threads
   anchored on a capstone (and their ``ThreadLevelUnlock`` receipts, ``PROTECT`` against
-  ``Thread``) are deleted before it. No other thread is touched, and this is not a ruling
-  that threads are wiped (``ScopeEntry.unblocker_only``).
+  ``Thread``) are deleted before it. No other thread is touched.
 - ``ListenerHarvest.secret`` is ``PROTECT`` against ``Secret`` — deleted before it.
 - ``EventGrandeurContribution.transfer`` is ``PROTECT`` against ``CurrencyTransfer`` —
   deleted before it.
@@ -304,10 +303,6 @@ class ScopeEntry:
     model: type[Model]
     filter_kwargs: dict[str, Any] | None
     note: str
-    #: True when the entry exists only to clear a PROTECT foreign key and is NOT a ruling
-    #: that the model is play-state. ``classification`` does not count such an entry as the
-    #: model being wiped.
-    unblocker_only: bool = False
 
 
 #: The single source of truth for what this wipe touches, in explicit dependency-safe
@@ -391,14 +386,12 @@ SCOPE_TABLE: list[ScopeEntry] = [
         {"thread__target_capstone__isnull": False},
         "PROTECT-unblocker: ThreadLevelUnlock.thread is PROTECT against Thread. Only the "
         "receipts of capstone-anchored threads go, as those threads are deleted next.",
-        unblocker_only=True,
     ),
     ScopeEntry(
         Thread,
         {"target_capstone__isnull": False},
         "PROTECT-unblocker: Thread.target_capstone is PROTECT against RelationshipCapstone. "
         "Only threads anchored on a capstone go; a thread with any other anchor is untouched.",
-        unblocker_only=True,
     ),
     ScopeEntry(
         RelationshipCapstone,
@@ -493,7 +486,7 @@ def scope_entry_for(model: type[Model]) -> ScopeEntry:
     entry, and for one whose entry is not a provenance split.
     """
     for entry in SCOPE_TABLE:
-        if entry.model is model and entry.filter_kwargs and not entry.unblocker_only:
+        if entry.model is model and entry.filter_kwargs:
             return entry
     msg = f"{model.__name__} has no provenance-filtered SCOPE_TABLE entry."
     raise LookupError(msg)

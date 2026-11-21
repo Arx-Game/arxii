@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from unittest import mock
 
-from django.test import TestCase
+from django.apps import apps
+from django.db import models
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
@@ -25,6 +27,7 @@ from world.beta_reset.exceptions import (
 from world.beta_reset.models import ReleaseLatch
 from world.beta_reset.services import (
     CONFIRMATION_PHRASE,
+    SCOPE_TABLE,
     mark_released,
     wipe_pristine_world,
 )
@@ -402,3 +405,57 @@ class PlayStateRowsBlockingTheWipeTests(TestCase):
 
         self.assertFalse(EventGrandeurContribution.objects.filter(pk=contribution.pk).exists())
         self.assertFalse(CurrencyTransfer.objects.filter(pk=transfer.pk).exists())
+
+
+def _first_step_that_deletes() -> dict[type[models.Model], int]:
+    """For each model the wipe deletes, the first ``SCOPE_TABLE`` step that does.
+
+    A step deletes its own table and everything that cascades from it.
+    """
+    cascades: dict[type[models.Model], list[type[models.Model]]] = {}
+    for model in apps.get_models():
+        for field in model._meta.get_fields():
+            if (
+                isinstance(field, models.ForeignKey | models.OneToOneField)
+                and field.remote_field.on_delete is models.CASCADE
+                and isinstance(field.related_model, type)
+            ):
+                cascades.setdefault(field.related_model, []).append(model)
+    first: dict[type[models.Model], int] = {}
+    for index, entry in enumerate(SCOPE_TABLE):
+        pending = [entry.model]
+        while pending:
+            current = pending.pop()
+            if current in first and first[current] <= index:
+                continue
+            first.setdefault(current, index)
+            pending.extend(cascades.get(current, []))
+    return first
+
+
+class ScopeTableDeleteOrderTests(SimpleTestCase):
+    """A protected reference from a table the wipe does not clear first would crash it."""
+
+    def test_every_protected_reference_onto_a_scope_table_is_cleared_first(self) -> None:
+        deleted_at = _first_step_that_deletes()
+        scope_models = {entry.model for entry in SCOPE_TABLE}
+        late = []
+        for model in apps.get_models():
+            for field in model._meta.get_fields():
+                if not isinstance(field, models.ForeignKey | models.OneToOneField):
+                    continue
+                if field.remote_field.on_delete not in (models.PROTECT, models.RESTRICT):
+                    continue
+                target = field.related_model
+                if target not in scope_models:
+                    continue
+                if model not in deleted_at or deleted_at[model] > deleted_at[target]:
+                    late.append(f"{model.__name__}.{field.name} -> {target.__name__}")
+        self.assertEqual(
+            sorted(late),
+            [],
+            "Each of these PROTECT relations points at a table SCOPE_TABLE deletes, and the "
+            "table holding it is not deleted at or before that step (itself or by cascade), "
+            "so the wipe raises ProtectedError as soon as one such row exists. Add the "
+            "holding table to SCOPE_TABLE ahead of its target.",
+        )

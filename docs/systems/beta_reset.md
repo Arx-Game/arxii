@@ -58,24 +58,19 @@ catalog/config models (`CrimeKind`, `AreaLaw`, `SecretCategory`, `Profession`,
 discriminator exists on it today — flagged, not guessed at); org economics
 (`OrganizationTreasury` and friends — orgs themselves survive the reset).
 
-## Completeness: wiped, kept, or awaiting a ruling
+## Delete order and the provenance sets
 
-`SCOPE_TABLE` is hand-written, so `world/beta_reset/classification.py` forces a decision
-for every concrete `arxii` model with a relation to `CharacterSheet`, `RosterEntry`,
-`RosterTenure` or `Persona`. Each is in exactly one place: wiped (`SCOPE_TABLE`, or every row
-deleted by a required CASCADE from a wholesale-wiped table, `wiped_models()`), `KEPT_WITH_REASON`
-(identity, account-level records, derived values the progress reset steps back, authored
-catalog rows, materialized views), or `UNDECIDED_AWAITING_RULING` (not wiped today, not clearly
-authored or account-level; the maintainer rules on each and a listing is not a decision to
-keep). `test_classification.py` fails when a model is in none or in two. It also walks every
-PROTECT/RESTRICT relation onto a model the wipe deletes (`protect_blockers()`) and fails unless
-the dependent rows are deleted first. `PROTECT_BLOCKERS_AWAITING_RULING` lists the six
-relations onto `Clue` that can still stop the wipe, because deleting Secrets cascades to the
-clues that target them and whether authored clues survive is unruled.
-
-A `ScopeEntry` with `unblocker_only=True` exists only to clear a PROTECT key (capstone-anchored
-`Thread` rows and their `ThreadLevelUnlock` receipts) and is not counted as a ruling that the
-model is wiped. `PLAY_TIME_*` and `CG_AUTHORING_*` provenance sets in `services.py` together
+The wipe's scope is `SCOPE_TABLE` alone: the explicit list of what it deletes, in order.
+`test_service.ScopeTableDeleteOrderTests` walks every PROTECT or RESTRICT relation onto a
+`SCOPE_TABLE` table and fails when the table holding it is not deleted at or before that
+step (itself or by cascade), because the wipe would then raise `ProtectedError`. That is how
+the capstone-anchored `Thread` rows and their `ThreadLevelUnlock` receipts, journal capstones,
+legend honors, listener harvests and event grandeur spends come to be listed ahead of their
+targets. A protected reference onto a table the wipe reaches only by cascade (a `Clue` the
+Secret wipe cascades into, with a pool entry, vision or answer pointing at it) is not in
+that walk; it is covered by the seeded behavioural test in `test_cutover.py`, where the
+cutover rolls everything back and the command raises a `CommandError` naming the blocking
+model. The `PLAY_TIME_*` and `CG_AUTHORING_*` provenance sets in `services.py` together
 cover every `AcquisitionOrigin`, `TraitChangeSource` and `DistinctionOrigin` member, enforced
 by `test_progress.py`.
 
@@ -127,7 +122,7 @@ gifts (with their natural weapon) and distinctions (through
 `distinctions.services.delete_character_distinction`, the teardown `remove_distinction` shares)
 are removed, the stat-point and maturation spend receipts are deleted, and the class level
 returns to the lowest `level_before` among the Durance and Audere Majora receipts. It does not
-reset the `UNDECIDED_AWAITING_RULING` tables or the character's path (`CharacterPathHistory`
+reset anything it does not list or the character's path (`CharacterPathHistory`
 carries no provenance).
 
 ## Tests
@@ -137,8 +132,17 @@ carries no provenance).
 nothing; the latch blocks execution; the confirmation/backup/constant guards each refuse
 independently; PROTECT-ordering for `NPCStanding`, `CombatEncounter`/`Scene`, journal
 capstones and legend honors, capstone-anchored threads, listener harvests and event
-grandeur spends). `test_classification.py` — the completeness and delete-order checks.
+grandeur spends). `test_service.py` also holds the delete-order walk.
 `test_progress.py` — the per-character reset and the provenance-set partition.
 `test_cutover.py` — the policy steps, the reservation gate over the API, carry-over, and the
 command output. `test_command.py` — thin argument-gating tests via `call_command` for both
 `beta_reset` and `mark_beta_release`.
+
+## Retired after the cutover
+
+The reset exists for one day. At the cutover a reviewed PR sets `BETA_RESET_ENABLED` to
+False. The PR after it deletes the whole `world/beta_reset` package (both commands, the
+services, the progress reset, the cutover layer and their tests) and drops the `ReleaseLatch`
+table with one `DeleteModel` migration. The reservation rule for original characters
+(`is_reserved_against` and its use in the application serializer, `RosterApplication.approve`
+and `can_apply`) lives in the roster app and stays.

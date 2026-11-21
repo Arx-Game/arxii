@@ -113,10 +113,9 @@ The central spine connecting every system in the game. Characters develop throug
   roster tenure, returns held roster characters to Available and progress-resets each
   (`reset_character_progress`, reading the ledger), keeps player original characters
   reserved to their creator (only that account may apply again), and carries over named
-  characters (`--carry-over`). Still open, awaiting owner rulings: which of the
-  `UNDECIDED_AWAITING_RULING` tables the wipe covers, how `CharacterCodexKnowledge` resets,
-  who deletes alpha characters in none of those kinds, and whether organisation treasuries
-  survive. See `docs/systems/beta_reset.md` and ADR-0206/ADR-0207/ADR-3055.
+  characters (`--carry-over`). The wipe deletes what `SCOPE_TABLE` names; which further tables it
+  should cover is the open question in #5227. See `docs/systems/beta_reset.md` and
+  ADR-0206/ADR-0207/ADR-3055.
 - **Tests:** Extensive tests for traits, skills, kudos, character XP, path history, legend
 
 ## What's Needed for MVP

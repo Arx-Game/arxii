@@ -31,7 +31,3 @@ _Avoid_: kept character, grandfathered character
 **Progress reset**:
 `reset_character_progress`: steps one kept character's play-time provenance back out (trait values by ledger delta, play-origin techniques, gifts and distinctions, spend receipts, class level), leaving character-creation and authoring rows. Not the wipe, which strips whole tables world-wide.
 _Avoid_: character wipe, rollback
-
-**Awaiting a ruling**:
-Said of a character-linked model in `classification.UNDECIDED_AWAITING_RULING`: the wipe does not cover it today and the maintainer has not ruled whether it should. Not a decision to keep it.
-_Avoid_: kept, safe, exempt

@@ -247,7 +247,6 @@ class CutoverCommandTests(CutoverTestBase):
         self.assertIn("Would run 1 cutover policy step", output)
         self.assertIn("[Roster character]", output)
         self.assertIn("return to the Available roster", output)
-        self.assertIn("awaiting a ruling", output)
         self.assertIn("Dry run only", output)
 
     def test_a_bad_carry_over_id_is_a_command_error(self) -> None:
@@ -306,7 +305,6 @@ class DryRunReportTests(CutoverTestBase):
             "LEDGER WARNING: cutover_strength: the ledger ends at 5 but the value is 9", output
         )
         self.assertIn("1 kept character(s) have an incomplete provenance ledger", output)
-        self.assertIn("left untouched by this command", output)
         self.assertIn("computed BEFORE the policy steps", output)
         self.assertEqual(CharacterGift.objects.filter(character=sheet).count(), 1)
 

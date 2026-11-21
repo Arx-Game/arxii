@@ -39,10 +39,10 @@ character, and a beat that resolves sends a narrative notification to its player
 a session request. A reset must not message anyone, so the level, caches, health and anima are
 written directly.
 
-What it does NOT reset: the tables in ``classification.UNDECIDED_AWAITING_RULING`` (XP and
-development balances, magic state, relationships, codex knowledge and the rest) and the
-character's path. A crossing or semi-crossing switched the path, and
-``CharacterPathHistory`` carries no provenance to say which row was baseline.
+What it does NOT reset: anything not listed above (XP and development balances, magic state,
+relationships, codex knowledge and the rest) and the character's path. A crossing or
+semi-crossing switched the path, and ``CharacterPathHistory`` carries no provenance to say
+which row was baseline.
 """
 
 from __future__ import annotations
