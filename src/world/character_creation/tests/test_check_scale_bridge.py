@@ -73,16 +73,16 @@ class CgCheckScaleBridgeTests(FinalizationTestMixin, TestCase):
 
         twin = CharacterSheetFactory().character
         CharacterTraitValue.objects.create(
-            character=twin.sheet_data, trait=strength, value=20
-        )  # display 2, like DEFAULT_STATS
+            character=twin.sheet_data, trait=strength, value=DEFAULT_STATS["strength"]
+        )  # 30, the same strength the draft finalizes with
         CharacterTraitValue.objects.create(character=twin.sheet_data, trait=skill, value=30)
 
         cg_result = perform_check(character, check_type, target_difficulty=0)
         twin_result = perform_check(twin, check_type, target_difficulty=0)
 
-        # strength 20 × 0.5 → 10 pts; skill 30 × 1.0 → 30 pts (1 pt/level)
-        assert cg_result.trait_points == 40
-        assert twin_result.trait_points == 40
+        # strength 30 × 0.5 → 15 pts; skill 30 × 1.0 → 30 pts (1 pt/level)
+        assert cg_result.trait_points == 45
+        assert twin_result.trait_points == 45
 
     def test_finalize_bridges_cg_skills_into_trait_rows(self):
         skill = SkillFactory()

@@ -86,12 +86,12 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         strength_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["strength"]
         )
-        assert strength_value.value == 20
+        assert strength_value.value == DEFAULT_STATS["strength"] == 30
 
         agility_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["agility"]
         )
-        assert agility_value.value == 20
+        assert agility_value.value == DEFAULT_STATS["agility"] == 30
 
         willpower_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["willpower"]
@@ -108,7 +108,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         assert changes.count() == 12
         strength_change = changes.get(trait=self.stats["strength"])
         assert strength_change.old_value == 0
-        assert strength_change.new_value == 20
+        assert strength_change.new_value == DEFAULT_STATS["strength"] == 30
         assert strength_change.source == TraitChangeSource.CHARACTER_CREATION
 
     def test_staff_add_to_roster_stamps_staff_provenance(self):
@@ -206,7 +206,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         strength_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["strength"]
         )
-        assert strength_value.value == 20
+        assert strength_value.value == DEFAULT_STATS["strength"] == 30
 
         willpower_value = CharacterTraitValue.objects.get(
             character_id=character.pk, trait=self.stats["willpower"]

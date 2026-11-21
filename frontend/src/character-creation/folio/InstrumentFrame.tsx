@@ -52,6 +52,8 @@ interface StatRowBaseProps {
   bonus?: number;
   /** When set, the name is a button that opens the gloss in the margin. */
   onWhy?: () => void;
+  /** Hover text on the name button: what the statistic governs (#5223). */
+  whyTitle?: string;
   whyOpen?: boolean;
   /** Inline gloss under the row (narrow layouts). */
   gloss?: string;
@@ -74,7 +76,7 @@ type StatRowProps = StatRowBaseProps &
   );
 
 export function StatRow(props: StatRowProps) {
-  const { id, name, sub, value, bonus, onWhy, whyOpen, gloss, spec, step = 1 } = props;
+  const { id, name, sub, value, bonus, onWhy, whyOpen, whyTitle, gloss, spec, step = 1 } = props;
   return (
     <div className={spec ? 'stat-row spec' : 'stat-row'}>
       <span className="stat-name" id={id}>
@@ -84,6 +86,7 @@ export function StatRow(props: StatRowProps) {
             className="stat-why"
             aria-expanded={whyOpen ? 'true' : 'false'}
             aria-controls="why-note"
+            title={whyTitle}
             onClick={onWhy}
           >
             {name}

@@ -27,6 +27,7 @@ from world.character_creation.constants import (
     GIFT_FACETS_KEY,
     GIFT_RESONANCE_WEIGHTS_KEY,
     OFFICIALLY_DEAD_KEY,
+    OPTIONAL_STAGES,
     ORGANIZATIONS_KEY,
     PERSONALIZATION_COPY_KEYS,
     PRESTIGE_STORIES_KEY,
@@ -1539,6 +1540,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     stat_bonuses = serializers.SerializerMethodField()
     stage_completion = serializers.SerializerMethodField()
     stage_errors = serializers.SerializerMethodField()
+    surname = serializers.SerializerMethodField()
+    visited_stages = serializers.SerializerMethodField()
+    optional_stages = serializers.SerializerMethodField()
     stats_points_remaining = serializers.SerializerMethodField()
     stats_budget = serializers.SerializerMethodField()
     # Gift-stage technique pick budget (#2426 Task 10) — CharacterDraft property,
@@ -1634,6 +1638,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
+            "surname",
+            "visited_stages",
+            "optional_stages",
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
@@ -1674,6 +1681,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stat_bonuses",
             "stage_completion",
             "stage_errors",
+            "surname",
+            "visited_stages",
+            "optional_stages",
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
@@ -1785,6 +1795,18 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stats_points_remaining(self, obj: CharacterDraft) -> int:
         """Get remaining stat points to allocate (0 = fully allocated)."""
         return obj.calculate_points_remaining()
+
+    def get_surname(self, obj: CharacterDraft) -> str:
+        """The family's name, the new family's, or the drawn card's surname; '' until one exists."""
+        return obj.surname()
+
+    def get_visited_stages(self, obj: CharacterDraft) -> list[int]:
+        """The stages this draft has been opened on; the stage list shows a to-do for these only."""
+        return obj.visited_stages()
+
+    def get_optional_stages(self, _obj: CharacterDraft) -> list[int]:
+        """The stages that ask nothing; the stage list reads "optional" for them."""
+        return [int(stage) for stage in OPTIONAL_STAGES]
 
     def get_stats_budget(self, obj: CharacterDraft) -> int:
         """Get total stat point budget (base + bonuses)."""
@@ -2119,12 +2141,25 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
                 merged.pop(retired, None)
             validated_data["draft_data"] = merged
         restyled = {"selected_tradition", "selected_combat_style"} & validated_data.keys()
+        left_stage = instance.current_stage
         instance = super().update(instance, validated_data)
+        self._record_stage_move(instance, left_stage)
         if restyled:
             # A style the Tradition does not teach is cleared, and another style's
             # skill drops out of the training allocation (#4921).
             reconcile_combat_style(instance)
         return instance
+
+    @staticmethod
+    def _record_stage_move(instance: CharacterDraft, left_stage: int) -> None:
+        """Both ends of a stage change are stages the player has now seen (#5199).
+
+        The stage they left has no row of its own when it is the one the draft was made on.
+        """
+        if instance.current_stage == left_stage:
+            return
+        instance.record_stage_visit(left_stage)
+        instance.record_stage_visit(instance.current_stage)
 
     @staticmethod
     def _reconcile_vacancy_claims(instance: CharacterDraft, validated_data: dict) -> None:

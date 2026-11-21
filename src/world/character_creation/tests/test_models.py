@@ -8,6 +8,7 @@ from evennia.accounts.models import AccountDB
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.constants import (
     REQUIRED_STATS,
+    STAT_CREATION_BUDGET,
     STAT_DEFAULT_VALUE,
 )
 from world.character_creation.factories import (
@@ -276,53 +277,62 @@ class CharacterDraftStatsValidationTests(TestCase):
         return dict.fromkeys(REQUIRED_STATS, value)
 
     def _budget_balanced_stats(self) -> dict[str, int]:
-        """Helper: return stats that sum to the base budget (24)."""
-        # All at 2 = 12 * 2 = 24
-        return self._all_stats_at(STAT_DEFAULT_VALUE)
+        """Helper: return stats that sum to the creation budget (350, #5223)."""
+        # Eleven at 30 and one at 20 = 350
+        stats = self._all_stats_at(30)
+        stats[next(iter(stats))] = 20
+        assert sum(stats.values()) == STAT_CREATION_BUDGET
+        return stats
 
     # --- calculate_stat_budget ---
 
     def test_calculate_stat_budget_no_bonuses(self):
-        """Budget is 12 * 2 = 24 with no bonuses."""
-        assert self.draft.calculate_stat_budget() == STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+        """Budget is the creation budget, 350, with no bonuses (#5223)."""
+        assert self.draft.calculate_stat_budget() == STAT_CREATION_BUDGET == 350
 
     # --- calculate_points_remaining ---
 
     def test_calculate_points_remaining_no_stats(self):
-        """No stats allocated returns 0 remaining (base budget - default allocation)."""
+        """No stats allocated leaves the budget less the default spread: 350 - 240 (#5223)."""
         remaining = self.draft.calculate_points_remaining()
-        assert remaining == 0
+        assert remaining == 110
 
     def test_calculate_points_remaining_all_at_default(self):
-        """All stats at default value means 0 remaining."""
+        """All stats at the default leave 110 to place, as an unsaved draft does (#5223)."""
+        self.draft.draft_data = {"stats": self._all_stats_at(STAT_DEFAULT_VALUE)}
+        self.draft.save()
+        assert self.draft.calculate_points_remaining() == 110
+
+    def test_calculate_points_remaining_whole_budget_placed(self):
+        """Stats that sum to the budget leave nothing."""
         self.draft.draft_data = {"stats": self._budget_balanced_stats()}
         self.draft.save()
         assert self.draft.calculate_points_remaining() == 0
 
     def test_calculate_points_remaining_redistributed(self):
-        """Redistributed stats still sum to budget = 0 remaining."""
-        stats = self._all_stats_at(STAT_DEFAULT_VALUE)
+        """Moving a point between two stats leaves the remainder as it was."""
+        stats = self._budget_balanced_stats()
         # Move one stat point (10) from first stat to second
         stat_names = list(stats.keys())
-        stats[stat_names[0]] = 10
-        stats[stat_names[1]] = 30
+        stats[stat_names[0]] -= 10
+        stats[stat_names[1]] += 10
         self.draft.draft_data = {"stats": stats}
         self.draft.save()
         assert self.draft.calculate_points_remaining() == 0
 
     def test_calculate_points_remaining_under_allocated(self):
         """Under-allocated stats return positive remaining."""
-        stats = self._all_stats_at(10)  # 12 * 10 = 120, budget = 240, remaining = 120
+        stats = self._all_stats_at(10)  # 12 * 10 = 120, budget = 350, remaining = 230
         self.draft.draft_data = {"stats": stats}
         self.draft.save()
-        assert self.draft.calculate_points_remaining() == 120
+        assert self.draft.calculate_points_remaining() == 230
 
     def test_calculate_points_remaining_over_allocated(self):
         """Over-allocated stats return negative remaining."""
-        stats = self._all_stats_at(30)  # 12 * 30 = 360, budget = 240, remaining = -120
+        stats = self._all_stats_at(30)  # 12 * 30 = 360, budget = 350, remaining = -10
         self.draft.draft_data = {"stats": stats}
         self.draft.save()
-        assert self.draft.calculate_points_remaining() == -120
+        assert self.draft.calculate_points_remaining() == -10
 
     # --- Validation via _is_attributes_complete ---
 
@@ -684,7 +694,7 @@ class DistinctionStatBonusTests(TestCase):
         )
         draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, distinction)
-        base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+        base = STAT_CREATION_BUDGET
         assert draft.calculate_stat_budget() == base + 10
 
     def test_budget_decreases_with_negative_distinction_bonus(self):
@@ -698,7 +708,7 @@ class DistinctionStatBonusTests(TestCase):
         )
         draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, distinction)
-        base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+        base = STAT_CREATION_BUDGET
         assert draft.calculate_stat_budget() == base - 10
 
     def test_stacking_bonuses_increase_budget(self):
@@ -720,7 +730,7 @@ class DistinctionStatBonusTests(TestCase):
         draft = CharacterDraftFactory()
         self._add_distinction_to_draft(draft, d1)
         self._add_distinction_to_draft(draft, d2)
-        base = STAT_DEFAULT_VALUE * len(REQUIRED_STATS)
+        base = STAT_CREATION_BUDGET
         assert draft.calculate_stat_budget() == base + 20
 
 

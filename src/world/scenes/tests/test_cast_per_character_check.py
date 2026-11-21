@@ -27,6 +27,7 @@ from evennia.accounts.models import AccountDB
 from world.character_creation.factories import make_unknown_upbringing, single_resonance_weights
 from world.character_creation.models import Beginnings, CharacterDraft, StartingArea
 from world.character_creation.services import finalize_character
+from world.character_creation.tests.finalization_fixtures import DEFAULT_STATS
 from world.character_sheets.models import CharacterSheet, Gender
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
@@ -60,20 +61,8 @@ from world.tarot.models import TarotCard
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import CharacterTraitValue, Trait, TraitType
 
-_STATS = {
-    "strength": 20,
-    "agility": 20,
-    "stamina": 20,
-    "charm": 20,
-    "presence": 20,
-    "composure": 20,
-    "intellect": 20,
-    "wits": 20,
-    "stability": 20,
-    "luck": 20,
-    "perception": 20,
-    "willpower": 20,
-}
+# A finished draft places the whole creation budget, 350 (#5223).
+_STATS = dict(DEFAULT_STATS)
 
 
 class CastUsesPerCharacterCheckTests(TestCase):

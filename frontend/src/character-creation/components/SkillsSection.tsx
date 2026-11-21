@@ -141,7 +141,14 @@ function SkillSpecializations({
 }
 
 /** Skills section with interactive skill point allocation */
-export function SkillsSection({ draft }: { draft: CharacterDraft }) {
+interface SkillsSectionProps {
+  draft: CharacterDraft;
+  /** Told the points spent and the total whenever either changes, for the side panel's
+   *  "Skills" row (#5223). */
+  onPointsChange?: (spent: number, total: number) => void;
+}
+
+export function SkillsSection({ draft, onPointsChange }: SkillsSectionProps) {
   const { data: skills, isLoading: skillsLoading, error: skillsError } = useSkills();
   const { data: copy } = useCGExplanations();
   const { data: budget, isLoading: budgetLoading, error: budgetError } = useSkillPointBudget();
@@ -300,6 +307,11 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
     [skillValues, specValues, saveToBackend]
   );
 
+  const totalPoints = budget?.total_points;
+  useEffect(() => {
+    if (totalPoints !== undefined) onPointsChange?.(totalSpent, totalPoints);
+  }, [onPointsChange, totalSpent, totalPoints]);
+
   if (skillsLoading || budgetLoading) {
     return (
       <div className="flex items-center justify-center py-8">
@@ -356,10 +368,12 @@ export function SkillsSection({ draft }: { draft: CharacterDraft }) {
       <InstrumentFrame
         label="Skills"
         ledger={{
-          left: `Skills rise in steps of ten, to ${budget.max_skill_value}`,
+          left: `Specialization at ${budget.specialization_unlock_threshold} in parent skill.`,
+          // Points spent over the total, with no words (#5223): the side panel's "Skills" row
+          // reads the same two numbers.
           right: (
             <>
-              Skill points remaining: <b>{remaining}</b> of <b>{budget.total_points}</b>
+              <b>{totalSpent}</b>/<b>{budget.total_points}</b>
             </>
           ),
           over: remaining < 0,
