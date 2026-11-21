@@ -283,7 +283,7 @@ each read by field (never by name) at one named seam:
 
 ```
 select_npc_actions
-  └─ _provoking_participant_ids  ← provoking_source_by_target       forces_attack_on_source
+  └─ _provoking_participant_ids  ← provoking_instances_by_target      forces_attack_on_source
        narrow pool: engagement lock wins, else the provoker; a provoker who is down or
        gone leaves the pool alone; charmed/turned/summoned opponents never narrow
 

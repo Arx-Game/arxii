@@ -1569,7 +1569,7 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   opponents, and `absorb_pool` / `reflect_damage` find their condition by field, not by name.
   See `docs/systems/conditions.md` "Condition effects combat reads".
 - **Conditions react when someone is struck (#4584, ADR-4584-A) [BUILT & WIRED]:**
-  `ConditionTemplate` fields `forces_attack_on_source` (provoke; `provoking_source_by_target`),
+  `ConditionTemplate` fields `forces_attack_on_source` (provoke; `provoking_instances_by_target`),
   `source_guards_bearer` (standing guard; `guardians_by_target`), `spares_source` (#4759; an NPC
   spares the source and its wards, read by NPC targeting, `untargetable_participant_ids`, #4811), `prevents_knockout` (grace;
   `knockout_preventing_instance`) and `retaliation_damage` / `retaliation_damage_type` /

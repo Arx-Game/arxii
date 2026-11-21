@@ -203,6 +203,7 @@ def narrate_reactive_moment(  # noqa: PLR0913 - one moment's names and audience
     bearer_name: str = "",
     encounter: CombatEncounter | None = None,
     plain_fallback: bool = True,
+    hidden: bool | None = None,
 ) -> None:
     """Tell the audience that ``instance``'s reactive moment just happened.
 
@@ -213,6 +214,9 @@ def narrate_reactive_moment(  # noqa: PLR0913 - one moment's names and audience
     found (a player character's active participation, an opponent's own encounter), and with
     none the moment is told privately. ``plain_fallback=False`` says nothing when the template
     has no usable authored line (the caller has already narrated this event in its own words).
+    ``hidden`` is :func:`reactive_moment_hidden` decided by a caller that is about to delete
+    the instance (a spent concealing condition no longer conceals once it is gone); left out,
+    it is decided here.
     """
     from world.conditions.serializers import condition_display_name  # noqa: PLC0415
 
@@ -225,7 +229,8 @@ def narrate_reactive_moment(  # noqa: PLR0913 - one moment's names and audience
     presented = presented_names(people)
     names = {BEARER: bearer_name or (opponent.name if opponent else presented[bearer.pk])}
     if source is not None:
-        names[SOURCE] = presented[source.pk]
+        source_opponent = _opponent_of(source)
+        names[SOURCE] = source_opponent.name if source_opponent else presented[source.pk]
     if attacker:
         names[ATTACKER] = attacker
 
@@ -235,7 +240,9 @@ def narrate_reactive_moment(  # noqa: PLR0913 - one moment's names and audience
             return
         line = plain_reactive_line(moment, ward=condition_display_name(instance), names=names)
 
-    if fight is not None and not _hidden(instance):
+    if hidden is None:
+        hidden = reactive_moment_hidden(instance)
+    if fight is not None and not hidden:
         from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 
         broadcast_action_outcome(encounter=fight, narration=line)
@@ -278,7 +285,7 @@ def _fight_of(
     return context.participant.encounter if context is not None else None
 
 
-def _hidden(instance: ConditionInstance) -> bool:
+def reactive_moment_hidden(instance: ConditionInstance) -> bool:
     """True when a room line would give the moment away.
 
     Hidden by design: the template is not visible to others, or the bearer or the source

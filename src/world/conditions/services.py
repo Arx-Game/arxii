@@ -1718,18 +1718,25 @@ def spend_condition_use(
     if instance.condition.default_duration_type != DurationType.UNTIL_USED:
         return False
     target = instance.target
+    told = narration != SpendNarration.NONE
+    if told:
+        from world.conditions.reactive_narration import (  # noqa: PLC0415
+            narrate_reactive_moment,
+            reactive_moment_hidden,
+        )
+
+        # Decided before the teardown: a once-only concealing condition no longer conceals
+        # once it is deleted, and its spent line must not then go to the room.
+        hidden = reactive_moment_hidden(instance)
     _teardown_removed_condition_instance(target, instance)
     if hasattr(target, "trigger_handler"):
         target.trigger_handler.refresh()
-    if narration != SpendNarration.NONE:
-        from world.conditions.reactive_narration import (  # noqa: PLC0415
-            narrate_reactive_moment,
-        )
-
+    if told:
         narrate_reactive_moment(
             instance,
             ReactiveMoment.SPENT,
             plain_fallback=narration == SpendNarration.FULL,
+            hidden=hidden,
         )
     return True
 
@@ -3743,6 +3750,8 @@ def retaliating_instances(
             "condition",
             "condition__retaliation_damage_type",
             "condition__retaliation_condition",
+            "target",
+            "source_character",
         )
         .order_by("pk")
     )
@@ -3760,7 +3769,7 @@ def knockout_preventing_instance(
     """
     return (
         _active_flagged_instances([target], flag_field="prevents_knockout")
-        .select_related("condition")
+        .select_related("condition", "target", "source_character")
         .order_by("pk")
         .first()
     )
@@ -3834,32 +3843,17 @@ def provoking_instances_by_target(
     """Each target's provoking instance from active forces_attack_on_source conditions.
 
     Keyed by the bearer's ObjectDB pk; the value is the bearer's newest (highest pk) active,
-    unsuppressed flagged instance that has a source, with its template fetched in the same
-    query (the provoke narration reads it, #4587). An instance with no source has nobody to
-    attack and is skipped. One query for all ``targets`` (#4584).
+    unsuppressed flagged instance that has a source, with its template, bearer and source
+    fetched in the same query (the provoke narration reads them, #4587). An instance with no
+    source has nobody to attack and is skipped. One query for all ``targets`` (#4584).
     """
     rows = (
         _active_flagged_instances(targets, flag_field="forces_attack_on_source")
         .filter(source_character__isnull=False)
-        .select_related("condition")
+        .select_related("condition", "target", "source_character")
         .order_by("pk")
     )
     return {row.target_id: row for row in rows}
-
-
-def provoking_source_by_target(
-    targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
-) -> dict[int, int]:
-    """ObjectDB pk of each target's provoker from active forces_attack_on_source conditions.
-
-    Keyed by the bearer's ObjectDB pk; the value is the ``source_character_id`` of the
-    instance ``provoking_instances_by_target`` picks. Enemy target selection narrows an NPC
-    to its provoker (#4584).
-    """
-    return {
-        target_id: instance.source_character_id
-        for target_id, instance in provoking_instances_by_target(targets).items()
-    }
 
 
 def standing_guard_instance(
@@ -3875,7 +3869,7 @@ def standing_guard_instance(
     return (
         _active_flagged_instances([ward], flag_field="source_guards_bearer")
         .filter(source_character=guardian)
-        .select_related("condition")
+        .select_related("condition", "target", "source_character")
         .order_by("pk")
         .first()
     )
