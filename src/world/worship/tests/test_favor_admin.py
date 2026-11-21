@@ -177,6 +177,30 @@ class DevotionConfigAdminTests(TestCase):
         ).content.decode()
         self.assertIn("Worship pool cost", body)
 
+    def test_the_being_page_lists_each_pool_rows_effects_with_their_conditions(self) -> None:
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+        from world.checks.factories import ConsequenceEffectFactory, ConsequenceFactory
+        from world.conditions.factories import ConditionTemplateFactory
+        from world.worship.factories import WorshippedBeingFactory
+
+        pool = ConsequencePoolFactory(name="Pool of answers")
+        for label, condition in (("A breath", "Respite"), ("A price", "Brand of Silence")):
+            row = ConsequenceFactory(outcome_tier=self.failure, label=label)
+            ConsequenceEffectFactory(
+                consequence=row,
+                condition_template=ConditionTemplateFactory(name=condition),
+                target="self",
+            )
+            ConsequencePoolEntryFactory(pool=pool, consequence=row)
+        being = WorshippedBeingFactory(intervention_pool=pool)
+
+        body = self.client.get(
+            reverse("admin:arxii_worshippedbeing_change", args=(being.pk,))
+        ).content.decode()
+
+        self.assertIn(": Respite", body)
+        self.assertIn(": Brand of Silence", body)
+
     def test_odds_table_is_read_from_the_result_charts(self) -> None:
         from world.traits.factories import CheckRankFactory, ResultChartFactory
         from world.traits.models import ResultChart, ResultChartOutcome

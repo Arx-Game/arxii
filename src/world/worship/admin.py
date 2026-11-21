@@ -131,6 +131,14 @@ def intervention_pool_summary(being: WorshippedBeing) -> SafeString | str:
     rows = sorted(
         get_effective_consequences(pool), key=lambda row: (row.outcome_tier.success_level, row.pk)
     )
+    from world.checks.models import ConsequenceEffect  # noqa: PLC0415
+
+    # Every row's effects and their condition templates in one read, grouped by consequence.
+    effects: dict[int, list[ConsequenceEffect]] = {}
+    for effect in ConsequenceEffect.objects.filter(
+        consequence_id__in=[row.consequence.pk for row in rows]
+    ).select_related("condition_template"):
+        effects.setdefault(effect.consequence_id, []).append(effect)
     body = format_html_join(
         "",
         "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td></tr>",
@@ -139,7 +147,7 @@ def intervention_pool_summary(being: WorshippedBeing) -> SafeString | str:
                 row.outcome_tier.name,
                 row.label,
                 row.weight,
-                ", ".join(_effect_words(e) for e in row.consequence.effects.all())
+                ", ".join(_effect_words(e) for e in effects.get(row.consequence.pk, []))
                 or "None (text only)",
             )
             for row in rows

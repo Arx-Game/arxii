@@ -77,9 +77,14 @@ def _split_prayed_for(head: str) -> tuple[str, str]:
     from world.worship.models import WorshippedBeing  # noqa: PLC0415
 
     words = head.split()
+    # One read of the active beings' names, then each candidate ending is tested against it.
+    names = {
+        name.lower()
+        for name in WorshippedBeing.objects.filter(is_active=True).values_list("name", flat=True)
+    }
     for cut in range(1, len(words)):
         being = " ".join(words[cut:])
-        if WorshippedBeing.objects.filter(name__iexact=being, is_active=True).exists():
+        if being.lower() in names:
             return " ".join(words[:cut]), being
     return (words[0], " ".join(words[1:])) if words else ("", "")
 
