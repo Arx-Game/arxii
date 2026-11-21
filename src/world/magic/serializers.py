@@ -4465,6 +4465,7 @@ class TechniqueProgressSerializer(serializers.ModelSerializer):
     technique_id = serializers.IntegerField(read_only=True)
     technique_name = serializers.CharField(source="technique.name", read_only=True)
     teacher_name = serializers.SerializerMethodField()
+    is_self_study = serializers.SerializerMethodField()
     source_label = serializers.SerializerMethodField()
     weekly_remaining = serializers.SerializerMethodField()
 
@@ -4477,6 +4478,7 @@ class TechniqueProgressSerializer(serializers.ModelSerializer):
             "points_accumulated",
             "total_required",
             "teacher_name",
+            "is_self_study",
             "source_label",
             "weekly_remaining",
         ]
@@ -4488,6 +4490,12 @@ class TechniqueProgressSerializer(serializers.ModelSerializer):
         if obj.teacher_tenure_id is None:
             return None
         return obj.teacher_tenure.display_name
+
+    def get_is_self_study(self, obj: TechniqueProgress) -> bool:
+        """False for a meter a player teacher or an Academy trainer opened (#2741)."""
+        from world.magic.services.technique_training import is_academy_instructed  # noqa: PLC0415
+
+        return obj.teacher_tenure_id is None and not is_academy_instructed(obj)
 
     def get_source_label(self, obj: TechniqueProgress) -> str:
         return obj.get_source_display()
