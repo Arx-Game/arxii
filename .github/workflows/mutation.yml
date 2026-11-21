@@ -44,12 +44,6 @@ on:
         description: "Refuse a run whose estimate is longer than this many minutes"
         required: false
         type: string
-  # TEMPORARY (#4248): removed before the PR is enqueued
-  push:
-    branches:
-      - test-4248-mutation-testing-pilot-find-tests-that-g
-    paths:
-      - .github/mutation-pilot.args
 
 permissions:
   contents: read
@@ -116,37 +110,6 @@ jobs:
           IN_MAX_MINUTES: ${{ inputs.max_minutes }}
         run: |
           set -euo pipefail
-
-          # TEMPORARY (#4248): removed before the PR is enqueued
-          # On a push, the inputs come from .github/mutation-pilot.args, one
-          # name=value per line. The value is everything after the first "=".
-          if [ "${GITHUB_EVENT_NAME}" = "push" ]; then
-            while IFS= read -r line || [ -n "$line" ]; do
-              if [[ -z "${line//[[:space:]]/}" || "$line" == "#"* ]]; then
-                continue
-              fi
-              name="${line%%=*}"
-              value="${line#*=}"
-              if [ "$name" = "$line" ]; then
-                echo "::error::Line without an = in mutation-pilot.args: $line"
-                exit 1
-              fi
-              case "$name" in
-                source_file) IN_SOURCE_FILE="$value" ;;
-                kept) IN_KEPT="$value" ;;
-                units) IN_UNITS="$value" ;;
-                functions) IN_FUNCTIONS="$value" ;;
-                lines) IN_LINES="$value" ;;
-                sample) IN_SAMPLE="$value" ;;
-                max_minutes) IN_MAX_MINUTES="$value" ;;
-                *)
-                  echo "::error::Unknown input name in mutation-pilot.args: $line"
-                  exit 1
-                  ;;
-              esac
-            done < .github/mutation-pilot.args
-          fi
-          # End of the TEMPORARY block.
 
           for required in IN_SOURCE_FILE IN_KEPT IN_UNITS; do
             if [ -z "${!required:-}" ]; then
