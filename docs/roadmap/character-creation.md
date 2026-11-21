@@ -11,7 +11,7 @@ pays no CG points, opens no reason or degree offer and reaches no sheet, and the
 kept for the card's return. Nothing about a finished character's enemy record changed.
 
 The personality cards have a home again: the Identity stage has a Personality block
-between the quote and worship, the life page's cards two across, three at rest and the
+between the quote and worship, the life page's cards two across, four at rest and the
 rest under "See N more", or every card under its heading once staff group the lines. It
 reads a new offer chapter, Identity, which takes no opener, and the Distinction Builder
 and its paste table (`identity`, `identity:<heading>`) place cards there; for cards that

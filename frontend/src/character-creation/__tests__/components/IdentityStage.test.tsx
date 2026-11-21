@@ -272,7 +272,7 @@ describe('IdentityStage', () => {
       ]);
     });
 
-    it('shows a few cards at rest and the rest, still as cards, under See more', async () => {
+    it('shows four cards at rest and the rest, still as cards, under See more', async () => {
       const names = ['Daring', 'Efficient', 'Hedonistic', 'Indolent', 'Proud', 'Tireless'];
       vi.mocked(getDraftOffers).mockResolvedValue({
         offers: names.map((name, index) => identityCard(index + 1, name)),
@@ -286,11 +286,13 @@ describe('IdentityStage', () => {
       );
 
       await screen.findByRole('heading', { name: 'Personality' });
-      const fold = screen.getByText('See 3 more').closest('details');
+      const fold = screen.getByText('See 2 more').closest('details');
       expect(fold).not.toBeNull();
       const folded = fold!.querySelector('ul');
       expect(folded).toHaveClass('stances', 'grid', 'pair');
-      expect(folded!.querySelectorAll('li')).toHaveLength(3);
+      expect(folded!.querySelectorAll('li')).toHaveLength(2);
+      // Two full rows at rest: four cards, not the three a one-column block shows.
+      expect(container.querySelectorAll('.offer-group ul.stances > li')).toHaveLength(4);
       // Every class the block emits has a rule in cg.css that reaches it (#3667 shape).
       const styledElsewhere = new Set(['leaf-body', 'note-group']);
       expect(unreachableClasses(container, styledElsewhere)).toEqual([]);

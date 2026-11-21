@@ -12,7 +12,7 @@
  * Between the quote and worship, the Personality block (#5255, owner ruling
  * 2026-11-21: the personality cards are picked here): this chapter's own offered
  * distinctions (`ChapterOffers chapter="identity"`), the life page's cards two
- * across. A few show at rest and the rest under "See N more"; where staff gave the
+ * across. Four show at rest and the rest under "See N more"; where staff gave the
  * lines headings every card shows under its heading instead. The section is absent
  * when staff have placed no card here.
  */

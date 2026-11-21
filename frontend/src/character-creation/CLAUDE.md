@@ -160,7 +160,7 @@ character-creation/
     │                        #   block (#5255, owner ruling 2026-11-21): an h2 (copy
     │                        #   `identity_personality_heading`) over `ChapterOffers
     │                        #   chapter="identity"` as the life page's cards, two across
-    │                        #   (`pair`), signed prices, three at rest and the rest under
+    │                        #   (`pair`), signed prices, four at rest and the rest under
     │                        #   "See N more"; once staff give the lines headings every
     │                        #   card shows under its heading and nothing folds. Absent
     │                        #   when no card is placed. The side panel's points line
@@ -406,7 +406,8 @@ term whose definition is blank is plain text with no underline; `interceptPick` 
 changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 `secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.
 `pair` (#5255) puts a grid two across in the reading column (`.stances.grid.pair`, the
-Glimpse's rule), and a grid folded under "See N more" keeps its cards; the Identity
+Glimpse's rule) with four cards at rest where the others show three, and a grid folded
+under "See N more" keeps its cards; the Identity
 stage's Personality block uses both.
 
 ## A card click shows at once (#5134)
