@@ -54,10 +54,11 @@ def _exact_power(magnitude: int, curve: list[tuple[int, int]]) -> Fraction:
 
 
 def _by_largest_remainder(weights: list[int], amount: int) -> list[int]:
-    """The textbook split the docstring names, worked in exact fractions.
+    """The textbook split that ``_largest_remainder`` names, worked in exact fractions.
 
-    Each entry's exact quota is rounded down, then what is left over is handed out one each
-    to the largest fractional parts, the earlier entry first on a tie.
+    Its docstring: "Split ``amount`` over ``weights`` by the largest remainder, earlier entries
+    first on a tie." Each entry's exact quota is rounded down, then what is left over is
+    handed out one each to the largest fractional parts, the earlier entry first on a tie.
     """
     weight_sum = sum(weights)
     if weight_sum == 0:
@@ -85,9 +86,10 @@ class PointsToPowerHoldsItsContract(unittest.TestCase):
 
     @given(curves(), caps)
     def test_curve_passes_through_its_rows(self, curve, cap) -> None:
-        """The curve is "a list of ``(points_reached, power)``": reaching a row gives its power.
+        """The curve is "a list of ``(points_reached, power)``", "Linear between the rows".
 
-        The result never passes the cap, so a row whose power is over the cap reads as the cap.
+        Both together say that reaching a row gives that row's power. The result never passes
+        the cap, so a row whose power is over the cap reads as the cap.
         """
         for reached, power in curve:
             self.assertEqual(points_to_power(reached, curve, cap=cap), min(power, cap))
@@ -110,7 +112,8 @@ class PointsToPowerHoldsItsContract(unittest.TestCase):
             self.assertEqual(abs(result), min(curve[-1][1], cap))
             return
         exact = _exact_power(magnitude, curve)
-        # The docstring does not say which way a value between rows is rounded: either is accepted.
+        # The docstring does not say which way a value between rows is rounded: either is
+        # accepted, so a floor or a ceiling both pass.
         self.assertLess(abs(abs(result) - min(exact, cap)), 1)
 
 
@@ -141,7 +144,7 @@ class ApportionPowerHoldsItsContract(unittest.TestCase):
                 self.assertEqual(share, 0)
 
     @given(
-        st.lists(points, max_size=8),
+        st.lists(st.one_of(points, st.integers(-4, 4)), max_size=8),
         st.integers(0, 60),
         st.integers(0, 60),
     )
@@ -153,9 +156,12 @@ class ApportionPowerHoldsItsContract(unittest.TestCase):
         positive_power = gained if any(p > 0 for p in line_points) else 0
         negative_power = lost if any(p < 0 for p in line_points) else 0
         total = positive_power - negative_power
-        # "Lines with positive points split it by their points; lines with negative points split
-        # what they take away, positive_power - total_power, by their points, and each share is
-        # negated; a line worth no points gets 0."
+        # The split rule is quoted from ``apportion_power``: "Lines with positive points split it
+        # by their points; lines with negative points split what they take away,
+        # positive_power - total_power, by their points, and each share is negated; a line worth
+        # no points gets 0." The largest-remainder rule and its tie order are quoted from
+        # ``_largest_remainder`` in ``_by_largest_remainder``. The amount to lose is
+        # never negative here: the powers agree with the lines, so it is negative_power, 0 or more.
         gains = _by_largest_remainder([max(0, p) for p in line_points], positive_power)
         losses = _by_largest_remainder([max(0, -p) for p in line_points], negative_power)
         expected = [gain - loss for gain, loss in zip(gains, losses, strict=True)]
