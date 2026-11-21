@@ -215,7 +215,7 @@ class SceneRoundDefaultsConfigAdmin(admin.ModelAdmin):
 class FacePlaceholderConfigAdmin(admin.ModelAdmin):
     """#4889 - the one picture a face with no portrait shows; a pk=1 singleton."""
 
-    list_display = ["placeholder", "updated_at", "updated_by"]
+    list_display = ["__str__", "placeholder", "updated_at", "updated_by"]
     autocomplete_fields = ["placeholder"]
     readonly_fields = ["updated_at", "updated_by"]
     # Shown read-only and written by save_model, never picked from a dropdown.

@@ -631,7 +631,10 @@ Cloudinary folder with no player or tenure number; `copy_image(player_data, sour
 stores a new copy of one of the player's pictures (used by face portraits, folder
 `FACE_PORTRAIT_FOLDER`) and checks again with the size Cloudinary reports, destroying the asset
 and refusing when that passes the quota. SQLite does not lock rows, so the concurrency is
-proved on Postgres.
+proved on Postgres. Both read the Django setting `CLOUDINARY_CLOUD_NAME` (from the
+`CLOUDINARY_CLOUD_NAME` environment variable) to know uploads are configured; until #4889 the
+setting was never defined outside the tests, so a running server refused every upload with
+"Cloudinary is not configured".
 
 ### Gallery (`/api/roster/tenure-media/`, #4151)
 

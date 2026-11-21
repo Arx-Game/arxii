@@ -27,6 +27,8 @@ from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import AccountFactory, MediaFactory, RoomProfileFactory
 from evennia_extensions.models import Media
+from flows.factories import SceneDataManagerFactory
+from flows.service_functions.serializers.room_state import ObjectStateSerializer
 from integration_tests.harness import JourneyCase
 from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
 from world.forms.factories import AlternateSelfFactory
@@ -483,6 +485,21 @@ class TheFaceWithNoPortrait(DisguiseFaceCase):
         self.assertEqual(by_name["Owl Mask"]["thumbnail_media_url"], BUILTIN_FACE_PLACEHOLDER_URL)
         # The true face keeps the letter avatar the client draws for no picture.
         self.assertEqual(by_name["Ysmay"]["thumbnail_url"], "")
+
+
+class TheRoomListFollowsTheWornMask(DisguiseFaceCase):
+    """A room's states persist across commands, so the list must read the face worn now."""
+
+    def test_a_state_built_before_a_mask_switch_still_reports_the_mask_now_worn(self) -> None:
+        state = SceneDataManagerFactory().initialize_state_for_object(self.ysmay)
+        before = ObjectStateSerializer().to_representation(state)
+        self.assertEqual(before["persona_id"], self.mask.pk)
+
+        self.telnet(self.ysmay, "persona Ysmay")
+
+        after = ObjectStateSerializer().to_representation(state)
+        self.assertEqual(after["persona_id"], self.sheet.primary_persona.pk)
+        self.assertEqual(after["name"], "Ysmay")
 
 
 class AnAlternateSelfsPortrait(DisguiseFaceCase):
