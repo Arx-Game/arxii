@@ -793,6 +793,7 @@ def _resolve_hostile_accepted_cast(
             scene=action_request.scene,
             room=action_request.scene.room,
             from_entrance=action_request.originated_as_entrance,
+            cast_resonance=_stored_cast_resonance_still_held(action_request),
         )
         acknowledge_encounter_risk(encounter, target.character_sheet)
         action_request.status = ActionRequestStatus.RESOLVED
@@ -1512,6 +1513,7 @@ def _route_hostile_cast(  # noqa: PLR0913 - cohesive hostile-cast routing params
             scene=scene,
             room=scene.room,
             from_entrance=originated_as_entrance,
+            cast_resonance=preferred_resonance,
         )
     return CastResult(request=request, encounter=encounter)
 

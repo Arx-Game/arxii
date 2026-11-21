@@ -30,6 +30,23 @@ if TYPE_CHECKING:
     from world.magic.models import FuryTier, Resonance, Technique
 
 
+def _refuse_resonance_off_thread(
+    participant: CombatParticipant, technique: Technique | None, resonance: Resonance | None
+) -> None:
+    """Refuse a declared cast resonance the Gift's thread holds no row for (#5231)."""
+    if technique is None or resonance is None:
+        return
+    from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
+    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+    try:
+        cast_resonance_for(participant.character_sheet.character, technique, resonance)
+    except ResonanceNotOnGiftThread as exc:
+        raise DeclarationRefusedError(
+            exc.user_message, code=ActionDispatchError.RESONANCE_NOT_ON_GIFT_THREAD
+        ) from exc
+
+
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
@@ -48,6 +65,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     cast_destination: Position | None = None,
     cast_position_a: Position | None = None,
     cast_position_b: Position | None = None,
+    cast_resonance: Resonance | None = None,
 ) -> CombatRoundAction:
     """Declare a PC's action for the current round.
 
@@ -147,6 +165,10 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             focused_ally_target=focused_ally_target,
         )
 
+    # A resonance the cast is to be worked in must be one the Gift's thread holds (#5231).
+    # Refused here, before anything is recorded or charged.
+    _refuse_resonance_off_thread(participant, focused_action, cast_resonance)
+
     action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
@@ -169,6 +191,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "cast_destination": cast_destination,
             "cast_position_a": cast_position_a,
             "cast_position_b": cast_position_b,
+            "cast_resonance": cast_resonance,
         },
     )
 

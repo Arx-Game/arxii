@@ -129,9 +129,24 @@ def resolve_combat_technique(
         participant.character_sheet.character, action.focused_action
     )
 
+    # The resonance the player chose at declaration (#5231). The Gift's thread may have lost
+    # it since, and a round never fails on that: the cast is then worked in the default.
+    chosen_resonance = None
+    if action.cast_resonance is not None:
+        from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+        held = cast_resonance_for(
+            participant.character_sheet.character,
+            action.focused_action,
+            action.cast_resonance,
+            refuse_off_thread=False,
+        )
+        chosen_resonance = held if held == action.cast_resonance else None
+
     technique_use_result = use_technique(
         character=participant.character_sheet.character,
         technique=action.focused_action,
+        preferred_resonance=chosen_resonance,
         resolve_fn=resolver,
         confirm_soulfray_risk=action.confirm_soulfray_risk,
         strain_commitment=action.strain_commitment,

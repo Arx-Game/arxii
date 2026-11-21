@@ -16,26 +16,39 @@ light part 10 percent below an Abyssal share of 50, all of it from there):
 from __future__ import annotations
 
 import math
+from unittest.mock import MagicMock
 
 from django.urls import reverse
 
 from actions.factories import ActionTemplateFactory
 from integration_tests.harness import JourneyCase
 from world.checks.test_helpers import force_check_outcome
+from world.combat.constants import ActionCategory, OpponentTier, RiskLevel
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    ThreatPoolEntryFactory,
+    ThreatPoolFactory,
+)
+from world.combat.models import CombatRoundAction
+from world.combat.services import add_participant, begin_declaration_phase, resolve_round
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
+    EffectTypeFactory,
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
     ensure_canonical_affinities,
 )
 from world.magic.models import Affinity, CharacterAnima, CharacterResonance, ThreadResonance
+from world.magic.seeds_cast import ensure_technique_cast_content
 from world.magic.specialization.services import provision_latent_gift_thread
 from world.scenes.action_constants import ConsentDecision
+from world.scenes.constants import RoundStatus
 from world.scenes.factories import SceneFactory
 from world.scenes.models import SceneActionRequest
 from world.scenes.tests.cast_test_helpers import (
@@ -50,6 +63,11 @@ CAST_URL = "/api/action-requests/cast/"
 NOT_ON_THREAD = "That resonance is not part of this Gift's thread."
 
 
+def _clean_cast(*args: object, **kwargs: object) -> MagicMock:
+    """An offence roll at success level 2, which lands the cast."""
+    return MagicMock(success_level=2, outcome=None)
+
+
 def _corruption_template(resonance) -> None:
     """The condition a resonance's corruption lives in, as the accrual service finds it."""
     template = ConditionTemplateFactory(
@@ -59,7 +77,7 @@ def _corruption_template(resonance) -> None:
         ConditionStageFactory(condition=template, stage_order=order, severity_threshold=threshold)
 
 
-class WorkingACastInAChosenResonance(JourneyCase):
+class _AYsmayWithATwoResonanceGift(JourneyCase):
     """Ysmay's Gift holds a Primal and an Abyssal resonance; she picks which to cast in."""
 
     def setUp(self) -> None:
@@ -109,6 +127,10 @@ class WorkingACastInAChosenResonance(JourneyCase):
     def corruption(self, character) -> dict[str, int]:
         rows = CharacterResonance.objects.filter(character_sheet=character.sheet_data)
         return {row.resonance.name: row.corruption_current for row in rows}
+
+
+class WorkingACastInAChosenResonance(_AYsmayWithATwoResonanceGift):
+    """She casts through the web cast endpoint, on her own or at another player."""
 
     def cast(self, character, technique=None, **body):
         technique = technique or self.technique
@@ -236,3 +258,109 @@ class WorkingACastInAChosenResonance(JourneyCase):
         # She is not left unable to cast: it resolves in Warmth, which adds no corruption.
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(self.corruption(ysmay), before)
+
+
+class WorkingACombatCastInAChosenResonance(_AYsmayWithATwoResonanceGift):
+    """In a fight, the resonance she names when she declares is the one her cast is worked in.
+
+    Ysmay (80 Primal, 20 Abyssal) declares a strike at Gristle from telnet, naming a
+    resonance with ``variant=``; the round resolves later, and the cast is worked in the
+    resonance she named. Worked in Ruin it adds corruption to Ruin, worked in Warmth it adds
+    none, the same as a cast outside a fight.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.strike = TechniqueFactory(
+            name="Ember Lash",
+            gift=self.gift,
+            intensity=20,
+            control=40,
+            anima_cost=1,
+            effect_type=EffectTypeFactory(name="Ember Lash effect", base_power=5),
+            action_category=ActionCategory.PHYSICAL,
+            action_template=ensure_technique_cast_content(),
+        )
+        self.ysmay = self.caster("Ysmay", primal="80", abyssal="20")
+        grant_technique(self.ysmay.sheet_data.primary_persona, self.strike)
+        self.encounter = CombatEncounterFactory(
+            status=RoundStatus.BETWEEN_ROUNDS,
+            round_number=0,
+            risk_level=RiskLevel.MODERATE,
+            room=self.room,
+        )
+        pool = ThreatPoolFactory()
+        ThreatPoolEntryFactory(pool=pool, base_damage=1)
+        self.gristle = CombatOpponentFactory(
+            encounter=self.encounter,
+            name="Gristle",
+            tier=OpponentTier.MOOK,
+            health=5000,
+            max_health=5000,
+            threat_pool=pool,
+        )
+        add_participant(self.encounter, self.ysmay.sheet_data)
+        begin_declaration_phase(self.encounter)
+        self.encounter.refresh_from_db()
+
+    def declared(self) -> CombatRoundAction:
+        return CombatRoundAction.objects.get(
+            participant__character_sheet=self.ysmay.sheet_data,
+            round_number=self.encounter.round_number,
+        )
+
+    def declare_and_resolve(self, resonance) -> CombatRoundAction:
+        told = self.telnet(self.ysmay, f"cast Ember Lash at Gristle variant={resonance.name}")
+        self.assertNotIn("Could not", told)
+        declared = self.declared()
+        resolve_round(self.encounter, offense_check_fn=_clean_cast)
+        return declared
+
+    def test_a_combat_cast_worked_in_her_abyssal_resonance_corrupts_and_one_in_her_primal_does_not(
+        self,
+    ) -> None:
+        before = self.corruption(self.ysmay)
+
+        declared = self.declare_and_resolve(self.ruin)
+
+        self.assertEqual(declared.cast_resonance, self.ruin)
+        after_ruin = self.corruption(self.ysmay)
+        self.assertGreaterEqual(after_ruin["Ruin"] - before["Ruin"], 1)
+        self.assertEqual(after_ruin["Warmth"], before["Warmth"])
+
+        self.encounter.refresh_from_db()
+        begin_declaration_phase(self.encounter)
+        self.encounter.refresh_from_db()
+        declared = self.declare_and_resolve(self.warmth)
+
+        self.assertEqual(declared.cast_resonance, self.warmth)
+        self.assertEqual(self.corruption(self.ysmay), after_ruin)
+
+    def test_a_resonance_not_on_the_thread_is_refused_at_declaration(self) -> None:
+        anima_before = CharacterAnima.objects.get(character=self.ysmay.sheet_data).current
+
+        told = self.telnet(self.ysmay, f"cast Ember Lash at Gristle variant={self.stray.name}")
+
+        self.assertIn(NOT_ON_THREAD, told)
+        self.assertFalse(CombatRoundAction.objects.exists())
+        self.assertEqual(
+            CharacterAnima.objects.get(character=self.ysmay.sheet_data).current, anima_before
+        )
+
+    def test_a_resonance_retuned_off_the_thread_before_the_round_resolves_still_casts(
+        self,
+    ) -> None:
+        told = self.telnet(self.ysmay, f"cast Ember Lash at Gristle variant={self.ruin.name}")
+        self.assertNotIn("Could not", told)
+        before = self.corruption(self.ysmay)
+        ThreadResonance.objects.get(
+            thread__owner=self.ysmay.sheet_data, resonance=self.ruin
+        ).delete()
+        self.ysmay.threads.invalidate()
+
+        resolve_round(self.encounter, offense_check_fn=_clean_cast)
+
+        # It cast in Warmth, the leading resonance, which adds no corruption, and no error.
+        self.assertNotIn("not part of this Gift's thread", self.said(self.ysmay))
+        self.assertEqual(self.corruption(self.ysmay), before)
+        self.assertEqual(self.declared().cast_resonance, self.ruin)

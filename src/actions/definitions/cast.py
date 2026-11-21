@@ -331,6 +331,7 @@ class CastTechniqueAction(Action):
             "action_slot",
             "fury_commitment_id",
             "fury_resonance_id",
+            "preferred_resonance_id",
         ):
             _value = kwargs.get(_key)
             if _value is not None:

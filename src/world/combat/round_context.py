@@ -517,6 +517,16 @@ class CombatRoundContext(RoundContext):
 
             fury_resonance = Resonance.objects.filter(pk=fury_resonance_id).first()
 
+        # The resonance the cast is to be worked in (#5231): the web body key and telnet's
+        # variant= both arrive as preferred_resonance_id. declare_action refuses one the
+        # Gift's thread does not hold, before anything is recorded or charged.
+        cast_resonance = None
+        preferred_resonance_id = kwargs.get("preferred_resonance_id")
+        if preferred_resonance_id is not None:
+            from world.magic.models import Resonance  # noqa: PLC0415
+
+            cast_resonance = Resonance.objects.filter(pk=preferred_resonance_id).first()
+
         # The web dispatch reaches here without the cast's round_declaration hook, so the
         # strength's depth cap is enforced again before anything is charged (#4738).
         self._refuse_unreachable_fury(participant, fury_commitment, fury_resonance)
@@ -547,6 +557,11 @@ class CombatRoundContext(RoundContext):
             cast_positions,
         ) = self._merge_slot_into_existing(slot, technique, existing, kwargs)
 
+        # The focused cast and each passive arrive as separate calls; a passive call names
+        # no resonance and must not wipe the one the focused cast chose.
+        if cast_resonance is None and slot != CombatActionSlot.FOCUSED and existing:
+            cast_resonance = existing.cast_resonance
+
         effort = (
             kwargs.get(_EFFORT_LEVEL_KEY)
             or (existing.effort_level if existing else None)
@@ -574,6 +589,7 @@ class CombatRoundContext(RoundContext):
                 cast_destination=cast_positions["cast_destination"],
                 cast_position_a=cast_positions["cast_position_a"],
                 cast_position_b=cast_positions["cast_position_b"],
+                cast_resonance=cast_resonance,
             )
         except DeclarationRefusedError as exc:
             # A refusal the player can meet comes back as a 400 with its reason (#4796).
