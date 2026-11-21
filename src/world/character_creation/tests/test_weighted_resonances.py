@@ -203,6 +203,13 @@ class TheGiftThreadHoldsThePicksAtZero(_WeightedPicksCase):
         )
         self.assertEqual(thread.resonance, self.fury)
 
+    def test_an_even_split_leads_with_the_primal_pick_whatever_the_order_given(self) -> None:
+        sheet, draft = self._finalize([(self.domination, 5), (self.fury, 5)])
+        thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=self.gift)
+        self.assertEqual(thread.resonance, self.fury)
+        config = RitualCheckConfig.objects.get(ritual__author_account=draft.account)
+        self.assertEqual(config.resonance, self.fury)
+
     def test_species_gift_thread_holds_the_same_picks(self) -> None:
         species = SpeciesFactory(name="Many Moods Folk")
         minor = GiftFactory(name="Folk Gift", kind=GiftKind.MINOR)
