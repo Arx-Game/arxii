@@ -28,9 +28,15 @@ from typing import TYPE_CHECKING
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
 
-from world.magic.constants import DEED_GAIN_SOURCES, ComponentMode
+from world.magic.constants import (
+    AFFINITY_ABYSSAL,
+    AFFINITY_CELESTIAL,
+    AFFINITY_PRIMAL,
+    DEED_GAIN_SOURCES,
+    ComponentMode,
+)
 from world.magic.exceptions import ConversionMappingError, NotUnsettledError
-from world.magic.models.aura import CharacterResonance
+from world.magic.models.aura import CharacterResonance, share_lead_key
 from world.magic.models.drift import (
     DriftConfig,
     DriftConversionCap,
@@ -80,7 +86,9 @@ def get_drift_config() -> DriftConfig:
 
 
 def _main_affinity(aura: CharacterAura | None) -> Affinity | None:
-    """The affinity holding the largest settled share (ties: lowest affinity id), or None.
+    """The affinity holding the largest settled share, or None.
+
+    A tie goes to Primal, then to the lowest affinity id.
 
     None when there is no aura or none of its shares has been settled yet.
     """
@@ -89,7 +97,10 @@ def _main_affinity(aura: CharacterAura | None) -> Affinity | None:
     settled = [share for share in aura.cached_shares if share.settled_percent > 0]
     if not settled:
         return None
-    return min(settled, key=lambda share: (-share.settled_percent, share.affinity_id)).affinity
+    return min(
+        settled,
+        key=lambda share: share_lead_key(share, share.settled_percent),
+    ).affinity
 
 
 def _share_of(part: int, whole: int) -> Decimal:
@@ -111,6 +122,47 @@ def _unsettled_numbers(main: Affinity, cfg: DriftConfig) -> tuple[int, int]:
     )
 
 
+def _lean_of(aura: CharacterAura) -> Affinity | None:
+    """Which of Celestial and Abyssal a Primal character leans toward, or None.
+
+    The one with the larger settled share. Equal shares, including both zero or absent, mean
+    no lean.
+    """
+    side = {
+        share.affinity.name: share
+        for share in aura.cached_shares
+        if share.affinity.name in (AFFINITY_CELESTIAL, AFFINITY_ABYSSAL)
+    }
+    celestial = side.get(AFFINITY_CELESTIAL)
+    abyssal = side.get(AFFINITY_ABYSSAL)
+    celestial_settled = celestial.settled_percent if celestial else Decimal(0)
+    abyssal_settled = abyssal.settled_percent if abyssal else Decimal(0)
+    if celestial_settled == abyssal_settled:
+        return None
+    return (celestial if celestial_settled > abyssal_settled else abyssal).affinity
+
+
+def _range_for(
+    affinity: Affinity, main: Affinity, lean: Affinity | None, cfg: DriftConfig
+) -> int | None:
+    """The range before Unsettled for growth in ``affinity``, or None when it is not read.
+
+    ``range(x)`` is the first of ``_unsettled_numbers(x, cfg)``. A Celestial main reads every
+    other affinity at ``range(main)``. An Abyssal main reads Primal never and the rest at
+    ``range(main)``. A Primal main with a ``lean`` reads the side opposite the lean at
+    ``range(lean)`` and the lean itself at ``cfg.own_side_tolerance_percent``; with no lean
+    it reads Celestial and Abyssal at ``range(main)``. Any other main (a test affinity)
+    reads every other affinity at ``range(main)``.
+    """
+    if main.name == AFFINITY_ABYSSAL and affinity.name == AFFINITY_PRIMAL:
+        return None
+    if main.name == AFFINITY_PRIMAL and lean is not None:
+        if affinity.pk == lean.pk:
+            return cfg.own_side_tolerance_percent
+        return _unsettled_numbers(lean, cfg)[0]
+    return _unsettled_numbers(main, cfg)[0]
+
+
 def drift_for(sheet: CharacterSheet) -> DriftReading:
     """Whether ``sheet``'s character is unsettled, and by how much (#5123).
 
@@ -119,9 +171,17 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
     lifetime resonance. For every affinity other than the main one (the largest settled
     share), the excess is how far its share stands past its settled share plus the range
     before Unsettled. ``steps_past`` is the total excess in bands of the step, rounded up.
-    The range and the step are the main affinity's own ``unsettled_tolerance_percent`` and
-    ``unsettled_step_percent`` when set, else the general values on ``DriftConfig``
-    (``_unsettled_numbers``).
+    The step is the main affinity's own ``unsettled_step_percent`` when set, else the general
+    value on ``DriftConfig`` (``_unsettled_numbers``). The range reads by side
+    (``_range_for``):
+
+    - Celestial main: every other affinity at the main's range.
+    - Abyssal main: Primal is never read; Celestial at the main's range.
+    - Primal main leaning to a side (the larger settled share of Celestial and Abyssal): the
+      opposite side at the lean's range, the lean itself at
+      ``DriftConfig.own_side_tolerance_percent``.
+    - Primal main with no lean: Celestial and Abyssal at the main's range.
+    - Any other main: every other affinity at the main's range.
 
     A character with no aura, or an aura with nothing settled yet, reads zero.
     """
@@ -138,7 +198,8 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
         )
 
     cfg = get_drift_config()
-    tolerance_percent, step_percent = _unsettled_numbers(main, cfg)
+    step_percent = _unsettled_numbers(main, cfg)[1]
+    lean = _lean_of(aura) if main.name == AFFINITY_PRIMAL else None
     settled_shares = {share.affinity_id: share.settled_percent for share in aura.cached_shares}
     rows = list(
         CharacterResonance.objects.filter(character_sheet=sheet).select_related(
@@ -153,11 +214,17 @@ def drift_for(sheet: CharacterSheet) -> DriftReading:
             lifetime_by_affinity.get(affinity_id, 0) + row.lifetime_earned
         )
     shares = {aff: _share_of(life, total_lifetime) for aff, life in lifetime_by_affinity.items()}
+    affinities = {share.affinity_id: share.affinity for share in aura.cached_shares}
+    for row in rows:
+        affinities.setdefault(row.resonance.affinity_id, row.resonance.affinity)
 
     excess_by_affinity: dict[int, Decimal] = {}
     excess_points: dict[int, int] = {}
     for affinity_id in shares.keys() | settled_shares.keys():
         if affinity_id == main.pk:
+            continue
+        tolerance_percent = _range_for(affinities[affinity_id], main, lean, cfg)
+        if tolerance_percent is None:
             continue
         past_settled = (
             shares.get(affinity_id, Decimal(0))
@@ -307,16 +374,6 @@ def own_affinity(sheet: CharacterSheet) -> Affinity | None:
     None when the sheet has no aura yet or nothing in it is settled. Never raises.
     """
     return _main_affinity(sheet.aura_or_none)
-
-
-def earn_rate_percent(sheet: CharacterSheet) -> int:
-    """The earn rate of the character's main affinity, as a percentage (#5181).
-
-    100 when the sheet has no aura or no main affinity. Reads the cached aura shares, so it adds
-    no query on a warm cache.
-    """
-    affinity = own_affinity(sheet)
-    return 100 if affinity is None else affinity.earn_rate_percent
 
 
 def learn_rate_percent(sheet: CharacterSheet) -> int:

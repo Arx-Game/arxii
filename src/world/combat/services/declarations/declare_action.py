@@ -30,6 +30,28 @@ if TYPE_CHECKING:
     from world.magic.models import FuryTier, Resonance, Technique
 
 
+def refuse_resonance_off_thread(
+    participant: CombatParticipant, technique: Technique | None, resonance: Resonance | None
+) -> None:
+    """Refuse a declared cast resonance no thread her forms come from holds a row for (#5231).
+
+    The one refusal: ``declare_action`` runs it, and so do the doors that charge a pull before
+    declaring (the web dispatch, the telnet cast), so a refused choice is never charged.
+    """
+    from world.magic.specialization.services import resonance_on_gift_thread  # noqa: PLC0415
+
+    if technique is None or resonance is None or technique.gift_id is None:
+        return
+    character = participant.character_sheet.character
+    if resonance_on_gift_thread(character, technique, resonance) is None:
+        from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
+
+        raise DeclarationRefusedError(
+            ResonanceNotOnGiftThread.user_message,
+            code=ActionDispatchError.RESONANCE_NOT_ON_GIFT_THREAD,
+        )
+
+
 def declare_action(  # noqa: PLR0913 - action declaration requires all slot fields
     participant: CombatParticipant,
     *,
@@ -48,6 +70,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
     cast_destination: Position | None = None,
     cast_position_a: Position | None = None,
     cast_position_b: Position | None = None,
+    cast_resonance: Resonance | None = None,
 ) -> CombatRoundAction:
     """Declare a PC's action for the current round.
 
@@ -147,6 +170,10 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             focused_ally_target=focused_ally_target,
         )
 
+    # A resonance the cast is to be worked in must be one the Gift's thread holds (#5231).
+    # Refused here, before anything is recorded or charged.
+    refuse_resonance_off_thread(participant, focused_action, cast_resonance)
+
     action, _created = CombatRoundAction.objects.update_or_create(
         participant=participant,
         round_number=encounter.round_number,
@@ -169,6 +196,7 @@ def declare_action(  # noqa: PLR0913 - action declaration requires all slot fiel
             "cast_destination": cast_destination,
             "cast_position_a": cast_position_a,
             "cast_position_b": cast_position_b,
+            "cast_resonance": cast_resonance,
         },
     )
 

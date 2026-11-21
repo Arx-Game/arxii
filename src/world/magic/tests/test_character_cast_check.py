@@ -23,6 +23,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.models.ritual_check_config import RitualCheckConfig
 from world.magic.models.rituals import Ritual
@@ -168,7 +169,7 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
         TechniqueStyleFactory()
         EffectTypeFactory()
         ResonanceFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         tradition = TraditionFactory()
 
         # Skill needed so provision_player_anima_ritual doesn't log + skip.
@@ -316,7 +317,7 @@ class GetCharacterCastCheckTests(TestCase):
         TechniqueStyleFactory()
         EffectTypeFactory()
         ResonanceFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         tradition = TraditionFactory()
         cls.skill = SkillFactory(name="CCProvisionMelee")
 

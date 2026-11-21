@@ -127,6 +127,7 @@ from world.magic.models import (
     TechniqueVariant,
     aura_shares_prefetch,
 )
+from world.magic.models.aura import share_lead_key
 from world.magic.services.technique_effects import technique_payload_prefetches
 from world.magic.services.technique_forms import (
     available_technique_forms,
@@ -1151,8 +1152,8 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
 
 
 def _aura_share_entries(aura: CharacterAura) -> list[AuraShareEntry]:
-    """The aura's shares as display entries, highest percent first (ties by affinity pk)."""
-    ordered = sorted(aura.cached_shares, key=lambda share: (-share.percent, share.affinity_id))
+    """The aura's shares as display entries, highest percent first (ties: Primal, then pk)."""
+    ordered = sorted(aura.cached_shares, key=lambda share: share_lead_key(share, share.percent))
     return [
         AuraShareEntry(
             affinity_id=share.affinity_id,

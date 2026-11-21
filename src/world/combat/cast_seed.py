@@ -51,7 +51,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import Technique
+    from world.magic.models import Resonance, Technique
 
 
 # A PC opponent is a real, competent foe rather than a mook/swarm; ELITE mirrors
@@ -291,6 +291,7 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
     scene: Scene,
     room: ObjectDB | None,  # noqa: OBJECTDB_PARAM
     from_entrance: bool = False,
+    cast_resonance: Resonance | None = None,
 ) -> CombatEncounter:
     """Seed a new combat encounter from a hostile cast, or feed an active one.
 
@@ -307,6 +308,8 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
         from_entrance: True when this hostile cast originated as a dramatic
             technique entrance (#2183) — stamped onto the caster's declared
             round action so a later task can fire recognition on resolution.
+        cast_resonance: The resonance the caster named for the cast, already checked
+            against the Gift's thread; stored on the declared round action (#5231).
 
     Note:
         When this call CREATES a new encounter (no feedable encounter existed),
@@ -374,6 +377,7 @@ def seed_or_feed_encounter_from_cast(  # noqa: PLR0913 - cast context + entrance
         focused_category=technique.action_category,
         effort_level=EffortLevel.MEDIUM,
         focused_opponent_target=opponent,
+        cast_resonance=cast_resonance,
     )
     if from_entrance and not action.from_entrance:
         action.from_entrance = True

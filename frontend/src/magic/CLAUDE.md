@@ -411,8 +411,33 @@ and renders nothing without shares. The sheet payload carries no settled or unse
 settled ring and the Unsettled status show to the owner only (`isMyCharacter`,
 read from `useCharacterAuras`); everyone else sees the halo and the words. Mounted by
 `SpellbookTab` (its reflections card carries the "Settle your aura" button, #5124) and by the Gift stage's resonance
-step in character creation (`character-creation/components/gift/ResonanceWeights.tsx`, with
-`auraSentence` of the weighted picks).
+step in character creation until #5231, when that step began drawing its aura with `AuraSwirl`
+(below) and `ResonanceWeights.tsx` was removed; `AuraHalo` stays on the character sheet.
+
+### `auraSwirl.ts`, `components/AuraSwirl.tsx` (#5231)
+
+An aura drawn as one swirling mass in which each colour covers its share and the colours do not
+blend, ported from the approved creation demo. `auraSwirl.ts` holds the pure drawing: `hexToOklch`,
+`lift`, `ramp`, `noise`, `cloud`, `swirlThreshold` (the quantile that gives each colour its share),
+`drawMass` and `massFrame`. `AuraSwirl` takes `primaryHex`, `secondaryHex` (null draws one colour),
+`secondShare` (0 to 1) and `className`; a colour the server sent that is not `#RRGGBB` draws neutral
+grey (`#8C8C8C`, the colour a resonance starts with), the swirl keeps its phase across redraws, and
+it animates only while the page is visible and draws one still frame under reduced motion. Only the
+Gift stage of character creation mounts it (`StrengthStep`); the sheet keeps `AuraHalo`.
+
+### `components/CastResonancePicker.tsx` (#5231)
+
+The resonances a cast may be worked in, one row each, on the scene cast panel (`ActionPanel`, from
+`CastableTechnique.resonance_options`) and the combat cast declaration (`YourTurn`, from the
+descriptor's `cast_resonance_options`). A row shows the resonance's colour and name, "your usual" on
+the default, the kindled word and its reason, "Stronger here than <the usual one>." on the single option
+the server marked `stronger`, and "Adds corruption." where `adds_corruption` is set. Nothing is drawn
+with fewer than two options. Picking the default sends nothing (a worn alternate self's resonance is
+its own default entry and is not on the Gift's thread, so the server would refuse its id); picking
+any other sends `preferred_resonance_id`. It is separate from `TechniqueFormPicker`, which keeps choosing
+forms: picking a variant form moves the resonance picker to that form's resonance, a pick made after
+wins, and the base form leaves it alone. `PayerOptions` shows a "Stronger" tag beside the payer the
+server marks `stronger` in the pull preview.
 
 ### `components/KindledResonancesPanel.tsx` (#5124, #5177)
 

@@ -13,10 +13,18 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.magic.constants import AcquisitionOrigin, TargetKind
+from world.magic.constants import (
+    AFFINITY_ABYSSAL,
+    AFFINITY_CELESTIAL,
+    AFFINITY_PRIMAL,
+    AcquisitionOrigin,
+    TargetKind,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+
+    from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
     from world.covenants.models import CovenantRole
@@ -28,6 +36,8 @@ if TYPE_CHECKING:
 
 # Sentinel: caller has not yet fetched the sheet (distinct from None = "no sheet").
 _SHEET_UNSET: object = object()
+# Sentinel: caller has not yet read the worn alternate self's resonance (None = "none worn").
+ALT_RESONANCE_UNSET: object = object()
 
 
 def provision_latent_gift_thread(
@@ -278,7 +288,9 @@ def gift_threads_for(character, gift: Gift) -> list:
     return covering
 
 
-def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
+def gift_resonances_for(
+    character, gift: Gift, *, sheet: CharacterSheet | None | object = _SHEET_UNSET
+) -> list[Resonance]:
     """The resonance(s) this gift manifests as FOR THIS character.
 
     Derived on read from the character's active GIFT thread covering ``gift``:
@@ -301,12 +313,17 @@ def gift_resonances_for(character, gift: Gift) -> list[Resonance]:
     catching the ``sheet_data`` raise from the handler. A non-Character object
     (no ``.threads``) is a caller bug and is left to raise ``AttributeError``
     rather than papered over with a ``hasattr`` check.
-    """
-    from world.magic.services.techniques import (  # noqa: PLC0415
-        _get_character_sheet,
-    )
 
-    sheet = _get_character_sheet(character)
+    ``sheet`` is the character's sheet when the caller already holds it (``None`` for a
+    sheetless character); left out, it is read here. A caller listing several techniques reads
+    it once and passes it in (#5231).
+    """
+    if sheet is _SHEET_UNSET:
+        from world.magic.services.techniques import (  # noqa: PLC0415
+            _get_character_sheet,
+        )
+
+        sheet = _get_character_sheet(character)
     if sheet is None:
         return gift.cached_resonances
 
@@ -409,12 +426,165 @@ def _gift_thread_for_variant(character, technique: Technique):
     return covering[0] if covering else None
 
 
-def _effective_variant_resonance(sheet, thread, preferred_resonance):
-    """Choose cast-time, alt-self, or thread resonance in priority order."""
+def _effective_variant_resonance(
+    sheet, thread, preferred_resonance, alt_resonance=ALT_RESONANCE_UNSET
+):
+    """Choose cast-time, alt-self, or thread resonance in priority order.
+
+    ``alt_resonance`` is the worn alternate self's resonance when the caller already read it
+    (``None`` for none worn); left out, it is read here.
+    """
     if preferred_resonance is not None:
         return preferred_resonance
-    resonance = active_alt_self_resonance(sheet)
+    resonance = (
+        active_alt_self_resonance(sheet) if alt_resonance is ALT_RESONANCE_UNSET else alt_resonance
+    )
     return thread.resonance if resonance is None else resonance
+
+
+def _threads_the_forms_come_from(
+    # the thread handler takes the character
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+) -> list[Thread]:
+    """The threads this caster's forms of ``technique`` come from (#5231, WB2).
+
+    The Gift's thread (``_gift_thread_for_variant``, lineage-aware) and every thread
+    ``technique_forms._candidate_threads`` lists, the one list the form picker reads: for a
+    technique a covenant role granted that is the role's thread.
+    """
+    # technique_forms imports this module at call time; the import here is lazy for the cycle.
+    from world.magic.services.technique_forms import _candidate_threads  # noqa: PLC0415
+
+    threads: list[Thread] = []
+    gift_thread = _gift_thread_for_variant(character, technique)
+    if gift_thread is not None:
+        threads.append(gift_thread)
+    threads.extend(
+        thread
+        for thread in _candidate_threads(
+            character, technique, character.techniques.hold_for(technique)
+        )
+        if thread not in threads
+    )
+    return threads
+
+
+def resonance_on_gift_thread(
+    # the thread handler and sheet lookups take the character
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+    resonance: Resonance | None,
+    *,
+    sheet: CharacterSheet | None | object = _SHEET_UNSET,
+) -> Resonance | None:
+    """The named ``resonance`` when a thread this caster's forms come from holds a row for it.
+
+    None when nothing is named, the technique has no Gift, the caster has no such thread (a
+    sheetless NPC included), or no such thread holds a row for the resonance. The threads are
+    the Gift's thread and the one a covenant role's technique lists its forms from
+    (``_threads_the_forms_come_from``), so picking a form the screen offers is never refused.
+    It is the one test behind every refusal and every fall-back: ``cast_resonance_for``
+    refuses a named resonance for which this returns None, and a stored choice for which it
+    returns None is cast in the default resonance instead (#5231).
+    """
+    from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
+
+    if resonance is None or technique.gift_id is None:
+        return None
+    if (_get_character_sheet(character) if sheet is _SHEET_UNSET else sheet) is None:
+        return None
+    for thread in _threads_the_forms_come_from(character, technique):
+        if character.threads.amount_of(thread, resonance) is not None:
+            return resonance
+    return None
+
+
+_NO_THREAD_AFFINITY_ORDER = (AFFINITY_PRIMAL, AFFINITY_CELESTIAL, AFFINITY_ABYSSAL)
+
+
+def _first_unthreaded_resonance(gift: Gift) -> Resonance | None:
+    """The Gift's own first resonance for a caster with no thread on it: Primal, then
+    Celestial, then Abyssal, the Gift's own order within an affinity (#5231, WB3).
+
+    Nobody is corrupted by a default she did not pick, so the Abyssal one is last.
+    """
+    resonances = gift.cached_resonances
+    if not resonances:
+        return None
+    return min(
+        resonances,
+        key=lambda r: (
+            _NO_THREAD_AFFINITY_ORDER.index(r.affinity.name)
+            if r.affinity.name in _NO_THREAD_AFFINITY_ORDER
+            else len(_NO_THREAD_AFFINITY_ORDER)
+        ),
+    )
+
+
+def cast_resonance_for(  # noqa: PLR0913 - the named pick, the refusal switch, two lookups read once
+    # the thread handler and sheet lookups take the character
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+    preferred: Resonance | None = None,
+    *,
+    refuse_off_thread: bool = True,
+    sheet: CharacterSheet | None | object = _SHEET_UNSET,
+    alt_resonance: Resonance | None | object = ALT_RESONANCE_UNSET,
+) -> Resonance | None:
+    """The one resonance a cast of ``technique`` is worked in (#5231).
+
+    The named ``preferred`` resonance, else the worn alternate self's, else the leading
+    resonance of the Gift's thread (``_effective_variant_resonance``'s own order). A named
+    resonance that no thread her forms come from holds a row for (``resonance_on_gift_thread``)
+    raises ``ResonanceNotOnGiftThread`` while ``refuse_off_thread`` is set, and is ignored (the
+    default is used) when it is not. A caster with no thread on the Gift, a sheetless NPC
+    included, works the resonance she named if a role thread holds it, else the Gift's own
+    first one in the order Primal, Celestial, Abyssal (``_first_unthreaded_resonance``). A
+    technique with no Gift, or a Gift with no resonances, is worked in none. Choosing the base
+    form does not change the answer: the form and the resonance are separate choices.
+
+    A caller listing several techniques for one character reads her ``sheet`` and her worn
+    alternate self's resonance (``alt_resonance``, None for none worn) once and passes them in,
+    so the list costs no sheet or alternate-self query per technique.
+    """
+    from world.magic.exceptions import ResonanceNotOnGiftThread  # noqa: PLC0415
+    from world.magic.services.techniques import _get_character_sheet  # noqa: PLC0415
+
+    if technique.gift_id is None:
+        return None
+    if sheet is _SHEET_UNSET:
+        sheet = _get_character_sheet(character)
+    named = resonance_on_gift_thread(character, technique, preferred, sheet=sheet)
+    if preferred is not None and named is None and refuse_off_thread:
+        raise ResonanceNotOnGiftThread
+    thread = _gift_thread_for_variant(character, technique) if sheet is not None else None
+    if thread is None:
+        return named if named is not None else _first_unthreaded_resonance(technique.gift)
+    return _effective_variant_resonance(sheet, thread, named, alt_resonance)
+
+
+def cast_working_resonances(
+    # the thread handler and sheet lookups take the character
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+    cast_resonance: Resonance | None,
+) -> list[Resonance]:
+    """The resonances a cast's resonance-tied power draws on (#5231, E1).
+
+    The one resonance the cast is worked in, as a one-entry list, whenever the cast has one.
+    Only where no cast resonance exists (a caller that is not a cast, a sheetless caster, a
+    technique with no Gift) does it fall back to every resonance the Gift manifests as for her
+    (``gift_resonances_for``). Every reader of a resonance-tied power (touchstones, resonance
+    standing, a resonance-scoped power or effect target, the aura alignment, the place's
+    reaction) reads through here, so a cast worked in her Primal resonance never collects power
+    tied to her Abyssal one while taking none of its corruption.
+    """
+    if cast_resonance is not None:
+        return [cast_resonance]
+    if technique.gift_id is None:
+        return []
+    return gift_resonances_for(character, technique.gift)
 
 
 def _prefer_early_form(character, technique, resonance, variant):

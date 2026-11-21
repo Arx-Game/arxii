@@ -142,6 +142,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
         from world.character_creation.models import CharacterDraft
         from world.character_creation.services import finalize_character
         from world.character_creation.tests.finalization_fixtures import DEFAULT_STATS
+        from world.magic.constants import AFFINITY_PRIMAL
         from world.magic.models import CharacterTechnique, Resonance, Tradition
         from world.magic.services.cg_catalog import get_gift_options, get_technique_options
         from world.npc_services.effects import run_train_offer
@@ -209,7 +210,7 @@ class SettleObligationLoopEndToEndTests(TestCase):
         # technique "you already know this" refusal.
         cg_technique = next(t for t in available_techniques if t.pk != train_technique.pk)
 
-        resonance = Resonance.objects.first()
+        resonance = Resonance.objects.filter(affinity__name=AFFINITY_PRIMAL).first()
         stat = Trait.objects.filter(trait_type=TraitType.STAT).first()
         from world.skills.models import Skill
 

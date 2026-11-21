@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 from world.character_creation.sheet_writers import SheetWriteError, grant_codex_entries
+from world.magic.constants import AFFINITY_PRIMAL
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -64,8 +65,15 @@ class MagicPicks:
 
     @property
     def ordered_resonances(self) -> list[WeightedResonance]:
-        """The picks heaviest first (a tie keeps the order given): the first one leads."""
-        return sorted(self.resonances, key=lambda pick: -pick.weight)
+        """The picks heaviest first: the first one leads.
+
+        A tie goes to the Primal pick, so an even split reads Primal everywhere the main
+        affinity does; two tied picks of one affinity keep the order given.
+        """
+        return sorted(
+            self.resonances,
+            key=lambda pick: (-pick.weight, pick.resonance.affinity.name != AFFINITY_PRIMAL),
+        )
 
     @property
     def lead_resonance(self) -> Resonance | None:

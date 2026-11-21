@@ -28,6 +28,7 @@ from world.character_sheets.factories import (
 )
 from world.character_sheets.models import CharacterSheet, Heritage
 from world.character_sheets.serializers import (
+    _aura_share_entries,
     _build_appearance,
     _build_distinctions,
     _build_goals,
@@ -1586,6 +1587,19 @@ class TestMagicPartialData(TestCase):
         assert response.status_code == 200
         magic = response.data["magic"]
         assert _aura_percents(magic["aura"])["celestial"] == Decimal("33.33")
+
+
+class TestAuraShareTieOrder(TestCase):
+    """The sheet lists tied aura shares in the same order the main affinity names."""
+
+    def test_a_tie_lists_primal_first(self) -> None:
+        # Celestial is created first, so its affinity id is the lower one; the tie
+        # order still puts Primal ahead of it.
+        aura = CharacterAuraFactory(
+            celestial=Decimal("50.00"), primal=Decimal("50.00"), abyssal=Decimal("0.00")
+        )
+        names = [entry["affinity_name"] for entry in _aura_share_entries(aura)]
+        assert names == ["Primal", "Celestial"]
 
 
 class TestMagicGiftWithoutTechniques(TestCase):

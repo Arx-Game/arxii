@@ -183,6 +183,9 @@ export type ThreadResonanceRow = components['schemas']['ThreadResonanceRow'];
 /** One resonance that could pay for a pulled thread, with its cost, balance and perks (#5123). */
 export type PayerOption = components['schemas']['PayerOption'];
 
+/** One resonance a cast may be worked in, with its colour, kindling and cost cues (#5231). */
+export type CastResonanceOption = components['schemas']['CastResonanceOption'];
+
 /** The payer options for one pulled thread in a pull preview (#5123). */
 export type ThreadPayerPreview = components['schemas']['ThreadPayerPreview'];
 

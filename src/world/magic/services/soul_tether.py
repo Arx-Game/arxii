@@ -661,7 +661,10 @@ def _get_sinner_tether_thread(
     relationship: CharacterRelationship,
     resonance: Resonance,
 ) -> Thread | None:
-    """Return the Sinner's RELATIONSHIP_CAPSTONE Thread for this bond + resonance, or None."""
+    """Return the Sinner's RELATIONSHIP_CAPSTONE Thread for this bond + resonance, or None.
+
+    The thread matches when ``resonance`` has a row on it, not only when it leads (#5231).
+    """
     from world.magic.models import Thread  # noqa: PLC0415
 
     capstone = relationship.capstones.filter(
@@ -670,13 +673,17 @@ def _get_sinner_tether_thread(
     ).first()
     if capstone is None:
         return None
-    return Thread.objects.filter(
-        owner=sinner_sheet,
-        target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
-        target_capstone=capstone,
-        resonance=resonance,
-        retired_at__isnull=True,
-    ).first()
+    return (
+        Thread.objects.filter(
+            owner=sinner_sheet,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            target_capstone=capstone,
+            resonance_rows__resonance=resonance,
+            retired_at__isnull=True,
+        )
+        .distinct()
+        .first()
+    )
 
 
 def sineater_thread_resonance(sineater_side: CharacterRelationship) -> Resonance | None:
@@ -1252,7 +1259,10 @@ def _get_sinner_tether_threads_for_resonance(
     sheet: CharacterSheet,
     resonance: Resonance,
 ) -> list[Any]:
-    """Return all active Sinner-side RELATIONSHIP_CAPSTONE Threads matching resonance.
+    """Return all active Sinner-side RELATIONSHIP_CAPSTONE Threads holding ``resonance``.
+
+    A thread holds it when the resonance has a row on the thread, led by it or not (#5231).
+    Only Abyssal resonances corrupt, so this is any Abyssal resonance on the thread.
 
     "Sinner-side" means the Thread's target_capstone belongs to a
     CharacterRelationship where sheet is the source AND soul_tether_role is
@@ -1271,13 +1281,15 @@ def _get_sinner_tether_threads_for_resonance(
         Thread.objects.filter(
             owner=sheet,
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
-            resonance=resonance,
+            resonance_rows__resonance=resonance,
             retired_at__isnull=True,
             # Capstone must belong to a soul-tether relationship where sheet is the Sinner.
             target_capstone__relationship__source=sheet,
             target_capstone__relationship__is_soul_tether=True,
             target_capstone__relationship__soul_tether_role=SoulTetherRole.SINNER,
-        ).select_related("target_capstone__relationship")
+        )
+        .select_related("target_capstone__relationship")
+        .distinct()
     )
 
 

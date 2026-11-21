@@ -1840,6 +1840,22 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
         related_name="+",
         help_text="The ally's resonance a Rally names (#5124); null for any other action.",
     )
+    # Every writer of this action row must set or clear this field. The row is rewritten whole
+    # by each declaration kind (``declare_action``'s update_or_create and the per-kind writers
+    # in ``declarations/``), so a writer that leaves it out would carry the previous
+    # declaration's pick into a cast that never named it (#5231). The cast kinds set it; every
+    # other kind writes None, and a passive-slot call keeps the focused cast's own pick.
+    cast_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The resonance the declared cast is worked in (#5231); null works it in the "
+            "default one."
+        ),
+    )
     maneuver = models.CharField(
         max_length=20,
         choices=CombatManeuver.choices,

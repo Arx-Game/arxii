@@ -48,15 +48,15 @@ class ClaimKindledTests(TestCase):
 
     def test_claims_everything_waiting_and_zeroes_the_counters(self) -> None:
         claimed = claim_kindled(self.sheet)
-        self.assertEqual({c.resonance: c.amount for c in claimed}, {self.ruin: 5, self.wild: 3})
+        self.assertEqual({c.resonance: c.amount for c in claimed}, {self.ruin: 7, self.wild: 3})
         self.ruin_row.refresh_from_db()
         self.assertEqual(self.ruin_row.kindled_unclaimed, 0)
         self.assertEqual(self.wild_row.kindled_unclaimed, 0)
-        self.assertEqual(self._balance(self.ruin), 5)
+        self.assertEqual(self._balance(self.ruin), 7)
         grants = ResonanceGrant.objects.filter(
             character_sheet=self.sheet, source=GainSource.KINDLED_CLAIM
         )
-        self.assertEqual(sorted(g.amount for g in grants), [3, 5])
+        self.assertEqual(sorted(g.amount for g in grants), [3, 7])
 
     def test_claims_only_the_named_resonances(self) -> None:
         claimed = claim_kindled(self.sheet, [self.wild])
@@ -71,8 +71,8 @@ class ClaimKindledTests(TestCase):
         self.assertEqual(ResonanceGrant.objects.count(), grants_before)
         self.assertEqual(claim_lines([]), (NOTHING_WAITING_LINE,))
 
-    def test_the_earn_rate_scales_the_claim_and_the_ledger_amount_is_returned(self) -> None:
-        CharacterAuraFactory(character=self.sheet, celestial=0, primal=10, abyssal=90)
+    def test_the_resonances_own_affinity_sets_the_claim_whatever_her_main_affinity(self) -> None:
+        CharacterAuraFactory(character=self.sheet, celestial=0, primal=90, abyssal=10)
         claimed = claim_kindled(self.sheet, [self.ruin])
         # 5 waiting at the Abyssal affinity's 150% is 7, as the walkthrough has it.
         self.assertEqual(claimed[0].amount, 7)
@@ -81,11 +81,11 @@ class ClaimKindledTests(TestCase):
     def test_a_claim_twice_pays_once(self) -> None:
         claim_kindled(self.sheet)
         claim_kindled(self.sheet)
-        self.assertEqual(self._balance(self.ruin), 5)
+        self.assertEqual(self._balance(self.ruin), 7)
 
     def test_lines_use_the_affinitys_verb_and_fall_back_when_blank(self) -> None:
         lines = claim_lines(claim_kindled(self.sheet))
-        self.assertIn("You gloat. Your Ruin grows by 5.", lines)
+        self.assertIn("You gloat. Your Ruin grows by 7.", lines)
         self.assertIn("You claim what was waiting. Your Thorn grows by 3.", lines)
 
 

@@ -20,11 +20,11 @@ from world.magic.factories import (
     EffectTypeFactory,
     GiftFactory,
     PathGiftGrantFactory,
-    ResonanceFactory,
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.seeds_cast import get_standalone_cast_template
 from world.realms.models import Realm
@@ -134,7 +134,7 @@ class FinalizationTestMixin:
             )
         target.path = PathFactory(name=f"{prefix} Path", stage=PathStage.PROSPECT, minimum_level=1)
         target.effect_type = EffectTypeFactory()
-        target.resonance = ResonanceFactory()
+        target.resonance = primal_resonance()
         target.tradition = TraditionFactory()
 
         # Gift-stage validator fixtures (#2426): a gift available for (tradition, path)

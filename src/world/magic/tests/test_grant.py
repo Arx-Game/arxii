@@ -8,8 +8,9 @@ from world.magic.factories import (
     DramaticMomentTagFactory,
     EntryFlourishRecordFactory,
     ResonanceFactory,
+    ensure_canonical_affinities,
 )
-from world.magic.models import Affinity, ResonanceGrant
+from world.magic.models import ResonanceGrant
 from world.magic.services.resonance import grant_resonance
 
 
@@ -84,35 +85,35 @@ class ResonanceGrantEntryFlourishTest(TestCase):
 
 
 class AffinityEarnRateTest(TestCase):
-    """The earn rate of the character's main affinity scales what they earn (#5181)."""
+    """The affinity of the resonance earned sets how fast it grows (#5231)."""
 
     def setUp(self):
         self.sheet = CharacterSheetFactory()
-        self.resonance = ResonanceFactory()
-        CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.resonance)
+        _celestial, primal, self.abyssal = ensure_canonical_affinities()
+        self.abyssal.earn_rate_percent = 150
+        self.abyssal.save()
+        self.abyssal_resonance = ResonanceFactory(affinity=self.abyssal)
+        self.primal_resonance = ResonanceFactory(affinity=primal)
+        for resonance in (self.abyssal_resonance, self.primal_resonance):
+            CharacterResonanceFactory(character_sheet=self.sheet, resonance=resonance)
 
-    def _abyssal_at(self, rate: int) -> None:
-        CharacterAuraFactory(character=self.sheet, celestial=0, primal=20, abyssal=80)
-        affinity = Affinity.objects.get(name="Abyssal")
-        affinity.earn_rate_percent = rate
-        affinity.save()
-
-    def _granted(self, source: str, amount: int = 10) -> int:
+    def _granted(self, resonance, source: str, amount: int = 10) -> int:
         ledger: list[ResonanceGrant] = []
-        grant_resonance(self.sheet, self.resonance, amount, source=source, ledger_out=ledger)
+        grant_resonance(self.sheet, resonance, amount, source=source, ledger_out=ledger)
         return ledger[0].amount
 
-    def test_a_newly_earned_source_is_scaled_and_the_ledger_records_it(self):
-        self._abyssal_at(150)
-        self.assertEqual(self._granted(GainSource.SINEATING), 15)
+    def test_a_resonance_is_earned_at_its_own_affinitys_rate_whatever_her_main_affinity(self):
+        CharacterAuraFactory(character=self.sheet, celestial=0, primal=80, abyssal=20)
+        self.assertEqual(self._granted(self.abyssal_resonance, GainSource.SINEATING), 15)
+        self.assertEqual(self._granted(self.primal_resonance, GainSource.SINEATING), 10)
 
     def test_an_exempt_source_is_never_scaled(self):
-        self._abyssal_at(150)
-        self.assertEqual(self._granted(GainSource.STAFF_GRANT), 10)
+        self.assertEqual(self._granted(self.abyssal_resonance, GainSource.STAFF_GRANT), 10)
 
-    def test_a_character_with_no_aura_earns_at_100(self):
-        self.assertEqual(self._granted(GainSource.SINEATING), 10)
+    def test_a_character_with_no_aura_earns_at_the_resonances_rate(self):
+        self.assertEqual(self._granted(self.abyssal_resonance, GainSource.SINEATING), 15)
 
     def test_a_scaled_amount_never_falls_below_one(self):
-        self._abyssal_at(10)
-        self.assertEqual(self._granted(GainSource.SINEATING, amount=3), 1)
+        self.abyssal.earn_rate_percent = 10
+        self.abyssal.save()
+        self.assertEqual(self._granted(self.abyssal_resonance, GainSource.SINEATING, amount=3), 1)

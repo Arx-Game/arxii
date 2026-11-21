@@ -80,7 +80,7 @@ class CharacterThreadHandler:
         out: dict[int, list[tuple[Resonance, int]]] = {}
         rows = ThreadResonance.objects.filter(
             thread__owner_id=self.character.pk, thread__retired_at__isnull=True
-        ).select_related("resonance")
+        ).select_related("resonance__affinity")
         for row in rows:
             out.setdefault(row.thread_id, []).append((row.resonance, row.amount))
         return out
@@ -88,6 +88,10 @@ class CharacterThreadHandler:
     def resonances_of(self, thread: Thread) -> list[Resonance]:
         """The resonances ``thread`` holds a row for (at any amount), leading first."""
         return [resonance for resonance, _amount in self._rows_by_thread.get(thread.pk, [])]
+
+    def rows_of(self, thread: Thread) -> list[tuple[Resonance, int]]:
+        """``thread``'s ``(resonance, amount)`` rows, leading first (empty when it has none)."""
+        return self._rows_by_thread.get(thread.pk, [])
 
     def amount_of(self, thread: Thread, resonance: Resonance) -> int | None:
         """How much of ``resonance`` ``thread`` holds, or None when it holds no row for it."""

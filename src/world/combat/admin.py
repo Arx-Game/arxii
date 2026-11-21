@@ -195,6 +195,7 @@ class BossPhaseAdmin(admin.ModelAdmin):
 @admin.register(CombatRoundAction)
 class CombatRoundActionAdmin(admin.ModelAdmin):
     autocomplete_fields = [
+        "cast_resonance",
         "fury_resonance",
         "interaction",
         "item_instance",

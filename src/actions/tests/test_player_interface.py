@@ -355,6 +355,34 @@ class TestGetPlayerActionsCombatBackend(django.test.TestCase):
         self.assertEqual(len(combat_actions), 1)
         self.assertIsNone(combat_actions[0].reactive_anima_cost)
 
+    def test_enchanting_technique_carries_no_cast_resonance_options(self) -> None:
+        """A Strike names no resonance, so a technique that enchants one offers no picker
+        options, while a plain cast of the same Gift still lists its default entry (#5231)."""
+        from actions.factories import ActionTemplateFactory
+        from actions.player_interface import get_player_actions
+        from world.magic.factories import (
+            CharacterTechniqueFactory,
+            GiftFactory,
+            ResonanceFactory,
+            TechniqueDamageProfileFactory,
+            TechniqueFactory,
+        )
+
+        gift = GiftFactory()
+        gift.resonances.add(ResonanceFactory())
+        template = ActionTemplateFactory(check_type=self.check_type)
+        plain = TechniqueFactory(gift=gift, damage_profile=False, action_template=template)
+        enchanting = TechniqueFactory(gift=gift, damage_profile=False, action_template=template)
+        TechniqueDamageProfileFactory(technique=enchanting, uses_equipped_weapon=True)
+        CharacterTechniqueFactory(character=self.sheet, technique=plain)
+        CharacterTechniqueFactory(character=self.sheet, technique=enchanting)
+        self.assertTrue(enchanting.enchants_strike)
+        self.assertFalse(plain.enchants_strike)
+
+        by_technique = {a.ref.technique_id: a for a in get_player_actions(self.character)}
+        self.assertEqual(by_technique[enchanting.pk].cast_resonance_options, ())
+        self.assertEqual(len(by_technique[plain.pk].cast_resonance_options), 1)
+
 
 # ---------------------------------------------------------------------------
 # Test: COMBAT backend — declaration window closed (RESOLVING / BETWEEN_ROUNDS)

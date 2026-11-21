@@ -30893,6 +30893,17 @@ export interface components {
       /** @description Which pulled resonance the burn comes from (#5066); needed only when the pull's threads mix resonances. */
       burn_resonance_id?: number | null;
     };
+    /** @description One resonance a cast may be worked in, with its colour and its kindled strength word. */
+    CastResonanceOption: {
+      readonly resonance_id: number;
+      readonly name: string;
+      readonly color_hex: string;
+      readonly is_default: boolean;
+      readonly kindled_strength: string | null;
+      readonly reasons: string[];
+      readonly stronger: boolean;
+      readonly adds_corruption: boolean;
+    };
     /**
      * @description Serializes a Technique for the castable-techniques list endpoint.
      *
@@ -30928,6 +30939,7 @@ export interface components {
       } | null;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
       readonly forms: components['schemas']['TechniqueForm'][];
+      readonly resonance_options: components['schemas']['CastResonanceOption'][];
       /**
        * @description Flat reactive anima fee of *obj*'s protective condition, or None (#3573).
        *
@@ -48192,6 +48204,7 @@ export interface components {
       effects: components['schemas']['ResolvedPullEffect'][];
       level_read: number;
       kindled_strength?: string | null;
+      stronger: boolean;
     };
     /** @description Read-only serializer for pending alterations shown on character sheet. */
     PendingAlteration: {
@@ -48809,6 +48822,7 @@ export interface components {
       readonly soulfray_warning: components['schemas']['SoulfrayWarning'] | null;
       readonly available_fury_tiers: components['schemas']['FuryTierOption'][];
       readonly eligible_fury_resonances: components['schemas']['FuryResonanceOption'][];
+      readonly cast_resonance_options: components['schemas']['CastResonanceOption'][];
       readonly cast_preview: components['schemas']['CastPreview'] | null;
       readonly is_ultimate: boolean;
       readonly enchants_strike: boolean;
@@ -50406,6 +50420,11 @@ export interface components {
       /** @description Description of this resonance. */
       readonly description: string;
       readonly codex_entry_id: number | null;
+      /**
+       * Colour
+       * @description Picked with a colour picker. The aura is drawn in it.
+       */
+      readonly color_hex: string;
     };
     /** @description Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25). */
     ResonanceGrant: {

@@ -85,6 +85,8 @@ class AffinityAndResonanceListTest(APITestCase):
                 "affinity_name": "Primal",
                 "description": "Heat.",
                 "codex_entry_id": None,
+                # The model's default colour; the aura is drawn in it (#5231).
+                "color_hex": "#8C8C8C",
             },
         )
         self.assertEqual(rows[self.shadow.pk]["affinity_name"], "Abyssal")

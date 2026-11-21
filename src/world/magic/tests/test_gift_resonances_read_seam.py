@@ -1,6 +1,4 @@
-"""The four cast sites read the character's GIFT-thread resonance, not the authored M2M."""
-
-import inspect
+"""The cast sites read the character's GIFT-thread resonance, not the authored M2M."""
 
 from django.test import TestCase
 
@@ -27,13 +25,12 @@ class GiftResonancesReadSeamTests(TestCase):
         result = gift_resonances_for(self.sheet.character, self.gift)
         self.assertEqual([r.pk for r in result], [self.supported_a.pk])
 
-    def test_power_terms_uses_thread_resonance(self) -> None:
-        # Smoke: power_terms.power_term_for_technique reads gift_resonances_for.
-        # A full cast fixture is heavy; assert the read seam is wired by checking
-        # the function imports + is called (mock gift_resonances_for if needed).
-        from world.magic.services import power_terms
+    def test_a_cast_with_no_resonance_draws_on_the_thread_resonance(self) -> None:
+        """``cast_working_resonances`` (the one reader of power-tied resonances, #5231) falls
+        back to the thread's resonances when no cast resonance is given, never the M2M."""
+        from world.magic.factories import TechniqueFactory
+        from world.magic.specialization.services import cast_working_resonances
 
-        # The seam is verified end-to-end in the E2E (Task 11); here we assert
-        # the module imports the helper.
-        source = inspect.getsource(power_terms)
-        self.assertIn("gift_resonances_for", source)
+        technique = TechniqueFactory(gift=self.gift)
+        result = cast_working_resonances(self.sheet.character, technique, None)
+        self.assertEqual([r.pk for r in result], [self.supported_a.pk])

@@ -485,7 +485,8 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
     cfg = get_resonance_gain_config()
     n = len(unsettled)
     # The pot is a budget of UNSCALED shares: each endorsement draws ``share`` of it, and the
-    # character's earn rate (#5181) is their bonus on top, applied inside ``grant_resonance``.
+    # resonance's own affinity's earn rate (#5231) is its bonus on top, applied inside
+    # ``grant_resonance``.
     # So the split stays in unscaled terms, while what is stored and totalled below is the
     # amount the ledger row actually recorded.
     share = math.ceil(cfg.weekly_pot_per_character / n)
@@ -523,8 +524,9 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
 def _keep_granted_amount(row: Any, ledger: list[ResonanceGrant]) -> None:
     """Make a receipt row's ``granted_amount`` the amount its ledger row recorded.
 
-    ``grant_resonance`` scales the amount by the character's earn rate (#5181), so the number
-    the receipt was created with is not always the number granted. No write when they agree.
+    ``grant_resonance`` scales the amount by the earn rate of the resonance's own affinity
+    (#5231), so the number the receipt was created with is not always the number granted. No
+    write when they agree.
     """
     if ledger[-1].amount != row.granted_amount:
         row.granted_amount = ledger[-1].amount
