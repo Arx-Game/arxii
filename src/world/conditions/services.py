@@ -112,6 +112,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.types import ExtraTraitTerm
     from world.covenants.models import CovenantRole
+    from world.items.models import ItemInstance
     from world.magic.models import PendingAlteration, Technique, Thread
     from world.magic.models.techniques import TechniqueCapabilityGrant
     from world.magic.types.pull import PullActionContext
@@ -314,6 +315,7 @@ def get_active_conditions(
         "condition",
         "condition__category",
         "current_stage",
+        "source_item__template",
     )
 
     if not include_suppressed:
@@ -360,7 +362,7 @@ def get_active_conditions(
             # category/condition/suppressed filters don't need re-applying.
             surviving_pks = [inst.pk for inst in instances if inst not in expired]
             qs = ConditionInstance.objects.filter(pk__in=surviving_pks).select_related(
-                "condition", "condition__category", "current_stage"
+                "condition", "condition__category", "current_stage", "source_item__template"
             )
 
     return qs
@@ -606,6 +608,7 @@ class _ApplyConditionParams:
     source_description: str = ""
     source_vow: "CovenantRole | None" = None
     soulfray_consented: bool = False
+    source_item: "ItemInstance | None" = None
 
 
 @dataclass
@@ -959,6 +962,7 @@ def _create_instance_from_context(
         source_technique=params.source_technique,
         source_description=params.source_description,
         source_vow=params.source_vow,
+        source_item=params.source_item,
         soulfray_consented=params.soulfray_consented,
     )
 
@@ -1121,8 +1125,12 @@ def apply_condition(  # noqa: PLR0913
     source_character: "ObjectDB | None" = None,  # noqa: OBJECTDB_PARAM
     source_technique: "Technique | None" = None,
     source_description: str = "",
+    source_item: "ItemInstance | None" = None,
 ) -> ApplyConditionResult:
     """Apply a condition to a target, handling stacking and interactions.
+
+    ``source_item`` is the worn item that gives the condition (#5074); only
+    ``reconcile_worn_conditions`` passes it.
 
     Thin wrapper around _apply_single — builds a single-item context
     and delegates. For applying multiple conditions, use bulk_apply_conditions.
@@ -1172,6 +1180,7 @@ def apply_condition(  # noqa: PLR0913
         source_technique=source_technique,
         source_description=source_description,
         source_vow=_resolve_source_vow_anchor(source_character),
+        source_item=source_item,
     )
     result = _apply_single(target, condition, params, ctx)
 

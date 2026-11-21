@@ -1,9 +1,10 @@
 """Character creation with several weighted resonances (#5123).
 
-A player picks resonances in the Gift stage and spreads ``DriftConfig.creation_points``
-across them. Finalize seeds each pick's lifetime from its weight (no balance), the aura and
-the settled self both come from the weights, the Gift thread holds the picks at zero with
-the heaviest leading, and the codex grants an entry for every pick.
+A player picks one Primal resonance in the Gift stage, and at most one Celestial or
+Abyssal one, and spreads ``DriftConfig.creation_points`` across them (#5231). Finalize
+seeds each pick's lifetime from its weight (no balance), the aura and the settled self both
+come from the weights, the Gift thread holds the picks at zero with the heaviest leading,
+and the codex grants an entry for every pick.
 """
 
 from decimal import Decimal
@@ -48,13 +49,12 @@ def _weights(*picks) -> list[dict[str, int]]:
 
 
 class _WeightedPicksCase(TestCase):
-    """Fury 6 and Wonder 1 (Primal), Domination 3 (Abyssal): spread over ten points."""
+    """Fury 7 (Primal) and Domination 3 (Abyssal): spread over ten points."""
 
     @classmethod
     def setUpTestData(cls) -> None:
         cls.celestial, cls.primal, cls.abyssal = ensure_canonical_affinities()
         cls.fury = ResonanceFactory(name="Fury", affinity=cls.primal)
-        cls.wonder = ResonanceFactory(name="Wonder", affinity=cls.primal)
         cls.domination = ResonanceFactory(name="Domination", affinity=cls.abyssal)
         cls.tradition = TraditionFactory()
         # An unrestricted gift: its supported set is empty, so every pick is held.
@@ -66,9 +66,7 @@ class _WeightedPicksCase(TestCase):
         cls.skill = SkillFactory()
 
     def _draft(self, picks=None, **extra):
-        picks = (
-            picks if picks is not None else [(self.fury, 6), (self.wonder, 1), (self.domination, 3)]
-        )
+        picks = picks if picks is not None else [(self.fury, 7), (self.domination, 3)]
         draft_data = {
             "selected_gift_id": self.gift.pk,
             "selected_technique_ids": [self.technique.pk],
@@ -96,24 +94,24 @@ class FinalizeWritesTheWeightedPicks(_WeightedPicksCase):
             row.resonance_id: row.lifetime_earned
             for row in CharacterResonance.objects.filter(character_sheet=sheet)
         }
-        # creation_seed_per_point is 10: a weight of 6 seeds 60 lifetime.
-        self.assertEqual(lifetime, {self.fury.pk: 60, self.wonder.pk: 10, self.domination.pk: 30})
+        # creation_seed_per_point is 10: a weight of 7 seeds 70 lifetime.
+        self.assertEqual(lifetime, {self.fury.pk: 70, self.domination.pk: 30})
 
     def test_no_balance_granted_by_seed(self) -> None:
         sheet, _ = self._finalize()
         rows = CharacterResonance.objects.filter(character_sheet=sheet)
-        self.assertEqual(rows.count(), 3)
-        self.assertEqual([row.balance for row in rows], [0, 0, 0])
+        self.assertEqual(rows.count(), 2)
+        self.assertEqual([row.balance for row in rows], [0, 0])
         ledger = ResonanceGrant.objects.filter(character_sheet=sheet)
         self.assertEqual({grant.source for grant in ledger}, {GainSource.CHARACTER_CREATION})
         self.assertEqual(
             {grant.resonance_id: grant.amount for grant in ledger},
-            {self.fury.pk: 60, self.wonder.pk: 10, self.domination.pk: 30},
+            {self.fury.pk: 70, self.domination.pk: 30},
         )
 
     def test_codex_granted_for_every_pick(self) -> None:
         entries = {}
-        for resonance in (self.fury, self.wonder, self.domination):
+        for resonance in (self.fury, self.domination):
             entries[resonance.pk] = CodexEntryFactory(name=f"{resonance.name} lore")
             resonance.codex_entry = entries[resonance.pk]
             resonance.save()
@@ -124,7 +122,7 @@ class FinalizeWritesTheWeightedPicks(_WeightedPicksCase):
         self.assertEqual({row.entry_id for row in known}, {entry.pk for entry in entries.values()})
 
     def test_anima_ritual_carries_the_heaviest_pick(self) -> None:
-        _, draft = self._finalize([(self.wonder, 2), (self.domination, 5), (self.fury, 3)])
+        _, draft = self._finalize([(self.domination, 5), (self.fury, 3)])
         config = RitualCheckConfig.objects.get(ritual__author_account=draft.account)
         self.assertEqual(config.resonance, self.domination)
 
@@ -186,24 +184,25 @@ class TheStartingAuraComesFromTheWeights(_WeightedPicksCase):
         grant_resonance(sheet, self.domination, 3, source=GainSource.STAFF_GRANT)
         self.assertEqual(drift_for(sheet).steps_past, 0)
 
-    def test_one_affinity_picks_start_wholly_in_it(self) -> None:
-        sheet, _ = self._finalize([(self.domination, 10)])
-        aura = CharacterAura.objects.get(character=sheet)
-        self.assertEqual(aura.percent_for(self.abyssal), Decimal("100.00"))
-        self.assertEqual(drift_for(sheet).steps_past, 0)
-
 
 class TheGiftThreadHoldsThePicksAtZero(_WeightedPicksCase):
     def test_gift_thread_rows_at_zero_heaviest_leads(self) -> None:
         # Given lightest first: the thread still leads with the heaviest pick.
-        sheet, _ = self._finalize([(self.wonder, 1), (self.domination, 3), (self.fury, 6)])
+        sheet, _ = self._finalize([(self.domination, 3), (self.fury, 7)])
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=self.gift)
         rows = list(thread.resonance_rows.all())
         self.assertEqual(
             [(row.resonance_id, row.amount) for row in rows],
-            [(self.fury.pk, 0), (self.domination.pk, 0), (self.wonder.pk, 0)],
+            [(self.fury.pk, 0), (self.domination.pk, 0)],
         )
         self.assertEqual(thread.resonance, self.fury)
+
+    def test_an_even_split_leads_with_the_primal_pick_whatever_the_order_given(self) -> None:
+        sheet, draft = self._finalize([(self.domination, 5), (self.fury, 5)])
+        thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=self.gift)
+        self.assertEqual(thread.resonance, self.fury)
+        config = RitualCheckConfig.objects.get(ritual__author_account=draft.account)
+        self.assertEqual(config.resonance, self.fury)
 
     def test_species_gift_thread_holds_the_same_picks(self) -> None:
         species = SpeciesFactory(name="Many Moods Folk")
@@ -213,7 +212,7 @@ class TheGiftThreadHoldsThePicksAtZero(_WeightedPicksCase):
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=minor)
         self.assertEqual(
             [row.resonance_id for row in thread.resonance_rows.all()],
-            [self.fury.pk, self.domination.pk, self.wonder.pk],
+            [self.fury.pk, self.domination.pk],
         )
         self.assertEqual(thread.resonance, self.fury)
 
@@ -221,7 +220,7 @@ class TheGiftThreadHoldsThePicksAtZero(_WeightedPicksCase):
 class TheGiftStageChecksTheSpread(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
-        ensure_canonical_affinities()
+        _, primal, abyssal = ensure_canonical_affinities()
         cls.path = PathFactory()
         cls.tradition = TraditionFactory()
         cls.gift = GiftFactory(name="Shadow Majesty")
@@ -229,8 +228,8 @@ class TheGiftStageChecksTheSpread(TestCase):
             gift=cls.gift, action_template=get_standalone_cast_template()
         )
         PathGiftGrantFactory(path=cls.path, gift=cls.gift).starter_techniques.set([cls.technique])
-        cls.first = ResonanceFactory()
-        cls.second = ResonanceFactory()
+        cls.first = ResonanceFactory(affinity=primal)
+        cls.second = ResonanceFactory(affinity=abyssal)
         cls.stat = StatTraitFactory(name="Focus")
         cls.skill = SkillFactory()
 
@@ -287,12 +286,13 @@ class TheGiftStageChecksTheSpread(TestCase):
         )
 
     def test_no_picks_and_unreadable_picks_are_refused(self) -> None:
-        self.assertEqual(self._errors(None), ["Select a gift resonance"])
-        self.assertEqual(self._errors([]), ["Select a gift resonance"])
+        self.assertEqual(self._errors(None), ["Pick the feeling that gives you strength."])
+        self.assertEqual(self._errors([]), ["Pick the feeling that gives you strength."])
         self.assertEqual(
             self._errors([{"resonance_id": self.first.pk, "weight": "10"}]),
             ["Your resonance picks are not readable"],
         )
         self.assertEqual(
-            self._errors([{"resonance_id": 0, "weight": 10}]), ["Select a gift resonance"]
+            self._errors([{"resonance_id": 0, "weight": 10}]),
+            ["Pick the feeling that gives you strength."],
         )

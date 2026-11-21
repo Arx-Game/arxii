@@ -166,6 +166,22 @@ def _keep_pull_rows(participant: CombatParticipant, kwargs: dict[str, Any]) -> C
     return guard
 
 
+def _named_cast_resonance(resonance_id: Any) -> Resonance | None:
+    """The Resonance a cast names by id, None when it names none (#5231).
+
+    An id that is not a number or matches no resonance reads "Resonance not found.", the
+    same line telnet gives for a resonance name it cannot find, never a server error.
+    """
+    if resonance_id is None:
+        return None
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    try:
+        return Resonance.objects.get(pk=int(resonance_id))
+    except (TypeError, ValueError, Resonance.DoesNotExist) as exc:
+        raise ActionDispatchError(ActionDispatchError.RESONANCE_NOT_FOUND) from exc
+
+
 class CombatRoundContext(RoundContext):
     """``RoundContext`` backed by a live ``CombatParticipant`` + ``CombatEncounter``.
 
@@ -480,6 +496,7 @@ class CombatRoundContext(RoundContext):
     ) -> None:
         """Upsert a CombatRoundAction and clear any competing challenge declaration."""
         from world.magic.models import Technique  # noqa: PLC0415
+        from world.magic.specialization.services import resonance_on_gift_thread  # noqa: PLC0415
 
         if _EFFORT_LEVEL_KEY not in kwargs:
             raise ActionDispatchError(ActionDispatchError.UNKNOWN_ACTION_REF)
@@ -501,6 +518,9 @@ class CombatRoundContext(RoundContext):
         from world.combat.services.declarations.declaration_validation import (  # noqa: PLC0415
             DeclarationRefusedError,
         )
+        from world.combat.services.declarations.declare_action import (  # noqa: PLC0415
+            refuse_resonance_off_thread,
+        )
         from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
         fury_commitment = None
@@ -517,6 +537,11 @@ class CombatRoundContext(RoundContext):
 
             fury_resonance = Resonance.objects.filter(pk=fury_resonance_id).first()
 
+        # The resonance the cast is to be worked in (#5231): the web body key and telnet's
+        # variant= both arrive as preferred_resonance_id. declare_action refuses one the
+        # Gift's thread does not hold, before anything is recorded or charged.
+        cast_resonance = _named_cast_resonance(kwargs.get("preferred_resonance_id"))
+
         # The web dispatch reaches here without the cast's round_declaration hook, so the
         # strength's depth cap is enforced again before anything is charged (#4738).
         self._refuse_unreachable_fury(participant, fury_commitment, fury_resonance)
@@ -524,6 +549,12 @@ class CombatRoundContext(RoundContext):
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:
             _refuse_weapon_technique(technique)
+            # Refused before the pull is committed, as telnet does: declare_action would
+            # refuse it too, but only after the pull had changed an identity-mapped balance.
+            try:
+                refuse_resonance_off_thread(participant, technique, cast_resonance)
+            except DeclarationRefusedError as exc:
+                raise ActionDispatchError(exc.code) from exc
             self._commit_focused_pull(participant, technique, kwargs)
 
         # The frontend dispatches the focused action and each passive as SEPARATE
@@ -546,6 +577,20 @@ class CombatRoundContext(RoundContext):
             aoe_opponents,
             cast_positions,
         ) = self._merge_slot_into_existing(slot, technique, existing, kwargs)
+
+        # The focused cast and each passive arrive as separate calls; a passive call names
+        # no resonance and must not wipe the one the focused cast chose. The Gift's thread may
+        # have lost it since, and a passive call is never refused over a resonance it did not
+        # name: a carried pick the thread no longer holds is dropped, and the cast then runs in
+        # the default (#5231).
+        if cast_resonance is None and slot != CombatActionSlot.FOCUSED and existing:
+            cast_resonance = (
+                resonance_on_gift_thread(
+                    participant.character_sheet.character, focused, existing.cast_resonance
+                )
+                if focused is not None
+                else None
+            )
 
         effort = (
             kwargs.get(_EFFORT_LEVEL_KEY)
@@ -574,6 +619,7 @@ class CombatRoundContext(RoundContext):
                 cast_destination=cast_positions["cast_destination"],
                 cast_position_a=cast_positions["cast_position_a"],
                 cast_position_b=cast_positions["cast_position_b"],
+                cast_resonance=cast_resonance,
             )
         except DeclarationRefusedError as exc:
             # A refusal the player can meet comes back as a 400 with its reason (#4796).

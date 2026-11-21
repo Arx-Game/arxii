@@ -946,6 +946,26 @@ def _probe_manifest_beings_have_avatars() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_resonances_have_a_colour() -> ProbeResult:
+    """Every resonance has a colour staff picked, not the default grey (#5231).
+
+    Consumer: the aura swirl and the creation page draw each resonance in its
+    ``color_hex``. A resonance still on the field's default draws grey.
+    """
+    from world.magic.models import Resonance  # noqa: PLC0415
+
+    default = Resonance._meta.get_field("color_hex").default  # noqa: SLF001
+    missing = tuple(
+        Resonance.objects.filter(color_hex__iexact=default)
+        .order_by("name")
+        .values_list("name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} resonance(s) are still on the default grey {default}."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_manifest_archetypes_have_abilities() -> ProbeResult:
     """Every companion archetype a technique can manifest has abilities (#4118).
 
@@ -4470,6 +4490,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "to arrive: the cast silently manifests nothing."
             ),
             probe=CustomProbe(fn=_probe_manifest_beings_have_avatars),
+        ),
+        ContentDependency(
+            key="resonance-colours",
+            label="Resonances have a colour picked",
+            tier=DependencyTier.TUNING,
+            consumer="frontend/src/magic/components/AuraSwirl.tsx, the Gift stage's strength step",
+            consequence=(
+                "A resonance still on the default grey is drawn grey in the aura swirl "
+                "and on its creation card, so it cannot be told from another grey one."
+            ),
+            probe=CustomProbe(fn=_probe_resonances_have_a_colour),
+            admin_model="Resonance",
         ),
         ContentDependency(
             key="manifest-archetype-abilities",

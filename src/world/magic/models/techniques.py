@@ -1196,6 +1196,18 @@ class AbstractAppliedCondition(SharedMemoryModel):
     class Meta:
         abstract = True
 
+    def clean(self) -> None:
+        """Refuse a condition an item gives its wearer (#5074): one condition has one
+        source, and a stack or refresh onto a gear-owned instance would be wiped when
+        the item comes off."""
+        super().clean()
+        if self.condition_id is not None:
+            from world.items.models import ItemWornCondition  # noqa: PLC0415
+
+            if ItemWornCondition.objects.filter(condition_id=self.condition_id).exists():
+                msg = "An item gives this condition. Choose one that only an effect applies."
+                raise ValidationError({"condition": msg})
+
     def compute_severity(
         self,
         *,

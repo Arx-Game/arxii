@@ -91,6 +91,22 @@ function KindledTag({ option, threadId }: { option: PayerOption; threadId: numbe
   );
 }
 
+/**
+ * "Stronger" beside the payer whose boosted level is strictly the highest (#5231); the server
+ * marks at most one, so a tie shows none.
+ */
+function StrongerTag({ option, threadId }: { option: PayerOption; threadId: number }) {
+  if (!option.stronger) return null;
+  return (
+    <span
+      className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary"
+      data-testid={`payer-stronger-${threadId}-${option.resonance_id}`}
+    >
+      Stronger
+    </span>
+  );
+}
+
 function costLine(option: PayerOption): string {
   return `${option.cost} ${option.resonance_name} · you have ${option.balance}`;
 }
@@ -145,6 +161,7 @@ export function PayerOptions({
           <span className="flex items-center gap-2">
             Pays with {payer.resonance_name}
             <KindledTag option={payer} threadId={thread.id} />
+            <StrongerTag option={payer} threadId={thread.id} />
           </span>
           <span className="tabular-nums">{costLine(payer)}</span>
         </div>
@@ -192,6 +209,7 @@ export function PayerOptions({
                   />
                   <b>{option.resonance_name}</b>
                   <KindledTag option={option} threadId={thread.id} />
+                  <StrongerTag option={option} threadId={thread.id} />
                 </span>
                 <span className="text-xs tabular-nums">{costLine(option)}</span>
               </button>

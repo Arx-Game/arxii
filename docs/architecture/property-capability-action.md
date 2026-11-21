@@ -101,8 +101,10 @@ let any source (Technique, Distinction, equipment) directly declare a bundle
 of effects including Properties, but Conditions-as-bundles work as the bridge.
 
 Property sources on a character at query time:
-- **Innate**: species, equipment (when built)
-- **Temporary**: active Conditions with Property M2M
+- **Innate**: species
+- **Temporary**: active Conditions with Property M2M, including the condition a worn item
+  gives its wearer (#5074): gear reaches capabilities and properties only through that
+  condition (`ItemWornCondition`), never directly
 - Properties from these sources are unioned — no conflicts, just aggregation
 
 ### Capabilities: What Characters Can Do

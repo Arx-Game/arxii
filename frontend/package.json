@@ -62,7 +62,7 @@
     "react-router-dom": "^7.18.5",
     "react-select": "^5.10.2",
     "remark-gfm": "^4.0.1",
-    "sonner": "^1.4.2",
+    "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0"
   },
   "devDependencies": {
@@ -80,7 +80,7 @@
     "eslint-plugin-react-hooks": "^5.0.0",
     "eslint-plugin-react-refresh": "^0.5.8",
     "globals": "^17.14.0",
-    "jsdom": "^26.1.0",
+    "jsdom": "^31.0.1",
     "openapi-typescript": "^7.13.0",
     "postcss": "^8.5.33",
     "prettier": "^3.10.1",

@@ -55,6 +55,15 @@ class DriftConfig(SharedMemoryModel):
             "An Affinity's own value, when set, replaces it."
         ),
     )
+    own_side_tolerance_percent = models.PositiveSmallIntegerField(
+        default=15,
+        validators=[MaxValueValidator(100)],
+        verbose_name="Own-side range",
+        help_text=(
+            "Percentage points. A character whose main affinity is Primal is Unsettled by "
+            "growth on the side she already leans to only past this."
+        ),
+    )
     creation_points = models.PositiveSmallIntegerField(
         default=10,
         validators=[MinValueValidator(1)],

@@ -292,9 +292,9 @@ def _combat_burn_strain_units(character: ObjectDB, combat_burn_for: str) -> int:
 
 def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged pull
     *,
-    technique: Technique,
     character: ObjectDB,
     runtime_intensity: int,
+    cast_resonance: Resonance | None,
     cast_pull: CastPullDeclaration | None = None,
     cast_pull_spent: int = 0,
     burn_result: ResonanceBurnResult | None = None,
@@ -302,20 +302,16 @@ def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged 
 ) -> tuple[ResonanceInvolvement, ...]:
     """Compute per-resonance involvement for one cast.
 
-    stat_bonus_contribution splits runtime intensity equally across the
-    technique's gift's resonances (the modifier system does not track
-    per-resonance attribution; spec §10.1 acknowledges this as an
-    impl-phase resolution).
+    A cast is worked in one resonance (#5231): the whole ``runtime_intensity`` goes to
+    ``cast_resonance`` as its ``stat_bonus_contribution`` and no other resonance gets any.
 
     thread_pull_resonance_spent sums the resonance this cast's pulls spent: the
     character's active CombatPull rows and the non-combat ``cast_pull`` charged with
-    the cast, each with the resonance burned raw beside it (#4736). A pull on a
-    resonance outside the gift's set still involves that resonance. Burned points
-    that fell at the pair rate are carried as ``hasty_fall_points``.
+    the cast, each with the resonance burned raw beside it (#4736). A pull attaches to the
+    resonance that paid for it, whichever resonance the cast is worked in, so a pull paid
+    in Abyssal corrupts as it always did. Burned points that fell at the pair rate are
+    carried as ``hasty_fall_points``.
     """
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
-
-    resonances = list(gift_resonances_for(character, technique.gift))
     spends = _pull_spends_for_cast(
         character=character,
         cast_pull=cast_pull,
@@ -324,16 +320,20 @@ def _build_resonance_involvements(  # noqa: PLR0913 - the cast plus its charged 
         combat_burn_for=combat_burn_for,
         # Combat pulls exist only in a combat encounter, whose casts and clash
         # contributions name ``combat_burn_for``. Any other cast reads them only to add
-        # to its gift's resonances, so with none it skips the per-caster query (#1846).
-        read_combat_pulls=bool(resonances) or bool(combat_burn_for),
+        # to its resonance, so with none it skips the per-caster query (#1846).
+        read_combat_pulls=cast_resonance is not None or bool(combat_burn_for),
     )
-    if not resonances and not spends:
+    if cast_resonance is None and not spends:
         return ()
 
-    per_resonance_share = runtime_intensity // len(resonances) if resonances else 0
-    involved = [(r, per_resonance_share) for r in resonances]
-    gift_pks = {r.pk for r in resonances}
-    involved.extend((res, 0) for pk, (res, _spend) in spends.items() if pk not in gift_pks)
+    involved = []
+    if cast_resonance is not None:
+        involved.append((cast_resonance, runtime_intensity))
+    involved.extend(
+        (res, 0)
+        for pk, (res, _spend) in spends.items()
+        if cast_resonance is None or pk != cast_resonance.pk
+    )
 
     involvements = []
     for resonance, share in involved:
@@ -364,11 +364,14 @@ def _partition_power_targets(
     *,
     technique: Technique | None,
     character: object,
+    cast_resonance: Resonance | None = None,
 ) -> tuple[ModifierTarget | None, ModifierTarget | None, list[ModifierTarget]]:
     """Split scope-matched power targets into (multiplier_target, team_lane_target, flat_targets).
 
     A target matches when it passes both scope gates (AND semantics; null = global):
-    - Resonance: target_resonance is None, or matches the character's GIFT-thread resonance.
+    - Resonance: target_resonance is None, or matches the resonance the cast is worked in
+      (``cast_working_resonances``: every Gift-thread resonance only when no cast resonance
+      is given, #5231).
     - Damage-type: target_damage_type is None, or matches a technique damage profile.
     Untyped damage profiles (damage_type=None) never count as a damage-type match.
 
@@ -385,9 +388,11 @@ def _partition_power_targets(
     technique_resonance_ids: set[int] = set()
     technique_damage_type_ids: set[int] = set()
     if technique is not None:
-        from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+        from world.magic.specialization.services import cast_working_resonances  # noqa: PLC0415
 
-        technique_resonance_ids = {r.id for r in gift_resonances_for(character, technique.gift)}
+        technique_resonance_ids = {
+            r.id for r in cast_working_resonances(character, technique, cast_resonance)
+        }
         technique_damage_type_ids = {
             p.damage_type_id
             for p in technique.damage_profiles.all()
@@ -577,12 +582,16 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     target_sheet: CharacterSheet | None = None,
     price_payment: PricePayment | None = None,
     substance_lines: Sequence[tuple[str, int]] = (),
+    cast_resonance: Resonance | None = None,
 ) -> PowerLedger:
     """Derive effective power as an ordered ledger. NEVER stored — recomputed each cast.
 
     ``substance_lines`` (#5125): ``(label, power)`` per Primum source her gift's substance
     draws on, after any call-up this cast makes, one ENVIRONMENT line each ("Surroundings:
     fire"). Computed once in ``use_technique`` from the cast's ``SubstancePlan``.
+
+    ``cast_resonance`` (#5231): the one resonance the cast is worked in, forwarded into
+    ``PowerTermContext`` for ``kindled_cast_power_term``. ``None`` (the default) adds nothing.
 
     ``price_payment`` (#4099): the cast's one price decision, forwarded unchanged into
     ``PowerTermContext`` for ``price_power_term``. ``None`` (the default, and every
@@ -625,7 +634,8 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     multiplicative stage (ADR-0158).
 
     A target is matched when it passes both scope gates (AND semantics; null = global):
-    - Resonance scope: target_resonance is None, or matches a technique gift resonance.
+    - Resonance scope: target_resonance is None, or matches the resonance the cast is worked in
+      (#5231; every gift resonance only for a caller that names no cast resonance).
     - Damage-type scope: target_damage_type is None, or matches a technique damage profile.
     Untyped damage profiles (damage_type=None) never count as a damage-type match.
     Power-scoped contributions raise landed effect only; channeled intensity
@@ -645,7 +655,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
         return PowerLedgerBuilder(base=max(0, channeled_intensity)).build()
 
     multiplier_target, team_lane_target, flat_targets = _partition_power_targets(
-        technique=technique, character=character
+        technique=technique, character=character, cast_resonance=cast_resonance
     )
 
     builder = PowerLedgerBuilder(base=channeled_intensity, base_label="channeled intensity")
@@ -676,6 +686,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
         price_payment=price_payment,
+        cast_resonance=cast_resonance,
     )
     for provider in get_power_term_providers():
         builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
@@ -854,6 +865,7 @@ def _evaluate_cast_environment(
     character: ObjectDB,
     caster_room: ObjectDB | None,
     technique: Technique,
+    cast_resonance: Resonance | None = None,
 ) -> tuple[RoomProfile | None, ResonanceEnvironmentEffect | None]:
     """Resolve the caster's room profile and evaluate the resonance environment once.
 
@@ -867,7 +879,7 @@ def _evaluate_cast_environment(
     except RoomProfile.DoesNotExist:
         return None, None
     environment_effect = evaluate_resonance_environment(
-        caster=character, room=caster_room, technique=technique
+        caster=character, room=caster_room, technique=technique, cast_resonance=cast_resonance
     )
     return room_profile, environment_effect
 
@@ -1478,13 +1490,16 @@ def _prepare_technique_cast(  # noqa: PLR0913
     cast_check=None,
     burn_result: ResonanceBurnResult | None = None,
     substance_plan: SubstancePlan | None = None,
+    cast_resonance: Resonance | None = None,
 ) -> _CastPreparation | None:
     """Run the pre-cast event and prepare power and pull effects."""
     from world.magic.services.substance import source_power_lines  # noqa: PLC0415
 
     effective_targets = targets or []
     caster_room = character.location
-    room_profile, environment_effect = _evaluate_cast_environment(character, caster_room, technique)
+    room_profile, environment_effect = _evaluate_cast_environment(
+        character, caster_room, technique, cast_resonance
+    )
     seed_ledger = _derive_power(
         channeled_intensity=stats.intensity + max(power_intensity_bonus, 0) + strain_power_bonus,
         technique=technique,
@@ -1494,6 +1509,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
         situation_ctx=situation_ctx,
         target_sheet=target_sheet,
         price_payment=price_payment,
+        cast_resonance=cast_resonance,
         substance_lines=(
             [(source.label, power) for source, power in source_power_lines(substance_plan)]
             if substance_plan is not None
@@ -1626,6 +1642,7 @@ def _complete_technique_cast(  # noqa: PLR0913
     price_payment=None,
     defer_soulfray_reveal: bool = False,
     substance_plan: SubstancePlan | None = None,
+    cast_resonance: Resonance | None,
 ) -> TechniqueUseResult:
     """Deduct anima, resolve the cast, and emit all post-cast effects."""
     deficit = deduct_anima(character, cost.effective_cost, lethal=lethal)
@@ -1687,9 +1704,9 @@ def _complete_technique_cast(  # noqa: PLR0913
         check_result=effective_check_result,
     )
     resonance_involvements = _build_resonance_involvements(
-        technique=technique,
         character=character,
         runtime_intensity=stats.intensity,
+        cast_resonance=cast_resonance,
         cast_pull=preparation.charged_pull,
         cast_pull_spent=preparation.charged_pull_spent,
         burn_result=preparation.burn_result,
@@ -1799,7 +1816,14 @@ def use_technique(  # noqa: PLR0913
     wheel on ``result.soulfray_result.reveal`` instead of sending it on commit
     (#4089). Only a caller that plays the reveal itself, in order with its own
     wheels (the scene action path), passes it; that caller must never drop it.
+
+    The cast is worked in one resonance (#5231), ``cast_resonance_for`` of the technique and
+    the caller's ``preferred_resonance``. It is read before anything is charged, so a named
+    resonance the Gift's thread does not hold refuses the cast with nothing spent.
     """
+    from world.magic.specialization.services import cast_resonance_for  # noqa: PLC0415
+
+    cast_resonance = cast_resonance_for(character, technique, preferred_resonance)
     _validate_strain_commitment(strain_commitment)
     stats, anima, cost, effective_strain, substance_plan = _calculate_technique_cost(
         character=character,
@@ -1874,6 +1898,7 @@ def use_technique(  # noqa: PLR0913
         cast_check=cast_check,
         burn_result=burn_result,
         substance_plan=substance_plan,
+        cast_resonance=cast_resonance,
     )
     if preparation is None:
         if fury is not None:
@@ -1908,4 +1933,5 @@ def use_technique(  # noqa: PLR0913
         price_payment=price_payment,
         defer_soulfray_reveal=defer_soulfray_reveal,
         substance_plan=substance_plan,
+        cast_resonance=cast_resonance,
     )

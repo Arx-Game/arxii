@@ -1101,6 +1101,7 @@ export const mockResonances: Resonance[] = [
     affinity_name: 'Abyssal',
     description: 'Affinity with darkness',
     codex_entry_id: null,
+    color_hex: '#2A2433',
   },
   {
     id: 2,
@@ -1109,6 +1110,7 @@ export const mockResonances: Resonance[] = [
     affinity_name: 'Primal',
     description: 'Affinity with fire',
     codex_entry_id: null,
+    color_hex: '#E0642A',
   },
 ];
 

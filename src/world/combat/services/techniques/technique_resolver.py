@@ -79,7 +79,7 @@ if TYPE_CHECKING:
     from world.conditions.types import AppliedConditionResult, RemovedConditionResult
     from world.covenants.style_fit import StyleFit
     from world.covenants.types import FiredVowEffect
-    from world.magic.models import Technique
+    from world.magic.models import Resonance, Technique
     from world.magic.models.techniques import AbstractDamageProfile
     from world.magic.types.power_ledger import PowerLedger
     from world.mechanics.models import ModifierTarget
@@ -162,6 +162,7 @@ class TechniqueDamageBonus:
         technique: Technique,
         *,
         technique_scoped_only: bool = False,
+        cast_resonance: Resonance | None = None,
     ) -> TechniqueDamageBonus:
         """The bonus for ``sheet`` casting ``technique``; with no damage-kind modifier
         target in the game there is nothing to match, so no context is built.
@@ -170,6 +171,8 @@ class TechniqueDamageBonus:
         (#5026): an enchanted Strike's typed part counts only modifiers scoped to the
         technique, its gift, function, resonance or damage type, because a kind-wide damage
         modifier already reaches the Strike through "Strike: base damage".
+
+        ``cast_resonance`` is the resonance the cast is worked in (#5231).
         """
         targets = technique_effect_targets(MechanicsEffectKind.DAMAGE)
         if technique_scoped_only:
@@ -178,7 +181,7 @@ class TechniqueDamageBonus:
             return cls.none()
         return cls(
             sheet=sheet,
-            context=technique_effect_context(sheet, technique),
+            context=technique_effect_context(sheet, technique, cast_resonance=cast_resonance),
             targets=targets,
             narrowed=opponent_targets_exist(targets),
         )
@@ -251,6 +254,9 @@ class CombatTechniqueResolver:
     # The hit roll of an enchanted Strike (#5092): its technique roll is the attack's
     # attack roll for a perk's "Applies to", so this roll takes none (counted once).
     enchanted_hit: bool = False
+    # The one resonance the cast is worked in (#5231), so a resonance-scoped damage or
+    # condition modifier matches only it. None: the cast is not worked in a resonance.
+    cast_resonance: Resonance | None = None
 
     def _roll_check(self) -> CheckResult:
         """Roll the offense check with effort + pull-bonus modifiers."""
@@ -769,7 +775,9 @@ class CombatTechniqueResolver:
         # The cast's technique-scoped damage modifiers (#4822), worked out once per damage
         # type however many profiles and opponents the cast has.
         technique_bonus = TechniqueDamageBonus.for_cast(
-            self.participant.character_sheet, self.action.focused_action
+            self.participant.character_sheet,
+            self.action.focused_action,
+            cast_resonance=self.cast_resonance,
         )
 
         results: list[OpponentDamageResult] = []
@@ -944,7 +952,7 @@ class CombatTechniqueResolver:
         # target so an opponent scope reads who each condition lands on (#4823), ride the
         # technique's own rows only; the signature and vow rows below keep their own sources.
         condition_bonus = TechniqueConditionBonus.for_cast(
-            self.participant.character_sheet, technique
+            self.participant.character_sheet, technique, cast_resonance=self.cast_resonance
         )
         applied = apply_technique_conditions(
             technique=technique,

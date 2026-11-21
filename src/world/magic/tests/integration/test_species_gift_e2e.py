@@ -56,6 +56,7 @@ from world.magic.factories import (
     ThreadPullEffectFactory,
     TraditionFactory,
     ensure_canonical_affinities,
+    primal_resonance,
 )
 from world.magic.models import Resonance, Technique, Thread
 from world.magic.models.gifts import CharacterGift
@@ -102,7 +103,7 @@ class _SpeciesGiftJourneyBase(TestCase):
         from world.achievements.factories import AchievementFactory
         from world.codex.factories import CodexEntryFactory
 
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         # The species' Minor Gift + its starting technique.
         cls.minor_gift = GiftFactory(name="Test Nightform", kind=GiftKind.MINOR)
         cls.minor_gift.resonances.add(cls.resonance)

@@ -271,6 +271,7 @@ def declare_strike(  # noqa: PLR0913 - the Strike's picks: target, weapon, use, 
             "social_passive": None,
             "mental_passive": None,
             "combo_upgrade": None,
+            "cast_resonance": None,  # a re-declaration drops the last cast's resonance (#5231)
             "is_ready": False,
         },
     )

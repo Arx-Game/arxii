@@ -5,6 +5,7 @@ from decimal import Decimal
 
 import factory
 
+from world.conditions.constants import DurationType
 from world.items.constants import BodyRegion, EquipmentLayer, GearArchetype, KeepsakeSubject
 from world.items.crafting.constants import CostConsumption, CraftingRecipeKind
 from world.items.gems.constants import GemAxis
@@ -23,6 +24,7 @@ from world.items.models import (
     ItemSubstance,
     ItemTemplate,
     ItemTemplateProperty,
+    ItemWornCondition,
     Keepsake,
     Mantle,
     MantleLevelClearance,
@@ -201,6 +203,23 @@ class ItemFacetFactory(factory.django.DjangoModelFactory):
     item_instance = factory.SubFactory(ItemInstanceFactory)
     facet = factory.SubFactory("world.magic.factories.FacetFactory")
     attachment_quality_tier = factory.SubFactory(QualityTierFactory)
+
+
+class ItemWornConditionFactory(factory.django.DjangoModelFactory):
+    """Factory for ItemWornCondition (#5074): an item that puts a condition on its wearer.
+
+    The condition defaults to a permanent one, as staff author gear conditions.
+    """
+
+    class Meta:
+        model = ItemWornCondition
+        django_get_or_create = ("item_instance", "condition")
+
+    item_instance = factory.SubFactory(ItemInstanceFactory)
+    condition = factory.SubFactory(
+        "world.conditions.factories.ConditionTemplateFactory",
+        default_duration_type=DurationType.PERMANENT,
+    )
 
 
 class EquippedItemFactory(factory.django.DjangoModelFactory):

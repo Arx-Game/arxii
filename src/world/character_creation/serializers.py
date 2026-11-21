@@ -2274,9 +2274,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         """``gift_resonance_weights`` (#5123): the stage's own check, minus the full spread.
 
         Saving a spread that is still being worked through is fine; a resonance picked
-        twice, one that does not exist, a pick under one point or more points than the
-        creation points are refused here with the stage's own wording. The stage check
-        still asks for the whole spread before the Gift stage reads complete.
+        twice, one that does not exist, a pick under one point, more points than the
+        creation points, a second Primal pick or a second pick that is not Celestial or
+        Abyssal are refused here with the stage's own wording. The stage check still asks
+        for the whole spread and for the Primal feeling before the Gift stage reads
+        complete (a draft may hold its second pick first).
         """
         raw = data.get(GIFT_RESONANCE_WEIGHTS_KEY)
         if not raw:

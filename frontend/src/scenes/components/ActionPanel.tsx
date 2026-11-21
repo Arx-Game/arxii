@@ -24,8 +24,9 @@ import {
 import { fetchScene, sceneKeys } from '../queries';
 import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { SurroundingsLines } from '@/magic/components/SurroundingsLines';
+import { CastResonancePicker } from '@/magic/components/CastResonancePicker';
 import { GiftCallUpRow } from './GiftCallUpRow';
-import { CastFocusLines, CastSpendLine } from './CastSpendLine';
+import { CastFocusLines, CastKindledLine, CastSpendLine } from './CastSpendLine';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
@@ -111,6 +112,14 @@ function formSelection(
 }
 
 /**
+ * The resonance the caster picked to work the cast in (#5231). Sends nothing until she picks,
+ * so the server uses her usual one; a pick wins over the resonance a variant form names.
+ */
+function resonanceSelection(resonanceId: number | null): { preferred_resonance_id?: number } {
+  return resonanceId === null ? {} : { preferred_resonance_id: resonanceId };
+}
+
+/**
  * Lets the caster pick among the forms of the selected technique (#2901).
  *
  * Renders nothing when only one form is reachable — a picker with a single
@@ -187,7 +196,13 @@ export function ActionPanel({ sceneId }: Props) {
   // #2901: which form of the selected technique to work. null = the default
   // form, which is what a bare cast does; the base form is variant_id null.
   const [selectedForm, setSelectedForm] = useState<FormChoice>(null);
+  // #5231: the resonance the cast is worked in. null = the usual one, which is what a bare
+  // cast does. Picking a variant form moves it to that form's resonance, and a pick made here
+  // afterwards wins over the form's.
+  const [selectedResonanceId, setSelectedResonanceId] = useState<number | null>(null);
   const [castLedgerResult, setCastLedgerResult] = useState<CastResponse | null>(null);
+  // The kindled resonance the shown cast was worked in, by name; null when it was not kindled.
+  const [castKindledResonance, setCastKindledResonance] = useState<string | null>(null);
   // The caster's consent (#3573) to hold the selected ward-bearing technique's
   // protective condition alive past zero anima via Soulfray. Only meaningful
   // when selectedTechnique.reactive_anima_cost != null; reset whenever the
@@ -263,8 +278,15 @@ export function ActionPanel({ sceneId }: Props) {
       }),
     onSuccess: (data) => {
       invalidateActionOutcomeQueries();
+      // The option she cast in: her pick, else her usual one, read before the picks reset.
+      const castIn =
+        chosenResonanceId === null
+          ? resonanceOptions.find((o) => o.is_default)
+          : resonanceOptions.find((o) => o.resonance_id === chosenResonanceId);
+      setCastKindledResonance(castIn?.kindled_strength ? castIn.name : null);
       setSelectedTechnique(null);
       setSelectedForm(null);
+      setSelectedResonanceId(null);
       setCastTargetPersonaId(null);
       setCastTargetPersonaIds([]);
       setCastPickingTarget(false);
@@ -499,12 +521,51 @@ export function ActionPanel({ sceneId }: Props) {
 
   function handleTechniqueSelect(technique: CastableTechnique) {
     setSelectedTechnique(technique);
+    setSelectedResonanceId(null);
     setCastTargetPersonaId(null);
     setCastTargetPersonaIds([]);
     setCastLedgerResult(null);
     setCastWardSoulfrayAccepted(false);
     performCast.reset();
     pull.reset();
+  }
+
+  // The pick counts only while the selected technique offers it, so a pick can never be sent
+  // for a technique that does not.
+  const resonanceOptions = selectedTechnique?.resonance_options ?? [];
+  const chosenResonanceId = resonanceOptions.some((o) => o.resonance_id === selectedResonanceId)
+    ? selectedResonanceId
+    : null;
+
+  // Choosing her usual resonance clears the pick and sends nothing, because the usual one may
+  // be a worn self's resonance that is not on the Gift's thread, which the server refuses when
+  // sent back. It also releases a variant form she picked, so the form no longer names a
+  // resonance for her.
+  // A variant form of another resonance than the one she picks falls back to the base form, so
+  // the form picker shows what is sent.
+  function handleResonanceSelect(resonanceId: number) {
+    if (resonanceOptions.find((o) => o.resonance_id === resonanceId)?.is_default) {
+      setSelectedResonanceId(null);
+      if (typeof selectedForm === 'number') setSelectedForm(null);
+      return;
+    }
+    setSelectedResonanceId(resonanceId);
+    const defaultForm = selectedTechnique?.forms.find((f) => f.is_default);
+    const shownForm = selectedForm ?? defaultForm?.variant_id ?? 'base';
+    const shown =
+      typeof shownForm === 'number'
+        ? selectedTechnique?.forms.find((f) => f.variant_id === shownForm)
+        : undefined;
+    if (shown !== undefined && shown.resonance_id !== resonanceId) setSelectedForm('base');
+  }
+
+  // Choosing a variant form works that form's resonance, so the resonance picker follows it;
+  // the base form leaves the resonance alone.
+  function handleFormSelect(choice: FormChoice) {
+    setSelectedForm(choice);
+    if (selectedTechnique === null || choice === null || choice === 'base') return;
+    const form = selectedTechnique.forms.find((f) => f.variant_id === choice);
+    if (form) setSelectedResonanceId(form.resonance_id);
   }
 
   function handleCastCommit() {
@@ -527,6 +588,7 @@ export function ActionPanel({ sceneId }: Props) {
         technique_id: selectedTechnique.id,
         target_persona_ids: castTargetPersonaIds,
         ...formSelection(selectedTechnique, selectedForm),
+        ...resonanceSelection(chosenResonanceId),
         ...payload,
         ...soulfrayKwarg,
       });
@@ -536,6 +598,7 @@ export function ActionPanel({ sceneId }: Props) {
         technique_id: selectedTechnique.id,
         target_persona: castTargetPersonaId ?? null,
         ...formSelection(selectedTechnique, selectedForm),
+        ...resonanceSelection(chosenResonanceId),
         ...payload,
         ...soulfrayKwarg,
       });
@@ -759,6 +822,10 @@ export function ActionPanel({ sceneId }: Props) {
                     <div className="space-y-2" data-testid="cast-ledger-result">
                       <CastSpendLine result={castLedgerResult.result} />
                       <CastFocusLines result={castLedgerResult.result} />
+                      <CastKindledLine
+                        resonanceName={castKindledResonance}
+                        ledger={castLedgerResult.result.power_ledger}
+                      />
                       <PowerLedgerPanel ledger={castLedgerResult.result.power_ledger} />
                       <Button
                         size="sm"
@@ -855,7 +922,14 @@ export function ActionPanel({ sceneId }: Props) {
                       <TechniqueFormPicker
                         technique={selectedTechnique}
                         choice={selectedForm}
-                        onSelect={setSelectedForm}
+                        onSelect={handleFormSelect}
+                      />
+
+                      <CastResonancePicker
+                        options={resonanceOptions}
+                        selectedId={chosenResonanceId}
+                        onSelect={handleResonanceSelect}
+                        disabled={performCast.isPending}
                       />
 
                       {selectedTechnique.hostile && (

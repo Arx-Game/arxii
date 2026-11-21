@@ -300,8 +300,8 @@ class RegistryTest(CombatRoleFlagsCase):
 #: list: the two condition probes read each setter source once, so a new SetterSource in
 #: web/admin/combo_map/sources.py adds 2 (the pact offer, #4341), and so does a new
 #: ReaderSource (the three kindling fields added 6, #5124), and the corruption config's
-#: compulsion condition adds 2 (#5177).
-FLAG_QUERIES = 127
+#: compulsion condition adds 2 (#5177), and so does the worn-item setter (#5074).
+FLAG_QUERIES = 129
 
 
 class QueryCountTest(CombatRoleFlagsCase):

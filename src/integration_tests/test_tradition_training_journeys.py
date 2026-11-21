@@ -49,11 +49,11 @@ from world.magic.factories import (
     BinaryEffectTypeFactory,
     GiftFactory,
     PathGiftGrantFactory,
-    ResonanceFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
+    primal_resonance,
 )
 from world.magic.models import CharacterAnima, Resonance
 from world.magic.seeds_cast import get_standalone_cast_template
@@ -450,7 +450,7 @@ class MagicTrainingAllocationJourney(JourneyCase):
         technique = gift.techniques.first()
         cls.skills = [SkillFactory(category=TraitCategory.MAGIC) for _ in range(3)]
         cls.account = AccountFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = primal_resonance()
         cls.path, cls.tradition = path, tradition
         cls.draft_data = {
             "distinctions": [{"distinction_id": training.pk, "rank": 1}],
@@ -507,7 +507,10 @@ class MagicTrainingAllocationJourney(JourneyCase):
         client = self.api(self.account)
         url = f"/api/character-creation/drafts/{draft.pk}/"
         stage = str(CharacterDraft.Stage.GIFT)
-        self.assertIn("Select a gift resonance", client.get(url).json()["stage_errors"][stage])
+        self.assertIn(
+            "Pick the feeling that gives you strength.",
+            client.get(url).json()["stage_errors"][stage],
+        )
 
         listed = client.get("/api/magic/resonances/")
         self.assertEqual(listed.status_code, 200, listed.content)
@@ -522,7 +525,7 @@ class MagicTrainingAllocationJourney(JourneyCase):
         )
         self.assertEqual(response.status_code, 200, response.content)
         errors = client.get(url).json()["stage_errors"][stage]
-        self.assertNotIn("Select a gift resonance", errors)
+        self.assertNotIn("Pick the feeling that gives you strength.", errors)
 
     def test_resubmit_refuses_a_draft_that_cannot_submit(self) -> None:
         """Revisions that leave the training pool unspent cannot be resubmitted."""

@@ -1,6 +1,7 @@
 """CorruptionConfig — singleton tuning surface for the Corruption foundation."""
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 
 from core.managers import ArxSharedMemoryManager
@@ -44,6 +45,25 @@ class CorruptionConfig(SharedMemoryModel):
         help_text=(
             "Percentage points by which each success level reduces alternate-self cast "
             "corruption reaching the player character. Failures increase it."
+        ),
+    )
+
+    light_corruption_percent = models.PositiveSmallIntegerField(
+        default=10,
+        validators=[MaxValueValidator(100)],
+        verbose_name="Light corruption",
+        help_text=(
+            "A percentage. The share of the full corruption an Abyssal cast adds while the "
+            "caster is only slightly Abyssal."
+        ),
+    )
+    full_corruption_from_share = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MaxValueValidator(100)],
+        verbose_name="Full corruption from",
+        help_text=(
+            "The Abyssal share of the caster's aura, as a percentage, from which she takes "
+            "all of it."
         ),
     )
 

@@ -34,6 +34,7 @@ from world.conditions.models import (
     DamageType,
 )
 from world.conditions.serializers import (
+    GEAR_SOURCE_CONTEXT_KEY,
     CapabilityTypeSerializer,
     ConditionCategorySerializer,
     ConditionInstanceObserverSerializer,
@@ -344,7 +345,11 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
             "condition__name",
         )
 
-        return Response(ConditionInstanceSerializer(conditions, many=True).data)
+        return Response(
+            ConditionInstanceSerializer(
+                conditions, many=True, context={GEAR_SOURCE_CONTEXT_KEY: True}
+            ).data
+        )
 
     @action(detail=False, methods=["get"])
     def summary(self, request: Request) -> Response:
@@ -384,7 +389,9 @@ class CharacterConditionsViewSet(CharacterContextMixin, viewsets.ViewSet):
 
         return Response(
             {
-                "conditions": ConditionInstanceSerializer(conditions, many=True).data,
+                "conditions": ConditionInstanceSerializer(
+                    conditions, many=True, context={GEAR_SOURCE_CONTEXT_KEY: True}
+                ).data,
                 "total_conditions": len(conditions),
                 "negative_count": negative_count,
                 "positive_count": positive_count,
@@ -470,6 +477,11 @@ class ConditionInstanceViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSe
     serializer_class = ConditionInstanceSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_serializer_context(self) -> dict[str, object]:
+        """The queryset holds only the requester's own characters' conditions, so a worn
+        item's name may show as the source (#5074)."""
+        return {**super().get_serializer_context(), GEAR_SOURCE_CONTEXT_KEY: True}
+
     def get_queryset(self) -> QuerySet[ConditionInstance]:
         """Scope to instances on characters the requester actively plays."""
         owned_character_ids = [
@@ -479,6 +491,7 @@ class ConditionInstanceViewSet(mixins.RetrieveModelMixin, viewsets.GenericViewSe
             "condition",
             "condition__category",
             "current_stage",
+            "source_item__template",
         )
 
 

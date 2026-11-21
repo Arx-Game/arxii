@@ -30,7 +30,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.magic.models import Technique
+    from world.magic.models import Resonance, Technique
     from world.mechanics.derived_amounts import DerivedInputs
 
 PARTIAL_PROTECTION_CAP = 100
@@ -117,9 +117,15 @@ def technique_effect_context(
     technique: "Technique",
     *,
     damage_type_id: int | None = None,
+    cast_resonance: "Resonance | None" = None,
 ) -> TechniqueEffectContext:
-    """Describe ``technique`` as cast by ``sheet`` for the technique-scoped targets."""
-    from world.magic.specialization.services import gift_resonances_for  # noqa: PLC0415
+    """Describe ``technique`` as cast by ``sheet`` for the technique-scoped targets.
+
+    ``cast_resonance`` is the one resonance a cast is worked in (#5231): a resonance-scoped
+    target then matches only it. A caller that is not a cast leaves it out and the context
+    holds every resonance the Gift manifests as for the caster.
+    """
+    from world.magic.specialization.services import cast_working_resonances  # noqa: PLC0415
 
     gift = technique.gift
     gift_ids = {gift.pk}
@@ -129,7 +135,9 @@ def technique_effect_context(
         technique_id=technique.pk,
         gift_ids=frozenset(gift_ids),
         functions=frozenset(tag.function for tag in technique.cached_function_tags),
-        resonance_ids=frozenset(r.pk for r in gift_resonances_for(sheet.character, gift)),
+        resonance_ids=frozenset(
+            r.pk for r in cast_working_resonances(sheet.character, technique, cast_resonance)
+        ),
         damage_type_id=damage_type_id,
     )
 
@@ -242,9 +250,17 @@ class TechniqueConditionBonus:
 
     @classmethod
     def for_cast(
-        cls, sheet: "CharacterSheet | None", technique: "Technique"
+        cls,
+        sheet: "CharacterSheet | None",
+        technique: "Technique",
+        *,
+        cast_resonance: "Resonance | None" = None,
     ) -> "TechniqueConditionBonus":
-        """The bonus for ``sheet`` casting ``technique``'s own conditions; none with no sheet."""
+        """The bonus for ``sheet`` casting ``technique``'s own conditions; none with no sheet.
+
+        ``cast_resonance`` is the resonance the cast is worked in (#5231), when the caller is
+        a cast.
+        """
         if sheet is None:
             return cls.none()
         severity_targets = technique_effect_targets(EffectKind.CONDITION_SEVERITY)
@@ -253,7 +269,7 @@ class TechniqueConditionBonus:
             return cls.none()
         return cls(
             sheet=sheet,
-            context=technique_effect_context(sheet, technique),
+            context=technique_effect_context(sheet, technique, cast_resonance=cast_resonance),
             severity_targets=severity_targets,
             duration_targets=duration_targets,
         )

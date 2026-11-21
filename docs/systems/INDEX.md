@@ -131,7 +131,7 @@
   `strength` a rank; `reason_text`), or a Rally or a GM kindled it (`Kindling`, `source`
   RALLY/GM, ends with its fight or scene). Staff author `KindledStrengthTier` (rank, name, `min_bond_tier`,
   `min_severity`, `pull_levels`, `give_in_max_depth`, `give_in_bonus_percent`, `give_in_ease_tenths`,
-  `dig_deep_scale_percent`, `earn_percent`), the singleton `KindlingConfig` (`harm_property`, and since #5181 `instant_percent` and `claim_percent`),
+  `dig_deep_scale_percent`, `earn_percent`, and since #5231 `cast_power`), the singleton `KindlingConfig` (`harm_property`, and since #5181 `instant_percent` and `claim_percent`),
   `KindledDeedAward`, `AnimaRitualResonanceAward` and `RallyKindlingStrength` on one admin page; `Resonance.feeling` (Property FK)
   and `missions.MissionTheme` (`themes` on `MissionTemplate` and `MissionOption`) feed the
   situations. Six new covenants `Situation` members (`THREAD_ANCHOR_PRESENT`, `OWN_FEELING`,
@@ -152,8 +152,10 @@
   (`claim`, `claim_resonance_ids`; answers `claim_lines`), `ClaimedResonance`; `GET /api/magic/kindled-resonances/`
   lists `unclaimed` and `claim_verb`; telnet `pose/claim`, `pose/claim <resonance>,...=<text>`; React `ClaimRow`.
   Rates (#5181): `Affinity.earn_rate_percent` scales what `grant_resonance` records except for
-  `AFFINITY_RATE_EXEMPT_SOURCES`, `Affinity.learn_rate_percent` scales `credit_technique_progress`, and
-  `Affinity.claim_verb` is the claiming word. Reflections: `Reflection` and
+  `AFFINITY_RATE_EXEMPT_SOURCES` (read from the affinity of the resonance earned since #5231, whoever earns it),
+  `Affinity.learn_rate_percent` scales `credit_technique_progress` (still by the main affinity), and
+  `Affinity.claim_verb` is the claiming word. `Affinity.kindled_boost_percent` (#5231) scales the pull levels and
+  the cast power a kindled resonance of that affinity gives. Reflections: `Reflection` and
   `SettlingRite` (`models/reflection.py`), `GainSource.EMBRACED_DEED`, `reflectable_for`,
   `record_reflection`, `unsettling_resonance`; pose and journal actions take `reflect_*` kwargs.
   Endpoints: `GET /api/magic/kindled-resonances/`, `GET /api/magic/reflectables/`,
@@ -204,10 +206,26 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   (`world/forms/services`): a self chosen in the Audere reveal is assumed on the choice's
   commit and reverted from `end_audere` and encounter cleanup; `working_affinities(sheet, resonances)` makes a cast
   work in the worn self's affinity. See magic.md.
+- **A cast is worked in one resonance (#5231, ADR-5231) [BUILT & WIRED]:** `cast_resonance_for(character,
+  technique, preferred)` and `resonance_on_gift_thread` (`world/magic/specialization/services.py`) name the one
+  resonance a cast is worked in and test a named one against the Gift's thread; `cast_resonance_options`
+  (`services/cast_resonance_options.py`, with `kindling_by_resonance` and `stronger_marks`) lists the choices for the
+  scene cast panel and the combat declaration; `CombatRoundAction.cast_resonance` and
+  `SceneActionRequest.cast_resonance` hold the choice; `ResonanceNotOnGiftThread`; `_build_resonance_involvements`
+  gives the whole intensity to that resonance; `cast_corruption_part` with `CorruptionConfig.light_corruption_percent`
+  and `full_corruption_from_share` scales the corruption by how Abyssal the caster is; `kindled_cast_power_term`
+  (`KindledStrengthTier.cast_power`, `Affinity.kindled_boost_percent`) adds power; a pull adds a second kindled resonance
+  of the other kind (`_second_resonance_boost`) and marks the stronger payer (`PayerOption.stronger`); Sineating moves
+  corruption in the resonance on the thread with the most of the Sinner's own (`_plea_resonance`) and pays her across
+  the thread (`_earning_parts`); `Resonance.color_hex` and the React `AuraSwirl`, `CastResonancePicker` and
+  `StrengthStep` (creation takes one Primal pick and at most one Celestial or Abyssal pick). See magic.md "A cast is
+  worked in one resonance".
 - **Unsettled and Resonance Conflict (#4732, #5123):** `DriftConfig` (singleton, `get_drift_config()`),
   `CharacterAuraShare.settled_percent`, `drift_for(sheet)` (the
   unsettled reading on the true aura, a `DriftReading` of `shares`, `settled_shares` and `excess_points`; the range before Unsettled and step are per main affinity,
-  `Affinity.unsettled_tolerance_percent` / `unsettled_step_percent` through `_unsettled_numbers`, #4751),
+  `Affinity.unsettled_tolerance_percent` / `unsettled_step_percent` through `_unsettled_numbers`, #4751; which affinities are
+  read and at which range is chosen by side in `_range_for`, with `DriftConfig.own_side_tolerance_percent` for a Primal
+  character's own side, and a tie in the main affinity goes to Primal, #5231),
   and `check_resonance_focus` (once per cast, inside
   `use_technique`'s `_complete_technique_cast`, so every cast path rolls it); the conflict
   condition is authored and `ConditionCategory.self_shakeable` lets `breakfree`/`rally` reach it.
@@ -490,6 +508,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `preferred_resonance_id` on the cast request is the web counterpart to
     telnet's `cast <tech> variant=<resonance>` (#1619); before #2901 the web had
     `use_base_form` alone and could not reach a specialized form at all.
+    Since #5231 it also names the resonance a cast is worked in (separate from the form picker).
     See magic.md "Per-caster technique forms".
   - **Ritual Liturgy (#1352):** `RitualLiturgy` (OneToOne → `Ritual`; `opening_call`
     TextField — the officiant's authored ceremonial words; public, non-spoiler).
@@ -1566,6 +1585,15 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   via `ConditionCategory.alters_behavior`), progression (interactions), scenes (telnet `treat` +
   web Treat panel surface converges on the `SceneActionRequest` consent seam via the
   custom-action-resolver registry)
+- **Gear conditions (#5074, ADR-5074):** `ItemWornCondition` (`world/items/models.py`) names a
+  condition an item gives its wearer, optionally from a mantle attunement level;
+  `ConditionInstance.source_item` marks the instances gear owns;
+  `reconcile_worn_conditions` / `reconcile_item_wearers` / `release_worn_conditions`
+  (`world/items/services/worn_conditions.py`) are called from `equip_item`, `unequip_item`,
+  `spend_resonance_for_imbuing`, the item admin and the delete paths. A gear condition's
+  movement and dodge powers charge its `reactive_anima_cost` and overspend into Soulfray
+  (`gear_condition_with_cost`, `world/combat/services/movement_use.py`). See
+  [items.md](items.md) "Worn conditions" and [conditions.md](conditions.md) "Gear conditions".
 - **Source:** `src/world/conditions/`
 - **Details:** [conditions.md](conditions.md)
 ### Species

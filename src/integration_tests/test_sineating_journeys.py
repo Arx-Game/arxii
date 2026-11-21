@@ -26,6 +26,8 @@ import uuid
 from django.test import override_settings
 from rest_framework import status
 
+from actions.factories import ActionTemplateFactory
+from commands import pending_actions
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.character_sheets.factories import CharacterSheetFactory
@@ -33,11 +35,16 @@ from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.magic.constants import TargetKind
 from world.magic.factories import (
+    BinaryEffectTypeFactory,
+    CharacterAnimaFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
     CharacterThreadWeavingUnlockFactory,
+    GiftFactory,
     ResonanceFactory,
     SineatingOutcomeAwardFactory,
+    TechniqueFactory,
+    ThreadResonanceFactory,
     ThreadWeavingUnlockFactory,
     ensure_conversion_pairs,
     set_aura_split,
@@ -48,16 +55,22 @@ from world.magic.models import Affinity, AffinityInteraction, CharacterAura, Mir
 from world.magic.models.aura import CharacterResonance
 from world.magic.models.soul_tether import Sineating, SineatingPendingOffer
 from world.magic.services.soul_tether import accept_soul_tether, get_soul_tether_config
+from world.magic.services.thread_rows import refresh_leading_resonance
+from world.magic.specialization.services import provision_latent_gift_thread
 from world.magic.types.soul_tether import SoulTetherRole
 from world.relationships.factories import CharacterRelationshipFactory, RelationshipTypeFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.scenes.models import Interaction
+from world.scenes.tests.cast_test_helpers import grant_technique
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
+from world.traits.factories import CheckSystemSetupFactory
 from world.traits.services import ensure_canonical_check_outcome
+from world.vitals.models import CharacterVitals
 
 SUBMIT_POSE = "/api/interactions/submit-pose/"
+CAST_URL = "/api/action-requests/cast/"
 OPTIONS = "/api/magic/sineating-options/"
 ENTREAT = "kneels and offers up the weight of it."
 PERFORM = "lays a hand on the offered weight and takes it."
@@ -168,6 +181,10 @@ class SineatingJourneyCase(JourneyCase):
             ritual_components=[],
             sineater_resonance=self.primal,
         )
+        # The tether installs the Sinner's reactive triggers (the Hollow's absorption), and
+        # the handler drops its cache only on commit, which a test's transaction never
+        # reaches: re-read now, as a real commit would, so a cast later in the test sees them.
+        sinner.trigger_handler.refresh()
         thread = Thread.objects.get(
             owner=sinner.sheet_data,
             target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
@@ -314,6 +331,120 @@ class ASineatingByTelnet(SineatingJourneyCase):
         self.assertFalse(SineatingPendingOffer.objects.exists())
         self.assertEqual(Sineating.objects.get().units_accepted, 0)
         self.assertEqual(corruption(self.ysmay, self.ruin), 260)
+
+
+class ASinnerWhoseBondIsMostlyHerFeeling(SineatingJourneyCase):
+    """Ysmay's bond thread holds 80 of a Primal feeling (leading) and 20 of Ruin (Abyssal).
+
+    Expected values come from the spec (Verification 8 and decisions 13 and 24), worked by hand:
+    she carries only Ruin corruption, so the plea moves Ruin; two units at a full share earn
+    2 x 5 x 1.00 = 10, split 80/20 by the amounts imbued: 8 Longing and 2 Ruin. At a Failure
+    (a quarter share) they earn int(2.5) = 2: Longing 2 x 80 // 100 = 1 and Ruin 2 x 20 // 100 =
+    0, the leading Longing takes the remainder of 1 so it reads 2, and Ruin's part of 0 grants
+    nothing. The Hollow refills by the 2 units. Her aura is mostly Primal (10 percent Abyssal,
+    under the 50 percent a caster pays in full from), so her next cast, worked in Ruin through the
+    web cast endpoint, at tier 1 and intensity 50, adds ceil(50 x 10 x 10 / 100 x 10 / 100) = 5
+    corruption, of which the Hollow's 2 are absorbed and 3 reach her.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.longing = ResonanceFactory(name="Longing", affinity=self.primal_affinity)
+        thread = Thread.objects.get(
+            owner=self.ysmay.sheet_data,
+            target_kind=TargetKind.RELATIONSHIP_CAPSTONE,
+            retired_at__isnull=True,
+        )
+        ThreadResonanceFactory(thread=thread, resonance=self.longing, amount=80)
+        ThreadResonanceFactory(thread=thread, resonance=self.ruin, amount=20)
+        refresh_leading_resonance(thread)
+        self.aura(self.ysmay, celestial="10", primal="80", abyssal="10")
+
+    def cast_in_ruin(self) -> dict:
+        """Ysmay casts a tier 1 technique of intensity 50 through the web cast endpoint, worked
+        in Ruin (the one resonance her Gift's thread holds); the response's power ledger."""
+        CheckSystemSetupFactory.create()
+        sheet = self.ysmay.sheet_data
+        gift = GiftFactory()
+        technique = TechniqueFactory(
+            gift=gift,
+            level=1,
+            intensity=50,
+            control=100,
+            anima_cost=1,
+            effect_type=BinaryEffectTypeFactory(),
+            damage_profile=False,
+            action_template=ActionTemplateFactory(),
+        )
+        self.assertEqual(technique.tier, 1)
+        grant_technique(sheet.primary_persona, technique)
+        CharacterAnimaFactory(character=sheet, current=50, maximum=50)
+        CharacterVitals.objects.create(
+            character_sheet=sheet, health=50, max_health=50, base_max_health=50
+        )
+        provision_latent_gift_thread(sheet, gift, resonances=[self.ruin])
+        # The scene's anti-spam memory is process-wide and keyed by sheet pk.
+        pending_actions._LAST_ACTED.clear()
+        self.addCleanup(pending_actions._LAST_ACTED.clear)
+        with (
+            force_check_outcome(self.outcomes["Success"]),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            response = self.ysmay_web.post(
+                CAST_URL,
+                {
+                    "scene": self.scene.pk,
+                    "initiator_persona": sheet.primary_persona.pk,
+                    "technique_id": technique.pk,
+                    "preferred_resonance_id": self.ruin.pk,
+                },
+                format="json",
+            )
+        self.assertEqual(response.status_code, 201, response.data)
+        return response.json()["result"]["power_ledger"]
+
+    def test_the_ruin_falls_she_is_paid_in_her_mix_and_the_hollow_guards_her_next_cast(
+        self,
+    ) -> None:
+        self.entreat()
+        plea = SineatingPendingOffer.objects.get()
+        self.assertEqual(plea.resonance, self.ruin)
+
+        self.perform(self.corvin)
+
+        self.assertEqual(corruption(self.ysmay, self.ruin), 140)
+        self.assertEqual(balance(self.ysmay, self.longing), 8)
+        self.assertEqual(balance(self.ysmay, self.ruin), 2)
+        self.assertTold(self.ysmay, "your corruption in Ruin falls by 120")
+        self.assertTold(self.ysmay, "Your Longing grows by 8. Your Ruin grows by 2.")
+        audit = Sineating.objects.get()
+        self.assertEqual((audit.resonance, audit.sinner_resonance_earned), (self.ruin, 10))
+        self.assertEqual(self.hollow(), 2)
+
+        ledger = self.cast_in_ruin()
+
+        # What she is shown of the cast: its power ledger opens on the channeled intensity.
+        self.assertEqual(ledger["entries"][0]["source_label"], "channeled intensity")
+        # Hand-worked: the cast puts its whole intensity of 50 on Ruin, 50 x (10 / 10) x (10 / 10)
+        # = 50, and she is 10 percent Abyssal, under the 50 she pays in full from, so she takes
+        # the light 10 percent: 5. The Hollow's 2 absorb part of it, so 3 reach her: 140 + 3.
+        self.assertEqual(corruption(self.ysmay, self.ruin), 143)
+        self.assertEqual(self.hollow(), 0)
+
+    def test_a_failed_roll_gives_the_remainder_to_her_feeling_and_nothing_to_a_zero_part(
+        self,
+    ) -> None:
+        self.entreat()
+
+        self.perform(self.corvin, tier="Failure")
+
+        self.assertEqual(corruption(self.ysmay, self.ruin), 140)
+        self.assertEqual(balance(self.ysmay, self.longing), 2)
+        self.assertEqual(balance(self.ysmay, self.ruin), 0)
+        self.assertTold(self.ysmay, "Your Longing grows by 2.")
+        self.assertNotTold(self.ysmay, "Your Ruin grows by")
+        audit = Sineating.objects.get()
+        self.assertEqual((audit.resonance, audit.sinner_resonance_earned), (self.ruin, 2))
 
 
 class ASineatingByTheWeb(SineatingJourneyCase):

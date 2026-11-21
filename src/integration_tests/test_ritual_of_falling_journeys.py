@@ -48,9 +48,13 @@ class _AFalling(JourneyCase):
         self.ysmay = self.make_player("Ysmay", room=self.room)
         self.sheet = self.ysmay.sheet_data
         aura = CharacterAuraFactory(character=self.sheet)
-        set_aura_split(aura, celestial="50", primal="45", abyssal="5")
+        set_aura_split(aura, celestial="56", primal="44", abyssal="0")
+        # The grants recompute the aura from what she has earned: 100 Celestial against 80
+        # Primal is 55.56 / 44.44, so Celestial leads and Primal is past the Fall's 40 percent.
+        # An even 100 / 100 would tie, and a tie reads Primal, so a Fall to Primal would be
+        # refused as "already dominant".
         grant_resonance(self.sheet, self.cele_res, 100, source=GainSource.STAFF_GRANT)
-        grant_resonance(self.sheet, self.primal_res, 100, source=GainSource.STAFF_GRANT)
+        grant_resonance(self.sheet, self.primal_res, 80, source=GainSource.STAFF_GRANT)
 
 
 class FallingByAffinityId(_AFalling):
@@ -63,7 +67,8 @@ class FallingByAffinityId(_AFalling):
         primal_row = CharacterResonance.objects.get(
             character_sheet=self.sheet, resonance=self.primal_res
         )
-        self.assertEqual(primal_row.balance, 220)
+        # Her own 80 plus Bene's 100 converted at the Fall's 1.20 (120).
+        self.assertEqual(primal_row.balance, 200)
 
     def test_an_unknown_affinity_id_is_refused_plainly(self) -> None:
         told = self.telnet(self.ysmay, "ritual Ritual of Falling target_affinity=999999")

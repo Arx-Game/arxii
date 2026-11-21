@@ -1393,6 +1393,9 @@ class ItemInstance(SharedMemoryModel):
         # the crafter as designer on every crafted item (the purge spares it, cleanup.py).
         if self.silhouette_id or self.dedicated_at is not None or self.item_styles.exists():
             return True
+        # A condition staff authored for the item (#5074) is part of its design too.
+        if self.worn_conditions.exists():
+            return True
         if self.lineage.exists():
             return True
         if self.has_facet_history:
@@ -2117,6 +2120,94 @@ class ItemStyle(ItemAttachment):
 
     def __str__(self) -> str:
         return f"{self.item_instance} ← {self.style}"
+
+
+def _effect_applies_condition(condition_id: int) -> bool:
+    """Whether any applied-condition row (a technique's, a variant's, a miracle's, a draft's)
+    names this condition template. Walks every concrete ``AbstractAppliedCondition``
+    subclass, so a new kind of applier is covered without editing this list."""
+    from django.apps import apps  # noqa: PLC0415
+
+    from world.magic.models.techniques import AbstractAppliedCondition  # noqa: PLC0415
+
+    return any(
+        model.objects.filter(condition_id=condition_id).exists()
+        for model in apps.get_models()
+        if issubclass(model, AbstractAppliedCondition)
+    )
+
+
+class ItemWornCondition(SharedMemoryModel):
+    """A condition this item puts on whoever wears it (#5074).
+
+    Staff author "this item gives its wearer this condition", optionally only to a
+    wearer attuned to a mantle level. The condition carries everything the item does
+    (check bonuses, resistances, capabilities and the properties that reach
+    applications), so gear has no capability path of its own. The wearer holds the
+    condition while the item is equipped in any slot; it ends when the item comes off
+    (``world.items.services.worn_conditions.reconcile_worn_conditions``). A plain row,
+    not an ``ItemAttachment``: nothing reads an applier, quality or time for it.
+    """
+
+    item_instance = models.ForeignKey(
+        _ITEM_INSTANCE_FK,
+        on_delete=models.CASCADE,
+        related_name="worn_conditions",
+    )
+    condition = models.ForeignKey(
+        "arxii.ConditionTemplate",
+        on_delete=models.PROTECT,
+        related_name="worn_on_items",
+        help_text=(
+            "The condition the wearer holds while this item is worn. Give it a Permanent "
+            "duration, and tick off 'can be dispelled' where it should never come off. "
+            "A technique cannot also apply it."
+        ),
+    )
+    mantle_level = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Mantle only: the condition works only for a wearer whose attunement to this "
+            "mantle has reached this level. Blank works for any wearer."
+        ),
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["item_instance", "condition"],
+                name="items_unique_worncondition_per_item",
+            ),
+            models.CheckConstraint(
+                check=models.Q(mantle_level__isnull=True) | models.Q(mantle_level__gte=1),
+                name="items_worncondition_mantle_level_positive",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.item_instance} wears {self.condition}"
+
+    def clean(self) -> None:
+        """Refuse a mantle level on a plain item or beyond the mantle's levels, and a
+        condition a technique also applies (one source per condition, #5074)."""
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.mantle_level is not None and self.item_instance_id is not None:
+            mantle = Mantle.objects.filter(item_instance_id=self.item_instance_id).first()
+            if mantle is None:
+                errors["mantle_level"] = "Only a mantle's item can name a mantle level."
+            elif self.mantle_level > mantle.max_level:
+                errors["mantle_level"] = (
+                    f"This mantle has {mantle.max_level} levels; choose one of them."
+                )
+        if self.condition_id is not None and _effect_applies_condition(self.condition_id):
+            errors["condition"] = (
+                "A technique, variant or miracle applies this condition. "
+                "Choose one that only gear gives."
+            )
+        if errors:
+            raise ValidationError(errors)
 
 
 class Outfit(SharedMemoryModel):

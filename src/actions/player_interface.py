@@ -713,13 +713,18 @@ def _combat_actions(
     # Per-technique performability filter: skip techniques the character cannot
     # currently perform (dead, or any unmet capability requirement). Combat
     # techniques per character are bounded (a handful), so a clear per-technique
-    # loop is acceptable for v1 — no batching needed.
+    # loop is acceptable for v1. What is the same for every technique (her kindling, read
+    # for the cast resonance options) is read once before the loop, never inside it.
     # Soulfray + fury declaration context (#1543). One soulfray lookup per
     # character; fury tiers are a small authored catalog; anchors are the
     # caster's consented relationships with a non-zero bond.
     from world.magic.services.anima import get_character_cast_check  # noqa: PLC0415
     from world.magic.services.capability_requirements import (  # noqa: PLC0415
         technique_performable,
+    )
+    from world.magic.services.cast_resonance_options import (  # noqa: PLC0415
+        cast_resonance_options,
+        kindling_by_resonance,
     )
     from world.magic.services.magic_skills import cast_check_type  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
@@ -729,6 +734,7 @@ def _combat_actions(
     )
     from world.magic.services.technique_personalization import hold_display_name  # noqa: PLC0415
     from world.magic.services.ultimates import readied_ultimate  # noqa: PLC0415
+    from world.magic.specialization.services import active_alt_self_resonance  # noqa: PLC0415
 
     # The readied Audere ultimate (if any) joins the known-technique list for
     # this one declaration window -- it never becomes a CharacterTechnique row
@@ -754,6 +760,13 @@ def _combat_actions(
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
 
     lethal = ctx.participant.encounter.is_lethal if isinstance(ctx, CombatRoundContext) else True
+    # Her kindling is the same for every technique: read it once, in this round when there is one.
+    kindling = kindling_by_resonance(
+        sheet, resolution=ctx if isinstance(ctx, CombatRoundContext) else None
+    )
+    # Her worn alternate self's resonance is the default every technique's picker leads with:
+    # read it once, with the kindling, not once per technique (#5231).
+    alt_resonance = active_alt_self_resonance(sheet)
     result: list[PlayerAction] = []
     # #5125: the Primum lines of one gift in this room, read once for all its techniques.
     lines_cache: dict = {}
@@ -797,6 +810,21 @@ def _combat_actions(
                 soulfray_warning=soulfray_warning,
                 available_fury_tiers=fury_tiers,
                 eligible_fury_resonances=eligible_fury_resonances,
+                # A Strike names no resonance, so a technique that enchants one is always worked
+                # in the default resonance and offers no options (#5231).
+                cast_resonance_options=(
+                    ()
+                    if technique.enchants_strike
+                    else tuple(
+                        cast_resonance_options(
+                            character,
+                            technique,
+                            sheet=sheet,
+                            kindling=kindling,
+                            alt_resonance=alt_resonance,
+                        )
+                    )
+                ),
                 is_ultimate=technique.is_ultimate,
                 cast_preview=_cast_preview(
                     character, technique, lethal=lethal, lines_cache=lines_cache
@@ -1432,6 +1460,7 @@ def _blink_entries(
         reach_for_strength,
         turn_movement_sources,
     )
+    from world.combat.services.movement_use import gear_condition_with_cost  # noqa: PLC0415
     from world.combat.services.reactions import FREE_USE, movement_use_cost  # noqa: PLC0415
     from world.magic.services.soulfray import get_soulfray_warning  # noqa: PLC0415
 
@@ -1444,7 +1473,10 @@ def _blink_entries(
     met, reasons = context.move_met, [] if context.move_met else [context.move_reason]
     for movement in turn_movement_sources(character, CreatureTraversal.BLINKS):
         cost = movement_use_cost(character, movement, in_fight=in_fight)
-        warning = stage_warning if movement.technique_id is not None else None
+        spends_anima = movement.technique_id is not None or gear_condition_with_cost(
+            character, movement
+        )
+        warning = stage_warning if spends_anima else None
         free = cost in (FREE_USE, "0 anima")  # noqa: STRING_LITERAL - a zero-cost cast
         reach = reach_for_strength(movement.standing_strength)
         for place in blink_landings(character, reach):

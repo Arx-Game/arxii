@@ -52,6 +52,9 @@ def hard_delete_item_instance(item_instance: ItemInstance) -> None:
 
     Used by both the destruction-at-0-charges path (#509) and the time-based
     soft-delete cleanup (#1025). Caller owns the transaction."""
+    from world.items.services.worn_conditions import release_worn_conditions  # noqa: PLC0415
+
+    release_worn_conditions(item_instance)
     item_instance.ownership_events.all().delete()
     if item_instance.game_object_id is not None:
         item_instance.game_object.delete()  # CASCADE removes the ItemInstance row

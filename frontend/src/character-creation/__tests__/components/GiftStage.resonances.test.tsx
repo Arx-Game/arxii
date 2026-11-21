@@ -6,7 +6,7 @@
  * useResonances runs for real and only apiFetch is stubbed, by URL.
  */
 
-import { screen, within } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { vi } from 'vitest';
 import { apiFetch } from '@/evennia_replacements/api';
 import { GiftStage } from '../../components/GiftStage';
@@ -49,10 +49,13 @@ const served = [
     affinity_name: 'Primal',
     description: 'The pull of deep water.',
     codex_entry_id: null,
+    color_hex: '#3A7CA5',
   },
 ];
 
 beforeEach(() => {
+  // jsdom has no canvas: the aura draws nothing, the step still renders.
+  vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue(null);
   vi.mocked(apiFetch).mockImplementation(async (url: string) =>
     url === '/api/magic/resonances/'
       ? ({ ok: true, json: () => Promise.resolve(served) } as Response)
@@ -61,7 +64,7 @@ beforeEach(() => {
 });
 
 describe('GiftStage Resonance step (#4665)', () => {
-  it('lists the resonances served at /api/magic/resonances/ with their affinity', async () => {
+  it('lists the Primal resonances served at /api/magic/resonances/ as cards', async () => {
     const draft = createMockDraft({
       selected_path: mockPath,
       selected_tradition: mockTradition,
@@ -70,10 +73,9 @@ describe('GiftStage Resonance step (#4665)', () => {
     renderWithCharacterCreationProviders(
       <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
     );
-    const list = await screen.findByRole('list', { name: 'Resonances' });
-    expect(await within(list).findByText('Tidecall')).toBeInTheDocument();
-    expect(within(list).getByText('Primal')).toBeInTheDocument();
-    expect(within(list).getByText('The pull of deep water.')).toBeInTheDocument();
+    const card = await screen.findByRole('button', { name: /Tidecall/ });
+    expect(card).toHaveTextContent('The pull of deep water.');
+    expect(card).not.toHaveTextContent('Primal');
     expect(apiFetch).toHaveBeenCalledWith('/api/magic/resonances/');
   });
 });

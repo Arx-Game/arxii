@@ -52,6 +52,7 @@ from world.combat.models import (
     ThreatPool,
 )
 from world.conditions.serializers import (
+    GEAR_SOURCE_CONTEXT_KEY,
     CompulsionSerializer,
     ConditionInstanceSerializer,
     serialize_compulsion_summary,
@@ -140,7 +141,10 @@ def _serialize_active_conditions(
         if not can_view_hidden:
             qs = qs.filter(condition__is_visible_to_others=True)
         instances = list(qs.order_by("-condition__display_priority"))
-    return ConditionInstanceSerializer(instances, many=True, context=context).data
+    # A worn item's name shows only to those who may see hidden conditions (the owner, GM,
+    # staff), never to another participant (#5074).
+    shown = {**context, GEAR_SOURCE_CONTEXT_KEY: can_view_hidden}
+    return ConditionInstanceSerializer(instances, many=True, context=shown).data
 
 
 def _audere_state(

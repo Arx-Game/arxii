@@ -552,7 +552,9 @@ class CombatEncounterViewSet(ModelViewSet):
         )
         rows = ConditionInstance.objects.filter(
             not_suppressed, target_id__in=object_ids
-        ).select_related("condition", "condition__category", "current_stage")
+        ).select_related(
+            "condition", "condition__category", "current_stage", "source_item__template"
+        )
         by_object_id: dict[int, list[ConditionInstance]] = {}
         for row in rows:
             by_object_id.setdefault(row.target_id, []).append(row)

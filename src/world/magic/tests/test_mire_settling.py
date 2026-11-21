@@ -14,7 +14,6 @@ set and the spec's traces, never read back from the code:
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.test import TestCase, override_settings
 
@@ -242,9 +241,11 @@ class AbsolvingAndCondemningTheMire(MireSettlingCase):
         self.carry(self.ysmay_side, 108)
         self.reflect(self.ysmay_side, ReflectionChoice.ABSOLVE)
 
-        # The reward of 40 is earned at 150%, so 60 grows, and the line must say 60.
-        with patch("world.magic.services.drift.earn_rate_percent", return_value=150):
-            result = self.settle()
+        # The reward of 40 is earned in Tide at its affinity's 150%, so 60 grows, and the line must
+        # say 60.
+        self.primal_affinity.earn_rate_percent = 150
+        self.primal_affinity.save()
+        result = self.settle()
 
         self.assertIn("Your Tide grows by 60.", result.lines[0])
         self.assertEqual(ResonanceGrant.objects.get(source=GainSource.MIRE_PURIFIED).amount, 60)

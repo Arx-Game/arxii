@@ -54,11 +54,23 @@ class StartingAuraAtCharacterCreation(FinalizationTestMixin, JourneyCase):
         cls.staff = AccountFactory(is_staff=True)
         cls.celestial, cls.primal, cls.abyssal = ensure_canonical_affinities()
 
-    def _character_made_picking(self, first_name: str, affinity: Affinity) -> ObjectDB:
-        """Finalize a draft whose Gift resonance is of ``affinity``; the character made."""
+    def _character_made_picking(
+        self, first_name: str, affinity: Affinity, *, outward: Affinity | None = None
+    ) -> ObjectDB:
+        """Finalize a draft whose Gift resonance is of ``affinity``; the character made.
+
+        With ``outward`` the draft also holds one Celestial or Abyssal pick of that affinity,
+        the single second pick creation allows (#5231): six points on the first, four on it.
+        """
         self.account = self.staff
         self.resonance = ResonanceFactory(affinity=affinity)
         draft = self._create_base_draft(first_name=first_name)
+        if outward is not None:
+            draft.draft_data["gift_resonance_weights"] = [
+                {"resonance_id": self.resonance.pk, "weight": 6},
+                {"resonance_id": ResonanceFactory(affinity=outward).pk, "weight": 4},
+            ]
+            draft.save(update_fields=["draft_data"])
         added = self.api(self.staff).post(
             f"/api/character-creation/drafts/{draft.pk}/add-to-roster/", {}, format="json"
         )
@@ -78,11 +90,13 @@ class StartingAuraAtCharacterCreation(FinalizationTestMixin, JourneyCase):
         self.assertEqual(_shares(payload), {"Primal": Decimal(100)})
         self.assertEqual(payload["dominant_affinity"], "Primal")
 
-    def test_an_abyssal_pick_starts_wholly_abyssal(self) -> None:
-        character = self._character_made_picking("Corin", self.abyssal)
+    def test_an_abyssal_second_pick_starts_the_aura_primal_with_an_abyssal_share(self) -> None:
+        # Creation refuses a wholly Abyssal start (a Primal feeling is required, #5231), so the
+        # Abyssal pick rides beside one: 6 and 4 of the 10 points give 60 / 40.
+        character = self._character_made_picking("Corin", self.primal, outward=self.abyssal)
         payload = self._aura_payload(character)
-        self.assertEqual(_shares(payload), {"Abyssal": Decimal(100)})
-        self.assertEqual(payload["dominant_affinity"], "Abyssal")
+        self.assertEqual(_shares(payload), {"Primal": Decimal(60), "Abyssal": Decimal(40)})
+        self.assertEqual(payload["dominant_affinity"], "Primal")
 
     def test_granting_resonance_moves_the_dominant_affinity_the_api_shows(self) -> None:
         character = self._character_made_picking("Wren", self.primal)
@@ -165,6 +179,8 @@ class AuraAffinityAtTheAcademy(_AcademyCourseCase):
                 # required fields a browser posts with their current values.
                 "claim_verb": self.dawn.claim_verb,
                 "earn_rate_percent": self.dawn.earn_rate_percent,
+                # The kindled boost (#5231) is a required percentage like the rates beside it.
+                "kindled_boost_percent": self.dawn.kindled_boost_percent,
                 "learn_rate_percent": self.dawn.learn_rate_percent,
                 "ritual_partner_fatigue": self.dawn.ritual_partner_fatigue,
                 # The page carries the affinity's kindling situations inline (#5124); a

@@ -586,6 +586,7 @@ describe('ThreadPullPicker — payer per thread (#5123)', () => {
     affordable: balance >= 3,
     effects,
     level_read: 3,
+    stronger: false,
   });
   const mixed = makeThread({
     id: 1,

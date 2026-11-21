@@ -53,6 +53,19 @@ supersedes ADR-0287 in part.
 none, so the qualities line shows nothing there until staff add them (the walkthrough is
 on #5241; the Required content page lists them as "Per-feature Appearance distinctions").
 
+## Built (2026-11-21, #5231: creation asks what gives a character strength)
+
+The Gift stage's Resonance step replaces the weighted collection of resonances (#5123) with one Primal pick, the
+feeling that gives the character strength, and at most one Celestial or Abyssal pick for what she does to others.
+`resonance_weights_error` refuses a list with no Primal pick ("Pick the feeling that gives you strength."), more
+than one ("Pick one feeling."), or a second pick that is not Celestial or Abyssal ("Pick one resonance for what
+you do to others, or none."); a draft saved under the old rule reads the stage incomplete. The step is
+`StrengthStep` (three questions, the cards with each resonance's `color_hex`, one slider that splits the creation
+points, and `AuraSwirl` drawing the aura as one swirling mass) and it renders whole from the start; fifteen
+`gift_strength_*` CG explanation keys hold its words. A stored list that breaks the rule shows nothing chosen. An even
+split is Primal. Staff's Grant magic is unchanged. Journey: `test_strength_in_creation_journeys.py`. Staff owe each
+resonance a colour (it starts grey).
+
 ## Built (2026-11-17, #5178: one Background box on Final Touches)
 
 Character creation asks for the character's history once. The owner ruled that a text box
