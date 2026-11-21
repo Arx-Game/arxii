@@ -39,6 +39,7 @@ import {
   Marginalia,
   Note,
   RecordRail,
+  type RecordRow,
   stageEyebrow,
 } from '../folio';
 import { useGoalDomains } from '../goals';
@@ -359,6 +360,15 @@ function awardLabel(points: number): string {
   return `Awards ${points} CG ${points === 1 ? 'point' : 'points'}`;
 }
 
+/**
+ * The side panel's Enemy row (#5255): present only for a draft a held card asks an enemy
+ * of, and blank until the enemy is named.
+ */
+function enemyRailRows(asked: boolean, line: string | undefined, award: number): RecordRow[] {
+  if (!asked) return [];
+  return [{ label: 'Enemy', value: line ? `${line} · ${awardLabel(award)}` : undefined }];
+}
+
 /** Which offer the draft's enemy pick is, if any (by kind, group id and name). */
 function offerFor(enemy: DraftEnemy | null, offers: EnemyOffer[]): EnemyOffer | undefined {
   if (!enemy) return undefined;
@@ -675,14 +685,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             label: 'Goals',
             value: `${goals.length} goals, ${usedPoints} of ${BASE_GOAL_POINTS} points`,
           },
-          ...(enemyAsked
-            ? [
-                {
-                  label: 'Enemy',
-                  value: enemyLine ? `${enemyLine} · ${awardLabel(enemyAward)}` : undefined,
-                },
-              ]
-            : []),
+          ...enemyRailRows(enemyAsked, enemyLine, enemyAward),
           record.points,
         ]}
         ledger={stageEyebrow(draft.current_stage)}
