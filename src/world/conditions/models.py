@@ -1297,11 +1297,13 @@ class ConditionCheckModifier(NaturalKeyMixin, ConditionOrStageEffect):
 
     def __str__(self) -> str:
         sign = "+" if self.modifier_value >= 0 else ""
-        target = (
-            f"{self.check_category.name} (category)"
-            if self.check_category_id
-            else self.check_type.name
-        )
+        # An unsaved row being refused for having no check is named too (#4587).
+        if self.check_category_id:
+            target = f"{self.check_category.name} (category)"
+        elif self.check_type_id:
+            target = self.check_type.name
+        else:
+            target = "no check"
         if self.stage:
             return (
                 f"{self.stage.condition.name} ({self.stage.name}): "
