@@ -5,6 +5,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { characterSheetKey } from '@/character_sheets/queries';
 import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
 import { fetchAllPages } from '@/lib/pagination';
@@ -59,7 +60,7 @@ function useFaceInvalidation(characterSheetId: number | null) {
     if (characterSheetId !== null) {
       qc.invalidateQueries({ queryKey: personaKeys.forCharacterSheet(characterSheetId) });
       qc.invalidateQueries({ queryKey: alternateSelfKeys.forCharacterSheet(characterSheetId) });
-      qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] });
+      qc.invalidateQueries({ queryKey: characterSheetKey(characterSheetId) });
     }
     qc.invalidateQueries({ queryKey: ['my-roster-entries'] });
     if (storageChanged) {
