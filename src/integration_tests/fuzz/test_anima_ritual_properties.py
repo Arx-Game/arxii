@@ -69,6 +69,7 @@ from world.magic.models import (
 )
 from world.magic.models.kindling import AnimaRitualResonanceAward
 from world.magic.models.soulfray import AnimaRitualBudgetAward
+from world.magic.serializers import AnimaRitualEndorsementSerializer
 from world.magic.services.anima import provision_player_anima_ritual
 from world.magic.services.anima_ritual_action import start_partner_ritual
 from world.magic.services.anima_ritual_attunement import (
@@ -1291,6 +1292,71 @@ class Endorsement(_Bonded):
                     self.assertEqual(self.outward_grants(sheet, outward), [])
         finally:
             self._set_failed_endorsement_percent(original)
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        split=aura_splits(),
+        old_outward_key=st.sampled_from(OUTWARD_KEYS),
+        award=st.integers(1, 60),
+    )
+    def test_an_attunement_while_asked_leaves_the_request_on_its_old_picks(
+        self, split: tuple[int, int, int], old_outward_key: str, award: int
+    ) -> None:
+        """Maintainer: "keeps feeding it until she changes the ritual." (the ritual the partner
+        was asked about is the one she asked with).
+
+        Given a partner who has been asked to take part (the request waiting), then the performer
+        attunes the ritual to a different Primal pick and a different outward pick (free here:
+        no costs, no check), then the partner accepts and the roll lands on Success: the Primal
+        grant goes to the old Primal pick, the outward amount held for the partner is the outward
+        part of the award and is held for the old outward pick, the partner's question names the
+        old outward pick in lower case, and endorsing grants the old outward pick that amount and
+        grants nothing to the new picks.
+        """
+        new_outward_key = next(key for key in OUTWARD_KEYS if key != old_outward_key)
+        sheet, ritual = self.performer(
+            split=split, picks=[("primal 1", 1), (old_outward_key, 1)], anima=0
+        )
+        for key in ("primal 2", new_outward_key):
+            CharacterResonanceFactory(character_sheet=sheet, resonance=self.resonances[key])
+        self.author("Success", budget=0, award=award)
+        partner = self.partner("pc")
+        scene = self.scene_with(sheet, partner.character_sheet)
+        request = start_partner_ritual(
+            scene=scene, initiator_persona=sheet.primary_persona, target_persona=partner
+        )
+        self.assertEqual(request.status, ActionRequestStatus.PENDING)
+
+        attune_anima_ritual(sheet, self.resonances["primal 2"], self.resonances[new_outward_key])
+        self.assertEqual(
+            stored_picks(ritual),
+            (self.resonances["primal 2"].pk, self.resonances[new_outward_key].pk),
+        )
+        with force_check_outcome(self.outcomes["Success"]):
+            respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+
+        old_outward = self.resonances[old_outward_key]
+        expected = outward_part_of(award, split, old_outward_key)
+        primal_expected = award - expected
+        self.assertEqual(
+            self.primal_grants(sheet),
+            [(self.resonances["primal 1"].pk, primal_expected)] if primal_expected else [],
+        )
+        if expected == 0:
+            self.assertEqual(self.outward_grants(sheet, old_outward), [])
+            return
+        row = AnimaRitualPerformance.objects.get(ritual=ritual)
+        stored = stored_performance(ritual)
+        self.assertEqual(stored["outward_resonance_id"], old_outward.pk)
+        self.assertEqual(stored["outward_amount_pending"], expected)
+        self.assertEqual(
+            AnimaRitualEndorsementSerializer(row).data["prompt"],
+            f"{sheet.primary_persona.name}'s ritual reached for your "
+            f"{old_outward.name.lower()}. Did it take hold of you?",
+        )
+        answer_anima_ritual(partner.character_sheet, row, endorse=True)
+        self.assertEqual(self.outward_grants(sheet, old_outward), [expected])
+        self.assertEqual(self.outward_grants(sheet, self.resonances[new_outward_key]), [])
 
     def assert_refused(self, answerer: CharacterSheet, row: AnimaRitualPerformance) -> None:
         """An endorse by ``answerer`` is refused (nothing is waiting for them)."""
