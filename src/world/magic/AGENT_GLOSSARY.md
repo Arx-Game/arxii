@@ -418,6 +418,15 @@ tier's authored default. A Crossing's prepared text is consumed (linked to the
 _Avoid_: custom vision, override text, patron text (patron variant is a narrower,
 pre-existing layer underneath this one).
 
+**Anima ritual** (#5280):
+A character's personal ritual, a scene with a partner that is never performed alone. It rolls a check, recovers anima and eases Soulfray on a success (Partial Success and above), and grows up to two resonances in her aura: a Primal one for how it feels to her and a Celestial or Abyssal one for how it reaches the partner, split by the two affinities' settled shares. Anyone who plays it is asked for a partner; an NPC partner needs a GM. _Avoid_: solo ritual, the anima refill.
+
+**Endorsement (of a ritual)** (#5280):
+A player partner's answer to an **Anima ritual** that reached for their resonance: Endorse grows the performer's outward resonance by the held part, Withhold grants nothing, and an unanswered question lapses when the scene finishes. After a failed roll an endorsement grants `AnimaConfig.failed_endorsement_percent` of the outward part of the Success tier's award. Not a `PoseEndorsement`. `AnimaRitualPerformance.endorsement` holds where it stands. _Avoid_: consent (that is the partner's agreeing to take part, before the roll), approval.
+
+**Attunement** (#5280):
+The paid way to change an **Anima ritual**'s two resonance picks after their free first setup, for the anima, resonance and action point costs staff set on `AnimaConfig`, and a check when staff set one. A failed roll keeps the costs and the old picks. Not the Touchstone attunement of an item. _Avoid_: re-pick, edit.
+
 **Endorsement**:
 A peer's recognition of another character's pose (`PoseEndorsement`) that settles at the weekly tick to grant Resonance from a shared pot. A legitimate, live Resonance-award mechanism alongside scene-entry and style-presentation endorsements.
 

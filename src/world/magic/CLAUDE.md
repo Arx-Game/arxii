@@ -257,23 +257,61 @@ technique-design step or a magical-research unlock — never on-demand) is a def
 `needs-design` follow-up; the web `author` endpoint and `PlayerPolicy` seam are already wired.
 
 ### Anima Recovery
-- `Ritual` (execution_kind=SCENE_ACTION) + `RitualCheckConfig` sidecar - Personalized recovery ritual (stat + skill + resonance + check_type)
+- `Ritual` (execution_kind=SCENE_ACTION) + `RitualCheckConfig` sidecar - Personalized recovery ritual (stat + skill + check_type + two resonance picks, `primal_resonance` and `outward_resonance`)
 - `AnimaRitualPerformance` - Historical record of ritual performances
 
 **Note:** During character creation, the magic stage uses the starter Gift/Technique
 catalog pick (see below). CG finalization also provisions the anima ritual itself —
-`_finalize_anima_ritual` (`world.character_creation.services`) calls
+the magic writer's `_anima` step (`world.character_creation.magic_writer`) calls
 `provision_player_anima_ritual` at finalize, not post-CG. The player-authored `Ritual` row
 (SCENE_ACTION) carries check configuration via its `RitualCheckConfig` sidecar (stat, skill,
-resonance, check_type); as of #2971, that `resonance` is also populated at CG time — resolved
-from the heaviest `gift_resonance_weights` pick the gift-thread grant leads with (see "GIFT
-thread substrate" below) — since the anima ritual IS the character's magical identity.
+primal_resonance, outward_resonance, check_type); as of #5280 the two picks are populated at CG
+time from the heaviest Primal and the heaviest Celestial or Abyssal pick (`MagicPicks`), since the
+anima ritual IS the character's magical identity.
+
+**The ritual is never performed alone (#5280, ADR-5280).** `perform_anima_ritual` is gone. Every door
+(persona menu, Rituals page, the ritual's own name, web dispatch, bare `ritual anima`) is refused with
+"Name someone else to take part in your ritual."; the one way in is `start_partner_ritual`, which
+`check_partner_ritual` guards (an NPC partner needs a GM: `partner_is_run_by_a_gm`; refused in combat).
+- **Two picks.** A Primal one (how it feels to her) and a Celestial or Abyssal one (the part of the
+  award her partner decides by endorsing), each from the resonances she holds. Held means a
+  `CharacterResonance` row, which persists when her aura share falls. The first setup is free
+  (`set_up_anima_ritual_resonances`); after that they are locked. A pick stays on the ritual until
+  changed even if it leaves her held list, and pays nothing while she does not hold it.
+- **The split.** `ritual_succeeded` (`success_level >= 0`) is the one success boundary: a Partial
+  Success pays its own tier's anima budget and `AnimaRitualResonanceAward`; Failure and Critical
+  Failure recover no anima, ease no Soulfray and grow no Primal resonance. `ritual_earning_parts`
+  splits the award by the two affinities' settled aura shares. The part paid to the outward pick is
+  the award times the outward affinity's settled share divided by the sum of the Primal and outward
+  shares, rounded down; the part paid to the Primal pick is the rest; when both shares are 0 the
+  award splits in half (the outward part rounded down); a lone pick gets the whole award. A pick
+  whose share is exactly 0 beside a non-zero one is paid 0. A pick keeps paying while she holds the
+  resonance, however small its share. A part pays nothing when the performer does not hold that
+  resonance, which happens when a pick has left her held list.
+- **The ritual is the character's.** `get_character_anima_ritual` and `anima_ritual_open_in_scene`
+  read `character_scene_action_rituals(character_id)`: the SCENE_ACTION ritual her roster entry has a
+  `CharacterRitualKnowledge` row for (creation writes it beside the ritual), never one her player's
+  account authored, so two characters one player plays each have their own, and a character nobody
+  is logged in as still has hers (#5280). The telnet name lookup, the sheet's magic section and the
+  edit permission (`IsRitualAuthorOrStaff`: a player acting as the character who knows it, `known_ritual_ids_for_request`; the Rituals list
+  shows the selected character's anima ritual only) read the same row. `author_account` only records who created it (the content export skips such rows).
+- **The answer.** A player partner endorses or withholds the outward part
+  (`answer_anima_ritual`; `AnimaRitualPerformance.endorsement`, `outward_amount_pending`). After a failed
+  roll, `AnimaConfig.failed_endorsement_percent` of the Success tier's outward part is held. An NPC
+  partner gives it on the roll alone. `lapse_pending_endorsements` runs when a scene finishes (and
+  when a battle ends its backing scene); a late answer is refused.
+- **Attunement.** `attune_anima_ritual` changes the picks after the free setup for the costs on
+  `AnimaConfig` (`attunement_anima_cost`, `attunement_resonance_cost`, `attunement_ap_cost`, an optional
+  check). It checks only the picks it changes, refuses in combat and before any picks are set, spends
+  action points as its check, never refuses for lack of anima (a shortfall is Soulfray), and a failed
+  roll keeps the costs and the old picks.
 
 **Anima/severity budget per outcome tier (#1207):** `anima._budget_for_outcome` reads
 `AnimaRitualBudgetAward` (`world/magic/models/soulfray.py`) — a per-`CheckOutcome`-tier
 authored row — instead of the old `SoulfrayConfig.ritual_budget_critical_success/_success/
-_partial/_failure` fields. Every one of the 5 canonical tiers must have a row; a missing
-one raises rather than silently granting 0 anima.
+_partial/_failure` fields. Every success tier (Partial Success and above) must have a row; a
+missing one raises rather than silently granting 0 anima. A failed roll recovers nothing (#5280), so
+the Failure and Critical Failure rows are never read.
 
 ### Standalone Casting (#1306)
 
@@ -1415,7 +1453,7 @@ Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
   trickle fires only when the room has a positive cascade-row LocationValueModifier
   with key_type=RESONANCE matching a claimed resonance)
 - `Interaction.pose_kind` CharField - STANDARD / ENTRY / DEPARTURE
-- `GainSource` TextChoice - POSE_ENDORSEMENT / SCENE_ENTRY / ROOM_RESIDENCE / OUTFIT_ITEM / STAFF_GRANT
+- `GainSource` TextChoice - POSE_ENDORSEMENT / SCENE_ENTRY / ROOM_RESIDENCE / OUTFIT_ITEM / STAFF_GRANT (and more since; `ANIMA_RITUAL` is the anima ritual's two grants, #5280: the Primal part on the roll, the outward part on the partner's endorsement or, for an NPC partner, on the roll)
 
 **Residence declaration + room aura tagging, live end-to-end (#2036):** the daily
 residence-trickle gate above was mechanically inert until #2036 wired every write path —

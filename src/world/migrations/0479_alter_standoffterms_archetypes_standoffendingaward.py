@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0474_worn_conditions")]
+    dependencies = [("arxii", "0478_alter_animaconfig_failed_endorsement_percent")]
 
     operations = [
         migrations.AlterField(

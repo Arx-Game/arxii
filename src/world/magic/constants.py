@@ -1037,6 +1037,16 @@ AFFINITY_PRIMAL = "Primal"
 AFFINITY_ABYSSAL = "Abyssal"
 
 
+class AnimaRitualEndorsement(models.TextChoices):
+    """Where a partner's answer to an anima ritual stands (#5280)."""
+
+    NOT_ASKED = "not_asked", "Not asked"
+    PENDING = "pending", "Pending"
+    ENDORSED = "endorsed", "Endorsed"
+    WITHHELD = "withheld", "Withheld"
+    LAPSED = "lapsed", "Lapsed"
+
+
 class FeedingTaintRole(models.TextChoices):
     """Which feeding-taint rule a CompromiseActType row stands for."""
 

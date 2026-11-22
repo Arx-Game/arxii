@@ -26,8 +26,11 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { extractErrorMessage } from '@/lib/errors';
-import { usePatchRitual } from '@/rituals/queries';
+import { useAnimaRitualChoices, usePatchRitual, useSetUpAnimaRitual } from '@/rituals/queries';
 import type { RitualWithSchema } from '@/rituals/types';
+import { AnimaRitualAttuneDialog } from './AnimaRitualAttuneDialog';
+import { AnimaRitualPillPicker } from './AnimaRitualPillPicker';
+import { affinityInkClass } from './affinityInk';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -35,6 +38,8 @@ import type { RitualWithSchema } from '@/rituals/types';
 
 export interface AnimaRitualEditDialogProps {
   ritual: RitualWithSchema;
+  /** The character whose ritual this is; the resonance picks are read and written for her. */
+  characterSheetId: number;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSuccess?: () => void;
@@ -54,8 +59,6 @@ interface FormState {
   skill_id: string;
   /** FK id for skills.Specialization — optional */
   specialization_id: string;
-  /** FK id for magic.Resonance — optional */
-  resonance_id: string;
   /** FK id for checks.CheckType */
   check_type_id: string;
   target_difficulty_level: string;
@@ -69,7 +72,6 @@ function initFormState(ritual: RitualWithSchema): FormState {
     stat_id: '',
     skill_id: '',
     specialization_id: '',
-    resonance_id: '',
     check_type_id: '',
     target_difficulty_level: '0',
   };
@@ -89,11 +91,128 @@ function isValid(form: FormState): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// The two resonance picks (#5280)
+// ---------------------------------------------------------------------------
+
+/**
+ * While the ritual has no resonance: two pill pickers and a free "Set resonances". Once set the
+ * picks are read-only and "Attune" opens the paid change.
+ */
+function AnimaRitualResonances({ characterSheetId }: { characterSheetId: number }) {
+  const { data: choices, isError, error } = useAnimaRitualChoices(characterSheetId);
+  const setUp = useSetUpAnimaRitual();
+  const [primalId, setPrimalId] = useState<number | null>(null);
+  // undefined until she picks: the outward slot starts with nothing selected, "None" included.
+  const [outwardId, setOutwardId] = useState<number | null | undefined>(undefined);
+  const [attuneOpen, setAttuneOpen] = useState(false);
+
+  if (isError) {
+    return (
+      <p role="alert" className="text-sm text-destructive" data-testid="anima-ritual-choices-error">
+        {extractErrorMessage(error, 'Failed to load your ritual resonances')}
+      </p>
+    );
+  }
+  if (!choices) return null;
+
+  if (choices.locked) {
+    return (
+      <div className="space-y-3" data-testid="anima-ritual-resonances-locked">
+        <div className="flex flex-wrap gap-4">
+          <div className="min-w-0 flex-1 basis-56">
+            <span className="block text-sm font-medium">What you feel</span>
+            <span
+              className={`mt-1 block rounded-md border border-dashed px-3 py-2 text-sm ${affinityInkClass(choices.primal_pick?.affinity_name)}`}
+            >
+              {choices.primal_pick?.name ?? 'None'}
+            </span>
+          </div>
+          <div className="min-w-0 flex-1 basis-56">
+            <span className="block text-sm font-medium">What it does to them</span>
+            <span
+              className={`mt-1 block rounded-md border border-dashed px-3 py-2 text-sm ${affinityInkClass(choices.outward_pick?.affinity_name)}`}
+            >
+              {choices.outward_pick?.name ?? 'None'}
+            </span>
+          </div>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => setAttuneOpen(true)}
+          data-testid="anima-ritual-attune-button"
+        >
+          Attune
+        </Button>
+        {attuneOpen && (
+          <AnimaRitualAttuneDialog
+            characterSheetId={characterSheetId}
+            choices={choices}
+            open={attuneOpen}
+            onOpenChange={setAttuneOpen}
+          />
+        )}
+      </div>
+    );
+  }
+
+  const setUpError = setUp.isError
+    ? extractErrorMessage(setUp.error, 'Failed to set your ritual resonances')
+    : null;
+
+  return (
+    <div className="space-y-3" data-testid="anima-ritual-resonances-unset">
+      {setUpError && (
+        <p role="alert" className="text-sm text-destructive" data-testid="anima-ritual-setup-error">
+          {setUpError}
+        </p>
+      )}
+      <div className="flex flex-wrap gap-4">
+        <AnimaRitualPillPicker
+          label="What you feel when you perform it"
+          hint="Primal resonances you hold"
+          resonances={choices.primal}
+          selectedId={primalId}
+          onSelect={setPrimalId}
+          disabled={setUp.isPending}
+          testId="setup-primal-picker"
+        />
+        <AnimaRitualPillPicker
+          label="What it does to the other person"
+          hint="Celestial and Abyssal resonances you hold"
+          resonances={choices.outward}
+          selectedId={outwardId}
+          onSelect={setOutwardId}
+          allowNone
+          disabled={setUp.isPending}
+          testId="setup-outward-picker"
+        />
+      </div>
+      <Button
+        type="button"
+        disabled={(primalId === null && !outwardId) || setUp.isPending}
+        onClick={() =>
+          setUp.mutate({
+            character_sheet_id: characterSheetId,
+            primal_resonance_id: primalId,
+            outward_resonance_id: outwardId ?? null,
+          })
+        }
+        data-testid="anima-ritual-set-resonances-button"
+      >
+        Set resonances
+      </Button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export function AnimaRitualEditDialog({
   ritual,
+  characterSheetId,
   open,
   onOpenChange,
   onSuccess,
@@ -124,7 +243,6 @@ export function AnimaRitualEditDialog({
     const checkTypeId = parseInt(form.check_type_id, 10);
     const difficulty = parseInt(form.target_difficulty_level, 10);
     const specializationId = form.specialization_id ? parseInt(form.specialization_id, 10) : null;
-    const resonanceId = form.resonance_id ? parseInt(form.resonance_id, 10) : null;
 
     patchMutation.mutate(
       {
@@ -138,7 +256,6 @@ export function AnimaRitualEditDialog({
           check_type_id: Number.isNaN(checkTypeId) ? undefined : checkTypeId,
           target_difficulty_level: Number.isNaN(difficulty) ? 0 : difficulty,
           specialization_id: Number.isNaN(specializationId) ? null : specializationId,
-          resonance_id: Number.isNaN(resonanceId) ? null : resonanceId,
         },
       },
       {
@@ -157,7 +274,7 @@ export function AnimaRitualEditDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <form onSubmit={handleSubmit}>
           <DialogHeader>
             <DialogTitle>Edit Anima Ritual</DialogTitle>
@@ -177,6 +294,8 @@ export function AnimaRitualEditDialog({
           )}
 
           <div className="mt-4 space-y-4">
+            <AnimaRitualResonances characterSheetId={characterSheetId} />
+
             {/* Name */}
             <div>
               <label htmlFor="anima-ritual-name" className="mb-1 block text-sm font-medium">
@@ -287,23 +406,6 @@ export function AnimaRitualEditDialog({
                 onChange={(e) => handleChange('specialization_id', e.target.value)}
                 disabled={patchMutation.isPending}
                 data-testid="field-specialization-id"
-                className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              />
-            </div>
-
-            {/* Resonance (optional FK id) — TODO Phase 10 */}
-            <div>
-              <label htmlFor="anima-ritual-resonance-id" className="mb-1 block text-sm font-medium">
-                Resonance ID <span className="text-xs text-muted-foreground">(optional)</span>
-              </label>
-              <input
-                id="anima-ritual-resonance-id"
-                type="number"
-                min={1}
-                value={form.resonance_id}
-                onChange={(e) => handleChange('resonance_id', e.target.value)}
-                disabled={patchMutation.isPending}
-                data-testid="field-resonance-id"
                 className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>

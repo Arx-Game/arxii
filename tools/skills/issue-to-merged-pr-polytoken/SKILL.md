@@ -157,14 +157,20 @@ and proceed without `spec:approved`. Keep the reason visible. Do not use this
 lane merely because a label looks simple.
 
 For standard/heavyweight work, write the awaiting marker outside the spec markers
-and invoke the ported `brainstorming` skill. The root agent and stakeholder
-brainstorm together to produce a product brief/PRD: users, desired outcome,
-success signal, non-goals, provenance, assumptions, 1–3 options with consequences,
-and concrete scenarios or state transitions. The agent facilitates and records
-choices; it must not silently choose product taste or priorities. Dispatch
-`intent-ambiguity-critic` and `scope-simplicity-critic` in parallel before the
-stakeholder conversation; fold their evidence into the PRD, then record the
-stakeholder ruling.
+and **run a grilling session first** (`tools/skills/grilling-session/SKILL.md`):
+the stakeholder talks, the agent asks open questions, keeps the words verbatim,
+extracts rules with quotes, plays them back as one walkthrough plus its own
+inferences, and ends with a pitch that carries no agent verdict. Never open with a
+menu of options or a drafted brief (owner ruling 2026-11-21).
+
+Once the stakeholder finds the pitch compelling, invoke the ported `brainstorming`
+skill to write the product brief/PRD from the extracted rules: users, desired
+outcome, success signal, non-goals, provenance, assumptions, and concrete
+scenarios or state transitions. Every rule cites the stakeholder's words; the
+agent's inferences sit in their own section. The agent must not silently choose
+product taste or priorities. Dispatch `intent-ambiguity-critic` and
+`scope-simplicity-critic` in parallel on the extracted rules, fold their evidence
+into the PRD, and take any new question back to the stakeholder.
 
 For visual or high-risk work, use `tools/skills/demoing-a-feature/SKILL.md` before
 technical approval. Produce two or more low-cost, read-only demo directions or screenshot variants,

@@ -496,7 +496,7 @@ Paid before effect resolution:
 
 ### 9.4 Effect
 
-Mirrors `perform_anima_ritual` (Scope 6): a check-outcome-tiered budget.
+Mirrors `apply_anima_ritual_outcome` (Scope 6; the solo `perform_anima_ritual` is gone, #5280): a check-outcome-tiered budget.
 
 ```python
 def perform_soul_tether_rescue(sineater_sheet, sinner_sheet, resonance, components):

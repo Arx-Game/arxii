@@ -24,6 +24,7 @@ from world.magic.services.technique_forms import (
 )
 from world.magic.services.technique_personalization import hold_display_name
 from world.magic.specialization.services import ALT_RESONANCE_UNSET
+from world.roster.services.npc_lending import current_player_of
 from world.scenes.action_constants import (
     ActionDelivery,
     ActionRequestStatus,
@@ -951,7 +952,8 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
         Populated only when:
         - action_key is "anima_ritual"
         - the request was accepted (resolver attached payload to action_request)
-        - the requesting user is the initiator (disguise: target sees nothing)
+        - the requesting user is the player of the initiator's character, read through the
+          roster tenure (disguise: target sees nothing)
 
         The payload is attached to action_request as a transient attribute by
         ``_resolve_anima_ritual`` to avoid a second DB query.
@@ -966,7 +968,9 @@ class EnhancedSceneActionResultSerializer(serializers.Serializer):
         request = self.context.get("request")
         if action_request is None or request is None:
             return None
-        initiator_account = action_request.initiator_persona.character_sheet.character.db_account
+        # The initiator's player is whoever holds her roster tenure: an unpuppeted character has
+        # no account on her (Evennia clears it), and her player still sees her own recovery.
+        initiator_account = current_player_of(action_request.initiator_persona.character_sheet)
         if initiator_account is None or request.user != initiator_account:
             return None
         # Suppression justified: transient side-channel stash from the anima resolver.

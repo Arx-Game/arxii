@@ -23,7 +23,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { ExternalLink, Shuffle } from 'lucide-react';
+import { ChevronDown, ChevronRight, ExternalLink, Shuffle } from 'lucide-react';
 import { urls } from '@/utils/urls';
 import { useEffect, useState } from 'react';
 import { CodexTerm } from '@/codex/components/CodexTerm';
@@ -53,7 +53,6 @@ import type {
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
 import { LifeGrids } from './lineage/LifeGrids';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
-import { LineageRecord } from './lineage/LineageRecord';
 import { cgRecord } from '../cgRecord';
 
 interface LineageStageProps {
@@ -185,7 +184,6 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
           </>
         )}
         <LifeGrids draft={draft} copy={copy} />
-        {template && <LineageRecord draft={draft} template={template} path={path} />}
       </div>
     </ChapterLeaf>
   );
@@ -569,6 +567,10 @@ export function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
     draft.draft_data.tarot_card_name ?? null
   );
   const [isReversed, setIsReversed] = useState<boolean>(draft.draft_data.tarot_reversed ?? false);
+  // The deck is 78 cards. It stays folded behind "Choose a card" (#5201, owner ruling
+  // 2026-11-18), so the draw and the surname are all that stand above the life; fold
+  // state is local and never saved.
+  const [deckOpen, setDeckOpen] = useState(false);
 
   // Sync local state when draft data changes externally
   useEffect(() => {
@@ -675,11 +677,25 @@ export function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
         </CardContent>
       </Card>
 
-      {/* Controls: Random draw + orientation toggle */}
+      {/* Controls: the draw, the door to the deck, and the orientation toggle */}
       <div className="flex flex-wrap items-center gap-4">
         <Button onClick={handleRandomDraw} variant="outline">
           <Shuffle className="mr-2 h-4 w-4" />
           Draw Random Card
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          aria-expanded={deckOpen}
+          aria-controls="tarot-deck"
+          onClick={() => setDeckOpen((open) => !open)}
+        >
+          {deckOpen ? (
+            <ChevronDown className="mr-2 h-4 w-4" />
+          ) : (
+            <ChevronRight className="mr-2 h-4 w-4" />
+          )}
+          Choose a card
         </Button>
 
         {selectedCardName !== null && (
@@ -699,92 +715,96 @@ export function TarotNamingRitual({ draft }: TarotNamingRitualProps) {
         )}
       </div>
 
-      {/* Major Arcana */}
-      <div className="space-y-3">
-        <h4 className="text-sm font-semibold text-muted-foreground">Major Arcana</h4>
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {majorArcana.map((card) => (
-            <TarotCardItem
-              key={card.id}
-              card={card}
-              isSelected={selectedCardName === card.name}
-              isReversed={selectedCardName === card.name ? isReversed : false}
-              onSelect={() => handleSelectCard(card.name, isReversed)}
-            />
-          ))}
-        </div>
-      </div>
-
-      {/* Minor Arcana */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-muted-foreground">Minor Arcana</h4>
-          {selectedCardName !== null && (
-            <div className="flex items-center gap-2">
-              <Label htmlFor="tarot-orientation-minor" className="text-xs">
-                Upright
-              </Label>
-              <Switch
-                id="tarot-orientation-minor"
-                checked={isReversed}
-                onCheckedChange={handleToggleReversed}
-              />
-              <Label htmlFor="tarot-orientation-minor" className="text-xs">
-                Reversed
-              </Label>
+      {deckOpen && (
+        <div id="tarot-deck" className="space-y-6">
+          {/* Major Arcana */}
+          <div className="space-y-3">
+            <h4 className="text-sm font-semibold text-muted-foreground">Major Arcana</h4>
+            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {majorArcana.map((card) => (
+                <TarotCardItem
+                  key={card.id}
+                  card={card}
+                  isSelected={selectedCardName === card.name}
+                  isReversed={selectedCardName === card.name ? isReversed : false}
+                  onSelect={() => handleSelectCard(card.name, isReversed)}
+                />
+              ))}
             </div>
-          )}
-        </div>
-        {(Object.entries(minorBySuit) as [string, TarotCard[]][]).map(([suit, suitCards]) => {
-          if (suitCards.length === 0) return null;
-          const suitSurname = suitCards[0]
-            ? getSurname(suitCards[0], isReversed)
-            : suit.charAt(0).toUpperCase() + suit.slice(1);
-          return (
-            <div key={suit} className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Label className="text-sm font-medium capitalize">{suit}</Label>
-                <span className="text-xs text-muted-foreground">(Surname: {suitSurname})</span>
-              </div>
-              <div className="grid gap-1.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-                {suitCards.map((card) => {
-                  const showReversed = isReversed && card.description_reversed;
-                  const minorDesc = showReversed ? card.description_reversed : card.description;
-                  const cardElement = (
-                    <Card
-                      key={card.id}
-                      className={cn(
-                        'cursor-pointer px-3 py-2 transition-all',
-                        selectedCardName === card.name && 'ring-2 ring-primary',
-                        selectedCardName !== card.name && 'hover:ring-1 hover:ring-primary/50'
-                      )}
-                      onClick={() => handleSelectCard(card.name, isReversed)}
-                    >
-                      <p className="text-sm font-medium">{card.name}</p>
-                    </Card>
-                  );
+          </div>
 
-                  if (minorDesc) {
-                    return (
-                      <HoverCard key={card.id} openDelay={200}>
-                        <HoverCardTrigger asChild>{cardElement}</HoverCardTrigger>
-                        <HoverCardContent className="w-60">
-                          <p className="mb-1 text-xs font-semibold text-muted-foreground">
-                            {showReversed ? 'Reversed' : 'Upright'}
-                          </p>
-                          <p className="text-sm">{minorDesc}</p>
-                        </HoverCardContent>
-                      </HoverCard>
-                    );
-                  }
-
-                  return cardElement;
-                })}
-              </div>
+          {/* Minor Arcana */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="text-sm font-semibold text-muted-foreground">Minor Arcana</h4>
+              {selectedCardName !== null && (
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="tarot-orientation-minor" className="text-xs">
+                    Upright
+                  </Label>
+                  <Switch
+                    id="tarot-orientation-minor"
+                    checked={isReversed}
+                    onCheckedChange={handleToggleReversed}
+                  />
+                  <Label htmlFor="tarot-orientation-minor" className="text-xs">
+                    Reversed
+                  </Label>
+                </div>
+              )}
             </div>
-          );
-        })}
-      </div>
+            {(Object.entries(minorBySuit) as [string, TarotCard[]][]).map(([suit, suitCards]) => {
+              if (suitCards.length === 0) return null;
+              const suitSurname = suitCards[0]
+                ? getSurname(suitCards[0], isReversed)
+                : suit.charAt(0).toUpperCase() + suit.slice(1);
+              return (
+                <div key={suit} className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Label className="text-sm font-medium capitalize">{suit}</Label>
+                    <span className="text-xs text-muted-foreground">(Surname: {suitSurname})</span>
+                  </div>
+                  <div className="grid gap-1.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                    {suitCards.map((card) => {
+                      const showReversed = isReversed && card.description_reversed;
+                      const minorDesc = showReversed ? card.description_reversed : card.description;
+                      const cardElement = (
+                        <Card
+                          key={card.id}
+                          className={cn(
+                            'cursor-pointer px-3 py-2 transition-all',
+                            selectedCardName === card.name && 'ring-2 ring-primary',
+                            selectedCardName !== card.name && 'hover:ring-1 hover:ring-primary/50'
+                          )}
+                          onClick={() => handleSelectCard(card.name, isReversed)}
+                        >
+                          <p className="text-sm font-medium">{card.name}</p>
+                        </Card>
+                      );
+
+                      if (minorDesc) {
+                        return (
+                          <HoverCard key={card.id} openDelay={200}>
+                            <HoverCardTrigger asChild>{cardElement}</HoverCardTrigger>
+                            <HoverCardContent className="w-60">
+                              <p className="mb-1 text-xs font-semibold text-muted-foreground">
+                                {showReversed ? 'Reversed' : 'Upright'}
+                              </p>
+                              <p className="text-sm">{minorDesc}</p>
+                            </HoverCardContent>
+                          </HoverCard>
+                        );
+                      }
+
+                      return cardElement;
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </section>
   );
 }

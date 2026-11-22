@@ -34,6 +34,21 @@ describe('FormattedContent', () => {
     expect(el).toHaveStyle({ color: '#800000' });
   });
 
+  it('draws near-white color in the theme foreground on the light theme', () => {
+    render(<FormattedContent content="|Wwhite on white|n" />);
+    const el = screen.getByText('white on white');
+    expect(el).toHaveClass('text-foreground');
+    expect(el).not.toHaveStyle({ color: '#ffffff' });
+    expect(el.style.getPropertyValue('--segment-color')).toBe('#ffffff');
+  });
+
+  it('draws near-black color in the theme foreground on the dark theme', () => {
+    render(<FormattedContent content="|Xblack on black|n" />);
+    const el = screen.getByText('black on black');
+    expect(el).toHaveClass('dark:text-foreground');
+    expect(el.style.getPropertyValue('--segment-color')).toBe('#000000');
+  });
+
   it('renders link as <a> with correct attributes', () => {
     render(<FormattedContent content="visit https://example.com now" />);
     const link = screen.getByText('https://example.com');

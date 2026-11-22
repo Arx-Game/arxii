@@ -21,6 +21,7 @@ from world.magic.factories import (
     RitualCheckConfigFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
+    teach_ritual,
 )
 from world.magic.models import Technique
 from world.magic.models.rituals import Ritual
@@ -261,6 +262,7 @@ class ResolveCastCheckTests(TestCase):
         config = RitualCheckConfigFactory(ritual=ritual)
         self.sheet.character.db_account = account
         self.sheet.character.save(update_fields=["db_account"])
+        teach_ritual(ritual, self.sheet)
         technique = TechniqueFactory(gift=self.gift, action_template=self.template)
 
         cast = resolve_cast_check(self.sheet.character, technique)

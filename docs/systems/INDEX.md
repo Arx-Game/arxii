@@ -325,10 +325,19 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     latent provisioning at CG + `gift_resonances_for` (the four cast sites; the thread's
     resonances in row order, #5123).
   - **Anima / rituals:** `CharacterAnima`, the personal anima ritual (a SCENE_ACTION
-    `Ritual`; performed through `PerformRitualAction`, web Perform button and
-    telnet `ritual anima`, #4451), the ritual with a partner (#5181: `start_partner_ritual`, `resolve_ritual_request`,
-    `apply_ritual_bond`, `AnimaRitualResonanceAward`, `GainSource.ANIMA_RITUAL`, `Affinity.ritual_partner_fatigue`; telnet
-    `ritual anima <partner>`; `PersonaMenu.anima_ritual_available`; journey `test_anima_ritual_partner_journeys`),
+    `Ritual`, never performed alone since #5280: the web dispatch, the bare verb and the
+    ritual's own name all refuse with "Name someone else to take part in your ritual."), the ritual
+    with a partner (#5181, #5280, ADR-5280: `start_partner_ritual`, `check_partner_ritual`,
+    `resolve_ritual_request`, `ritual_succeeded`, `ritual_earning_parts`, `apply_ritual_bond`,
+    `AnimaRitualResonanceAward`, `GainSource.ANIMA_RITUAL`, `Affinity.ritual_partner_fatigue`; telnet
+    `ritual anima <partner>`; `PersonaMenu.anima_ritual_available`), its two resonance picks
+    (`RitualCheckConfig.primal_resonance` and `outward_resonance`; `anima_ritual_choices`,
+    `set_up_anima_ritual_resonances`; `/api/magic/anima-ritual/`), the partner's answer
+    (`AnimaRitualPerformance.endorsement`, `answer_anima_ritual`, `lapse_pending_endorsements`,
+    `EndorseAnimaRitualAction`; `/api/magic/anima-ritual-endorsements/`; telnet `ritual endorse` and
+    `ritual withhold`), and attunement (`attune_anima_ritual`, `AttuneAnimaRitualAction`,
+    `AnimaConfig.attunement_*`; telnet `ritual attune`); journeys `test_anima_ritual_partner_journeys`,
+    `test_attuning_the_anima_ritual_journeys`,
     `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
     `TechniqueOutcomeModifier`. `ANIMA_BANDS` + `anima_band_for(current, maximum)`
     (`constants.py`, PLACEHOLDER labels pending Apostate rewrite) derive the
@@ -892,7 +901,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `get_character_cast_check(character)` (`services/anima.py`) — resolves the
     per-character CheckType for cast resolution.
     `get_character_anima_ritual(character)` (`services/anima.py`) — retrieves the
-    character's personal SCENE_ACTION `Ritual` (their anima ritual).
+    character's personal SCENE_ACTION `Ritual` (their anima ritual): the one her roster
+    entry knows (`CharacterRitualKnowledge`), never her account's (#5280);
+    `character_scene_action_rituals(character_id)` is the shared query.
     `provision_player_anima_ritual(...)` (`services/anima.py`) — updated to point
     `RitualCheckConfig.check_type` at the per-character check so ritual and technique
     casts roll the same personal check.

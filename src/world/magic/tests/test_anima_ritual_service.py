@@ -1,7 +1,8 @@
-"""Service tests for perform_anima_ritual (Scope 6 Phase 8, updated Phase 7).
+"""Service tests for apply_anima_ritual_outcome (Scope 6 Phase 8, retargeted in #5280).
 
-Tests are grouped by scenario. The _scene_participant gate is patched to
-return True unless a test specifically exercises the gate. SoulfrayConfig
+The anima ritual is never done alone, so the roll and its gates belong to the partner
+ritual (``check_partner_ritual``, ``resolve_ritual_request``); these tests apply a rolled
+outcome row and check what it did to anima and Soulfray. SoulfrayConfig
 and ConditionTemplate rows are created in setUp because they are singletons
 queried with .first() / .get(name=...).
 
@@ -12,8 +13,6 @@ the Ritual to the character's account via author_account.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory
@@ -23,12 +22,7 @@ from world.conditions.factories import (
     SoulfrayTemplateFactory,
 )
 from world.magic.constants import RitualExecutionKind
-from world.magic.exceptions import (
-    CharacterEngagedForRitual,
-    NoRitualConfigured,
-    RitualAlreadyPerformedThisScene,
-    RitualScenePrerequisiteFailed,
-)
+from world.magic.exceptions import RitualAlreadyPerformedThisScene
 from world.magic.factories import (
     CharacterAnimaFactory,
     RitualCheckConfigFactory,
@@ -37,29 +31,39 @@ from world.magic.factories import (
 )
 from world.magic.models.anima import AnimaRitualPerformance
 from world.magic.models.soulfray import AnimaRitualBudgetAward
-from world.magic.services.anima import perform_anima_ritual
-from world.mechanics.factories import CharacterEngagementFactory
+from world.magic.services.anima import apply_anima_ritual_outcome
 from world.scenes.factories import SceneFactory
 from world.traits.factories import CheckOutcomeFactory
+from world.traits.models import CheckOutcome
 
 
-def _make_check_result(success_level: int) -> MagicMock:
-    """Build a mock CheckResult with a real CheckOutcome row."""
-    outcome = CheckOutcomeFactory(
+def _outcome(success_level: int) -> CheckOutcome:
+    """A real CheckOutcome row at ``success_level``."""
+    return CheckOutcomeFactory(
         name=f"Outcome_sl_{success_level}_{id(object())}",
         success_level=success_level,
     )
-    result = MagicMock()
-    result.outcome = outcome
-    result.success_level = success_level
-    return result
+
+
+def _perform(sheet, ritual, outcome, scene):
+    """Apply a rolled ``outcome`` to ``sheet``'s ritual with a partner, as an accepted request
+    does after the roll (the roll itself is ``resolve_ritual_request``'s, covered by the
+    journeys)."""
+    return apply_anima_ritual_outcome(
+        ritual=ritual,
+        outcome=outcome,
+        scene=scene,
+        character_sheet=sheet,
+        partner_sheet=CharacterSheetFactory(),
+    )
 
 
 def _make_ritual_for_sheet(sheet):
     """Create a SCENE_ACTION Ritual + sidecar for the given character sheet.
 
     Sets character.db_account if not already set, then creates the ritual
-    with author_account pointing to that account.
+    with author_account pointing to that account and the knowledge row that makes it
+    the character's own (#5280).
     """
     character = sheet.character
     if character.db_account is None:
@@ -71,25 +75,10 @@ def _make_ritual_for_sheet(sheet):
         service_function_path="",
         flow=None,
         author_account=character.db_account,
+        known_by=sheet,
     )
     RitualCheckConfigFactory(ritual=ritual)
     return ritual
-
-
-# Patch target: source module where perform_check is defined
-_PERFORM_CHECK_PATH = "world.checks.services.perform_check"
-# Patch target for scene gate
-_SCENE_PARTICIPANT_PATH = "world.magic.services.anima._scene_participant"
-
-
-class NoRitualConfiguredTests(TestCase):
-    """Gate: character has no anima_ritual configured."""
-
-    def test_no_ritual_raises(self) -> None:
-        sheet = CharacterSheetFactory()
-        scene = SceneFactory(is_active=True)
-        with self.assertRaises(NoRitualConfigured):
-            perform_anima_ritual(character_sheet=sheet, scene=scene)
 
 
 class CritNoSoulfrayTests(TestCase):
@@ -109,17 +98,11 @@ class CritNoSoulfrayTests(TestCase):
         self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_crit_no_soulfray_anima_goes_to_max(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=2)
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=10
-        )
+    def test_crit_no_soulfray_anima_goes_to_max(self) -> None:
+        outcome = _outcome(2)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=10)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         self.anima.refresh_from_db()
         self.assertEqual(self.anima.current, 10)
@@ -127,7 +110,6 @@ class CritNoSoulfrayTests(TestCase):
         self.assertEqual(result.anima_recovered, 7)  # 10 - 3
         self.assertFalse(result.soulfray_resolved)
         self.assertIsNone(result.soulfray_stage_after)
-        mock_scene.assert_called()
 
 
 class CritWithSoulfrayTests(TestCase):
@@ -152,17 +134,11 @@ class CritWithSoulfrayTests(TestCase):
         )
         self.scene = SceneFactory(is_active=True)
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_crit_with_soulfray_severity_paid_down_anima_force_refilled(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=2)
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=10
-        )
+    def test_crit_with_soulfray_severity_paid_down_anima_force_refilled(self) -> None:
+        outcome = _outcome(2)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=10)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         # Crit budget=10, cost_per_point=2: can reduce 5 severity points, but only 2 exist
         # After 2 reductions: budget = 10 - 4 = 6 remaining
@@ -171,7 +147,6 @@ class CritWithSoulfrayTests(TestCase):
         self.assertEqual(self.anima.current, 10)
         self.assertEqual(result.severity_reduced, 2)
         self.assertTrue(result.soulfray_resolved)
-        mock_scene.assert_called()
 
 
 class SuccessWithSoulfrayTests(TestCase):
@@ -196,17 +171,11 @@ class SuccessWithSoulfrayTests(TestCase):
         )
         self.scene = SceneFactory(is_active=True)
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_success_with_soulfray_severity_reduced_partial_anima_refill(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=1)
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=6
-        )
+    def test_success_with_soulfray_severity_reduced_partial_anima_refill(self) -> None:
+        outcome = _outcome(1)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=6)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         # Success budget=6, cost_per_point=2: can reduce 3 severity points (cost=6)
         # Budget exhausted after 3 reductions → 0 left for anima
@@ -216,7 +185,6 @@ class SuccessWithSoulfrayTests(TestCase):
         self.assertEqual(self.anima.current, 2)
         self.assertEqual(result.anima_recovered, 0)
         self.assertFalse(result.soulfray_resolved)
-        mock_scene.assert_called()
 
 
 class PartialWithHighSoulfrayTests(TestCase):
@@ -245,17 +213,11 @@ class PartialWithHighSoulfrayTests(TestCase):
         )
         self.scene = SceneFactory(is_active=True)
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_partial_high_soulfray_small_severity_reduction_leftover_anima(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=0)
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=3
-        )
+    def test_partial_high_soulfray_small_severity_reduction_leftover_anima(self) -> None:
+        outcome = _outcome(0)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=3)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         # Partial budget=3, cost_per_point=2 (guard: budget >= cost_per_point):
         #   iteration 1: budget(3) >= 2 → reduce, budget=1
@@ -267,11 +229,12 @@ class PartialWithHighSoulfrayTests(TestCase):
         self.assertEqual(self.anima.current, 2)
         self.assertEqual(result.anima_recovered, 1)
         self.assertFalse(result.soulfray_resolved)
-        mock_scene.assert_called()
+        # Partial Success is a success at its own tier (maintainer ruling 2026-11-22).
+        self.assertTrue(result.performance.was_successful)
 
 
 class FailureNoSoulfrayTests(TestCase):
-    """Failure outcome with no Soulfray: small anima refill."""
+    """Failure outcome with no Soulfray: a failed roll gives no anima."""
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
@@ -287,23 +250,17 @@ class FailureNoSoulfrayTests(TestCase):
         self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_failure_no_soulfray_small_anima_refill(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=-1)
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=1
-        )
+    def test_failure_no_soulfray_gives_no_anima(self) -> None:
+        outcome = _outcome(-1)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=1)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         self.anima.refresh_from_db()
-        self.assertEqual(self.anima.current, 1)  # failure budget = 1
-        self.assertEqual(result.anima_recovered, 1)
+        self.assertEqual(self.anima.current, 0)  # the Failure row's budget of 1 is not paid
+        self.assertEqual(result.anima_recovered, 0)
         self.assertEqual(result.severity_reduced, 0)
-        mock_scene.assert_called()
+        self.assertFalse(result.performance.was_successful)
 
 
 class ChosenPatronShareTests(TestCase):
@@ -329,36 +286,24 @@ class ChosenPatronShareTests(TestCase):
             kind=FavorAwardKind.CHOSEN_ANIMA, outcome_tier=outcome, amount=amount
         )
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_a_good_ritual_shows_what_the_patron_added(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=1)
-        outcome = mock_check.return_value.outcome
+    def test_a_good_ritual_shows_what_the_patron_added(self) -> None:
+        outcome = _outcome(1)
         AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=3)
         self.award(outcome, 5)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         self.assertEqual(result.anima_recovered, 8)
         self.assertEqual((result.patron_bonus, result.patron_name), (5, "The Tide"))
-        mock_scene.assert_called()
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_a_failure_with_no_patron_row_gets_nothing_from_the_patron(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=-1)
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=2
-        )
+    def test_a_failure_gets_nothing_from_the_patron_and_no_anima(self) -> None:
+        outcome = _outcome(-1)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=2)
+        self.award(outcome, 5)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
-        self.assertEqual((result.anima_recovered, result.patron_bonus), (2, 0))
-        mock_scene.assert_called()
+        self.assertEqual((result.anima_recovered, result.patron_bonus), (0, 0))
 
 
 class GateTests(TestCase):
@@ -378,41 +323,14 @@ class GateTests(TestCase):
         self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_engaged_character_raises(
-        self,
-        mock_check: MagicMock,
-        mock_scene: MagicMock,  # noqa: ARG002
-    ) -> None:
-        CharacterEngagementFactory(character=self.sheet)
-        with self.assertRaises(CharacterEngagedForRitual):
-            perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
-        mock_check.assert_not_called()
-        # engagement gate runs before scene gate, so _scene_participant is never called
-
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_second_ritual_same_scene_raises(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=1)
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=6
-        )
+    def test_second_ritual_same_scene_raises(self) -> None:
+        outcome = _outcome(1)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=6)
         # First call succeeds
-        perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        _perform(self.sheet, self.ritual, outcome, self.scene)
         # Second call raises
         with self.assertRaises(RitualAlreadyPerformedThisScene):
-            perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
-        mock_scene.assert_called()
-
-    @patch(_PERFORM_CHECK_PATH)
-    def test_scene_gate_raises_when_not_participant(self, mock_check: MagicMock) -> None:
-        # _scene_participant returns False (default — no roster setup)
-        with self.assertRaises(RitualScenePrerequisiteFailed):
-            perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
-        mock_check.assert_not_called()
+            _perform(self.sheet, self.ritual, outcome, self.scene)
 
 
 class PerformanceRowTests(TestCase):
@@ -432,17 +350,11 @@ class PerformanceRowTests(TestCase):
         self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_performance_row_persisted_with_accurate_fields(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
-        mock_check.return_value = _make_check_result(success_level=1)
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=6
-        )
+    def test_performance_row_persisted_with_accurate_fields(self) -> None:
+        outcome = _outcome(1)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=6)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         perf = AnimaRitualPerformance.objects.get(pk=result.performance.pk)
         self.assertEqual(perf.ritual, self.ritual)
@@ -452,11 +364,10 @@ class PerformanceRowTests(TestCase):
         self.assertEqual(perf.anima_recovered, 6)
         self.assertEqual(perf.severity_reduced, 0)
         self.assertIsNotNone(perf.outcome)
-        mock_scene.assert_called()
 
 
 class AnimaRitualBudgetGuardTests(TestCase):
-    """Spec §4.11 — perform_anima_ritual loop guard prevents overspend.
+    """Spec §4.11: the outcome applier's loop guard prevents overspend.
 
     The loop guard 'budget >= cost_per_point' ensures that when cost > 1
     the loop does not run when the remaining budget cannot pay for a full
@@ -470,11 +381,7 @@ class AnimaRitualBudgetGuardTests(TestCase):
         self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_cost_one_budget_three_three_reductions(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
+    def test_cost_one_budget_three_three_reductions(self) -> None:
         """cost=1, budget=3, severity=10 → 3 severity reductions, 0 leftover for anima.
 
         Unchanged behavior at cost=1 (current default).
@@ -486,23 +393,16 @@ class AnimaRitualBudgetGuardTests(TestCase):
             severity=10,
         )
         SoulfrayConfigFactory(ritual_severity_cost_per_point=1)
-        mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=3
-        )
+        outcome = _outcome(1)  # success → budget=3
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=3)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         # cost=1: 3 reductions consume budget exactly; 0 leftover → no anima refill
         self.assertEqual(result.severity_reduced, 3)
         self.assertEqual(result.anima_recovered, 0)
-        mock_scene.assert_called()
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_cost_two_budget_three_one_reduction_one_leftover(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
+    def test_cost_two_budget_three_one_reduction_one_leftover(self) -> None:
         """cost=2, budget=3 → 1 reduction (2 spent), 1 leftover refills anima.
 
         BEFORE the fix: loop ran while budget > 0, so:
@@ -519,23 +419,16 @@ class AnimaRitualBudgetGuardTests(TestCase):
             severity=10,
         )
         SoulfrayConfigFactory(ritual_severity_cost_per_point=2)
-        mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=3
-        )
+        outcome = _outcome(1)  # success → budget=3
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=3)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         # cost=2, budget=3: only 1 reduction (2 spent), 1 leftover → anima refill of 1
         self.assertEqual(result.severity_reduced, 1)
         self.assertEqual(result.anima_recovered, 1)
-        mock_scene.assert_called()
 
-    @patch(_SCENE_PARTICIPANT_PATH, return_value=True)
-    @patch(_PERFORM_CHECK_PATH)
-    def test_no_soulfray_full_budget_to_anima(
-        self, mock_check: MagicMock, mock_scene: MagicMock
-    ) -> None:
+    def test_no_soulfray_full_budget_to_anima(self) -> None:
         """cost=2, no soulfray instance → 0 reductions, full budget for anima.
 
         Regression guard for the no-soulfray short-circuit path; the loop
@@ -544,28 +437,11 @@ class AnimaRitualBudgetGuardTests(TestCase):
         CharacterAnimaFactory(character=self.sheet, current=0, maximum=10)
         # No ConditionInstance created for this character
         SoulfrayConfigFactory(ritual_severity_cost_per_point=2)
-        mock_check.return_value = _make_check_result(success_level=1)  # success → budget=3
-        AnimaRitualBudgetAward.objects.create(
-            outcome_tier=mock_check.return_value.outcome, budget=3
-        )
+        outcome = _outcome(1)  # success → budget=3
+        AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=3)
 
-        result = perform_anima_ritual(character_sheet=self.sheet, scene=self.scene)
+        result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         # No soulfray → 0 reductions; full budget=3 refills anima
         self.assertEqual(result.severity_reduced, 0)
         self.assertEqual(result.anima_recovered, 3)
-        mock_scene.assert_called()
-
-
-class NullCheckTypeGuardTests(TestCase):
-    """#709: a config with NULL check_type raises NoRitualConfigured, not a crash."""
-
-    def test_perform_raises_when_check_type_missing(self):
-        sheet = CharacterSheetFactory()
-        ritual = _make_ritual_for_sheet(sheet)
-        config = ritual.check_config
-        config.check_type = None
-        config.save(update_fields=["check_type"])
-        scene = SceneFactory()
-        with self.assertRaises(NoRitualConfigured):
-            perform_anima_ritual(sheet, scene)

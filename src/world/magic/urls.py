@@ -10,6 +10,8 @@ from rest_framework.routers import DefaultRouter
 from world.magic.views import (
     AcceptTechniqueOfferView,
     AffinityViewSet,
+    AnimaRitualEndorsementViewSet,
+    AnimaRitualSetupViewSet,
     ApplicablePullsView,
     AudereMajoraRespondView,
     AudereRespondView,
@@ -86,6 +88,14 @@ router.register("character-auras", CharacterAuraViewSet, basename="character-aur
 router.register("character-resonances", CharacterResonanceViewSet, basename="character-resonance")
 router.register("character-gifts", CharacterGiftViewSet, basename="character-gift")
 router.register("character-anima", CharacterAnimaViewSet, basename="character-anima")
+# #5280 - the anima ritual's two resonance picks: the choices and the free first setup
+router.register("anima-ritual", AnimaRitualSetupViewSet, basename="anima-ritual")
+# #5280 - a partner's answer to an anima ritual that reached for them
+router.register(
+    "anima-ritual-endorsements",
+    AnimaRitualEndorsementViewSet,
+    basename="anima-ritual-endorsement",
+)
 # Alterations
 router.register(
     "pending-alterations",

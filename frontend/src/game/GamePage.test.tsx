@@ -311,6 +311,15 @@ vi.mock('@/combat/components/CombatTacticalMap', () => ({
   ),
 }));
 
+// The partner's anima ritual endorsement card (#5280) loads the rituals waiting for an
+// answer in this scene; none are waiting here.
+vi.mock('@/rituals/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/rituals/api')>()),
+  fetchAnimaRitualEndorsements: vi.fn(() =>
+    Promise.resolve({ count: 0, next: null, previous: null, results: [] })
+  ),
+}));
+
 vi.mock('@/battles/queries', () => ({
   useBattleForSceneQuery: vi.fn().mockReturnValue({ data: null, isLoading: false, isError: false }),
 }));

@@ -8,24 +8,28 @@ interface EvenniaMessageProps {
   presentation?: 'terminal' | 'prose';
 }
 
-// Evennia color class mappings to Tailwind classes
+// Evennia color class mappings to Tailwind classes. The neutrals (black, the two
+// grays, white) follow the theme rather than a fixed shade (#5280): Evennia sends
+// |w (a command name, "Type |writual endorse Mara|n") as bright white, which was
+// white on white in the light theme, and |X as black, which vanished on dark.
+// Bright white is the theme's foreground in bold, so it still stands out.
 const colorMap: Record<string, string> = {
-  'color-000': 'text-gray-900', // Black
+  'color-000': 'text-foreground', // Black (|X)
   'color-001': 'text-red-700', // Dark Red
   'color-002': 'text-green-700', // Dark Green
   'color-003': 'text-yellow-600', // Dark Yellow
   'color-004': 'text-blue-700', // Dark Blue
   'color-005': 'text-purple-700', // Dark Magenta
   'color-006': 'text-cyan-700', // Dark Cyan
-  'color-007': 'text-gray-400', // Light Gray
-  'color-008': 'text-gray-600', // Dark Gray
+  'color-007': 'text-muted-foreground', // Light Gray
+  'color-008': 'text-muted-foreground', // Dark Gray (|x)
   'color-009': 'text-red-400', // Light Red
   'color-010': 'text-green-400', // Light Green
   'color-011': 'text-yellow-400', // Light Yellow
   'color-012': 'text-blue-400', // Light Blue
   'color-013': 'text-purple-400', // Light Magenta
   'color-014': 'text-cyan-400', // Light Cyan
-  'color-015': 'text-white', // White
+  'color-015': 'font-semibold text-foreground', // Bright White (|w)
 };
 
 export function EvenniaMessage({

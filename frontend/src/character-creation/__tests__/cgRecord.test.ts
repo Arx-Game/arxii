@@ -58,7 +58,12 @@ describe('cgRecord', () => {
 
   it('counts the points as spent of spent plus remaining, or as the stage shows them', () => {
     const draft = { ...mockEmptyDraft, cg_points_spent: 20, cg_points_remaining: 80 };
-    expect(cgRecord(draft).points).toEqual({ label: 'CG points', value: '20 of 100 spent' });
+    expect(cgRecord(draft).points).toEqual({
+      label: 'CG points',
+      value: '20 of 100 spent',
+      // The row the page's hover text about unspent points goes on (#5201).
+      points: true,
+    });
     expect(cgRecord(draft, { points: { spent: 35, remaining: 65 } }).points.value).toBe(
       '35 of 100 spent'
     );

@@ -966,9 +966,11 @@
 - `check_beta_reset_enabled() -> 'None' - Guard 1: the hardcoded constant. Raises ``BetaResetDisabledError`` if flipped off.`
 - `check_confirmation_phrase(typed: 'str | None') -> 'None' - Guard 3: the typed confirmation phrase must match exactly.`
 - `check_release_latch() -> 'None' - Guard 2: the one-way DB latch. Raises ``ReleaseLatchedError`` if any row exists.`
+- `deprovision_play_time_natural_weapons(sheet: 'CharacterSheet | None' = None) -> 'None' - A play-time gift that goes takes its natural weapon with it (#4898).`
 - `mark_released(*, released_by: 'AccountDB', note: 'str' = '') -> 'ReleaseLatch' - Write the one-way ``ReleaseLatch`` row. Refuses if one already exists.`
 - `preview_pristine_world_wipe() -> 'WipeReport' - Dry-run: count what ``wipe_pristine_world(execute=True)`` would delete.`
 - `refresh_legend_views() -> None - Refresh all legend materialized views concurrently.`
+- `scope_entry_for(model: 'type[Model]') -> 'ScopeEntry' - The ``SCOPE_TABLE`` entry for a provenance-filtered ``model``.`
 - `wipe_pristine_world(*, execute: 'bool' = False, confirm: 'str | None' = None, backup_verified_at: 'datetime | None' = None) -> 'WipeReport' - Dry-run (default) or execute the guarded beta-reset wipe.`
 
 
@@ -4262,6 +4264,7 @@
 - `compute_distinction_change_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' - Compute the XP cost for a sheet-update request.`
 - `compute_sheet_update_xp_cost(request_type: 'str', distinction: 'Distinction', rank: 'int') -> 'int' - Compute the XP cost for a sheet-update request.`
 - `create_sheet_update_request(character_sheet: 'CharacterSheet', request_type: 'str', *, justification: 'str', target_distinction: 'Distinction | None' = None, target_character_distinction: 'CharacterDistinction | None' = None, submitted_by: 'object | None' = None, origin: 'str' = DistinctionOrigin.UNLOCK_PURCHASE) -> 'SheetUpdateRequest' - Create a PENDING SheetUpdateRequest.`
+- `delete_character_distinction(character_distinction: 'CharacterDistinction') -> 'None' - Tear a held distinction down and delete the row, reconciling what hangs off it.`
 - `deny_sheet_update_request(request: 'SheetUpdateRequest', gm_account: 'object') -> 'None' - Deny a PENDING SheetUpdateRequest. No XP debit, no change.`
 - `grant_distinction(character: 'CharacterSheet', distinction: 'Distinction', *, origin: 'str', rank: 'int | None' = None, source_description: 'str' = '', feature_trait: 'FormTrait | None' = None, feature_marking: 'FormMarking | None' = None) -> 'CharacterDistinction' - Grant a Distinction, or rank one up, through the single acquisition seam (#2037).`
 - `mint_distinction_secret(character_distinction: 'CharacterDistinction', *, level: 'int | None' = None, provenance: 'str' = SecretProvenance.GM_AUTHORED, author_persona: 'Persona | None' = None, content: 'str' = '') -> 'Secret' - Relocate a distinction into a Secret, returning it (#1334).`
@@ -6085,6 +6088,8 @@
   - alignment_boon_tiers <- magic.ResonanceAlignmentBoonTier
 
 ### AnimaConfig
+**Foreign Keys:**
+  - attunement_check_type -> checks.CheckType [FK] (nullable)
 
 ### AnimaRitualBudgetAward
 **Foreign Keys:**
@@ -6096,6 +6101,8 @@
   - target_character -> character_sheets.CharacterSheet [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
   - outcome -> traits.CheckOutcome [FK] (nullable)
+  - outward_resonance -> magic.Resonance [FK] (nullable)
+  - performer_persona -> scenes.Persona [FK] (nullable)
 
 ### AnimaRitualResonanceAward
 **Foreign Keys:**
@@ -6912,7 +6919,8 @@
   - stat -> traits.Trait [FK]
   - skill -> skills.Skill [FK]
   - specialization -> skills.Specialization [FK] (nullable)
-  - resonance -> magic.Resonance [FK] (nullable)
+  - primal_resonance -> magic.Resonance [FK] (nullable)
+  - outward_resonance -> magic.Resonance [FK] (nullable)
   - check_type -> checks.CheckType [FK] (nullable)
 
 ### RitualComponentRequirement
@@ -7481,7 +7489,7 @@
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
 - `near_xp_lock_threads(character_sheet: 'CharacterSheet', within: 'int' = 100) -> 'list[ThreadXPLockProspect]' - Return threads whose dev_points are within `within` of the next XP-locked boundary.`
 - `preview_resonance_pull(character_sheet: 'CharacterSheet', tier: 'int', threads: 'list[Thread]', *, combat_encounter: 'CombatEncounter | None' = None, scene_id: 'int | None' = None, excluded_kinds: 'frozenset[str] | None' = None, target: 'ObjectDB | None' = None, technique: 'Technique | None' = None, burn_resonance: 'ResonanceModel | None' = None, payers: 'Mapping[int, ResonanceModel] | None' = None, with_options: 'bool' = True) -> 'PullPreviewResult' - Read-only preview of a resonance pull (Spec A §5.6).`
-- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str', stat: 'Trait | None' = None, skill: 'Skill | None' = None, resonance: 'Resonance | None' = None) -> 'Ritual | None' - Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
+- `provision_player_anima_ritual(account: 'AccountDB', character_sheet: 'CharacterSheet', roster_entry: 'RosterEntry', *, ritual_name: 'str', stat: 'Trait | None' = None, skill: 'Skill | None' = None, primal_resonance: 'Resonance | None' = None, outward_resonance: 'Resonance | None' = None) -> 'Ritual | None' - Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.`
 - `recompute_max_health_with_threads(character_sheet: 'CharacterSheet') -> 'int' - Recompute max_health folding in thread-derived VITAL_BONUS addends.`
 - `reconcile_ritual_knowledge(roster_entry: 'RosterEntry') -> None - Ensure CharacterRitualKnowledge rows exist for all granted rituals.`
 - `resolve_and_consume_ritual_components(*, ritual: 'Ritual', components: 'list[ItemInstance]', performer_sheet: 'CharacterSheet', resonance_context: 'Resonance | None' = None) -> 'None' - Validate and atomically consume ``ritual``'s components from ``components``.`
@@ -9814,6 +9822,7 @@
   - cohort_enrollments <- progression.CohortEnrollment
   - targeted_for_random_scene <- progression.RandomSceneTarget
   - random_scene_completed_by <- progression.RandomSceneCompletion
+  - anima_ritual_performances_given <- magic.AnimaRitualPerformance
   - poseendorsement_set <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - presentationendorsement_set <- magic.PresentationEndorsement
@@ -10078,6 +10087,7 @@
   - snapshot_skill -> skills.Skill [FK] (nullable)
   - snapshot_specialization -> skills.Specialization [FK] (nullable)
   - snapshot_resonance -> magic.Resonance [FK] (nullable)
+  - snapshot_primal_resonance -> magic.Resonance [FK] (nullable)
   - cast_resonance -> magic.Resonance [FK] (nullable)
   - snapshot_check_type -> checks.CheckType [FK] (nullable)
   - result_interaction -> scenes.Interaction [OneToOne] (nullable)
@@ -12658,7 +12668,7 @@
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
 - `intervention_cooldown_active(character) -> bool - Whether the divine intervention cooldown condition is on ``character``.`
 - `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
-- `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: divine intercession, a being stepping in for a fallen character (#4349).`
+- `maybe_fire_divine_intervention(character=None, payload=None) -> None - Trigger handler: divine intercession, a being stepping in for a fallen character (#4349).`
 - `miracle_ineligibility(character_sheet: 'CharacterSheet', miracle: 'Miracle', *, favor: int | None = None, on_cooldown: bool | None = None, cfg: 'DivineInterventionConfig | None' = None) -> str - Why ``miracle`` cannot be performed for ``character_sheet`` now, or "" when it can.`
 - `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None, trigger_event: str = 'character_incapacitated', outcome_tier: 'CheckOutcome | None' = None, context_text: str = '') -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`

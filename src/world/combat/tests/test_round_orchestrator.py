@@ -1236,7 +1236,7 @@ class OffenseCheckSourceTests(TestCase):
         from evennia.accounts.models import AccountDB
 
         from world.magic.constants import RitualExecutionKind
-        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.factories import RitualCheckConfigFactory, teach_ritual
         from world.magic.models.rituals import Ritual
 
         encounter, participant, _opponent, action, _npc_action = self._setup_encounter()
@@ -1251,6 +1251,7 @@ class OffenseCheckSourceTests(TestCase):
         config = RitualCheckConfigFactory(ritual=ritual)
         character.db_account = account
         character.save(update_fields=["db_account"])
+        teach_ritual(ritual, participant.character_sheet)
 
         captured = []
         resolve_round(encounter, offense_check_fn=self._recording_check_fn(captured))

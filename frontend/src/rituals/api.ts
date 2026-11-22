@@ -35,6 +35,21 @@ export type RitualSessionDraftRequest = components['schemas']['RitualSessionDraf
 export type RitualSessionAccept = components['schemas']['RitualSessionAccept'];
 export type RitualSessionAcceptRequest = components['schemas']['RitualSessionAcceptRequest'];
 
+export type AnimaRitualChoices = components['schemas']['AnimaRitualChoices'];
+export type AnimaRitualResonance = components['schemas']['AnimaRitualResonance'];
+export type AnimaRitualAttuned = components['schemas']['AnimaRitualAttuned'];
+export type AnimaRitualEndorsement = components['schemas']['AnimaRitualEndorsement'];
+export type PaginatedAnimaRitualEndorsementList =
+  components['schemas']['PaginatedAnimaRitualEndorsementList'];
+/** Both picks, each a resonance id or null (null leaves that slot empty). */
+export type AnimaRitualPicksBody = Omit<
+  components['schemas']['AnimaRitualAttuneRequest'],
+  'primal_resonance_id' | 'outward_resonance_id'
+> & {
+  primal_resonance_id: number | null;
+  outward_resonance_id: number | null;
+};
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -68,8 +83,6 @@ export interface AnimaRitualPatchBody {
   skill_id?: number | null;
   /** FK pk for skills.Specialization */
   specialization_id?: number | null;
-  /** FK pk for magic.Resonance */
-  resonance_id?: number | null;
   /** FK pk for checks.CheckType */
   check_type_id?: number | null;
   target_difficulty_level?: number;
@@ -94,6 +107,76 @@ export async function patchRitual(id: number, body: AnimaRitualPatchBody): Promi
   if (!res.ok) await throwApiError(res, 'Failed to update ritual');
 
   return res.json() as Promise<Ritual>;
+}
+
+// ---------------------------------------------------------------------------
+// Anima ritual picks and attunement (#5280)
+// ---------------------------------------------------------------------------
+
+const ANIMA_RITUAL_URL = '/api/magic/anima-ritual';
+const ANIMA_ENDORSEMENTS_URL = '/api/magic/anima-ritual-endorsements';
+
+/**
+ * GET /api/magic/anima-ritual/resonances/?character_sheet_id=<id>
+ * The resonances she holds for each pick, the picks now, whether they are locked, and what
+ * attuning costs.
+ */
+export async function fetchAnimaRitualChoices(
+  characterSheetId: number
+): Promise<AnimaRitualChoices> {
+  const res = await apiFetch(
+    `${ANIMA_RITUAL_URL}/resonances/?character_sheet_id=${characterSheetId}`
+  );
+  if (!res.ok) await throwApiError(res, 'Failed to load your ritual resonances');
+  return res.json() as Promise<AnimaRitualChoices>;
+}
+
+/** POST /api/magic/anima-ritual/set-up/ - writes both picks for free, once. */
+export async function setUpAnimaRitual(body: AnimaRitualPicksBody): Promise<AnimaRitualChoices> {
+  const res = await apiFetch(`${ANIMA_RITUAL_URL}/set-up/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to set your ritual resonances');
+  return res.json() as Promise<AnimaRitualChoices>;
+}
+
+/**
+ * POST /api/magic/anima-ritual/attune/ - pays to change the picks. A refusal is a 400 whose
+ * `detail` is a plain sentence, which `throwApiError` carries as the error message.
+ */
+export async function attuneAnimaRitual(body: AnimaRitualPicksBody): Promise<AnimaRitualAttuned> {
+  const res = await apiFetch(`${ANIMA_RITUAL_URL}/attune/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to attune your ritual');
+  return res.json() as Promise<AnimaRitualAttuned>;
+}
+
+/** GET /api/magic/anima-ritual-endorsements/?scene=<id> - rituals waiting for the requester. */
+export async function fetchAnimaRitualEndorsements(
+  sceneId: number
+): Promise<PaginatedAnimaRitualEndorsementList> {
+  const res = await apiFetch(`${ANIMA_ENDORSEMENTS_URL}/?scene=${sceneId}`);
+  if (!res.ok) throw new Error('Failed to load rituals waiting for your answer');
+  return res.json() as Promise<PaginatedAnimaRitualEndorsementList>;
+}
+
+/** POST /api/magic/anima-ritual-endorsements/<id>/answer/ - endorse or withhold. */
+export async function answerAnimaRitualEndorsement(
+  id: number,
+  endorse: boolean
+): Promise<{ detail: string }> {
+  const res = await apiFetch(`${ANIMA_ENDORSEMENTS_URL}/${id}/answer/`, {
+    method: 'POST',
+    headers: jsonHeaders(),
+    body: JSON.stringify({ endorse }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to answer the ritual');
+  return res.json() as Promise<{ detail: string }>;
 }
 
 // ---------------------------------------------------------------------------
