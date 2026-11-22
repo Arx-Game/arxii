@@ -218,6 +218,7 @@ class FacePlaceholderConfigAdmin(admin.ModelAdmin):
     list_display = ["__str__", "placeholder", "updated_at", "updated_by"]
     autocomplete_fields = ["placeholder"]
     readonly_fields = ["updated_at", "updated_by"]
+    fieldsets = [("Placeholder portrait", {"fields": ["placeholder", "updated_at", "updated_by"]})]
     # Shown read-only and written by save_model, never picked from a dropdown.
     large_table_widget_exempt = ["updated_by"]
 
