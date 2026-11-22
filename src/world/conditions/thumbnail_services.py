@@ -136,17 +136,18 @@ def persona_face_url(persona: "Persona") -> str:
     them can fall back to something else.
 
     A PRIMARY face that is presented while the character wears an alternate self shows that
-    self's picture, or the placeholder: never the real face (a story NPC's worn look is
-    copied onto the face's own text copy, a player character's look is its gallery's). Only
-    a presented PRIMARY face asks which self is worn, so a list of masks costs no query per
-    row; a writer of a self's picture sets its persona's copy too.
+    self's picture (when the self is tied to no mask), or the placeholder: never the real face
+    (a story NPC's worn look is copied onto the face's own text copy, a player character's
+    look is its gallery's). Only a presented PRIMARY face asks which self is worn, so a list
+    of masks costs no query per row; a writer of a self's picture sets its persona's copy too.
     """
     from world.scenes.constants import PersonaType  # noqa: PLC0415
 
     if persona.persona_type == PersonaType.PRIMARY:
         alt_self = _active_alternate_self(persona) if _is_presented(persona) else None
         if alt_self is not None:
-            if alt_self.thumbnail_id is not None:
+            # A self tied to a mask is that mask's picture, never the true face's (#4889).
+            if alt_self.thumbnail_id is not None and alt_self.persona_id is None:
                 return alt_self.thumbnail.cloudinary_url
             return placeholder_portrait_url()
     if persona.thumbnail_url:
