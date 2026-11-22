@@ -29221,8 +29221,8 @@ export interface components {
      * @description A ritual that reached for the requester's character and waits for their answer.
      *
      *     ``performer_name`` is the persona the performer wore for the ritual, ``prompt`` the
-     *     question the partner is asked, and ``partner_line`` the sentence about what the ritual does
-     *     to the partner's fatigue (blank when it does nothing).
+     *     question the partner is asked, and ``partner_line`` the sentence about what the ritual
+     *     already did to the partner's fatigue, in the past tense (blank when it did nothing).
      */
     AnimaRitualEndorsement: {
       readonly id: number;
