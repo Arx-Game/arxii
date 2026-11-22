@@ -274,6 +274,8 @@ def _crowd_opponents(scene: Scene) -> list[CombatOpponent]:
             "threat_pool",
             "voice_persona__character_sheet__character__display_data",
             "voice_persona__character_sheet__roster_entry__roster",
+            # ``persona_face_url`` asks which alternate self a voice wears (#4889).
+            "voice_persona__character_sheet__active_alternate_self__alternate_self",
         )
         .order_by("pk")
     )
@@ -374,7 +376,7 @@ def scene_cast_list(scene: Scene) -> list[CastListEntry]:
         for persona in Persona.objects.filter(
             character_sheet_id__in=[entry.character_sheet_id for entry in npc_entries],
             persona_type=PersonaType.PRIMARY,
-        )
+        ).select_related("character_sheet__active_alternate_self__alternate_self")
     }
 
     cast_list: list[CastListEntry] = []

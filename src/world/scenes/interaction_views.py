@@ -480,6 +480,8 @@ class InteractionViewSet(
             "persona__character_sheet",
             "persona__character_sheet__roster_entry",
             "persona__character_sheet__gender",  # #1109: apparent gender for anonymous sdesc
+            # #4889: ``persona_face_url`` asks which alternate self a presented face wears.
+            "persona__character_sheet__active_alternate_self__alternate_self",
             "persona",
             "scene",
             "place",
@@ -498,7 +500,9 @@ class InteractionViewSet(
             Prefetch(
                 "endorsements",
                 queryset=PoseEndorsement.objects.select_related(
-                    "endorser_sheet", "resonance"
+                    "endorser_sheet",
+                    "endorser_sheet__active_alternate_self__alternate_self",  # #4889
+                    "resonance",
                 ).prefetch_related(
                     Prefetch(
                         "endorser_sheet__personas",

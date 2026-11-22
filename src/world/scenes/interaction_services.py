@@ -837,7 +837,11 @@ def scene_entry_endorsements_for(scene: Scene | int) -> dict[int, list[SceneEntr
 
     rows = (
         SceneEntryEndorsement.objects.filter(scene=scene)
-        .select_related("endorser_sheet", "resonance")
+        .select_related(
+            "endorser_sheet",
+            "endorser_sheet__active_alternate_self__alternate_self",  # #4889: persona_face_url
+            "resonance",
+        )
         .prefetch_related(
             Prefetch(
                 "endorser_sheet__personas",
