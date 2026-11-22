@@ -63,12 +63,16 @@ You MUST work through these items in order:
 
 1. **Explore project context** — check files, docs, recent commits, `docs/adr/`,
    `AGENT_GLOSSARY_MAP.md` for canonical terms.
-2. **Ask clarifying questions** — one at a time, understand
-   purpose/constraints/success criteria and identify the decision-maker.
-3. **Build the product brief/PRD together** — state users, outcome, success
-   signal, non-goals, provenance, assumptions, options, consequences, and
-   concrete scenarios or state transitions. Mark observations, proposals, and
-   ratified decisions separately.
+2. **Run a grilling session** (`tools/skills/grilling-session/SKILL.md`) for
+   standard/heavyweight work: open prompts, the stakeholder's words kept verbatim,
+   rules extracted with quotes, played back as one walkthrough plus your
+   inferences, ending in a pitch with no verdict of your own. For lightweight work,
+   ask clarifying questions instead and identify the decision-maker.
+3. **Write the product brief/PRD from the session's rules** — users, outcome,
+   success signal, non-goals, provenance, assumptions, and concrete scenarios or
+   state transitions, each rule citing the stakeholder's words. Mark observations,
+   proposals, and ratified decisions separately, and keep your inferences in
+   their own section.
 4. **Compare concrete directions** — for visual/high-risk work, create at least
    two low-cost demo directions or screenshot variants and ask the stakeholder to
    choose or amend one; for nonvisual work, compare traces, payloads, or state
@@ -111,16 +115,15 @@ You MUST work through these items in order:
   sub-projects: what are the independent pieces, how do they relate, what order
   should they be built? Then brainstorm the first sub-project through the normal
   design flow. Each sub-project gets its own spec → plan → implementation cycle.
-- For appropriately-scoped projects, ask questions one at a time to refine the
-  idea.
-- Prefer multiple choice questions when possible, but open-ended is fine too.
-- Only one question per message — if a topic needs more exploration, break it
-  into multiple questions.
+- For appropriately-scoped projects, run the grilling session: open prompts that
+  invite the stakeholder to talk, not menus of choices. Several prompts per turn
+  are fine, because the stakeholder answers in any order and at any length.
 - Focus on understanding: purpose, constraints, success criteria, stakeholder taste,
   priorities, and decision authority. Keep the product conversation separate from
   the later engineering design.
 
-**Exploring approaches:**
+**Exploring technical approaches** (only after the product direction is settled
+by the session):
 
 - Propose 2-3 different approaches with trade-offs.
 - Present options conversationally with your recommendation and reasoning.
@@ -213,9 +216,8 @@ The agent resumes (in a later invocation) once a member has applied
 
 ## Key Principles
 
-- **One question at a time** — don't overwhelm with multiple questions.
-- **Multiple choice preferred** — easier to answer than open-ended when
-  possible.
+- **The stakeholder talks first** — open prompts and a verbatim transcript come
+  before any option menu; options are for forks the session left open.
 - **YAGNI ruthlessly** — remove unnecessary features from all designs.
 - **Explore alternatives** — always propose 2-3 approaches before settling.
 - **Incremental validation** — present design, get approval before moving on.
