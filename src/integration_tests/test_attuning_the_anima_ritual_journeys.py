@@ -243,3 +243,39 @@ class AttuningOnTheWeb(_MarasRitual):
 
         self.assertEqual(answer.status_code, status.HTTP_400_BAD_REQUEST, answer.content)
         self.assert_nothing_spent()
+
+
+class TheRitualListNamesTheTwoPicks(_MarasRitual):
+    """The Rituals page reads each anima ritual's two picks from the list, by id and by name."""
+
+    def listed_configs(self) -> dict:
+        answer = self.api(self.account_of(self.mara)).get("/api/magic/rituals/")
+        self.assertEqual(answer.status_code, status.HTTP_200_OK, answer.content)
+        body = answer.json()
+        return {row["name"]: row["check_config"] for row in body.get("results", body)}
+
+    def test_a_ritual_with_picks_names_both_and_one_with_none_reads_null(self) -> None:
+        unpicked = RitualFactory(
+            name="Unpicked Rite",
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+            hedge_accessible=True,
+        )
+        RitualCheckConfigFactory(ritual=unpicked, primal_resonance=None, outward_resonance=None)
+
+        configs = self.listed_configs()
+
+        picked = configs[self.ritual.name]
+        self.assertEqual(picked["primal_resonance_id"], self.hollow.pk)
+        self.assertEqual(picked["primal_resonance_name"], "Hollow")
+        self.assertEqual(picked["outward_resonance_id"], self.ruin.pk)
+        self.assertEqual(picked["outward_resonance_name"], "Ruin")
+        none = configs["Unpicked Rite"]
+        for field in (
+            "primal_resonance_id",
+            "primal_resonance_name",
+            "outward_resonance_id",
+            "outward_resonance_name",
+        ):
+            self.assertIsNone(none[field])
