@@ -220,12 +220,39 @@ def narrate_reactive_moment(  # noqa: PLR0913 - one moment's names and audience
     """
     from world.conditions.serializers import condition_display_name  # noqa: PLC0415
 
-    template = instance.condition
     bearer = instance.target
     source = instance.source_character
     people = [bearer] if source is None or source.pk == bearer.pk else [bearer, source]
     opponent = _opponent_of(bearer)
     fight = encounter or _fight_of(bearer, opponent)
+    names = _moment_names(people, source, opponent, bearer_name=bearer_name, attacker=attacker)
+
+    line = fill_reactive_line(authored_line(instance.condition, moment), names)
+    if line is None:
+        if not plain_fallback:
+            return
+        line = plain_reactive_line(moment, ward=condition_display_name(instance), names=names)
+    if hidden is None:
+        hidden = reactive_moment_hidden(instance)
+    _deliver_moment_line(line, people, fight, hidden=hidden)
+
+
+def _moment_names(
+    people: list[ObjectDB],
+    source: ObjectDB | None,  # noqa: OBJECTDB_PARAM - a source may be any object, an NPC included
+    opponent: CombatOpponent | None,
+    *,
+    bearer_name: str,
+    attacker: str,
+) -> dict[str, str]:
+    """The presented names a moment's line fills in: the bearer, the source and the foe.
+
+    ``people`` is the bearer, then the source when it is someone else; ``source`` is the
+    condition's source, who may be the bearer. With no source the line has no ``{source}``
+    name. A bearer or source who is a foe is named by its combat name, everyone else by the
+    face they present.
+    """
+    bearer = people[0]
     presented = presented_names(people)
     names = {BEARER: bearer_name or (opponent.name if opponent else presented[bearer.pk])}
     if source is not None:
@@ -233,15 +260,17 @@ def narrate_reactive_moment(  # noqa: PLR0913 - one moment's names and audience
         names[SOURCE] = source_opponent.name if source_opponent else presented[source.pk]
     if attacker:
         names[ATTACKER] = attacker
+    return names
 
-    line = fill_reactive_line(authored_line(template, moment), names)
-    if line is None:
-        if not plain_fallback:
-            return
-        line = plain_reactive_line(moment, ward=condition_display_name(instance), names=names)
 
-    if hidden is None:
-        hidden = reactive_moment_hidden(instance)
+def _deliver_moment_line(
+    line: str,
+    people: list[ObjectDB],
+    fight: CombatEncounter | None,
+    *,
+    hidden: bool,
+) -> None:
+    """Tell the room of ``fight`` the line, or tell ``people`` privately when hidden or unfought."""
     if fight is not None and not hidden:
         from world.combat.interaction_services import broadcast_action_outcome  # noqa: PLC0415
 

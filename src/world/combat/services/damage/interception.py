@@ -673,12 +673,8 @@ def _attempt_guardian_interpose(
             # attempted failure. Leave both budgets untouched for fallback.
             return False
 
-    if pre_payload.amount < amount_before and action is None:
-        _narrate_standing_guard(guardian, interposer, protected, pre_payload)
     if pre_payload.amount < amount_before:
-        source_action = action if action is not None else _own_round_action(guardian)
-        if source_action is not None:
-            _record_story_envoy_rescue(guardian, source_action, protected)
+        _after_guard_reduced_the_blow(guardian, interposer, protected, pre_payload, action)
 
     # Increment both budgets only after a dispatch/technique has truly started.
     # This preserves the fallback path for unavailable guardians while counting
@@ -691,6 +687,22 @@ def _attempt_guardian_interpose(
     if technique_action is None:
         _charge_interpose_fatigue(guardian, action, reactions_before=reactions_before)
     return True
+
+
+def _after_guard_reduced_the_blow(
+    guardian: CombatParticipant,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM - the guardian's own character
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM - the ward's own character
+    pre_payload: DamagePreApplyPayload,
+    action: CombatRoundAction | None,
+) -> None:
+    """What follows a guard that took some of the blow: a standing guard is told, and a
+    story envoy's rescue is recorded against the round action that did it."""
+    if action is None:
+        _narrate_standing_guard(guardian, interposer, protected, pre_payload)
+    source_action = action if action is not None else _own_round_action(guardian)
+    if source_action is not None:
+        _record_story_envoy_rescue(guardian, source_action, protected)
 
 
 def _narrate_standing_guard(
