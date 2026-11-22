@@ -14,6 +14,9 @@
  * one. On a route with no family the Family row is "Surname" and holds the surname the
  * tarot card gave, so it no longer reads "not yet chosen" after the card is drawn. The
  * surname is the server's (`draft.surname`), the same on every stage.
+ *
+ * The points row is marked `points`, and `RecordRail` gives a row so marked the page's
+ * hover text: what becomes of points left unspent (#5201, `folio/pointsHint.ts`).
  */
 import type { RecordRow } from './folio/RecordRail';
 import { resolveFamilyPath, type CharacterDraft } from './types';
@@ -59,6 +62,7 @@ export function cgRecord(draft: CharacterDraft, overrides: CgRecordOverrides = {
     points: {
       label: 'CG points',
       value: `${points.spent} of ${points.spent + points.remaining} spent`,
+      points: true,
     },
   };
 }

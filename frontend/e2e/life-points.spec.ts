@@ -126,9 +126,10 @@ test.describe('the CG points beside the life', () => {
     // And it is still showing it once the page has fetched the draft again.
     expect((await refetched).status()).toBe(200);
     await expect.poll(total).toBe(line(afterCostly));
-    await expect(
-      page.getByText(`CG points: ${budget - afterCostly} of ${budget}`, { exact: true })
-    ).toBeVisible();
+    // The panel's row is the page's one points line: the box under the life that
+    // printed "CG points: N of M" again is gone (#5201).
+    await expect(page.getByTestId('lineage-record')).toHaveCount(0);
+    await expect(page.getByText(/^CG points: \d+ of \d+$/)).toHaveCount(0);
 
     // The card the world pays for, on top of the first.
     saved = page.waitForResponse((r) => isSave(r.url()));
@@ -148,9 +149,7 @@ test.describe('the CG points beside the life', () => {
     expect((await refetched).status()).toBe(200);
     await expect.poll(total).toBe(line(afterBoth));
     await expect(ledger.locator('.row')).toHaveCount(2);
-    await expect(
-      page.getByText(`CG points: ${end.spent} of ${budget}`, { exact: true })
-    ).toBeVisible();
+    expect(await total()).toBe(`${end.spent} of ${budget} spent`);
 
     // Restart: Clear All Choices (#5146) asks first. Cancel leaves the server's life as
     // it is; confirming empties it, and the page and the server agree again.
