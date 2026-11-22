@@ -394,9 +394,8 @@ class GetCharacterCastCheckTests(TestCase):
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
 
-        # Puppet the character to the account so db_account is set,
-        # mirroring the runtime path where get_character_anima_ritual queries
-        # author_account=character.db_account.
+        # Puppet the character to the account so db_account is set, as at runtime
+        # (get_character_anima_ritual reads the character's own knowledge row, #5280).
         character.db_account = account
         character.save(update_fields=["db_account"])
 
@@ -431,7 +430,7 @@ class ResolveCastCheckTests(TestCase):
         self.assertIsNone(resolve_cast_check(self.sheet.character, templateless))
 
     def test_provisioned_personal_check_wins_over_template(self):
-        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.factories import RitualCheckConfigFactory, teach_ritual
         from world.magic.services.magic_skills import resolve_cast_check
 
         account = AccountDB.objects.create(username=f"resolve_cc_{id(self)}")
@@ -443,6 +442,7 @@ class ResolveCastCheckTests(TestCase):
         config = RitualCheckConfigFactory(ritual=ritual)
         self.sheet.character.db_account = account
         self.sheet.character.save(update_fields=["db_account"])
+        teach_ritual(ritual, self.sheet)
 
         cast_check = resolve_cast_check(self.sheet.character, self.technique)
         self.assertEqual(cast_check.check_type, config.check_type)

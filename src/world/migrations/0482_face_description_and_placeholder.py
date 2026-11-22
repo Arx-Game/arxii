@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0474_worn_conditions"),
+        ("arxii", "0481_reactive_condition_narration"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

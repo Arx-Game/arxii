@@ -1321,7 +1321,7 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         assert config.skill == self.skill
 
     def test_ritual_check_config_resonance_matches_cg_pick(self) -> None:
-        """The provisioned anima Ritual's check_config.resonance matches the CG-picked
+        """The provisioned anima Ritual's check_config.primal_resonance matches the CG-picked
         gift resonance (#2971) — the anima ritual IS the character's magical identity."""
         from world.character_creation.services import finalize_magic_data
         from world.character_sheets.factories import CharacterSheetFactory
@@ -1336,12 +1336,11 @@ class FinalizeGiftAndTechniquesTests(TestCase):
         finalize_magic_data(draft, sheet)
 
         config = RitualCheckConfig.objects.get(ritual__author_account=draft.account)
-        assert config.resonance == self.other_resonance
+        assert config.primal_resonance == self.other_resonance
 
-        # Task 1's public seam also resolves it now — mirrors the runtime path
-        # where get_character_anima_ritual queries author_account=character.db_account
-        # (db_account is set when the player puppets the finalized character, not
-        # at CG finalize time itself; test_character_cast_check.py does the same).
+        # Task 1's public seam also resolves it now, through the character's own ritual
+        # knowledge row (#5280); db_account is set as when the player puppets the finalized
+        # character (test_character_cast_check.py does the same).
         sheet.character.db_account = draft.account
         sheet.character.save(update_fields=["db_account"])
         assert anima_ritual_resonance(sheet) == self.other_resonance

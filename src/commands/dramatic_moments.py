@@ -293,6 +293,11 @@ class CmdMoment(ArxCommand):
             self.msg("No dramatic-moment types are defined.")
             return
         lines = ["|wAvailable dramatic-moment types:|n"]
-        lines.extend(f"  {mt.label} — {mt.resonance.name} ({mt.resonance_amount})" for mt in types)
+        # A type with no resonance grants the character's own (#4323).
+        lines.extend(
+            f"  {mt.label} — {mt.resonance.name if mt.resonance else 'their own resonance'}"
+            f" ({mt.resonance_amount})"
+            for mt in types
+        )
         lines.append("\nUse: moment tag <character>=<type>")
         self.msg("\n".join(lines))

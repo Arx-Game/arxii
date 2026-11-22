@@ -27,6 +27,7 @@ from unittest.mock import patch
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.db import DatabaseError
+from django.test import tag
 from django.urls import reverse
 from evennia.objects.models import ObjectDB
 
@@ -40,6 +41,7 @@ from world.codex.factories import (
     CodexSubjectFactory,
 )
 from world.codex.models import CodexEntry, CodexEntryFiling
+from world.conditions.factories import ConditionCheckModifierFactory
 from world.magic.factories import (
     CharacterTechniqueFactory,
     TechniqueFactory,
@@ -248,3 +250,20 @@ class EvenniasObjectPageKeepsTheStoredObject(RefusedAdminSaveCase):
         refetched = ObjectDB.objects.get(pk=vestry.pk)
         self.assertEqual(refetched.db_key, "The Vestry")
         self.assertEqual(refetched.db_lock_storage, stored_locks)
+
+
+class ACheckModifierWithNoCheckIsRefusedInWords(RefusedAdminSaveCase):
+    """Staff clear the check on a condition's check modifier and save."""
+
+    @tag("regression")
+    def test_the_page_says_what_is_missing_instead_of_failing(self) -> None:
+        """Regression for #4587. A check modifier saved with neither a check type nor a check
+        category is refused with the model's own sentence; the page had answered with a
+        server error, because naming the unsaved row read its missing check type."""
+        modifier = ConditionCheckModifierFactory()
+        url = reverse("admin:arxii_conditioncheckmodifier_change", args=[modifier.pk])
+        data = self.change_post(url)
+        data["check_type"] = ""
+        response = self.client.post(url, data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Exactly one of check_type or check_category must be set.")

@@ -79,7 +79,10 @@ export interface CharacterSheetMotif {
 export interface CharacterSheetAnimaRitual {
   stat: string;
   skill: string;
-  resonance: string;
+  /** The Primal resonance the ritual feeds; blank while unset. */
+  primal_resonance: string;
+  /** The Celestial or Abyssal resonance it reaches for in the partner; blank while unset. */
+  outward_resonance: string;
   description: string;
 }
 

@@ -456,7 +456,7 @@ class CommitToClashTests(TestCase):
         from evennia.accounts.models import AccountDB
 
         from world.magic.constants import RitualExecutionKind
-        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.factories import RitualCheckConfigFactory, teach_ritual
         from world.magic.models.rituals import Ritual
 
         character_sheet, _anima = self._make_character_with_anima()
@@ -471,6 +471,7 @@ class CommitToClashTests(TestCase):
         config = RitualCheckConfigFactory(ritual=ritual)
         character_sheet.character.db_account = account
         character_sheet.character.save(update_fields=["db_account"])
+        teach_ritual(ritual, character_sheet)
 
         captured = []
         from world.checks.services import perform_check as real_perform_check

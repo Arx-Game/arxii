@@ -225,9 +225,11 @@ through a graded **"Magic: Technique Cast"** `ConsequencePool`. The anima ritual
 technique casts always share the same personal check (`provision_player_anima_ritual`
 in `services/anima.py`).
 
-A player can now perform the anima ritual itself (#4451): the Perform button on its card on the
-Rituals page and telnet `ritual anima` both reach `perform_anima_ritual` through
-`PerformRitualAction`, once per scene, in the scene the character stands in.
+A player can perform the anima ritual itself (#4451, reshaped by #5280): it is never done alone, so
+the web dispatch, telnet `ritual anima` and the ritual's own name all refuse and ask
+her to name someone else; the ritual is asked of a partner through `start_partner_ritual`, once per
+scene, in the scene the character stands in (see "The anima ritual becomes a scene with a partner"
+below).
 
 Deferred to follow-up issues: optional resonance→aspect mapping for the per-character
 check (today all magic checks use the Arcana aspect).
@@ -481,7 +483,11 @@ never overwrite a staff-adjusted row.
   member of a listing Tradition (#4555; `magic.services.cg_catalog.get_technique_options`). Delegates acquisition to the same
   `charge_and_learn` core player-to-player `TechniqueTeachingOffer` accepts use — one
   seam, two front doors. A learner short of the offer's coin is refused with the price and
-  her balance before anything is charged (`TrainingFundsInsufficient`, #4523). **Great Archive self-study** is the same TRAIN shape, gated on a
+  her balance before anything is charged (`TrainingFundsInsufficient`, #4523). The trainer is never
+  present at a session, so the offer's staff-set `TrainOfferDetails.instruction_bonus` is copied onto
+  the `TechniqueProgress` meter it opens and added to every session's roll as an "Academy
+  instruction" modifier, and the self-study penalty does not apply (#2741, ADR-2741). The learning
+  roll also adds the technique's own casting skill, counted once (#2740). **Great Archive self-study** is the same TRAIN shape, gated on a
   quest-completion `Achievement`. It teaches the learner's own (Path × Gift) shared
   starter pool only — it does **not** restore an orphaned tradition's signature
   technique list; recovering a lost tradition's own curriculum is story content, not
@@ -1420,7 +1426,8 @@ authoring it leaves is listed in #5179). Built as one PR:
   resonance the ritual names in full at once (`AnimaRitualResonanceAward` by roll, plus the kindled share
   when that resonance is kindled) and moves the partner's fatigue by the affinity of that resonance
   (`Affinity.ritual_partner_fatigue`: positive takes, negative eases, zero does nothing); the partner
-  reads which before agreeing. The solo ritual still earns nothing.
+  reads which before agreeing. (Since #5280 the ritual has two picks and is never solo; see the entry
+  below.)
 - **Earn rate and learn rate.** `Affinity.earn_rate_percent` scales what a character earns and
   `Affinity.learn_rate_percent` scales technique training. The learn rate is applied by the character's
   main affinity; since #5231 the earn rate is applied by the affinity of the resonance earned, whoever earns it;
@@ -1497,3 +1504,42 @@ set the step and the anima-0 stage; both default off. Journeys in
 - Architecture references: `docs/architecture/` (power-derivation, resonance-threads,
   resonance-gain, reactive-layer-foundation, magical-alteration, non-clash-casting, …)
 - System reference: `docs/systems/magic.md`
+
+## The anima ritual becomes a scene with a partner that grows two aura resonances (#5280, ADR-5280, BUILT 2026-11-22)
+
+Built as one PR (the numbered parts were the build order):
+
+- **Never alone.** The solo ritual and `perform_anima_ritual` are gone. Every door (persona menu, the
+  Rituals page, the ritual's own name, the web dispatch, bare `ritual anima`) refuses a ritual with
+  nobody else, with "Name someone else to take part in your ritual." An NPC partner needs a GM
+  (a `GMProfile` on the player now playing it, or a scene GM); with none, "Nobody is playing that
+  character." The ritual is still refused in combat.
+- **Two picks.** `RitualCheckConfig.resonance` became `primal_resonance` and `outward_resonance`
+  (three migrations: expand, copy by affinity, contract). Creation writes the heaviest Primal and the
+  heaviest Celestial or Abyssal pick. The first setup of the picks is free (`/api/magic/anima-ritual/`);
+  after that they are locked and a pick stays until changed. Held means a `CharacterResonance` row, which
+  persists when her aura share falls, so a pick keeps paying while she holds the resonance.
+- **The split.** The award at the roll's tier splits by the two affinities' settled aura shares. The
+  part paid to the outward pick is the award times the outward share divided by the sum of the Primal
+  and outward shares, rounded down; the part paid to the Primal pick is the rest; when both shares are
+  0 the award splits in half. A share of exactly 0 beside a non-zero one is paid 0. A Partial Success counts as a success at
+  its own tier's award; a lower tier recovers no anima and grows no Primal resonance. A part pays
+  nothing when the performer no longer holds that resonance. The ritual is the character's own: it is
+  the SCENE_ACTION ritual her roster entry knows (`CharacterRitualKnowledge`), never one her player's
+  account authored for another character, and a character nobody is logged in as still has hers.
+- **The partner's answer.** A player partner endorses or withholds the outward part (after a failed roll,
+  `AnimaConfig.failed_endorsement_percent` of the Success tier's outward part is held for them to
+  endorse). An NPC partner gives it on the roll alone. Unanswered questions lapse when the scene
+  finishes, including a battle ending it, and a late answer is refused. Web card, telnet `ritual
+  endorse` / `ritual withhold`.
+- **Attunement.** After the free setup the picks change by attunement: staff-set anima, resonance and
+  action point costs and an optional check on `AnimaConfig`. It checks only the picks it changes, is
+  refused in combat and before any picks are set, spends action points as its check, never refuses for
+  lack of anima, and a failed roll keeps the costs and the old picks. Web Attune dialog, telnet
+  `ritual attune`.
+- **Journeys and properties:** `test_performing_the_anima_ritual_journeys.py`,
+  `test_anima_ritual_partner_journeys.py`, `test_attuning_the_anima_ritual_journeys.py` and
+  `fuzz/test_anima_ritual_properties.py`.
+- **Staff authoring left.** The `AnimaRitualBudgetAward` rows for Failure and Critical Failure are no
+  longer read. Staff set the attunement costs and check and `failed_endorsement_percent` (default 50);
+  none is seeded.

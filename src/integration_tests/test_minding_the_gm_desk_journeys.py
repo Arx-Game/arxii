@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from django.test import tag
 from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
@@ -525,6 +526,19 @@ class SuggestingADramaticMoment(JourneyCase):
             "There is no active scene here.", self.telnet(self.hobb, "moment suggestions")
         )
         self.assertIn("There is no active scene here.", self.telnet(self.hobb, "moment tag list"))
+
+    @tag("regression")
+    def test_the_type_list_shows_a_type_whose_grant_follows_the_characters_own(self) -> None:
+        """Regression for #4323. Staff leave a moment type's resonance blank so its grant
+        follows the character's own (the standoff ending table asks for exactly that), and
+        the GM's list of types still lists it."""
+        DramaticMomentTypeFactory(
+            label="Standoff ending (journey)", resonance=None, resonance_amount=30
+        )
+        types = strip_ansi(self.telnet(self.hobb, "moment tag list"))
+        self.assertIn("Standoff ending (journey)", types)
+        self.assertIn("their own resonance (30)", types)
+        self.assertIn("A Flourish of Steel", types)
 
     def test_the_gm_tags_a_moment_himself(self) -> None:
         self.assertIn(

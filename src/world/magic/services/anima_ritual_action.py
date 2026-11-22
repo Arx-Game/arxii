@@ -1,8 +1,8 @@
 """Anima ritual resolver registration, and the ritual with a partner (#5181).
 
 Registers the "anima_ritual" action_key with the scenes resolver registry.
-On accept, applies the check outcome via apply_anima_ritual_outcome(), then earns the
-ritual's resonance and touches the partner's fatigue via apply_ritual_bond().
+On accept, applies the check outcome via apply_anima_ritual_outcome(), then grows the ritual's
+two resonances and touches the partner's fatigue via apply_ritual_bond().
 
 A player asks a partner to take part with ``start_partner_ritual`` (the web scene-action
 create and telnet ``ritual anima <partner>`` both call it). The request is the ordinary
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from world.scenes.action_models import SceneActionRequest
     from world.scenes.models import Persona, Scene
     from world.scenes.types import EnhancedSceneActionResult
+    from world.traits.models import CheckOutcome
 
 ANIMA_RITUAL_ACTION_KEY = "anima_ritual"
 _NO_RITUAL = "You have no anima ritual to perform."
@@ -38,6 +39,7 @@ _ALREADY_PERFORMED = "You have already performed your anima ritual in this scene
 _ALREADY_ASKED = "You already have a ritual waiting for an answer in this scene."
 _NOT_TOGETHER = "You and your partner must both be in this scene, in the same place."
 _ONE_PLAYER = "You cannot perform your ritual with another character you play."
+_NOBODY_PLAYING = "Nobody is playing that character."
 
 
 def _in_scene_together(
@@ -51,21 +53,49 @@ def _in_scene_together(
     return shared is not None and shared.pk == scene.pk
 
 
+def partner_is_run_by_a_gm(
+    partner_sheet: CharacterSheet, scene: Scene, performer_sheet: CharacterSheet
+) -> bool:
+    """True when a GM writes the partner's part: the account now playing the partner has a
+    GM profile, or a participant of the scene other than the performer's own account is its GM.
+
+    The ritual reaches for the partner, so an NPC's reactions must be written by someone
+    other than the performer's own player (#5280): a scene GM who also plays the performer
+    would be feeding their own character with an NPC nobody else plays. "Now playing" is
+    ``current_player_of``: a lent NPC's borrower, else its holder.
+    """
+    from world.roster.services.npc_lending import current_player_of  # noqa: PLC0415
+
+    player = current_player_of(partner_sheet)
+    if player is not None and player.gm_profile_or_none is not None:
+        return True
+    gms = scene.participations.filter(is_gm=True)
+    performer_player = current_player_of(performer_sheet)
+    if performer_player is not None:
+        gms = gms.exclude(account=performer_player)
+    return gms.exists()
+
+
 def check_partner_ritual(
     *, initiator_persona: Persona, target_persona: Persona | None, scene: Scene
 ) -> Ritual:
     """The initiator's own anima ritual, after every refusal a request for a partner can meet.
 
+    The ritual is never done alone, so this is the one gate every door runs through.
+
     Raises:
         ValidationError: no ritual or one not set up, no partner or the performer themselves,
             a partner who is not in this scene and the same place, a partner the same account
-            plays, the ritual already performed in this scene, or already asked of someone and
-            waiting.
+            plays, a performer in combat, an NPC partner no GM runs, the ritual already
+            performed in this scene, or already asked of someone and waiting.
     """
+    from world.magic.exceptions import CharacterEngagedForRitual  # noqa: PLC0415
     from world.magic.services.anima import (  # noqa: PLC0415
         get_character_anima_ritual,
         has_performed_anima_ritual_in_scene,
     )
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
     from world.roster.services.npc_lending import played_by_one_account  # noqa: PLC0415
     from world.scenes.action_constants import ActionRequestStatus  # noqa: PLC0415
     from world.scenes.action_models import SceneActionRequest  # noqa: PLC0415
@@ -84,6 +114,12 @@ def check_partner_ritual(
         raise ValidationError(_NOT_TOGETHER)
     if played_by_one_account(sheet, partner_sheet):
         raise ValidationError(_ONE_PLAYER)
+    if CharacterEngagement.objects.filter(character_id=sheet.character.pk).exists():
+        raise ValidationError(CharacterEngagedForRitual.user_message)
+    if not is_player_character(partner_sheet) and not partner_is_run_by_a_gm(
+        partner_sheet, scene, sheet
+    ):
+        raise ValidationError(_NOBODY_PLAYING)
     if has_performed_anima_ritual_in_scene(ritual=ritual, scene=scene):
         raise ValidationError(_ALREADY_PERFORMED)
     waiting = SceneActionRequest.objects.filter(
@@ -126,20 +162,15 @@ def start_partner_ritual(
 def ritual_consent_sentence(action_request: SceneActionRequest) -> str:
     """The sentence a partner's consent prompt carries about their fatigue, or blank (#5181).
 
-    Only a ritual request names a resonance, so any other request reads blank.
+    Only a ritual request names a resonance, so any other request reads blank. The resonance
+    read is ``snapshot_resonance``, the ritual's outward pick (Celestial or Abyssal): the one
+    that reaches the partner (#5280).
     """
-    from world.magic.services.ritual_bond import (  # noqa: PLC0415
-        performer_holds,
-        ritual_partner_effect_sentence,
-    )
+    from world.magic.services.ritual_bond import ritual_partner_effect_sentence  # noqa: PLC0415
 
     if action_request.action_key != ANIMA_RITUAL_ACTION_KEY:
         return ""
-    resonance = action_request.snapshot_resonance
-    # A resonance the performer does not hold does nothing to the partner, so say nothing.
-    if not performer_holds(action_request.initiator_persona.character_sheet, resonance):
-        return ""
-    return ritual_partner_effect_sentence(resonance)
+    return ritual_partner_effect_sentence(action_request.snapshot_resonance)
 
 
 def is_templateless_ritual_request(action_request: SceneActionRequest) -> bool:
@@ -195,13 +226,13 @@ def resolve_ritual_request(action_request: SceneActionRequest) -> None:
 
 
 def apply_ritual_to_request(
-    action_request: SceneActionRequest, ritual: Ritual, outcome: object
+    action_request: SceneActionRequest, ritual: Ritual, outcome: CheckOutcome
 ) -> tuple[RitualOutcome, RitualBond | None]:
     """Apply a rolled outcome for ``action_request``: anima and Soulfray, then the bond.
 
-    The partner is the request's target. The bond (resonance earned, the partner's fatigue)
-    runs after the anima outcome, and only when there is a partner. Both are told privately
-    after commit.
+    The partner is the request's target. The bond (the two resonances earned, the partner's
+    fatigue and the question put to a player character partner) runs after the anima outcome,
+    and only when there is a partner. Both are told privately after commit.
     """
     from world.magic.services.anima import apply_anima_ritual_outcome  # noqa: PLC0415
     from world.magic.services.ritual_bond import apply_ritual_bond  # noqa: PLC0415
@@ -216,13 +247,20 @@ def apply_ritual_to_request(
             scene=action_request.scene,
             character_sheet=performer,
             partner_sheet=partner,
+            performer_persona=action_request.initiator_persona,
         )
         bond = None
         if partner is not None:
             bond = apply_ritual_bond(
-                performer, partner, ritual, outcome, action_request.snapshot_resonance
+                performer,
+                partner,
+                ritual,
+                outcome,
+                ritual_outcome.performance,
+                primal=action_request.snapshot_primal_resonance,
+                outward=action_request.snapshot_resonance,
             )
-            _tell_both(action_request, performer, partner, bond)
+            _tell_both(action_request, performer, partner, bond, ritual_outcome.anima_recovered)
     return ritual_outcome, bond
 
 
@@ -231,10 +269,15 @@ def _tell_both(
     performer: CharacterSheet,
     partner: CharacterSheet,
     bond: RitualBond,
+    anima_recovered: int,
 ) -> None:
     """Tell the performer what their ritual did and the partner what it did to them, privately,
-    once the transaction commits. The room is told nothing: the performance is the pose."""
+    once the transaction commits. A player character partner whose answer is awaited is also
+    asked the question, with how to answer it from telnet. The room is told nothing: the
+    performance is the pose."""
+    from world.magic.constants import AnimaRitualEndorsement  # noqa: PLC0415
     from world.magic.services.ritual_bond import (  # noqa: PLC0415
+        partner_endorsement_prompt,
         partner_ritual_line,
         performer_ritual_line,
     )
@@ -242,12 +285,18 @@ def _tell_both(
 
     initiator_name = action_request.initiator_persona.name
     partner_name = action_request.target_persona.name
-    performer_line = performer_ritual_line(bond, partner_name)
+    performer_line = performer_ritual_line(bond, partner_name, anima_recovered)
     if performer_line:
         send_stored_notice(performer, performer_line, ooc_note="Anima ritual")
     partner_line = partner_ritual_line(bond, initiator_name)
     if partner_line:
         send_stored_notice(partner, partner_line, ooc_note="Anima ritual")
+    if bond.endorsement == AnimaRitualEndorsement.PENDING and bond.outward_resonance is not None:
+        prompt = partner_endorsement_prompt(initiator_name, bond.outward_resonance)
+        how_to = (
+            f"Type |writual endorse {initiator_name}|n or |writual withhold {initiator_name}|n."
+        )
+        send_stored_notice(partner, f"{prompt} {how_to}", ooc_note="Anima ritual")
 
 
 def _resolve_anima_ritual(
@@ -257,25 +306,17 @@ def _resolve_anima_ritual(
     """Apply anima ritual outcome when an accepted request has action_key='anima_ritual'.
 
     Reads the Ritual from action_request.snapshot_ritual (populated at request
-    creation time). Falls back to looking up the initiator's authored SCENE_ACTION
-    Ritual when snapshot_ritual is absent (legacy requests).
+    creation time). Falls back to the initiator's own anima ritual when snapshot_ritual is
+    absent (legacy requests).
     """
-    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
-    from world.magic.models.rituals import Ritual  # noqa: PLC0415
+    from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
 
     initiator_sheet = action_request.initiator_persona.character_sheet
 
-    # Prefer the snapshot copy; fall back to live authorship lookup.
+    # Prefer the snapshot copy; fall back to the ritual the initiator knows.
     ritual = action_request.snapshot_ritual
     if ritual is None:
-        ritual = (
-            Ritual.objects.filter(
-                author_account=initiator_sheet.character.db_account,
-                execution_kind=RitualExecutionKind.SCENE_ACTION,
-            )
-            .select_related("check_config")
-            .first()
-        )
+        ritual = get_character_anima_ritual(initiator_sheet.character)
 
     if ritual is None:
         return  # silently no-op on malformed request

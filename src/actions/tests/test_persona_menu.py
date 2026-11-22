@@ -152,6 +152,7 @@ class PersonaMenuServiceTests(django.test.TestCase):
             service_function_path="",
             flow=None,
             author_account=self.viewer_account,
+            known_by=self.viewer_sheet,
         )
         RitualCheckConfigFactory(ritual=ritual, check_type=CheckTypeFactory())
         with self.assertNumQueries(1):

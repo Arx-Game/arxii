@@ -8,6 +8,7 @@
  */
 
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { LineageStage } from '../../components/LineageStage';
 import * as api from '../../api';
@@ -200,17 +201,51 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
       });
     });
 
-    it('displays major arcana card names', async () => {
+    it('keeps the deck folded until "Choose a card" is pressed (#5201)', async () => {
       seedTarotMocks();
+      const user = userEvent.setup();
 
       renderWithCharacterCreationProviders(
         <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
         { queryClient: createTestQueryClient() }
       );
 
+      // On arrival: the draw and the door to the deck, and not one of the cards.
+      const door = await screen.findByRole('button', { name: 'Choose a card' });
+      expect(door).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.getByRole('button', { name: /draw random card/i })).toBeInTheDocument();
+      expect(screen.queryByText('The Fool')).toBeNull();
+      expect(screen.queryByText('Major Arcana')).toBeNull();
+      expect(screen.queryByText('Ace of Swords')).toBeNull();
+
+      await user.click(door);
+      expect(door).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByText('The Fool')).toBeInTheDocument();
+      expect(screen.getByText('The Magician')).toBeInTheDocument();
+
+      // The same door folds it again.
+      await user.click(door);
+      expect(screen.queryByText('The Fool')).toBeNull();
+    });
+
+    it('a card chosen from the open deck is saved', async () => {
+      seedTarotMocks();
+      const user = userEvent.setup();
+
+      renderWithCharacterCreationProviders(
+        <LineageStage draft={mockDraftWithHeritage} onStageSelect={mockOnStageSelect} />,
+        { queryClient: createTestQueryClient() }
+      );
+
+      await user.click(await screen.findByRole('button', { name: 'Choose a card' }));
+      await user.click(screen.getByText('The Magician'));
       await waitFor(() => {
-        expect(screen.getByText('The Fool')).toBeInTheDocument();
-        expect(screen.getByText('The Magician')).toBeInTheDocument();
+        expect(api.updateDraft).toHaveBeenCalledWith(
+          mockDraftWithHeritage.id,
+          expect.objectContaining({
+            draft_data: expect.objectContaining({ tarot_card_name: 'The Magician' }),
+          })
+        );
       });
     });
 
@@ -222,9 +257,8 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
         { queryClient: createTestQueryClient() }
       );
 
-      await waitFor(() => {
-        expect(screen.getByText('Minor Arcana')).toBeInTheDocument();
-      });
+      await userEvent.click(await screen.findByRole('button', { name: 'Choose a card' }));
+      expect(screen.getByText('Minor Arcana')).toBeInTheDocument();
 
       expect(screen.getByText('Ace of Swords')).toBeInTheDocument();
       expect(screen.getByText('Two of Cups')).toBeInTheDocument();
@@ -316,6 +350,8 @@ describe('LineageTarot - Tarot Naming Ritual', () => {
         { queryClient: createTestQueryClient() }
       );
 
+      // The chosen card's own text is in the deck, behind its door.
+      await userEvent.click(await screen.findByRole('button', { name: 'Choose a card' }));
       await waitFor(() => {
         expect(
           screen.getByText(/recklessness, taken advantage of, inconsideration/i)

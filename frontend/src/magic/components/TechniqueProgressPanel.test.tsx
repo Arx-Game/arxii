@@ -30,6 +30,7 @@ const mockMeters = [
     points_accumulated: 4,
     total_required: 10,
     teacher_name: 'Ariel',
+    is_self_study: false,
     source_label: 'Teaching Offer',
     weekly_remaining: 30,
   },
@@ -40,6 +41,7 @@ const mockMeters = [
     points_accumulated: 8,
     total_required: 8,
     teacher_name: null,
+    is_self_study: false,
     source_label: 'Academy Training',
     weekly_remaining: null,
   },
@@ -88,7 +90,8 @@ describe('TechniqueProgressPanel', () => {
     expect(rows[0]).toHaveTextContent('30 AP left this week');
 
     expect(rows[1]).toHaveTextContent('Hollow Step');
-    expect(rows[1]).toHaveTextContent('Self-study');
+    expect(rows[1]).toHaveTextContent('Academy trainer');
+    expect(rows[1]).not.toHaveTextContent('Self-study');
   });
 
   it('scopes the meter list and mutation to the viewed character', () => {

@@ -3671,7 +3671,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="technique-training-check-type",
             label="Technique Training check type",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/technique_training.py:69 resolve_training_check()",
+            consumer="world/magic/services/technique_training.py resolve_training_check()",
             consequence=(
                 "Training a technique crashes with CheckType.DoesNotExist instead "
                 "of rolling the Technique Training check."
@@ -3933,7 +3933,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="willpower-stat-trait",
             label="Willpower stat trait",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/anima.py:393 provision_player_anima_ritual()",
+            consumer="world/magic/services/anima.py provision_player_anima_ritual()",
             consequence=(
                 "Provisioning a player's anima ritual logs a warning and skips "
                 "ritual creation entirely for that character when no explicit stat "
@@ -4892,7 +4892,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             label="Soulfray config singleton",
             tier=DependencyTier.TUNING,
             consumer=(
-                "world/magic/services/anima.py:219 apply_anima_ritual_outcome(); "
+                "world/magic/services/anima.py apply_anima_ritual_outcome(); "
                 "world/magic/services/techniques.py _get_social_safety_bonus()"
             ),
             consequence=(
@@ -6473,6 +6473,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consequence=("A revealed cause shows its name with no one-line explanation under it."),
             probe=CustomProbe(fn=_probe_standoff_cause_glosses),
             admin_model="StandoffCauseGloss",
+        ),
+        ContentDependency(
+            key="standoff-ending-awards",
+            label="Standoff ending awards",
+            tier=DependencyTier.TUNING,
+            consumer="world/standoffs/services/ending.py ending_award()",
+            consequence=(
+                "The terms that end a standoff earn no resonance, renown or legend deed of "
+                "their own; only the kindling path pays."
+            ),
+            probe=AnyRowProbe(label="StandoffEndingAward"),
+            admin_model="StandoffEndingAward",
         ),
         ContentDependency(
             key="standoff-creature-languages",

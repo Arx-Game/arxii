@@ -1070,13 +1070,14 @@ def _set_aside_for_claim(row: CharacterResonance, amount: int) -> None:
     )[0]
 
 
-def award_kindled_deeds(
+def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and its surroundings
     sheet: CharacterSheet,
     *,
     act: KindlingAct,
     outcome: CheckOutcome | None,
     resolution: object | None = None,
     mission: MissionInstance | None = None,
+    context: KindlingContext | None = None,
 ) -> list[ResonanceGrant]:
     """Earn each resonance ``act`` feeds, scaled by the roll's ``outcome`` (#5124).
 
@@ -1092,13 +1093,13 @@ def award_kindled_deeds(
     Non-player characters earn nothing.
 
     With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
-    are read. Each grant is told to the actor alone ("You earned ...") once the surrounding
-    transaction commits, through a private narrative message that reports the amount the ledger
-    recorded after the earn rate and how much was set aside. Returns the grants written.
+    are read. A caller that knows its surroundings and has no round (a standoff is a
+    negotiation, round zero) passes ``context``, which is used as it stands, a ``None``
+    resolution included. Each grant is told to the actor alone ("You earned ...") once the
+    surrounding transaction commits, through a private narrative message that reports the
+    amount the ledger recorded after the earn rate and how much was set aside. Returns the
+    grants written.
     """
-    from django.db import transaction  # noqa: PLC0415
-
-    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
     from world.roster.services.activity import is_player_character  # noqa: PLC0415
 
     if outcome is None:
@@ -1107,35 +1108,56 @@ def award_kindled_deeds(
     award = KindledDeedAward.objects.filter(outcome_tier=outcome).first()
     if award is None or not is_player_character(sheet):
         return []
-    if resolution is None and mission is None:
+    if context is None and resolution is None and mission is None:
         context = kindling_context_for(sheet)
+    if context is not None:
         resolution, mission = context.resolution, context.mission
     config = get_kindling_config()
     grants: list[ResonanceGrant] = []
     for entry in kindled_resonances(sheet, resolution=resolution, mission=mission, act=act):
-        situation = entry.strongest_situation
-        if entry.fed_tier is None or situation is None:
-            continue
-        amount = award.amount * entry.fed_tier.earn_percent // 100
-        if amount <= 0:
-            continue
-        row = grant_resonance(
-            sheet,
-            entry.resonance,
-            max(1, amount * config.instant_percent // 100),
-            source=GainSource.KINDLED_DEED,
-            kindling_situation=situation,
-            deed_label=act.label or None,
-            ledger_out=grants,
-        )
-        set_aside = amount * config.claim_percent // 100
-        if set_aside > 0:
-            _set_aside_for_claim(row, set_aside)
-        line = f"You earned {grants[-1].amount} {entry.resonance.name}."
-        if set_aside > 0:
-            line += f" {set_aside} more is waiting to be claimed."
-        transaction.on_commit(_told_of_deed(sheet, line))
+        _earn_kindled_entry(sheet, entry, award.amount, config, act, grants)
     return grants
+
+
+def _earn_kindled_entry(  # noqa: PLR0913 - the sheet, the entry and the shared earn inputs
+    sheet: CharacterSheet,
+    entry: KindledResonance,
+    award_amount: int,
+    config: KindlingConfig,
+    act: KindlingAct,
+    grants: list[ResonanceGrant],
+) -> None:
+    """Earn one kindled resonance's share of a deed and tell the actor once it commits.
+
+    Appends the grant ``grant_resonance`` writes to ``grants``. A resonance no situation fed,
+    or one whose earn rate rounds the award to 0, earns nothing.
+    """
+    from django.db import transaction  # noqa: PLC0415
+
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    situation = entry.strongest_situation
+    if entry.fed_tier is None or situation is None:
+        return
+    amount = award_amount * entry.fed_tier.earn_percent // 100
+    if amount <= 0:
+        return
+    row = grant_resonance(
+        sheet,
+        entry.resonance,
+        max(1, amount * config.instant_percent // 100),
+        source=GainSource.KINDLED_DEED,
+        kindling_situation=situation,
+        deed_label=act.label or None,
+        ledger_out=grants,
+    )
+    set_aside = amount * config.claim_percent // 100
+    if set_aside > 0:
+        _set_aside_for_claim(row, set_aside)
+    line = f"You earned {grants[-1].amount} {entry.resonance.name}."
+    if set_aside > 0:
+        line += f" {set_aside} more is waiting to be claimed."
+    transaction.on_commit(_told_of_deed(sheet, line))
 
 
 def _told_of_deed(sheet: CharacterSheet, line: str) -> Callable[[], None]:

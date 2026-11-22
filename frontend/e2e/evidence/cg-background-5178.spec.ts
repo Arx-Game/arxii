@@ -181,15 +181,16 @@ test.describe('one Background box on Final Touches replaces the life page’s te
     await openStage(page, 3);
     await expect(page.getByRole('region', { name: 'Childhood' })).toBeVisible({ timeout: 15000 });
     await expect(page.locator('.interview .stage-acc')).toHaveCount(3);
-    await page.locator('.interview .life-foot').scrollIntoViewIfNeeded();
+    await page.locator('.interview .stage-acc').last().scrollIntoViewIfNeeded();
     await page.screenshot({ path: shot('life-1920.png') });
     if (oldBuild) return;
     await expect(page.getByText('Background Notes')).toHaveCount(0);
     await expect(page.getByText(/Recent History/)).toHaveCount(0);
     await expect(page.locator('.interview .life textarea')).toHaveCount(0);
-    // Every stage is still there with its cards, and the foot line follows the last one.
+    // Every stage is still there with its cards. The life ends on the last one: the foot
+    // line this once checked for is gone (#5201).
     await expect(page.locator('.interview .stage-acc[data-open="true"]')).toHaveCount(3);
-    await expect(page.locator('.interview .life-foot')).toBeVisible();
+    await expect(page.locator('.interview .life-foot')).toHaveCount(0);
   });
 
   test('a Sleeper’s life page shows the beginning’s line and nothing to fill in', async ({

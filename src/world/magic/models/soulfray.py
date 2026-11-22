@@ -182,10 +182,11 @@ class AnimaRitualBudgetAward(OutcomeTierAward):
     _failure fields and anima.py's private _CRIT_SUCCESS_LEVEL/_SUCCESS_LEVEL/
     _PARTIAL_LEVEL constants (#1207) — those re-derived the canonical CheckOutcome
     spine instead of matching it directly, and disagreed with ritual_checks.OutcomeTier
-    about what success_level == 0 meant. Every one of the 5 canonical tiers must have
-    an authored row (unlike GangTurfReputationAward's "missing = 0" convention) —
+    about what success_level == 0 meant. Every success tier (Partial Success and above) must
+    have an authored row (unlike GangTurfReputationAward's "missing = 0" convention):
     _budget_for_outcome (anima.py) raises clearly rather than silently granting 0
-    anima on an un-seeded tier.
+    anima on an un-seeded tier. A failed roll recovers nothing (#5280), so the Failure and
+    Critical Failure rows are never read.
     """
 
     budget = models.PositiveIntegerField(

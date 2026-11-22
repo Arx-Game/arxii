@@ -1286,15 +1286,6 @@
   color: var(--cg-text-soft);
   opacity: 1;
 }
-.interview .life-foot {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 1.4rem;
-  padding-top: 0.8rem;
-  border-top: 1px solid var(--cg-hairline);
-  color: var(--cg-text-soft);
-}
 /* A grid block runs three across as cards; a one-of grid keeps its round dot. */
 .interview .stances.grid {
   display: grid;
@@ -1391,8 +1382,7 @@
 }
 .interview .life .beat-prompt,
 .interview .life .cover-box,
-.interview .life .figure,
-.interview .life .testament {
+.interview .life .figure {
   max-width: 68ch;
 }
 /* The life's cards are one across in a narrow life and widen with it (#5200). They were two
@@ -1629,35 +1619,6 @@
   color: var(--cg-accent);
   display: block;
   margin-bottom: 0.25rem;
-}
-.interview .next {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.8rem;
-}
-.interview .next button {
-  font-family: 'Cinzel', serif;
-  font-weight: 600;
-  font-size: 0.75rem;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  background: transparent;
-  color: var(--cg-accent);
-  border: 1px solid var(--cg-hairline-strong);
-  padding: 0.45rem 0.8rem;
-  cursor: pointer;
-}
-.interview .testament {
-  margin: 1.2rem 0 0;
-  padding: 1rem 1.2rem;
-  border: 1px solid var(--cg-hairline);
-  font-style: italic;
-  color: var(--cg-text-soft);
-}
-.interview .testament b {
-  font-style: normal;
-  font-weight: 500;
-  color: var(--cg-text);
 }
 /* The life's choices in the chapter's right-hand panel (#5148): every pick under its
    stage with its signed price, set as the "CG selections" rows above it are. */

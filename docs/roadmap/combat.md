@@ -704,10 +704,21 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   now end by use: a blessing's term after the real roll it fed (all roll sites and a resumed
   paused resolution, never a preview), a ward after a successful fire, a seeded marker once its
   flow has run. Proven by `src/integration_tests/test_holding_the_line_journeys.py`. **Known
-  gaps:** a successful strike-back is not narrated (only the fizzle speaks); strike-back, guard
+  gaps:** strike-back, guard
   and provoke read PC bearers/wards and NPC attackers only (no strike-back ward on an NPC or
   summon, no standing guard of an ALLY summon); staff author strike-back as a plain condition,
   there is no seeded strike-back content to load.
+
+- **Reactive conditions tell the room when they fire (#4587):** a strike back, a standing
+  guard stepping in, a provoked foe turning, a grace holding and a once-only condition being
+  spent each tell the fight's room a line staff author on the condition template
+  (`retaliation_narration`, `guard_narration`, `provoke_narration`, `grace_narration`,
+  `spent_narration`, with `{bearer}`, `{source}`, `{attacker}` filled with presented persona
+  names), else a plain system line. A hidden condition, a concealed bearer or source, and a
+  moment outside a fight go only to the bearer and the source. Proven by
+  `src/integration_tests/test_reactive_moment_narration_journeys.py`. **Known gaps:** a failed
+  guard roll and a declined guard are still silent to the room; no seeded lines (staff author
+  each in the Reactive narration fieldset of the condition template admin).
 
 - **A technique shakes enemy morale by its own amount (#4619, ADR-4619-A; slice 5 of #4573,
   the mark half is #4603):** a technique can carry one morale row (`TechniqueMoraleEffect`:
@@ -897,6 +908,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   pressing player still rolls; the target's drives and cause only set the grade. The profile
   is locked while the character stands in a standoff. Web: a panel on the sheet's Growth tab;
   telnet `standoff profile`. This completes the #4121 slice cut.
+- **Standoffs: how you settle a fight shapes your resonance and your name** - SHIPPED (#4323,
+  ADR-4323): only the terms that settle the last group pay, so a long press cannot be farmed.
+  The roll's result tier picks a staff-authored row (`StandoffEndingAward`) that names the
+  dramatic moment the ending counts as, so the character's own resonance and renown grow by the
+  result, and a witnessed ending also writes a legend deed carrying the terms' archetypes, which
+  the faction rules that read a deed's archetype then see. The same ending is a social act fed
+  to the kindling path, so a resonance another character's press kindled earns too. The room
+  reads one credit line; the resonance that grew is told to the actor alone. Two characters
+  one account plays pay each other nothing. Not built: a
+  GM confirming the pay in a GM-run standoff; `StandoffApproach.archetypes` stays unread.
 - **Spectacle breaks morale** - SHIPPED (#4147, ADR-4147, 2026-10-05): an earned display
   shakes the enemies who witness it. Audere entry, an ultimate, a Crossing, a critical
   technique (intensity and success level thresholds) and a devastating action (one action

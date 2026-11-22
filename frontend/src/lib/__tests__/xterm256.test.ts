@@ -5,6 +5,7 @@ import {
   xtermToHex,
   muColorToHex,
   hexToNearestXterm,
+  contrastGuardFor,
 } from '../xterm256';
 
 describe('XTERM_TO_HEX', () => {
@@ -95,5 +96,21 @@ describe('hexToNearestXterm', () => {
     // Should return some warm orange-ish xterm index
     expect(result).toBeGreaterThanOrEqual(0);
     expect(result).toBeLessThan(256);
+  });
+});
+
+describe('contrastGuardFor', () => {
+  it('names the theme a near-white or near-black color vanishes on', () => {
+    expect(contrastGuardFor('#ffffff')).toBe('near-white');
+    expect(contrastGuardFor('#c0c0c0')).toBe('near-white');
+    expect(contrastGuardFor('#000000')).toBe('near-black');
+    expect(contrastGuardFor('#303030')).toBe('near-black');
+  });
+
+  it('leaves every other color alone', () => {
+    expect(contrastGuardFor('#800000')).toBeNull();
+    expect(contrastGuardFor('#ff0000')).toBeNull();
+    expect(contrastGuardFor('#808080')).toBeNull();
+    expect(contrastGuardFor('not a color')).toBeNull();
   });
 });

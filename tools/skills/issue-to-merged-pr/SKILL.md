@@ -218,14 +218,24 @@ visible in the assessment. Do not use the lightweight lane merely because a labe
 looks simple.
 
 For standard or heavyweight work, write the corresponding awaiting marker outside
-the spec markers and use the collaborative brainstorming lane. The root agent and
-stakeholder produce a product brief/PRD together: users, desired outcome, success
-signal, non-goals, provenance, outcome-changing assumptions, 1–3 options with
-consequences, and concrete scenarios or state transitions. The agent facilitates
-and records decisions; it must not silently choose taste or priorities. Dispatch
-`intent-ambiguity-critic` and `scope-simplicity-critic` in parallel before the
-stakeholder conversation; fold their evidence into the PRD, then record the
-stakeholder ruling.
+the spec markers and **run a grilling session first**
+(`tools/skills/grilling-session/SKILL.md`). The stakeholder talks the design
+through and the agent asks open questions, keeps the words verbatim in a private
+transcript, extracts rules with the stakeholder's quotes beside them, plays them
+back as one walkthrough plus the agent's own inferences, and ends with a pitch
+that carries no agent verdict. Do not open with a menu of options or a drafted
+brief: that framing implies the direction is already set (owner ruling
+2026-11-21). Keep `AskUserQuestion` for a real fork left once the rules settle.
+
+Only after the session, and only once the stakeholder finds the pitch compelling,
+write the product brief/PRD from the extracted rules: users, desired outcome,
+success signal, non-goals, provenance, outcome-changing assumptions, and concrete
+scenarios or state transitions. Every rule cites the stakeholder's words; anything
+the agent inferred sits in its own section. The agent must not silently choose
+taste or priorities. Dispatch `intent-ambiguity-critic` and
+`scope-simplicity-critic` in parallel on the extracted rules, fold their evidence
+into the brief, and take any new question back to the stakeholder. #5280 is the
+worked example.
 
 For player- or staff-facing or otherwise high-risk work, use the heavyweight lane
 when the discovery assessment says alternatives need to be made visible. Invoke
@@ -457,6 +467,7 @@ do not convene a permanent council. Existing narrow reviewers take precedence:
 | Framework hook, network boundary, or changed mock/double | `mock-fidelity-reviewer` and real-boundary contract coverage |
 | Persisted player-facing outcome or audience delivery | `outcome-delivery-reviewer` |
 | Evennia typeclass row creation or repair | `typeclass-creation-reviewer` |
+| A character's in-character data (a ritual, thread, aura, resonance, anima, technique) looked up through `db_account`, `author_account`, `account_id`, a tenure's account or `request.user`, or a helper that picks one of an account's several characters | `character-scope-reviewer` (#5280); live-presence questions go to `pc-npc-test-reviewer` |
 | Derived eligibility/safety classifier or hand-enumerated choice/visibility family | `derived-classifier-reviewer` or `enumerated-set-reviewer` |
 | Portal, websocket, telnet protocol, or Portal-read setting | `portal-code-deploy-reviewer` |
 | Approved visual/demo surface | `demo-fidelity-reviewer` |

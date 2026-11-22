@@ -66,6 +66,8 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.gm.models import GMPrompt
     from world.items.models import Style
     from world.magic.models.dramatic_moment import (
@@ -74,6 +76,7 @@ if TYPE_CHECKING:
     )
     from world.magic.models.endorsement import EntryFlourishRecord, StylePresentationEndorsement
     from world.magic.models.techniques import Technique
+    from world.societies.models import PhilosophicalArchetype
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -947,13 +950,15 @@ def _resolve_moment_resonance(
 
 
 def anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
-    """The character's anima-ritual resonance — their 'main' one, if authored.
+    """The character's anima-ritual resonance: their 'main' one, if authored.
 
-    The anima ritual is per-character and carries a ``RitualCheckConfig`` whose
-    ``resonance`` is optional, so this is best-effort: no ritual, or no
-    resonance on its config, simply yields no candidate.
+    The ritual carries two picks (#5280), a Primal one and an optional Celestial or
+    Abyssal one. The 'main' is the pick whose affinity is the aura's main affinity;
+    otherwise the Primal pick, else the outward pick. Best-effort: no ritual, or no
+    pick on its config, simply yields no candidate.
     """
     from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
+    from world.magic.services.drift import own_affinity  # noqa: PLC0415
 
     ritual = get_character_anima_ritual(character_sheet.character)
     if ritual is None:
@@ -961,7 +966,15 @@ def anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
     # ``check_config_or_none`` is the model's own ReverseOneToOneOrNone
     # descriptor; the sidecar is optional, so don't reinvent the guard.
     config = ritual.check_config_or_none
-    return config.resonance if config is not None else None
+    if config is None:
+        return None
+    picks = [pick for pick in (config.primal_resonance, config.outward_resonance) if pick]
+    main = own_affinity(character_sheet)
+    if main is not None:
+        for pick in picks:
+            if pick.affinity_id == main.pk:
+                return pick
+    return picks[0] if picks else None
 
 
 def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing one tag event
@@ -973,6 +986,7 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     interaction: Interaction | None = None,
     technique: Technique | None = None,
     resonance: Resonance | None = None,
+    archetypes: Sequence[PhilosophicalArchetype] = (),
 ) -> DramaticMomentTag:
     """Tag a character's dramatic scene moment and fire resonance + renown.
 
@@ -993,6 +1007,10 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     If none of those resolve, the renown award still fires and the resonance
     grant is simply skipped — a moment can be worth recognising without paying
     a currency the character has no claim to.
+
+    *archetypes*, when given, are the archetypes of this particular act and replace the
+    moment type's own for the renown award (a standoff's terms carry their own, #4323);
+    empty keeps the type's.
 
     Raises:
         DramaticMomentCapExceeded: If per_scene_cap for this (moment_type, scene, sheet) is reached.
@@ -1057,7 +1075,7 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
             magnitude=moment_type.magnitude,
             risk=moment_type.risk,
             reach=moment_type.reach or None,
-            archetypes=list(moment_type.archetypes.all()),
+            archetypes=list(archetypes) or list(moment_type.archetypes.all()),
             origin_area=area_for_scene(scene),
             title=moment_type.label,
         )

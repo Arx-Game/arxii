@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import factory
 
@@ -138,8 +138,12 @@ from world.mechanics.factories import (
     PowerMultiplierTargetFactory,
 )
 from world.roster.factories import RosterEntryFactory
+from world.roster.models import RosterEntry
 from world.societies.constants import RenownMagnitude, RenownReach, RenownRisk
 from world.traits.factories import TraitFactory
+
+if TYPE_CHECKING:
+    from world.character_sheets.models import CharacterSheet
 
 # Centralized repeated literals (avoids the duplicated-literal SonarCloud
 # smell, python:S1192).
@@ -1655,6 +1659,11 @@ class RitualFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Ritual
         django_get_or_create = ("name",)
+        # The post-generation hooks (``known_by`` here, the requirement rows on two
+        # subclasses) only create other rows. Without this, factory_boy saves the
+        # instance after them, and a get_or_create hit on a cached row writes its stale
+        # fields over a staff edit (``test_edit_preserved_on_rerun``, #5280).
+        skip_postgeneration_save = True
 
     name = factory.Sequence(lambda n: f"Ritual {n}")
     description = factory.Faker("paragraph")
@@ -1664,6 +1673,31 @@ class RitualFactory(factory.django.DjangoModelFactory):
     execution_kind = RitualExecutionKind.SERVICE
     service_function_path = "world.magic.services.placeholder_ritual"
     flow = None
+
+    @factory.post_generation
+    def known_by(self, create: bool, extracted: object, **kwargs: object) -> None:
+        """``known_by=<CharacterSheet>`` gives that character the ritual's knowledge row.
+
+        A SCENE_ACTION ritual is a character's anima ritual only through this row (#5280):
+        the ritual belongs to the character who knows it, not to the account that authored
+        it. A sheet with no roster entry is given one.
+        """
+        if not create or extracted is None:
+            return
+        teach_ritual(self, extracted)
+
+
+def teach_ritual(ritual: Ritual, character_sheet: CharacterSheet) -> CharacterRitualKnowledge:
+    """Give ``character_sheet`` the knowledge row for ``ritual`` (#5280).
+
+    A SCENE_ACTION ritual is a character's anima ritual only through this row: the ritual
+    belongs to the character who knows it, not to the account that authored it. A sheet with
+    no roster entry is given one.
+    """
+    entry = RosterEntry.objects.filter(character_sheet=character_sheet).first()
+    if entry is None:
+        entry = RosterEntryFactory(character_sheet=character_sheet)
+    return CharacterRitualKnowledgeFactory(roster_entry=entry, ritual=ritual)
 
 
 class ImbuingRitualFactory(RitualFactory):
@@ -1805,7 +1839,8 @@ class RitualCheckConfigFactory(factory.django.DjangoModelFactory):
     stat = factory.SubFactory(TraitFactory)
     skill = factory.SubFactory("world.skills.factories.SkillFactory")
     specialization = None
-    resonance = None
+    primal_resonance = None
+    outward_resonance = None
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
     target_difficulty_level = 0
 

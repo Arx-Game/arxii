@@ -81,6 +81,31 @@ class MagicPicks:
         ordered = self.ordered_resonances
         return ordered[0].resonance if ordered else None
 
+    @property
+    def primal_resonance(self) -> Resonance | None:
+        """The heaviest Primal pick: what the anima ritual grows for its performer, or None."""
+        return next(
+            (
+                pick.resonance
+                for pick in self.ordered_resonances
+                if pick.resonance.affinity.name == AFFINITY_PRIMAL
+            ),
+            None,
+        )
+
+    @property
+    def outward_resonance(self) -> Resonance | None:
+        """The heaviest Celestial or Abyssal pick: what the anima ritual reaches for in its
+        partner, or None."""
+        return next(
+            (
+                pick.resonance
+                for pick in self.ordered_resonances
+                if pick.resonance.affinity.name != AFFINITY_PRIMAL
+            ),
+            None,
+        )
+
 
 @dataclass(frozen=True)
 class MagicHooks:
@@ -291,7 +316,8 @@ def _anima(sheet: CharacterSheet, picks: MagicPicks) -> None:
         ritual_name=picks.ritual_name,
         stat=picks.anima_stat,
         skill=picks.anima_skill,
-        resonance=picks.lead_resonance,
+        primal_resonance=picks.primal_resonance,
+        outward_resonance=picks.outward_resonance,
     )
 
 

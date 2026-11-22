@@ -35,6 +35,12 @@ PROSE_FIELD_NAMES = frozenset(
     {
         "announce_template",
         "arrival_verb",
+        # #4587: the line a reactive condition moment is told with, staff-written for players.
+        "grace_narration",
+        "guard_narration",
+        "provoke_narration",
+        "retaliation_narration",
+        "spent_narration",
         "authored_ic_framing",
         "cast_narration",
         # #5181: the verb in a claiming line ("You gloat. Your Ruin grows by 6.").

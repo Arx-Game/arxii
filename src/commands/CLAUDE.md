@@ -949,8 +949,16 @@ actions, backends, and service functions.
 - **The Anima ritual with a partner** (#5181; `ritual.py`). `ritual anima <partner>` asks someone in the scene to
   take part in the caller's own anima ritual (`start_partner_ritual`, the same consent request the web
   scene-action create opens), tells the partner what is asked, the sentence about their fatigue and `accept` /
-  `deny`, and an NPC partner answers at once. A bare `ritual anima` is still the solo ritual. Typed in
-  `integration_tests/test_anima_ritual_partner_journeys.py`.
+  `deny`. An NPC partner needs a GM (the player now playing it holds a `GMProfile`, or the scene has a GM
+  participant) and then answers at once; with none the caller reads "Nobody is playing that character."
+  A bare `ritual anima` is refused with "Name someone else to take part in your ritual. Usage: ritual
+  anima <partner>", and so is the ritual's own name (#5280). A player partner is then asked whether the
+  ritual took hold of them (the outward part of the award waits on it): `ritual endorse <performer>` or
+  `ritual withhold <performer>` (`EndorseAnimaRitualAction`, the same answer as the web card). `ritual
+  attune primal=<name|none> outward=<name|none>` changes the ritual's two resonance picks after their free
+  first setup, for the costs staff set (`AttuneAnimaRitualAction`; a line naming only one slot reads the
+  usage). Typed in `integration_tests/test_anima_ritual_partner_journeys.py` and
+  `test_attuning_the_anima_ritual_journeys.py`.
 - **Combat and the GM** (#5124): `combat digdeep [<resonance>]` and `combat rally <ally>[=<resonance>]`
   (`combat_maneuvers.py`) name the resonance; `stage kindle <character>=<resonance>[:<strength>]`
   (`gm_props.py`, action `stage_kindle`) kindles a resonance for the scene, gated like the other
@@ -1745,7 +1753,8 @@ actions, backends, and service functions.
   is the direct-tagging telnet parity for the web `DramaticMomentTagDialog` — a thin
   command calling `create_dramatic_moment_tag` directly (the same service the web
   serializer calls, not via an Action). `moment tag list` browses the authored
-  `DramaticMomentType` catalog. Both GM-gated via `_account_can_gm_scene` on the caller's
+  `DramaticMomentType` catalog; a type with no resonance lists as "their own resonance",
+  since its grant follows the character's own (#4323: it had raised on that row). Both GM-gated via `_account_can_gm_scene` on the caller's
   active scene. Its `func` sends a `CommandError` the way `ArxCommand.func` does, typed
   `error` with the structured `command_error` frame (#3657 tranche 11: the override had sent a
   bare line the web could not place); the tagged name resolves through a quiet global search

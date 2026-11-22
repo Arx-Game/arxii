@@ -117,3 +117,24 @@ export function hexToNearestXterm(hex: string): number {
 
   return bestIndex;
 }
+
+/** Which theme a color would vanish on: `near-white` on the light theme, `near-black` on dark. */
+export type ContrastGuard = 'near-white' | 'near-black';
+
+const NEAR_WHITE_FLOOR = 0xb0;
+const NEAR_BLACK_CEILING = 0x40;
+
+/**
+ * Whether a color is so near white (every channel at least 0xb0) or so near black (every
+ * channel at most 0x40) that it disappears on one theme's background, and which one.
+ *
+ * Only a render-time guard: the color codes keep their meaning, and the renderer swaps in the
+ * theme's own foreground for the theme where the color would vanish (#5280).
+ */
+export function contrastGuardFor(hex: string): ContrastGuard | null {
+  const channels = /^#[0-9a-f]{6}$/i.test(hex) ? hexToRgb(hex) : null;
+  if (channels === null) return null;
+  if (Math.min(...channels) >= NEAR_WHITE_FLOOR) return 'near-white';
+  if (Math.max(...channels) <= NEAR_BLACK_CEILING) return 'near-black';
+  return null;
+}

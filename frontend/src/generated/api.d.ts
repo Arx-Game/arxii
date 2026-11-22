@@ -14150,6 +14150,159 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/anima-ritual-endorsements/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The anima rituals waiting for the requester's answer, and the answer (#5280).
+     *
+     *     GET  /api/magic/anima-ritual-endorsements/?scene=<id>
+     *         The requester's own pending rows: rituals that reached for a character they play, newest
+     *         first. ``scene`` narrows to one scene.
+     *     POST /api/magic/anima-ritual-endorsements/<id>/answer/  {endorse: bool}
+     *         Answers through ``EndorseAnimaRitualAction`` (telnet ``ritual endorse|withhold``
+     *         converges on it). Only the player of the partner may answer (403 otherwise); a ritual no
+     *         longer pending is a 400 ``{detail}``.
+     */
+    get: operations['magic_anima_ritual_endorsements_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/anima-ritual-endorsements/{id}/answer/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description The anima rituals waiting for the requester's answer, and the answer (#5280).
+     *
+     *     GET  /api/magic/anima-ritual-endorsements/?scene=<id>
+     *         The requester's own pending rows: rituals that reached for a character they play, newest
+     *         first. ``scene`` narrows to one scene.
+     *     POST /api/magic/anima-ritual-endorsements/<id>/answer/  {endorse: bool}
+     *         Answers through ``EndorseAnimaRitualAction`` (telnet ``ritual endorse|withhold``
+     *         converges on it). Only the player of the partner may answer (403 otherwise); a ritual no
+     *         longer pending is a 400 ``{detail}``.
+     */
+    post: operations['magic_anima_ritual_endorsements_answer_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/anima-ritual/attune/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description Pay to change the picks: converges on ``AttuneAnimaRitualAction`` with telnet.
+     *
+     *     A refusal (nothing changes, an unheld or wrong-affinity pick, too little resonance or
+     *     action points) is a 400 ``{detail}`` and spends nothing. A failed roll is a 200: the
+     *     costs are spent and the picks are as they were, which the ``message`` says.
+     */
+    post: operations['magic_anima_ritual_attune_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/anima-ritual/resonances/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The picks of the character's anima ritual: what she may choose, and the free first setup
+     *     (#5280).
+     *
+     *     A ViewSet of its own, never part of ``RitualViewSet``: that is a ``ModelViewSet`` whose
+     *     ``create`` would let any player write a ritual. Here a player can only name her own
+     *     character, and the one write goes through ``set_up_anima_ritual_resonances``.
+     *
+     *     GET  /api/magic/anima-ritual/resonances/?character_sheet_id=<id>
+     *         The Primal and the Celestial or Abyssal resonances she holds, the picks the ritual
+     *         carries, whether they are locked, and what attuning costs. 404 when she has no ritual.
+     *     POST /api/magic/anima-ritual/set-up/  {character_sheet_id, primal_resonance_id,
+     *         outward_resonance_id}
+     *         Writes both picks for free, once. A refusal is a 400 ``{detail}``.
+     *     POST /api/magic/anima-ritual/attune/  {character_sheet_id, primal_resonance_id,
+     *         outward_resonance_id}
+     *         Pays to change the picks after the first setup, through ``AttuneAnimaRitualAction``.
+     *         Replies ``{choices, message, changed}``; a refusal is a 400 ``{detail}``.
+     *
+     *     The query serializers are the filter (they require and resolve the one character), and the
+     *     ``GET`` returns one object, so ``pagination_class`` is ``None``.
+     */
+    get: operations['magic_anima_ritual_resonances_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/anima-ritual/set-up/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description The picks of the character's anima ritual: what she may choose, and the free first setup
+     *     (#5280).
+     *
+     *     A ViewSet of its own, never part of ``RitualViewSet``: that is a ``ModelViewSet`` whose
+     *     ``create`` would let any player write a ritual. Here a player can only name her own
+     *     character, and the one write goes through ``set_up_anima_ritual_resonances``.
+     *
+     *     GET  /api/magic/anima-ritual/resonances/?character_sheet_id=<id>
+     *         The Primal and the Celestial or Abyssal resonances she holds, the picks the ritual
+     *         carries, whether they are locked, and what attuning costs. 404 when she has no ritual.
+     *     POST /api/magic/anima-ritual/set-up/  {character_sheet_id, primal_resonance_id,
+     *         outward_resonance_id}
+     *         Writes both picks for free, once. A refusal is a 400 ``{detail}``.
+     *     POST /api/magic/anima-ritual/attune/  {character_sheet_id, primal_resonance_id,
+     *         outward_resonance_id}
+     *         Pays to change the picks after the first setup, through ``AttuneAnimaRitualAction``.
+     *         Replies ``{choices, message, changed}``; a refusal is a 400 ``{detail}``.
+     *
+     *     The query serializers are the filter (they require and resolve the one character), and the
+     *     ``GET`` returns one object, so ``pagination_class`` is ``None``.
+     */
+    post: operations['magic_anima_ritual_set_up_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/applicable-pulls/': {
     parameters: {
       query?: never;
@@ -29104,6 +29257,93 @@ export interface components {
       text: string;
       shared: boolean;
     };
+    /** @description The body of an answer: true to endorse the ritual, false to withhold. */
+    AnimaRitualAnswerRequest: {
+      endorse: boolean;
+    };
+    AnimaRitualAnswerResponse: {
+      detail: string;
+    };
+    /**
+     * @description Request shape for POST /api/magic/anima-ritual/attune/.
+     *
+     *     ``character_sheet_id`` is resolved the way a ritual perform resolves it: the requester must
+     *     play that character (staff may name any). Both picks are required, each a resonance id or
+     *     null (null clears that slot), because an attunement writes both. The service decides whether
+     *     they are held, of the right affinity and paid for.
+     */
+    AnimaRitualAttuneRequest: {
+      character_sheet_id: number;
+      primal_resonance_id: number | null;
+      outward_resonance_id: number | null;
+    };
+    /**
+     * @description The reply to an attunement (read-only): the ritual's choices as they stand now, the line
+     *     the player reads, and whether the picks changed (false when the roll failed).
+     */
+    AnimaRitualAttuned: {
+      readonly choices: components['schemas']['AnimaRitualChoices'];
+      readonly message: string;
+      readonly changed: boolean;
+    };
+    /**
+     * @description What changing the picks costs, read from the ``AnimaConfig`` singleton (read-only).
+     *
+     *     ``check_type_name`` is null while no check is set, and then the attunement rolls nothing.
+     */
+    AnimaRitualAttunement: {
+      readonly anima_cost: number;
+      readonly resonance_cost: number;
+      readonly ap_cost: number;
+      readonly check_type_name: string | null;
+    };
+    /**
+     * @description The ritual's choices and picks, with the attunement's costs (read-only).
+     *
+     *     Built over an ``AnimaRitualChoices``. ``primal`` and ``outward`` list the resonances the
+     *     character holds that each slot may take; ``primal_pick`` and ``outward_pick`` are what the
+     *     ritual carries (null when unset); ``locked`` is true once either is set.
+     */
+    AnimaRitualChoices: {
+      readonly primal: components['schemas']['AnimaRitualResonance'][];
+      readonly outward: components['schemas']['AnimaRitualResonance'][];
+      readonly primal_pick: components['schemas']['AnimaRitualResonance'] | null;
+      readonly outward_pick: components['schemas']['AnimaRitualResonance'] | null;
+      readonly locked: boolean;
+      readonly attunement: components['schemas']['AnimaRitualAttunement'];
+    };
+    /**
+     * @description A ritual that reached for the requester's character and waits for their answer.
+     *
+     *     ``performer_name`` is the persona the performer wore for the ritual, ``prompt`` the
+     *     question the partner is asked, and ``partner_line`` the sentence about what the ritual
+     *     already did to the partner's fatigue, in the past tense (blank when it did nothing).
+     */
+    AnimaRitualEndorsement: {
+      readonly id: number;
+      readonly performer_name: string;
+      readonly prompt: string;
+      readonly partner_line: string;
+    };
+    /** @description One resonance a pick may take (read-only): enough to list it and name its affinity. */
+    AnimaRitualResonance: {
+      readonly id: number;
+      /** @description Resonance name. The canonical set is authored in the content repo — do not invent one here. */
+      readonly name: string;
+      readonly affinity_name: string;
+    };
+    /**
+     * @description Request shape for POST /api/magic/anima-ritual/set-up/.
+     *
+     *     ``character_sheet_id`` is resolved the way a ritual perform resolves it: the requester must
+     *     play that character (staff may name any). Each pick is a resonance id or null, and the
+     *     service decides whether the picks are held and of the right affinity.
+     */
+    AnimaRitualSetUpRequest: {
+      character_sheet_id: number;
+      primal_resonance_id?: number | null;
+      outward_resonance_id?: number | null;
+    };
     /** @description ``{loan_id, accept}``. */
     AnswerRequest: {
       loan_id: number;
@@ -42470,6 +42710,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['AlternateSelf'][];
     };
+    PaginatedAnimaRitualEndorsementList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['AnimaRitualEndorsement'][];
+    };
     PaginatedArchitecturalStyleList: {
       /** @example 123 */
       count: number;
@@ -50825,6 +51080,14 @@ export interface components {
       /** @description UI-rendering metadata: what kwargs the perform endpoint expects. Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. When None, the ritual takes no player-supplied kwargs. */
       readonly input_schema: unknown;
       readonly author_account_id: number | null;
+      /**
+       * @description Whether the requester may edit this ritual (#5280).
+       *
+       *     Read through the character the requester acts as, not the authoring account: the view
+       *     passes that character's known ritual ids once as ``known_ritual_ids`` in the context.
+       *     Without a request in the context nobody is the viewer, so it is False.
+       */
+      readonly viewer_can_edit: boolean;
       /** @description Return nested check_config when present, else None. */
       readonly check_config: {
         [key: string]: unknown;
@@ -50855,7 +51118,6 @@ export interface components {
       stat_id?: number;
       skill_id?: number;
       specialization_id?: number | null;
-      resonance_id?: number | null;
       check_type_id?: number | null;
       target_difficulty_level?: number;
     };
@@ -50870,7 +51132,6 @@ export interface components {
       stat_id?: number;
       skill_id?: number;
       specialization_id?: number | null;
-      resonance_id?: number | null;
       check_type_id?: number | null;
       target_difficulty_level?: number;
     };
@@ -75588,6 +75849,123 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Affinity'];
+        };
+      };
+    };
+  };
+  magic_anima_ritual_endorsements_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedAnimaRitualEndorsementList'];
+        };
+      };
+    };
+  };
+  magic_anima_ritual_endorsements_answer_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Anima Ritual Performance. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AnimaRitualAnswerRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AnimaRitualAnswerResponse'];
+        };
+      };
+    };
+  };
+  magic_anima_ritual_attune_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AnimaRitualAttuneRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AnimaRitualAttuned'];
+        };
+      };
+    };
+  };
+  magic_anima_ritual_resonances_retrieve: {
+    parameters: {
+      query: {
+        character_sheet_id: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AnimaRitualChoices'];
+        };
+      };
+    };
+  };
+  magic_anima_ritual_set_up_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['AnimaRitualSetUpRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AnimaRitualChoices'];
         };
       };
     };

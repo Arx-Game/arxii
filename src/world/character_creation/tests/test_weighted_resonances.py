@@ -121,10 +121,11 @@ class FinalizeWritesTheWeightedPicks(_WeightedPicksCase):
         )
         self.assertEqual({row.entry_id for row in known}, {entry.pk for entry in entries.values()})
 
-    def test_anima_ritual_carries_the_heaviest_pick(self) -> None:
+    def test_anima_ritual_carries_the_primal_pick_and_the_outward_pick(self) -> None:
         _, draft = self._finalize([(self.domination, 5), (self.fury, 3)])
         config = RitualCheckConfig.objects.get(ritual__author_account=draft.account)
-        self.assertEqual(config.resonance, self.domination)
+        self.assertEqual(config.primal_resonance, self.fury)
+        self.assertEqual(config.outward_resonance, self.domination)
 
 
 class TheStartingAuraComesFromTheWeights(_WeightedPicksCase):
@@ -202,7 +203,8 @@ class TheGiftThreadHoldsThePicksAtZero(_WeightedPicksCase):
         thread = Thread.objects.get(owner=sheet, target_kind=TargetKind.GIFT, target_gift=self.gift)
         self.assertEqual(thread.resonance, self.fury)
         config = RitualCheckConfig.objects.get(ritual__author_account=draft.account)
-        self.assertEqual(config.resonance, self.fury)
+        self.assertEqual(config.primal_resonance, self.fury)
+        self.assertEqual(config.outward_resonance, self.domination)
 
     def test_species_gift_thread_holds_the_same_picks(self) -> None:
         species = SpeciesFactory(name="Many Moods Folk")

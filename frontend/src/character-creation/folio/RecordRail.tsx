@@ -1,11 +1,14 @@
 /** CG selections (#3540, Decision 8; OOC sweep): chosen values only, never prose. */
 import type { ReactNode } from 'react';
+import { usePointsHint } from './pointsHint';
 
 export interface RecordRow {
   label: string;
   value?: string | null;
   /** When set, the value is a door back to the chapter that wrote it. */
   onEdit?: () => void;
+  /** The CG points row: it carries the page's hover text about unspent points (#5201). */
+  points?: boolean;
 }
 
 function RecordValue({ value, onEdit }: { value?: string | null; onEdit?: () => void }) {
@@ -21,12 +24,13 @@ function RecordValue({ value, onEdit }: { value?: string | null; onEdit?: () => 
 }
 
 export function RecordRail({ rows, ledger }: { rows: RecordRow[]; ledger?: string }) {
+  const pointsHint = usePointsHint();
   return (
     <div className="record-rail">
       <h2 className="rail-label">CG selections</h2>
       <dl>
         {rows.map((row) => (
-          <div className="row" key={row.label}>
+          <div className="row" key={row.label} title={row.points ? pointsHint : undefined}>
             <dt>{row.label}</dt>
             <dd>
               <RecordValue value={row.value} onEdit={row.onEdit} />

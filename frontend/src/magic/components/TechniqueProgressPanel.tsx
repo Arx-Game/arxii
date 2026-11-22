@@ -21,11 +21,18 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { useTechniqueProgress, useTrainTechnique } from '@/magic/queries';
-import type { TrainTechniqueResult } from '@/magic/types';
+import type { TechniqueProgressMeter, TrainTechniqueResult } from '@/magic/types';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk) of the acting character. */
   characterSheetId: number;
+}
+
+function meterTeacherLabel(meter: TechniqueProgressMeter): string {
+  if (meter.teacher_name) {
+    return `Taught by ${meter.teacher_name}`;
+  }
+  return meter.is_self_study ? 'Self-study' : 'Academy trainer';
 }
 
 export function TechniqueProgressPanel({ characterSheetId }: Props) {
@@ -87,9 +94,7 @@ export function TechniqueProgressPanel({ characterSheetId }: Props) {
             >
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="font-medium">{meter.technique_name}</span>
-                <Badge variant="outline">
-                  {meter.teacher_name ? `Taught by ${meter.teacher_name}` : 'Self-study'}
-                </Badge>
+                <Badge variant="outline">{meterTeacherLabel(meter)}</Badge>
               </div>
               <Progress value={pct} data-testid={`technique-progress-bar-${meter.technique_id}`} />
               <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">

@@ -119,6 +119,7 @@ class TestSceneActionRequest(TestCase):
         self.assertIsNone(request.snapshot_stat)
         self.assertIsNone(request.snapshot_skill)
         self.assertIsNone(request.snapshot_specialization)
+        self.assertIsNone(request.snapshot_primal_resonance)
         self.assertIsNone(request.snapshot_resonance)
         self.assertIsNone(request.snapshot_check_type)
         self.assertIsNone(request.snapshot_target_difficulty)
@@ -130,7 +131,11 @@ class TestSceneActionRequest(TestCase):
             service_function_path="",
             flow=None,
         )
-        config = RitualCheckConfigFactory(ritual=ritual)
+        config = RitualCheckConfigFactory(
+            ritual=ritual,
+            primal_resonance=ResonanceFactory(),
+            outward_resonance=ResonanceFactory(),
+        )
         request = SceneActionRequestFactory(
             scene=self.scene,
             initiator_persona=self.initiator,
@@ -139,7 +144,8 @@ class TestSceneActionRequest(TestCase):
             snapshot_stat=config.stat,
             snapshot_skill=config.skill,
             snapshot_specialization=config.specialization,
-            snapshot_resonance=config.resonance,
+            snapshot_primal_resonance=config.primal_resonance,
+            snapshot_resonance=config.outward_resonance,
             snapshot_check_type=config.check_type,
             snapshot_target_difficulty=26,
         )
@@ -147,7 +153,8 @@ class TestSceneActionRequest(TestCase):
         self.assertEqual(request.snapshot_stat, config.stat)
         self.assertEqual(request.snapshot_skill, config.skill)
         self.assertEqual(request.snapshot_specialization, config.specialization)
-        self.assertEqual(request.snapshot_resonance, config.resonance)
+        self.assertEqual(request.snapshot_primal_resonance, config.primal_resonance)
+        self.assertEqual(request.snapshot_resonance, config.outward_resonance)
         self.assertEqual(request.snapshot_check_type, config.check_type)
         self.assertEqual(request.snapshot_target_difficulty, 26)
 

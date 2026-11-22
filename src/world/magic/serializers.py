@@ -44,6 +44,7 @@ from world.magic.constants import (
 )
 from world.magic.models import (
     Affinity,
+    AnimaRitualPerformance,
     CharacterAnima,
     CharacterAura,
     CharacterAuraShare,
@@ -1405,7 +1406,18 @@ class RitualCheckConfigSerializer(serializers.ModelSerializer):
     stat_name = serializers.CharField(source="stat.name", read_only=True)
     skill_name = serializers.CharField(source="skill.name", read_only=True)
     specialization_id = serializers.PrimaryKeyRelatedField(source="specialization", read_only=True)
-    resonance_id = serializers.PrimaryKeyRelatedField(source="resonance", read_only=True)
+    primal_resonance_id = serializers.PrimaryKeyRelatedField(
+        source="primal_resonance", read_only=True
+    )
+    primal_resonance_name = serializers.CharField(
+        source="primal_resonance.name", read_only=True, allow_null=True
+    )
+    outward_resonance_id = serializers.PrimaryKeyRelatedField(
+        source="outward_resonance", read_only=True
+    )
+    outward_resonance_name = serializers.CharField(
+        source="outward_resonance.name", read_only=True, allow_null=True
+    )
     check_type_id = serializers.PrimaryKeyRelatedField(source="check_type", read_only=True)
     check_type_name = serializers.SerializerMethodField()
 
@@ -1422,7 +1434,10 @@ class RitualCheckConfigSerializer(serializers.ModelSerializer):
             "skill",
             "skill_name",
             "specialization_id",
-            "resonance_id",
+            "primal_resonance_id",
+            "primal_resonance_name",
+            "outward_resonance_id",
+            "outward_resonance_name",
             "check_type_id",
             "check_type_name",
             "target_difficulty_level",
@@ -1451,6 +1466,7 @@ class RitualSerializer(serializers.ModelSerializer):
     )
     check_config = serializers.SerializerMethodField()
     is_imbuing = serializers.SerializerMethodField()
+    viewer_can_edit = serializers.SerializerMethodField()
 
     class Meta:
         model = Ritual
@@ -1464,6 +1480,7 @@ class RitualSerializer(serializers.ModelSerializer):
             "execution_kind",
             "input_schema",
             "author_account_id",
+            "viewer_can_edit",
             "check_config",
             "client_hosted",
             "participation_rule",
@@ -1479,6 +1496,22 @@ class RitualSerializer(serializers.ModelSerializer):
         if config is None:
             return None
         return RitualCheckConfigSerializer(config).data
+
+    def get_viewer_can_edit(self, obj: Ritual) -> bool:
+        """Whether the requester may edit this ritual (#5280).
+
+        Read through the character the requester acts as, not the authoring account: the view
+        passes that character's known ritual ids once as ``known_ritual_ids`` in the context.
+        Without a request in the context nobody is the viewer, so it is False.
+        """
+        from world.magic.permissions import can_edit_ritual  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None:
+            return False
+        return can_edit_ritual(
+            request.user, obj, known_ritual_ids=self.context.get("known_ritual_ids", set())
+        )
 
     def get_is_imbuing(self, obj: Ritual) -> bool:
         """True for the Rite of Imbuing (2026-07 audit).
@@ -1502,7 +1535,6 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
     stat_id = serializers.IntegerField(required=False)
     skill_id = serializers.IntegerField(required=False)
     specialization_id = serializers.IntegerField(required=False, allow_null=True)
-    resonance_id = serializers.IntegerField(required=False, allow_null=True)
     check_type_id = serializers.IntegerField(required=False, allow_null=True)
     target_difficulty_level = serializers.IntegerField(min_value=0, required=False)
 
@@ -1530,25 +1562,6 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
         except model.DoesNotExist as exc:
             raise serializers.ValidationError({key: f"{model.__name__} not found."}) from exc
 
-    def _refuse_unheld_resonance(self, resonance: Resonance | None) -> None:
-        """A ritual can only name a resonance its owner holds (#5181).
-
-        The ritual's resonance is what an Anima ritual with a partner earns, so naming one the
-        character never held would earn it from nothing. The ritual belongs to the account that
-        authored it (the ritual being patched, ``self.parent.instance``), so the check asks
-        whether that account plays a character who holds the resonance, never which character
-        the requester has selected. Staff may set any resonance.
-        """
-        from world.magic.services.ritual_bond import account_plays_holder  # noqa: PLC0415
-
-        request = self.context.get("request")
-        if resonance is None or request is None or request.user.is_staff:
-            return
-        author_id = self.parent.instance.author_account_id
-        if author_id is None or not account_plays_holder(author_id, resonance):
-            msg = "You can only name a resonance your character already holds."
-            raise serializers.ValidationError({"resonance_id": msg})
-
     def validate(self, attrs: dict) -> dict:
         """Resolve integer PK fields to model instances."""
         from world.checks.models import CheckType  # noqa: PLC0415
@@ -1573,8 +1586,6 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
         self._resolve_nullable_fk(
             attrs, "specialization_id", Specialization, "specialization", resolved
         )
-        self._resolve_nullable_fk(attrs, "resonance_id", Resonance, "resonance", resolved)
-        self._refuse_unheld_resonance(resolved.get("resonance"))
         self._resolve_nullable_fk(attrs, "check_type_id", CheckType, "check_type", resolved)
 
         if "target_difficulty_level" in attrs:  # noqa: STRING_LITERAL
@@ -4465,6 +4476,7 @@ class TechniqueProgressSerializer(serializers.ModelSerializer):
     technique_id = serializers.IntegerField(read_only=True)
     technique_name = serializers.CharField(source="technique.name", read_only=True)
     teacher_name = serializers.SerializerMethodField()
+    is_self_study = serializers.SerializerMethodField()
     source_label = serializers.SerializerMethodField()
     weekly_remaining = serializers.SerializerMethodField()
 
@@ -4477,6 +4489,7 @@ class TechniqueProgressSerializer(serializers.ModelSerializer):
             "points_accumulated",
             "total_required",
             "teacher_name",
+            "is_self_study",
             "source_label",
             "weekly_remaining",
         ]
@@ -4488,6 +4501,12 @@ class TechniqueProgressSerializer(serializers.ModelSerializer):
         if obj.teacher_tenure_id is None:
             return None
         return obj.teacher_tenure.display_name
+
+    def get_is_self_study(self, obj: TechniqueProgress) -> bool:
+        """False for a meter a player teacher or an Academy trainer opened (#2741)."""
+        from world.magic.services.technique_training import is_academy_instructed  # noqa: PLC0415
+
+        return obj.teacher_tenure_id is None and not is_academy_instructed(obj)
 
     def get_source_label(self, obj: TechniqueProgress) -> str:
         return obj.get_source_display()
@@ -4548,3 +4567,162 @@ class ThreadResonanceOptionsSerializer(serializers.Serializer):
     offering_count = serializers.IntegerField()
     unavailable_reason = serializers.CharField(allow_blank=True)
     options = ThreadResonanceOptionSerializer(many=True)
+
+
+# =============================================================================
+# The anima ritual's two resonance picks (#5280)
+# =============================================================================
+
+
+class AnimaRitualResonanceSerializer(serializers.ModelSerializer):
+    """One resonance a pick may take (read-only): enough to list it and name its affinity."""
+
+    affinity_name = serializers.CharField(source="affinity.name", read_only=True)
+
+    class Meta:
+        model = Resonance
+        fields = ["id", "name", "affinity_name"]
+        read_only_fields = fields
+
+
+class AnimaRitualAttunementSerializer(serializers.Serializer):
+    """What changing the picks costs, read from the ``AnimaConfig`` singleton (read-only).
+
+    ``check_type_name`` is null while no check is set, and then the attunement rolls nothing.
+    """
+
+    anima_cost = serializers.IntegerField(source="attunement_anima_cost", read_only=True)
+    resonance_cost = serializers.IntegerField(source="attunement_resonance_cost", read_only=True)
+    ap_cost = serializers.IntegerField(source="attunement_ap_cost", read_only=True)
+    check_type_name = serializers.SerializerMethodField()
+
+    def get_check_type_name(self, config: object) -> str | None:
+        check_type = config.attunement_check_type
+        return check_type.name if check_type is not None else None
+
+
+class AnimaRitualChoicesSerializer(serializers.Serializer):
+    """The ritual's choices and picks, with the attunement's costs (read-only).
+
+    Built over an ``AnimaRitualChoices``. ``primal`` and ``outward`` list the resonances the
+    character holds that each slot may take; ``primal_pick`` and ``outward_pick`` are what the
+    ritual carries (null when unset); ``locked`` is true once either is set.
+    """
+
+    primal = AnimaRitualResonanceSerializer(many=True, read_only=True)
+    outward = AnimaRitualResonanceSerializer(many=True, read_only=True)
+    primal_pick = AnimaRitualResonanceSerializer(read_only=True, allow_null=True)
+    outward_pick = AnimaRitualResonanceSerializer(read_only=True, allow_null=True)
+    locked = serializers.BooleanField(read_only=True)
+    attunement = serializers.SerializerMethodField()
+
+    @extend_schema_field(AnimaRitualAttunementSerializer)
+    def get_attunement(self, _choices: object) -> dict:
+        from world.magic.models import AnimaConfig  # noqa: PLC0415
+
+        config = AnimaConfig.get_singleton()
+        return AnimaRitualAttunementSerializer(config).data
+
+
+class AnimaRitualChoicesQuerySerializer(serializers.Serializer):
+    """Query shape for GET /api/magic/anima-ritual/resonances/.
+
+    ``character_sheet_id`` is resolved the way a ritual perform resolves it: the requester
+    must play that character (staff may name any).
+    """
+
+    character_sheet_id = serializers.IntegerField()
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        return _resolve_account_sheet(value, self.context.get("request"))
+
+
+class AnimaRitualSetUpSerializer(serializers.Serializer):
+    """Request shape for POST /api/magic/anima-ritual/set-up/.
+
+    ``character_sheet_id`` is resolved the way a ritual perform resolves it: the requester must
+    play that character (staff may name any). Each pick is a resonance id or null, and the
+    service decides whether the picks are held and of the right affinity.
+    """
+
+    character_sheet_id = serializers.IntegerField()
+    primal_resonance_id = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.select_related("affinity"), allow_null=True, required=False
+    )
+    outward_resonance_id = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.select_related("affinity"), allow_null=True, required=False
+    )
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        return _resolve_account_sheet(value, self.context.get("request"))
+
+
+class AnimaRitualAttuneSerializer(serializers.Serializer):
+    """Request shape for POST /api/magic/anima-ritual/attune/.
+
+    ``character_sheet_id`` is resolved the way a ritual perform resolves it: the requester must
+    play that character (staff may name any). Both picks are required, each a resonance id or
+    null (null clears that slot), because an attunement writes both. The service decides whether
+    they are held, of the right affinity and paid for.
+    """
+
+    character_sheet_id = serializers.IntegerField()
+    primal_resonance_id = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.select_related("affinity"), allow_null=True
+    )
+    outward_resonance_id = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.select_related("affinity"), allow_null=True
+    )
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        return _resolve_account_sheet(value, self.context.get("request"))
+
+
+class AnimaRitualAttunedSerializer(serializers.Serializer):
+    """The reply to an attunement (read-only): the ritual's choices as they stand now, the line
+    the player reads, and whether the picks changed (false when the roll failed)."""
+
+    choices = AnimaRitualChoicesSerializer(read_only=True)
+    message = serializers.CharField(read_only=True)
+    changed = serializers.BooleanField(read_only=True)
+
+
+# =============================================================================
+# A partner's answer to an anima ritual (#5280)
+# =============================================================================
+
+
+class AnimaRitualEndorsementSerializer(serializers.ModelSerializer):
+    """A ritual that reached for the requester's character and waits for their answer.
+
+    ``performer_name`` is the persona the performer wore for the ritual, ``prompt`` the
+    question the partner is asked, and ``partner_line`` the sentence about what the ritual
+    already did to the partner's fatigue, in the past tense (blank when it did nothing).
+    """
+
+    performer_name = serializers.CharField(source="performer_persona.name", read_only=True)
+    prompt = serializers.SerializerMethodField()
+    partner_line = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AnimaRitualPerformance
+        fields = ["id", "performer_name", "prompt", "partner_line"]
+        read_only_fields = fields
+
+    def get_prompt(self, performance: AnimaRitualPerformance) -> str:
+        from world.magic.services.ritual_bond import partner_endorsement_prompt  # noqa: PLC0415
+
+        return partner_endorsement_prompt(
+            performance.performer_persona.name, performance.outward_resonance
+        )
+
+    def get_partner_line(self, performance: AnimaRitualPerformance) -> str:
+        from world.magic.services.ritual_bond import partner_card_line  # noqa: PLC0415
+
+        return partner_card_line(performance.outward_resonance, performance.performer_persona.name)
+
+
+class AnimaRitualAnswerSerializer(serializers.Serializer):
+    """The body of an answer: true to endorse the ritual, false to withhold."""
+
+    endorse = serializers.BooleanField()

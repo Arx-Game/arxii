@@ -201,3 +201,32 @@ class ControlLossFiresOn(models.TextChoices):
     MOON_PULL = "moon_pull", "Moon pull"
     WOUND_THRESHOLD = "wound_threshold", "Wounded below a health threshold"
     CONDITION_STAGE = "condition_stage", "Vulnerability enters a stage"
+
+
+class ReactiveMoment(models.TextChoices):
+    """The five moments a reactive condition effect fires that staff can narrate (#4587).
+
+    Each value names the ``ConditionTemplate`` field that holds its authored line
+    (``<value>_narration``), so the field read for a moment is derived, never a second
+    hand-kept table.
+    """
+
+    RETALIATION = "retaliation", "Strike back"
+    GUARD = "guard", "Guard steps in"
+    PROVOKE = "provoke", "Provoked foe turns"
+    GRACE = "grace", "Grace holds the bearer up"
+    SPENT = "spent", "Once-only condition spent"
+
+
+class SpendNarration(models.TextChoices):
+    """How much ``spend_condition_use`` says when it ends a once-only condition (#4587).
+
+    ``FULL``: the authored spent line, else the plain one. ``AUTHORED_ONLY``: only an
+    authored line, for a caller that just narrated the specific moment (a strike back, a
+    grace) and would otherwise say the same event twice. ``NONE``: nothing, for the
+    one-shot marker adapters, whose spending is a mechanism and not an event a player sees.
+    """
+
+    FULL = "full", "Authored line, else plain line"
+    AUTHORED_ONLY = "authored_only", "Authored line only"
+    NONE = "none", "Nothing"

@@ -472,8 +472,8 @@ class HoldingTheLine(SeededLevelLadderMixin, _TheYard):
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
-class BrennaStandsGuard(_TheYard):
-    """Brenna's standing guard over Cassian: she steps into the brute's swing without declaring.
+class _TheGuardedYard(_TheYard):
+    """The Yard with Brenna standing guard over Cassian, ready for a guarded round.
 
     The interpose content is seeded the way ``test_guardian_reactions`` seeds it, Brenna is
     granted telekinesis (an interpose capability) by a condition and built for Reflexes, and her
@@ -530,6 +530,10 @@ class BrennaStandsGuard(_TheYard):
     def _guarded_round(self) -> None:
         with patch(CHALLENGE_PERFORM_CHECK, side_effect=self._interpose_roll):
             self._round()
+
+
+class BrennaStandsGuard(_TheGuardedYard):
+    """Brenna's standing guard over Cassian: she steps into the brute's swing without declaring."""
 
     def test_brenna_guards_cassian_and_still_takes_her_turn(self) -> None:
         self._brenna_declares(self.plain)

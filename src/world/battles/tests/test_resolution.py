@@ -161,7 +161,7 @@ class BattleTechniqueResolverTests(TestCase):
         )
         from world.checks.test_helpers import force_check_outcome
         from world.magic.constants import RitualExecutionKind
-        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.factories import RitualCheckConfigFactory, teach_ritual
         from world.magic.models.rituals import Ritual
         from world.traits.factories import CheckOutcomeFactory
 
@@ -174,6 +174,7 @@ class BattleTechniqueResolverTests(TestCase):
         config = RitualCheckConfigFactory(ritual=ritual)
         self.sheet.character.db_account = account
         self.sheet.character.save(update_fields=["db_account"])
+        teach_ritual(ritual, self.sheet)
 
         battle = create_battle(name="Resolver Personal Check Battle")
         side = add_side(battle=battle, role=BattleSideRole.ATTACKER)

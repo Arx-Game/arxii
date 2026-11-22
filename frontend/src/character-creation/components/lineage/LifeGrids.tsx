@@ -11,8 +11,10 @@
  * `ChapterOffers` as a grid of cards, grouped under headings when the answers carry a
  * group, priced as signed numbers, every term on a card's mechanics line showing its
  * definition on hover. A closed section shows its answers, or the beat's own prompt in
- * plain text when nothing is picked. Next folds its section and makes sure the one below
- * (or the next stage and its first section) is open.
+ * plain text when nothing is picked. A section has no Next of its own (#5201, owner ruling
+ * 2026-11-18): the fold arrow at its heading closes it, and the page's Next is the only
+ * Next. The life ends on its last stage, with no count line and no paragraph of the
+ * picks under it; the right-hand panel already lists the picks and the points.
  *
  * Every section's grid ends on an Amnesiac card (#5102): no cost, not a distinction,
  * its text a staff copy row. Picking it marks that one beat unknown, which drops its
@@ -125,16 +127,6 @@ export function LifeGrids({ draft, copy }: Props) {
   // visit. Both start empty, so everything starts open (#5160).
   const [foldedStages, setFoldedStages] = useState<ReadonlySet<string>>(() => new Set());
   const [foldedBeats, setFoldedBeats] = useState<ReadonlySet<number>>(() => new Set());
-  // The section Next has just folded. A tall section folding under the pointer leaves
-  // the window showing the middle of the one below, so its own line is brought back
-  // into the window and the section below reads from its top.
-  const foldedByNext = useRef<number | null>(null);
-  useEffect(() => {
-    if (foldedByNext.current === null) return;
-    const line = document.getElementById(`life-sec-${foldedByNext.current}`);
-    foldedByNext.current = null;
-    line?.scrollIntoView?.({ block: 'nearest' });
-  }, [foldedBeats]);
   // The suggested life (#4865): loaded once when the grids first open for a beginning the
   // draft's stamp does not name. The server's stamp is the durable guard (a life the player
   // edited or cleared never reloads); the ref only stops a second call in one mount.
@@ -300,49 +292,6 @@ export function LifeGrids({ draft, copy }: Props) {
   const toggleStage = (stage: string) => setFoldedStages((folded) => flipped(folded, stage));
   const toggleSection = (beat: BeatPoolEntry) =>
     setFoldedBeats((folded) => flipped(folded, beat.beat_id));
-  // Next folds its own section. The one below is open already unless the player folded
-  // it, and then Next opens it: the section under this one in the stage, or the first
-  // section of the next stage (and that stage) after a stage's last section.
-  const next = (stage: string, beat: BeatPoolEntry) => {
-    const pool = byStage.get(stage) ?? [];
-    const at = pool.findIndex((b) => b.beat_id === beat.beat_id);
-    const lastOfStage = at + 1 >= pool.length;
-    const nextStage = lastOfStage ? stages[stages.indexOf(stage) + 1] : undefined;
-    const below = lastOfStage ? nextStage && (byStage.get(nextStage) ?? [])[0] : pool[at + 1];
-    foldedByNext.current = beat.beat_id;
-    setFoldedBeats((folded) => {
-      const after = new Set(folded);
-      after.add(beat.beat_id);
-      if (below) after.delete(below.beat_id);
-      return after;
-    });
-    if (nextStage !== undefined)
-      setFoldedStages((folded) => {
-        const after = new Set(folded);
-        after.delete(nextStage);
-        return after;
-      });
-  };
-
-  const takenCount = beats.filter((b) => b.taken || picksOf(b).length > 0).length;
-  const budget = shown.spent + shown.remaining;
-  const foot = (copy?.beats_foot ?? '{taken} taken, {spent} of {budget} points spent')
-    .replace('{taken}', String(takenCount))
-    .replace('{spent}', String(shown.spent))
-    .replace('{budget}', String(budget));
-  const told = beats
-    .filter((b) => !b.unknown)
-    .map((b) => summaryOf(b))
-    .filter((s) => !s.none)
-    .map((s) => s.text);
-  const stageLabel = (stage: string) =>
-    copy?.[`life_${stage}_heading`] ?? LIFE_GRID_LABELS[stage] ?? stage;
-  const unknownWord = (copy?.beats_unknown_word ?? 'Unknown').toLowerCase();
-  const unknownStages = stages
-    .filter((stage) => stageUnknown(byStage.get(stage) ?? []))
-    .map((stage) => `${stageLabel(stage)}: ${unknownWord}`);
-  const testamentLines = [...unknownStages, ...told];
-
   const amnesiacCard = (beat: BeatPoolEntry) => (
     <li>
       <button
@@ -361,7 +310,7 @@ export function LifeGrids({ draft, copy }: Props) {
     </li>
   );
 
-  const renderSection = (stage: string, beat: BeatPoolEntry) => {
+  const renderSection = (beat: BeatPoolEntry) => {
     const open = !foldedBeats.has(beat.beat_id);
     const summary = summaryOf(beat);
     const state = stateOf(beat);
@@ -505,11 +454,6 @@ export function LifeGrids({ draft, copy }: Props) {
                   />
                 </div>
               ))}
-            <div className="next">
-              <button type="button" onClick={() => next(stage, beat)}>
-                {copy?.life_next ?? 'Next'}
-              </button>
-            </div>
           </div>
         )}
       </article>
@@ -541,7 +485,7 @@ export function LifeGrids({ draft, copy }: Props) {
             <span className="prog">{prog}</span>
           </button>
         </h3>
-        {open && <div className="stage-body">{pool.map((beat) => renderSection(stage, beat))}</div>}
+        {open && <div className="stage-body">{pool.map((beat) => renderSection(beat))}</div>}
       </section>
     );
   };
@@ -604,20 +548,6 @@ export function LifeGrids({ draft, copy }: Props) {
           )}
         </p>
         {stages.map(renderStage)}
-        <div className="life-foot">
-          <span>{foot}</span>
-        </div>
-        <div className="testament">
-          {testamentLines.length > 0
-            ? testamentLines.map((line, i) => (
-                <span key={line}>
-                  {i > 0 && '. '}
-                  <b>{line}</b>
-                  {i === testamentLines.length - 1 && '.'}
-                </span>
-              ))
-            : (copy?.life_testament_empty ?? 'Nothing written yet.')}
-        </div>
       </div>
       {rail ? createPortal(ledger, rail) : ledger}
     </div>

@@ -710,6 +710,8 @@ export interface TechniqueProgressMeter {
   total_required: number;
   /** Anonymity-respecting display name (RosterTenure.display_name), or null for self-study. */
   teacher_name: string | null;
+  /** False for a meter a player teacher or an Academy trainer opened (no self-study penalty). */
+  is_self_study: boolean;
   /** TechniqueProgress.get_source_display() — e.g. "Teaching Offer" / "Academy Training". */
   source_label: string;
   /** Remaining weekly training points for this technique, or null when unavailable. */

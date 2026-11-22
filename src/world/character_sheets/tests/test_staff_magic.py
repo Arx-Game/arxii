@@ -108,11 +108,13 @@ class GrantMagicTests(TestCase):
         aura = CharacterAura.objects.get(character=self.sheet)
         assert aura.glimpse_story == "The lamp went out and I could still see."
         config = RitualCheckConfig.objects.get(ritual__name="Dawn Vigil")
-        assert (config.stat, config.skill, config.resonance) == (
+        # Staff pick one resonance; its affinity is not Primal, so it is the outward pick.
+        assert (config.stat, config.skill, config.outward_resonance) == (
             self.stat,
             self.skill,
             self.resonance,
         )
+        assert config.primal_resonance is None
         # The ritual belongs to the player, never the staff member who granted it.
         assert config.ritual.author_account == self.player.account
 

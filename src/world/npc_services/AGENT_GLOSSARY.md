@@ -117,6 +117,13 @@ _Avoid_: "teaching offer" for TRAIN specifically (that term is
 `magic.TechniqueTeachingOffer`, the player-to-player path — a different model
 entirely, though both converge on the same acquisition seam).
 
+**Instruction bonus** (#2741): the check points a TRAIN offer's trainer adds to every training
+session roll, authored on `TrainOfferDetails.instruction_bonus` and copied onto the
+`TechniqueProgress` meter the offer opens, because the NPC trainer is never present at a session.
+Paying for a TRAIN offer also lifts the self-study penalty, whatever the bonus is set to.
+_Avoid_: "teacher skill bonus" (that is the player-teacher path, read from the teacher's own
+check rating).
+
 **Skill course / Course enrollment** (#4457, ADR-4457-A):
 `OfferKind.SKILL_COURSE` is an Academy teacher's course in one skill (any
 skill, chosen by staff on each offer; the Required content dashboard keeps one

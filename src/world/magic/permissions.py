@@ -8,7 +8,8 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from world.magic.models import Thread
+from world.magic.constants import RitualExecutionKind
+from world.magic.models import AnimaRitualPerformance, Ritual, Thread
 from world.magic.models.sessions import RitualSession
 from world.roster.models import RosterEntry
 
@@ -24,13 +25,55 @@ def _active_sheet_ids_for_user(user: object) -> set[int]:
     return set(RosterEntry.objects.for_account(account).character_ids())
 
 
+def known_ritual_ids_for_request(request: Request) -> set[int]:
+    """Return the ids of the anima rituals the character the request acts as knows (#5280).
+
+    The anima ritual is in character and belongs to the character who knows it, so what a
+    player may see or edit of it is read through ``CharacterRitualKnowledge`` on the character
+    she is browsing as (``character_for_request``), never through the account that authored it
+    and never through every character the account plays. No selected character knows none,
+    and neither does a selected character the player no longer plays (a tenure that ended
+    leaves the selection behind): this is the tenure permission boundary, so the account's
+    current tenures are read here on purpose.
+    """
+    from world.magic.services.anima import character_scene_action_rituals  # noqa: PLC0415
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+    character = character_for_request(request, entry_id=None)
+    if character is None or character.pk not in _active_sheet_ids_for_user(request.user):
+        return set()
+    return set(character_scene_action_rituals(character.pk).values_list("pk", flat=True))
+
+
+def can_edit_ritual(user: object, ritual: Ritual, *, known_ritual_ids: set[int]) -> bool:
+    """Whether ``user`` may edit ``ritual``; ``known_ritual_ids`` is the acting character's.
+
+    Staff may edit any ritual. A staff-authored ritual (no author) is staff-only. A player's
+    anima ritual (SCENE_ACTION) is edited from the character who knows it. Any other
+    player-authored ritual is edited by the account that authored it.
+    """
+    if cast(AccountDB, user).is_staff:
+        return True
+    author_id = ritual.author_account_id
+    if author_id is None:
+        return False
+    if ritual.execution_kind == RitualExecutionKind.SCENE_ACTION:
+        return ritual.pk in known_ritual_ids
+    return author_id == cast(AccountDB, user).pk
+
+
 class IsRitualAuthorOrStaff(BasePermission):
     """Allow write access only to the Ritual's author or staff.
 
     Safe methods (GET, HEAD, OPTIONS) are always allowed.
-    Mutation (PATCH, PUT, DELETE) is restricted to:
+    Mutation (PATCH, PUT, DELETE) follows ``can_edit_ritual``:
     - Staff accounts (is_staff=True).
-    - The account that authored the ritual (ritual.author_account == request.user).
+    - For a player's anima ritual (SCENE_ACTION with an author): a requester acting as the
+      character who knows it (#5280). The ritual is in character and belongs to the
+      character, so authorship alone does not let a player edit it from another character,
+      even one on the same account, and a player who takes over the character can.
+    - For any other player-authored ritual: the account that authored it
+      (ritual.author_account == request.user).
 
     Staff-authored rituals (author_account=NULL) cannot be mutated by non-staff.
     """
@@ -38,12 +81,9 @@ class IsRitualAuthorOrStaff(BasePermission):
     def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
         if request.method in SAFE_METHODS:
             return True
-        if request.user.is_staff:
-            return True
-        author_id = obj.author_account_id
-        if author_id is None:
-            return False  # staff-authored ritual — non-staff cannot mutate
-        return author_id == request.user.id
+        return can_edit_ritual(
+            request.user, obj, known_ritual_ids=known_ritual_ids_for_request(request)
+        )
 
 
 class IsThreadOwner(BasePermission):
@@ -158,3 +198,16 @@ class IsStaffForBaseWrites(BasePermission):
         if view.action in BASE_WRITE_ACTIONS:
             return bool(request.user.is_staff)
         return True
+
+
+class PlaysTheRitualPartner(BasePermission):
+    """Answering an anima ritual (#5280): only the player of the character it reached for.
+
+    "Plays" is the active tenure, as the other magic permissions read it. Staff get no
+    exception: the answer is the partner's own.
+    """
+
+    def has_object_permission(
+        self, request: Request, view: APIView, obj: AnimaRitualPerformance
+    ) -> bool:
+        return obj.target_character_id in _active_sheet_ids_for_user(request.user)

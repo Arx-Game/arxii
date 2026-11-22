@@ -325,10 +325,19 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     latent provisioning at CG + `gift_resonances_for` (the four cast sites; the thread's
     resonances in row order, #5123).
   - **Anima / rituals:** `CharacterAnima`, the personal anima ritual (a SCENE_ACTION
-    `Ritual`; performed through `PerformRitualAction`, web Perform button and
-    telnet `ritual anima`, #4451), the ritual with a partner (#5181: `start_partner_ritual`, `resolve_ritual_request`,
-    `apply_ritual_bond`, `AnimaRitualResonanceAward`, `GainSource.ANIMA_RITUAL`, `Affinity.ritual_partner_fatigue`; telnet
-    `ritual anima <partner>`; `PersonaMenu.anima_ritual_available`; journey `test_anima_ritual_partner_journeys`),
+    `Ritual`, never performed alone since #5280: the web dispatch, the bare verb and the
+    ritual's own name all refuse with "Name someone else to take part in your ritual."), the ritual
+    with a partner (#5181, #5280, ADR-5280: `start_partner_ritual`, `check_partner_ritual`,
+    `resolve_ritual_request`, `ritual_succeeded`, `ritual_earning_parts`, `apply_ritual_bond`,
+    `AnimaRitualResonanceAward`, `GainSource.ANIMA_RITUAL`, `Affinity.ritual_partner_fatigue`; telnet
+    `ritual anima <partner>`; `PersonaMenu.anima_ritual_available`), its two resonance picks
+    (`RitualCheckConfig.primal_resonance` and `outward_resonance`; `anima_ritual_choices`,
+    `set_up_anima_ritual_resonances`; `/api/magic/anima-ritual/`), the partner's answer
+    (`AnimaRitualPerformance.endorsement`, `answer_anima_ritual`, `lapse_pending_endorsements`,
+    `EndorseAnimaRitualAction`; `/api/magic/anima-ritual-endorsements/`; telnet `ritual endorse` and
+    `ritual withhold`), and attunement (`attune_anima_ritual`, `AttuneAnimaRitualAction`,
+    `AnimaConfig.attunement_*`; telnet `ritual attune`); journeys `test_anima_ritual_partner_journeys`,
+    `test_attuning_the_anima_ritual_journeys`,
     `AnimaRitualPerformance`, `SoulfrayConfig`, `MishapPoolTier`,
     `TechniqueOutcomeModifier`. `ANIMA_BANDS` + `anima_band_for(current, maximum)`
     (`constants.py`, PLACEHOLDER labels pending Apostate rewrite) derive the
@@ -892,7 +901,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `get_character_cast_check(character)` (`services/anima.py`) — resolves the
     per-character CheckType for cast resolution.
     `get_character_anima_ritual(character)` (`services/anima.py`) — retrieves the
-    character's personal SCENE_ACTION `Ritual` (their anima ritual).
+    character's personal SCENE_ACTION `Ritual` (their anima ritual): the one her roster
+    entry knows (`CharacterRitualKnowledge`), never her account's (#5280);
+    `character_scene_action_rituals(character_id)` is the shared query.
     `provision_player_anima_ritual(...)` (`services/anima.py`) — updated to point
     `RitualCheckConfig.check_type` at the per-character check so ritual and technique
     casts roll the same personal check.
@@ -1569,11 +1580,15 @@ Persistent states that modify capabilities, checks, and resistances with stage p
   opponents, and `absorb_pool` / `reflect_damage` find their condition by field, not by name.
   See `docs/systems/conditions.md` "Condition effects combat reads".
 - **Conditions react when someone is struck (#4584, ADR-4584-A) [BUILT & WIRED]:**
-  `ConditionTemplate` fields `forces_attack_on_source` (provoke; `provoking_source_by_target`),
+  `ConditionTemplate` fields `forces_attack_on_source` (provoke; `provoking_instances_by_target`),
   `source_guards_bearer` (standing guard; `guardians_by_target`), `spares_source` (#4759; an NPC
   spares the source and its wards, read by NPC targeting, `untargetable_participant_ids`, #4811), `prevents_knockout` (grace;
   `knockout_preventing_instance`) and `retaliation_damage` / `retaliation_damage_type` /
-  `retaliation_condition` (strike-back; `retaliating_instances`). `UNTIL_USED` conditions end by
+  `retaliation_condition` (strike-back; `retaliating_instances`). Each of these moments (and an
+  `UNTIL_USED` spend) tells the room an authored `<moment>_narration` line on the template, else a
+  plain one: `narrate_reactive_moment`, `fill_reactive_line` in `world/conditions/reactive_narration.py`
+  (#4587; `ReactiveMoment`, `SpendNarration` in `conditions/constants.py`; provoke/guard instances come
+  from `provoking_instances_by_target` and `standing_guard_instance`). `UNTIL_USED` conditions end by
   use: `spend_condition_use`, `spend_contributing_conditions`, `spend_conditions_by_id`;
   `condition_contributions` records `condition_instance_id`, and previews never spend. See
   `docs/systems/conditions.md` "Condition effects combat reads" and
@@ -5383,7 +5398,7 @@ register as additional kinds.
 - **TRAIN offers — Academy training (#2440):** `NPCRole.teaches_tradition` (nullable FK →
   `magic.Tradition`, `SET_NULL`) scopes which tradition's signature techniques a trainer
   role can teach; `TrainOfferDetails` (1:1 per-offer details — `technique` FK, `learn_ap_cost`,
-  `gold_cost`) authors **one offer row per teachable technique** (mirrors how MISSION/PERMIT
+  `gold_cost`, `instruction_bonus`, #2741) authors **one offer row per teachable technique** (mirrors how MISSION/PERMIT
   enumerate per-template/per-kind rows — the smallest shape consistent with MENU/POOL
   selection; MENU-mode already lists every eligible offer as its own menu line). Handler
   (`run_train_offer`): resolve the Academy (`offer.role.faction_affiliation`) → obligation
@@ -5474,7 +5489,9 @@ register as additional kinds.
   `contribute_to_technique_progress` with a learning check. The learner
   rolls intellect ("Technique Training" `CheckType`, seeded by
   `ensure_technique_training_content()`) plus the skills staff map to
-  `TECHNIQUE_LEARNING`; the seed names no skill (#4547). The
+  `TECHNIQUE_LEARNING`, plus the technique's own casting skill (its skill, else its casting
+  style's) through `magic_skills.technique_learning_terms`, counted once (#2740; the seed
+  names no skill, #4547). The
   check outcome maps to a dev-point multiplier via
   `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure=0×, partial=0.5×,
   success=1.0×, critical=1.5×). AP is always spent; only dev-point yield
@@ -5482,7 +5499,11 @@ register as additional kinds.
   `dev_points` + `ap_to_spend` as co-equal params (decoupling AP from
   dev points). Difficulty: `target_difficulty = (technique.tier × step)
   − (learner_level // divisor) − teacher_skill_bonus
-  + (self_study_penalty if teacher is None)`. Four tuning knobs on
+  + (self_study_penalty if neither a player teacher nor an Academy trainer taught it)`.
+  A meter an Academy TRAIN offer opened (`TechniqueProgress.source = ACADEMY_TRAINING`) is paid
+  instruction (#2741): no self-study penalty, and its `instruction_bonus` (copied from
+  `TrainOfferDetails.instruction_bonus` at acceptance by `charge_and_learn`) joins the roll as
+  one labelled `CHARACTER` modifier, "Academy instruction". Four tuning knobs on
   `GiftAcquisitionConfig`.
 - **Player-facing training trigger (#2739):** the production caller #2727 shipped
   without. `TrainTechniqueAction` (`actions/definitions/technique_training.py`, key
@@ -5492,7 +5513,7 @@ register as additional kinds.
   create one: accepting a teaching offer or an Academy TRAIN offer), resolves a
   co-present teacher (`progress.teacher_tenure`'s character sharing the learner's
   room *at session time* — Decision 3a: never a location hard-block, silent
-  self-study fallback otherwise, true for both PC-teacher and Academy meters), and
+  self-study fallback otherwise; an Academy meter is never self-study, #2741), and
   calls `resolve_training_check`. `ap_to_invest` defaults to 1 (no base-session-cost
   constant exists yet) and is rejected when non-positive; the action does not
   pre-bound it further — the seam spends it in full and raises
@@ -8647,7 +8668,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
-### Standoffs (#4145, #4354, #4361, #4373, #4415, #4441)
+### Standoffs (#4145, #4354, #4361, #4373, #4415, #4441, #4323)
 The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
 creatures, presses them with social approaches and names terms that settle them. Derived
 from live (OPEN or PROPOSED) `StandoffGroup` rows, never a stored flag (ADR-4145-A). In a
@@ -8657,11 +8678,14 @@ its own group, read live from its persona (ADR-4373-A), and verbal approaches an
 language gate. Hunger, Hatred and Territory run on each group's clock and on faction rules that
 provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A). A player
 character who opts in, with drives and a cause of their own, can be read and pressed by other
-player characters as a persona group (ADR-4441-A).
+player characters as a persona group (ADR-4441-A). The terms that settle the last group are the
+only act that pays: the character's own resonance, renown and, when another player's character
+witnessed it, a legend deed, graded by the roll's result tier (ADR-4323).
 
 - **Models:** `CreatureDrive`, `FactionRule` (was `RegardRule`), `StandoffApproach`,
   `StandoffTerms`, `StandoffConfig` (singleton), `StandoffCauseGloss`, `StandoffGroup`,
   `StandoffReveal`, `StandoffAngleShare` (was `StandoffSparkShare`), `StandoffMoraleRuling`,
+  `StandoffEndingAward` (#4323: result tier to a `DramaticMomentType` and a deed worth),
   `OpponentLineDrive`, `OpponentLineFactionRuleSuppression`; `FactionRule.organization` /
   `society` (one owner); `FactionRule.cause_effect` (`CauseEffect`: NONE, SUPPRESS, PROVOKE);
   `CreatureTemplate.cause` (NONE, PREDATION, ORDERS, HUNGER, HATRED, TERRITORY) /
@@ -8691,7 +8715,8 @@ player characters as a persona group (ADR-4441-A).
   `group_drives`, `group_rules`, `inherited_rules`, `affiliation_rules`, `persona_drives`
   (`services/profile.py`); `member_filter`, `attack_line` (`services/state.py`);
   `group_languages`, `persona_languages`, `language_refusal` (`services/language.py`);
-  `regard_for` (`services/verbs.py`); `apply_profile_change`, `build_profile_view`,
+  `regard_for` (`services/verbs.py`); `pay_standoff_ending`, `ending_award`
+  (`services/ending.py`); `apply_profile_change`, `build_profile_view`,
   `is_standoff_player_character`, `target_refusal`, `is_in_live_standoff`, `drive_catalog`
   (`services/character_profile.py`); `story_npc_personas`, `may_stand_persona`
   (`world/stories/services/cast.py`);
