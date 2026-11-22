@@ -46,8 +46,8 @@ class OpponentPortraitSerializerTests(TestCase):
 
         data = OpponentSerializer(opponent).data
         self.assertIsNone(data["thumbnail_media_url"])
-        # Matches PersonaSerializer: thumbnail_url is the model URLField,
-        # which is "" (blank) when unset.
+        # Matches PersonaSerializer: persona_face_url is "" (the client's letter avatar) for
+        # a PRIMARY face with no picture; a mask with none shows the placeholder instead.
         self.assertEqual(data["thumbnail_url"], "")
 
     def test_persona_less_opponent_returns_none_for_both(self) -> None:

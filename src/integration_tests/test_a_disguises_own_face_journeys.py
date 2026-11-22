@@ -17,29 +17,39 @@ against. The two-uploads-at-once lock needs Postgres row locks and is proved by 
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import PropertyMock, patch
 
-from django.contrib import admin
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.forms import modelform_factory
-from django.test import RequestFactory, override_settings
+from django.test import override_settings
+from django.urls import reverse
 from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import AccountFactory, MediaFactory, RoomProfileFactory
 from evennia_extensions.models import Media
-from flows.factories import SceneDataManagerFactory
-from flows.service_functions.serializers.room_state import ObjectStateSerializer
 from integration_tests.harness import JourneyCase
+from integration_tests.test_refused_admin_saves_journeys import RefusedAdminSaveCase
+from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import LifecycleState
+from world.combat.factories import (
+    CombatEncounterFactory,
+    CombatOpponentFactory,
+    CombatParticipantFactory,
+)
+from world.conditions.capability_content import AT_WILL_SHIFTING
+from world.conditions.factories import CapabilityTypeFactory
 from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
-from world.forms.factories import AlternateSelfFactory
-from world.forms.models import ActiveAlternateSelf, AlternateSelf
+from world.forms.factories import ActiveAlternateSelfFactory, AlternateSelfFactory
+from world.gm.constants import GMLevel
+from world.gm.factories import GMProfileFactory, seed_default_gm_level_caps
 from world.items.factories import EquippedItemFactory
+from world.mechanics.factories import ModifierCategoryFactory, ModifierSourceFactory
+from world.mechanics.models import CharacterModifier, ModifierTarget
 from world.roster.factories import TenureMediaFactory
+from world.roster.models import RosterEntry
 from world.roster.services.gallery import look_url, media_usage, set_look, wear_look
 from world.roster.services.gallery_services import media_bytes_used
 from world.scenes.constants import PersonaType
-from world.scenes.factories import PersonaFactory
+from world.scenes.factories import PersonaFactory, SceneFactory, SceneParticipationFactory
 from world.scenes.models import (
     FacePlaceholderConfig,
     Persona,
@@ -549,16 +559,31 @@ class TheFaceWithNoPortrait(DisguiseFaceCase):
 class TheRoomListFollowsTheWornMask(DisguiseFaceCase):
     """A room's states persist across commands, so the list must read the face worn now."""
 
-    def test_a_state_built_before_a_mask_switch_still_reports_the_mask_now_worn(self) -> None:
-        state = SceneDataManagerFactory().initialize_state_for_object(self.ysmay)
-        before = ObjectStateSerializer().to_representation(state)
-        self.assertEqual(before["persona_id"], self.mask.pk)
+    def hobb_room_row(self) -> dict[str, Any]:
+        """Ysmay's row in the room frame Hobb's client is sent."""
+        self.watch(self.hobb)
+        with patch.object(type(self.hobb), "has_account", new_callable=PropertyMock) as has:
+            has.return_value = True
+            self.hobb.send_room_state()
+        frames = [
+            kwargs["room_state"][1]
+            for _args, kwargs in self.mailbox(self.hobb).calls
+            if "room_state" in kwargs
+        ]
+        self.assertTrue(frames, self.mailbox(self.hobb).calls)
+        rows = frames[-1]["characters"] + frames[-1]["objects"]
+        return next(row for row in rows if row["dbref"] == self.ysmay.dbref)
+
+    def test_the_room_frame_names_the_mask_now_worn_after_a_switch_back(self) -> None:
+        masked = self.hobb_room_row()
+        self.assertEqual(masked["persona_id"], self.mask.pk)
+        self.assertEqual(masked["thumbnail_url"], BUILTIN_FACE_PLACEHOLDER_URL)
 
         self.telnet(self.ysmay, "persona Ysmay")
 
-        after = ObjectStateSerializer().to_representation(state)
-        self.assertEqual(after["persona_id"], self.sheet.primary_persona.pk)
-        self.assertEqual(after["name"], "Ysmay")
+        barefaced = self.hobb_room_row()
+        self.assertEqual(barefaced["persona_id"], self.sheet.primary_persona.pk)
+        self.assertEqual(barefaced["name"], "Ysmay")
 
 
 class AnAlternateSelfsPortrait(DisguiseFaceCase):
@@ -574,6 +599,16 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
             character=self.sheet, display_name="Battle Form", persona=form_persona
         )
         self.bare = AlternateSelfFactory(character=self.sheet, display_name="Hollow Form")
+        # Shifting at will is a capability she holds, as in the form-shifting journey.
+        capability = CapabilityTypeFactory(name=AT_WILL_SHIFTING, innate_baseline=0)
+        target = ModifierTarget.objects.create(
+            name=f"capability_{capability.pk}",
+            category=ModifierCategoryFactory(name="capability"),
+            target_capability=capability,
+        )
+        CharacterModifier.objects.create(
+            character=self.sheet, target=target, source=ModifierSourceFactory(), value=1
+        )
 
     def set_portrait(self, alt_self: Any, **body: Any) -> Any:
         return self.ysmay_api().post(
@@ -581,9 +616,10 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         )
 
     def wear(self, alt_self: Any) -> None:
-        ActiveAlternateSelf.objects.update_or_create(
-            character=self.sheet, defaults={"alternate_self": alt_self}
+        shifted = self.ysmay_api().post(
+            "/api/forms/alternate-selves/shift/", {"alternate_self_id": alt_self.pk}, format="json"
         )
+        self.assertEqual(shifted.status_code, 200, shifted.content)
         self.sheet.refresh_from_db()
 
     def test_a_form_with_a_persona_sets_its_own_and_its_personas_picture(self) -> None:
@@ -640,6 +676,38 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         self.assertEqual(poses, {self.bare.thumbnail.cloudinary_url})
         self.assertNotIn(self.real_url, str(feed))
 
+    def test_a_player_character_in_a_worn_form_shows_its_picture_in_poses_and_never_a_letter(
+        self,
+    ) -> None:
+        """A player character's true face holds no picture copy: her look is in her gallery."""
+        self.assertEqual(self.sheet.primary_persona.thumbnail_url, "")
+        self.set_portrait(self.bare, media_id=self.her_picture().pk)
+        self.bare.refresh_from_db()
+        self.telnet(self.ysmay, "persona Ysmay")
+        self.start_scene()
+        self.wear(self.bare)
+        self.telnet(self.ysmay, "pose bares her teeth.")
+
+        poses, feed = self.feed_pictures()
+
+        self.assertEqual(poses, {self.bare.thumbnail.cloudinary_url})
+        self.assertNotIn(self.real_url, str(feed))
+
+    def test_a_form_tied_to_another_mask_keeps_its_picture_off_this_one(self) -> None:
+        """Her worn form belongs to Ashen Wolf, so the barefaced face never reads its picture."""
+        self.set_portrait(self.with_persona, media_id=self.her_picture().pk)
+        self.with_persona.refresh_from_db()
+        self.wear(self.with_persona)
+        self.telnet(self.ysmay, "persona Ysmay")
+
+        listed = self.ysmay_api().get(f"/api/personas/?character_sheet={self.sheet.pk}").json()
+        by_name = {row["name"]: row["thumbnail_media_url"] for row in listed["results"]}
+        sheet = self.hobb_reads_sheet()
+
+        self.assertEqual(by_name["Ashen Wolf"], self.with_persona.thumbnail.cloudinary_url)
+        self.assertNotEqual(by_name["Ysmay"], self.with_persona.thumbnail.cloudinary_url)
+        self.assertEqual(sheet["profile_picture"], BUILTIN_FACE_PLACEHOLDER_URL)
+
     def test_a_worn_form_with_no_persona_shows_the_silhouette_then_her_pick_over_staffs(
         self,
     ) -> None:
@@ -684,26 +752,104 @@ class AnAlternateSelfsPortrait(DisguiseFaceCase):
         self.assertEqual(unknown.status_code, 404)
 
 
-class AStaffPictureOnAFormReachesThePoseToo(DisguiseFaceCase):
-    """A unit a journey cannot reach: the admin's save hook, with a real form and its changes.
+class TheMaskedFaceInFightsAndCastLists(DisguiseFaceCase):
+    """Where a fight or the GM's cast list shows a face, a disguised one shows the placeholder."""
 
-    The changeform has dozens of required fields, so the hook is driven with a one-field
-    ModelForm whose ``changed_data`` is real, never a hand-built stand-in.
-    """
+    def setUp(self) -> None:
+        super().setUp()
+        self.real_url = self.give_her_a_real_look()
+        primary = self.sheet.primary_persona
+        primary.thumbnail_url = self.real_url
+        primary.save(update_fields=["thumbnail_url"])
+        self.scene = SceneFactory(room=self.lantern)
+
+    def test_a_masked_fighter_and_masked_opponents_show_the_placeholder_in_the_fight(self) -> None:
+        encounter = CombatEncounterFactory(scene=self.scene, room=self.lantern)
+        CombatParticipantFactory(encounter=encounter, character_sheet=self.sheet)
+        CombatParticipantFactory(encounter=encounter, character_sheet=self.hobb.sheet_data)
+        villain_real = "https://res.cloudinary.com/test/image/upload/villain_real.png"
+        villain, shapeshifter = CharacterSheetFactory(), CharacterSheetFactory()
+        for sheet in (villain, shapeshifter):
+            sheet.primary_persona.thumbnail_url = villain_real
+            sheet.primary_persona.save(update_fields=["thumbnail_url"])
+        hood = PersonaFactory(
+            character_sheet=villain,
+            persona_type=PersonaType.TEMPORARY,
+            name="a hooded man",
+            thumbnail_url="",
+        )
+        hooded = CombatOpponentFactory(encounter=encounter, persona=hood, name="a hooded man")
+        wolf_self = AlternateSelfFactory(character=shapeshifter, display_name="Wolf Shape")
+        ActiveAlternateSelfFactory(character=shapeshifter, alternate_self=wolf_self)
+        shifted = CombatOpponentFactory(
+            encounter=encounter, persona=shapeshifter.primary_persona, name="Wolf Shape"
+        )
+
+        response = self.hobb_api().get(f"/api/combat/{encounter.pk}/")
+
+        self.assertEqual(response.status_code, 200, response.content)
+        payload = response.json()
+        fighters = {row["id"]: row for row in payload["participants"]}
+        ysmay_row = next(row for row in fighters.values() if row["persona_id"] == self.mask.pk)
+        self.assertEqual(ysmay_row["thumbnail_url"], BUILTIN_FACE_PLACEHOLDER_URL)
+        opponents = {row["id"]: row for row in payload["opponents"]}
+        for opponent in (hooded, shifted):
+            self.assertEqual(
+                opponents[opponent.pk]["thumbnail_url"], BUILTIN_FACE_PLACEHOLDER_URL, opponent
+            )
+        for real in (self.real_url, villain_real):
+            self.assertNotIn(real, str(payload))
+
+    def test_a_story_npc_in_a_worn_form_shows_the_placeholder_in_the_cast_list(self) -> None:
+        seed_default_gm_level_caps()
+        warden = self.make_player("Ravenna", room=self.lantern)
+        gm = self.account_of(warden)
+        GMProfileFactory(account=gm, level=GMLevel.JUNIOR)
+        SceneParticipationFactory(scene=self.scene, account=gm, is_gm=True, is_owner=True)
+        minted = self.web(warden, "mint_story_npc", name="Captain Vael", description="An officer.")
+        self.assertTrue(minted.detail.success, minted.detail.message)
+        entry = RosterEntry.objects.get(pk=minted.detail.data["roster_entry_id"])
+        vael = entry.character_sheet.character
+        vael.location = self.lantern
+        vael.save()
+        npc_real = "https://res.cloudinary.com/test/image/upload/vael_real.png"
+        primary = entry.character_sheet.primary_persona
+        primary.thumbnail_url = npc_real
+        primary.save(update_fields=["thumbnail_url"])
+        url = f"/api/scenes/{self.scene.pk}/cast-list/"
+
+        def vael_row() -> dict[str, Any]:
+            rows = self.api(gm).get(url).json()
+            return next(row for row in rows if row["name"] == "Captain Vael")
+
+        self.assertEqual(vael_row()["thumbnail_url"], npc_real)
+        wolf_self = AlternateSelfFactory(character=entry.character_sheet, display_name="Wolf")
+        ActiveAlternateSelfFactory(character=entry.character_sheet, alternate_self=wolf_self)
+        entry.character_sheet.refresh_from_db()
+
+        self.assertEqual(vael_row()["thumbnail_url"], BUILTIN_FACE_PLACEHOLDER_URL)
+        art = MediaFactory(player_data=None, slug="wolf-art", cloudinary_public_id="art/wolf")
+        wolf_self.thumbnail = art
+        wolf_self.save(update_fields=["thumbnail"])
+        self.assertEqual(vael_row()["thumbnail_url"], art.cloudinary_url)
+
+
+class AStaffPictureOnAFormReachesThePoseToo(RefusedAdminSaveCase):
+    """Staff set a form's Thumbnail on its stock admin page and the pose shows it too."""
 
     def test_staff_setting_a_forms_picture_sets_its_personas_pose_picture(self) -> None:
+        sheet = CharacterSheetFactory()
         form_persona = PersonaFactory(
-            character_sheet=self.sheet, name="Ashen Wolf", persona_type=PersonaType.ALTERNATE
+            character_sheet=sheet, name="Ashen Wolf", persona_type=PersonaType.ALTERNATE
         )
-        wolf = AlternateSelfFactory(character=self.sheet, persona=form_persona)
+        wolf = AlternateSelfFactory(character=sheet, persona=form_persona)
         art = MediaFactory(player_data=None, slug="wolf-art", cloudinary_public_id="art/wolf")
-        form = modelform_factory(AlternateSelf, fields=["thumbnail"])(
-            data={"thumbnail": art.pk}, instance=wolf
-        )
-        self.assertTrue(form.is_valid(), form.errors)
+        url = reverse("admin:arxii_alternateself_change", args=[wolf.pk])
+        data = self.change_post(url)
+        data["thumbnail"] = str(art.pk)
 
-        request = RequestFactory().post("/admin/")
-        admin.site.get_model_admin(AlternateSelf).save_model(request, form.instance, form, True)
+        saved = self.client.post(url, data)
 
+        self.assertEqual(saved.status_code, 302, saved.content[:2000])
         persona = Persona.objects.get(pk=form_persona.pk)
         self.assertEqual((persona.thumbnail, persona.thumbnail_url), (art, art.cloudinary_url))
