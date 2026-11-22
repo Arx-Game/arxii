@@ -96,7 +96,7 @@ export function AnimaRitualAttuneDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg" {...NO_DESCRIPTION}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg" {...NO_DESCRIPTION}>
         <DialogHeader>
           <DialogTitle>Attune your ritual</DialogTitle>
         </DialogHeader>
