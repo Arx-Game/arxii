@@ -251,7 +251,7 @@ class AcceptingARitualRequestTests(TestCase):
             author_account=self.sheet.character.db_account,
         )
         RitualCheckConfigFactory(
-            ritual=self.ritual, resonance=self.ruin, check_type=CheckTypeFactory()
+            ritual=self.ritual, outward_resonance=self.ruin, check_type=CheckTypeFactory()
         )
         CharacterAnimaFactory(character=self.sheet, current=2, maximum=10)
         CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.ruin)

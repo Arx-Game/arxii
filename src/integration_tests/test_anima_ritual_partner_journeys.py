@@ -117,7 +117,7 @@ class _RitualWithAPartner(JourneyCase):
         )
         RitualCheckConfigFactory(
             ritual=self.ritual,
-            resonance=self.resonance,
+            outward_resonance=self.resonance,
             check_type=self.check_type,
             target_difficulty_level=2,
         )

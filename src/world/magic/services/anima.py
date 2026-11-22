@@ -366,7 +366,8 @@ def provision_player_anima_ritual(  # noqa: PLR0913
     ritual_name: str,
     stat: Trait | None = None,
     skill: Skill | None = None,
-    resonance: Resonance | None = None,
+    primal_resonance: Resonance | None = None,
+    outward_resonance: Resonance | None = None,
 ) -> Ritual | None:
     """Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.
 
@@ -390,10 +391,11 @@ def provision_player_anima_ritual(  # noqa: PLR0913
         stat: Explicit Anima Check stat; falls back to Willpower when None.
         skill: Explicit Anima Check skill; falls back to the character's
             highest-valued skill (or first active skill) when None.
-        resonance: The character's CG-picked gift resonance (#2971) — the anima
-            ritual IS the character's magical identity, so it is written onto the
-            created ``RitualCheckConfig``. ``None`` when unset (legacy/test-only
-            callers), which leaves ``RitualCheckConfig.resonance`` null as before.
+        primal_resonance: The Primal resonance the ritual grows for its performer
+            (the CG pick, #5280), written onto the created ``RitualCheckConfig``.
+            ``None`` when unset (legacy/test-only callers).
+        outward_resonance: The Celestial or Abyssal resonance the ritual reaches for
+            in its partner, written onto the same row. ``None`` when unset.
     """
     from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
     from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
@@ -486,7 +488,8 @@ def provision_player_anima_ritual(  # noqa: PLR0913
         stat=stat_trait,
         skill=skill,
         check_type=check_type,
-        resonance=resonance,
+        primal_resonance=primal_resonance,
+        outward_resonance=outward_resonance,
     )
 
     # 5. Grant knowledge so the ritual appears in the scene action menu.

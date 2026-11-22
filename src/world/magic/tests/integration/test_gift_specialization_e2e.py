@@ -175,7 +175,7 @@ class GiftSpecializationE2ETest(TestCase):
             ritual_name="Identity Ritual",
             stat=StatTraitFactory(),
             skill=SkillFactory(),
-            resonance=self.resonance,
+            primal_resonance=self.resonance,
         )
         # Mirrors the runtime path: get_character_anima_ritual queries
         # author_account=character.db_account.

@@ -1227,7 +1227,7 @@ class TestMagicSectionFull(TestCase):
             ritual=cls.ritual,
             stat=cls.stat_willpower,
             skill=cls.melee_skill,
-            resonance=cls.resonance_resolve,
+            primal_resonance=cls.resonance_resolve,
         )
 
         # --- Aura (FK to ObjectDB) ---
@@ -1366,9 +1366,10 @@ class TestMagicSectionFull(TestCase):
         assert magic["anima_ritual"]["skill"] == "Melee"
 
     def test_anima_ritual_resonance(self) -> None:
-        """Anima ritual entry contains the resonance name."""
+        """Anima ritual entry names the Primal pick and leaves the outward pick blank."""
         magic = self._get_magic()
-        assert magic["anima_ritual"]["resonance"] == "Resolve"
+        assert magic["anima_ritual"]["primal_resonance"] == "Resolve"
+        assert magic["anima_ritual"]["outward_resonance"] == ""
 
     def test_anima_ritual_description(self) -> None:
         """Anima ritual entry contains the description."""

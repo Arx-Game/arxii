@@ -61,7 +61,7 @@ class ResolveGrantResonanceTests(TestCase):
         ritual_resonance = ResonanceFactory()
         RitualCheckConfigFactory(
             ritual__author_account=sheet.character.db_account,
-            resonance=ritual_resonance,
+            primal_resonance=ritual_resonance,
         )
 
         resolved = _resolve_grant_resonance(sheet, gift)

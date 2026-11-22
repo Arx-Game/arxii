@@ -1405,7 +1405,18 @@ class RitualCheckConfigSerializer(serializers.ModelSerializer):
     stat_name = serializers.CharField(source="stat.name", read_only=True)
     skill_name = serializers.CharField(source="skill.name", read_only=True)
     specialization_id = serializers.PrimaryKeyRelatedField(source="specialization", read_only=True)
-    resonance_id = serializers.PrimaryKeyRelatedField(source="resonance", read_only=True)
+    primal_resonance_id = serializers.PrimaryKeyRelatedField(
+        source="primal_resonance", read_only=True
+    )
+    primal_resonance_name = serializers.CharField(
+        source="primal_resonance.name", read_only=True, allow_null=True
+    )
+    outward_resonance_id = serializers.PrimaryKeyRelatedField(
+        source="outward_resonance", read_only=True
+    )
+    outward_resonance_name = serializers.CharField(
+        source="outward_resonance.name", read_only=True, allow_null=True
+    )
     check_type_id = serializers.PrimaryKeyRelatedField(source="check_type", read_only=True)
     check_type_name = serializers.SerializerMethodField()
 
@@ -1422,7 +1433,10 @@ class RitualCheckConfigSerializer(serializers.ModelSerializer):
             "skill",
             "skill_name",
             "specialization_id",
-            "resonance_id",
+            "primal_resonance_id",
+            "primal_resonance_name",
+            "outward_resonance_id",
+            "outward_resonance_name",
             "check_type_id",
             "check_type_name",
             "target_difficulty_level",
@@ -1502,7 +1516,6 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
     stat_id = serializers.IntegerField(required=False)
     skill_id = serializers.IntegerField(required=False)
     specialization_id = serializers.IntegerField(required=False, allow_null=True)
-    resonance_id = serializers.IntegerField(required=False, allow_null=True)
     check_type_id = serializers.IntegerField(required=False, allow_null=True)
     target_difficulty_level = serializers.IntegerField(min_value=0, required=False)
 
@@ -1530,25 +1543,6 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
         except model.DoesNotExist as exc:
             raise serializers.ValidationError({key: f"{model.__name__} not found."}) from exc
 
-    def _refuse_unheld_resonance(self, resonance: Resonance | None) -> None:
-        """A ritual can only name a resonance its owner holds (#5181).
-
-        The ritual's resonance is what an Anima ritual with a partner earns, so naming one the
-        character never held would earn it from nothing. The ritual belongs to the account that
-        authored it (the ritual being patched, ``self.parent.instance``), so the check asks
-        whether that account plays a character who holds the resonance, never which character
-        the requester has selected. Staff may set any resonance.
-        """
-        from world.magic.services.ritual_bond import account_plays_holder  # noqa: PLC0415
-
-        request = self.context.get("request")
-        if resonance is None or request is None or request.user.is_staff:
-            return
-        author_id = self.parent.instance.author_account_id
-        if author_id is None or not account_plays_holder(author_id, resonance):
-            msg = "You can only name a resonance your character already holds."
-            raise serializers.ValidationError({"resonance_id": msg})
-
     def validate(self, attrs: dict) -> dict:
         """Resolve integer PK fields to model instances."""
         from world.checks.models import CheckType  # noqa: PLC0415
@@ -1573,8 +1567,6 @@ class RitualCheckConfigPatchSerializer(serializers.Serializer):
         self._resolve_nullable_fk(
             attrs, "specialization_id", Specialization, "specialization", resolved
         )
-        self._resolve_nullable_fk(attrs, "resonance_id", Resonance, "resonance", resolved)
-        self._refuse_unheld_resonance(resolved.get("resonance"))
         self._resolve_nullable_fk(attrs, "check_type_id", CheckType, "check_type", resolved)
 
         if "target_difficulty_level" in attrs:  # noqa: STRING_LITERAL

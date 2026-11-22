@@ -167,7 +167,7 @@ class CreateDramaticMomentTagServiceTest(TestCase):
         moment_type = DramaticMomentTypeFactory(resonance=None, resonance_amount=15)
         RitualCheckConfigFactory(
             ritual__author_account=self.sheet.character.db_account,
-            resonance=self.resonance,
+            primal_resonance=self.resonance,
         )
 
         create_dramatic_moment_tag(

@@ -43,13 +43,13 @@ class RitualCheckConfigModelTests(TestCase):
             ritual=self.ritual,
             stat=self.stat,
             skill=self.skill,
-            resonance=self.resonance,
+            primal_resonance=self.resonance,
             check_type=self.check_type,
         )
         self.assertEqual(config.ritual, self.ritual)
         self.assertEqual(config.stat, self.stat)
         self.assertEqual(config.skill, self.skill)
-        self.assertEqual(config.resonance, self.resonance)
+        self.assertEqual(config.primal_resonance, self.resonance)
         self.assertEqual(config.check_type, self.check_type)
         self.assertIsNone(config.specialization)
 
@@ -65,7 +65,7 @@ class RitualCheckConfigModelTests(TestCase):
             stat=self.stat,
             skill=self.skill,
             specialization=specialization,
-            resonance=self.resonance,
+            primal_resonance=self.resonance,
             check_type=self.check_type,
         )
         self.assertEqual(config.specialization, specialization)

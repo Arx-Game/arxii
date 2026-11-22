@@ -951,7 +951,8 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
         ).select_related(
             "check_config__stat",
             "check_config__skill",
-            "check_config__resonance",
+            "check_config__primal_resonance",
+            "check_config__outward_resonance",
         ),
         to_attr="cached_scene_action_rituals",
     ),
@@ -1146,7 +1147,8 @@ def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | Non
     return AnimaRitualSection(
         stat=config.stat.name,
         skill=config.skill.name,
-        resonance=config.resonance.name if config.resonance else "",
+        primal_resonance=config.primal_resonance.name if config.primal_resonance else "",
+        outward_resonance=config.outward_resonance.name if config.outward_resonance else "",
         description=ritual.description,
     )
 

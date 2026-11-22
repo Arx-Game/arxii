@@ -126,7 +126,9 @@ def start_partner_ritual(
 def ritual_consent_sentence(action_request: SceneActionRequest) -> str:
     """The sentence a partner's consent prompt carries about their fatigue, or blank (#5181).
 
-    Only a ritual request names a resonance, so any other request reads blank.
+    Only a ritual request names a resonance, so any other request reads blank. The resonance
+    read is ``snapshot_resonance``, the ritual's outward pick (Celestial or Abyssal): the one
+    that reaches the partner (#5280).
     """
     from world.magic.services.ritual_bond import (  # noqa: PLC0415
         performer_holds,
