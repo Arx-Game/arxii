@@ -106,9 +106,12 @@ def placeholder_portrait_url() -> str:
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
     from evennia_extensions.models import Media  # noqa: PLC0415
-    from world.scenes.models import get_face_placeholder_config  # noqa: PLC0415
+    from world.scenes.models import FacePlaceholderConfig  # noqa: PLC0415
 
-    media_id = get_face_placeholder_config().placeholder_id
+    # A read, never ``get_face_placeholder_config()``: that accessor creates the row when
+    # none exists, and menus and room lists resolve portraits through read-only requests.
+    config = FacePlaceholderConfig.objects.cached_singleton()
+    media_id = config.placeholder_id if config is not None else None
     if media_id is None:
         return BUILTIN_FACE_PLACEHOLDER_URL
     try:
