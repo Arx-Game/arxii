@@ -188,48 +188,21 @@ class PerformRitualAction(Action):
     # ------------------------------------------------------------------
 
     def _perform_anima_ritual(self, sheet: Any, ritual: Any) -> ActionResult:
-        """Perform the actor's personal anima ritual in the scene they stand in (#4451).
+        """Refuse the actor's personal anima ritual performed on their own (#5280).
 
-        A SCENE_ACTION ritual has no service function or flow to dispatch: it is the
-        once-per-scene roll ``perform_anima_ritual`` runs. It only ever acts on the
-        performer's own ritual, so a ritual that is not theirs is refused rather
-        than silently swapped for theirs.
+        The ritual is never done alone: it is a scene with a partner, asked for through
+        ``start_partner_ritual`` (the persona menu, or ``ritual anima <partner>``). Every
+        door that reaches this action alone is told so. A ritual that is not the actor's
+        own is refused as no ritual of theirs rather than as one waiting for a partner.
         """
-        from world.magic.exceptions import (  # noqa: PLC0415
-            CharacterEngagedForRitual,
-            NoRitualConfigured,
-            RitualAlreadyPerformedThisScene,
-            RitualScenePrerequisiteFailed,
-        )
-        from world.magic.services.anima import (  # noqa: PLC0415
-            get_character_anima_ritual,
-            perform_anima_ritual,
-        )
-        from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
+        from world.magic.exceptions import NoRitualConfigured  # noqa: PLC0415
+        from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
+        from world.magic.services.anima_ritual_action import _NEEDS_PARTNER  # noqa: PLC0415
 
         own = get_character_anima_ritual(sheet.character)
         if own is None or own.pk != ritual.pk:
             return ActionResult(success=False, message=NoRitualConfigured.user_message)
-
-        scene = get_active_scene(sheet.character.location)
-        if scene is None:
-            return ActionResult(success=False, message=RitualScenePrerequisiteFailed.user_message)
-
-        try:
-            outcome = perform_anima_ritual(character_sheet=sheet, scene=scene)
-        except (
-            NoRitualConfigured,
-            CharacterEngagedForRitual,
-            RitualScenePrerequisiteFailed,
-            RitualAlreadyPerformedThisScene,
-        ) as exc:
-            return ActionResult(success=False, message=exc.user_message)
-
-        return ActionResult(
-            success=True,
-            message=_anima_ritual_message(ritual, outcome),
-            data={"execution_kind": ritual.execution_kind, "result": outcome},
-        )
+        return ActionResult(success=False, message=_NEEDS_PARTNER)
 
     def _precheck(self, ritual: Any, performer_sheet: Any, kwargs: dict[str, Any]) -> None:
         """Refuse a ritual whose service would refuse, before components or anima are spent.
@@ -368,18 +341,3 @@ def _picks_opened(sheet: Any, thread: Any, result: Any) -> list[int]:
     from world.covenants.focus_picks import picks_opened_by_imbuing  # noqa: PLC0415
 
     return picks_opened_by_imbuing(sheet, thread, result)
-
-
-def _anima_ritual_message(ritual: Any, outcome: Any) -> str:
-    """The performer's line: what the roll came to, then what it did for them."""
-    parts = [f"You perform {ritual.name}: {outcome.outcome.name}."]
-    if outcome.severity_reduced:
-        parts.append(f"Your Soulfray eases by {outcome.severity_reduced}.")
-    if outcome.soulfray_resolved:
-        parts.append("The Soulfray is gone.")
-    if outcome.anima_recovered:
-        share = (
-            f", +{outcome.patron_bonus} from {outcome.patron_name}" if outcome.patron_bonus else ""
-        )
-        parts.append(f"You recover {outcome.anima_recovered} anima{share}.")
-    return " ".join(parts)

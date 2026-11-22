@@ -304,7 +304,12 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
           <div className="refsheet-tags">
             {magic.anima_ritual.stat && <Tag>{magic.anima_ritual.stat}</Tag>}
             {magic.anima_ritual.skill && <Tag>{magic.anima_ritual.skill}</Tag>}
-            {magic.anima_ritual.resonance && <Tag accent>{magic.anima_ritual.resonance}</Tag>}
+            {magic.anima_ritual.primal_resonance && (
+              <Tag accent>{magic.anima_ritual.primal_resonance}</Tag>
+            )}
+            {magic.anima_ritual.outward_resonance && (
+              <Tag accent>{magic.anima_ritual.outward_resonance}</Tag>
+            )}
           </div>
         </div>
       )}

@@ -3933,7 +3933,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             key="willpower-stat-trait",
             label="Willpower stat trait",
             tier=DependencyTier.REQUIRED,
-            consumer="world/magic/services/anima.py:393 provision_player_anima_ritual()",
+            consumer="world/magic/services/anima.py provision_player_anima_ritual()",
             consequence=(
                 "Provisioning a player's anima ritual logs a warning and skips "
                 "ritual creation entirely for that character when no explicit stat "
@@ -4892,7 +4892,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
             label="Soulfray config singleton",
             tier=DependencyTier.TUNING,
             consumer=(
-                "world/magic/services/anima.py:219 apply_anima_ritual_outcome(); "
+                "world/magic/services/anima.py apply_anima_ritual_outcome(); "
                 "world/magic/services/techniques.py _get_social_safety_bonus()"
             ),
             consequence=(

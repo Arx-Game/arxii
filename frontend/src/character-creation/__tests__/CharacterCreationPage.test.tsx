@@ -34,6 +34,14 @@ import {
   seedQueryData,
 } from './testUtils';
 
+// The Review stage asks which tables the account runs (`useTables`, which throws its
+// error into the stage's boundary). Unmocked, that was a real request the test machine
+// refuses, and the stage crashed as soon as the refusal came back: the staff test
+// passed only while its assertions ran first (#5201 lost that race).
+vi.mock('@/tables/api', () => ({
+  getTables: vi.fn().mockResolvedValue({ count: 0, next: null, previous: null, results: [] }),
+}));
+
 // Mock the API module
 vi.mock('../api', () => ({
   canCreateCharacter: vi.fn(),
@@ -194,6 +202,28 @@ describe('CharacterCreationPage', () => {
       // (Task 4) also has a row labeled "Origin", so scope to the nav.
       const nav = screen.getByRole('navigation', { name: /character creation stages/i });
       expect(within(nav).getByText('Origin')).toBeInTheDocument();
+    });
+
+    it("the CG points row carries the budget's conversion on hover, on the stage shown (#5201)", async () => {
+      const queryClient = createTestQueryClient();
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        draft: mockEmptyDraft,
+        startingAreas: mockStartingAreas,
+      });
+
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, {
+        queryClient,
+        account: mockPlayerAccount,
+      });
+
+      // The mocked budget converts one for one.
+      await waitFor(() => {
+        expect(screen.getByText('CG points').closest('.row')).toHaveAttribute(
+          'title',
+          'CG points left unspent convert to XP when the character is approved, 1 XP for each point.'
+        );
+      });
     });
 
     it('renders the current stage component', async () => {

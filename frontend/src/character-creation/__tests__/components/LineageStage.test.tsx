@@ -790,8 +790,8 @@ describe('LineageStage', () => {
     });
   });
 
-  describe('LineageRecord (#3660)', () => {
-    it('shows a plain pick answer as "choice · cost", with no group and no double separator', async () => {
+  describe('The foot of the stage (#5201)', () => {
+    it('ends on the life: no box repeats the route, its answers or the CG points', async () => {
       const draft = createMockDraft({
         ...mockDraftWithUpbringing,
         family: mockNobleFamily,
@@ -802,22 +802,11 @@ describe('LineageStage', () => {
         queryClient,
       });
 
-      expect(await screen.findByText('A private tutor · 2 pts')).toBeInTheDocument();
-    });
-
-    it('shows a group answer as "choice · group · cost"', async () => {
-      const draft = createMockDraft({
-        ...mockDraftWithHeritageNoUpbringing,
-        selected_origin_template: mockUpbringingConnections,
-        family_path: 'none',
-        draft_data: { origin_anchors: { '401': 9001 }, origin_choices: { '401': 502 } },
-      });
-      const queryClient = createTestQueryClient();
-      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
-        queryClient,
-      });
-
-      expect(await screen.findByText('Courier · House Orisant · 10 pts')).toBeInTheDocument();
+      // The answer's own price is on the answer; the record line that priced it again is not.
+      expect(await screen.findByText('2 pts')).toBeInTheDocument();
+      expect(screen.queryByTestId('lineage-record')).toBeNull();
+      expect(screen.queryByText('A private tutor · 2 pts')).toBeNull();
+      expect(screen.queryByText(/^CG points: \d+ of \d+$/)).toBeNull();
     });
   });
 

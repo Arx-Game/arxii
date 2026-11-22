@@ -200,6 +200,12 @@ drafts the spec, flags the team, then **stops** until a human org member approve
   must accept no other marker-based bypass, and a slice never writes a lightweight
   marker to pass.
 
+Standard and heavyweight discovery starts with a **grilling session**
+(`tools/skills/grilling-session/`): the maintainer talks the design through in
+their own words and the agent asks open questions and records rules with quotes,
+before any option or drafted brief is put in front of them. A menu of discrete
+decisions implies the direction is already set (owner ruling 2026-11-21).
+
 Discovery markers record the collaborative product gate before the technical spec:
 `lane=lightweight|standard|heavyweight` and
 `state=complete|awaiting-stakeholder`. They stay outside

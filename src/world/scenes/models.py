@@ -314,6 +314,15 @@ class Scene(CachedPropertiesMixin, SharedMemoryModel):
 
             clear_scene_substance_marks(self)
 
+            # #5280: a partner who never answered an anima ritual in this scene can no longer
+            # say whether it took hold; the held part lapses. A battle that ends its backing
+            # scene writes it directly and lapses it itself; an answer also checks the scene.
+            from world.magic.services.anima_ritual_endorsement import (  # noqa: PLC0415
+                lapse_pending_endorsements,
+            )
+
+            lapse_pending_endorsements(self)
+
 
 class SceneClock(SharedMemoryModel):
     """An authored countdown on the beat a scene is running (#3567).

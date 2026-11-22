@@ -85,6 +85,7 @@ const makeRiseRitual = (overrides: Partial<RitualWithSchema> = {}): RitualWithSc
     execution_kind: 'SERVICE',
     input_schema: null,
     author_account_id: null,
+    viewer_can_edit: false,
     check_config: null,
     client_hosted: false,
     participation_rule: 'FORMATION',

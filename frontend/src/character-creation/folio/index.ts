@@ -3,6 +3,7 @@ export { PageTurn } from './PageTurn';
 export { NightPlate } from './NightPlate';
 export { ChapterLeaf } from './ChapterLeaf';
 export { useChapterRail } from './chapterRail';
+export { PointsHint, pointsHint } from './pointsHint';
 export { RecordRail, Marginalia, Note } from './RecordRail';
 export type { RecordRow } from './RecordRail';
 export { EntryList, Entry, EntryDoors } from './Entry';

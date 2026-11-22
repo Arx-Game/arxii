@@ -2,15 +2,10 @@
  * RitualsListPage — browse and perform available rituals.
  *
  * Split into two sections:
- *   1. "Authored by you" — rituals where author_account matches the current account id.
- *      These are SCENE_ACTION anima rituals the player has personalised.
+ *   1. "Your anima ritual" — the SCENE_ACTION ritual a character the player plays knows.
+ *      The server lists only the player's own (#5280); the anima ritual is in character,
+ *      so nothing here is read through the account.
  *   2. "Known rituals" — all other rituals the character has knowledge of.
- *
- * Backend gap (Phase 9): The RitualSerializer does not expose `author_account_id`,
- * so the authored/known split currently falls back to checking
- * execution_kind === 'SCENE_ACTION' as a proxy. When Phase 10 adds
- * `author_account_id` to the serializer, replace the proxy check with a
- * proper account-id comparison.
  *
  * The active character's id == CharacterSheet pk (OneToOne primary_key=True on ObjectDB).
  */
@@ -74,7 +69,6 @@ function RitualsListInner() {
   const activeCharacter =
     account?.available_characters?.find((c) => c.currently_puppeted_in_session) ?? null;
   const characterSheetId = activeCharacter?.id ?? null;
-  const currentAccountId = account?.id ?? null;
 
   if (isLoading) return <LoadingSkeletons />;
 
@@ -108,11 +102,7 @@ function RitualsListInner() {
     );
   }
 
-  // Partition rituals: SCENE_ACTION execution_kind is a proxy for "authored by you"
-  // until Phase 10 backend adds author_account_id to the serializer.
-  // When that lands, replace this with:
-  //   const authoredRituals = displayedRituals.filter(r => r.author_account_id === currentAccountId);
-  //   const knownRituals = displayedRituals.filter(r => r.author_account_id !== currentAccountId);
+  // The server returns a SCENE_ACTION ritual only to the player of a character who knows it.
   const authoredRituals = displayedRituals.filter(
     (r) => (r.execution_kind as string) === 'SCENE_ACTION'
   );
@@ -124,21 +114,13 @@ function RitualsListInner() {
 
   return (
     <div className="space-y-8">
-      {/* Authored by you — SCENE_ACTION anima rituals */}
+      {/* Your anima ritual — SCENE_ACTION */}
       {authoredRituals.length > 0 && (
         <section data-testid="authored-rituals-section">
-          {hasSections && <SectionHeader title="Authored by you" />}
+          {hasSections && <SectionHeader title="Your anima ritual" />}
           <div className="space-y-3">
             {authoredRituals.map((ritual) => (
-              <RitualCard
-                key={ritual.id}
-                ritual={ritual}
-                characterSheetId={characterSheetId}
-                currentAccountId={currentAccountId}
-                // author_account_id not yet in serializer — Phase 10 gap.
-                // For now, pass currentAccountId so edit button is visible to owner.
-                authorAccountId={currentAccountId}
-              />
+              <RitualCard key={ritual.id} ritual={ritual} characterSheetId={characterSheetId} />
             ))}
           </div>
         </section>
@@ -150,12 +132,7 @@ function RitualsListInner() {
           {hasSections && <SectionHeader title="Known rituals" />}
           <div className="space-y-3">
             {knownRituals.map((ritual) => (
-              <RitualCard
-                key={ritual.id}
-                ritual={ritual}
-                characterSheetId={characterSheetId}
-                currentAccountId={currentAccountId}
-              />
+              <RitualCard key={ritual.id} ritual={ritual} characterSheetId={characterSheetId} />
             ))}
           </div>
         </section>

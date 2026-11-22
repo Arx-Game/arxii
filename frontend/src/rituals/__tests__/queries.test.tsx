@@ -53,6 +53,7 @@ const mockRitual = {
     ],
   },
   author_account_id: null,
+  viewer_can_edit: false,
   check_config: null,
   client_hosted: false,
   participation_rule: 'SINGLE_ACTOR' as const,

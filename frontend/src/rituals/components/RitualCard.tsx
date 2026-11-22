@@ -3,10 +3,10 @@
  *
  * Shows name, description, a snippet of narrative_prose, and an action button:
  *
- * - execution_kind === 'SCENE_ACTION' (the personal anima ritual): a "Perform"
- *   button that rolls the ritual in the player's current scene and shows what
- *   it did (#4451), plus a "Manage" button that expands a
- *   RitualSceneActionDetailPanel with check spec + edit controls.
+ * - execution_kind === 'SCENE_ACTION' (the personal anima ritual): a "Manage"
+ *   button that expands a RitualSceneActionDetailPanel with check spec + edit
+ *   controls. It has no Perform button: the ritual is a scene with a partner, so
+ *   it is performed from the partner's menu in a scene (#5280).
  * - All other kinds: "Perform" button that opens RitualPerformDialog.
  *
  * Pattern mirrors TableCard.tsx.
@@ -16,8 +16,6 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { extractErrorMessage } from '@/lib/errors';
-import { usePerformRitual } from '@/rituals/queries';
 import { RitualPerformDialog } from './RitualPerformDialog';
 import { RitualSessionDraftDialog } from './RitualSessionDraftDialog';
 import { RitualSceneActionDetailPanel } from './RitualSceneActionDetailPanel';
@@ -30,10 +28,6 @@ import type { RitualWithSchema } from '../types';
 interface RitualCardProps {
   ritual: RitualWithSchema;
   characterSheetId: number;
-  /** The account id of the currently logged-in user; forwarded to detail panel. */
-  currentAccountId?: number | null;
-  /** author_account_id from the ritual — undefined until backend exposes it. */
-  authorAccountId?: number | null;
   onSuccess?: () => void;
 }
 
@@ -57,17 +51,10 @@ function isBilateral(ritual: RitualWithSchema): boolean {
 // Component
 // ---------------------------------------------------------------------------
 
-export function RitualCard({
-  ritual,
-  characterSheetId,
-  currentAccountId,
-  authorAccountId,
-  onSuccess,
-}: RitualCardProps) {
+export function RitualCard({ ritual, characterSheetId, onSuccess }: RitualCardProps) {
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
-  const performAnimaRitual = usePerformRitual();
 
   const sceneAction = isSceneAction(ritual);
   const bilateral = isBilateral(ritual);
@@ -90,30 +77,15 @@ export function RitualCard({
             </div>
 
             {sceneAction ? (
-              <div className="flex shrink-0 gap-2">
-                <Button
-                  size="sm"
-                  disabled={performAnimaRitual.isPending}
-                  onClick={() =>
-                    performAnimaRitual.mutate({
-                      ritual_id: ritual.id,
-                      character_sheet_id: characterSheetId,
-                      kwargs: {},
-                    })
-                  }
-                  data-testid="ritual-perform-button"
-                >
-                  {performAnimaRitual.isPending ? 'Performing...' : 'Perform'}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDetailOpen((prev) => !prev)}
-                  data-testid="ritual-manage-button"
-                >
-                  Manage
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                onClick={() => setDetailOpen((prev) => !prev)}
+                data-testid="ritual-manage-button"
+              >
+                Manage
+              </Button>
             ) : (
               <Button
                 variant="outline"
@@ -126,32 +98,11 @@ export function RitualCard({
             )}
           </div>
 
-          {/* What the personal anima ritual did, or why it could not be performed */}
-          {sceneAction && performAnimaRitual.isSuccess && (
-            <p
-              role="status"
-              className="mt-3 rounded-md bg-muted px-3 py-2 text-sm"
-              data-testid="ritual-perform-result"
-            >
-              {performAnimaRitual.data.message ?? `You perform ${ritual.name}.`}
-            </p>
-          )}
-          {sceneAction && performAnimaRitual.isError && (
-            <p
-              role="alert"
-              className="mt-3 rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive"
-              data-testid="ritual-perform-error"
-            >
-              {extractErrorMessage(performAnimaRitual.error, 'Failed to perform ritual')}
-            </p>
-          )}
-
           {/* SCENE_ACTION detail panel (expanded inline) */}
           {sceneAction && detailOpen && (
             <RitualSceneActionDetailPanel
               ritual={ritual}
-              currentAccountId={currentAccountId ?? null}
-              authorAccountId={authorAccountId}
+              characterSheetId={characterSheetId}
               onEditSuccess={() => {
                 onSuccess?.();
               }}

@@ -80,7 +80,8 @@ class RitualCheckConfigCreateTests(TestCase):
     def test_config_optional_fields_default_null(self):
         config = RitualCheckConfigFactory()
         self.assertIsNone(config.specialization)
-        self.assertIsNone(config.resonance)
+        self.assertIsNone(config.primal_resonance)
+        self.assertIsNone(config.outward_resonance)
         self.assertIsNone(config.non_founder_target_difficulty_level)
 
     def test_one_to_one_constraint(self):
