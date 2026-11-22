@@ -133,6 +133,14 @@ the deletion test, then produces a **markdown** report (no HTML/Mermaid — this
 a headless repo) of candidate refactors ranked Strong / Worth-exploring /
 Speculative. Flags conflicts with recorded ADRs.
 
+### grilling-session
+
+Runs before any brief or spec for standard or heavyweight work. The maintainer
+talks the design through; the agent asks open questions, keeps the words verbatim
+in a private transcript, extracts rules with quotes beside them, plays them back as
+one walkthrough plus its own inferences, and ends with a pitch that carries no agent
+verdict. Wired into Step 2 of `issue-to-merged-pr`. First run: #5280.
+
 ### demoing-a-feature
 
 For anything a player or staff member sees or operates: the spec is approved off
