@@ -4,11 +4,11 @@ Exercises every Scope 6 service through a single scenario:
     accumulation → aftermath application → stabilization → ritual recovery
     → anima regen gating → decay-alone-cannot-recover-stage-2 boundary.
 
-Scene participation is patched at the two call sites that gate on it
-(`world.magic.services.anima._scene_participant` and
-`world.conditions.services._scene_participant`) so this test does not
+Scene participation is patched at the call site that gates the treatment
+(`world.conditions.services._scene_participant`) so this test does not
 re-exercise roster/account plumbing; that is covered by unit tests in
-each service.
+the service. The anima ritual is never done alone (#5280): the target performs it
+with an NPC partner in a scene a GM runs, which the partner is accepted in at once.
 """
 
 from __future__ import annotations
@@ -17,8 +17,9 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase, override_settings
 
-from evennia_extensions.factories import AccountFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.test_helpers import force_check_outcome
 from world.conditions.factories import (
     ArcaneTremorTemplateFactory,
     AuraBleedTemplateFactory,
@@ -43,12 +44,14 @@ from world.magic.factories import (
     SoulfrayContentFactory,
     wire_soulfray_aftermath,
 )
+from world.magic.models.anima import AnimaRitualPerformance
 from world.magic.models.soulfray import AnimaRitualBudgetAward
-from world.magic.services.anima import anima_regen_tick, perform_anima_ritual
-from world.scenes.factories import SceneFactory
+from world.magic.services.anima import anima_regen_tick
+from world.magic.services.anima_ritual_action import start_partner_ritual
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.traits.factories import CheckOutcomeFactory
 
-_ANIMA_SCENE_PARTICIPANT_PATH = "world.magic.services.anima._scene_participant"
 _CONDITIONS_SCENE_PARTICIPANT_PATH = "world.conditions.services._scene_participant"
 # perform_check is lazy-imported inside both services; patch the source module.
 _PERFORM_CHECK_PATH = "world.checks.services.perform_check"
@@ -67,7 +70,6 @@ def _make_check_result(success_level: int) -> MagicMock:
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # SoulfrayContentFactory gates on #2698
 @patch(_CONDITIONS_SCENE_PARTICIPANT_PATH, return_value=True)
-@patch(_ANIMA_SCENE_PARTICIPANT_PATH, return_value=True)
 class SoulfrayRecoveryFlowIntegrationTests(TestCase):
     """Single-scenario end-to-end test covering the Scope 6 recovery surfaces."""
 
@@ -95,16 +97,15 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
         )
 
     # - PLR0915: end-to-end flow; breaking into parts would obscure the scenario
-    # - ARG002: mock_anima_scene and mock_cond_scene are injected by the
-    #   class-level @patch decorators and not asserted on inside this test
+    # - ARG002: mock_cond_scene is injected by the class-level @patch decorator and not
+    #   asserted on inside this test
     def test_full_recovery_flow(  # noqa: PLR0915
         self,
-        mock_anima_scene: MagicMock,  # noqa: ARG002
         mock_cond_scene: MagicMock,  # noqa: ARG002
     ) -> None:
         # --- 1) Target character accumulates Soulfray to stage 3 (Ripping) ---
         target_sheet = CharacterSheetFactory()
-        # Create SCENE_ACTION Ritual for the character via author_account
+        # Create the character's own SCENE_ACTION Ritual (the knowledge row makes it hers)
         _account = AccountFactory()
         target_sheet.character.db_account = _account
         target_sheet.character.save(update_fields=["db_account"])
@@ -113,6 +114,7 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
             service_function_path="",
             flow=None,
             author_account=_account,
+            known_by=target_sheet,
         )
         RitualCheckConfigFactory(ritual=_ritual)
         target_anima = CharacterAnimaFactory(
@@ -120,7 +122,15 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
             current=0,
             maximum=20,
         )
-        scene = SceneFactory(is_active=True)
+        # The ritual's partner is an NPC in the same room, accepted at once because the scene
+        # has a GM; the performer stands in that room and so does the partner.
+        room = RoomProfileFactory()
+        scene = SceneFactory(location=room, is_active=True)
+        SceneParticipationFactory(scene=scene, account=AccountFactory(), is_gm=True)
+        partner_sheet = CharacterSheetFactory()
+        for sheet in (target_sheet, partner_sheet):
+            sheet.character.location = room.objectdb
+        invalidate_active_scene_cache(room.objectdb)
 
         soulfray_inst = ConditionInstanceFactory(
             target=target_sheet.character,
@@ -161,16 +171,19 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
         # anima refills to max. Budget=10 (crit), Soulfray severity=16, so
         # 10 budget goes to severity-pay-down, but crit also overrides anima
         # to maximum regardless of leftover budget.
-        with patch(_PERFORM_CHECK_PATH) as mock_check:
-            mock_check.return_value = _make_check_result(success_level=2)
-            AnimaRitualBudgetAward.objects.create(
-                outcome_tier=mock_check.return_value.outcome, budget=10
+        crit = CheckOutcomeFactory(name=f"IntegrationCrit_{id(object())}", success_level=2)
+        AnimaRitualBudgetAward.objects.create(outcome_tier=crit, budget=10)
+        with force_check_outcome(crit):
+            start_partner_ritual(
+                scene=scene,
+                initiator_persona=target_sheet.primary_persona,
+                target_persona=partner_sheet.primary_persona,
             )
-            ritual_outcome = perform_anima_ritual(character_sheet=target_sheet, scene=scene)
+        performance = AnimaRitualPerformance.objects.get(ritual=_ritual, scene=scene)
         soulfray_inst.refresh_from_db()
         target_anima.refresh_from_db()
         self.assertLess(soulfray_inst.severity, ripping_threshold)
-        self.assertGreater(ritual_outcome.severity_reduced, 0)
+        self.assertGreater(performance.severity_reduced, 0)
         self.assertEqual(target_anima.current, target_anima.maximum)
 
         # --- 4) Anima regen tick: blocked while Soulfray at stage >= 2 ---

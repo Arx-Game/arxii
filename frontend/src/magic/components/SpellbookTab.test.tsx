@@ -624,7 +624,8 @@ describe('SpellbookTab', () => {
         anima_ritual: {
           stat: 'Composure',
           skill: 'Ritual',
-          resonance: 'Silence',
+          primal_resonance: 'Silence',
+          outward_resonance: 'Dread',
           description: 'She counts the coins in the dark until the counting is the only sound.',
         },
       })
@@ -636,6 +637,8 @@ describe('SpellbookTab', () => {
       screen.getByText('She counts the coins in the dark until the counting is the only sound.')
     ).toBeInTheDocument();
     expect(screen.getByText('Composure')).toBeInTheDocument();
+    expect(screen.getByText('Silence')).toBeInTheDocument();
+    expect(screen.getByText('Dread')).toBeInTheDocument();
   });
 
   it('draws no halo for an aura with nothing in it', () => {

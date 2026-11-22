@@ -13,6 +13,7 @@ from world.magic.models import CharacterAnima
 from world.magic.types.ritual import AnimaRegenTickSummary, RitualOutcome
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
@@ -20,9 +21,9 @@ if TYPE_CHECKING:
     from world.magic.models.affinity import Resonance
     from world.magic.models.rituals import Ritual
     from world.roster.models import RosterEntry
-    from world.scenes.models import Scene
+    from world.scenes.models import Persona, Scene
     from world.skills.models import Skill
-    from world.traits.models import Trait
+    from world.traits.models import CheckOutcome, Trait
 
 logger = logging.getLogger(__name__)
 
@@ -99,17 +100,29 @@ def recompute_max_anima(character_sheet: CharacterSheet) -> int:
     return new_max
 
 
-def get_character_anima_ritual(character):  # noqa: OBJECTDB_PARAM — Evennia character
-    """The character's authored SCENE_ACTION ritual (with check_config), or None."""
+def character_scene_action_rituals(character_id: int) -> QuerySet[Ritual]:
+    """The SCENE_ACTION rituals the character knows: her anima ritual (#5280).
+
+    The anima ritual is in character, so it belongs to the character, never to the account
+    that plays her: it is the ritual her roster entry has a ``CharacterRitualKnowledge`` row
+    for, which creation writes beside the ritual. Takes the character's id (a CharacterSheet
+    shares its character's pk), so it works for a character nobody is logged in as.
+    """
     from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
     from world.magic.models.rituals import Ritual  # noqa: PLC0415
 
+    return Ritual.objects.filter(
+        known_by_records__roster_entry__character_sheet_id=character_id,
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+    )
+
+
+def get_character_anima_ritual(character):  # noqa: OBJECTDB_PARAM — Evennia character
+    """The character's own SCENE_ACTION ritual (with check_config), or None."""
     return (
-        Ritual.objects.filter(
-            author_account=character.db_account,
-            execution_kind=RitualExecutionKind.SCENE_ACTION,
-        )
+        character_scene_action_rituals(character.pk)
         .select_related("check_config")
+        .order_by("pk")
         .first()
     )
 
@@ -122,65 +135,14 @@ def get_character_cast_check(character):  # noqa: OBJECTDB_PARAM — Evennia cha
     return ritual.check_config.check_type
 
 
-@transaction.atomic
-def perform_anima_ritual(
-    character_sheet: CharacterSheet,
-    scene: Scene,
-) -> RitualOutcome:
-    """Perform the character's personalised anima ritual once per scene.
+def ritual_succeeded(outcome: CheckOutcome) -> bool:
+    """True when a roll counts as a success for the anima ritual: Partial Success and above.
 
-    Scope 6 §5.1. Outcome-tiered recovery budget: reduce Soulfray severity
-    first at ritual_severity_cost_per_point per point, then refill anima
-    with leftover budget. Crit always tops anima to max regardless.
+    The one place the boundary lives (maintainer ruling, 2026-11-22). A success pays its own
+    tier's anima budget and resonance award; only Failure and Critical Failure are failures,
+    and a failed roll gives no anima and no Primal resonance.
     """
-    from world.checks.services import (  # noqa: PLC0415
-        difficulty_points,
-        perform_check_with_modifiers,
-    )
-    from world.magic.constants import MagicActivity  # noqa: PLC0415
-    from world.magic.exceptions import (  # noqa: PLC0415
-        CharacterEngagedForRitual,
-        NoRitualConfigured,
-        RitualAlreadyPerformedThisScene,
-        RitualScenePrerequisiteFailed,
-    )
-    from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
-    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
-    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
-
-    character = character_sheet.character
-    ritual = get_character_anima_ritual(character)
-    if ritual is None or not hasattr(ritual, "check_config"):
-        raise NoRitualConfigured
-
-    config = ritual.check_config
-    if config.check_type is None:
-        raise NoRitualConfigured
-
-    if CharacterEngagement.objects.filter(character_id=character.pk).exists():
-        raise CharacterEngagedForRitual
-
-    if not scene.is_active or not _scene_participant(scene, character):
-        raise RitualScenePrerequisiteFailed
-
-    if AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists():
-        raise RitualAlreadyPerformedThisScene
-
-    check_result = perform_check_with_modifiers(
-        character,
-        check_type=config.check_type,
-        target_difficulty=difficulty_points(config.target_difficulty_level),
-        scene=scene,
-        extra_traits=activity_skill_terms(MagicActivity.ANIMA_RITUAL),
-    )
-    outcome = check_result.outcome
-
-    return apply_anima_ritual_outcome(
-        ritual=ritual,
-        outcome=outcome,
-        scene=scene,
-        character_sheet=character_sheet,
-    )
+    return outcome.success_level >= 0
 
 
 def _chosen_patron_share(character_sheet: CharacterSheet, outcome: object) -> tuple[str, int]:
@@ -199,26 +161,28 @@ def _chosen_patron_share(character_sheet: CharacterSheet, outcome: object) -> tu
     return patronages[0].being.name, share
 
 
-def apply_anima_ritual_outcome(
+def apply_anima_ritual_outcome(  # noqa: PLR0913
     *,
     ritual: Ritual,
-    outcome: object,
+    outcome: CheckOutcome,
     scene: Scene,
     character_sheet: CharacterSheet,
     partner_sheet: CharacterSheet | None = None,
+    performer_persona: Persona | None = None,
 ) -> RitualOutcome:
     """Apply a pre-computed check outcome to anima/soulfray + create audit row.
 
-    Extracted from perform_anima_ritual() so SceneActionRequest can drive the
-    check and pass the outcome here.
+    ``resolve_ritual_request`` (the partner ritual's accepted request) drives the check and
+    passes the outcome here.
 
     Args:
         ritual: The Ritual (SCENE_ACTION kind) being performed.
         outcome: The check outcome / result object (must have success_level).
         scene: The scene in which the ritual is performed.
         character_sheet: The character performing the ritual.
-        partner_sheet: The character who took part (#5181), recorded on the performance row;
-            None for the solo ritual.
+        partner_sheet: The character who took part (#5181), recorded on the performance row.
+        performer_persona: The persona the performer wore (the request's initiator persona),
+            recorded on the performance row so the partner's card never shows a masked name.
 
     Returns:
         RitualOutcome describing what was recovered and reduced.
@@ -233,7 +197,9 @@ def apply_anima_ritual_outcome(
     character = character_sheet.character
 
     config = SoulfrayConfig.objects.cached_singleton()
-    budget = _budget_for_outcome(outcome)
+    succeeded = ritual_succeeded(outcome)
+    # A failed roll gives no anima and eases no Soulfray, whatever the tier's row holds.
+    budget = _budget_for_outcome(outcome) if succeeded else 0
 
     anima = CharacterAnima.objects.select_for_update().get(character=character_sheet)
 
@@ -272,14 +238,16 @@ def apply_anima_ritual_outcome(
 
     # Chosen patronage share (#2550, #4349): the CHOSEN_ANIMA award for the ritual's result,
     # additive to the leftover budget after soulfray reduction, before the anima refill. Both
-    # call paths (perform_anima_ritual direct + _resolve_anima_ritual web) converge here.
-    patron_name, patron_share = _chosen_patron_share(character_sheet, outcome)
+    # call paths (resolve_ritual_request and _resolve_anima_ritual) converge here.
+    patron_name, patron_share = ("", 0)
+    if succeeded:
+        patron_name, patron_share = _chosen_patron_share(character_sheet, outcome)
     budget += patron_share
 
     anima_before = anima.current
     anima.current = min(anima.current + max(0, budget), anima.maximum)
 
-    success_level = int(outcome.success_level)  # type: ignore[union-attr]
+    success_level = outcome.success_level
     if success_level >= 2:  # noqa: PLR2004 - chart success degrees
         anima.current = anima.maximum
 
@@ -292,16 +260,17 @@ def apply_anima_ritual_outcome(
     performance = AnimaRitualPerformance.objects.create(
         ritual=ritual,
         scene=scene,
-        was_successful=success_level >= 1,
+        was_successful=succeeded,
         anima_recovered=anima_recovered,
         outcome=outcome,
         severity_reduced=severity_reduced,
         target_character=partner_sheet,
+        performer_persona=performer_persona,
     )
 
     return RitualOutcome(
         performance=performance,
-        outcome=outcome,  # type: ignore[arg-type]
+        outcome=outcome,
         severity_reduced=severity_reduced,
         anima_recovered=anima_recovered,
         soulfray_stage_after=stage_after,
@@ -366,7 +335,8 @@ def provision_player_anima_ritual(  # noqa: PLR0913
     ritual_name: str,
     stat: Trait | None = None,
     skill: Skill | None = None,
-    resonance: Resonance | None = None,
+    primal_resonance: Resonance | None = None,
+    outward_resonance: Resonance | None = None,
 ) -> Ritual | None:
     """Create a SCENE_ACTION Ritual + sidecar + CharacterRitualKnowledge for a player.
 
@@ -390,10 +360,11 @@ def provision_player_anima_ritual(  # noqa: PLR0913
         stat: Explicit Anima Check stat; falls back to Willpower when None.
         skill: Explicit Anima Check skill; falls back to the character's
             highest-valued skill (or first active skill) when None.
-        resonance: The character's CG-picked gift resonance (#2971) — the anima
-            ritual IS the character's magical identity, so it is written onto the
-            created ``RitualCheckConfig``. ``None`` when unset (legacy/test-only
-            callers), which leaves ``RitualCheckConfig.resonance`` null as before.
+        primal_resonance: The Primal resonance the ritual grows for its performer
+            (the CG pick, #5280), written onto the created ``RitualCheckConfig``.
+            ``None`` when unset (legacy/test-only callers).
+        outward_resonance: The Celestial or Abyssal resonance the ritual reaches for
+            in its partner, written onto the same row. ``None`` when unset.
     """
     from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
     from world.magic.models import CharacterRitualKnowledge  # noqa: PLC0415
@@ -486,7 +457,8 @@ def provision_player_anima_ritual(  # noqa: PLR0913
         stat=stat_trait,
         skill=skill,
         check_type=check_type,
-        resonance=resonance,
+        primal_resonance=primal_resonance,
+        outward_resonance=outward_resonance,
     )
 
     # 5. Grant knowledge so the ritual appears in the scene action menu.
@@ -507,7 +479,7 @@ def has_performed_anima_ritual_in_scene(
     """Return True when the given ritual has already been performed in this scene.
 
     Used by the menu contributor to enforce the once-per-scene cap without
-    re-running the full gate logic in perform_anima_ritual().
+    re-running the full gate logic in ``check_partner_ritual``.
     """
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
 
@@ -523,50 +495,28 @@ def anima_ritual_open_in_scene(
     One query, so the persona menu can tell the web client whether to offer the ritual (#5181).
     The ritual and the once-per-scene cap are the same ones ``check_partner_ritual`` enforces.
     """
-    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
-    from world.magic.models.rituals import Ritual  # noqa: PLC0415
-
     return (
-        Ritual.objects.filter(
-            author_account=character.db_account,
-            execution_kind=RitualExecutionKind.SCENE_ACTION,
-            check_config__check_type__isnull=False,
-        )
+        character_scene_action_rituals(character.pk)
+        .filter(check_config__check_type__isnull=False)
         .exclude(performances__scene=scene)
         .exists()
     )
 
 
 def _budget_for_outcome(outcome: object) -> int:
-    """Return the anima/severity budget for an outcome row.
+    """Return the anima/severity budget for the tier of a roll that counts as a success.
 
-    Raises AnimaRitualBudgetAward.DoesNotExist if the tier has no authored row —
-    every one of the 5 canonical CheckOutcome tiers must be seeded (unlike
-    GangTurfReputationAward's "missing row = 0" convention; a missing anima
-    budget must not silently grant 0 recovery on a legitimate ritual attempt).
+    ``apply_anima_ritual_outcome`` calls this only when ``ritual_succeeded`` is true (Partial
+    Success and above), so a Failure or Critical Failure roll never reads its tier's row: those
+    two rows hold no meaning (#5280). The success tiers must be seeded (unlike
+    GangTurfReputationAward's "missing row = 0" convention): a missing anima budget must not
+    silently grant 0 recovery on a legitimate ritual attempt.
+
+    Raises AnimaRitualBudgetAward.DoesNotExist if a success tier has no authored row.
     """
     from world.magic.models.soulfray import AnimaRitualBudgetAward  # noqa: PLC0415
 
     return AnimaRitualBudgetAward.objects.get(outcome_tier=outcome).budget
-
-
-def _scene_participant(scene: Scene, character: ObjectDB) -> bool:
-    """Return True when *character*'s account has a SceneParticipation in *scene*.
-
-    Mirrors conditions.services._scene_participant — same roster-tenure path.
-    """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-    from world.scenes.models import SceneParticipation  # noqa: PLC0415
-
-    try:
-        entry = RosterEntry.objects.get(character_sheet_id=character.pk)
-    except RosterEntry.DoesNotExist:
-        return False
-    tenure = entry.tenures.filter(end_date__isnull=True).first()
-    if tenure is None:
-        return False
-    account_id = tenure.player_data.account_id
-    return SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
 
 
 def anima_regen_tick() -> AnimaRegenTickSummary:

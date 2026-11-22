@@ -255,7 +255,7 @@ class TestGetPlayerActionsCombatBackend(django.test.TestCase):
 
         from actions.player_interface import get_player_actions
         from world.magic.constants import RitualExecutionKind
-        from world.magic.factories import RitualCheckConfigFactory
+        from world.magic.factories import RitualCheckConfigFactory, teach_ritual
         from world.magic.models.rituals import Ritual
 
         account = AccountDB.objects.create(username=f"combat_check_{id(self)}")
@@ -267,6 +267,7 @@ class TestGetPlayerActionsCombatBackend(django.test.TestCase):
         config = RitualCheckConfigFactory(ritual=ritual)
         self.character.db_account = account
         self.character.save(update_fields=["db_account"])
+        teach_ritual(ritual, self.character.sheet_data)
 
         actions = get_player_actions(self.character)
         combat_actions = [a for a in actions if a.backend == ActionBackend.COMBAT]

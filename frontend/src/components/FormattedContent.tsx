@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { type CSSProperties, useMemo } from 'react';
 
 import { type Segment, parseFormattedContent } from '@/lib/formatParser';
+import { contrastGuardFor } from '@/lib/xterm256';
 import { cn } from '@/lib/utils';
 import { markMatches, useFeedFind } from '@/game/feedFind';
 
@@ -44,12 +45,32 @@ export const FormattedContent = React.memo(function FormattedContent({
             return <em key={i}>{text}</em>;
           case 'strikethrough':
             return <del key={i}>{text}</del>;
-          case 'color':
+          case 'color': {
+            // A near-white color vanishes on the light theme and a near-black one on the dark
+            // theme (#5280), so there the theme's foreground is drawn instead. The code keeps
+            // its meaning: the other theme still shows the color.
+            const guard = contrastGuardFor(segment.hex);
+            if (guard === null) {
+              return (
+                <span key={i} style={{ color: segment.hex }}>
+                  {text}
+                </span>
+              );
+            }
             return (
-              <span key={i} style={{ color: segment.hex }}>
+              <span
+                key={i}
+                className={
+                  guard === 'near-white'
+                    ? 'text-foreground dark:[color:var(--segment-color)]'
+                    : '[color:var(--segment-color)] dark:text-foreground'
+                }
+                style={{ '--segment-color': segment.hex } as CSSProperties}
+              >
                 {text}
               </span>
             );
+          }
           case 'link':
             return (
               <a

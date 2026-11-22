@@ -11,6 +11,19 @@ describe('EvenniaMessage', () => {
     expect(coloredText.parentElement).toHaveTextContent(/Green\s+Next line/);
   });
 
+  // #5280: Evennia sends |w as color-015 and |X as color-000; a fixed white or
+  // black vanished on one of the two themes, so the neutrals follow the theme.
+  it('renders bright white and black in the theme foreground', () => {
+    render(
+      <EvenniaMessage content='Type <span class="color-015">ritual endorse Mara</span> or <span class="color-000">X</span>' />
+    );
+
+    const command = screen.getByText('ritual endorse Mara');
+    expect(command).toHaveClass('text-foreground', 'font-semibold');
+    expect(command).not.toHaveClass('text-white');
+    expect(screen.getByText('X')).toHaveClass('text-foreground');
+  });
+
   it('sanitizes unsafe markup', () => {
     render(<EvenniaMessage content="<img src=x onerror=alert(1)>Safe<script>alert(1)</script>" />);
 

@@ -246,7 +246,8 @@ class AnimaRitualSection(TypedDict):
 
     stat: str
     skill: str
-    resonance: str
+    primal_resonance: str
+    outward_resonance: str
     description: str
 
 

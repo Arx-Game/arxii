@@ -753,7 +753,8 @@ def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
         "check_config__stat",
         "check_config__skill",
         "check_config__specialization",
-        "check_config__resonance",
+        "check_config__primal_resonance",
+        "check_config__outward_resonance",
         "check_config__check_type",
     ).get(id=ritual_id)
 
@@ -764,7 +765,8 @@ def _snapshot_kwargs_from_ritual(ritual_id: int) -> dict[str, object]:
         "snapshot_stat": config.stat,
         "snapshot_skill": config.skill,
         "snapshot_specialization": config.specialization,
-        "snapshot_resonance": config.resonance,
+        "snapshot_primal_resonance": config.primal_resonance,
+        "snapshot_resonance": config.outward_resonance,
         "snapshot_check_type": config.check_type,
         "snapshot_target_difficulty": difficulty_points(config.target_difficulty_level),
     }
