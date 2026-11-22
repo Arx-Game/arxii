@@ -164,7 +164,7 @@ class AttuningByTelnet(_MarasRitual):
     def test_a_line_that_names_only_one_slot_gets_the_usage(self) -> None:
         told = self.telnet(self.mara, "ritual attune primal=Marrow")
 
-        self.assertIn("Usage: ritual attune primal=<resonance|none> outward=<resonance|none>", told)
+        self.assertIn("Usage: ritual attune primal=<name|none> outward=<name|none>", told)
         self.assert_nothing_spent()
 
     def test_an_unknown_resonance_is_refused(self) -> None:

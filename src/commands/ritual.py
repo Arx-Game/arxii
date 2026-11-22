@@ -72,7 +72,7 @@ _ANIMA_SHORTHAND = "anima"
 _ANIMA_USAGE = "Name someone else to take part in your ritual. Usage: ritual anima <partner>"
 #: ``ritual attune primal=<name|none> outward=<name|none>`` changes the ritual's two picks (#5280).
 _ATTUNE_SUBCMD = "attune"
-_ATTUNE_USAGE = "Usage: ritual attune primal=<resonance|none> outward=<resonance|none>"
+_ATTUNE_USAGE = "Usage: ritual attune primal=<name|none> outward=<name|none>"
 _ATTUNE_KEYS = re.compile(r"\b(primal|outward)=", re.IGNORECASE)
 _NO_PICK = "none"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
