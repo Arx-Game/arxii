@@ -54,6 +54,8 @@ from world.conditions.constants import (
     ConditionInteractionTrigger,
     DamageTickTiming,
     DurationType,
+    ReactiveMoment,
+    SpendNarration,
     StackBehavior,
     TreatmentTargetKind,
 )
@@ -1683,7 +1685,11 @@ def _teardown_removed_condition_instance(
     return condition
 
 
-def spend_condition_use(instance: ConditionInstance) -> bool:
+def spend_condition_use(
+    instance: ConditionInstance,
+    *,
+    narration: SpendNarration = SpendNarration.FULL,
+) -> bool:
     """End a once-only (``UNTIL_USED``) condition because it was just used (#4584).
 
     The one primitive every "once then spent" effect calls: a blessing whose term helped
@@ -1701,15 +1707,37 @@ def spend_condition_use(instance: ConditionInstance) -> bool:
     Returns True when this call ended the instance. Returns False, touching nothing, when
     the instance is already gone (``pk is None``, so spending twice is harmless) or its
     template is not ``UNTIL_USED`` (a lasting condition is never spent by use).
+
+    The spend is then told (#4587): the template's authored ``spent_narration``, else a
+    plain line, to the fight's room or privately (``narrate_reactive_moment``). ``narration``
+    trims that for a caller that already told the event (``AUTHORED_ONLY``) or whose
+    spending is not an event a player sees (``NONE``, the one-shot marker adapters).
     """
     if instance.pk is None:
         return False
     if instance.condition.default_duration_type != DurationType.UNTIL_USED:
         return False
     target = instance.target
+    told = narration != SpendNarration.NONE
+    if told:
+        from world.conditions.reactive_narration import (  # noqa: PLC0415
+            narrate_reactive_moment,
+            reactive_moment_hidden,
+        )
+
+        # Decided before the teardown: a once-only concealing condition no longer conceals
+        # once it is deleted, and its spent line must not then go to the room.
+        hidden = reactive_moment_hidden(instance)
     _teardown_removed_condition_instance(target, instance)
     if hasattr(target, "trigger_handler"):
         target.trigger_handler.refresh()
+    if told:
+        narrate_reactive_moment(
+            instance,
+            ReactiveMoment.SPENT,
+            plain_fallback=narration == SpendNarration.FULL,
+            hidden=hidden,
+        )
     return True
 
 
@@ -3722,6 +3750,8 @@ def retaliating_instances(
             "condition",
             "condition__retaliation_damage_type",
             "condition__retaliation_condition",
+            "target",
+            "source_character",
         )
         .order_by("pk")
     )
@@ -3739,7 +3769,7 @@ def knockout_preventing_instance(
     """
     return (
         _active_flagged_instances([target], flag_field="prevents_knockout")
-        .select_related("condition")
+        .select_related("condition", "target", "source_character")
         .order_by("pk")
         .first()
     )
@@ -3807,23 +3837,42 @@ def draws_aggro_target_ids(
     )
 
 
-def provoking_source_by_target(
+def provoking_instances_by_target(
     targets: Iterable["ObjectDB"],  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
-) -> dict[int, int]:
-    """ObjectDB pk of each target's provoker from active forces_attack_on_source conditions.
+) -> dict[int, ConditionInstance]:
+    """Each target's provoking instance from active forces_attack_on_source conditions.
 
-    Keyed by the bearer's ObjectDB pk; the value is the ``source_character_id`` of the
-    bearer's newest (highest pk) active, unsuppressed flagged instance that has a source.
-    An instance with no source has nobody to attack and is skipped. One query for all
-    ``targets`` (#4584). Enemy target selection narrows an NPC to its provoker.
+    Keyed by the bearer's ObjectDB pk; the value is the bearer's newest (highest pk) active,
+    unsuppressed flagged instance that has a source, with its template, bearer and source
+    fetched in the same query (the provoke narration reads them, #4587). An instance with no
+    source has nobody to attack and is skipped. One query for all ``targets`` (#4584).
     """
     rows = (
         _active_flagged_instances(targets, flag_field="forces_attack_on_source")
         .filter(source_character__isnull=False)
+        .select_related("condition", "target", "source_character")
         .order_by("pk")
-        .values_list("target_id", "source_character_id")
     )
-    return dict(rows)
+    return {row.target_id: row for row in rows}
+
+
+def standing_guard_instance(
+    ward: "ObjectDB",  # noqa: OBJECTDB_PARAM - mirrors get_active_conditions
+    guardian: "ObjectDB",  # noqa: OBJECTDB_PARAM - the condition's source character
+) -> ConditionInstance | None:
+    """The ward's oldest active source_guards_bearer instance whose source is ``guardian``.
+
+    The instance whose guard just stepped in (``guardians_by_target`` orders guardians by
+    oldest instance first, so this is the one that put her first in line); its template
+    carries the guard narration (#4587). None when the guardian holds no such instance.
+    """
+    return (
+        _active_flagged_instances([ward], flag_field="source_guards_bearer")
+        .filter(source_character=guardian)
+        .select_related("condition", "target", "source_character")
+        .order_by("pk")
+        .first()
+    )
 
 
 def guardians_by_target(

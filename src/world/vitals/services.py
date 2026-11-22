@@ -22,6 +22,8 @@ from world.checks.services import (
     difficulty_step_points,
     perform_check_with_modifiers,
 )
+from world.conditions.constants import ReactiveMoment, SpendNarration
+from world.conditions.reactive_narration import narrate_reactive_moment
 from world.conditions.services import (
     knockout_preventing_instance,
     spend_condition_use,
@@ -873,7 +875,10 @@ def _process_knockout_tier(  # noqa: PLR0913
     A grace condition (``prevents_knockout``, #4584) stops the roll: it is looked up
     only after those guards, so it is used only when a knockout roll would actually
     happen, and spent through ``spend_condition_use`` (an ``UNTIL_USED`` grace stops
-    one knockout and ends; a ``ROUNDS`` grace stops every knockout while it lasts).
+    one knockout and ends; a ``ROUNDS`` grace stops every knockout while it lasts). The
+    grace is told when it holds (#4587): its ``grace_narration``, else a plain line, to
+    the fight's room when the bearer is in one and the grace is not hidden or the bearer
+    or source concealed, otherwise to the bearer and source privately.
     ``CHARACTER_INCAPACITATED`` still fires on entering the knockout band, because it
     marks the band, not the knockout. NPC opponents have no knockout tier (they have
     no ``CharacterSheet``), so the flag has nothing to stop on them.
@@ -889,7 +894,8 @@ def _process_knockout_tier(  # noqa: PLR0913
         return
     grace = knockout_preventing_instance(character_sheet.character)
     if grace is not None:
-        spend_condition_use(grace)
+        narrate_reactive_moment(grace, ReactiveMoment.GRACE)
+        spend_condition_use(grace, narration=SpendNarration.AUTHORED_ONLY)
         return
     _apply_knockout_tier(
         character_sheet=character_sheet,

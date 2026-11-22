@@ -3564,7 +3564,7 @@
 - `process_damage_interactions(target: 'ObjectDB', damage_type: world.conditions.models.DamageType) -> world.conditions.types.DamageInteractionResult - Process condition interactions when target takes damage.`
 - `process_round_end(target: 'ObjectDB') -> world.conditions.types.RoundTickResult - Process end-of-round effects for all conditions on a target.`
 - `process_round_start(target: 'ObjectDB') -> world.conditions.types.RoundTickResult - Process start-of-round effects for all conditions on a target.`
-- `provoking_source_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, int] - ObjectDB pk of each target's provoker from active forces_attack_on_source conditions.`
+- `provoking_instances_by_target(targets: collections.abc.Iterable['ObjectDB']) -> dict[int, world.conditions.models.ConditionInstance] - Each target's provoking instance from active forces_attack_on_source conditions.`
 - `rally_target_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The condition instance a rally on *target* reaches, or None when nothing holds them.`
 - `record_rally_landed(instance: world.conditions.models.ConditionInstance) -> None - An ally's rally landed on *instance* (#4887): the one writer of ``rallied``.`
 - `register_detection(observer_sheet: 'CharacterSheet', target: 'ObjectDB') -> None - Record that observer_sheet has pierced target's active concealment(s) (#1225).`
@@ -3580,9 +3580,10 @@
 - `scaled_resistance_value(modifier: world.conditions.models.ConditionResistanceModifier, instance: world.conditions.models.ConditionInstance) -> int - One ConditionResistanceModifier's contribution on one active instance (#4728).`
 - `settle_round_effects(targets: collections.abc.Iterable['ObjectDB']) -> list[world.conditions.models.ConditionInstance] - Convert round-counted conditions on the targets into wall-clock expiries (#4120).`
 - `settled_effects_tick() -> world.conditions.types.SettledTickSummary - Scheduler entry point. Run out and tick round-based effects settled after combat (#4120).`
-- `spend_condition_use(instance: world.conditions.models.ConditionInstance) -> bool - End a once-only (``UNTIL_USED``) condition because it was just used (#4584).`
+- `spend_condition_use(instance: world.conditions.models.ConditionInstance, *, narration: world.conditions.constants.SpendNarration = SpendNarration.FULL) -> bool - End a once-only (``UNTIL_USED``) condition because it was just used (#4584).`
 - `spend_conditions_by_id(instance_ids: collections.abc.Iterable[int]) -> None - Spend the once-only conditions among ``instance_ids`` with one query (#4584).`
 - `spend_contributing_conditions(breakdown: world.checks.types.ModifierBreakdown) -> None - Spend every once-only condition whose nonzero term helped a real roll (#4584).`
+- `standing_guard_instance(ward: 'ObjectDB', guardian: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The ward's oldest active source_guards_bearer instance whose source is ``guardian``.`
 - `suppress_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, duration_rounds: int | None = None) -> bool - Temporarily suppress a condition's effects.`
 - `take_breath(target: 'ObjectDB') -> list[world.conditions.models.ConditionTemplate] - She breathes: every held-breath condition on her ends (#4741).`
 - `thread_passive_capability_grants(character_sheet: 'CharacterSheet') -> dict[int, int] - Thread-passive capability grants (#751 B2), by capability pk.`
@@ -12250,6 +12251,7 @@
 - `knockout_preventing_instance(target: 'ObjectDB') -> world.conditions.models.ConditionInstance | None - The bearer's oldest active, unsuppressed ``prevents_knockout`` instance, or None (#4584).`
 - `mark_fed_to_death(victim_sheet: 'CharacterSheet') -> 'bool' - Kill an NPC drained past empty by feeding (#2853). Returns True on death.`
 - `mend_wound(healer_sheet: 'CharacterSheet', target_sheet: 'CharacterSheet', wound_instance: 'ConditionInstance', amount: 'int', cap_fraction: 'Decimal | None' = None) -> 'int' - Raise a wounded target's health, double-bounded (#2644 — the attrition invariant).`
+- `narrate_reactive_moment(instance: 'ConditionInstance', moment: 'ReactiveMoment', *, attacker: 'str' = '', bearer_name: 'str' = '', encounter: 'CombatEncounter | None' = None, plain_fallback: 'bool' = True, hidden: 'bool | None' = None) -> 'None' - Tell the audience that ``instance``'s reactive moment just happened.`
 - `perceives_dreamside(character_sheet: 'CharacterSheet | None') -> 'bool' - True when the character's perception is relocated to the dream side (#2287).`
 - `perform_check_with_modifiers(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, effort_level: str | None = None, fatigue_penalty: int = 0, specialization: 'Specialization | None' = None, *, situation_ctx: 'SituationContext | None' = None, level_override: int | None = None, scene: 'Scene | None' = None, extra_contributions: 'list[ModifierContribution] | None' = None, skip_fashion: bool = False, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> world.checks.types.CheckResult - Run a check with all character modifiers gathered automatically.`
 - `process_damage_consequences(character_sheet: 'CharacterSheet | None', damage_dealt: 'int', damage_type: 'DamageType | None', *, extra_modifiers: 'int' = 0, combat_interaction_factory: 'Callable[[], Interaction] | None' = None, source_character: 'ObjectDB | None' = None) -> 'DamageConsequenceResult' - Process survivability consequences after damage is applied.`
@@ -12257,7 +12259,7 @@
 - `resolve_abandonment(character_sheet: 'CharacterSheet | None') -> 'bool' - Resolve an abandoned downed victim's fate through the abandonment pool (#1479 T8).`
 - `resolve_vitals_consequence(character_sheet: 'CharacterSheet', check_type: 'CheckTypeHint', target_difficulty: 'int', pool: 'ConsequencePool', *, extra_modifiers: 'int' = 0, source_character: 'ObjectDB | None' = None) -> 'PendingResolution' - Resolve one survivability consequence through the consequence-pool pipeline.`
 - `retire_character(character_sheet: 'CharacterSheet', *, forced_by: 'object | None' = None) -> 'None' - Release a dead character: the final lock of the ghost interlude (#2287).`
-- `spend_condition_use(instance: world.conditions.models.ConditionInstance) -> bool - End a once-only (``UNTIL_USED``) condition because it was just used (#4584).`
+- `spend_condition_use(instance: world.conditions.models.ConditionInstance, *, narration: world.conditions.constants.SpendNarration = SpendNarration.FULL) -> bool - End a once-only (``UNTIL_USED``) condition because it was just used (#4584).`
 - `spend_contributing_conditions(breakdown: world.checks.types.ModifierBreakdown) -> None - Spend every once-only condition whose nonzero term helped a real roll (#4584).`
 - `tick_round_for_targets(targets: 'Iterable[ObjectDB]', *, timing: "Literal['start', 'end']" = 'end') -> 'None' - Apply one round's worth of per-target effects for a set of targets.`
 - `unconscious_instance(character_sheet: 'CharacterSheet | None') -> 'ConditionInstance | None' - Return the character's active Unconscious ConditionInstance, if any.`

@@ -69,7 +69,7 @@ The social-combat maneuver by which a PC draws an NPC's aggro by rolling wits + 
 _Avoid_: mock, aggro (colloquial). Not **Provoke** (below): Taunt biases an NPC's choice through threat, Provoke removes the choice.
 
 **Provoke** (#4584):
-A condition with `ConditionTemplate.forces_attack_on_source` on an NPC opponent: it attacks only the condition's source (`source_character`), from the round after the condition lands (the hard form of Taunt's soft threat bias). An active engagement lock wins; a source who is down, untargetable or out of the fight leaves the opponent choosing as normal; charmed, turned and summoned opponents ignore it. Read by `select_npc_actions` through `provoking_source_by_target`.
+A condition with `ConditionTemplate.forces_attack_on_source` on an NPC opponent: it attacks only the condition's source (`source_character`), from the round after the condition lands (the hard form of Taunt's soft threat bias). An active engagement lock wins; a source who is down, untargetable or out of the fight leaves the opponent choosing as normal; charmed, turned and summoned opponents ignore it. Read by `select_npc_actions` through `provoking_instances_by_target`.
 _Avoid_: taunt (the soft, threat-based maneuver), aggro, lock (an engagement lock is a different, duel-style hold)
 
 **Mark** (`CombatMark`, #2664, player surface #4603):

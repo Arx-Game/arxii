@@ -704,10 +704,21 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   now end by use: a blessing's term after the real roll it fed (all roll sites and a resumed
   paused resolution, never a preview), a ward after a successful fire, a seeded marker once its
   flow has run. Proven by `src/integration_tests/test_holding_the_line_journeys.py`. **Known
-  gaps:** a successful strike-back is not narrated (only the fizzle speaks); strike-back, guard
+  gaps:** strike-back, guard
   and provoke read PC bearers/wards and NPC attackers only (no strike-back ward on an NPC or
   summon, no standing guard of an ALLY summon); staff author strike-back as a plain condition,
   there is no seeded strike-back content to load.
+
+- **Reactive conditions tell the room when they fire (#4587):** a strike back, a standing
+  guard stepping in, a provoked foe turning, a grace holding and a once-only condition being
+  spent each tell the fight's room a line staff author on the condition template
+  (`retaliation_narration`, `guard_narration`, `provoke_narration`, `grace_narration`,
+  `spent_narration`, with `{bearer}`, `{source}`, `{attacker}` filled with presented persona
+  names), else a plain system line. A hidden condition, a concealed bearer or source, and a
+  moment outside a fight go only to the bearer and the source. Proven by
+  `src/integration_tests/test_reactive_moment_narration_journeys.py`. **Known gaps:** a failed
+  guard roll and a declined guard are still silent to the room; no seeded lines (staff author
+  each in the Reactive narration fieldset of the condition template admin).
 
 - **A technique shakes enemy morale by its own amount (#4619, ADR-4619-A; slice 5 of #4573,
   the mark half is #4603):** a technique can carry one morale row (`TechniqueMoraleEffect`:

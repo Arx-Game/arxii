@@ -26,14 +26,14 @@ from world.combat.factories import (
 from world.combat.services import select_npc_actions
 from world.combat.services.npc.npc_selection import _narrow_to_locked_or_provoker
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
-from world.conditions.services import provoking_source_by_target
+from world.conditions.services import provoking_instances_by_target
 from world.scenes.constants import RoundStatus
 
 NARROW_PATH = "world.combat.services.npc.npc_selection._narrow_to_locked_or_provoker"
 
 
-class ProvokingSourceByTargetTests(TestCase):
-    """The batched helper maps a bearer to the newest active, sourced provoke."""
+class ProvokingInstancesByTargetTests(TestCase):
+    """The batched helper maps a bearer to its newest active, sourced provoke instance."""
 
     @classmethod
     def setUpTestData(cls):
@@ -45,8 +45,8 @@ class ProvokingSourceByTargetTests(TestCase):
         cls.plain = ConditionTemplateFactory(name="Plain 4584", forces_attack_on_source=False)
         cls.later = ConditionTemplateFactory(name="Later 4584", forces_attack_on_source=True)
 
-    def test_maps_bearer_to_source_in_one_query(self):
-        ConditionInstanceFactory(
+    def test_maps_bearer_to_its_instance_in_one_query_with_what_narration_reads(self):
+        provoking = ConditionInstanceFactory(
             target=self.bearer, condition=self.provoke, source_character=self.first
         )
         ConditionInstanceFactory(
@@ -54,43 +54,38 @@ class ProvokingSourceByTargetTests(TestCase):
         )
 
         with self.assertNumQueries(1):
-            result = provoking_source_by_target([self.bearer, self.other])
+            result = provoking_instances_by_target([self.bearer, self.other])
+            # The template, bearer and source are fetched with it (#4587).
+            self.assertEqual(result[self.bearer.pk].condition, self.provoke)
+            self.assertEqual(result[self.bearer.pk].target, self.bearer)
+            self.assertEqual(result[self.bearer.pk].source_character, self.first)
 
-        self.assertEqual(result, {self.bearer.pk: self.first.pk})
+        self.assertEqual(result, {self.bearer.pk: provoking})
 
     def test_newest_instance_wins(self):
         ConditionInstanceFactory(
             target=self.bearer, condition=self.provoke, source_character=self.first
         )
-        ConditionInstanceFactory(
+        newest = ConditionInstanceFactory(
             target=self.bearer, condition=self.later, source_character=self.second
         )
 
-        self.assertEqual(
-            provoking_source_by_target([self.bearer]), {self.bearer.pk: self.second.pk}
-        )
+        self.assertEqual(provoking_instances_by_target([self.bearer]), {self.bearer.pk: newest})
 
-    def test_suppressed_instance_is_skipped(self):
+    def test_suppressed_and_sourceless_instances_are_skipped(self):
         ConditionInstanceFactory(
             target=self.bearer,
             condition=self.provoke,
             source_character=self.first,
             is_suppressed=True,
         )
-
-        self.assertEqual(provoking_source_by_target([self.bearer]), {})
-
-    def test_sourceless_instance_is_skipped(self):
-        ConditionInstanceFactory(
-            target=self.bearer, condition=self.provoke, source_character=self.first
-        )
         ConditionInstanceFactory(target=self.bearer, condition=self.later, source_character=None)
 
-        self.assertEqual(provoking_source_by_target([self.bearer]), {self.bearer.pk: self.first.pk})
+        self.assertEqual(provoking_instances_by_target([self.bearer]), {})
 
     def test_no_targets_runs_no_query(self):
         with self.assertNumQueries(0):
-            self.assertEqual(provoking_source_by_target([]), {})
+            self.assertEqual(provoking_instances_by_target([]), {})
 
 
 class ProvokeTargetingTests(TestCase):
