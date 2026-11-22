@@ -467,6 +467,7 @@ do not convene a permanent council. Existing narrow reviewers take precedence:
 | Framework hook, network boundary, or changed mock/double | `mock-fidelity-reviewer` and real-boundary contract coverage |
 | Persisted player-facing outcome or audience delivery | `outcome-delivery-reviewer` |
 | Evennia typeclass row creation or repair | `typeclass-creation-reviewer` |
+| A character's in-character data (a ritual, thread, aura, resonance, anima, technique) looked up through `db_account`, `author_account`, `account_id`, a tenure's account or `request.user`, or a helper that picks one of an account's several characters | `character-scope-reviewer` (#5280); live-presence questions go to `pc-npc-test-reviewer` |
 | Derived eligibility/safety classifier or hand-enumerated choice/visibility family | `derived-classifier-reviewer` or `enumerated-set-reviewer` |
 | Portal, websocket, telnet protocol, or Portal-read setting | `portal-code-deploy-reviewer` |
 | Approved visual/demo surface | `demo-fidelity-reviewer` |
