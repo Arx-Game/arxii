@@ -11,6 +11,7 @@ from world.magic.factories import (
     DramaticMomentTagFactory,
     DramaticMomentTypeFactory,
     ResonanceFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import CharacterResonance, ResonanceGrant
 from world.magic.models.dramatic_moment import DramaticMomentTag
@@ -63,7 +64,7 @@ class DramaticMomentTagModelTest(TestCase):
 class CreateDramaticMomentTagServiceTest(TestCase):
     def setUp(self):
         self.sheet = CharacterSheetFactory()
-        self.resonance = ResonanceFactory()
+        self.resonance = ResonanceFactory(affinity=ensure_canonical_affinities()[1])
         CharacterResonanceFactory(
             character_sheet=self.sheet,
             resonance=self.resonance,

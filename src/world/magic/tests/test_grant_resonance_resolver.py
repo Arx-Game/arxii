@@ -21,6 +21,7 @@ from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     RitualCheckConfigFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import CharacterGift, Thread
 from world.magic.specialization.services import (
@@ -58,7 +59,7 @@ class ResolveGrantResonanceTests(TestCase):
     def test_empty_set_no_threads_no_claims_uses_anima_ritual_resonance(self):
         sheet = CharacterSheetFactory()
         gift = GiftFactory()
-        ritual_resonance = ResonanceFactory()
+        ritual_resonance = ResonanceFactory(affinity=ensure_canonical_affinities()[1])
         RitualCheckConfigFactory(
             ritual__author_account=sheet.character.db_account,
             primal_resonance=ritual_resonance,
@@ -156,7 +157,7 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
     def test_resonance_none_on_empty_set_gift_provisions_a_thread(self):
         sheet = CharacterSheetFactory()
         gift = GiftFactory()
-        ritual_resonance = ResonanceFactory()
+        ritual_resonance = ResonanceFactory(affinity=ensure_canonical_affinities()[1])
         RitualCheckConfigFactory(
             ritual__author_account=sheet.character.db_account,
             primal_resonance=ritual_resonance,

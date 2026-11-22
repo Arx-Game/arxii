@@ -1536,6 +1536,98 @@ class RitualViewSetTests(APITestCase):
         )
 
 
+class RitualListNamesTheTwoPicksTests(APITestCase):
+    """The ritual list names an anima ritual's two picks, in a constant number of queries."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.magic.factories import (
+            ResonanceFactory,
+            ensure_canonical_affinities,
+        )
+
+        cls.celestial, cls.primal, _abyssal = ensure_canonical_affinities()
+        cls.user = AccountFactory(username="two_picks_user")
+        cls.primal_pick = ResonanceFactory(name="Hearth Primal", affinity=cls.primal)
+        cls.outward_pick = ResonanceFactory(name="Dawn Celestial", affinity=cls.celestial)
+        cls.picked = cls._ritual("Picked Rite", cls.primal_pick, cls.outward_pick)
+        cls.unpicked = cls._ritual("Unpicked Rite", None, None)
+
+    @staticmethod
+    def _ritual(name, primal, outward):
+        from world.magic.constants import RitualExecutionKind
+        from world.magic.factories import RitualCheckConfigFactory, RitualFactory
+
+        ritual = RitualFactory(
+            name=name,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+        )
+        RitualCheckConfigFactory(ritual=ritual, primal_resonance=primal, outward_resonance=outward)
+        return ritual
+
+    def setUp(self) -> None:
+        self.client.force_authenticate(self.user)
+
+    @staticmethod
+    def _go_cold() -> None:
+        """Empty the identity map of the rows the list reads, as a freshly started server is.
+
+        A row made in this process is already in the identity map, which would hide a lazy
+        load behind a cache hit; the first list on a real server pays for each one.
+        """
+        from world.checks.models import CheckType
+        from world.magic.models import Resonance, Ritual, RitualCheckConfig
+        from world.traits.models import Trait
+
+        for model in (Ritual, RitualCheckConfig, Resonance, Trait, CheckType):
+            model.flush_instance_cache()
+
+    def _list(self) -> dict:
+        response = self.client.get(reverse("magic:ritual-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        results = response.data.get("results", response.data)
+        return {row["name"]: row["check_config"] for row in results}
+
+    def test_the_picks_are_named_and_a_ritual_with_none_reads_null(self) -> None:
+        configs = self._list()
+
+        picked = configs["Picked Rite"]
+        self.assertEqual(picked["primal_resonance_id"], self.primal_pick.pk)
+        self.assertEqual(picked["primal_resonance_name"], "Hearth Primal")
+        self.assertEqual(picked["outward_resonance_id"], self.outward_pick.pk)
+        self.assertEqual(picked["outward_resonance_name"], "Dawn Celestial")
+        unpicked = configs["Unpicked Rite"]
+        self.assertIsNone(unpicked["primal_resonance_id"])
+        self.assertIsNone(unpicked["primal_resonance_name"])
+        self.assertIsNone(unpicked["outward_resonance_id"])
+        self.assertIsNone(unpicked["outward_resonance_name"])
+
+    def test_more_rituals_cost_no_more_queries_for_their_picks(self) -> None:
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.magic.factories import ResonanceFactory
+
+        self._list()  # the first request pays one-off cache loads; measure from the second
+        self._go_cold()
+        with CaptureQueriesContext(connection) as before:
+            self._list()
+        for n in range(3):
+            self._ritual(
+                f"Extra Rite {n}",
+                ResonanceFactory(name=f"Extra Primal {n}", affinity=self.primal),
+                ResonanceFactory(name=f"Extra Celestial {n}", affinity=self.celestial),
+            )
+        self._go_cold()
+        with CaptureQueriesContext(connection) as after:
+            configs = self._list()
+
+        self.assertEqual(configs["Extra Rite 2"]["outward_resonance_name"], "Extra Celestial 2")
+        self.assertEqual(len(after), len(before))
+
+
 class TestRitualClientHosted(APITestCase):
     """Verify that Ritual.client_hosted is exposed by the list endpoint with correct values.
 

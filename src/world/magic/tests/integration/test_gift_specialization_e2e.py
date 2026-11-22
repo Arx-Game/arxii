@@ -37,6 +37,7 @@ from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import (
     CharacterResonance,
@@ -77,7 +78,7 @@ class GiftSpecializationE2ETest(TestCase):
         # Achievement eligibility requires a live, non-staff RosterTenure (#3024).
         grant_test_tenure(cls.sheet)
         cls.gift = GiftFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = ResonanceFactory(affinity=ensure_canonical_affinities()[1])
         cls.gift.resonances.add(cls.resonance)
         # The gift's starting technique.
         cls.technique = TechniqueFactory(gift=cls.gift)

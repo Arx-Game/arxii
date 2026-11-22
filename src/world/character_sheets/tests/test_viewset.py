@@ -92,6 +92,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueStyleFactory,
     UltimateTechniqueFactory,
+    ensure_canonical_affinities,
 )
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
@@ -1164,7 +1165,9 @@ class TestMagicSectionFull(TestCase):
         )
 
         # --- Gift with resonances and techniques ---
-        cls.resonance_resolve = ResonanceFactory(name="Resolve")
+        cls.resonance_resolve = ResonanceFactory(
+            name="Resolve", affinity=ensure_canonical_affinities()[1]
+        )
         cls.resonance_metal = ResonanceFactory(name="Metal")
 
         cls.gift = GiftFactory(name="Iron Will", description="Unyielding magical will.")
@@ -2733,7 +2736,7 @@ class TestCharacterSheetQueryCount(TestCase):
         _seed_house_holding_land(cls.sheet.primary_persona)
 
         # --- Magic ---
-        resonance = ResonanceFactory(name="QCResolve")
+        resonance = ResonanceFactory(name="QCResolve", affinity=ensure_canonical_affinities()[1])
         gift = GiftFactory(name="QCIronWill")
         gift.resonances.add(resonance)
         technique = TechniqueFactory(name="QCSteelSkin", gift=gift, level=2)
@@ -3066,7 +3069,7 @@ class TestPrefetchCompleteness(TestCase):
         CharacterDistinctionFactory(character=cls.character.sheet_data, distinction=dist, rank=1)
 
         # Magic: gifts, techniques, motif, anima ritual, aura
-        resonance = ResonanceFactory(name="PFResolve")
+        resonance = ResonanceFactory(name="PFResolve", affinity=ensure_canonical_affinities()[1])
         gift = GiftFactory(name="PFGift")
         gift.resonances.add(resonance)
         technique = TechniqueFactory(name="PFTech", gift=gift, level=1)

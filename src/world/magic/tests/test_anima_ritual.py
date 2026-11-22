@@ -15,6 +15,7 @@ from world.magic.factories import (
     ResonanceFactory,
     RitualCheckConfigFactory,
     RitualFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import AnimaRitualPerformance, Ritual, RitualCheckConfig
 from world.skills.factories import SkillFactory, SpecializationFactory
@@ -29,7 +30,7 @@ class RitualCheckConfigModelTests(TestCase):
     def setUpTestData(cls):
         cls.stat = TraitFactory(name="Composure", trait_type=TraitType.STAT)
         cls.skill = SkillFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = ResonanceFactory(affinity=ensure_canonical_affinities()[1])
         cls.check_type = CheckTypeFactory()
         cls.ritual = RitualFactory(
             execution_kind=RitualExecutionKind.SCENE_ACTION,
