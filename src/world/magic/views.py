@@ -1740,17 +1740,6 @@ class RitualPerformView(APIView):
                 if dataclasses.is_dataclass(result)
                 else result
             )
-        if ritual.execution_kind == RitualExecutionKind.SCENE_ACTION:
-            # The personal anima ritual (#4451): tell the performer what the roll did.
-            payload["message"] = action_result.message
-            payload["result"] = {
-                "outcome": result.outcome.name,
-                "anima_recovered": result.anima_recovered,
-                "patron_bonus": result.patron_bonus,
-                "patron_name": result.patron_name,
-                "severity_reduced": result.severity_reduced,
-                "soulfray_resolved": result.soulfray_resolved,
-            }
         return Response(payload, status=status.HTTP_200_OK)
 
 

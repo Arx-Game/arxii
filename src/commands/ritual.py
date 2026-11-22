@@ -6,8 +6,9 @@ session path).
 
 Single-actor path (SERVICE/CEREMONY kind):
     ``ritual <name>``                       — perform a ritual by name
-    ``ritual anima``                        — perform your personal anima ritual in the
-        scene you stand in (also ``ritual <its name>``); once per scene (#4451)
+    ``ritual anima <partner>``              — ask someone in the scene to take part in your
+        personal anima ritual; it is never done alone (#5280). Bare ``ritual anima`` is refused
+        with the usage line, and so is ``ritual <its name>`` with the same refusal.
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
         e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``/
         ``resonance=<id>``; ``resonance=`` (alias ``target_resonance=``) names the
@@ -62,9 +63,10 @@ _TARGET_RESONANCE_KWARG = "target_resonance"
 _FROM_RESONANCE_KWARG = "from_resonance"
 _FROM_ALIAS_KWARG = "from"
 _AMOUNT_KWARG = "amount"
-#: ``ritual anima`` performs the caller's own personal anima ritual (#4451), whatever
-#: its authored name is.
+#: ``ritual anima <partner>`` asks a partner to take part in the caller's own personal anima
+#: ritual (#5181), whatever its authored name is.
 _ANIMA_SHORTHAND = "anima"
+_ANIMA_USAGE = "Name someone else to take part in your ritual. Usage: ritual anima <partner>"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
 
 #: Rite of Honors (#3466) telnet tokens — every one may run to multiple words
@@ -188,11 +190,10 @@ class CmdRitual(ArxCommand):
         Example: ``ritual Rite of Imbuing thread=5``
         Example: ``ritual <retune rite> thread=5 resonance=12`` - move a thread
             to another resonance (leave out ``resonance=`` to list where it can go)
-        ``ritual anima`` - perform your personal anima ritual in the scene you
-            are in (once per scene; it eases Soulfray, then restores anima)
-        ``ritual anima <partner>`` - ask someone in the scene to take part in it. They are
-            told what it will do to their fatigue and agree with ``accept``; it then earns
-            the resonance your ritual names (#5181)
+        ``ritual anima <partner>`` - ask someone in the scene to take part in your personal
+            anima ritual, which is never done alone (once per scene). A player is told what
+            it will do to their fatigue and agrees with ``accept``; an NPC is accepted at
+            once when a GM runs it or the scene (#5181, #5280)
 
     **Multi-participant session lifecycle:**
         ``ritual sessions``                              - list pending sessions
@@ -239,12 +240,15 @@ class CmdRitual(ArxCommand):
     # ------------------------------------------------------------------
 
     def _asked_for_a_partner(self, first: str) -> bool:
-        """Handle ``ritual anima <partner>`` and return True; False for any other line
-        (a bare ``ritual anima`` is the solo ritual, and a name with ``key=value`` after it is
-        not a partner)."""
+        """Handle ``ritual anima [<partner>]`` and return True; False for any other line
+        (a name with ``key=value`` after it is not a partner). A bare ``ritual anima`` is
+        refused with the usage line: the ritual is never done alone."""
         partner = (self.args or "").strip()[len(first) :].strip()
-        if first != _ANIMA_SHORTHAND or not partner or "=" in partner:
+        if first != _ANIMA_SHORTHAND or "=" in partner:
             return False
+        if not partner:
+            self.caller.msg(_ANIMA_USAGE)
+            return True
         try:
             self._handle_anima_with_partner(partner)
         except CommandError as err:

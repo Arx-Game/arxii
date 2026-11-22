@@ -122,67 +122,6 @@ def get_character_cast_check(character):  # noqa: OBJECTDB_PARAM — Evennia cha
     return ritual.check_config.check_type
 
 
-@transaction.atomic
-def perform_anima_ritual(
-    character_sheet: CharacterSheet,
-    scene: Scene,
-) -> RitualOutcome:
-    """Perform the character's personalised anima ritual once per scene.
-
-    Scope 6 §5.1. Outcome-tiered recovery budget: reduce Soulfray severity
-    first at ritual_severity_cost_per_point per point, then refill anima
-    with leftover budget. Crit always tops anima to max regardless.
-    """
-    from world.checks.services import (  # noqa: PLC0415
-        difficulty_points,
-        perform_check_with_modifiers,
-    )
-    from world.magic.constants import MagicActivity  # noqa: PLC0415
-    from world.magic.exceptions import (  # noqa: PLC0415
-        CharacterEngagedForRitual,
-        NoRitualConfigured,
-        RitualAlreadyPerformedThisScene,
-        RitualScenePrerequisiteFailed,
-    )
-    from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
-    from world.magic.services.magic_skills import activity_skill_terms  # noqa: PLC0415
-    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
-
-    character = character_sheet.character
-    ritual = get_character_anima_ritual(character)
-    if ritual is None or not hasattr(ritual, "check_config"):
-        raise NoRitualConfigured
-
-    config = ritual.check_config
-    if config.check_type is None:
-        raise NoRitualConfigured
-
-    if CharacterEngagement.objects.filter(character_id=character.pk).exists():
-        raise CharacterEngagedForRitual
-
-    if not scene.is_active or not _scene_participant(scene, character):
-        raise RitualScenePrerequisiteFailed
-
-    if AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists():
-        raise RitualAlreadyPerformedThisScene
-
-    check_result = perform_check_with_modifiers(
-        character,
-        check_type=config.check_type,
-        target_difficulty=difficulty_points(config.target_difficulty_level),
-        scene=scene,
-        extra_traits=activity_skill_terms(MagicActivity.ANIMA_RITUAL),
-    )
-    outcome = check_result.outcome
-
-    return apply_anima_ritual_outcome(
-        ritual=ritual,
-        outcome=outcome,
-        scene=scene,
-        character_sheet=character_sheet,
-    )
-
-
 def _chosen_patron_share(character_sheet: CharacterSheet, outcome: object) -> tuple[str, int]:
     """(the patron's name, the anima it adds) when the character is a Chosen whose patron favor
     meets the Chosen favor config's threshold: the CHOSEN_ANIMA award for the ritual's result
@@ -209,16 +148,15 @@ def apply_anima_ritual_outcome(
 ) -> RitualOutcome:
     """Apply a pre-computed check outcome to anima/soulfray + create audit row.
 
-    Extracted from perform_anima_ritual() so SceneActionRequest can drive the
-    check and pass the outcome here.
+    ``resolve_ritual_request`` (the partner ritual's accepted request) drives the check and
+    passes the outcome here.
 
     Args:
         ritual: The Ritual (SCENE_ACTION kind) being performed.
         outcome: The check outcome / result object (must have success_level).
         scene: The scene in which the ritual is performed.
         character_sheet: The character performing the ritual.
-        partner_sheet: The character who took part (#5181), recorded on the performance row;
-            None for the solo ritual.
+        partner_sheet: The character who took part (#5181), recorded on the performance row.
 
     Returns:
         RitualOutcome describing what was recovered and reduced.
@@ -272,7 +210,7 @@ def apply_anima_ritual_outcome(
 
     # Chosen patronage share (#2550, #4349): the CHOSEN_ANIMA award for the ritual's result,
     # additive to the leftover budget after soulfray reduction, before the anima refill. Both
-    # call paths (perform_anima_ritual direct + _resolve_anima_ritual web) converge here.
+    # call paths (resolve_ritual_request and _resolve_anima_ritual) converge here.
     patron_name, patron_share = _chosen_patron_share(character_sheet, outcome)
     budget += patron_share
 
@@ -510,7 +448,7 @@ def has_performed_anima_ritual_in_scene(
     """Return True when the given ritual has already been performed in this scene.
 
     Used by the menu contributor to enforce the once-per-scene cap without
-    re-running the full gate logic in perform_anima_ritual().
+    re-running the full gate logic in ``check_partner_ritual``.
     """
     from world.magic.models.anima import AnimaRitualPerformance  # noqa: PLC0415
 
@@ -551,25 +489,6 @@ def _budget_for_outcome(outcome: object) -> int:
     from world.magic.models.soulfray import AnimaRitualBudgetAward  # noqa: PLC0415
 
     return AnimaRitualBudgetAward.objects.get(outcome_tier=outcome).budget
-
-
-def _scene_participant(scene: Scene, character: ObjectDB) -> bool:
-    """Return True when *character*'s account has a SceneParticipation in *scene*.
-
-    Mirrors conditions.services._scene_participant — same roster-tenure path.
-    """
-    from world.roster.models import RosterEntry  # noqa: PLC0415
-    from world.scenes.models import SceneParticipation  # noqa: PLC0415
-
-    try:
-        entry = RosterEntry.objects.get(character_sheet_id=character.pk)
-    except RosterEntry.DoesNotExist:
-        return False
-    tenure = entry.tenures.filter(end_date__isnull=True).first()
-    if tenure is None:
-        return False
-    account_id = tenure.player_data.account_id
-    return SceneParticipation.objects.filter(scene=scene, account_id=account_id).exists()
 
 
 def anima_regen_tick() -> AnimaRegenTickSummary:

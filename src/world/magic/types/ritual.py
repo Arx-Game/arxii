@@ -24,7 +24,7 @@ class AnimaRitualCategory(models.TextChoices):
 
 @dataclass(frozen=True)
 class RitualOutcome:
-    """Result of a single perform_anima_ritual invocation."""
+    """What one anima ritual with a partner did to its performer's anima and Soulfray."""
 
     performance: AnimaRitualPerformance
     outcome: CheckOutcome

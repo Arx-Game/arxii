@@ -9,8 +9,8 @@ any transaction, so it would leak rows between examples).
 
 ``_AnimaRitualWorld`` is the shared builder: a performer with an aura split, resonance picks
 and a real SCENE_ACTION ritual provisioned through ``provision_player_anima_ritual``; a partner
-(player character or story NPC); and a scene they share. Later rules in the same module build
-on it.
+(player character or story NPC, run by nobody, a player borrower, a GM or the scene's GM); and
+a scene they share, in a room both stand in. Later rules in the same module build on it.
 """
 
 from __future__ import annotations
@@ -18,13 +18,18 @@ from __future__ import annotations
 from collections.abc import Sequence
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from evennia.accounts.models import AccountDB
 from hypothesis import given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 
+from actions.definitions.ritual import PerformRitualAction
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_creation.magic_writer import MagicPicks, WeightedResonance
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
+from world.checks.test_helpers import force_check_outcome
+from world.gm.factories import GMProfileFactory
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
@@ -32,10 +37,28 @@ from world.magic.factories import (
     ResonanceFactory,
     ensure_conversion_pairs,
 )
-from world.magic.models import Resonance, Ritual, RitualCheckConfig
+from world.magic.models import (
+    AnimaRitualPerformance,
+    CharacterAnima,
+    Resonance,
+    Ritual,
+    RitualCheckConfig,
+)
+from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.services.anima import provision_player_anima_ritual
-from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.magic.services.anima_ritual_action import start_partner_ritual
+from world.roster.constants import NPCLoanStatus
+from world.roster.factories import (
+    NPCLoanFactory,
+    RosterEntryFactory,
+    RosterFactory,
+    RosterTenureFactory,
+)
+from world.roster.models.choices import RosterType
+from world.scenes.action_constants import ActionRequestStatus
+from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.scenes.models import Persona, Scene
 from world.skills.factories import SkillFactory
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -123,9 +146,13 @@ class _AnimaRitualWorld:
 
     @staticmethod
     def play(sheet: CharacterSheet) -> AccountDB:
-        """Seat a player on ``sheet`` (an active tenure) and return their account."""
+        """Seat a player on ``sheet`` (an active tenure, the account on the character as a
+        logged-in puppet has it) and return their account."""
         entry = RosterEntryFactory(character_sheet=sheet)
-        return RosterTenureFactory(roster_entry=entry, end_date=None).player_data.account
+        account = RosterTenureFactory(roster_entry=entry, end_date=None).player_data.account
+        sheet.character.db_account = account
+        sheet.character.save(update_fields=["db_account"])
+        return account
 
     @staticmethod
     def magic_picks(account: AccountDB, resonances: list[WeightedResonance]) -> MagicPicks:
@@ -142,23 +169,43 @@ class _AnimaRitualWorld:
             origin="",
         )
 
-    def partner(self, kind: str) -> Persona:
-        """The partner's persona: ``"pc"`` is held by a player, ``"npc"`` by nobody."""
+    @staticmethod
+    def partner(control: str) -> Persona:
+        """The partner's persona, by who writes its part.
+
+        ``"pc"`` is a player character a player holds. The rest are story NPCs (on the NPC
+        shelf): ``"nobody"`` plays it, ``"player borrower"`` is a lent NPC a player with no GM
+        profile now plays, ``"gm holder"`` is held by an account with a GM profile, and
+        ``"scene gm"`` has no player of its own (the scene's GM is built by ``scene_with``).
+        """
         sheet = CharacterSheetFactory()
-        if kind == "pc":
-            self.play(sheet)
-        else:
-            RosterEntryFactory(character_sheet=sheet)
+        if control == "pc":
+            _AnimaRitualWorld.play(sheet)
+            return sheet.primary_persona
+        npc_shelf = RosterFactory(roster_type=RosterType.NPC)
+        entry = RosterEntryFactory(character_sheet=sheet, roster=npc_shelf)
+        if control == "player borrower":
+            NPCLoanFactory(roster_entry=entry, status=NPCLoanStatus.ACTIVE)
+        elif control == "gm holder":
+            tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+            GMProfileFactory(account=tenure.player_data.account)
         return sheet.primary_persona
 
     @staticmethod
-    def scene_with(performer: CharacterSheet, partner: Persona) -> Scene:
-        """A live scene the performer and a player partner both stand in."""
-        scene = SceneFactory(is_active=True)
-        for sheet in (performer, partner.character_sheet):
+    def scene_with(*sheets: CharacterSheet, gm: bool = False) -> Scene:
+        """A live scene in a room every one of ``sheets`` stands in, so each is "in this scene,
+        in the same place". A held character takes part under their account; ``gm`` adds a third
+        account who is the scene's GM."""
+        room = RoomProfileFactory()
+        scene = SceneFactory(location=room, is_active=True)
+        for sheet in sheets:
+            sheet.character.location = room.objectdb
             tenure = sheet.roster_entry.current_tenure
             if tenure is not None:
                 SceneParticipationFactory(scene=scene, account=tenure.player_data.account)
+        if gm:
+            SceneParticipationFactory(scene=scene, account=AccountFactory(), is_gm=True)
+        invalidate_active_scene_cache(room.objectdb)
         return scene
 
 
@@ -199,3 +246,98 @@ class CreationSetsBothPicks(_AnimaRitualWorld, HypothesisTestCase):
 
         self.assertEqual(config.primal_resonance, heaviest(("primal 1", "primal 2")))
         self.assertEqual(config.outward_resonance, heaviest(("celestial 1", "abyssal 1")))
+
+
+def anima_of(sheet: CharacterSheet) -> int:
+    """The anima the database holds (``refresh_from_db`` is a no-op on idmapper rows)."""
+    return CharacterAnima.objects.filter(character=sheet).values_list("current", flat=True).get()
+
+
+class _RitualGates(_AnimaRitualWorld, HypothesisTestCase):
+    """The anima budget of every tier is authored, so a ritual that ran would restore anima."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        for outcome in cls.outcomes.values():
+            AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=4)
+
+
+class NeverAlone(_RitualGates):
+    """The ritual is done with somebody, on every door."""
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        door=st.sampled_from(("the action", "no partner", "her own persona")),
+        tier=st.sampled_from(sorted(CANONICAL_OUTCOME_LEVELS)),
+        anima=st.integers(0, 10),
+    )
+    def test_a_ritual_with_nobody_else_never_restores_anima(
+        self, door: str, tier: str, anima: int
+    ) -> None:
+        """Maintainer: "Anima ritual can NEVER be done alone. Hard requirement to involve other
+        people."
+
+        Given the ritual started through each door (the action the Rituals page and the ritual's
+        own name reach, a request naming no partner, a request naming her own persona), any
+        outcome the dice could land on and any starting anima, her anima is exactly what it was,
+        no performance row exists, and she is told to name someone else.
+        """
+        sheet, ritual = self.performer(anima=anima)
+        scene = self.scene_with(sheet)
+        refusal = "Name someone else to take part in your ritual."
+
+        with force_check_outcome(self.outcomes[tier]):
+            if door == "the action":
+                told = PerformRitualAction().run(actor=sheet.character, ritual=ritual).message
+            else:
+                target = None if door == "no partner" else sheet.primary_persona
+                with self.assertRaises(ValidationError) as refused:
+                    start_partner_ritual(
+                        scene=scene, initiator_persona=sheet.primary_persona, target_persona=target
+                    )
+                told = " ".join(refused.exception.messages)
+
+        self.assertEqual(told, refusal)
+        self.assertEqual(anima_of(sheet), anima)
+        self.assertFalse(AnimaRitualPerformance.objects.filter(ritual=ritual).exists())
+
+
+class NpcPartners(_RitualGates):
+    """An NPC partner needs somebody writing its part."""
+
+    @settings(max_examples=20, deadline=None)
+    @given(control=st.sampled_from(("nobody", "player borrower", "gm holder", "scene gm")))
+    def test_an_npc_partner_is_refused_unless_a_gm_runs_it_or_the_scene(self, control: str) -> None:
+        """Maintainer: "GM has control of NPC or is GMing the scene. Basically if an NPC's
+        reactions are not being written by a GM ... it isn't an appropriate target."
+
+        Given a story NPC played by nobody, by a player who borrowed it, by an account with a GM
+        profile, or played by nobody in a scene a third account GMs, asking it to take part is
+        refused with "Nobody is playing that character." exactly when nobody plays it or only a
+        player does; otherwise the request is resolved at once, with no one asked for consent.
+        """
+        sheet, _ritual = self.performer()
+        partner = self.partner(control)
+        scene = self.scene_with(sheet, partner.character_sheet, gm=control == "scene gm")
+
+        with force_check_outcome(self.outcomes["Success"]):
+            if control in ("nobody", "player borrower"):
+                with self.assertRaises(ValidationError) as refused:
+                    start_partner_ritual(
+                        scene=scene,
+                        initiator_persona=sheet.primary_persona,
+                        target_persona=partner,
+                    )
+                self.assertEqual(refused.exception.messages, ["Nobody is playing that character."])
+                self.assertFalse(SceneActionRequest.objects.filter(scene=scene).exists())
+            else:
+                request = start_partner_ritual(
+                    scene=scene, initiator_persona=sheet.primary_persona, target_persona=partner
+                )
+                status = (
+                    SceneActionRequest.objects.filter(pk=request.pk)
+                    .values_list("status", flat=True)
+                    .get()
+                )
+                self.assertEqual(status, ActionRequestStatus.RESOLVED)

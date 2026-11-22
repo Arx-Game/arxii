@@ -38,6 +38,7 @@ _ALREADY_PERFORMED = "You have already performed your anima ritual in this scene
 _ALREADY_ASKED = "You already have a ritual waiting for an answer in this scene."
 _NOT_TOGETHER = "You and your partner must both be in this scene, in the same place."
 _ONE_PLAYER = "You cannot perform your ritual with another character you play."
+_NOBODY_PLAYING = "Nobody is playing that character."
 
 
 def _in_scene_together(
@@ -51,21 +52,41 @@ def _in_scene_together(
     return shared is not None and shared.pk == scene.pk
 
 
+def partner_is_run_by_a_gm(partner_sheet: CharacterSheet, scene: Scene) -> bool:
+    """True when a GM writes the partner's part: the account now playing the partner has a
+    GM profile, or any participant of the scene is its GM.
+
+    The ritual reaches for the partner, so an NPC's reactions must be written by someone
+    (#5280). "Now playing" is ``current_player_of``: a lent NPC's borrower, else its holder.
+    """
+    from world.roster.services.npc_lending import current_player_of  # noqa: PLC0415
+
+    player = current_player_of(partner_sheet)
+    if player is not None and player.gm_profile_or_none is not None:
+        return True
+    return scene.participations.filter(is_gm=True).exists()
+
+
 def check_partner_ritual(
     *, initiator_persona: Persona, target_persona: Persona | None, scene: Scene
 ) -> Ritual:
     """The initiator's own anima ritual, after every refusal a request for a partner can meet.
 
+    The ritual is never done alone, so this is the one gate every door runs through.
+
     Raises:
         ValidationError: no ritual or one not set up, no partner or the performer themselves,
             a partner who is not in this scene and the same place, a partner the same account
-            plays, the ritual already performed in this scene, or already asked of someone and
-            waiting.
+            plays, a performer in combat, an NPC partner no GM runs, the ritual already
+            performed in this scene, or already asked of someone and waiting.
     """
+    from world.magic.exceptions import CharacterEngagedForRitual  # noqa: PLC0415
     from world.magic.services.anima import (  # noqa: PLC0415
         get_character_anima_ritual,
         has_performed_anima_ritual_in_scene,
     )
+    from world.mechanics.engagement import CharacterEngagement  # noqa: PLC0415
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
     from world.roster.services.npc_lending import played_by_one_account  # noqa: PLC0415
     from world.scenes.action_constants import ActionRequestStatus  # noqa: PLC0415
     from world.scenes.action_models import SceneActionRequest  # noqa: PLC0415
@@ -84,6 +105,10 @@ def check_partner_ritual(
         raise ValidationError(_NOT_TOGETHER)
     if played_by_one_account(sheet, partner_sheet):
         raise ValidationError(_ONE_PLAYER)
+    if CharacterEngagement.objects.filter(character_id=sheet.character.pk).exists():
+        raise ValidationError(CharacterEngagedForRitual.user_message)
+    if not is_player_character(partner_sheet) and not partner_is_run_by_a_gm(partner_sheet, scene):
+        raise ValidationError(_NOBODY_PLAYING)
     if has_performed_anima_ritual_in_scene(ritual=ritual, scene=scene):
         raise ValidationError(_ALREADY_PERFORMED)
     waiting = SceneActionRequest.objects.filter(
