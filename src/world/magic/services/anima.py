@@ -497,12 +497,15 @@ def anima_ritual_open_in_scene(
 
 
 def _budget_for_outcome(outcome: object) -> int:
-    """Return the anima/severity budget for an outcome row.
+    """Return the anima/severity budget for the tier of a roll that counts as a success.
 
-    Raises AnimaRitualBudgetAward.DoesNotExist if the tier has no authored row —
-    every one of the 5 canonical CheckOutcome tiers must be seeded (unlike
-    GangTurfReputationAward's "missing row = 0" convention; a missing anima
-    budget must not silently grant 0 recovery on a legitimate ritual attempt).
+    ``apply_anima_ritual_outcome`` calls this only when ``ritual_succeeded`` is true (Partial
+    Success and above), so a Failure or Critical Failure roll never reads its tier's row: those
+    two rows hold no meaning (#5280). The success tiers must be seeded (unlike
+    GangTurfReputationAward's "missing row = 0" convention): a missing anima budget must not
+    silently grant 0 recovery on a legitimate ritual attempt.
+
+    Raises AnimaRitualBudgetAward.DoesNotExist if a success tier has no authored row.
     """
     from world.magic.models.soulfray import AnimaRitualBudgetAward  # noqa: PLC0415
 
