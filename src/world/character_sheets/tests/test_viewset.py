@@ -2760,7 +2760,7 @@ class TestCharacterSheetQueryCount(TestCase):
             ritual=qc_ritual,
             stat=stat_will,
             skill=ritual_skill,
-            resonance=resonance,
+            primal_resonance=resonance,
         )
 
         CharacterAuraFactory(
@@ -3093,7 +3093,7 @@ class TestPrefetchCompleteness(TestCase):
             ritual=pf_ritual,
             stat=stat_will,
             skill=ritual_skill,
-            resonance=resonance,
+            primal_resonance=resonance,
         )
 
         CharacterAuraFactory(

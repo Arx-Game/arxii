@@ -159,7 +159,7 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
         ritual_resonance = ResonanceFactory()
         RitualCheckConfigFactory(
             ritual__author_account=sheet.character.db_account,
-            resonance=ritual_resonance,
+            primal_resonance=ritual_resonance,
         )
 
         grant_gift_to_character(sheet, gift)
