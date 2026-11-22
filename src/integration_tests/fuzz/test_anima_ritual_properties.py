@@ -44,6 +44,7 @@ from world.magic.factories import (
     ensure_conversion_pairs,
 )
 from world.magic.models import (
+    AnimaConfig,
     AnimaRitualPerformance,
     CharacterAnima,
     CharacterAura,
@@ -1008,3 +1009,128 @@ class Roll(_Bonded):
         finally:
             self.abyssal.ritual_partner_fatigue = original
             self.abyssal.save()
+
+
+class FailedRoll(_Bonded):
+    """A failed roll still reaches for the partner, at a reduced amount a player must endorse."""
+
+    def _with_failed_endorsement_percent(self, percent: int) -> int:
+        """Set the config's percent and return what it was (the caller restores it)."""
+        config = AnimaConfig.get_singleton()
+        original = config.failed_endorsement_percent
+        config.failed_endorsement_percent = percent
+        config.save()
+        return original
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        split=aura_splits(),
+        outward_key=st.sampled_from(OUTWARD_KEYS),
+        tier=st.sampled_from(FAILED_TIERS),
+        success_award=st.integers(0, 60),
+        has_award_row=st.booleans(),
+        percent=st.integers(0, 100),
+        kind=st.sampled_from(PARTNER_KINDS),
+    )
+    def test_a_failed_roll_holds_a_reduced_outward_amount_for_a_player_partner(  # noqa: PLR0913
+        self,
+        split: tuple[int, int, int],
+        outward_key: str,
+        tier: str,
+        success_award: int,
+        has_award_row: bool,
+        percent: int,
+        kind: str,
+    ) -> None:
+        """Maintainer: "Check determines whether anima happens and whether resonance happens if
+        primal." (a failed roll earns no Primal) and the ruling of 2026-11-22 that after a
+        failure a player partner's endorsement is worth ``failed_endorsement_percent`` of the
+        outward part of the Success tier's award, because a failed tier's own award is usually
+        0.
+
+        Given a Failure or Critical Failure (whose own award is authored and must be ignored),
+        both picks held and any aura, a player character partner is asked about an outward amount
+        equal to the Success award split by the aura (the outward part is the award times its
+        share of the Primal and outward shares, rounded down; half when both shares are 0) times
+        the percent, rounded down. The performance is then pending with that amount and the
+        outward pick. When that amount is 0, or no Success award row exists, nothing is stored and
+        the endorsement stays not asked. A story NPC partner stores nothing and is granted
+        nothing. No resonance is granted either way, and her anima does not change.
+        """
+        sheet, ritual = self.performer(
+            split=split, picks=[("primal 1", 1), (outward_key, 1)], anima=3
+        )
+        outward = self.resonances[outward_key]
+        self.author(tier, budget=5, award=40)
+        self.author("Success", budget=5, award=success_award)
+        if not has_award_row:
+            AnimaRitualResonanceAward.objects.filter(outcome_tier=self.outcomes["Success"]).delete()
+        original = self._with_failed_endorsement_percent(percent)
+        try:
+            partner = self.partner(kind)
+            scene = self.scene_with(sheet, partner.character_sheet)
+
+            self.run_ritual(sheet, partner, scene, tier)
+
+            share_primal = affinity_percent("primal 1", split)
+            share_outward = affinity_percent(outward_key, split)
+            award = success_award if has_award_row else 0
+            if share_primal + share_outward == 0:
+                outward_part = award // 2
+            else:
+                outward_part = award * share_outward // (share_primal + share_outward)
+            expected = outward_part * percent // 100 if kind == "pc" else 0
+            performance = stored_performance(ritual)
+            if expected > 0:
+                self.assertEqual(performance["endorsement"], AnimaRitualEndorsement.PENDING)
+                self.assertEqual(performance["outward_amount_pending"], expected)
+                self.assertEqual(performance["outward_resonance_id"], outward.pk)
+            else:
+                self.assertEqual(performance["endorsement"], AnimaRitualEndorsement.NOT_ASKED)
+                self.assertEqual(performance["outward_amount_pending"], 0)
+            self.assertEqual(ritual_grants(sheet), [])
+            self.assertEqual(anima_of(sheet), 3)
+        finally:
+            self._with_failed_endorsement_percent(original)
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        tier=st.sampled_from(FAILED_TIERS),
+        drop_outward=st.booleans(),
+        success_award=st.integers(1, 60),
+        percent=st.integers(1, 100),
+    )
+    def test_a_failed_roll_stores_nothing_for_an_outward_pick_she_does_not_hold(
+        self, tier: str, drop_outward: bool, success_award: int, percent: int
+    ) -> None:
+        """Maintainer: the ritual feeds "the resonances that they already have".
+
+        Given a failed roll, an aura settled half Primal and half Abyssal, a player character
+        partner and a Success award, the outward amount is stored as pending (the award's half,
+        rounded down, times the percent, rounded down) when she holds the outward pick, and
+        nothing is stored, with the endorsement left not asked, when she does not.
+        """
+        sheet, ritual = self.performer(
+            split=(0, 50, 50), picks=[("primal 1", 1), ("abyssal 1", 1)], anima=3
+        )
+        outward = self.resonances["abyssal 1"]
+        if drop_outward:
+            CharacterResonance.objects.filter(character_sheet=sheet, resonance=outward).delete()
+        self.author("Success", budget=5, award=success_award)
+        original = self._with_failed_endorsement_percent(percent)
+        try:
+            partner = self.partner("pc")
+            scene = self.scene_with(sheet, partner.character_sheet)
+
+            self.run_ritual(sheet, partner, scene, tier)
+
+            expected = (success_award // 2) * percent // 100
+            performance = stored_performance(ritual)
+            if drop_outward or expected == 0:
+                self.assertEqual(performance["endorsement"], AnimaRitualEndorsement.NOT_ASKED)
+                self.assertEqual(performance["outward_amount_pending"], 0)
+            else:
+                self.assertEqual(performance["endorsement"], AnimaRitualEndorsement.PENDING)
+                self.assertEqual(performance["outward_amount_pending"], expected)
+        finally:
+            self._with_failed_endorsement_percent(original)
