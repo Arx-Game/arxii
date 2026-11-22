@@ -1500,8 +1500,8 @@ class RitualSerializer(serializers.ModelSerializer):
     def get_viewer_can_edit(self, obj: Ritual) -> bool:
         """Whether the requester may edit this ritual (#5280).
 
-        Read through the characters the requester currently plays, not the authoring account:
-        the view passes their known ritual ids once as ``known_ritual_ids`` in the context.
+        Read through the character the requester acts as, not the authoring account: the view
+        passes that character's known ritual ids once as ``known_ritual_ids`` in the context.
         Without a request in the context nobody is the viewer, so it is False.
         """
         from world.magic.permissions import can_edit_ritual  # noqa: PLC0415

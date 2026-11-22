@@ -316,7 +316,7 @@ The risk of spam (initiator fires repeatedly until someone accepts) is acknowled
 ### B. Player browses /rituals + edits their ritual
 
 1. `useRituals()` → `GET /api/magic/rituals/` filtered by `Ritual.objects.filter(known_by_records__roster_entry=current)`.
-2. Page renders sections: "Your anima ritual" (the SCENE_ACTION ritual a character the player plays knows, #5280) + "Known rituals" (rest).
+2. Page renders sections: "Your anima ritual" (the SCENE_ACTION ritual the character the player is browsing as knows, #5280) + "Known rituals" (rest).
 3. Each card's action depends on `execution_kind`:
    - `SERVICE` / `FLOW` → "Perform" button → existing `RitualPerformDialog`.
    - `SCENE_ACTION` → "Manage" button → opens detail panel + edit dialog (author only) → `PATCH /api/magic/rituals/{id}/`.

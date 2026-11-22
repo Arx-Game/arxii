@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from world.magic.constants import RitualExecutionKind
-from world.magic.models import AnimaRitualPerformance, CharacterRitualKnowledge, Ritual, Thread
+from world.magic.models import AnimaRitualPerformance, Ritual, Thread
 from world.magic.models.sessions import RitualSession
 from world.roster.models import RosterEntry
 
@@ -25,25 +25,31 @@ def _active_sheet_ids_for_user(user: object) -> set[int]:
     return set(RosterEntry.objects.for_account(account).character_ids())
 
 
-def known_ritual_ids_for_user(user: object) -> set[int]:
-    """Return the ids of the rituals a character the user currently plays knows (#5280).
+def known_ritual_ids_for_request(request: Request) -> set[int]:
+    """Return the ids of the anima rituals the character the request acts as knows (#5280).
 
     The anima ritual is in character and belongs to the character who knows it, so what a
-    player may see or edit of it is read through ``CharacterRitualKnowledge`` on the characters
-    she plays now, never through the account that authored it.
+    player may see or edit of it is read through ``CharacterRitualKnowledge`` on the character
+    she is browsing as (``character_for_request``), never through the account that authored it
+    and never through every character the account plays. No selected character knows none,
+    and neither does a selected character the player no longer plays (a tenure that ended
+    leaves the selection behind): this is the tenure permission boundary, so the account's
+    current tenures are read here on purpose.
     """
-    return set(
-        CharacterRitualKnowledge.objects.filter(
-            roster_entry__character_sheet_id__in=_active_sheet_ids_for_user(user)
-        ).values_list("ritual_id", flat=True)
-    )
+    from world.magic.services.anima import character_scene_action_rituals  # noqa: PLC0415
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
+
+    character = character_for_request(request, entry_id=None)
+    if character is None or character.pk not in _active_sheet_ids_for_user(request.user):
+        return set()
+    return set(character_scene_action_rituals(character.pk).values_list("pk", flat=True))
 
 
 def can_edit_ritual(user: object, ritual: Ritual, *, known_ritual_ids: set[int]) -> bool:
-    """Whether ``user`` may edit ``ritual``; ``known_ritual_ids`` is her played characters'.
+    """Whether ``user`` may edit ``ritual``; ``known_ritual_ids`` is the acting character's.
 
     Staff may edit any ritual. A staff-authored ritual (no author) is staff-only. A player's
-    anima ritual (SCENE_ACTION) is edited by the player of a character who knows it. Any other
+    anima ritual (SCENE_ACTION) is edited from the character who knows it. Any other
     player-authored ritual is edited by the account that authored it.
     """
     if cast(AccountDB, user).is_staff:
@@ -62,10 +68,10 @@ class IsRitualAuthorOrStaff(BasePermission):
     Safe methods (GET, HEAD, OPTIONS) are always allowed.
     Mutation (PATCH, PUT, DELETE) follows ``can_edit_ritual``:
     - Staff accounts (is_staff=True).
-    - For a player's anima ritual (SCENE_ACTION with an author): a requester who currently
-      plays a character who knows it (#5280). The ritual is in character and belongs to the
+    - For a player's anima ritual (SCENE_ACTION with an author): a requester acting as the
+      character who knows it (#5280). The ritual is in character and belongs to the
       character, so authorship alone does not let a player edit it from another character,
-      and a player who takes over the character can.
+      even one on the same account, and a player who takes over the character can.
     - For any other player-authored ritual: the account that authored it
       (ritual.author_account == request.user).
 
@@ -76,7 +82,7 @@ class IsRitualAuthorOrStaff(BasePermission):
         if request.method in SAFE_METHODS:
             return True
         return can_edit_ritual(
-            request.user, obj, known_ritual_ids=known_ritual_ids_for_user(request.user)
+            request.user, obj, known_ritual_ids=known_ritual_ids_for_request(request)
         )
 
 

@@ -34,6 +34,7 @@ from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.serializers import RitualSerializer
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.roster.models import RosterEntry
+from world.roster.services.selection import set_selected_entry
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_serializers import EnhancedSceneActionResultSerializer
 from world.scenes.action_services import respond_to_action_request
@@ -343,6 +344,7 @@ class RitualViewSetPatchTests(APITestCase):
             execution_kind=RitualExecutionKind.SERVICE,
             service_function_path="world.magic.services.spend_resonance_for_imbuing",
             author_account=cls.author_account,
+            hedge_accessible=True,
             name="Authored Ritual",
         )
         cls.staff_ritual = RitualFactory(
@@ -356,6 +358,7 @@ class RitualViewSetPatchTests(APITestCase):
             service_function_path="",
             flow=None,
             author_account=cls.author_account,
+            hedge_accessible=True,
             name="Scene Ritual",
         )
         cls.scene_config = RitualCheckConfigFactory(ritual=cls.scene_ritual)
@@ -365,6 +368,7 @@ class RitualViewSetPatchTests(APITestCase):
             player_data=cls.author_account.player_data, end_date=None
         )
         teach_ritual(cls.scene_ritual, cls.knower_tenure.roster_entry.character_sheet)
+        set_selected_entry(cls.author_account.player_data, cls.knower_tenure.roster_entry)
 
     def _patch_url(self, pk: int) -> str:
         return reverse("magic:ritual-detail", kwargs={"pk": pk})
@@ -437,6 +441,7 @@ class RitualViewSetPatchTests(APITestCase):
             player_data=self.other_account.player_data,
             end_date=None,
         )
+        set_selected_entry(self.other_account.player_data, self.knower_tenure.roster_entry)
 
         self.client.force_authenticate(user=self.author_account)
         resp = self.client.patch(
@@ -519,6 +524,7 @@ class AnimaRitualVisibilityTests(APITestCase):
         RitualCheckConfigFactory(ritual=ritual)
         tenure = RosterTenureFactory(player_data=account.player_data, end_date=None)
         teach_ritual(ritual, tenure.roster_entry.character_sheet)
+        set_selected_entry(account.player_data, tenure.roster_entry)
         return ritual
 
     def _listed(self, account) -> dict[str, dict]:
@@ -552,4 +558,66 @@ class AnimaRitualVisibilityTests(APITestCase):
         self.assertEqual(
             set(self._listed(self.staff)),
             {"Mara's Breathing", "Tobin's Vigil", "The Shared Rite"},
+        )
+
+
+@tag("regression")
+class AnimaRitualOfTheActingCharacterTests(APITestCase):
+    """One account plays two characters: browsing as one never shows or edits the other's."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.account = AccountFactory()
+        cls.tenure_a = RosterTenureFactory(player_data=cls.account.player_data, end_date=None)
+        cls.tenure_b = RosterTenureFactory(player_data=cls.account.player_data, end_date=None)
+        cls.ritual_a = cls._anima_ritual(cls.tenure_a, "Ash's Breathing")
+        cls.ritual_b = cls._anima_ritual(cls.tenure_b, "Birch's Breathing")
+
+    @staticmethod
+    def _anima_ritual(tenure, name: str):
+        ritual = RitualFactory(
+            name=name,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+            author_account=tenure.player_data.account,
+            hedge_accessible=True,
+        )
+        RitualCheckConfigFactory(ritual=ritual)
+        teach_ritual(ritual, tenure.roster_entry.character_sheet)
+        return ritual
+
+    def _browse_as(self, tenure) -> None:
+        set_selected_entry(self.account.player_data, tenure.roster_entry)
+        self.client.force_authenticate(user=self.account)
+
+    def test_the_list_shows_only_the_selected_characters_ritual(self) -> None:
+        """Regression for #5280. Browsing as the second character lists only her ritual."""
+        self._browse_as(self.tenure_b)
+        response = self.client.get(reverse("magic:ritual-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        listed = {row["name"]: row for row in response.data["results"]}
+        self.assertEqual(set(listed), {"Birch's Breathing"})
+        self.assertTrue(listed["Birch's Breathing"]["viewer_can_edit"])
+
+    def test_the_other_characters_ritual_cannot_be_read_or_edited(self) -> None:
+        """Regression for #5280. Browsing as the second character, the first's ritual is a 404."""
+        self._browse_as(self.tenure_b)
+        url = reverse("magic:ritual-detail", args=[self.ritual_a.pk])
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
+        response = self.client.patch(url, {"description": "Not mine"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.ritual_a.refresh_from_db()
+        self.assertNotEqual(self.ritual_a.description, "Not mine")
+
+    def test_the_selected_character_edits_her_own_ritual(self) -> None:
+        """Browsing as the first character, her own ritual patches and the second's does not."""
+        self._browse_as(self.tenure_a)
+        own = reverse("magic:ritual-detail", args=[self.ritual_a.pk])
+        response = self.client.patch(own, {"description": "Mine"}, format="json")
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.json())
+        other = reverse("magic:ritual-detail", args=[self.ritual_b.pk])
+        self.assertEqual(
+            self.client.patch(other, {"description": "Not mine"}, format="json").status_code,
+            status.HTTP_404_NOT_FOUND,
         )

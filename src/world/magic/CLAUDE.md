@@ -293,8 +293,8 @@ anima ritual IS the character's magical identity.
   `CharacterRitualKnowledge` row for (creation writes it beside the ritual), never one her player's
   account authored, so two characters one player plays each have their own, and a character nobody
   is logged in as still has hers (#5280). The telnet name lookup, the sheet's magic section and the
-  edit permission (`IsRitualAuthorOrStaff`: a player who currently plays a character who knows it)
-  read the same row. `author_account` only records who created it (the content export skips such rows).
+  edit permission (`IsRitualAuthorOrStaff`: a player acting as the character who knows it, `known_ritual_ids_for_request`; the Rituals list
+  shows the selected character's anima ritual only) read the same row. `author_account` only records who created it (the content export skips such rows).
 - **The answer.** A player partner endorses or withholds the outward part
   (`answer_anima_ritual`; `AnimaRitualPerformance.endorsement`, `outward_amount_pending`). After a failed
   roll, `AnimaConfig.failed_endorsement_percent` of the Success tier's outward part is held. An NPC

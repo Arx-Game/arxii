@@ -109,7 +109,7 @@ from world.magic.permissions import (
     IsStaffOrReadOnly,
     IsThreadOwner,
     PlaysTheRitualPartner,
-    known_ritual_ids_for_user,
+    known_ritual_ids_for_request,
 )
 from world.magic.serializers import (
     AcceptSoulTetherSerializer,
@@ -1387,9 +1387,9 @@ class RitualViewSet(viewsets.ModelViewSet):
         return RitualSerializer
 
     def get_serializer_context(self) -> dict:
-        """Add the ritual ids the requester's played characters know, once for the page."""
+        """Add the ritual ids the character the requester acts as knows, once for the page."""
         context = super().get_serializer_context()
-        context["known_ritual_ids"] = known_ritual_ids_for_user(self.request.user)
+        context["known_ritual_ids"] = known_ritual_ids_for_request(self.request)
         return context
 
     def get_queryset(self):
@@ -1401,7 +1401,7 @@ class RitualViewSet(viewsets.ModelViewSet):
         draft seams enforce (``ritual_visible_to``).
 
         A SCENE_ACTION ritual is a character's own anima ritual (#5280), so a player
-        sees only the ones a character she currently plays knows. Staff see them all.
+        sees only the one the character she is browsing as knows. Staff see them all.
         """
         from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
         from world.roster.services.selection import character_for_request  # noqa: PLC0415
@@ -1412,7 +1412,7 @@ class RitualViewSet(viewsets.ModelViewSet):
             return queryset
         queryset = queryset.filter(
             ~Q(execution_kind=RitualExecutionKind.SCENE_ACTION)
-            | Q(pk__in=known_ritual_ids_for_user(user))
+            | Q(pk__in=known_ritual_ids_for_request(self.request))
         )
         puppet = character_for_request(self.request, entry_id=None)
         # Accounts without a selected character browse the unfiltered catalog.
