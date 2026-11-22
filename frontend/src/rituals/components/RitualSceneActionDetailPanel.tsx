@@ -24,6 +24,7 @@ import type { RitualWithSchema } from '../types';
 
 interface RitualSceneActionDetailPanelProps {
   ritual: RitualWithSchema;
+  characterSheetId: number;
   /** The account id of the currently logged-in user; used to gate edit button. */
   currentAccountId: number | null;
   /** The author_account_id from the ritual — undefined until backend exposes it. */
@@ -37,6 +38,7 @@ interface RitualSceneActionDetailPanelProps {
 
 export function RitualSceneActionDetailPanel({
   ritual,
+  characterSheetId,
   currentAccountId,
   authorAccountId,
   onEditSuccess,
@@ -95,6 +97,7 @@ export function RitualSceneActionDetailPanel({
       {editOpen && (
         <AnimaRitualEditDialog
           ritual={ritual}
+          characterSheetId={characterSheetId}
           open={editOpen}
           onOpenChange={setEditOpen}
           onSuccess={() => {

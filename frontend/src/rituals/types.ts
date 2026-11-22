@@ -89,8 +89,9 @@ export interface PerformRitualResponse {
   ritual_id: number;
   execution_kind: string;
   /**
-   * The performer's own line: sent for the personal anima ritual (SCENE_ACTION) and for
-   * every SERVICE ritual that returns a result (e.g. the thread retune's move line).
+   * The performer's own line, sent for every SERVICE ritual that returns a result (e.g. the
+   * thread retune's move line). The personal anima ritual is not performed through this
+   * endpoint (#5280).
    */
   message?: string;
   result?: Record<string, unknown>;

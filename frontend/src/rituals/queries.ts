@@ -11,6 +11,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import * as api from './api';
 import type {
   AnimaRitualPatchBody,
+  AnimaRitualPicksBody,
   RitualSessionAcceptRequest,
   RitualSessionDraftRequest,
 } from './api';
@@ -25,6 +26,13 @@ export const ritualKeys = {
   all: ['rituals'] as const,
   list: () => [...ritualKeys.all, 'list'] as const,
   detail: (id: number) => [...ritualKeys.all, 'detail', id] as const,
+};
+
+export const animaRitualKeys = {
+  all: ['anima-ritual'] as const,
+  choices: (characterSheetId: number) =>
+    [...animaRitualKeys.all, 'choices', characterSheetId] as const,
+  endorsements: (sceneId: number) => [...animaRitualKeys.all, 'endorsements', sceneId] as const,
 };
 
 export const ritualSessionKeys = {
@@ -82,6 +90,68 @@ export function usePatchRitual() {
     onSuccess: (data: Ritual) => {
       qc.invalidateQueries({ queryKey: ritualKeys.detail(data.id) }).catch(() => {});
       qc.invalidateQueries({ queryKey: ritualKeys.list() }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Anima ritual picks, attunement and the partner's answer (#5280)
+// ---------------------------------------------------------------------------
+
+export function useAnimaRitualChoices(characterSheetId: number, enabled = true) {
+  return useQuery({
+    queryKey: animaRitualKeys.choices(characterSheetId),
+    queryFn: () => api.fetchAnimaRitualChoices(characterSheetId),
+    enabled: enabled && characterSheetId > 0,
+  });
+}
+
+function useRefreshAnimaRitual() {
+  const qc = useQueryClient();
+  return () => {
+    qc.invalidateQueries({ queryKey: animaRitualKeys.all }).catch(() => {});
+    qc.invalidateQueries({ queryKey: ritualKeys.all }).catch(() => {});
+    qc.invalidateQueries({ queryKey: ['character-sheets'] }).catch(() => {});
+  };
+}
+
+export function useSetUpAnimaRitual() {
+  const refresh = useRefreshAnimaRitual();
+  return useMutation({
+    mutationFn: (body: AnimaRitualPicksBody) => api.setUpAnimaRitual(body),
+    onSuccess: refresh,
+  });
+}
+
+export function useAttuneAnimaRitual() {
+  const refresh = useRefreshAnimaRitual();
+  return useMutation({
+    mutationFn: (body: AnimaRitualPicksBody) => api.attuneAnimaRitual(body),
+    onSuccess: refresh,
+  });
+}
+
+/**
+ * The rituals in a scene waiting for the requester's answer. Refetches every 5 s, the cadence
+ * `ConsentPrompt` uses for its pending requests. Like that prompt it degrades to nothing on a
+ * failed fetch instead of throwing into the page's error boundary.
+ */
+export function useAnimaRitualEndorsements(sceneId: number | null) {
+  return useQuery({
+    queryKey: animaRitualKeys.endorsements(sceneId ?? 0),
+    queryFn: () => api.fetchAnimaRitualEndorsements(sceneId as number),
+    enabled: sceneId != null && sceneId > 0,
+    refetchInterval: 5_000,
+  });
+}
+
+export function useAnswerAnimaRitual() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, endorse }: { id: number; endorse: boolean }) =>
+      api.answerAnimaRitualEndorsement(id, endorse),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: animaRitualKeys.all }).catch(() => {});
     },
   });
 }
