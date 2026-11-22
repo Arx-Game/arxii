@@ -346,7 +346,7 @@ describe('RitualsListPage', () => {
 
     expect(screen.getByTestId('authored-rituals-section')).toBeInTheDocument();
     expect(screen.getByTestId('known-rituals-section')).toBeInTheDocument();
-    expect(screen.getByText('Authored by you')).toBeInTheDocument();
+    expect(screen.getByText('Your anima ritual')).toBeInTheDocument();
     expect(screen.getByText('Known rituals')).toBeInTheDocument();
   });
 
@@ -364,7 +364,7 @@ describe('RitualsListPage', () => {
       </Wrapper>
     );
 
-    expect(screen.queryByText('Authored by you')).not.toBeInTheDocument();
+    expect(screen.queryByText('Your anima ritual')).not.toBeInTheDocument();
     expect(screen.queryByText('Known rituals')).not.toBeInTheDocument();
   });
 

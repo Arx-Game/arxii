@@ -90780,6 +90780,15 @@ components:
           type: integer
           readOnly: true
           nullable: true
+        viewer_can_edit:
+          type: boolean
+          description: |-
+            Whether the requester may edit this ritual (#5280).
+
+            Read through the characters the requester currently plays, not the authoring account:
+            the view passes their known ritual ids once as ``known_ritual_ids`` in the context.
+            Without a request in the context nobody is the viewer, so it is False.
+          readOnly: true
         check_config:
           type: object
           additionalProperties: {}
@@ -90829,6 +90838,7 @@ components:
       - name
       - narrative_prose
       - participation_rule
+      - viewer_can_edit
     RitualCheckConfigPatch:
       type: object
       description: |-

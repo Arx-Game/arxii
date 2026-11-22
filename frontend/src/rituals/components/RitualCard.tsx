@@ -28,10 +28,6 @@ import type { RitualWithSchema } from '../types';
 interface RitualCardProps {
   ritual: RitualWithSchema;
   characterSheetId: number;
-  /** The account id of the currently logged-in user; forwarded to detail panel. */
-  currentAccountId?: number | null;
-  /** author_account_id from the ritual — undefined until backend exposes it. */
-  authorAccountId?: number | null;
   onSuccess?: () => void;
 }
 
@@ -55,13 +51,7 @@ function isBilateral(ritual: RitualWithSchema): boolean {
 // Component
 // ---------------------------------------------------------------------------
 
-export function RitualCard({
-  ritual,
-  characterSheetId,
-  currentAccountId,
-  authorAccountId,
-  onSuccess,
-}: RitualCardProps) {
+export function RitualCard({ ritual, characterSheetId, onSuccess }: RitualCardProps) {
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -113,8 +103,6 @@ export function RitualCard({
             <RitualSceneActionDetailPanel
               ritual={ritual}
               characterSheetId={characterSheetId}
-              currentAccountId={currentAccountId ?? null}
-              authorAccountId={authorAccountId}
               onEditSuccess={() => {
                 onSuccess?.();
               }}

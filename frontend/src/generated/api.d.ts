@@ -50945,6 +50945,14 @@ export interface components {
       /** @description UI-rendering metadata: what kwargs the perform endpoint expects. Shape: {'fields': [{'name': str, 'label': str, 'type': str, 'required': bool, ...}]}. When None, the ritual takes no player-supplied kwargs. */
       readonly input_schema: unknown;
       readonly author_account_id: number | null;
+      /**
+       * @description Whether the requester may edit this ritual (#5280).
+       *
+       *     Read through the characters the requester currently plays, not the authoring account:
+       *     the view passes their known ritual ids once as ``known_ritual_ids`` in the context.
+       *     Without a request in the context nobody is the viewer, so it is False.
+       */
+      readonly viewer_can_edit: boolean;
       /** @description Return nested check_config when present, else None. */
       readonly check_config: {
         [key: string]: unknown;
