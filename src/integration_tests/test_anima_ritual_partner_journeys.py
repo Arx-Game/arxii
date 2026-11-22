@@ -18,7 +18,7 @@ from django.test import override_settings
 from rest_framework import status
 
 from actions.constants import ActionCategory
-from evennia_extensions.factories import RoomProfileFactory
+from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
 from world.checks.factories import CheckTypeFactory
 from world.checks.services import difficulty_points
@@ -44,9 +44,11 @@ from world.magic.models import (
     ResonanceGrant,
 )
 from world.magic.models.soulfray import AnimaRitualBudgetAward
+from world.roster.factories import RosterFactory
+from world.roster.models.choices import RosterType
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
-from world.scenes.factories import SceneFactory
+from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.traits.factories import ensure_level_ladder
 from world.traits.services import ensure_canonical_check_outcome
@@ -207,18 +209,44 @@ class AnAbyssalRitualFeedsOnItsPartner(_RitualWithAPartner):
 
         self.assertIn("Name someone else to take part in your ritual.", told)
 
-    def test_the_solo_telnet_ritual_still_restores_anima_and_earns_no_resonance(self) -> None:
-        # The solo ritual needs the performer to be a scene participant, as it always did.
-        from world.scenes.factories import SceneParticipationFactory
-
-        SceneParticipationFactory(scene=self.scene, account=self.account_of(self.mara))
+    def test_the_ritual_with_nobody_named_restores_no_anima_and_earns_no_resonance(self) -> None:
         with force_check_outcome(self.success):
-            self.telnet(self.mara, "ritual anima")
+            told = self.telnet(self.mara, "ritual anima")
 
-        self.assertEqual(CharacterAnima.objects.get(character=self.mara.sheet_data).current, 8)
+        self.assertIn("Name someone else to take part in your ritual.", told)
+        self.assertEqual(CharacterAnima.objects.get(character=self.mara.sheet_data).current, 2)
         self.assertEqual(self.balance(), 0)
-        self.assertIsNone(AnimaRitualPerformance.objects.get().target_character)
+        self.assertFalse(AnimaRitualPerformance.objects.exists())
         self.assertEqual(social_fatigue(self.tobin), 0)
+
+
+class AnNpcPartner(_RitualWithAPartner):
+    """Hobb is a story NPC on the NPC shelf; nobody plays him unless the table has a GM."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.hobb.sheet_data.roster_entry.move_to_roster(RosterFactory(roster_type=RosterType.NPC))
+
+    def test_with_no_gm_running_him_he_is_refused_and_nothing_happens(self) -> None:
+        told = self.telnet(self.mara, "ritual anima Hobb")
+
+        self.assertIn("Nobody is playing that character.", told)
+        self.assertFalse(SceneActionRequest.objects.filter(action_key="anima_ritual").exists())
+        self.assertFalse(AnimaRitualPerformance.objects.exists())
+        self.assertEqual(CharacterAnima.objects.get(character=self.mara.sheet_data).current, 2)
+
+    def test_with_a_gm_in_the_scene_he_takes_part_at_once(self) -> None:
+        SceneParticipationFactory(scene=self.scene, account=AccountFactory(), is_gm=True)
+
+        with force_check_outcome(self.success):
+            self.telnet(self.mara, "ritual anima Hobb")
+
+        request = SceneActionRequest.objects.get(action_key="anima_ritual")
+        self.assertEqual(request.status, ActionRequestStatus.RESOLVED)
+        self.assertEqual(CharacterAnima.objects.get(character=self.mara.sheet_data).current, 8)
+        performance = AnimaRitualPerformance.objects.get()
+        self.assertEqual(performance.target_character, self.hobb.sheet_data)
+        self.assertEqual(self.balance(), 6)
 
 
 class ACelestialRitualEasesItsPartner(_RitualWithAPartner):
