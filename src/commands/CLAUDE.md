@@ -1745,7 +1745,8 @@ actions, backends, and service functions.
   is the direct-tagging telnet parity for the web `DramaticMomentTagDialog` — a thin
   command calling `create_dramatic_moment_tag` directly (the same service the web
   serializer calls, not via an Action). `moment tag list` browses the authored
-  `DramaticMomentType` catalog. Both GM-gated via `_account_can_gm_scene` on the caller's
+  `DramaticMomentType` catalog; a type with no resonance lists as "their own resonance",
+  since its grant follows the character's own (#4323: it had raised on that row). Both GM-gated via `_account_can_gm_scene` on the caller's
   active scene. Its `func` sends a `CommandError` the way `ArxCommand.func` does, typed
   `error` with the structured `command_error` frame (#3657 tranche 11: the override had sent a
   bare line the web could not place); the tagged name resolves through a quiet global search

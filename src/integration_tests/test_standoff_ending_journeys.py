@@ -92,7 +92,7 @@ class StandoffEndingBase(JourneyCase):
         self.success = CheckOutcomeFactory(name="Ending success (journey)", success_level=1)
         self.partial = CheckOutcomeFactory(name="Ending partial (journey)", success_level=0)
         for outcome, amount, magnitude, legend in (
-            (self.critical, 30, "medium", 400),
+            (self.critical, 30, "moderate", 400),
             (self.success, 15, "small", 200),
             (self.partial, 5, "small", 0),
         ):
@@ -143,6 +143,10 @@ class TheEndingPaysByTheResult(StandoffEndingBase):
         self.assertEqual(self.encounter.standoff_groups.get().state, StandoffGroupState.SETTLED)
         self.assertEqual(self.earned(), 30)
         self.assertEqual(DramaticMomentTag.objects.filter(character_sheet=self.sheet).count(), 1)
+        # Her name grows by the moderate tier's renown (the renown table's 150 fame).
+        persona = self.sheet.primary_persona
+        persona.refresh_from_db()
+        self.assertEqual(persona.fame_points, 150)
         deed = self.deeds().get()
         self.assertEqual(deed.title, "Spare Them (journey): Roadside Toughs")
         self.assertEqual(deed.base_value, 400)
