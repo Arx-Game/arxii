@@ -597,8 +597,9 @@ check into `start_action_resolution` via the `check_type` override (optional kwa
 **The anima ritual is never performed alone (#5280, ADR-5280) [BUILT & WIRED].** The old solo
 roll, `perform_anima_ritual` (#4451), is gone. `PerformRitualAction.execute()` still branches on
 `execution_kind == SCENE_ACTION`, but it now refuses with "Name someone else to take part in your
-ritual." (`_NEEDS_PARTNER`) for the Rituals page's Perform button (`/api/magic/rituals/perform/`),
-`ritual <the ritual's own name>` and the bare `ritual anima`, which also reads the usage line
+ritual." (`_NEEDS_PARTNER`) at the web dispatch (`POST /api/magic/rituals/perform/`, the Rituals
+page has no Perform button for the anima ritual any more), at `ritual <the ritual's own name>` and at
+the bare `ritual anima`, which also reads the usage line
 (`ritual anima <partner>`). A ritual that is not the actor's own is refused as no ritual of theirs.
 The one way in is `start_partner_ritual(scene=, initiator_persona=, target_persona=)`
 (`services/anima_ritual_action.py`), reached from the persona menu's "Anima ritual" item

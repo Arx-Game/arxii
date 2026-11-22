@@ -6,7 +6,7 @@ session path).
 
 Single-actor path (SERVICE/CEREMONY kind):
     ``ritual <name>``                       — perform a ritual by name
-    ``ritual anima <partner>``              — ask someone in the scene to take part in your
+    ``ritual anima <partner>``              - ask someone in the scene to take part in your
         personal anima ritual; it is never done alone (#5280). Bare ``ritual anima`` is refused
         with the usage line, and so is ``ritual <its name>`` with the same refusal.
     ``ritual attune primal=<name|none> outward=<name|none>`` - pay to change the two resonances

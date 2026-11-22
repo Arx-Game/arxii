@@ -325,7 +325,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     latent provisioning at CG + `gift_resonances_for` (the four cast sites; the thread's
     resonances in row order, #5123).
   - **Anima / rituals:** `CharacterAnima`, the personal anima ritual (a SCENE_ACTION
-    `Ritual`, never performed alone since #5280: the Perform button, the bare verb and the
+    `Ritual`, never performed alone since #5280: the web dispatch, the bare verb and the
     ritual's own name all refuse with "Name someone else to take part in your ritual."), the ritual
     with a partner (#5181, #5280, ADR-5280: `start_partner_ritual`, `check_partner_ritual`,
     `resolve_ritual_request`, `ritual_succeeded`, `ritual_earning_parts`, `apply_ritual_bond`,

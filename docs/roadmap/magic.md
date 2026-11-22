@@ -226,7 +226,7 @@ technique casts always share the same personal check (`provision_player_anima_ri
 in `services/anima.py`).
 
 A player can perform the anima ritual itself (#4451, reshaped by #5280): it is never done alone, so
-the Rituals page's Perform button, telnet `ritual anima` and the ritual's own name all refuse and ask
+the web dispatch, telnet `ritual anima` and the ritual's own name all refuse and ask
 her to name someone else; the ritual is asked of a partner through `start_partner_ritual`, once per
 scene, in the scene the character stands in (see "The anima ritual becomes a scene with a partner"
 below).

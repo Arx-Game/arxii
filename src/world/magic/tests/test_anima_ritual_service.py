@@ -365,7 +365,7 @@ class PerformanceRowTests(TestCase):
 
 
 class AnimaRitualBudgetGuardTests(TestCase):
-    """Spec §4.11 — the outcome applier's loop guard prevents overspend.
+    """Spec §4.11: the outcome applier's loop guard prevents overspend.
 
     The loop guard 'budget >= cost_per_point' ensures that when cost > 1
     the loop does not run when the remaining budget cannot pay for a full
