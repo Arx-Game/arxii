@@ -6475,6 +6475,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="StandoffCauseGloss",
         ),
         ContentDependency(
+            key="standoff-ending-awards",
+            label="Standoff ending awards",
+            tier=DependencyTier.TUNING,
+            consumer="world/standoffs/services/ending.py ending_award()",
+            consequence=(
+                "The terms that end a standoff earn no resonance, renown or legend deed of "
+                "their own; only the kindling path pays."
+            ),
+            probe=AnyRowProbe(label="StandoffEndingAward"),
+            admin_model="StandoffEndingAward",
+        ),
+        ContentDependency(
             key="standoff-creature-languages",
             label="Standoff creature languages",
             tier=DependencyTier.TUNING,

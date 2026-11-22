@@ -120,3 +120,9 @@ PROFILE_NO_SUCH_DRIVE_MESSAGE = "That is not a drive anyone can have."
 PROFILE_NO_SUCH_CAUSE_MESSAGE = "That is not a cause."
 PROFILE_DRIVE_NOT_HELD_MESSAGE = "You do not have that drive."
 PROFILE_NO_SUCH_CHANGE_MESSAGE = "That is not a change to a profile."
+
+# System strings: the credit line for what the terms that ended a standoff earned (#4323).
+LINE_ENDING_CREDIT = "{name} ends it with {terms}: {earned}."
+LINE_ENDING_EARNED = "You earned {amount} {resonance}."
+EARNED_LEGEND = "it is written into their legend"
+EARNED_RENOWN = "their name carries further"

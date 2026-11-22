@@ -14,6 +14,7 @@ from world.standoffs.models import (
     FactionRule,
     StandoffApproach,
     StandoffCauseGloss,
+    StandoffEndingAward,
     StandoffGroup,
     StandoffReactionLine,
     StandoffReveal,
@@ -56,6 +57,16 @@ class StandoffTermsFactory(factory_django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Terms {n}")
     effect = TermsEffect.PASS
+
+
+class StandoffEndingAwardFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = StandoffEndingAward
+        django_get_or_create = ("outcome_tier",)
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    moment_type = factory.SubFactory("world.magic.factories.DramaticMomentTypeFactory")
+    legend_value = 0
 
 
 class StandoffCauseGlossFactory(factory_django.DjangoModelFactory):

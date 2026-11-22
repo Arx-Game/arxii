@@ -22,6 +22,9 @@ class StandoffActionResult:
     fight_started: bool = False
     settled: bool = False
     morale_line: str = ""
+    # The credit line for what the terms that ended the standoff earned (#4323): sent to the
+    # room after the verb's own line; empty when the terms did not end it or earned nothing.
+    credit_line: str = ""
     # Room lines from testing the causes after the verb, in order: a Territory group's
     # "losing patience" warning (#4415), then the attack line if the fight began.
     cause_lines: list[str] = field(default_factory=list)

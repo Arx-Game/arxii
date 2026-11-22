@@ -2569,6 +2569,13 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   `claim_percent` of it is set aside in `CharacterResonance.kindled_unclaimed`. The two may sum past
   100. Every kindled deed splits this way, in fights, missions and social scenes alike
   (`docs/adr/adr-5181-a-kindled-deed-pays-part-at-once-and-sets-a-share-aside-to-claim.md`).
+- **The standoff ending is a social act** (#4323). `ending._kindled` feeds `award_kindled_deeds`
+  one `SOCIAL` act, the terms that settled a standoff's last group, with an explicit
+  `KindlingContext` (`award_kindled_deeds(context=)`: used as it stands, a `None` resolution
+  included, so the standoff reads as a negotiation, not a combat round, and `DURING_NEGOTIATION`
+  holds). The same ending also pays a `DramaticMomentType` chosen by the roll's result
+  (`StandoffEndingAward`), where `create_dramatic_moment_tag(archetypes=)` lets the act's own
+  archetypes replace the type's for the renown award. See `docs/systems/standoffs.md`.
 - **Claiming** (#5181; `services/claiming.py`). What is set aside never expires. The character
   collects it with a claiming pose or a journal entry, any or all of it in one pose, across every
   affinity: `claim_kindled(sheet, resonances=None) -> list[ClaimedResonance]` locks the rows with

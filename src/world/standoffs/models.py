@@ -16,6 +16,7 @@ from django.db import models
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.checks.models import OutcomeTierAward
 from world.combat.constants import CauseKind
 from world.predicates.validation import validate_predicate_tree
 from world.standoffs.constants import (
@@ -322,7 +323,12 @@ class StandoffTerms(NaturalKeyMixin, SharedMemoryModel):
         "arxii.PhilosophicalArchetype",
         blank=True,
         related_name="+",
-        help_text="Archetypes these terms suit; empty means any.",
+        help_text=(
+            "The archetypes of the deed these terms make when they end a standoff (mercy, "
+            "coercion, a bargain): they set how societies regard it and which faction rules "
+            "that read a deed's archetype apply to the character later. Empty uses the "
+            "archetypes of the result tier's own moment type."
+        ),
     )
     display_order = models.PositiveIntegerField(default=0, help_text="Lower values show first.")
 
@@ -447,6 +453,42 @@ class StandoffConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return "Standoff settings"
+
+
+class StandoffEndingAward(OutcomeTierAward):
+    """What the terms that end a standoff pay at one roll result (#4323).
+
+    The act that ends a standoff, the terms that settle its last group, is the only act that
+    pays. ``moment_type`` is the dramatic moment it counts as at this result: staff set that
+    type's resonance amount, renown magnitude and per-scene cap, so a critical pays more and
+    a partial less, and code holds no amount. ``legend_value`` is the worth of the deed
+    written into the character's legend when the ending was witnessed, 0 for none. A result
+    with no row pays nothing.
+    """
+
+    moment_type = models.ForeignKey(
+        "arxii.DramaticMomentType",
+        on_delete=models.PROTECT,
+        related_name="standoff_ending_awards",
+        help_text=(
+            "The dramatic moment these terms count as at this result. Its resonance amount "
+            "and renown are what the ending pays; leave its resonance blank so the grant "
+            "follows the character's own."
+        ),
+    )
+    legend_value = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "Base worth of the legend deed written when the ending was witnessed by another "
+            "player's character. 0 writes no deed."
+        ),
+    )
+
+    class Meta(OutcomeTierAward.Meta):
+        verbose_name = "Standoff ending award"
+
+    def __str__(self) -> str:
+        return f"{self.outcome_tier.name}: {self.moment_type.label}"
 
 
 class StandoffCauseGloss(NaturalKeyMixin, SharedMemoryModel):

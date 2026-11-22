@@ -66,6 +66,8 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from world.gm.models import GMPrompt
     from world.items.models import Style
     from world.magic.models.dramatic_moment import (
@@ -74,6 +76,7 @@ if TYPE_CHECKING:
     )
     from world.magic.models.endorsement import EntryFlourishRecord, StylePresentationEndorsement
     from world.magic.models.techniques import Technique
+    from world.societies.models import PhilosophicalArchetype
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
@@ -983,6 +986,7 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     interaction: Interaction | None = None,
     technique: Technique | None = None,
     resonance: Resonance | None = None,
+    archetypes: Sequence[PhilosophicalArchetype] = (),
 ) -> DramaticMomentTag:
     """Tag a character's dramatic scene moment and fire resonance + renown.
 
@@ -1003,6 +1007,10 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     If none of those resolve, the renown award still fires and the resonance
     grant is simply skipped — a moment can be worth recognising without paying
     a currency the character has no claim to.
+
+    *archetypes*, when given, are the archetypes of this particular act and replace the
+    moment type's own for the renown award (a standoff's terms carry their own, #4323);
+    empty keeps the type's.
 
     Raises:
         DramaticMomentCapExceeded: If per_scene_cap for this (moment_type, scene, sheet) is reached.
@@ -1067,7 +1075,7 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
             magnitude=moment_type.magnitude,
             risk=moment_type.risk,
             reach=moment_type.reach or None,
-            archetypes=list(moment_type.archetypes.all()),
+            archetypes=list(archetypes) or list(moment_type.archetypes.all()),
             origin_area=area_for_scene(scene),
             title=moment_type.label,
         )
