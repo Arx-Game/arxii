@@ -31,6 +31,7 @@ from world.magic.services.anima import ritual_succeeded
 from world.magic.services.kindling import kindled_for, kindling_context_for
 from world.magic.services.resonance import grant_resonance
 from world.magic.types.ritual import RitualBond, RitualEarningParts
+from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -146,9 +147,12 @@ def _failed_endorsement_pending(
     performer_sheet: CharacterSheet, primal: Resonance | None, outward: Resonance
 ) -> int:
     """The outward growth held after a failed roll: ``failed_endorsement_percent`` of the
-    outward part of the canonical Success tier's award (a failed tier's own award is usually 0
-    or absent), 0 when there is no Success award."""
-    award = AnimaRitualResonanceAward.objects.filter(outcome_tier__name="Success").first()
+    outward part of the Success tier's award (a failed tier's own award is usually 0 or absent),
+    0 when there is no Success award. The tier is found by its success level, not its name, so
+    a staff rename cannot zero the endorsement."""
+    award = AnimaRitualResonanceAward.objects.filter(
+        outcome_tier__success_level=CANONICAL_OUTCOME_LEVELS["Success"]
+    ).first()
     if award is None or award.amount <= 0:
         return 0
     parts = ritual_earning_parts(performer_sheet, award.amount, primal, outward)
