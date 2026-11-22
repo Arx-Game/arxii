@@ -60,7 +60,7 @@ export function CharacterCreationPage() {
   const { data: canCreate, isLoading: canCreateLoading } = useCanCreateCharacter();
   const { data: draft, isLoading: draftLoading } = useDraft();
   const { data: copy } = useCGExplanations();
-  // What becomes of unspent points, said on the points row of every stage (#5201).
+  // What becomes of unspent points, said on the points row of the selections panel (#5201).
   const { data: budget } = useCGPointBudget();
   const { data: backgrounds } = usePageBackgrounds();
   const createDraft = useCreateDraft();

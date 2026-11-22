@@ -40,10 +40,12 @@ at its heading closes it and the page's Next is the only Next. The foot of the l
 no box: the "N taken, N of M points spent" line, the paragraph of the picks and the
 `LineageRecord` box (the route, its priced answers and the CG points again) are removed,
 since the selections panel lists the picks and the points and each priced answer prints
-its own price. The "CG points" row of the selections panel says on hover, on every stage,
-what becomes of unspent points ("CG points left unspent convert to XP when the character is
-approved, N XP for each point."), with N read from the active budget
-(`folio/pointsHint.ts`, provided once by `CharacterCreationPage`). The copy keys
+its own price. The "CG points" row of the selections panel says on hover what becomes of
+unspent points ("CG points left unspent convert to XP when the character is approved, N XP
+for each point."), on the nine stages that show the panel (Review has none and says the
+same in its own sentence). N is the active budget's rate, or 2 when no budget row exists,
+which is production's state (`folio/pointsHint.ts`, provided once by
+`CharacterCreationPage`). The copy keys
 `life_next`, `beats_foot` and `life_testament_empty` are no longer read. Lineage keeps its
 older card style; restyling it in the Folio style is not part of this.
 

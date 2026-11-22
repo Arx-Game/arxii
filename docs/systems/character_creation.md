@@ -1133,8 +1133,9 @@ that stood under it are removed, and so is the `LineageRecord` box under the lif
 selections panel lists the picks and the points. On a route with no family the tarot deck
 is folded behind "Choose a card" (`TarotNamingRitual`), so only the surname, the draw and
 the orientation switch stand above the life. The "CG points" row of the selections panel
-carries, on every stage, a hover saying what becomes of unspent points, at the active
-budget's rate (`folio/pointsHint.ts`). The first name is asked on the
+carries a hover saying what becomes of unspent points, on the nine stages that show the
+panel (Review has none and says it in its own sentence), at the active budget's rate or 2
+when no budget row exists (`folio/pointsHint.ts`). The first name is asked on the
 Origin leaf (`OriginStage`, a `Field` saved on blur, listed first in the rail; copy
 `origin_first_name_label`/`origin_first_name_hint`) and `IdentityStage` shows the name as a
 line (`identity_name_missing` when none). Copy keys carry in-code fallbacks; the demo's
