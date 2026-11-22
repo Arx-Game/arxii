@@ -13,12 +13,16 @@ standard/heavyweight work, no technical implementation begins until the
 stakeholder has reviewed the product direction and a member has approved the
 technical spec.
 
-Start by understanding the current project context, then ask focused questions one
-at a time. Brainstorm with the stakeholder rather than extracting requirements into
-an agent-owned answer: present options, consequences, concrete scenarios, and (for
-visual/high-risk work) competing demo directions or screenshot variants. The
-stakeholder supplies taste, priorities, and product decisions; the agent
-facilitates, expands scenarios, records provenance, and maintains the PRD.
+Start by understanding the current project context. For standard/heavyweight work,
+run a grilling session first (`tools/skills/grilling-session/SKILL.md`): the
+stakeholder talks the design through in their own words before any option is put in
+front of them, and the brief is written from the rules that session extracts, each
+with the stakeholder's quote. Opening with options implies the direction is already
+set (owner ruling 2026-11-21). After the session, present options, consequences,
+concrete scenarios, and (for visual/high-risk work) competing demo directions only
+for the forks the session left open. The stakeholder supplies taste, priorities,
+and product decisions; the agent facilitates, expands scenarios, records
+provenance, and maintains the PRD.
 
 <HARD-GATE>
 For standard/heavyweight work, do NOT invoke any implementation skill, write code,
