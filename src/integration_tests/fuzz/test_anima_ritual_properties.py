@@ -100,7 +100,7 @@ from world.scenes.action_models import SceneActionRequest
 from world.scenes.action_services import respond_to_action_request
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.interaction_services import invalidate_active_scene_cache
-from world.scenes.models import Persona, Scene
+from world.scenes.models import Persona, Scene, SceneParticipation
 from world.skills.factories import SkillFactory
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import StatTraitFactory
@@ -348,7 +348,11 @@ class NpcPartners(_RitualGates):
     """An NPC partner needs somebody writing its part."""
 
     @settings(max_examples=20, deadline=None)
-    @given(control=st.sampled_from(("nobody", "player borrower", "gm holder", "scene gm")))
+    @given(
+        control=st.sampled_from(
+            ("nobody", "player borrower", "gm holder", "scene gm", "performer is scene gm")
+        )
+    )
     def test_an_npc_partner_is_refused_unless_a_gm_runs_it_or_the_scene(self, control: str) -> None:
         """Maintainer: "GM has control of NPC or is GMing the scene. Basically if an NPC's
         reactions are not being written by a GM ... it isn't an appropriate target."
@@ -357,14 +361,21 @@ class NpcPartners(_RitualGates):
         profile, or played by nobody in a scene a third account GMs, asking it to take part is
         refused with "Nobody is playing that character." exactly when nobody plays it or only a
         player does; otherwise the request is resolved at once, with no one asked for consent.
+        A scene whose only GM is the performer's own account counts as nobody: a player never
+        benefits from RP between their own characters.
         """
         # Starting at 0 of 10 anima, a Success's budget of 4 must raise it to exactly 4.
         sheet, ritual = self.performer(anima=0)
         partner = self.partner(control)
         scene = self.scene_with(sheet, partner.character_sheet, gm=control == "scene gm")
+        if control == "performer is scene gm":
+            performer_player = sheet.roster_entry.current_tenure.player_data.account
+            own_seat = SceneParticipation.objects.get(scene=scene, account=performer_player)
+            own_seat.is_gm = True
+            own_seat.save(update_fields=["is_gm"])
 
         with force_check_outcome(self.outcomes["Success"]):
-            if control in ("nobody", "player borrower"):
+            if control in ("nobody", "player borrower", "performer is scene gm"):
                 with self.assertRaises(ValidationError) as refused:
                     start_partner_ritual(
                         scene=scene,

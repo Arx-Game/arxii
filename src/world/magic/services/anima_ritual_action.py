@@ -53,19 +53,27 @@ def _in_scene_together(
     return shared is not None and shared.pk == scene.pk
 
 
-def partner_is_run_by_a_gm(partner_sheet: CharacterSheet, scene: Scene) -> bool:
+def partner_is_run_by_a_gm(
+    partner_sheet: CharacterSheet, scene: Scene, performer_sheet: CharacterSheet
+) -> bool:
     """True when a GM writes the partner's part: the account now playing the partner has a
-    GM profile, or any participant of the scene is its GM.
+    GM profile, or a participant of the scene other than the performer's own account is its GM.
 
     The ritual reaches for the partner, so an NPC's reactions must be written by someone
-    (#5280). "Now playing" is ``current_player_of``: a lent NPC's borrower, else its holder.
+    other than the performer's own player (#5280): a scene GM who also plays the performer
+    would be feeding their own character with an NPC nobody else plays. "Now playing" is
+    ``current_player_of``: a lent NPC's borrower, else its holder.
     """
     from world.roster.services.npc_lending import current_player_of  # noqa: PLC0415
 
     player = current_player_of(partner_sheet)
     if player is not None and player.gm_profile_or_none is not None:
         return True
-    return scene.participations.filter(is_gm=True).exists()
+    gms = scene.participations.filter(is_gm=True)
+    performer_player = current_player_of(performer_sheet)
+    if performer_player is not None:
+        gms = gms.exclude(account=performer_player)
+    return gms.exists()
 
 
 def check_partner_ritual(
@@ -108,7 +116,9 @@ def check_partner_ritual(
         raise ValidationError(_ONE_PLAYER)
     if CharacterEngagement.objects.filter(character_id=sheet.character.pk).exists():
         raise ValidationError(CharacterEngagedForRitual.user_message)
-    if not is_player_character(partner_sheet) and not partner_is_run_by_a_gm(partner_sheet, scene):
+    if not is_player_character(partner_sheet) and not partner_is_run_by_a_gm(
+        partner_sheet, scene, sheet
+    ):
         raise ValidationError(_NOBODY_PLAYING)
     if has_performed_anima_ritual_in_scene(ritual=ritual, scene=scene):
         raise ValidationError(_ALREADY_PERFORMED)
