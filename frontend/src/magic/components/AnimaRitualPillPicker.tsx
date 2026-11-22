@@ -4,19 +4,33 @@
  */
 import { useId } from 'react';
 import type { AnimaRitualResonance } from '@/rituals/api';
-import { pillClass } from './pillClass';
+import { affinityInkClass } from './affinityInk';
 
 interface AnimaRitualPillPickerProps {
   label: string;
   /** What the pills are, shown under them in the editor. */
   hint?: string;
   resonances: readonly AnimaRitualResonance[];
-  selectedId: number | null;
+  /** The chosen resonance; null selects "None", undefined selects nothing yet. */
+  selectedId: number | null | undefined;
   onSelect: (resonanceId: number | null) => void;
   /** Adds a "None" pill that selects no resonance. */
   allowNone?: boolean;
   disabled?: boolean;
   testId: string;
+  /** A resonance the ritual carries that she no longer holds: shown selected, never pickable. */
+  keptUnheld?: AnimaRitualResonance | null;
+}
+
+const PILL = 'rounded-full border px-3 py-1 text-sm transition-colors';
+
+/** Selected pills take a current-colour border and bold type; unselected sit on the muted ground. */
+function pillClass(selected: boolean, ink: string): string {
+  return `${PILL} ${ink} ${
+    selected
+      ? 'border-current bg-background font-semibold'
+      : 'border-input bg-muted hover:bg-accent'
+  }`;
 }
 
 export function AnimaRitualPillPicker({
@@ -28,6 +42,7 @@ export function AnimaRitualPillPicker({
   allowNone = false,
   disabled = false,
   testId,
+  keptUnheld = null,
 }: AnimaRitualPillPickerProps) {
   const labelId = useId();
   return (
@@ -36,6 +51,19 @@ export function AnimaRitualPillPicker({
         {label}
       </span>
       <div role="group" aria-labelledby={labelId} className="flex flex-wrap gap-2">
+        {keptUnheld && !resonances.some((resonance) => resonance.id === keptUnheld.id) && (
+          <button
+            type="button"
+            disabled
+            aria-pressed={selectedId === keptUnheld.id}
+            className={pillClass(
+              selectedId === keptUnheld.id,
+              affinityInkClass(keptUnheld.affinity_name)
+            )}
+          >
+            {keptUnheld.name}
+          </button>
+        )}
         {resonances.map((resonance) => (
           <button
             key={resonance.id}
@@ -43,7 +71,10 @@ export function AnimaRitualPillPicker({
             disabled={disabled}
             aria-pressed={selectedId === resonance.id}
             onClick={() => onSelect(resonance.id)}
-            className={pillClass(selectedId === resonance.id)}
+            className={pillClass(
+              selectedId === resonance.id,
+              affinityInkClass(resonance.affinity_name)
+            )}
           >
             {resonance.name}
           </button>
@@ -54,7 +85,7 @@ export function AnimaRitualPillPicker({
             disabled={disabled}
             aria-pressed={selectedId === null}
             onClick={() => onSelect(null)}
-            className={pillClass(selectedId === null)}
+            className={pillClass(selectedId === null, '')}
           >
             None
           </button>

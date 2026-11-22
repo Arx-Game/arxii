@@ -30,6 +30,7 @@ import { useAnimaRitualChoices, usePatchRitual, useSetUpAnimaRitual } from '@/ri
 import type { RitualWithSchema } from '@/rituals/types';
 import { AnimaRitualAttuneDialog } from './AnimaRitualAttuneDialog';
 import { AnimaRitualPillPicker } from './AnimaRitualPillPicker';
+import { affinityInkClass } from './affinityInk';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -98,12 +99,20 @@ function isValid(form: FormState): boolean {
  * picks are read-only and "Attune" opens the paid change.
  */
 function AnimaRitualResonances({ characterSheetId }: { characterSheetId: number }) {
-  const { data: choices } = useAnimaRitualChoices(characterSheetId);
+  const { data: choices, isError, error } = useAnimaRitualChoices(characterSheetId);
   const setUp = useSetUpAnimaRitual();
   const [primalId, setPrimalId] = useState<number | null>(null);
-  const [outwardId, setOutwardId] = useState<number | null>(null);
+  // undefined until she picks: the outward slot starts with nothing selected, "None" included.
+  const [outwardId, setOutwardId] = useState<number | null | undefined>(undefined);
   const [attuneOpen, setAttuneOpen] = useState(false);
 
+  if (isError) {
+    return (
+      <p role="alert" className="text-sm text-destructive" data-testid="anima-ritual-choices-error">
+        {extractErrorMessage(error, 'Failed to load your ritual resonances')}
+      </p>
+    );
+  }
   if (!choices) return null;
 
   if (choices.locked) {
@@ -112,13 +121,17 @@ function AnimaRitualResonances({ characterSheetId }: { characterSheetId: number 
         <div className="flex flex-wrap gap-4">
           <div className="min-w-0 flex-1 basis-56">
             <span className="block text-sm font-medium">What you feel</span>
-            <span className="mt-1 block rounded-md border border-dashed px-3 py-2 text-sm">
+            <span
+              className={`mt-1 block rounded-md border border-dashed px-3 py-2 text-sm ${affinityInkClass(choices.primal_pick?.affinity_name)}`}
+            >
               {choices.primal_pick?.name ?? 'None'}
             </span>
           </div>
           <div className="min-w-0 flex-1 basis-56">
             <span className="block text-sm font-medium">What it does to them</span>
-            <span className="mt-1 block rounded-md border border-dashed px-3 py-2 text-sm">
+            <span
+              className={`mt-1 block rounded-md border border-dashed px-3 py-2 text-sm ${affinityInkClass(choices.outward_pick?.affinity_name)}`}
+            >
               {choices.outward_pick?.name ?? 'None'}
             </span>
           </div>
@@ -177,12 +190,12 @@ function AnimaRitualResonances({ characterSheetId }: { characterSheetId: number 
       </div>
       <Button
         type="button"
-        disabled={(primalId === null && outwardId === null) || setUp.isPending}
+        disabled={(primalId === null && !outwardId) || setUp.isPending}
         onClick={() =>
           setUp.mutate({
             character_sheet_id: characterSheetId,
             primal_resonance_id: primalId,
-            outward_resonance_id: outwardId,
+            outward_resonance_id: outwardId ?? null,
           })
         }
         data-testid="anima-ritual-set-resonances-button"

@@ -25,20 +25,10 @@ export function AnimaRitualEndorsementCard({ sceneId }: AnimaRitualEndorsementCa
       {waiting.map((row) => (
         <div
           key={row.id}
-          className="flex flex-wrap items-center gap-3 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30"
+          className="space-y-2 rounded-md border border-amber-500/50 bg-amber-50 px-4 py-3 dark:bg-amber-950/30"
           data-testid="anima-ritual-endorsement"
         >
-          <div className="min-w-0 flex-1 basis-56">
-            <p className="text-sm font-medium">{row.prompt}</p>
-            {row.partner_line && (
-              <p className="mt-1 text-xs text-muted-foreground">{row.partner_line}</p>
-            )}
-            {answer.isError && answer.variables?.id === row.id && (
-              <p role="alert" className="mt-1 text-xs text-destructive">
-                {extractErrorMessage(answer.error, 'Failed to answer the ritual')}
-              </p>
-            )}
-          </div>
+          <p className="text-sm font-medium">{row.prompt}</p>
           <div className="flex flex-wrap items-center gap-1.5">
             <Button
               size="sm"
@@ -58,6 +48,12 @@ export function AnimaRitualEndorsementCard({ sceneId }: AnimaRitualEndorsementCa
               Withhold
             </Button>
           </div>
+          {row.partner_line && <p className="text-xs text-muted-foreground">{row.partner_line}</p>}
+          {answer.isError && answer.variables?.id === row.id && (
+            <p role="alert" className="text-xs text-destructive">
+              {extractErrorMessage(answer.error, 'Failed to answer the ritual')}
+            </p>
+          )}
         </div>
       ))}
     </div>

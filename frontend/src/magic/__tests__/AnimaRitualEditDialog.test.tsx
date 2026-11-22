@@ -345,6 +345,8 @@ describe('AnimaRitualEditDialog', () => {
 
     const setButton = screen.getByRole('button', { name: 'Set resonances' });
     expect(setButton).toBeDisabled();
+    // Nothing is selected yet on the outward picker, "None" included.
+    expect(screen.getByRole('button', { name: 'None' })).toHaveAttribute('aria-pressed', 'false');
     expect(screen.getByText('What you feel when you perform it')).toBeInTheDocument();
     expect(screen.getByText('What it does to the other person')).toBeInTheDocument();
 
@@ -438,5 +440,52 @@ describe('AnimaRitualEditDialog', () => {
     expect(screen.getByTestId('anima-ritual-attune-error')).toHaveTextContent(
       'You do not have enough Hunger to attune your ritual.'
     );
+  });
+
+  // 14. The choices query failing shows its error rather than nothing
+  it('shows the error when the ritual choices fail to load', () => {
+    vi.mocked(ritualQueries.useAnimaRitualChoices).mockReturnValue({
+      data: undefined,
+      isError: true,
+      error: new Error('You have no anima ritual to set up.'),
+    } as unknown as ReturnType<typeof ritualQueries.useAnimaRitualChoices>);
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AnimaRitualEditDialog {...defaultProps} />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('anima-ritual-choices-error')).toHaveTextContent(
+      'You have no anima ritual to set up.'
+    );
+  });
+
+  // 15. A current pick she no longer holds shows selected and disabled, and Attune waits for
+  // that slot to change, because the server refuses an attunement that keeps an unheld pick
+  it('shows an unheld current pick as a disabled selected pill and waits for a change', async () => {
+    mockChoices({
+      ...lockedChoices,
+      primal: [unsetChoices.primal[1]],
+      primal_pick: unsetChoices.primal[0],
+    });
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AnimaRitualEditDialog {...defaultProps} />
+      </Wrapper>
+    );
+
+    await userEvent.click(screen.getByTestId('anima-ritual-attune-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Attune your ritual' });
+    const kept = within(dialog).getByRole('button', { name: 'Thrill' });
+    expect(kept).toBeDisabled();
+    expect(kept).toHaveAttribute('aria-pressed', 'true');
+    // Changing only the outward pick still keeps the unheld Primal one, so it is not offered.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mercy' }));
+    expect(within(dialog).getByRole('button', { name: 'Attune' })).toBeDisabled();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hunger' }));
+    expect(within(dialog).getByRole('button', { name: 'Attune' })).toBeEnabled();
   });
 });

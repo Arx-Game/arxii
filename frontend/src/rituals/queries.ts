@@ -150,7 +150,9 @@ export function useAnswerAnimaRitual() {
   return useMutation({
     mutationFn: ({ id, endorse }: { id: number; endorse: boolean }) =>
       api.answerAnimaRitualEndorsement(id, endorse),
-    onSuccess: () => {
+    // Settled, not only success: a refused answer (already answered, scene over) clears the
+    // stale row at once instead of leaving it for the next poll.
+    onSettled: () => {
       qc.invalidateQueries({ queryKey: animaRitualKeys.all }).catch(() => {});
     },
   });
