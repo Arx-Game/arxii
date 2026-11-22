@@ -261,6 +261,7 @@ class TheRitualListNamesTheTwoPicks(_MarasRitual):
             execution_kind=RitualExecutionKind.SCENE_ACTION,
             service_function_path="",
             flow=None,
+            known_by=self.mara.sheet_data,
             hedge_accessible=True,
         )
         RitualCheckConfigFactory(ritual=unpicked, primal_resonance=None, outward_resonance=None)

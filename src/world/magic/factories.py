@@ -1659,6 +1659,11 @@ class RitualFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = Ritual
         django_get_or_create = ("name",)
+        # The post-generation hooks (``known_by`` here, the requirement rows on two
+        # subclasses) only create other rows. Without this, factory_boy saves the
+        # instance after them, and a get_or_create hit on a cached row writes its stale
+        # fields over a staff edit (``test_edit_preserved_on_rerun``, #5280).
+        skip_postgeneration_save = True
 
     name = factory.Sequence(lambda n: f"Ritual {n}")
     description = factory.Faker("paragraph")
