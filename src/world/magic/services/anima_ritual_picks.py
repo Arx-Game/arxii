@@ -71,22 +71,32 @@ def _check_pick_is_held(sheet: CharacterSheet, resonance: Resonance) -> None:
 
 
 def check_anima_ritual_picks(
-    sheet: CharacterSheet, primal: Resonance | None, outward: Resonance | None
+    sheet: CharacterSheet,
+    primal: Resonance | None,
+    outward: Resonance | None,
+    *,
+    primal_changed: bool = True,
+    outward_changed: bool = True,
 ) -> None:
     """Refuse picks the ritual cannot take, before anything is written or spent.
 
+    Only a slot being changed is checked for being held and of the right affinity: a pick the
+    ritual already carries stays on it until she changes it, even once its resonance has left
+    her held list ("the ritual keeps feeding it"), and its affinity was valid when it was set.
+
     Raises:
-        AnimaRitualPickError: no pick at all, a pick she does not hold, a Primal slot given a
-            resonance that is not Primal, or the outward slot given a Primal one.
+        AnimaRitualPickError: no pick at all, a changed pick she does not hold, a changed Primal
+            slot given a resonance that is not Primal, or a changed outward slot given a Primal
+            one.
     """
     if primal is None and outward is None:
         raise AnimaRitualPickError(PICK_AT_LEAST_ONE)
-    if primal is not None:
+    if primal is not None and primal_changed:
         _check_pick_is_held(sheet, primal)
         if not _is_primal(primal):
             msg = f"{primal.name} is not a Primal resonance."
             raise AnimaRitualPickError(msg)
-    if outward is not None:
+    if outward is not None and outward_changed:
         _check_pick_is_held(sheet, outward)
         if _is_primal(outward):
             msg = f"{outward.name} is a Primal resonance. Pick a Celestial or Abyssal one."

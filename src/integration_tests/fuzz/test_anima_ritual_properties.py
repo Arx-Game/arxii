@@ -1666,6 +1666,56 @@ class Attunement(_AttunementWorld):
             pool.current = held
             pool.save(update_fields=["current"])
 
+    @settings(max_examples=20, deadline=None)
+    @given(
+        unheld_slot=st.sampled_from(("primal", "outward")),
+        primal_key=st.sampled_from(PRIMAL_KEYS),
+        outward_key=st.sampled_from(OUTWARD_KEYS),
+        clears_other_slot=st.booleans(),
+    )
+    def test_a_pick_she_no_longer_holds_stays_while_the_other_slot_changes(
+        self, unheld_slot: str, primal_key: str, outward_key: str, clears_other_slot: bool
+    ) -> None:
+        """Maintainer: "Keeps feeding it until she changes the ritual."
+
+        Given a ritual set up with a Primal and an outward pick, and one of the two picks then
+        leaving her held list (her resonance row gone), an attunement that changes only the other
+        slot (to the other resonance of its kind, or, for the outward slot, to none) succeeds and
+        keeps the unheld pick exactly as it was: only a pick being changed has to be held.
+        """
+        sheet, ritual = self.paying_performer()
+        set_up_anima_ritual_resonances(
+            sheet, self.resonances[primal_key], self.resonances[outward_key]
+        )
+        unheld_key = primal_key if unheld_slot == "primal" else outward_key
+        CharacterResonance.objects.filter(
+            character_sheet=sheet, resonance=self.resonances[unheld_key]
+        ).delete()
+        sheet.character.resonances.invalidate()
+
+        if unheld_slot == "primal":
+            other = None if clears_other_slot else next(k for k in OUTWARD_KEYS if k != outward_key)
+            target = (self.resonances[primal_key], self.resonances[other] if other else None)
+        else:
+            other = next(k for k in PRIMAL_KEYS if k != primal_key)
+            target = (self.resonances[other], self.resonances[outward_key])
+        before = self.set_costs(
+            attunement_anima_cost=1,
+            attunement_resonance_cost=1,
+            attunement_ap_cost=1,
+            attunement_check_type=None,
+        )
+        try:
+            result = attune_anima_ritual(sheet, *target)
+        finally:
+            self.set_costs(**before)
+
+        self.assertTrue(result.changed)
+        self.assertEqual(
+            stored_picks(ritual),
+            (target[0].pk, target[1].pk if target[1] else None),
+        )
+
     @settings(max_examples=30, deadline=None)
     @given(
         cost=st.integers(0, 10),

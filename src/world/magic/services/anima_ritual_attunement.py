@@ -167,11 +167,11 @@ def attune_anima_ritual(
     """Pay to change the ritual's two picks to ``primal`` and ``outward`` (either may be None).
 
     Every refusal is raised before anything is spent (in combat, no resonances set up yet, picks
-    unchanged, a pick not held or of the wrong affinity, too little resonance or action points, no
-    anima row when anima is charged). Then, in one transaction: the action points are spent, the
-    anima is deducted (a shortfall becomes Soulfray, never a refusal), each newly picked resonance
-    pays its balance, and the attunement check is rolled when staff set one. Both picks are
-    written only when there is no check or the roll succeeds; a failed roll keeps the costs and
+    unchanged, a changed pick not held or of the wrong affinity, too little resonance or action
+    points, no anima row when anima is charged). Then, in one transaction: the action points are
+    spent, the anima is deducted (a shortfall becomes Soulfray, never a refusal), each newly picked
+    resonance pays its balance, and the attunement check is rolled when staff set one. Both picks
+    are written only when there is no check or the roll succeeds; a failed roll keeps the costs and
     the old picks.
 
     If anything raises after the first spend, the database rolls back and the cached rows (action
@@ -179,8 +179,9 @@ def attune_anima_ritual(
 
     Raises:
         AnimaRitualPickError: she has no ritual, is in combat, has not set the picks up yet, the
-            picks are what the ritual already carries, fail ``check_anima_ritual_picks``, or she
-            has too few action points.
+            picks are what the ritual already carries, a changed pick fails
+            ``check_anima_ritual_picks`` (a pick she keeps stays even once she no longer holds
+            it), or she has too few action points.
         ResonanceInsufficient: a newly picked resonance holds less than the attunement costs.
     """
     config = ritual_config_of(sheet)
@@ -233,7 +234,13 @@ def _check_attunable(
         stored["outward_resonance_id"],
     ):
         raise AnimaRitualPickError(ALREADY_ATTUNED)
-    check_anima_ritual_picks(sheet, primal, outward)
+    check_anima_ritual_picks(
+        sheet,
+        primal,
+        outward,
+        primal_changed=(primal.pk if primal else None) != stored["primal_resonance_id"],
+        outward_changed=(outward.pk if outward else None) != stored["outward_resonance_id"],
+    )
     return stored
 
 
