@@ -3181,8 +3181,11 @@ class TestPrefetchCompleteness(TestCase):
 
     def test_magic_zero_queries(self) -> None:
         sheet = self._get_sheet()
-        # 3 queries (the anima ritual's skill name used to cost a fourth, a Skill's
+        # 4 queries (the anima ritual's skill name used to cost one more, a Skill's
         # Trait; a skill is the Trait itself since #5008):
+        #   1. character_scene_action_rituals(sheet.pk) (#5280) - the anima ritual is read
+        #      by one plain query, not a ``to_attr`` prefetch onto the idmapper-shared
+        #      RosterEntry, which would hide a ritual created later in the same process.
         #   2. character.resonances (CharacterResonanceHandler._by_resonance, #2032) —
         #      _build_magic_resonances reads the character's claimed CharacterResonance
         #      rows via the handler; not part of _MAGIC_PREFETCH_RELATED (a per-Character
@@ -3214,7 +3217,7 @@ class TestPrefetchCompleteness(TestCase):
         #      (3)'s cached character.threads handler — this fixture's character
         #      holds no TECHNIQUE thread, so it returns {} before reading any
         #      catalog table.
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             _build_magic(sheet)
 
     def test_story_zero_queries(self) -> None:
