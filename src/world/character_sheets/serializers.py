@@ -1799,7 +1799,11 @@ def _build_profile_picture(
     if not shows_real_face:
         worn = sheet.active_alternate_self_or_none
         alt_self = worn.alternate_self if worn is not None else None
-        if alt_self is not None and alt_self.thumbnail_id is not None:
+        # A self tied to another mask keeps its picture off this one (#4889).
+        belongs_here = alt_self is not None and (
+            alt_self.persona_id is None or active is None or alt_self.persona_id == active.pk
+        )
+        if belongs_here and alt_self.thumbnail_id is not None:
             return alt_self.thumbnail.cloudinary_url
         return (persona_face_url(active) if active is not None else "") or (
             placeholder_portrait_url()

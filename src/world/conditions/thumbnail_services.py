@@ -135,16 +135,15 @@ def persona_face_url(persona: "Persona") -> str:
     One answer for every list that reads a persona's portrait from its text copy, so none of
     them can fall back to something else.
 
-    A PRIMARY face that holds a picture (a story NPC's worn look is copied onto it) and is
-    presented while the character wears an alternate self that has no persona shows that
-    self's picture, or the placeholder: never the real face its own copy holds. Only such a
-    row asks which self is worn, so a list of masks and of player characters costs no query
-    per row; a writer of a self's picture sets its persona's copy too.
+    A PRIMARY face that is presented while the character wears an alternate self shows that
+    self's picture, or the placeholder: never the real face (a story NPC's worn look is
+    copied onto the face's own text copy, a player character's look is its gallery's). Only
+    a presented PRIMARY face asks which self is worn, so a list of masks costs no query per
+    row; a writer of a self's picture sets its persona's copy too.
     """
     from world.scenes.constants import PersonaType  # noqa: PLC0415
 
-    holds_a_picture = bool(persona.thumbnail_url) or persona.thumbnail_id is not None
-    if persona.persona_type == PersonaType.PRIMARY and holds_a_picture:
+    if persona.persona_type == PersonaType.PRIMARY:
         alt_self = _active_alternate_self(persona) if _is_presented(persona) else None
         if alt_self is not None:
             if alt_self.thumbnail_id is not None:
@@ -258,6 +257,9 @@ def _resolve_alternate_self_thumbnail(persona: "Persona") -> str | None:
     # Only on the face presented now: a hidden mask of the same character must not read the
     # same picture as the face on show, or the identical URL would link the two (#4889).
     if alt_self is None or alt_self.thumbnail_id is None or not _is_presented(persona):
+        return None
+    # A self tied to another mask keeps its picture off this one (#4889).
+    if alt_self.persona_id is not None and alt_self.persona_id != persona.pk:
         return None
     return alt_self.thumbnail.cloudinary_url
 

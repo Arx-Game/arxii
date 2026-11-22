@@ -123,6 +123,13 @@ def set_face_portrait(
         msg = "That picture can't be used as a portrait."
         raise FaceError(msg)
 
+    if (
+        isinstance(face, AlternateSelf)
+        and persona is not None
+        and persona.character_sheet_id != face.character_id
+    ):
+        msg = "That portrait cannot be set on this form."
+        raise FaceError(msg)
     _require_face_editable(persona.character_sheet if persona is not None else face.character)
     selves = _selves_rewritten(face, persona)
     with transaction.atomic():
