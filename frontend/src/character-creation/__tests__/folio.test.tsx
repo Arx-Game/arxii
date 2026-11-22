@@ -152,6 +152,7 @@ describe('RecordRail', () => {
     );
     expect(row('Perdition')).not.toHaveAttribute('title');
     // Until the budget has loaded the page gives no sentence, and the row has no hover.
+    expect(pointsHint(undefined)).toBeUndefined();
     rerender(<RecordRail rows={rows} />);
     expect(row('20 of 100 spent')).not.toHaveAttribute('title');
   });

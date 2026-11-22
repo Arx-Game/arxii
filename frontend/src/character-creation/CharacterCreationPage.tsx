@@ -259,7 +259,7 @@ export function CharacterCreationPage() {
 
   return (
     <div className="interview">
-      <PointsHint.Provider value={budget ? pointsHint(budget.xp_conversion_rate) : undefined}>
+      <PointsHint.Provider value={pointsHint(budget?.xp_conversion_rate)}>
         <div className="interview-grid">
           <ContentsRail
             currentStage={draft.current_stage}

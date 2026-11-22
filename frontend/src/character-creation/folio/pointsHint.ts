@@ -17,7 +17,11 @@ export function usePointsHint(): string | undefined {
   return useContext(PointsHint);
 }
 
-/** The sentence for a budget's rate, in the words the Review stage uses for the same fact. */
-export function pointsHint(xpPerPoint: number): string {
+/**
+ * The sentence for a budget's rate, in the words the Review stage uses for the same fact.
+ * No sentence while the rate is not known yet (the budget has not loaded).
+ */
+export function pointsHint(xpPerPoint: number | undefined): string | undefined {
+  if (xpPerPoint === undefined) return undefined;
   return `CG points left unspent convert to XP when the character is approved, ${xpPerPoint} XP for each point.`;
 }
