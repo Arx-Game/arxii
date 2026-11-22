@@ -897,6 +897,16 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   pressing player still rolls; the target's drives and cause only set the grade. The profile
   is locked while the character stands in a standoff. Web: a panel on the sheet's Growth tab;
   telnet `standoff profile`. This completes the #4121 slice cut.
+- **Standoffs: how you settle a fight shapes your resonance and your name** - SHIPPED (#4323,
+  ADR-4323): only the terms that settle the last group pay, so a long press cannot be farmed.
+  The roll's result tier picks a staff-authored row (`StandoffEndingAward`) that names the
+  dramatic moment the ending counts as, so the character's own resonance and renown grow by the
+  result, and a witnessed ending also writes a legend deed carrying the terms' archetypes, which
+  the faction rules that read a deed's archetype then see. The same ending is a social act fed
+  to the kindling path, so a resonance another character's press kindled earns too. The room
+  reads one credit line; the resonance that grew is told to the actor alone. Two characters
+  one account plays pay each other nothing. Not built: a
+  GM confirming the pay in a GM-run standoff; `StandoffApproach.archetypes` stays unread.
 - **Spectacle breaks morale** - SHIPPED (#4147, ADR-4147, 2026-10-05): an earned display
   shakes the enemies who witness it. Audere entry, an ultimate, a Crossing, a critical
   technique (intensity and success level thresholds) and a devastating action (one action
