@@ -30,6 +30,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.test_helpers import force_check_outcome
 from world.gm.factories import GMProfileFactory
+from world.magic.exceptions import CharacterEngagedForRitual
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
@@ -47,6 +48,7 @@ from world.magic.models import (
 from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.services.anima import provision_player_anima_ritual
 from world.magic.services.anima_ritual_action import start_partner_ritual
+from world.mechanics.factories import CharacterEngagementFactory
 from world.roster.constants import NPCLoanStatus
 from world.roster.factories import (
     NPCLoanFactory,
@@ -317,7 +319,8 @@ class NpcPartners(_RitualGates):
         refused with "Nobody is playing that character." exactly when nobody plays it or only a
         player does; otherwise the request is resolved at once, with no one asked for consent.
         """
-        sheet, _ritual = self.performer()
+        # Starting at 0 of 10 anima, a Success's budget of 4 must raise it to exactly 4.
+        sheet, ritual = self.performer(anima=0)
         partner = self.partner(control)
         scene = self.scene_with(sheet, partner.character_sheet, gm=control == "scene gm")
 
@@ -331,6 +334,7 @@ class NpcPartners(_RitualGates):
                     )
                 self.assertEqual(refused.exception.messages, ["Nobody is playing that character."])
                 self.assertFalse(SceneActionRequest.objects.filter(scene=scene).exists())
+                self.assertEqual(anima_of(sheet), 0)
             else:
                 request = start_partner_ritual(
                     scene=scene, initiator_persona=sheet.primary_persona, target_persona=partner
@@ -341,3 +345,37 @@ class NpcPartners(_RitualGates):
                     .get()
                 )
                 self.assertEqual(status, ActionRequestStatus.RESOLVED)
+                # The ritual took effect: it was performed in this scene and anima rose.
+                self.assertTrue(
+                    AnimaRitualPerformance.objects.filter(ritual=ritual, scene=scene).exists()
+                )
+                self.assertEqual(anima_of(sheet), 4)
+
+
+class CombatStillRefusesIt(_RitualGates):
+    """A character in combat cannot perform her ritual, with a partner or not."""
+
+    @settings(max_examples=20, deadline=None)
+    @given(anima=st.integers(0, 10))
+    def test_a_performer_in_combat_is_refused_even_with_a_willing_partner(self, anima: int) -> None:
+        """The solo ritual service refused a performer who was engaged in combat. The
+        maintainer's "Anima ritual can NEVER be done alone" adds a partner requirement; it does
+        not lift that refusal.
+
+        Given a performer with a ``CharacterEngagement`` asking a valid player-character partner
+        in the same place, she is refused with "You cannot perform a ritual during combat.", no
+        request is created, and her anima is unchanged.
+        """
+        sheet, _ritual = self.performer(anima=anima)
+        partner = self.partner("pc")
+        scene = self.scene_with(sheet, partner.character_sheet)
+        CharacterEngagementFactory(character=sheet)
+
+        with self.assertRaises(ValidationError) as refused:
+            start_partner_ritual(
+                scene=scene, initiator_persona=sheet.primary_persona, target_persona=partner
+            )
+
+        self.assertEqual(refused.exception.messages, [CharacterEngagedForRitual.user_message])
+        self.assertFalse(SceneActionRequest.objects.filter(scene=scene).exists())
+        self.assertEqual(anima_of(sheet), anima)
