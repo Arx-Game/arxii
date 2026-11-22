@@ -301,4 +301,5 @@ class KitViewStylingTest(KitPageCase):
 # #5093: three more, the same check for the three settings singletons it added (the
 # development cost, fatigue and check scale configs).
 # #5124: one more, the Kindling config singleton's add check (a new settings singleton).
-PAGE_QUERIES = 82
+# #4889: one more, the face placeholder config singleton's add check (a new settings singleton).
+PAGE_QUERIES = 83
