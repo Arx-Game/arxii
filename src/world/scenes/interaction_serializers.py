@@ -5,6 +5,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from rest_framework import serializers
 
+from world.conditions.thumbnail_services import persona_face_url
 from world.magic.serializers_reflection import (
     ClaimFieldsMixin,
     ReflectionFieldsMixin,
@@ -383,7 +384,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return PersonaPayload(
             id=obj.persona_id,
             name=name,
-            thumbnail_url=obj.persona.thumbnail_url or "",
+            thumbnail_url=persona_face_url(obj.persona),
         )
 
     def get_endorsee_sheet_id(self, obj: Interaction) -> int | None:
@@ -967,7 +968,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 {
                     "persona_id": persona.pk,
                     "persona_name": persona.name,
-                    "thumbnail_url": persona.thumbnail_url or "",
+                    "thumbnail_url": persona_face_url(persona),
                     "resonance_id": e.resonance_id,
                 }
             )
@@ -1011,7 +1012,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 {
                     "persona_id": persona.pk,
                     "persona_name": persona.name,
-                    "thumbnail_url": persona.thumbnail_url or "",
+                    "thumbnail_url": persona_face_url(persona),
                     "resonance_id": r.resonance_id,
                 }
             )

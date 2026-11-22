@@ -10588,6 +10588,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/forms/alternate-selves/{id}/set-portrait/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #4889 - pick, upload or remove one of the played character's alternate self's portrait.
+     *
+     *     The queryset is limited to the played sheet, so another player's alternate self is a 404.
+     */
+    post: operations['forms_alternate_selves_set_portrait_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/forms/alternate-selves/revert/': {
     parameters: {
       query?: never;
@@ -20071,6 +20092,26 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/personas/portrait-choices/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description #4889 - the requester's own pictures a portrait may be picked from (never another
+     *     player's). Their storage line is the Gallery's own ``tenure-media/usage/``.
+     */
+    get: operations['personas_portrait_choices_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/personas/set-active/': {
     parameters: {
       query?: never;
@@ -20088,6 +20129,50 @@ export interface paths {
      *     (400) without revealing whether it exists.
      */
     post: operations['personas_set_active_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/personas/set-description/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #4033 - write a mask's own description (what a stranger reads on look).
+     *
+     *     Own-sheet personas only; PRIMARY is refused by the service (the real description
+     *     is on the character sheet). A blank description clears it.
+     */
+    post: operations['personas_set_description_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/personas/set-portrait/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description #4889 - pick, upload or remove a mask's portrait.
+     *
+     *     Own-sheet personas only, one uniform refusal otherwise. A pick is copied and an
+     *     upload stored under an opaque folder, both through the one shared upload limit.
+     */
+    post: operations['personas_set_portrait_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -29137,6 +29222,16 @@ export interface components {
       /** @description Whether this is the alternate self the character is currently wearing. */
       readonly is_active: boolean;
       readonly compulsion: components['schemas']['Compulsion'] | null;
+      /** @description The persona this self wears, so the editor opens its description (#4889). */
+      readonly persona_id: number | null;
+      /**
+       * @description The picture this self shows: its own, its persona's, else the placeholder.
+       *
+       *     Never the character's real face, the same order the room list resolves (#4889).
+       */
+      readonly thumbnail_url: string;
+      /** @description Whether this self holds a picture of its own, so the editor can offer to remove it. */
+      readonly has_portrait: boolean;
     };
     /**
      * @description Read shape for the alternate-self switcher (#1111 slice 4).
@@ -35416,6 +35511,27 @@ export interface components {
       net: number;
       sheltered: boolean;
     };
+    /**
+     * @description A face's portrait change (#4889): pick one of the player's pictures, upload a new
+     *     one, or remove it. Exactly one of ``media_id``, ``image_file`` and ``clear``.
+     *
+     *     ``media_id`` is checked against the requester's own pickable pictures, so another
+     *     player's picture, an NSFW one and an unknown id fail the same way.
+     */
+    FacePortraitBodyRequest: {
+      media_id?: number;
+      /** Format: binary */
+      image_file?: string;
+      /** @default false */
+      clear: boolean;
+    };
+    /** @description One of the player's own pictures in the portrait picker (#4889). */
+    FacePortraitChoice: {
+      id: number;
+      url: string;
+      title: string;
+      file_size_bytes: number | null;
+    };
     /** @description Serializer for the flat Facet vocabulary. */
     Facet: {
       readonly id: number;
@@ -41480,8 +41596,8 @@ export interface components {
       /**
        * @description Direct portrait URL, resolved through the opponent's persona.
        *
-       *     Mirrors ``PersonaSerializer.thumbnail_url`` (the persona's
-       *     ``thumbnail_url`` URLField — ``""`` when unset). Persona-less
+       *     Mirrors ``PersonaSerializer.thumbnail_url`` (``persona_face_url``: the persona's
+       *     picture, the placeholder for a mask, ``""`` for a true face with none). Persona-less
        *     opponents (``persona=None``) return ``None``.
        */
       readonly thumbnail_url: string | null;
@@ -43445,6 +43561,21 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['ExitBarsDetails'][];
+    };
+    PaginatedFacePortraitChoiceList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['FacePortraitChoice'][];
     };
     PaginatedFashionPresentationList: {
       /** @example 123 */
@@ -46270,9 +46401,10 @@ export interface components {
       /**
        * @description Direct portrait URL via the presented persona (mirrors OpponentSerializer).
        *
-       *     The persona's ``thumbnail_url`` URLField (``""`` when unset); ``None`` when the
-       *     character has no persona. A mask shows its own portrait, never the true face
-       *     (#4802). Portrait is public identity, so it is not gated by ``_can_view_vitals``.
+       *     ``persona_face_url`` of the presented persona (the placeholder for a mask, ``""`` for a
+       *     true face with none); ``None`` when the character has no persona. A mask shows its own
+       *     portrait, never the true face (#4802). Portrait is public identity, so it is not gated
+       *     by ``_can_view_vitals``.
        */
       readonly thumbnail_url: string | null;
       /**
@@ -48824,8 +48956,10 @@ export interface components {
        * @default temporary
        */
       persona_type: components['schemas']['PersonaTypeEnum'];
-      thumbnail_url?: string;
+      readonly thumbnail_url: string;
       readonly thumbnail_media_url: string | null;
+      readonly description: string;
+      readonly has_portrait: boolean;
       readonly roster_entry: {
         [key: string]: number | string;
       } | null;
@@ -48867,6 +49001,7 @@ export interface components {
     /** @description The persona menu for one viewer and one target persona (#4030). */
     PersonaMenu: {
       persona_id: number;
+      readonly description: string;
       is_self: boolean;
       readonly scene_id: number | null;
       readonly viewer_persona_id: number | null;
@@ -51976,6 +52111,20 @@ export interface components {
     };
     /** @description POST body for the #981 set-active-persona endpoint. */
     SetActivePersonaRequestRequest: {
+      persona_id: number;
+    };
+    /** @description POST body for set-description: a mask's own prose (#4033). Blank clears it. */
+    SetFaceDescriptionRequestRequest: {
+      persona_id: number;
+      description: string;
+    };
+    /** @description POST body for a persona's set-portrait: the face, then the change (#4889). */
+    SetFacePortraitRequestRequest: {
+      media_id?: number;
+      /** Format: binary */
+      image_file?: string;
+      /** @default false */
+      clear: boolean;
       persona_id: number;
     };
     /** @description POST body for the #3261 set-name-display endpoint (degree + titles). */
@@ -71209,6 +71358,33 @@ export interface operations {
       };
     };
   };
+  forms_alternate_selves_set_portrait_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this alternate self. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: {
+      content: {
+        'multipart/form-data': components['schemas']['FacePortraitBodyRequest'];
+        'application/json': components['schemas']['FacePortraitBodyRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['AlternateSelf'];
+        };
+      };
+    };
+  };
   forms_alternate_selves_revert_create: {
     parameters: {
       query?: never;
@@ -84410,6 +84586,30 @@ export interface operations {
       };
     };
   };
+  personas_portrait_choices_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedFacePortraitChoiceList'];
+        };
+      };
+    };
+  };
   personas_set_active_create: {
     parameters: {
       query?: never;
@@ -84429,6 +84629,53 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['ActivePersonaResult'];
+        };
+      };
+    };
+  };
+  personas_set_description_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['SetFaceDescriptionRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
+        };
+      };
+    };
+  };
+  personas_set_portrait_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'multipart/form-data': components['schemas']['SetFacePortraitRequestRequest'];
+        'application/json': components['schemas']['SetFacePortraitRequestRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Persona'];
         };
       };
     };

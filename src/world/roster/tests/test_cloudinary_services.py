@@ -4,6 +4,7 @@ Tests for roster CloudinaryGalleryService.
 
 from unittest.mock import Mock, patch
 
+import cloudinary
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -62,7 +63,7 @@ class TestCloudinaryGalleryService(TestCase):
         self.tenure.refresh_from_db()
         assert self.tenure.photo_folder == expected
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
     @patch("cloudinary.uploader.upload")
     def test_upload_image_success(self, mock_upload):
         """Test successful image upload."""
@@ -107,7 +108,7 @@ class TestCloudinaryGalleryService(TestCase):
         assert "folder" in call_args[1]
         assert call_args[1]["resource_type"] == "image"
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
     @patch("cloudinary.uploader.upload")
     def test_upload_image_with_artist(self, mock_upload):
         """Test uploading image with artist attribution."""
@@ -130,7 +131,7 @@ class TestCloudinaryGalleryService(TestCase):
 
     def test_upload_image_no_cloudinary_config(self):
         """Test upload fails when Cloudinary is not configured."""
-        with override_settings(CLOUDINARY_CLOUD_NAME=""):
+        with patch.object(cloudinary.config(), "cloud_name", ""):
             image_file = SimpleUploadedFile(
                 "test.jpg",
                 b"fake content",
@@ -146,7 +147,7 @@ class TestCloudinaryGalleryService(TestCase):
 
             assert "Cloudinary is not configured" in str(cm.value)
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
     def test_upload_image_invalid_file_type(self):
         """Test upload fails with invalid file type."""
         image_file = SimpleUploadedFile(
@@ -164,7 +165,7 @@ class TestCloudinaryGalleryService(TestCase):
 
         assert "Unsupported file type." in str(cm.value)
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
     def test_upload_image_valid_file_types(self):
         """Test that valid file types are accepted."""
         valid_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
@@ -191,7 +192,7 @@ class TestCloudinaryGalleryService(TestCase):
                 except ValidationError:
                     self.fail(f"Valid content type {content_type} was rejected")
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
     @patch("cloudinary.uploader.upload")
     def test_upload_image_populates_file_size_bytes(self, mock_upload):
         """Test that a successful upload records the backend-reported size."""
@@ -217,7 +218,8 @@ class TestCloudinaryGalleryService(TestCase):
         # #4151: the pixel size bounds a look's crop.
         assert (media.width, media.height) == (800, 1200)
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud", MAX_PLAYER_MEDIA_FILE_BYTES=1000)
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
+    @override_settings(MAX_PLAYER_MEDIA_FILE_BYTES=1000)
     @patch("cloudinary.uploader.upload")
     def test_upload_image_rejects_file_over_per_file_cap(self, mock_upload):
         """Test that a file larger than the per-file cap is rejected before upload."""
@@ -236,7 +238,7 @@ class TestCloudinaryGalleryService(TestCase):
         assert "This file is larger than the per-file limit." in str(cm.value)
         mock_upload.assert_not_called()
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
     @patch("cloudinary.uploader.upload")
     def test_upload_image_rejects_upload_exceeding_quota(self, mock_upload):
         """Test that an upload pushing the player over quota is rejected before upload."""
@@ -260,10 +262,8 @@ class TestCloudinaryGalleryService(TestCase):
         assert "This upload would exceed your media quota." in str(cm.value)
         mock_upload.assert_not_called()
 
-    @override_settings(
-        CLOUDINARY_CLOUD_NAME="test_cloud",
-        MAX_PLAYER_MEDIA_FILE_BYTES=1000,
-    )
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
+    @override_settings(MAX_PLAYER_MEDIA_FILE_BYTES=1000)
     @patch("cloudinary.uploader.upload")
     def test_upload_image_staff_bypasses_quota_and_per_file_checks(self, mock_upload):
         """Test that a staff account's uploads skip both the quota and per-file checks."""
@@ -292,7 +292,7 @@ class TestCloudinaryGalleryService(TestCase):
         assert media.file_size_bytes == 5000
         mock_upload.assert_called_once()
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
     @patch("cloudinary.uploader.upload")
     def test_upload_image_cloudinary_error(self, mock_upload):
         """Test upload handles Cloudinary errors."""

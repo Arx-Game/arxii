@@ -14,6 +14,7 @@ from django.db.models.functions import Coalesce
 from django.utils import timezone
 
 from web.webclient.message_types import WebsocketMessageType
+from world.conditions.thumbnail_services import persona_face_url
 from world.scenes.block_services import social_control_excluded_target_ids
 from world.scenes.constants import (
     InteractionMode,
@@ -786,7 +787,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         persona=PersonaPayload(
             id=persona.pk,
             name=persona.name,
-            thumbnail_url=persona.thumbnail_url or "",
+            thumbnail_url=persona_face_url(persona),
         ),
         content=content,
         line="",
@@ -836,7 +837,11 @@ def scene_entry_endorsements_for(scene: Scene | int) -> dict[int, list[SceneEntr
 
     rows = (
         SceneEntryEndorsement.objects.filter(scene=scene)
-        .select_related("endorser_sheet", "resonance")
+        .select_related(
+            "endorser_sheet",
+            "endorser_sheet__active_alternate_self__alternate_self",  # #4889: persona_face_url
+            "resonance",
+        )
         .prefetch_related(
             Prefetch(
                 "endorser_sheet__personas",

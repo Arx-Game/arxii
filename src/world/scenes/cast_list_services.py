@@ -23,6 +23,7 @@ from typing import TYPE_CHECKING, Literal
 from django.core.exceptions import ObjectDoesNotExist
 
 from world.combat.constants import OpponentStatus, OpponentTier
+from world.conditions.thumbnail_services import persona_face_url
 from world.roster.constants import NPCLoanStatus
 from world.scenes.constants import PlayedByRole, RoundStatus
 
@@ -273,6 +274,8 @@ def _crowd_opponents(scene: Scene) -> list[CombatOpponent]:
             "threat_pool",
             "voice_persona__character_sheet__character__display_data",
             "voice_persona__character_sheet__roster_entry__roster",
+            # ``persona_face_url`` asks which alternate self a voice wears (#4889).
+            "voice_persona__character_sheet__active_alternate_self__alternate_self",
         )
         .order_by("pk")
     )
@@ -342,7 +345,7 @@ def _voiced_crowd(rows: list[CombatOpponent], player: _Player | None) -> CastLis
         name=voice.name,
         roster_entry_id=entry.pk if entry is not None else None,
         persona_id=voice.pk,
-        thumbnail_url=voice.thumbnail_url,
+        thumbnail_url=persona_face_url(voice),
         played_by=player.shown.name if player is not None else "",
         played_by_role=player.shown.role if player is not None else None,
         loan_id=loan.pk if loan is not None else None,
@@ -373,7 +376,7 @@ def scene_cast_list(scene: Scene) -> list[CastListEntry]:
         for persona in Persona.objects.filter(
             character_sheet_id__in=[entry.character_sheet_id for entry in npc_entries],
             persona_type=PersonaType.PRIMARY,
-        )
+        ).select_related("character_sheet__active_alternate_self__alternate_self")
     }
 
     cast_list: list[CastListEntry] = []
@@ -387,7 +390,7 @@ def scene_cast_list(scene: Scene) -> list[CastListEntry]:
                 name=character.db_key,
                 roster_entry_id=entry.pk,
                 persona_id=persona.pk if persona is not None else None,
-                thumbnail_url=persona.thumbnail_url if persona is not None else "",
+                thumbnail_url=persona_face_url(persona) if persona is not None else "",
                 played_by=player.shown.name,
                 played_by_role=player.shown.role,
                 loan_id=player.loan.pk if player.loan is not None else None,

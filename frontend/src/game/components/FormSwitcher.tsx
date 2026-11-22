@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
@@ -13,6 +14,8 @@ import {
 import { CompulsionMark } from '@/combat/components/CompulsionBanner';
 import { extractErrorMessage } from '@/lib/errors';
 
+import { useCharacterPersonasQuery } from '../personaQueries';
+import { GuiseSheetDialog } from './GuiseSheetDialog';
 import {
   useAlternateSelvesQuery,
   useRevertFormMutation,
@@ -51,7 +54,15 @@ export function FormSwitcher({ characterSheetId }: FormSwitcherProps) {
   const { data: alternates = [] } = useAlternateSelvesQuery(characterSheetId);
   const shift = useShiftFormMutation();
   const revert = useRevertFormMutation();
+  const { data: personas = [] } = useCharacterPersonasQuery(characterSheetId);
   const [open, setOpen] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+
+  const editing = alternates.find((alt) => alt.id === editingId) ?? null;
+  const editingPersona =
+    editing?.persona_id != null
+      ? (personas.find((persona) => persona.id === editing.persona_id) ?? null)
+      : null;
 
   const worn = useMemo(() => alternates.find((alt) => alt.is_active) ?? null, [alternates]);
   const isShiftingOrReverting = shift.isPending || revert.isPending;
@@ -105,8 +116,25 @@ export function FormSwitcher({ characterSheetId }: FormSwitcherProps) {
               </DropdownMenuRadioItem>
             ))}
           </DropdownMenuRadioGroup>
+          <DropdownMenuSeparator />
+          {alternates.map((alt) => (
+            <DropdownMenuItem key={alt.id} onSelect={() => setEditingId(alt.id)}>
+              {alternates.length > 1 ? `Edit face: ${activeLabel(alt)}…` : 'Edit face…'}
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      {editing && (editing.persona_id === null || editingPersona !== null) && (
+        <GuiseSheetDialog
+          persona={editingPersona}
+          alternateSelf={editing}
+          characterSheetId={characterSheetId}
+          open
+          onOpenChange={(next) => {
+            if (!next) setEditingId(null);
+          }}
+        />
+      )}
 
       {worn ? (
         <CompulsionMark compulsion={worn.compulsion} actionKey="revert_form">

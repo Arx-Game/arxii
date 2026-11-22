@@ -148,6 +148,7 @@ function groups(
 function menuFixture(overrides: Partial<PersonaMenuData> = {}): PersonaMenuData {
   return {
     persona_id: 10,
+    description: '',
     is_self: false,
     scene_id: 1,
     viewer_persona_id: 5,

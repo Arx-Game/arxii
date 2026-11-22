@@ -203,7 +203,8 @@ def _repick_worn(entry: RosterEntry) -> None:
 def _sync_npc_persona_portrait(entry: RosterEntry) -> None:
     """A story NPC's primary persona wears the worn look as its portrait (#4418).
 
-    Poses read ``Persona.thumbnail_url`` and room state reads ``Persona.thumbnail``, so
+    Poses read ``Persona.thumbnail_url`` (through ``persona_face_url``) and room state reads
+    ``Persona.thumbnail``, so
     both are set; both are cleared when no look is worn. A player character's persona
     is left alone.
     """

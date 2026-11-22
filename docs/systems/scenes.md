@@ -27,7 +27,8 @@ from world.scenes.constants import (
 | `Scene` | Primary scene entity (SharedMemoryModel, cached) | `name`, `description`, `location` (FK `arxii.RoomProfile`, #4217 off the #2608 audit; `scene.room` is the Evennia room object for presence, broadcast and teardown work, and takes one back on assignment), `date_started`, `date_finished`, `is_active`, `is_public`, `running_beat` (FK `arxii.Beat`, nullable, SET_NULL, #3425 — the story beat this scene is currently running, written by `RunBeatAction` and cleared by `finish_scene_full`) |
 | `SceneClock` | An authored countdown on the beat a scene is running (#3567) | `scene` (FK, CASCADE - where it was opened), `beat` (FK `arxii.Beat`, CASCADE - the key: a staged battle's private scene runs the same beat and reads the same clock), `size`/`filled` (PositiveSmallIntegerField), `created_at`, `closed_at` (nullable), `closed_reason` (`SceneClockClosedReason`: FILLED/COMPLETED/SCENE_ENDED). `UniqueConstraint` on `beat` where `closed_at__isnull=True` - one open clock per beat. Play state: resettable |
 | `SceneParticipation` | Links accounts to scenes with roles | `scene` (FK), `account` (FK AccountDB), `is_gm`, `is_owner`, `joined_at`, `left_at` |
-| `Persona` | Identity a participant uses within a scene | `participation` (FK), `name`, `is_fake_name`, `description`, `thumbnail_url`, `character` (FK ObjectDB) |
+| `Persona` | A face the character shows the world | `character_sheet` (FK), `name`, `persona_type`, `is_fake_name`, `description` (#4033: a mask's own prose, read only by `look` and the sheet through `mask_description`, empty for PRIMARY), `thumbnail` (FK Media) and `thumbnail_url` (the text copy poses read; both set together by `sync_persona_portrait`), `profile` (FK, the Guise Sheet) |
+| `FacePlaceholderConfig` (#4889) | The one picture a face with no portrait shows. A pk=1 singleton staff set in the admin (`get_face_placeholder_config()`); until they choose one the built-in grey silhouette shows | `placeholder` (FK `Media`, `SET_NULL`, staff-authored art only), `updated_at`, `updated_by` |
 | `DistinctionPersonaGrant` (#4856, slice 6 of #4813) | A card's second face: worn (Presumed Dead) opens character creation's Officially dead door, which shows to no other draft; not worn (Shady Alter Ego) a second ESTABLISHED face minted unworn from `draft_data.alter_ego`. Written once by creation's finalize through `create_persona` | `distinction` (O2O `Distinction`, `related_name="persona_grant"`), `worn` |
 | `SceneCheckModifier` | A scene's surroundings bonus or penalty to one check type, gathered by `collect_check_modifiers(scene=...)` as SCENE | `scene` (FK), `check_type` (FK), `modifier_value` (flat), `modifier_level` + `modifier_size` (#4638: both set reads the check value table at that level; both blank keeps the flat value; Paramount refused). One row per (scene, check type). Play state: resettable |
 
@@ -673,6 +674,24 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
 - `GET /api/personas/` - List personas (`PersonaSerializer` carries `believed_deceased`,
   read-only, #4396: the world believes this face dead)
 - `POST /api/personas/` - Create persona in a scene (participant/staff only)
+- `POST /api/personas/set-description/` (#4033) - `{persona_id, description}`: write a mask's own
+  prose (blank clears it, at most 4000 characters). Own-sheet personas only; PRIMARY and a foreign
+  or unknown id are refused (one uniform "That is not one of your identities.")
+- `POST /api/personas/set-portrait/` (#4889) - `{persona_id}` plus exactly one of `media_id` (one
+  of the requester's own, non-NSFW pictures, copied), `image_file` (a new upload, multipart) or
+  `clear: true`. Both routes go through `enforce_player_media_limits` under the player's row
+  lock; a refusal stores nothing and says "This upload would exceed your media quota." or
+  "This file is larger than the per-file limit." (the request serializer applies the per-file
+  check first, through `validate_player_image_file`, so a staff upload skips it as the Gallery's
+  does)
+- Both writes (and the alternate self's `set-portrait`) refuse while the character cannot act at
+  all: the offscreen-act state gate `set_active` runs (dead, unconscious, captured, retired or
+  unaccounted for), through `face_services._require_face_editable`. A pick has no rate limit.
+- `GET /api/personas/portrait-choices/` (#4889) - The requester's own pictures a portrait may be
+  picked from (`id`, `url`, `title`, `file_size_bytes`), paginated; their storage line is the
+  Gallery's `tenure-media/usage/`. Face copies and NSFW pictures are never listed
+- The persona menu (`GET /api/actions/characters/{id}/personas/{pid}/menu/`) carries the face's
+  `description` for the face card on a face that is not on the public roster
 
 **Filters:** `scene`, `participation`, `account`, `character`
 

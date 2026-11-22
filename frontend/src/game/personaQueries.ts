@@ -21,6 +21,10 @@ export interface SwitchablePersona {
   guise_protect: string;
   guise_fear: string;
   guise_background: string;
+  /** #4033 - the mask's own prose a stranger reads on look; empty when none. */
+  description: string;
+  /** Whether the face holds a picture of its own (#4889), so "Remove portrait" can show. */
+  has_portrait: boolean;
 }
 
 /** #1682 — the authorable Guise-Sheet fields (the three answers replace personality, #3621). */
@@ -33,7 +37,7 @@ export interface GuiseProfileBody {
   background: string;
 }
 
-const personaKeys = {
+export const personaKeys = {
   forCharacterSheet: (characterSheetId: number) =>
     ['character-personas', characterSheetId] as const,
 };
@@ -57,6 +61,8 @@ async function fetchCharacterPersonas(characterSheetId: number): Promise<Switcha
       guise_protect?: string;
       guise_fear?: string;
       guise_background?: string;
+      description?: string;
+      has_portrait?: boolean;
     }>;
   };
   return (data.results ?? []).map((p) => ({
@@ -72,6 +78,8 @@ async function fetchCharacterPersonas(characterSheetId: number): Promise<Switcha
     guise_protect: p.guise_protect ?? '',
     guise_fear: p.guise_fear ?? '',
     guise_background: p.guise_background ?? '',
+    description: p.description ?? '',
+    has_portrait: p.has_portrait ?? false,
   }));
 }
 

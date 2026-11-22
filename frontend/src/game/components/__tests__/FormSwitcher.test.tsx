@@ -14,6 +14,25 @@ vi.mock('../../formQueries', () => ({
   useRevertFormMutation: () => ({ mutate: vi.fn(), isPending: false, error: null }),
 }));
 
+vi.mock('../../personaQueries', () => ({
+  useCharacterPersonasQuery: () => ({ data: [] }),
+  useSetPersonaProfileMutation: () => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(),
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  }),
+}));
+
+vi.mock('../../faceQueries', () => ({
+  useFacePortraitMutation: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetFaceDescriptionMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  usePortraitChoicesQuery: () => ({ data: [], isError: false }),
+}));
+vi.mock('@/roster/gallery', () => ({ useMediaUsageQuery: () => ({ data: undefined }) }));
+
 function alternate(id: number, name: string): SwitchableAlternateSelf {
   return {
     id,
@@ -24,6 +43,9 @@ function alternate(id: number, name: string): SwitchableAlternateSelf {
     has_techniques: false,
     is_active: false,
     compulsion: null,
+    persona_id: null,
+    thumbnail_url: '',
+    has_portrait: false,
   };
 }
 

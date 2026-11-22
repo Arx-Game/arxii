@@ -4,6 +4,7 @@ from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.conditions.serializers import CompulsionSerializer
+from world.conditions.thumbnail_services import placeholder_portrait_url
 from world.forms.models import (
     AlternateSelf,
     Build,
@@ -109,6 +110,9 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
     resonance_name = serializers.SerializerMethodField()
     is_active = serializers.SerializerMethodField()
     compulsion = serializers.SerializerMethodField()
+    persona_id = serializers.SerializerMethodField()
+    thumbnail_url = serializers.SerializerMethodField()
+    has_portrait = serializers.SerializerMethodField()
 
     class Meta:
         model = AlternateSelf
@@ -122,10 +126,32 @@ class AlternateSelfSerializer(serializers.ModelSerializer):
             "resonance_name",
             "is_active",
             "compulsion",
+            "persona_id",
+            "thumbnail_url",
+            "has_portrait",
         ]
 
     def get_persona_name(self, obj: AlternateSelf) -> str | None:
         return obj.persona.name if obj.persona_id is not None else None
+
+    def get_persona_id(self, obj: AlternateSelf) -> int | None:
+        """The persona this self wears, so the editor opens its description (#4889)."""
+        return obj.persona_id
+
+    def get_has_portrait(self, obj: AlternateSelf) -> bool:
+        """Whether this self holds a picture of its own, so the editor can offer to remove it."""
+        return obj.thumbnail_id is not None
+
+    def get_thumbnail_url(self, obj: AlternateSelf) -> str:
+        """The picture this self shows: its own, its persona's, else the placeholder.
+
+        Never the character's real face, the same order the room list resolves (#4889).
+        """
+        if obj.thumbnail_id is not None:
+            return obj.thumbnail.cloudinary_url
+        if obj.persona_id is not None and obj.persona.thumbnail_id is not None:
+            return obj.persona.thumbnail.cloudinary_url
+        return placeholder_portrait_url()
 
     def get_form_name(self, obj: AlternateSelf) -> str | None:
         return obj.form.name or None if obj.form_id is not None else None

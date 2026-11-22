@@ -295,7 +295,9 @@ class CharacterItemDataHandler(BaseItemDataHandler):
         (the live free-text physical description: CG writes it, the Great
         Archive recorded-profile flow updates it). The old first stop —
         ``Persona.description`` — was a vestigial #347-era field nothing
-        ever wrote; removed.
+        ever wrote; removed. The mask's own description (#4033) is a new
+        field with that name, read only by ``look`` and the sheet through
+        ``persona_display.mask_description`` and never by this chain.
         """
         return super().get_display_description() or self.additional_desc
 

@@ -11,11 +11,13 @@ from rest_framework import mixins, permissions, serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.filters import SearchFilter
+from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import BasePermission, IsAuthenticatedOrReadOnly
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
+from evennia_extensions.models import PlayerData
 from world.scenes.constants import SceneAction, ScenePrivacyMode
 from world.scenes.filters import (
     PersonaFilter,
@@ -49,6 +51,7 @@ from world.scenes.serializers import (
     CastListEntrySerializer,
     CreateEstablishedPersonaRequestSerializer,
     CreateMaskRequestSerializer,
+    FacePortraitChoiceSerializer,
     HighlightReelSerializer,
     PersonaSerializer,
     SceneDetailSerializer,
@@ -57,6 +60,8 @@ from world.scenes.serializers import (
     ScenesSpotlightSerializer,
     SceneSummaryRevisionSerializer,
     SetActivePersonaRequestSerializer,
+    SetFaceDescriptionRequestSerializer,
+    SetFacePortraitRequestSerializer,
     SetNameDisplayRequestSerializer,
     SetPersonaProfileRequestSerializer,
     SetRoundModeRequestSerializer,
@@ -915,6 +920,104 @@ class PersonaViewSet(
         return Response(
             PersonaSerializer(persona, context={"request": request}).data, status=status.HTTP_200_OK
         )
+
+    def _own_persona(self, request: Request, persona_id: int) -> Persona:
+        """The played character's own persona, or one uniform refusal (#4889).
+
+        A foreign id and an unknown id are indistinguishable, so existence never leaks.
+        """
+        sheet = self._played_sheet(request)
+        persona = Persona.objects.filter(pk=persona_id, character_sheet=sheet).first()
+        if persona is None:
+            msg = "That is not one of your identities."
+            raise serializers.ValidationError({"detail": msg})
+        return persona
+
+    @extend_schema(
+        request=SetFaceDescriptionRequestSerializer,
+        responses={200: PersonaSerializer},
+        tags=["personas"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="set-description",
+        permission_classes=[permissions.IsAuthenticated],
+    )
+    def set_description(self, request: Request) -> Response:
+        """#4033 - write a mask's own description (what a stranger reads on look).
+
+        Own-sheet personas only; PRIMARY is refused by the service (the real description
+        is on the character sheet). A blank description clears it.
+        """
+        from world.scenes.face_services import FaceError, set_persona_description  # noqa: PLC0415
+
+        body = SetFaceDescriptionRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        persona = self._own_persona(request, body.validated_data["persona_id"])
+        try:
+            set_persona_description(persona, body.validated_data["description"])
+        except FaceError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        return Response(PersonaSerializer(persona, context={"request": request}).data)
+
+    @extend_schema(
+        request={
+            "multipart/form-data": SetFacePortraitRequestSerializer,
+            "application/json": SetFacePortraitRequestSerializer,
+        },
+        responses={200: PersonaSerializer},
+        tags=["personas"],
+    )
+    @action(
+        detail=False,
+        methods=[HTTPMethod.POST],
+        url_path="set-portrait",
+        permission_classes=[permissions.IsAuthenticated],
+        parser_classes=[JSONParser, MultiPartParser, FormParser],
+    )
+    def set_portrait(self, request: Request) -> Response:
+        """#4889 - pick, upload or remove a mask's portrait.
+
+        Own-sheet personas only, one uniform refusal otherwise. A pick is copied and an
+        upload stored under an opaque folder, both through the one shared upload limit.
+        """
+        from world.scenes.face_services import FaceError, set_face_portrait  # noqa: PLC0415
+
+        body = SetFacePortraitRequestSerializer(data=request.data, context={"request": request})
+        body.is_valid(raise_exception=True)
+        data = body.validated_data
+        persona = self._own_persona(request, data["persona_id"])
+        try:
+            set_face_portrait(
+                persona,
+                player_data=request.user.player_data,
+                media=data.get("media"),
+                image_file=data.get("image_file"),
+                clear=data["clear"],
+            )
+        except FaceError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        return Response(PersonaSerializer(persona, context={"request": request}).data)
+
+    @extend_schema(responses=FacePortraitChoiceSerializer(many=True), tags=["personas"])
+    @action(
+        detail=False,
+        methods=[HTTPMethod.GET],
+        url_path="portrait-choices",
+        permission_classes=[permissions.IsAuthenticated],
+        filter_backends=[],
+    )
+    def portrait_choices(self, request: Request) -> Response:
+        """#4889 - the requester's own pictures a portrait may be picked from (never another
+        player's). Their storage line is the Gallery's own ``tenure-media/usage/``."""
+        from world.scenes.face_services import pickable_portrait_media  # noqa: PLC0415
+
+        pictures = pickable_portrait_media(
+            PlayerData.objects.filter(account=request.user).first()
+        ).order_by("-uploaded_date", "-pk")
+        page = self.paginate_queryset(pictures)
+        return self.get_paginated_response(FacePortraitChoiceSerializer(page, many=True).data)
 
     @extend_schema(responses=RenownSerializer, tags=["personas"])
     @action(detail=True, methods=[HTTPMethod.GET])

@@ -4,6 +4,7 @@ from world.admin_utils import OneRowPerFormSet
 from world.scenes.models import (
     BlockContactFlag,
     DistinctionPersonaGrant,
+    FacePlaceholderConfig,
     Interaction,
     InteractionFavorite,
     InteractionReaction,
@@ -119,6 +120,25 @@ class PersonaAdmin(admin.ModelAdmin):
     search_fields = ["name", "character__db_key"]
     readonly_fields = ["created_at"]
 
+    def save_model(self, request: object, obj: Persona, form: object, change: bool) -> None:
+        """A staff-set Thumbnail also sets the text copy poses read (#4889).
+
+        Left alone when staff edited the text copy themselves in the same save.
+        """
+        from evennia_extensions.models import Media  # noqa: PLC0415
+        from world.scenes.face_services import delete_unused_face_copies  # noqa: PLC0415
+
+        changed = form.changed_data  # ty: ignore[unresolved-attribute]
+        # Form field names, not discriminators.
+        thumbnail_changed = "thumbnail" in changed  # noqa: STRING_LITERAL
+        if thumbnail_changed and "thumbnail_url" not in changed:  # noqa: STRING_LITERAL
+            obj.thumbnail_url = obj.thumbnail.cloudinary_url if obj.thumbnail_id else ""
+        super().save_model(request, obj, form, change)  # ty: ignore[invalid-argument-type]
+        # A replaced or removed portrait deletes the player's private copy of it.
+        previous_id = form.initial.get("thumbnail")  # ty: ignore[unresolved-attribute]
+        if thumbnail_changed and previous_id is not None:
+            delete_unused_face_copies([Media.objects.filter(pk=previous_id).first()])
+
 
 class InteractionReceiverInlineForInteraction(admin.TabularInline):
     model = InteractionReceiver
@@ -197,6 +217,44 @@ class SceneRoundDefaultsConfigAdmin(admin.ModelAdmin):
     ) -> bool:
         """Prevent deleting the config."""
         return False
+
+
+@admin.register(FacePlaceholderConfig)
+class FacePlaceholderConfigAdmin(admin.ModelAdmin):
+    """#4889 - the one picture a face with no portrait shows; a pk=1 singleton."""
+
+    list_display = ["__str__", "placeholder", "updated_at", "updated_by"]
+    autocomplete_fields = ["placeholder"]
+    readonly_fields = ["updated_at", "updated_by"]
+    fieldsets = [("Placeholder portrait", {"fields": ["placeholder", "updated_at", "updated_by"]})]
+    # Shown read-only and written by save_model, never picked from a dropdown.
+    large_table_widget_exempt = ["updated_by"]
+
+    def get_form(self, request: object, obj: object = None, change: bool = False, **kwargs: object):
+        """Pick the picture only: no add, change or delete of a ``Media`` row from this form."""
+        form = super().get_form(request, obj, change=change, **kwargs)  # ty: ignore[invalid-argument-type]
+        widget = form.base_fields["placeholder"].widget
+        widget.can_add_related = False  # ty: ignore[unresolved-attribute]
+        widget.can_change_related = False  # ty: ignore[unresolved-attribute]
+        widget.can_delete_related = False  # ty: ignore[unresolved-attribute]
+        widget.can_view_related = False  # ty: ignore[unresolved-attribute]
+        return form
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not FacePlaceholderConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+    def save_model(self, request: object, obj: FacePlaceholderConfig, form: object, change: bool):
+        obj.updated_by = request.user  # ty: ignore[unresolved-attribute]
+        super().save_model(request, obj, form, change)  # ty: ignore[invalid-argument-type]
 
 
 class PlacePresenceInline(admin.TabularInline):

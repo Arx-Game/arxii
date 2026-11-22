@@ -17,6 +17,7 @@ from __future__ import annotations
 from integration_tests.harness import JourneyCase
 from world.battles.factories import BattleFactory, BattleSideFactory
 from world.battles.services import enlist_participant
+from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
 from world.roster.factories import MediaFactory
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
@@ -56,7 +57,11 @@ class AMaskedFighterOnTheBattleRoster(JourneyCase):
         told = self.telnet(self.hobb, "persona mask a hooded man")
 
         persona = self.hobb_as_ada_reads_him()
-        self.assertEqual((persona["name"], persona["thumbnail_media_url"]), ("a hooded man", None))
+        # A bare mask shows the placeholder portrait (#4889), never the true face.
+        self.assertEqual(
+            (persona["name"], persona["thumbnail_media_url"]),
+            ("a hooded man", BUILTIN_FACE_PLACEHOLDER_URL),
+        )
         self.assertNotIn(self.face.cloudinary_url, str(persona), told)
 
         hood = MediaFactory()

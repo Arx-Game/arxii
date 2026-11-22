@@ -9,17 +9,33 @@ import uuid
 
 import cloudinary
 import cloudinary.api
+import cloudinary.exceptions
 import cloudinary.uploader
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
+from django.db import transaction
 from django.db.models import Sum
+import urllib3.exceptions
 
 from evennia_extensions.models import Artist, Media, PlayerData
 from world.roster.models import RosterTenure, TenureMedia
 from world.roster.services.media_scan import MediaScanService
 
 logger = logging.getLogger(__name__)
+
+# The one opaque Cloudinary folder a face portrait lives in (#4889). No player or character
+# number appears in the path, so a mask's picture URL cannot be matched to the real face's.
+FACE_PORTRAIT_FOLDER = "faces"
+
+# What a Cloudinary call raises: its own API error, or the transport's failure to reach it.
+_CLOUDINARY_FAILURES = (cloudinary.exceptions.Error, urllib3.exceptions.HTTPError, OSError)
+
+_ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/gif", "image/webp")
+_CLOUDINARY_EAGER = [
+    {"width": 300, "height": 300, "crop": "fill"},
+    {"width": 150, "height": 150, "crop": "fill"},
+]
 
 
 def media_bytes_used(player_data: PlayerData) -> int:
@@ -34,6 +50,60 @@ def media_bytes_used(player_data: PlayerData) -> int:
         total=Sum("file_size_bytes"),
     )["total"]
     return total or 0
+
+
+def enforce_player_media_limits(
+    player_data: PlayerData, *, incoming_bytes: int, freed_bytes: int = 0
+) -> None:
+    """Refuse a file that passes the per-file limit or would pass the player's quota (#3164).
+
+    The one check every stored file goes through: a new upload and a copy of an existing
+    picture (#4889). Staff accounts are exempt from both limits. The quota is the sum of the
+    player's own ``Media`` rows, so a caller that must hold the quota under simultaneous
+    requests calls this inside ``lock_player_media`` (see ``upload_image``). ``freed_bytes``
+    is what the caller deletes once the new file is stored (a replaced face portrait), so a
+    swap is judged on the total after it, not before.
+
+    Raises:
+        ValidationError: With the fixed per-file or quota message the Gallery shows.
+    """
+    if player_data.account.is_staff:
+        return
+    if incoming_bytes > settings.MAX_PLAYER_MEDIA_FILE_BYTES:
+        msg = "This file is larger than the per-file limit."
+        raise ValidationError(msg)
+    if media_bytes_used(player_data) - freed_bytes + incoming_bytes > player_data.media_quota_bytes:
+        msg = "This upload would exceed your media quota."
+        raise ValidationError(msg)
+
+
+def lock_player_media(player_data: PlayerData) -> None:
+    """Hold the player's row until the surrounding transaction ends (#4889).
+
+    Uploads by one player then run one after another, so the second sees the first's
+    bytes and two simultaneous uploads cannot both pass the quota. The lock is a filtered
+    query rather than ``get(pk=...)``: the identity map answers a pk ``get`` from memory
+    and would never reach the database. Must be called inside ``transaction.atomic()``.
+    """
+    # ``no_key``: the quota check needs the lock between uploads, not a block on the other
+    # rows that point at this player (a tenure, a journal) while a file is in flight.
+    list(
+        PlayerData.objects.select_for_update(no_key=True)
+        .filter(pk=player_data.pk)
+        .values_list("pk")
+    )
+
+
+def _require_cloudinary() -> None:
+    """Refuse an upload while Cloudinary itself has no cloud name to upload to.
+
+    Reads Cloudinary's own configuration, the one ``settings.py`` sets from the
+    ``CLOUDINARY_CLOUD_NAME`` environment variable and every upload uses, so the guard
+    answers whether uploads can actually reach an account (#4889).
+    """
+    if not cloudinary.config().cloud_name:
+        msg = "Cloudinary is not configured"
+        raise ValidationError(msg)
 
 
 class CloudinaryGalleryService:
@@ -64,6 +134,8 @@ class CloudinaryGalleryService:
         description: str = "",
         tenure: RosterTenure | None = None,
         created_by: Artist | None = None,
+        folder: str | None = None,
+        freed_bytes: int = 0,
     ) -> Media:
         """Upload an image to Cloudinary and create media records.
 
@@ -75,6 +147,9 @@ class CloudinaryGalleryService:
             description: Optional description
             tenure: Optional tenure to associate with the media
             created_by: Optional artist who created the media
+            folder: Optional Cloudinary folder. When given, the public id is
+                ``<folder>/<uuid>`` and no player or tenure number appears in it (#4889).
+            freed_bytes: Bytes the caller deletes right after this upload (#4889).
 
         Returns:
             Media: The created media record
@@ -82,12 +157,11 @@ class CloudinaryGalleryService:
         Raises:
             ValidationError: If upload fails or file is invalid
         """
-        if not hasattr(settings, "CLOUDINARY_CLOUD_NAME") or not settings.CLOUDINARY_CLOUD_NAME:
-            msg = "Cloudinary is not configured"
-            raise ValidationError(msg)
+        _require_cloudinary()
 
-        allowed_types = ["image/jpeg", "image/png", "image/gif", "image/webp"]
-        if hasattr(image_file, "content_type") and image_file.content_type not in allowed_types:
+        if hasattr(image_file, "content_type") and image_file.content_type not in (
+            _ALLOWED_IMAGE_TYPES
+        ):
             logger.warning("Unsupported file type: %s", image_file.content_type)
             msg = "Unsupported file type."
             raise ValidationError(msg)
@@ -96,60 +170,131 @@ class CloudinaryGalleryService:
         # sizeless stream); an actual upload always reports a size, so treat a
         # missing one as empty rather than widening every arithmetic use below.
         incoming = image_file.size or 0
-        if not player_data.account.is_staff and incoming > settings.MAX_PLAYER_MEDIA_FILE_BYTES:
-            msg = "This file is larger than the per-file limit."
-            raise ValidationError(msg)
-
         MediaScanService.scan_image(image_file)
 
-        if not player_data.account.is_staff:
-            used = media_bytes_used(player_data)
-            if used + incoming > player_data.media_quota_bytes:
-                msg = "This upload would exceed your media quota."
-                raise ValidationError(msg)
+        # The check, the upload and the row run under the player's row lock, so two
+        # simultaneous uploads cannot both pass the quota (#4889).
+        with transaction.atomic():
+            lock_player_media(player_data)
+            enforce_player_media_limits(
+                player_data, incoming_bytes=incoming, freed_bytes=freed_bytes
+            )
 
-        if tenure:
-            folder = cls.generate_tenure_folder(tenure)
-        else:
-            folder = f"player_{player_data.account.pk}"
-        public_id = f"{folder}/{uuid.uuid4().hex}"
+            if folder is None:
+                folder = (
+                    cls.generate_tenure_folder(tenure)
+                    if tenure
+                    else f"player_{player_data.account.pk}"
+                )
+            public_id = f"{folder}/{uuid.uuid4().hex}"
 
+            try:
+                result = cloudinary.uploader.upload(
+                    image_file,
+                    public_id=public_id,
+                    folder=folder,
+                    resource_type="image",
+                    quality="auto",
+                    fetch_format="auto",
+                    eager=_CLOUDINARY_EAGER,
+                )
+
+                media = Media.objects.create(
+                    player_data=player_data,
+                    cloudinary_public_id=result["public_id"],
+                    cloudinary_url=result["secure_url"],
+                    file_size_bytes=result.get("bytes"),
+                    width=result.get("width"),
+                    height=result.get("height"),
+                    media_type=media_type,
+                    title=title,
+                    description=description,
+                    created_by=created_by,
+                )
+
+                if tenure:
+                    TenureMedia.objects.create(tenure=tenure, media=media)
+
+                return cast(Media, media)
+
+            except Exception as e:
+                logger.exception("Failed to upload image to Cloudinary")
+                msg = "Failed to upload image."
+                raise ValidationError(msg) from e
+
+    @classmethod
+    def copy_image(
+        cls,
+        player_data: PlayerData,
+        source: Media,
+        *,
+        folder: str,
+        media_type: str = "portrait",
+        freed_bytes: int = 0,
+    ) -> Media:
+        """Store a new copy of one of the player's pictures under an opaque folder (#4889).
+
+        The copy has its own file, its own delivery URL and a blank title, description and
+        artist, so it cannot be matched to ``source`` or to the player. It counts against
+        the player's storage like any upload: the source's size is checked first, and the
+        size Cloudinary reports is checked again (the asset is destroyed and the copy
+        refused if that passes the quota).
+
+        Raises:
+            ValidationError: With the Gallery's per-file or quota message, or a fixed
+                failure message.
+        """
+        _require_cloudinary()
+        with transaction.atomic():
+            lock_player_media(player_data)
+            enforce_player_media_limits(
+                player_data,
+                incoming_bytes=source.file_size_bytes or 0,
+                freed_bytes=freed_bytes,
+            )
+            public_id = f"{folder}/{uuid.uuid4().hex}"
+            try:
+                result = cloudinary.uploader.upload(
+                    source.cloudinary_url,
+                    public_id=public_id,
+                    folder=folder,
+                    resource_type="image",
+                    quality="auto",
+                    fetch_format="auto",
+                    eager=_CLOUDINARY_EAGER,
+                )
+            except _CLOUDINARY_FAILURES as e:
+                logger.exception("Failed to copy image on Cloudinary")
+                msg = "Failed to upload image."
+                raise ValidationError(msg) from e
+            try:
+                enforce_player_media_limits(
+                    player_data,
+                    incoming_bytes=result.get("bytes") or 0,
+                    freed_bytes=freed_bytes,
+                )
+            except ValidationError:
+                cls._destroy_remote(result["public_id"])
+                raise
+            return cast(
+                Media,
+                Media.objects.create(
+                    player_data=player_data,
+                    cloudinary_public_id=result["public_id"],
+                    cloudinary_url=result["secure_url"],
+                    file_size_bytes=result.get("bytes"),
+                    width=result.get("width"),
+                    height=result.get("height"),
+                    media_type=media_type,
+                ),
+            )
+
+    @staticmethod
+    def _destroy_remote(public_id: str) -> None:
         try:
-            result = cloudinary.uploader.upload(
-                image_file,
-                public_id=public_id,
-                folder=folder,
-                resource_type="image",
-                quality="auto",
-                fetch_format="auto",
-                eager=[
-                    {"width": 300, "height": 300, "crop": "fill"},
-                    {"width": 150, "height": 150, "crop": "fill"},
-                ],
-            )
-
-            media = Media.objects.create(
-                player_data=player_data,
-                cloudinary_public_id=result["public_id"],
-                cloudinary_url=result["secure_url"],
-                file_size_bytes=result.get("bytes"),
-                width=result.get("width"),
-                height=result.get("height"),
-                media_type=media_type,
-                title=title,
-                description=description,
-                created_by=created_by,
-            )
-
-            if tenure:
-                TenureMedia.objects.create(tenure=tenure, media=media)
-
-            return cast(Media, media)
-
-        except Exception as e:
-            logger.exception("Failed to upload image to Cloudinary")
-            msg = "Failed to upload image."
-            raise ValidationError(msg) from e
+            cloudinary.uploader.destroy(public_id)
+        except _CLOUDINARY_FAILURES:
+            logger.exception("Cloudinary destroy failed for %s; remote asset orphaned", public_id)
 
     @classmethod
     def delete_media(cls, media: Media) -> bool:

@@ -97,6 +97,7 @@ from world.character_sheets.types import (
 )
 from world.classes.models import PathStage
 from world.conditions.models import ConditionInstance
+from world.conditions.thumbnail_services import persona_face_url, placeholder_portrait_url
 from world.covenants.models import CharacterCovenantRole, MentorBond
 from world.distinctions.models import CharacterDistinction
 from world.forms.models import (
@@ -144,6 +145,7 @@ from world.roster.models import Family, RosterTenure
 from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
+from world.scenes.persona_display import mask_description
 from world.skills.models import CharacterSpecializationValue, Skill
 from world.skills.services import is_skill_at_xp_boundary, skill_rating
 from world.societies.constants import MembershipFavor
@@ -694,7 +696,8 @@ def _build_appearance(
       reads only the coarse ``height_band`` (you can tell someone is tall by looking, but
       not their precise inches, and two faces of one character can't be matched on it).
     - **Free-text ``description`` shows only when ``reveal_identity``.** A mask must not
-      leak prose that names height, scars, or hair ("a tall auburn-haired woman…").
+      leak prose that names height, scars, or hair ("a tall auburn-haired woman…"); a viewer
+      who has not seen through it reads the mask's own description instead (#4033).
     - ``form_traits`` already reduce to the generic option name unless the *presented*
       persona supplies a descriptor (a base mask shows "red", not "flowing crimson"); a
       richer disguise overlay supplying its own descriptors is the disguise system's job.
@@ -737,7 +740,7 @@ def _build_appearance(
         height_inches=true_height if privileged else None,
         height_band=band.display_name if band is not None else None,
         build=_id_name_or_null(sheet.build, name_field="display_name"),
-        description=sheet.additional_desc if reveal_identity else "",
+        description=(sheet.additional_desc if reveal_identity else mask_description(active)),
         form_traits=form_traits,
     )
 
@@ -1528,7 +1531,7 @@ def _resolve_persona_thumbnail(
     try:
         character = persona.character_sheet.character
     except AttributeError:
-        return persona.thumbnail.cloudinary_url if persona.thumbnail_id else None
+        return persona_face_url(persona) or None
     return resolve_thumbnail(
         character,
         persona=persona,
@@ -1769,11 +1772,33 @@ def _build_looks(sheet: CharacterSheet) -> list[LookEntry]:
     return entries
 
 
-def _build_profile_picture(sheet: CharacterSheet) -> str | None:
+def _alternate_self_worn(sheet: CharacterSheet) -> bool:
+    """Whether the character is wearing an alternate self (a prefetched read, no query)."""
+    worn = sheet.active_alternate_self_or_none
+    return worn is not None and worn.alternate_self_id is not None
+
+
+def _build_profile_picture(
+    sheet: CharacterSheet, active: Persona | None, shows_real_face: bool
+) -> str | None:
     """The worn look's cropped URL, or None (#4151: the crop every surface shows).
 
-    Query-free through ``portrait_url`` and the select_related above.
+    Query-free through ``portrait_url`` and the select_related above. A viewer who has not
+    seen through the presented face gets that face's own portrait or the placeholder, never
+    the real character's look (#4889).
     """
+    if not shows_real_face:
+        worn = sheet.active_alternate_self_or_none
+        alt_self = worn.alternate_self if worn is not None else None
+        # A self tied to another mask keeps its picture off this one (#4889).
+        belongs_here = alt_self is not None and (
+            alt_self.persona_id is None or active is None or alt_self.persona_id == active.pk
+        )
+        if belongs_here and alt_self.thumbnail_id is not None:
+            return alt_self.thumbnail.cloudinary_url
+        return (persona_face_url(active) if active is not None else "") or (
+            placeholder_portrait_url()
+        )
     roster_entry = sheet.roster_entry
     if roster_entry is None:
         return None
@@ -2330,6 +2355,7 @@ def get_character_sheet_queryset() -> QuerySet[CharacterSheet]:
             "character__display_data",
             "active_alternate_self",
             "active_alternate_self__alternate_self",
+            "active_alternate_self__alternate_self__thumbnail",
         )
         .prefetch_related(*all_prefetch)
         .prefetch_related(
@@ -2401,6 +2427,10 @@ class CharacterSheetSerializer(serializers.Serializer):
         # #1270 — bio (concept/quote/story) reads from the presented face's profile: the real
         # one when revealed, a cover persona's own when presenting one, else blank.
         bio_profile = _presented_bio_profile(sheet, active, reveal_identity=reveal_identity)
+        # #4889: the real character's portrait and looks reach the owner, staff and a viewer
+        # who has seen through the presented face, and never a viewer of a mask or of a worn
+        # alternate self, which show their own picture or the placeholder.
+        shows_real_face = privileged or (reveal_identity and not _alternate_self_worn(sheet))
 
         return {
             "id": sheet.pk,
@@ -2448,15 +2478,18 @@ class CharacterSheetSerializer(serializers.Serializer):
                 active_revealed=reveal_identity,
             ),
             "theming": _build_theming(sheet),
-            "profile_picture": _build_profile_picture(sheet),
+            "profile_picture": _build_profile_picture(sheet, active, shows_real_face),
             # #4151: the Gallery veils NSFW pictures for anyone who is not a friend; the
             # owner and staff count as friends here (they see everything plain).
-            "viewer_is_friend": privileged or access >= 1 or _viewer_is_friend(sheet, user),
-            "current_residence": _build_current_residence(sheet),
+            # Both name the real character to a viewer of a mask or a worn alternate self (a
+            # friend list that holds you, a home), so they follow the same rule as the portrait.
+            "viewer_is_friend": shows_real_face
+            and (privileged or access >= 1 or _viewer_is_friend(sheet, user)),
+            "current_residence": _build_current_residence(sheet) if shows_real_face else None,
             # #3898 — the plate: which images the character can wear, and the ground
             # colour it is printed on. `plate_ink` is OOC chrome and ungated; it says
             # nothing about the character, only how their page is printed.
-            "looks": _build_looks(sheet),
+            "looks": _build_looks(sheet) if shows_real_face else [],
             "plate_ink": sheet.plate_ink,
             # Worn things are visible things, so this is ungated by tier — only the
             # layer walk decides, and only a covered piece is owner-only.

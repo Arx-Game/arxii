@@ -22,7 +22,7 @@ from evennia_extensions.models import Media
 from world.roster.models import RosterTenure, TenureMedia
 from world.roster.permissions import IsOwnerOrStaff
 from world.roster.serializers import MediaSerializer, MediaUploadSerializer
-from world.roster.services.gallery_services import CloudinaryGalleryService
+from world.roster.services.gallery_services import FACE_PORTRAIT_FOLDER, CloudinaryGalleryService
 
 
 class MediaViewSet(viewsets.ModelViewSet):
@@ -43,6 +43,15 @@ class MediaViewSet(viewsets.ModelViewSet):
     parser_classes = [JSONParser, MultiPartParser, FormParser]
 
     def get_queryset(self) -> QuerySet[Media]:
+        # A face portrait's private copy belongs to its face, not to the Gallery: it is never
+        # listed, fetched, deleted, attached to a tenure or made a profile picture here, which
+        # would leave the face pointing at a destroyed file or put a mask's picture on the
+        # real character's page (#4889).
+        return self._owned_queryset().exclude(
+            cloudinary_public_id__startswith=f"{FACE_PORTRAIT_FOLDER}/"
+        )
+
+    def _owned_queryset(self) -> QuerySet[Media]:
         # For listing, show user's own media unless staff
         # For detail views, show all media (permissions will restrict modifications)
         if self.action == "list":

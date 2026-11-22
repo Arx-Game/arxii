@@ -5,6 +5,7 @@ Tests for roster API viewsets.
 from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
+import cloudinary
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
@@ -380,7 +381,8 @@ class TestMediaViewSet(TestCase):
         assert response.status_code == 400
         assert "This upload would exceed your media quota." in str(response.data)
 
-    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud", MAX_PLAYER_MEDIA_FILE_BYTES=1000)
+    @patch.object(cloudinary.config(), "cloud_name", "test_cloud")
+    @override_settings(MAX_PLAYER_MEDIA_FILE_BYTES=1000)
     @patch("cloudinary.uploader.upload")
     def test_create_media_staff_uploads_over_quota_succeeds(self, mock_cloudinary_upload):
         """Staff bypass both the serializer's per-file check and the service's quota check."""

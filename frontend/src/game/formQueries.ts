@@ -14,9 +14,15 @@ export interface SwitchableAlternateSelf {
   is_active: boolean;
   /** What changing back costs under a compulsion; sent on the worn self only (#4802). */
   compulsion: Compulsion | null;
+  /** The persona this self wears, or null: a self with none has a portrait and no description. */
+  persona_id: number | null;
+  /** The picture this self shows: its own, its persona's, else the placeholder (#4889). */
+  thumbnail_url: string;
+  /** Whether this self holds a picture of its own (#4889). */
+  has_portrait: boolean;
 }
 
-const alternateSelfKeys = {
+export const alternateSelfKeys = {
   forCharacterSheet: (characterSheetId: number) =>
     ['character-alternate-selves', characterSheetId] as const,
 };
@@ -38,6 +44,9 @@ async function fetchAlternateSelves(characterSheetId: number): Promise<Switchabl
       has_techniques?: boolean;
       is_active?: boolean;
       compulsion?: Compulsion | null;
+      persona_id?: number | null;
+      thumbnail_url?: string;
+      has_portrait?: boolean;
     }>;
   };
   return (data.results ?? []).map((alt) => ({
@@ -49,6 +58,9 @@ async function fetchAlternateSelves(characterSheetId: number): Promise<Switchabl
     has_techniques: alt.has_techniques ?? false,
     is_active: alt.is_active ?? false,
     compulsion: alt.compulsion ?? null,
+    persona_id: alt.persona_id ?? null,
+    thumbnail_url: alt.thumbnail_url ?? '',
+    has_portrait: alt.has_portrait ?? false,
   }));
 }
 

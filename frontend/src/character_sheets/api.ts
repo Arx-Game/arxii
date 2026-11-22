@@ -361,8 +361,8 @@ export interface CharacterSheetFormTrait {
  * Mirrors `world.character_sheets.types.AppearanceSection`.
  *
  * `height_inches` is owner/staff only (#1325) — everyone else reads `height_band`.
- * `description` is blank unless the presented identity is revealed, so a mask never
- * leaks identifying prose.
+ * `description` is the real prose only when the presented identity is revealed; a mask
+ * shows its own description (#4033) or nothing, so it never leaks identifying prose.
  */
 export interface CharacterSheetAppearance {
   height_inches: number | null;
@@ -575,11 +575,15 @@ export interface CharacterSheetPayload {
   beats: CharacterSheetBeat[];
   personas: CharacterSheetPersona[];
   theming: Record<string, unknown>;
-  /** The worn look's cropped URL (#4151), or null. */
+  /**
+   * The worn look's cropped URL (#4151), or null. A viewer of a mask or a worn alternate
+   * self gets that face's own picture or the placeholder instead (#4889).
+   */
   profile_picture: string | null;
   /**
    * #4151 — whether the viewer sees NSFW pictures plain: the owner, staff, and the
-   * owner's friends do; anyone else sees them veiled until clicked.
+   * owner's friends do; anyone else sees them veiled until clicked. False for a viewer of
+   * a mask or a worn alternate self (#4889).
    */
   viewer_is_friend: boolean;
   current_residence: IdNameRef | null;

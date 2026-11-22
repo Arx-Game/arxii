@@ -43,6 +43,7 @@ from world.combat.factories import (
 )
 from world.combat.models import CombatOpponent
 from world.combat.services import add_participant
+from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
 from world.roster.factories import MediaFactory
 from world.scenes.constants import PersonaType, RoundStatus
 from world.scenes.models import Persona
@@ -219,8 +220,12 @@ class AMaskedFighterIsListedUnderTheMask(_AdaWatchesTheCauseway):
 
         told = self.telnet(self.hobb, "persona mask a hooded man")
 
-        # A bare mask shows no portrait: never the true face behind it.
-        self.assertIsNone(self.hobbs_row(self.ada_reads())["thumbnail_media_url"], told)
+        # A bare mask shows the placeholder portrait (#4889): never the true face behind it.
+        self.assertEqual(
+            self.hobbs_row(self.ada_reads())["thumbnail_media_url"],
+            BUILTIN_FACE_PLACEHOLDER_URL,
+            told,
+        )
         hood = MediaFactory()
         mask = Persona.objects.get(
             character_sheet=self.hobb.sheet_data, persona_type=PersonaType.TEMPORARY

@@ -1,6 +1,7 @@
 """Project URL configuration."""
 
 from django.urls import include, path, re_path
+from django.views.generic import RedirectView
 
 from web.views import FrontendAppView, PasswordChangeDiscoveryView, SecurityTxtView
 
@@ -77,6 +78,14 @@ urlpatterns = [
     path("webclient/", include("web.webclient.urls")),
     path("admin/", include("web.admin.urls")),
     path("accounts/", include("allauth.urls")),
+    # The built-in face placeholder (#4889) is a public file of the frontend build. The dev
+    # server serves it at this root path; the Django-served build keeps its public files
+    # under /static/dist/, so the root path is sent there instead of to the app shell.
+    path(
+        "placeholder-portrait.svg",
+        RedirectView.as_view(url="/static/dist/placeholder-portrait.svg", permanent=True),
+        name="placeholder-portrait",
+    ),
     # React frontend catch-all - must be last
     re_path(
         r"^(?!(?:admin(?:/|$)|api(?:/|$)|accounts(?:/|$)|webclient(?:/|$))).*$",

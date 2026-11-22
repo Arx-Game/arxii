@@ -994,10 +994,23 @@ Resolution is handled by `world.conditions.thumbnail_services.resolve_thumbnail(
 which checks in priority order:
 1. Active condition's stage thumbnail (highest `display_priority` visible condition)
 2. Active condition's template thumbnail
-3. Active alternate self's thumbnail
-4. Persona's `thumbnail` FK
-5. `ObjectDisplayData.thumbnail` fallback
+3. Active alternate self's thumbnail, on the face the character presents now only (#4889: a
+   hidden mask of the same character must not read the same picture)
+4. Persona's `thumbnail` FK (skipped for a PRIMARY face while an alternate self is worn: its
+   own picture is the real one)
+5. `ObjectDisplayData.thumbnail` fallback, skipped for a face that hides the real one: a
+   non-PRIMARY persona, or any persona while an alternate self is worn
 6. `fallback_media` (e.g. `CombatOpponent.portrait` for persona-less NPCs)
+7. `placeholder_portrait_url()` for a face that hides the real one and found no image above:
+   staff's `FacePlaceholderConfig.placeholder`, else the built-in grey silhouette, the frontend's public
+   file `placeholder-portrait.svg` at `BUILTIN_FACE_PLACEHOLDER_URL` (#4889; `web/urls.py` sends
+   that root path to `/static/dist/` in the Django-served build)
+
+Rows that read a persona's portrait from its text copy (poses, combat and battle lists, the
+persona list) use `persona_face_url`, which ends in the same placeholder for a non-PRIMARY face.
+A PRIMARY face that is presented while an alternate self is worn (a player character's too, not
+only a story NPC's) shows that self's picture when the self is tied to no mask, else the
+placeholder. A self tied to a mask lends its picture to that mask only.
 
 Hidden conditions (`is_visible_to_others=False`) do not override the thumbnail
 for non-privileged viewers — the same visibility gate as condition serialization.

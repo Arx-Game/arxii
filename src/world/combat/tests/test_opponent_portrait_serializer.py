@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from django.test import TestCase
 
+from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory
 from world.combat.serializers import OpponentSerializer
 from world.roster.factories import MediaFactory
@@ -40,13 +41,13 @@ class OpponentPortraitSerializerTests(TestCase):
         self.assertEqual(data["thumbnail_url"], "https://cdn.example/direct.png")
 
     def test_persona_without_thumbnail_returns_none_media_url(self) -> None:
-        persona = PersonaFactory(thumbnail=None, thumbnail_url="")
+        persona = CharacterSheetFactory().primary_persona
         opponent = CombatOpponentFactory(encounter=self.encounter, persona=persona)
 
         data = OpponentSerializer(opponent).data
         self.assertIsNone(data["thumbnail_media_url"])
-        # Matches PersonaSerializer: thumbnail_url is the model URLField,
-        # which is "" (blank) when unset.
+        # Matches PersonaSerializer: persona_face_url is "" (the client's letter avatar) for
+        # a PRIMARY face with no picture; a mask with none shows the placeholder instead.
         self.assertEqual(data["thumbnail_url"], "")
 
     def test_persona_less_opponent_returns_none_for_both(self) -> None:

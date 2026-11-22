@@ -88,11 +88,7 @@ class ObjectStateSerializer(serializers.Serializer):
             "thumbnail_url": self._resolve_thumbnail_for_viewer(instance, looker),
             # #4030 — the presented persona (a mask's own pk when masked), so a room-list
             # row can open the persona menu. Never the primary persona behind a mask.
-            "persona_id": (
-                instance._resolved_persona.pk  # noqa: SLF001 — BaseState seam, set in __init__
-                if instance._resolved_persona is not None  # noqa: SLF001
-                else None
-            ),
+            "persona_id": self._presented_persona_id(instance),
             # #3044 — lets the web room-objects panel offer a "View Board"
             # affordance without string-matching object names. A board is a
             # plain examinable Object with an active BOARD-kind MissionGiver
@@ -109,6 +105,12 @@ class ObjectStateSerializer(serializers.Serializer):
             # `participation.entered_sheet_ids`, one query per payload.
             "in_scene": self._in_scene(instance),
         }
+
+    @staticmethod
+    def _presented_persona_id(instance: BaseState) -> int | None:
+        """The face worn now, never the one this state was built with (#4889)."""
+        persona = instance.presented_persona()
+        return persona.pk if persona is not None else None
 
     def _in_scene(self, instance: BaseState) -> bool | None:
         entered = (self.context or {}).get("entered_sheet_ids")
@@ -132,7 +134,7 @@ class ObjectStateSerializer(serializers.Serializer):
         viewer_can_see_hidden = looker is not None and looker.obj == instance.obj
         return resolve_thumbnail(
             instance.obj,
-            persona=instance._resolved_persona,  # noqa: SLF001 — BaseState seam, set in __init__
+            persona=instance.presented_persona(),
             viewer_can_see_hidden=viewer_can_see_hidden,
         )
 

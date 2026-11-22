@@ -486,6 +486,18 @@ NPC loans. Details: `docs/systems/scenes.md`, `docs/roadmap/gm-system.md` Phase 
 
 Not built: NPC rolls against PCs; changes to combat's NPC attacks; a second resist check per template.
 
+### A disguise's own face (#4889, #4033)
+Built: a player writes a description and picks or uploads a portrait for each mask and a portrait
+for each alternate self (web only; no telnet verb writes them). A stranger reads the mask's
+description in `look` and on the sheet and sees its portrait; a face with no portrait shows one
+placeholder staff choose (built-in grey silhouette until then). A pick is a private copy in the
+opaque `faces/` folder and counts against the storage cap, which is now one shared check under a
+row lock. The sheet payload no longer hands a masked character's real portrait, gallery looks,
+friend flag or home to a stranger. Details: `docs/systems/appearance_and_identity.md`,
+`docs/adr/adr-4889-a-face-portrait-is-a-private-copy-in-an-opaque-folder-and-counts-against-storage.md`.
+Not built: a full persona sheet, per-viewer portraits, a GM or staff path to set someone else's face
+from the web (staff use the admin), description history.
+
 ### Relationship Integration
 - (superseded by #3957) `RelationshipUpdate` and its `linked_interaction` FK / `reference_mode` are gone; prose about a tie is a journal entry about the other character, and a scene both parties posed in credits tie depth via `credit_scene_depth`
 

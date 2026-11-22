@@ -6,6 +6,8 @@ while maintaining test accuracy. These settings should not be used in production
 """
 
 # Import all base settings
+import cloudinary
+
 from server.conf.settings import *  # noqa: F403
 
 # Use the same Postgres database as production — Django auto-creates a
@@ -80,9 +82,9 @@ TEST_ENVIRONMENT = True
 
 # Disable external services during tests
 SENDGRID_API_KEY = ""
-CLOUDINARY_CLOUD_NAME = ""
-CLOUDINARY_API_KEY = ""
-CLOUDINARY_API_SECRET = ""
+# Cloudinary is configured on its own object, not through a Django setting: blank it so no
+# test can reach a real account. A test that uploads sets a cloud name on that object.
+cloudinary.config(cloud_name="", api_key="", api_secret="")
 
 # These loggers fire ERROR-level messages only from tests that intentionally
 # trigger error paths to verify production behavior. Silencing them at CRITICAL

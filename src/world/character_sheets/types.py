@@ -100,8 +100,9 @@ class AppearanceSection(TypedDict):
     ``height_inches`` is the exact height, exposed only to the owner / staff (#1325);
     every other observer sees ``None`` there and reads the coarse ``height_band`` label
     instead, so two faces of one character can't be correlated by an identical height.
-    ``description`` (the free-text ``additional_desc``) is blank unless the presented
-    identity is revealed — a mask must not leak identifying prose.
+    ``description`` (the free-text ``additional_desc``) is shown only when the presented
+    identity is revealed; a viewer of a mask reads the mask's own description (#4033),
+    or nothing, never the real prose.
     """
 
     height_inches: int | None

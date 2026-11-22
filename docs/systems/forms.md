@@ -345,6 +345,16 @@ The decoupling of control from the shift and the stacking guard are documented i
   `{"alternate_self_id": <id>}`. Dispatches `ShiftFormAction` (key `"shift_form"`)
   through `dispatch_player_action` → `action.run()`. A foreign/unknown id returns 400
   with a uniform safe message (no repertoire leak).
+- `POST /api/forms/alternate-selves/{id}/set-portrait/` (#4889) - Pick, upload or remove the
+  played character's alternate self's portrait (`media_id` | `image_file` | `clear`, the same
+  body and the same upload limit as `POST /api/personas/set-portrait/`). Sets
+  `AlternateSelf.thumbnail` and, when the self has a persona, that persona's two portrait fields
+  (`sync_persona_portrait`). A staff-authored picture it replaces is never deleted. Another
+  player's alternate self is a 404. The list entries also carry `persona_id` and `thumbnail_url`
+  (the self's own picture, else its persona's, else the placeholder). A worn self with no
+  portrait shows the placeholder, never the character's real face. Staff setting the thumbnail
+  in the admin sets the persona's portrait fields too. A self whose persona belongs to another
+  character's sheet is refused (`FaceError`), and a self's picture shows only on its own persona.
 - `POST /api/forms/alternate-selves/revert/` - Revert the active alternate self.
   Dispatches `RevertFormAction` (key `"revert_form"`) through the same action seam.
   Returns the compulsion roll line when a compulsion makes it a roll (400 with the

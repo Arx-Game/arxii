@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from behaviors.models import BehaviorPackageInstance
     from flows.scene_data_manager import SceneDataManager
     from typeclasses.types import ArxTypeclass
-    from world.scenes.models import Scene
+    from world.scenes.models import Persona, Scene
 
 
 def select_display_name[NameT: str | None](
@@ -136,25 +136,35 @@ class BaseState:
         self.name_prefix_map: dict[int, str] = {}
         self.name_suffix_map: dict[int, str] = {}
         self.packages: list[BehaviorPackageInstance] = []
+        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
+
+        persona = self.presented_persona()
+        self._resolved_persona = persona
+        self.thumbnail_url = resolve_thumbnail(self.obj, persona=persona)
+
+    def presented_persona(self) -> "Persona | None":
+        """The face the object presents right now, read fresh (None for a non-character).
+
+        ``_resolved_persona`` is a snapshot from when this state was built, and a room's
+        states persist across commands, so a character who has since put on another mask
+        would still read as the old one. A reader that must follow the worn face (the room
+        list's persona id and portrait, #4889) calls this instead.
+        """
         # Generic seam: ``obj`` may be any stateable object — a typeclassed game
         # object (which carries the ``character_sheet`` property) or a plain model
         # (ItemInstance in some flows). Explicit type dispatch, not getattr-default.
         from evennia.objects.models import ObjectDB  # noqa: PLC0415
 
-        from world.conditions.thumbnail_services import resolve_thumbnail  # noqa: PLC0415
         from world.scenes.models import Persona  # noqa: PLC0415
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
         sheet = self.obj.character_sheet if isinstance(self.obj, ObjectDB) else None
-        if sheet is not None:
-            try:
-                persona = active_persona_for_sheet(sheet)
-            except Persona.DoesNotExist:
-                persona = None
-        else:
-            persona = None
-        self._resolved_persona = persona
-        self.thumbnail_url = resolve_thumbnail(self.obj, persona=persona)
+        if sheet is None:
+            return None
+        try:
+            return active_persona_for_sheet(sheet)
+        except Persona.DoesNotExist:
+            return None
 
     # ------------------------------------------------------------------
     # Attribute access helpers
