@@ -978,6 +978,9 @@ which checks in priority order:
 
 Rows that read a persona's portrait from its text copy (poses, combat and battle lists, the
 persona list) use `persona_face_url`, which ends in the same placeholder for a non-PRIMARY face.
+A PRIMARY face that is presented while an alternate self is worn (a player character's too, not
+only a story NPC's) shows that self's picture when the self is tied to no mask, else the
+placeholder. A self tied to a mask lends its picture to that mask only.
 
 Hidden conditions (`is_visible_to_others=False`) do not override the thumbnail
 for non-privileged viewers — the same visibility gate as condition serialization.

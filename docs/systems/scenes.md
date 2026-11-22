@@ -681,7 +681,9 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
   of the requester's own, non-NSFW pictures, copied), `image_file` (a new upload, multipart) or
   `clear: true`. Both routes go through `enforce_player_media_limits` under the player's row
   lock; a refusal stores nothing and says "This upload would exceed your media quota." or
-  "This file is larger than the per-file limit."
+  "This file is larger than the per-file limit." (the request serializer applies the per-file
+  check first, through `validate_player_image_file`, so a staff upload skips it as the Gallery's
+  does)
 - Both writes (and the alternate self's `set-portrait`) refuse while the character cannot act at
   all: the offscreen-act state gate `set_active` runs (dead, unconscious, captured, retired or
   unaccounted for), through `face_services._require_face_editable`. A pick has no rate limit.

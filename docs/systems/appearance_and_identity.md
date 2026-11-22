@@ -124,7 +124,8 @@ artist changes persona with an *identical* body; a curse changes the body and
   persona entries; it skips a PRIMARY face's own picture while an alternate self is worn) both end in `placeholder_portrait_url()` for a face that hides the real one
   and has no picture: staff's `FacePlaceholderConfig.placeholder`, else a built-in grey
   silhouette, never a letter and never the real face. A worn alternate self hides the real
-  face the same way, and its picture reaches only the face presented now. The room list reads the face worn now (`BaseState.presented_persona()`), not the one a
+  face the same way, and its picture reaches only the face presented now, and only a mask it is tied to (a true
+  face presented over a worn self tied to a mask shows the placeholder). The room list reads the face worn now (`BaseState.presented_persona()`), not the one a
   room's persistent state was built with, so a mask switch reaches its persona id and portrait.
   The sheet payload's
   real-character fields (`profile_picture`, `looks`, `viewer_is_friend`, `current_residence`)
