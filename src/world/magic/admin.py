@@ -2123,9 +2123,6 @@ class RitualCheckConfigInline(admin.StackedInline):
     model = RitualCheckConfig
     extra = 0
     can_delete = True
-    # The single ``resonance`` pick is replaced by the two picks (#5280); the column stays
-    # until the contract migration drops it, but staff no longer edit it.
-    exclude = ["resonance"]
     autocomplete_fields = [
         "stat",
         "skill",

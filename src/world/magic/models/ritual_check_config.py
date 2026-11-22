@@ -24,6 +24,11 @@ class RitualCheckConfig(SharedMemoryModel):
     check_type → checks.CheckType. For SERVICE rituals, stat/skill are
     narrative/authoring hints — the roll's mechanics come entirely from
     check_type composition + the authored difficulty.
+
+    An anima ritual also carries two resonance picks (#5280): ``primal_resonance`` is the
+    Primal resonance that grows for the performer, and ``outward_resonance`` is the
+    Celestial or Abyssal resonance the ritual reaches for in its partner. ``clean()``
+    holds each pick to its affinity.
     """
 
     ritual = models.OneToOneField(
@@ -52,14 +57,6 @@ class RitualCheckConfig(SharedMemoryModel):
         related_name="+",
         help_text="Optional specialization for this ritual's check.",
     )
-    resonance = models.ForeignKey(
-        "arxii.Resonance",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="Optional resonance filter for this ritual.",
-    )
     primal_resonance = models.ForeignKey(
         "arxii.Resonance",
         on_delete=models.SET_NULL,
@@ -68,7 +65,7 @@ class RitualCheckConfig(SharedMemoryModel):
         related_name="+",
         help_text=(
             "The Primal resonance this anima ritual grows for its performer. Must be a "
-            "Primal-affinity resonance. Replaces the single resonance pick."
+            "Primal-affinity resonance."
         ),
     )
     outward_resonance = models.ForeignKey(

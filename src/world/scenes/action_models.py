@@ -241,7 +241,9 @@ class SceneActionRequest(CommittingDeclaration, DefenderConsentFields, SharedMem
         null=True,
         blank=True,
         related_name="+",
-        help_text="Optional resonance filter from ritual check spec at fire time",
+        help_text=(
+            "The ritual's outward pick (Celestial or Abyssal) that the partner consented to"
+        ),
     )
     snapshot_primal_resonance = models.ForeignKey(
         "arxii.Resonance",

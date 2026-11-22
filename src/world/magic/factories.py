@@ -1805,7 +1805,6 @@ class RitualCheckConfigFactory(factory.django.DjangoModelFactory):
     stat = factory.SubFactory(TraitFactory)
     skill = factory.SubFactory("world.skills.factories.SkillFactory")
     specialization = None
-    resonance = None
     primal_resonance = None
     outward_resonance = None
     check_type = factory.SubFactory("world.checks.factories.CheckTypeFactory")
