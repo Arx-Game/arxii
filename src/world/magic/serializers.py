@@ -4670,8 +4670,8 @@ class AnimaRitualEndorsementSerializer(serializers.ModelSerializer):
     """A ritual that reached for the requester's character and waits for their answer.
 
     ``performer_name`` is the persona the performer wore for the ritual, ``prompt`` the
-    question the partner is asked, and ``partner_line`` the sentence about what the ritual does
-    to the partner's fatigue (blank when it does nothing).
+    question the partner is asked, and ``partner_line`` the sentence about what the ritual
+    already did to the partner's fatigue, in the past tense (blank when it did nothing).
     """
 
     performer_name = serializers.CharField(source="performer_persona.name", read_only=True)
@@ -4691,11 +4691,9 @@ class AnimaRitualEndorsementSerializer(serializers.ModelSerializer):
         )
 
     def get_partner_line(self, performance: AnimaRitualPerformance) -> str:
-        from world.magic.services.ritual_bond import (  # noqa: PLC0415
-            ritual_partner_effect_sentence,
-        )
+        from world.magic.services.ritual_bond import partner_card_line  # noqa: PLC0415
 
-        return ritual_partner_effect_sentence(performance.outward_resonance)
+        return partner_card_line(performance.outward_resonance, performance.performer_persona.name)
 
 
 class AnimaRitualAnswerSerializer(serializers.Serializer):

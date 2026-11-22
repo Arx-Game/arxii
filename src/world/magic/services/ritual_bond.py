@@ -268,10 +268,25 @@ def partner_endorsement_prompt(performer_name: str, outward: Resonance) -> str:
     )
 
 
-def partner_ritual_line(bond: RitualBond, performer_name: str) -> str:
-    """The private line the partner reads when their fatigue changed, else blank."""
-    if bond.fatigue_change > 0:
+def _ritual_leaves_line(direction: int, performer_name: str) -> str:
+    """What the ritual left the partner feeling: wearier for a positive direction, lighter for a
+    negative one, blank for none."""
+    if direction > 0:
         return f"{performer_name}'s ritual leaves you wearier."
-    if bond.fatigue_change < 0:
+    if direction < 0:
         return f"{performer_name}'s ritual leaves you lighter."
     return ""
+
+
+def partner_ritual_line(bond: RitualBond, performer_name: str) -> str:
+    """The private line the partner reads when their fatigue changed, else blank."""
+    return _ritual_leaves_line(bond.fatigue_change, performer_name)
+
+
+def partner_card_line(resonance: Resonance | None, performer_name: str) -> str:
+    """The line on the endorsement card, shown after the roll when the fatigue is already
+    applied: what the outward affinity's ``ritual_partner_fatigue`` did to the partner, blank
+    when the ritual named no outward resonance or the affinity's setting is 0."""
+    if resonance is None:
+        return ""
+    return _ritual_leaves_line(_sign(resonance.affinity.ritual_partner_fatigue), performer_name)

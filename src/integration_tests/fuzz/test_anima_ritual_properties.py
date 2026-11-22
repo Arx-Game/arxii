@@ -951,7 +951,9 @@ class Roll(_Bonded):
         Celestial one set to ease ``setting``, a partner with ``fatigue`` social fatigue ends the
         ritual ``setting`` higher after an Abyssal pick, and ``setting`` lower (never below 0)
         after a Celestial one, whatever the roll result and whether the partner is a player
-        character or a story NPC.
+        character or a story NPC. When a player partner is asked, the card they read says the
+        ritual "leaves you wearier" (Abyssal) or "leaves you lighter" (Celestial) with the
+        performer's persona name.
         """
         originals = (self.abyssal.ritual_partner_fatigue, self.celestial.ritual_partner_fatigue)
         self.abyssal.ritual_partner_fatigue = setting
@@ -959,7 +961,10 @@ class Roll(_Bonded):
         self.abyssal.save()
         self.celestial.save()
         try:
-            sheet, _ritual = self.performer(picks=[("primal 1", 1), (outward_key, 1)], anima=0)
+            sheet, ritual = self.performer(
+                split=(50, 0, 50), picks=[("primal 1", 1), (outward_key, 1)], anima=0
+            )
+            self.author("Success", budget=0, award=10)
             partner = self.partner(kind)
             pool = get_or_create_fatigue_pool(partner.character_sheet)
             pool.set_current(ActionCategory.SOCIAL, fatigue)
@@ -971,10 +976,22 @@ class Roll(_Bonded):
             after = get_or_create_fatigue_pool(partner.character_sheet).get_current(
                 ActionCategory.SOCIAL
             )
-            if outward_key.startswith("abyssal"):
+            abyssal = outward_key.startswith("abyssal")
+            if abyssal:
                 self.assertEqual(after, fatigue + setting)
             else:
                 self.assertEqual(after, max(fatigue - setting, 0))
+            # The card the player partner reads after the roll says what already happened, in
+            # the performer's persona name: wearier for an Abyssal pick, lighter for a Celestial.
+            row = AnimaRitualPerformance.objects.get(ritual=ritual)
+            if tier == "Success" and kind == "pc":
+                self.assertEqual(row.endorsement, AnimaRitualEndorsement.PENDING)
+            if row.endorsement == AnimaRitualEndorsement.PENDING:
+                direction = "wearier" if abyssal else "lighter"
+                self.assertEqual(
+                    AnimaRitualEndorsementSerializer(row).data["partner_line"],
+                    f"{sheet.primary_persona.name}'s ritual leaves you {direction}.",
+                )
         finally:
             self.abyssal.ritual_partner_fatigue, self.celestial.ritual_partner_fatigue = originals
             self.abyssal.save()
