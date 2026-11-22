@@ -149,7 +149,7 @@ The risk of spam (initiator fires repeatedly until someone accepts) is acknowled
 ┌─────────────────────────────────────────────────────────────────┐
 │                    /rituals page (existing)                      │
 │  Browses Ritual rows where the character has knowledge.          │
-│  - Authored by you: edit form (PATCH /api/magic/rituals/{id}/)   │
+│  - Your anima ritual: edit form (PATCH /api/magic/rituals/{id}/)   │
 │  - Known rituals: read-only display.                             │
 │  Perform button only for SERVICE/FLOW rituals; SCENE_ACTION      │
 │  rituals say "performable in scene."                             │
@@ -290,7 +290,7 @@ The risk of spam (initiator fires repeatedly until someone accepts) is acknowled
 | `frontend/src/scenes/components/ConsentPrompt.tsx` | UNCHANGED | Target sees generic check prompt. **Disguise.** |
 | `frontend/src/magic/components/AnimaRitualEditDialog.tsx` | NEW | Form to author/edit the Anima ritual: description, stat, skill, specialization, resonance, check_type, target_difficulty. |
 | `frontend/src/magic/__tests__/AnimaRitualEditDialog.test.tsx` | NEW | Form validation + PATCH submit. |
-| `frontend/src/rituals/pages/RitualsListPage.tsx` | MODIFIED | Section split: "Authored by you" + "Known rituals." Card actions differ by `execution_kind`. |
+| `frontend/src/rituals/pages/RitualsListPage.tsx` | MODIFIED | Section split: "Your anima ritual" + "Known rituals." Card actions differ by `execution_kind`. |
 | `frontend/src/rituals/components/RitualCard.tsx` | MODIFIED | For `SCENE_ACTION` rituals, show "Performable in scene" indicator and edit/manage button (no perform button). |
 | `frontend/src/rituals/components/RitualSceneActionDetailPanel.tsx` | NEW | Detail view of a SCENE_ACTION ritual showing the check spec + edit option (if author). |
 | Generated types (`frontend/src/generated/api.d.ts`) | REGEN | After backend changes, via `just gen-api-types`. |
@@ -316,7 +316,7 @@ The risk of spam (initiator fires repeatedly until someone accepts) is acknowled
 ### B. Player browses /rituals + edits their ritual
 
 1. `useRituals()` → `GET /api/magic/rituals/` filtered by `Ritual.objects.filter(known_by_records__roster_entry=current)`.
-2. Page renders sections: "Authored by you" (where `author_account=request.user.account`) + "Known rituals" (rest).
+2. Page renders sections: "Your anima ritual" (the SCENE_ACTION ritual a character the player plays knows, #5280) + "Known rituals" (rest).
 3. Each card's action depends on `execution_kind`:
    - `SERVICE` / `FLOW` → "Perform" button → existing `RitualPerformDialog`.
    - `SCENE_ACTION` → "Manage" button → opens detail panel + edit dialog (author only) → `PATCH /api/magic/rituals/{id}/`.
