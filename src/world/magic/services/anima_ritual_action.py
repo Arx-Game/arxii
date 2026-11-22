@@ -155,18 +155,11 @@ def ritual_consent_sentence(action_request: SceneActionRequest) -> str:
     read is ``snapshot_resonance``, the ritual's outward pick (Celestial or Abyssal): the one
     that reaches the partner (#5280).
     """
-    from world.magic.services.ritual_bond import (  # noqa: PLC0415
-        performer_holds,
-        ritual_partner_effect_sentence,
-    )
+    from world.magic.services.ritual_bond import ritual_partner_effect_sentence  # noqa: PLC0415
 
     if action_request.action_key != ANIMA_RITUAL_ACTION_KEY:
         return ""
-    resonance = action_request.snapshot_resonance
-    # A resonance the performer does not hold does nothing to the partner, so say nothing.
-    if not performer_holds(action_request.initiator_persona.character_sheet, resonance):
-        return ""
-    return ritual_partner_effect_sentence(resonance)
+    return ritual_partner_effect_sentence(action_request.snapshot_resonance)
 
 
 def is_templateless_ritual_request(action_request: SceneActionRequest) -> bool:

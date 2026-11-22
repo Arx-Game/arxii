@@ -39,6 +39,22 @@ class RitualOutcome:
 
 
 @dataclass(frozen=True)
+class AnimaRitualChoices:
+    """What a character may pick for her anima ritual's two resonances, and what it holds now.
+
+    ``primal`` are the Primal resonances she holds and ``outward`` the Celestial or Abyssal
+    ones, each by name. ``locked`` is true once either pick is set: changing them then takes
+    an attunement (#5280).
+    """
+
+    primal: tuple[Resonance, ...]
+    outward: tuple[Resonance, ...]
+    primal_pick: Resonance | None
+    outward_pick: Resonance | None
+    locked: bool
+
+
+@dataclass(frozen=True)
 class RitualBond:
     """What an Anima ritual with a partner did beyond restoring anima (#5181).
 

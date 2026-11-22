@@ -22,6 +22,7 @@ from django.core.exceptions import ValidationError
 from evennia.accounts.models import AccountDB
 from hypothesis import given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
+from rest_framework.test import APIClient
 
 from actions.definitions.ritual import PerformRitualAction
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
@@ -30,7 +31,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.test_helpers import force_check_outcome
 from world.gm.factories import GMProfileFactory
-from world.magic.exceptions import CharacterEngagedForRitual
+from world.magic.exceptions import AnimaRitualPickError, CharacterEngagedForRitual
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
@@ -41,6 +42,8 @@ from world.magic.factories import (
 from world.magic.models import (
     AnimaRitualPerformance,
     CharacterAnima,
+    CharacterAura,
+    CharacterResonance,
     Resonance,
     Ritual,
     RitualCheckConfig,
@@ -48,6 +51,11 @@ from world.magic.models import (
 from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.services.anima import provision_player_anima_ritual
 from world.magic.services.anima_ritual_action import start_partner_ritual
+from world.magic.services.anima_ritual_picks import (
+    RESONANCES_ARE_SET,
+    anima_ritual_choices,
+    set_up_anima_ritual_resonances,
+)
 from world.mechanics.factories import CharacterEngagementFactory
 from world.roster.constants import NPCLoanStatus
 from world.roster.factories import (
@@ -379,3 +387,216 @@ class CombatStillRefusesIt(_RitualGates):
         self.assertEqual(refused.exception.messages, [CharacterEngagedForRitual.user_message])
         self.assertFalse(SceneActionRequest.objects.filter(scene=scene).exists())
         self.assertEqual(anima_of(sheet), anima)
+
+
+PRIMAL_KEYS = ("primal 1", "primal 2")
+OUTWARD_KEYS = ("celestial 1", "abyssal 1")
+
+
+def stored_picks(ritual: Ritual) -> tuple[int | None, int | None]:
+    """The two picks the database holds (read around the idmapper cache)."""
+    return RitualCheckConfig.objects.values_list("primal_resonance_id", "outward_resonance_id").get(
+        ritual=ritual
+    )
+
+
+class _PicksWorld(_AnimaRitualWorld, HypothesisTestCase):
+    """A performer whose ritual has no picks yet, holding exactly the resonances a property
+    draws (so the free first setup is still ahead of her)."""
+
+    def unset_performer(self, held: Sequence[str]) -> tuple[CharacterSheet, Ritual]:
+        sheet, ritual = self.performer()
+        for key in held:
+            CharacterResonanceFactory(character_sheet=sheet, resonance=self.resonances[key])
+        self.assertEqual(stored_picks(ritual), (None, None))
+        return sheet, ritual
+
+
+class Picks(_PicksWorld):
+    """The ritual's resonances come from the aura and are set once for free."""
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        held=st.lists(st.sampled_from(RESONANCE_KEYS), unique=True),
+        primal_key=st.one_of(st.none(), st.sampled_from(RESONANCE_KEYS)),
+        outward_key=st.one_of(st.none(), st.sampled_from(RESONANCE_KEYS)),
+    )
+    def test_only_held_resonances_of_the_right_affinity_can_be_picked(
+        self, held: list[str], primal_key: str | None, outward_key: str | None
+    ) -> None:
+        """Maintainer: "only let them select what they have available from the aura ... not a
+        free text field."
+
+        Given any set of held resonances and any candidate (or none) for each slot, the free
+        setup succeeds exactly when at least one slot is given and every given candidate is held
+        and of its slot's affinity (Primal for the Primal slot, Celestial or Abyssal for the
+        outward slot). On a refusal both picks stay unset.
+        """
+        sheet, ritual = self.unset_performer(held)
+        fits = (primal_key is None or (primal_key in held and primal_key in PRIMAL_KEYS)) and (
+            outward_key is None or (outward_key in held and outward_key in OUTWARD_KEYS)
+        )
+        allowed = fits and not (primal_key is None and outward_key is None)
+        primal = self.resonances[primal_key] if primal_key else None
+        outward = self.resonances[outward_key] if outward_key else None
+
+        if allowed:
+            set_up_anima_ritual_resonances(sheet, primal, outward)
+            self.assertEqual(
+                stored_picks(ritual),
+                (primal.pk if primal else None, outward.pk if outward else None),
+            )
+        else:
+            with self.assertRaises(AnimaRitualPickError):
+                set_up_anima_ritual_resonances(sheet, primal, outward)
+            self.assertEqual(stored_picks(ritual), (None, None))
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        slot=st.sampled_from(("primal", "outward")),
+        first=st.integers(0, 1),
+        second=st.integers(0, 1),
+    )
+    def test_the_picks_are_locked_once_set(self, slot: str, first: int, second: int) -> None:
+        """Maintainer: "it's locked in unless the ritual itself changes."
+
+        Given a ritual set up once with a pick in either slot, a second free setup (the same
+        picks or others, in either slot) is refused with "Your ritual's resonances are set.
+        Attune it to change them." and the picks are exactly what the first setup wrote.
+        """
+        sheet, ritual = self.unset_performer(RESONANCE_KEYS)
+        keys = PRIMAL_KEYS if slot == "primal" else OUTWARD_KEYS
+        chosen = self.resonances[keys[first]]
+        if slot == "primal":
+            set_up_anima_ritual_resonances(sheet, chosen, None)
+            expected = (chosen.pk, None)
+        else:
+            set_up_anima_ritual_resonances(sheet, None, chosen)
+            expected = (None, chosen.pk)
+
+        again = self.resonances[PRIMAL_KEYS[second]]
+        with self.assertRaises(AnimaRitualPickError) as refused:
+            set_up_anima_ritual_resonances(sheet, again, self.resonances[OUTWARD_KEYS[second]])
+
+        self.assertEqual(refused.exception.user_message, RESONANCES_ARE_SET)
+        self.assertEqual(stored_picks(ritual), expected)
+        self.assertTrue(anima_ritual_choices(sheet).locked)
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        primal_key=st.sampled_from(PRIMAL_KEYS),
+        outward_key=st.sampled_from(OUTWARD_KEYS),
+        settled_left=st.integers(1, 99),
+    )
+    def test_a_pick_keeps_feeding_after_it_leaves_the_aura(
+        self, primal_key: str, outward_key: str, settled_left: int
+    ) -> None:
+        """Maintainer: "Keeps feeding it until she changes the ritual."
+
+        Given a ritual set up with a Primal and an outward pick, then the performer's balance
+        and lifetime of each picked resonance drops to 0 and the aura's settled share in each
+        pick's affinity falls to a smaller share that is not 0, the ritual still carries both
+        picks, and the choices still report them as the picks.
+        """
+        sheet, ritual = self.unset_performer(RESONANCE_KEYS)
+        primal, outward = self.resonances[primal_key], self.resonances[outward_key]
+        set_up_anima_ritual_resonances(sheet, primal, outward)
+
+        for resonance in (primal, outward):
+            row = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+            row.balance = 0
+            row.lifetime_earned = 0
+            row.save()
+        aura = CharacterAura.objects.get(character=sheet)
+        aura.primal = Decimal(settled_left)
+        aura.celestial = Decimal(100 - settled_left)
+        aura.abyssal = Decimal(0)
+        aura.save()
+
+        self.assertEqual(stored_picks(ritual), (primal.pk, outward.pk))
+        choices = anima_ritual_choices(sheet)
+        self.assertEqual((choices.primal_pick, choices.outward_pick), (primal, outward))
+        self.assertTrue(choices.locked)
+
+    @settings(max_examples=20, deadline=None)
+    @given(held=st.lists(st.sampled_from(RESONANCE_KEYS), unique=True))
+    def test_the_choices_list_exactly_the_held_resonances_by_slot(self, held: list[str]) -> None:
+        """Maintainer: "only let them select what they have available from the aura".
+
+        Given any set of held resonances, the Primal choices are the held Primal ones and the
+        outward choices the held Celestial and Abyssal ones, each by name, and nothing else.
+        """
+        sheet, _ritual = self.unset_performer(held)
+
+        choices = anima_ritual_choices(sheet)
+
+        def named(keys: Sequence[str]) -> list[str]:
+            return sorted(self.resonances[key].name for key in keys if key in held)
+
+        self.assertEqual([r.name for r in choices.primal], named(PRIMAL_KEYS))
+        self.assertEqual([r.name for r in choices.outward], named(OUTWARD_KEYS))
+        self.assertFalse(choices.locked)
+
+
+class SetUpRoute(_PicksWorld):
+    """The route writes the ritual only through the service and only for the player's own."""
+
+    @settings(max_examples=20, deadline=None)
+    @given(primal_key=st.sampled_from(PRIMAL_KEYS), outward_key=st.sampled_from(OUTWARD_KEYS))
+    def test_a_player_sets_up_only_her_own_ritual_and_only_once(
+        self, primal_key: str, outward_key: str
+    ) -> None:
+        """Maintainer: "only let them select what they have available from the aura ... not a
+        free text field."
+
+        Given a ritual with no picks, another player naming her character on the set-up route is
+        refused and the picks stay unset; the owner's request writes both picks and answers with
+        the choices locked; the choices route then reads the picks, the outward list and the
+        attunement costs to the owner and refuses the stranger; the owner's second request is
+        refused and changes nothing.
+        """
+        sheet, ritual = self.unset_performer(RESONANCE_KEYS)
+        owner = sheet.character.db_account
+        stranger = self.play(CharacterSheetFactory())
+        body = {
+            "character_sheet_id": sheet.pk,
+            "primal_resonance_id": self.resonances[primal_key].pk,
+            "outward_resonance_id": self.resonances[outward_key].pk,
+        }
+        url = "/api/magic/anima-ritual/set-up/"
+        client = APIClient()
+
+        client.force_authenticate(stranger)
+        self.assertEqual(client.post(url, body, format="json").status_code, 400)
+        self.assertEqual(stored_picks(ritual), (None, None))
+
+        client.force_authenticate(owner)
+        done = client.post(url, body, format="json")
+        self.assertEqual(done.status_code, 200)
+        self.assertTrue(done.data["locked"])
+        self.assertEqual(
+            stored_picks(ritual), (self.resonances[primal_key].pk, self.resonances[outward_key].pk)
+        )
+
+        read_url = f"/api/magic/anima-ritual/resonances/?character_sheet_id={sheet.pk}"
+        read = client.get(read_url)
+        self.assertEqual(read.status_code, 200)
+        self.assertEqual(read.data["primal_pick"]["id"], self.resonances[primal_key].pk)
+        self.assertEqual(read.data["outward_pick"]["id"], self.resonances[outward_key].pk)
+        self.assertEqual(
+            sorted(row["name"] for row in read.data["outward"]),
+            sorted(self.resonances[key].name for key in OUTWARD_KEYS),
+        )
+        self.assertEqual(
+            set(read.data["attunement"]),
+            {"anima_cost", "resonance_cost", "ap_cost", "check_type_name"},
+        )
+        client.force_authenticate(stranger)
+        self.assertEqual(client.get(read_url).status_code, 400)
+        client.force_authenticate(owner)
+
+        other = {**body, "primal_resonance_id": self.resonances["primal 2"].pk}
+        self.assertEqual(client.post(url, other, format="json").status_code, 400)
+        self.assertEqual(
+            stored_picks(ritual), (self.resonances[primal_key].pk, self.resonances[outward_key].pk)
+        )

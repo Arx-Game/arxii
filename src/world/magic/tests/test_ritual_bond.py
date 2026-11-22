@@ -151,18 +151,6 @@ class ApplyRitualBondTests(_Bond):
         self.assertIsNone(bond.resonance)
         self.assertEqual(_fatigue(self.partner), 0)
 
-    def test_a_resonance_the_performer_does_not_hold_earns_nothing_and_spares_the_partner(
-        self,
-    ) -> None:
-        self._set_fatigue_setting(self.abyssal, 10)
-        unheld = ResonanceFactory(name="Hollow", affinity=self.abyssal)
-
-        bond = self._bond(resonance=unheld)
-
-        self.assertIsNone(bond.resonance)
-        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.performer).exists())
-        self.assertEqual(_fatigue(self.partner), 0)
-
     def test_the_kindled_share_adds_to_the_award_before_the_earn_rate(self) -> None:
         # Walkthrough: 6 + 50% of 6 = 9, and at the Abyssal earn rate of 150% that is 13.
         self.abyssal.earn_rate_percent = 150

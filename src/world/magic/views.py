@@ -24,7 +24,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 from rest_framework import mixins, serializers, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.filters import OrderingFilter, SearchFilter
 from rest_framework.mixins import ListModelMixin, RetrieveModelMixin
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
@@ -49,6 +49,7 @@ from world.magic.crossing.handlers import (
     open_labels_by_relationship_id,
 )
 from world.magic.exceptions import (
+    AnimaRitualPickError,
     DuplicateTechniqueName,
     InvalidImbueAmount,
     TechniqueAuthoringNotPermitted,
@@ -114,6 +115,9 @@ from world.magic.serializers import (
     AffinitySerializer,
     AlterationResolutionResponseSerializer,
     AlterationResolutionSerializer,
+    AnimaRitualChoicesQuerySerializer,
+    AnimaRitualChoicesSerializer,
+    AnimaRitualSetUpSerializer,
     ApplicablePullsRequestSerializer,
     AudereMajoraCrossingResultSerializer,
     AudereMajoraRespondSerializer,
@@ -2435,6 +2439,88 @@ def _plain_detail(errors: object) -> str:
     else:
         return str(errors)
     return " ".join(part for part in parts if part)
+
+
+class AnimaRitualSetupViewSet(GenericViewSet):
+    """The picks of the character's anima ritual: what she may choose, and the free first setup
+    (#5280).
+
+    A ViewSet of its own, never part of ``RitualViewSet``: that is a ``ModelViewSet`` whose
+    ``create`` would let any player write a ritual. Here a player can only name her own
+    character, and the one write goes through ``set_up_anima_ritual_resonances``.
+
+    GET  /api/magic/anima-ritual/resonances/?character_sheet_id=<id>
+        The Primal and the Celestial or Abyssal resonances she holds, the picks the ritual
+        carries, whether they are locked, and what attuning costs. 404 when she has no ritual.
+    POST /api/magic/anima-ritual/set-up/  {character_sheet_id, primal_resonance_id,
+        outward_resonance_id}
+        Writes both picks for free, once. A refusal is a 400 ``{detail}``.
+
+    The query serializers are the filter (they require and resolve the one character), and the
+    ``GET`` returns one object, so ``pagination_class`` is ``None``.
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = None
+    filter_backends: list = []
+    serializer_class = AnimaRitualChoicesSerializer
+    queryset = CharacterSheet.objects.none()  # every route resolves its own character
+
+    @staticmethod
+    def _require_ritual(sheet: CharacterSheet) -> None:
+        from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
+
+        ritual = get_character_anima_ritual(sheet.character)
+        if ritual is None or ritual.check_config_or_none is None:
+            msg = "You have no anima ritual to set up."
+            raise NotFound(msg)
+
+    @extend_schema(
+        parameters=[OpenApiParameter("character_sheet_id", int, required=True)],
+        responses={200: AnimaRitualChoicesSerializer},
+    )
+    @action(detail=False, methods=["get"], url_path="resonances")
+    def resonances(self, request: Request) -> Response:
+        from world.magic.services.anima_ritual_picks import anima_ritual_choices  # noqa: PLC0415
+
+        serializer = AnimaRitualChoicesQuerySerializer(
+            data=request.query_params, context={"request": request}
+        )
+        if not serializer.is_valid():
+            return Response(
+                {"detail": _plain_detail(serializer.errors)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        sheet: CharacterSheet = serializer.validated_data["character_sheet_id"]
+        self._require_ritual(sheet)
+        return Response(AnimaRitualChoicesSerializer(anima_ritual_choices(sheet)).data)
+
+    @extend_schema(
+        request=AnimaRitualSetUpSerializer, responses={200: AnimaRitualChoicesSerializer}
+    )
+    @action(detail=False, methods=["post"], url_path="set-up")
+    def set_up(self, request: Request) -> Response:
+        from world.magic.services.anima_ritual_picks import (  # noqa: PLC0415
+            anima_ritual_choices,
+            set_up_anima_ritual_resonances,
+        )
+
+        serializer = AnimaRitualSetUpSerializer(data=request.data, context={"request": request})
+        if not serializer.is_valid():
+            return Response(
+                {"detail": _plain_detail(serializer.errors)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        data = serializer.validated_data
+        sheet: CharacterSheet = data["character_sheet_id"]
+        self._require_ritual(sheet)
+        try:
+            set_up_anima_ritual_resonances(
+                sheet, data.get("primal_resonance_id"), data.get("outward_resonance_id")
+            )
+        except AnimaRitualPickError as exc:
+            return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
+        except DjangoValidationError as exc:
+            return Response({"detail": " ".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(AnimaRitualChoicesSerializer(anima_ritual_choices(sheet)).data)
 
 
 class SettlingRiteView(APIView):

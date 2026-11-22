@@ -4540,3 +4540,91 @@ class ThreadResonanceOptionsSerializer(serializers.Serializer):
     offering_count = serializers.IntegerField()
     unavailable_reason = serializers.CharField(allow_blank=True)
     options = ThreadResonanceOptionSerializer(many=True)
+
+
+# =============================================================================
+# The anima ritual's two resonance picks (#5280)
+# =============================================================================
+
+
+class AnimaRitualResonanceSerializer(serializers.ModelSerializer):
+    """One resonance a pick may take (read-only): enough to list it and name its affinity."""
+
+    affinity_name = serializers.CharField(source="affinity.name", read_only=True)
+
+    class Meta:
+        model = Resonance
+        fields = ["id", "name", "affinity_name"]
+        read_only_fields = fields
+
+
+class AnimaRitualAttunementSerializer(serializers.Serializer):
+    """What changing the picks costs, read from the ``AnimaConfig`` singleton (read-only).
+
+    ``check_type_name`` is null while no check is set, and then the attunement rolls nothing.
+    """
+
+    anima_cost = serializers.IntegerField(source="attunement_anima_cost", read_only=True)
+    resonance_cost = serializers.IntegerField(source="attunement_resonance_cost", read_only=True)
+    ap_cost = serializers.IntegerField(source="attunement_ap_cost", read_only=True)
+    check_type_name = serializers.SerializerMethodField()
+
+    def get_check_type_name(self, config: object) -> str | None:
+        check_type = config.attunement_check_type
+        return check_type.name if check_type is not None else None
+
+
+class AnimaRitualChoicesSerializer(serializers.Serializer):
+    """The ritual's choices and picks, with the attunement's costs (read-only).
+
+    Built over an ``AnimaRitualChoices``. ``primal`` and ``outward`` list the resonances the
+    character holds that each slot may take; ``primal_pick`` and ``outward_pick`` are what the
+    ritual carries (null when unset); ``locked`` is true once either is set.
+    """
+
+    primal = AnimaRitualResonanceSerializer(many=True, read_only=True)
+    outward = AnimaRitualResonanceSerializer(many=True, read_only=True)
+    primal_pick = AnimaRitualResonanceSerializer(read_only=True, allow_null=True)
+    outward_pick = AnimaRitualResonanceSerializer(read_only=True, allow_null=True)
+    locked = serializers.BooleanField(read_only=True)
+    attunement = serializers.SerializerMethodField()
+
+    @extend_schema_field(AnimaRitualAttunementSerializer)
+    def get_attunement(self, _choices: object) -> dict:
+        from world.magic.models import AnimaConfig  # noqa: PLC0415
+
+        config = AnimaConfig.get_singleton()
+        return AnimaRitualAttunementSerializer(config).data
+
+
+class AnimaRitualChoicesQuerySerializer(serializers.Serializer):
+    """Query shape for GET /api/magic/anima-ritual/resonances/.
+
+    ``character_sheet_id`` is resolved the way a ritual perform resolves it: the requester
+    must play that character (staff may name any).
+    """
+
+    character_sheet_id = serializers.IntegerField()
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        return _resolve_account_sheet(value, self.context.get("request"))
+
+
+class AnimaRitualSetUpSerializer(serializers.Serializer):
+    """Request shape for POST /api/magic/anima-ritual/set-up/.
+
+    ``character_sheet_id`` is resolved the way a ritual perform resolves it: the requester must
+    play that character (staff may name any). Each pick is a resonance id or null, and the
+    service decides whether the picks are held and of the right affinity.
+    """
+
+    character_sheet_id = serializers.IntegerField()
+    primal_resonance_id = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.select_related("affinity"), allow_null=True, required=False
+    )
+    outward_resonance_id = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.select_related("affinity"), allow_null=True, required=False
+    )
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        return _resolve_account_sheet(value, self.context.get("request"))
