@@ -67,6 +67,7 @@ from world.standoffs.models import (
     StandoffTerms,
 )
 from world.standoffs.services.character_profile import target_refusal
+from world.standoffs.services.ending import pay_standoff_ending
 from world.standoffs.services.faction_rules import (
     MatchedFactionRule,
     band_shift_from,
@@ -892,7 +893,7 @@ def standoff_terms(
     if tier < 0:
         return _terms_refused(encounter, group, config, tier)
     _apply_terms(members, terms, config, sheet, tier)
-    return _terms_accepted(encounter, group, terms, result.outcome, tier)
+    return _terms_accepted(encounter, group, terms, result.outcome, tier, sheet)
 
 
 def _terms_refused(
@@ -919,14 +920,19 @@ def _terms_refused(
     )
 
 
-def _terms_accepted(
+def _terms_accepted(  # noqa: PLR0913 - the verb's whole context, as the other verb helpers
     encounter: CombatEncounter,
     group: StandoffGroup,
     terms: StandoffTerms,
     outcome: CheckOutcome,
     tier: int,
+    sheet: CharacterSheet,
 ) -> StandoffActionResult:
-    """Terms held: the group settles; the last settle completes the standoff."""
+    """Terms held: the group settles; the last settle completes the standoff.
+
+    The terms that settle the last group are the act that ends the standoff, and the only
+    act that pays for it (#4323): they earn before the encounter completes.
+    """
     group.state = StandoffGroupState.SETTLED
     group.settled_outcome = outcome
     group.save(update_fields=["state", "settled_outcome"])
@@ -934,7 +940,11 @@ def _terms_accepted(
     settle_empty_groups(encounter)
     cause_lines: list[str] = []
     fight_started = False
+    credit_line = ""
     if not encounter.standoff_groups.exclude(state=StandoffGroupState.SETTLED).exists():
+        credit_line = pay_standoff_ending(
+            encounter=encounter, group=group, terms=terms, sheet=sheet, outcome=outcome
+        )
         complete_standoff(encounter)
     else:
         fight_started = evaluate_causes(encounter, cause_lines, after_action=True)
@@ -945,6 +955,7 @@ def _terms_accepted(
         settled=True,
         fight_started=fight_started,
         cause_lines=cause_lines,
+        credit_line=credit_line,
     )
 
 

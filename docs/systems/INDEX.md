@@ -8653,7 +8653,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
 - **Source:** `src/world/covenants/`
 - **Details:** [covenants.md](covenants.md)
 
-### Standoffs (#4145, #4354, #4361, #4373, #4415, #4441)
+### Standoffs (#4145, #4354, #4361, #4373, #4415, #4441, #4323)
 The moment before a fight: round zero of a `CombatEncounter`, where a party reads groups of
 creatures, presses them with social approaches and names terms that settle them. Derived
 from live (OPEN or PROPOSED) `StandoffGroup` rows, never a stored flag (ADR-4145-A). In a
@@ -8663,11 +8663,14 @@ its own group, read live from its persona (ADR-4373-A), and verbal approaches an
 language gate. Hunger, Hatred and Territory run on each group's clock and on faction rules that
 provoke; a Calm or Charmed hold that ends asks the NPC's cause again (ADR-4415-A). A player
 character who opts in, with drives and a cause of their own, can be read and pressed by other
-player characters as a persona group (ADR-4441-A).
+player characters as a persona group (ADR-4441-A). The terms that settle the last group are the
+only act that pays: the character's own resonance, renown and, when another player's character
+witnessed it, a legend deed, graded by the roll's result tier (ADR-4323).
 
 - **Models:** `CreatureDrive`, `FactionRule` (was `RegardRule`), `StandoffApproach`,
   `StandoffTerms`, `StandoffConfig` (singleton), `StandoffCauseGloss`, `StandoffGroup`,
   `StandoffReveal`, `StandoffAngleShare` (was `StandoffSparkShare`), `StandoffMoraleRuling`,
+  `StandoffEndingAward` (#4323: result tier to a `DramaticMomentType` and a deed worth),
   `OpponentLineDrive`, `OpponentLineFactionRuleSuppression`; `FactionRule.organization` /
   `society` (one owner); `FactionRule.cause_effect` (`CauseEffect`: NONE, SUPPRESS, PROVOKE);
   `CreatureTemplate.cause` (NONE, PREDATION, ORDERS, HUNGER, HATRED, TERRITORY) /
@@ -8697,7 +8700,8 @@ player characters as a persona group (ADR-4441-A).
   `group_drives`, `group_rules`, `inherited_rules`, `affiliation_rules`, `persona_drives`
   (`services/profile.py`); `member_filter`, `attack_line` (`services/state.py`);
   `group_languages`, `persona_languages`, `language_refusal` (`services/language.py`);
-  `regard_for` (`services/verbs.py`); `apply_profile_change`, `build_profile_view`,
+  `regard_for` (`services/verbs.py`); `pay_standoff_ending`, `ending_award`
+  (`services/ending.py`); `apply_profile_change`, `build_profile_view`,
   `is_standoff_player_character`, `target_refusal`, `is_in_live_standoff`, `drive_catalog`
   (`services/character_profile.py`); `story_npc_personas`, `may_stand_persona`
   (`world/stories/services/cast.py`);

@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0478_alter_animaconfig_failed_endorsement_percent")]
+    dependencies = [("arxii", "0479_alter_standoffterms_archetypes_standoffendingaward")]
 
     operations = [
         migrations.AddField(
