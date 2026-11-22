@@ -382,3 +382,146 @@ class AskingThroughTheWeb(_RitualWithAPartner):
         self.assertEqual(created.status_code, status.HTTP_201_CREATED, created.content)
         request = SceneActionRequest.objects.get(pk=created.json()["id"])
         self.assertEqual(request.snapshot_ritual, self.ritual)
+
+
+ENDORSEMENTS = "/api/magic/anima-ritual-endorsements/"
+NOT_WAITING = "That ritual is not waiting for your answer."
+
+
+class _AnAskedPartner(_RitualWithAPartner):
+    """Mara's ritual has run on Tobin and her Ruin (the outward part, 3) waits on his answer."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.ask()
+        self.agree()
+        self.assertEqual(self.balance(self.resonance), 0)
+
+    def ruin_grants(self) -> int:
+        return ResonanceGrant.objects.filter(
+            source=GainSource.ANIMA_RITUAL, resonance=self.resonance
+        ).count()
+
+
+class TobinEndorses(_AnAskedPartner):
+    def test_endorsing_grows_marras_ruin_once_and_tells_her_so(self) -> None:
+        told = self.telnet(self.tobin, "ritual endorse Mara")
+
+        self.assertIn("You felt Mara's ritual.", told)
+        self.assertTold(self.mara, "Tobin felt it. Your Ruin grows by 3.")
+        self.assertEqual(self.balance(self.resonance), 3)
+        self.assertEqual(self.ruin_grants(), 1)
+        performance = AnimaRitualPerformance.objects.get()
+        self.assertEqual(performance.endorsement, AnimaRitualEndorsement.ENDORSED)
+        self.assertEqual(performance.outward_amount_pending, 0)
+
+    def test_answering_again_or_by_someone_else_grants_nothing_more(self) -> None:
+        self.telnet(self.tobin, "ritual endorse Mara")
+
+        again = self.telnet(self.tobin, "ritual endorse Mara")
+        stranger = self.telnet(self.hobb, "ritual endorse Mara")
+
+        self.assertIn("No ritual from Mara is waiting for your answer.", again)
+        self.assertIn("No ritual from Mara is waiting for your answer.", stranger)
+        self.assertEqual(self.balance(self.resonance), 3)
+        self.assertEqual(self.ruin_grants(), 1)
+
+    def test_naming_nobody_who_performed_one_is_told_none_is_waiting(self) -> None:
+        told = self.telnet(self.tobin, "ritual endorse Hobb")
+
+        self.assertIn("No ritual from Hobb is waiting for your answer.", told)
+        self.assertEqual(self.balance(self.resonance), 0)
+
+
+class TobinWithholds(_AnAskedPartner):
+    def test_withholding_grants_nothing_and_closes_the_question(self) -> None:
+        told = self.telnet(self.tobin, "ritual withhold Mara")
+
+        self.assertIn("You did not feel Mara's ritual.", told)
+        self.assertTold(self.mara, "Tobin did not feel it.")
+        self.assertEqual(self.balance(self.resonance), 0)
+        self.assertEqual(self.ruin_grants(), 0)
+        self.assertEqual(
+            AnimaRitualPerformance.objects.get().endorsement, AnimaRitualEndorsement.WITHHELD
+        )
+
+        later = self.telnet(self.tobin, "ritual endorse Mara")
+
+        self.assertIn("No ritual from Mara is waiting for your answer.", later)
+        self.assertEqual(self.balance(self.resonance), 0)
+
+
+class TheSceneFinishesUnanswered(_AnAskedPartner):
+    def test_the_question_lapses_and_a_late_endorse_grants_nothing(self) -> None:
+        self.scene.finish_scene()
+
+        self.assertEqual(
+            AnimaRitualPerformance.objects.get().endorsement, AnimaRitualEndorsement.LAPSED
+        )
+        late = self.telnet(self.tobin, "ritual endorse Mara")
+
+        self.assertIn("No ritual from Mara is waiting for your answer.", late)
+        self.assertEqual(self.balance(self.resonance), 0)
+        self.assertEqual(self.ruin_grants(), 0)
+
+
+class AnsweringOnTheWeb(_AnAskedPartner):
+    def _rows(self, character, **query) -> list[dict]:
+        listed = self.api(self.account_of(character)).get(
+            ENDORSEMENTS, {"scene": self.scene.pk, **query}
+        )
+        self.assertEqual(listed.status_code, status.HTTP_200_OK, listed.content)
+        return listed.json()["results"]
+
+    def _answer(self, character, performance_id: int, *, endorse: bool):
+        return self.api(self.account_of(character)).post(
+            f"{ENDORSEMENTS}{performance_id}/answer/", {"endorse": endorse}, format="json"
+        )
+
+    def test_the_list_holds_only_the_partners_own_pending_ritual(self) -> None:
+        performance = AnimaRitualPerformance.objects.get()
+
+        rows = self._rows(self.tobin)
+
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["id"], performance.pk)
+        self.assertEqual(rows[0]["performer_name"], "Mara")
+        self.assertEqual(
+            rows[0]["prompt"], "Mara's ritual reached for your ruin. Did it take hold of you?"
+        )
+        self.assertEqual(rows[0]["partner_line"], "It will add to your fatigue.")
+        self.assertEqual(self._rows(self.mara), [])
+        self.assertEqual(self._rows(self.hobb), [])
+        self.assertEqual(self._rows(self.tobin, scene=self.scene.pk + 1), [])
+
+    def test_only_the_partner_may_answer_and_only_once(self) -> None:
+        performance_id = AnimaRitualPerformance.objects.get().pk
+
+        stranger = self._answer(self.hobb, performance_id, endorse=True)
+        performer = self._answer(self.mara, performance_id, endorse=True)
+
+        self.assertEqual(stranger.status_code, status.HTTP_403_FORBIDDEN, stranger.content)
+        self.assertEqual(performer.status_code, status.HTTP_403_FORBIDDEN, performer.content)
+        self.assertEqual(self.balance(self.resonance), 0)
+
+        answered = self._answer(self.tobin, performance_id, endorse=True)
+        again = self._answer(self.tobin, performance_id, endorse=True)
+
+        self.assertEqual(answered.status_code, status.HTTP_200_OK, answered.content)
+        self.assertEqual(answered.json()["detail"], "You felt Mara's ritual.")
+        self.assertEqual(again.status_code, status.HTTP_400_BAD_REQUEST, again.content)
+        self.assertEqual(again.json()["detail"], NOT_WAITING)
+        self.assertEqual(self.balance(self.resonance), 3)
+        self.assertEqual(self.ruin_grants(), 1)
+        self.assertEqual(self._rows(self.tobin), [])
+
+    def test_withholding_on_the_web_grants_nothing(self) -> None:
+        performance_id = AnimaRitualPerformance.objects.get().pk
+
+        answered = self._answer(self.tobin, performance_id, endorse=False)
+
+        self.assertEqual(answered.status_code, status.HTTP_200_OK, answered.content)
+        self.assertEqual(self.balance(self.resonance), 0)
+        self.assertEqual(
+            AnimaRitualPerformance.objects.get().endorsement, AnimaRitualEndorsement.WITHHELD
+        )

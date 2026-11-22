@@ -841,6 +841,8 @@ class ActionRegistryTests(TestCase):
             "decline_sineating",
             # #5125 - harvesting Primum from a lair or a slain creature.
             "harvest_primum",
+            # #5280 - a partner's answer to an anima ritual that reached for them.
+            "endorse_anima_ritual",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

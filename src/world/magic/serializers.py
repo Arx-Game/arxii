@@ -44,6 +44,7 @@ from world.magic.constants import (
 )
 from world.magic.models import (
     Affinity,
+    AnimaRitualPerformance,
     CharacterAnima,
     CharacterAura,
     CharacterAuraShare,
@@ -4628,3 +4629,46 @@ class AnimaRitualSetUpSerializer(serializers.Serializer):
 
     def validate_character_sheet_id(self, value: int) -> CharacterSheet:
         return _resolve_account_sheet(value, self.context.get("request"))
+
+
+# =============================================================================
+# A partner's answer to an anima ritual (#5280)
+# =============================================================================
+
+
+class AnimaRitualEndorsementSerializer(serializers.ModelSerializer):
+    """A ritual that reached for the requester's character and waits for their answer.
+
+    ``performer_name`` is the persona the performer wore for the ritual, ``prompt`` the
+    question the partner is asked, and ``partner_line`` the sentence about what the ritual does
+    to the partner's fatigue (blank when it does nothing).
+    """
+
+    performer_name = serializers.CharField(source="performer_persona.name", read_only=True)
+    prompt = serializers.SerializerMethodField()
+    partner_line = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AnimaRitualPerformance
+        fields = ["id", "performer_name", "prompt", "partner_line"]
+        read_only_fields = fields
+
+    def get_prompt(self, performance: AnimaRitualPerformance) -> str:
+        from world.magic.services.ritual_bond import partner_endorsement_prompt  # noqa: PLC0415
+
+        return partner_endorsement_prompt(
+            performance.performer_persona.name, performance.outward_resonance
+        )
+
+    def get_partner_line(self, performance: AnimaRitualPerformance) -> str:
+        from world.magic.services.ritual_bond import (  # noqa: PLC0415
+            ritual_partner_effect_sentence,
+        )
+
+        return ritual_partner_effect_sentence(performance.outward_resonance)
+
+
+class AnimaRitualAnswerSerializer(serializers.Serializer):
+    """The body of an answer: true to endorse the ritual, false to withhold."""
+
+    endorse = serializers.BooleanField()

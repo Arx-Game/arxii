@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 from actions.models import ConsequencePool
 from world.magic.constants import ConsequencePoolScope, GainSource, ParticipationRule
 from world.magic.models import (
+    AnimaRitualPerformance,
     CharacterAnima,
     CharacterAura,
     CharacterCrossingText,
@@ -252,3 +253,14 @@ class PreparedSurgeTextFilter(django_filters.FilterSet):
     class Meta:
         model = CharacterSurgeText
         fields = ["character_sheet"]
+
+
+class AnimaRitualEndorsementFilterSet(django_filters.FilterSet):
+    """FilterSet for the rituals waiting on a partner's answer (#5280): ``scene`` narrows to
+    one scene's rituals."""
+
+    scene = django_filters.NumberFilter(field_name="scene_id")
+
+    class Meta:
+        model = AnimaRitualPerformance
+        fields = ["scene"]

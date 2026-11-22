@@ -68,6 +68,8 @@ _AMOUNT_KWARG = "amount"
 _ANIMA_SHORTHAND = "anima"
 _ANIMA_USAGE = "Name someone else to take part in your ritual. Usage: ritual anima <partner>"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
+#: The partner's answer to an anima ritual that reached for them (#5280).
+_ANSWER_SUBCMDS = frozenset({"endorse", "withhold"})
 
 #: Rite of Honors (#3466) telnet tokens — every one may run to multiple words
 #: (a persona's display name, a title, or free-prose journal body), so this
@@ -194,6 +196,9 @@ class CmdRitual(ArxCommand):
             anima ritual, which is never done alone (once per scene). A player is told what
             it will do to their fatigue and agrees with ``accept``; an NPC is accepted at
             once when a GM runs it or the scene (#5181, #5280)
+        ``ritual endorse <performer>`` / ``ritual withhold <performer>`` - answer a ritual
+            that reached for your resonance: endorse it if it took hold of you (the
+            performer's outward resonance grows), withhold if it did not (#5280)
 
     **Multi-participant session lifecycle:**
         ``ritual sessions``                              - list pending sessions
@@ -213,7 +218,7 @@ class CmdRitual(ArxCommand):
     def func(self) -> None:
         """Route session subcommands; fall through to single-actor action otherwise."""
         first = (self.args or "").strip().split()[0].lower() if (self.args or "").strip() else ""
-        if self._asked_for_a_partner(first):
+        if self._asked_for_a_partner(first) or self._answered_a_ritual(first):
             return
         if first in _SESSION_SUBCMDS:
             rest = (self.args or "").strip()[len(first) :].strip()
@@ -312,6 +317,43 @@ class CmdRitual(ArxCommand):
             " ".join(part for part in (asked, sentence, how) if part),
             ooc_note="Anima ritual request",
         )
+
+    def _answered_a_ritual(self, first: str) -> bool:
+        """Handle ``ritual endorse|withhold <performer>`` and return True; False for any other
+        line."""
+        if first not in _ANSWER_SUBCMDS:
+            return False
+        performer = (self.args or "").strip()[len(first) :].strip()
+        self._handle_answer(performer, endorse=first == "endorse")  # noqa: STRING_LITERAL
+        return True
+
+    def _handle_answer(self, performer_name: str, *, endorse: bool) -> None:
+        """Answer the newest ritual of ``performer_name`` (any case) that is waiting for the
+        caller's answer."""
+        from actions.definitions.anima_ritual import EndorseAnimaRitualAction  # noqa: PLC0415
+        from world.magic.services.anima_ritual_endorsement import (  # noqa: PLC0415
+            pending_endorsements_for,
+        )
+
+        sheet = self.caller.character_sheet
+        waiting = (
+            [
+                row
+                for row in pending_endorsements_for(sheet)
+                if row.performer_persona is not None
+                and row.performer_persona.name.lower() == performer_name.lower()
+            ]
+            if sheet is not None and performer_name
+            else []
+        )
+        if not waiting:
+            shown = performer_name or "them"
+            self.caller.msg(f"No ritual from {shown} is waiting for your answer.")
+            return
+        result = EndorseAnimaRitualAction().run(
+            actor=self.caller, performance_id=waiting[0].pk, endorse=endorse
+        )
+        self.caller.msg(result.message)
 
     # ------------------------------------------------------------------
     # Session handlers

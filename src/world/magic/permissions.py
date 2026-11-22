@@ -8,7 +8,7 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from world.magic.models import Thread
+from world.magic.models import AnimaRitualPerformance, Thread
 from world.magic.models.sessions import RitualSession
 from world.roster.models import RosterEntry
 
@@ -158,3 +158,16 @@ class IsStaffForBaseWrites(BasePermission):
         if view.action in BASE_WRITE_ACTIONS:
             return bool(request.user.is_staff)
         return True
+
+
+class PlaysTheRitualPartner(BasePermission):
+    """Answering an anima ritual (#5280): only the player of the character it reached for.
+
+    "Plays" is the active tenure, as the other magic permissions read it. Staff get no
+    exception: the answer is the partner's own.
+    """
+
+    def has_object_permission(
+        self, request: Request, view: APIView, obj: AnimaRitualPerformance
+    ) -> bool:
+        return obj.target_character_id in _active_sheet_ids_for_user(request.user)

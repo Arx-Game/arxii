@@ -57,6 +57,7 @@ from world.magic.exceptions import (
     UnknownResonance,
 )
 from world.magic.filters import (
+    AnimaRitualEndorsementFilterSet,
     CharacterAnimaFilter,
     CharacterAuraFilter,
     CharacterGiftFilter,
@@ -71,6 +72,7 @@ from world.magic.filters import (
 )
 from world.magic.models import (
     Affinity,
+    AnimaRitualPerformance,
     CharacterAnima,
     CharacterAura,
     CharacterCrossingText,
@@ -106,6 +108,7 @@ from world.magic.permissions import (
     IsStaffForBaseWrites,
     IsStaffOrReadOnly,
     IsThreadOwner,
+    PlaysTheRitualPartner,
 )
 from world.magic.serializers import (
     AcceptSoulTetherSerializer,
@@ -115,8 +118,10 @@ from world.magic.serializers import (
     AffinitySerializer,
     AlterationResolutionResponseSerializer,
     AlterationResolutionSerializer,
+    AnimaRitualAnswerSerializer,
     AnimaRitualChoicesQuerySerializer,
     AnimaRitualChoicesSerializer,
+    AnimaRitualEndorsementSerializer,
     AnimaRitualSetUpSerializer,
     ApplicablePullsRequestSerializer,
     AudereMajoraCrossingResultSerializer,
@@ -2521,6 +2526,72 @@ class AnimaRitualSetupViewSet(GenericViewSet):
         except DjangoValidationError as exc:
             return Response({"detail": " ".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(AnimaRitualChoicesSerializer(anima_ritual_choices(sheet)).data)
+
+
+class AnimaRitualEndorsementViewSet(ListModelMixin, GenericViewSet):
+    """The anima rituals waiting for the requester's answer, and the answer (#5280).
+
+    GET  /api/magic/anima-ritual-endorsements/?scene=<id>
+        The requester's own pending rows: rituals that reached for a character they play, newest
+        first. ``scene`` narrows to one scene.
+    POST /api/magic/anima-ritual-endorsements/<id>/answer/  {endorse: bool}
+        Answers through ``EndorseAnimaRitualAction`` (telnet ``ritual endorse|withhold``
+        converges on it). Only the player of the partner may answer (403 otherwise); a ritual no
+        longer pending is a 400 ``{detail}``.
+    """
+
+    permission_classes = [IsAuthenticated]
+    pagination_class = StandardResultsSetPagination
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = AnimaRitualEndorsementFilterSet
+    serializer_class = AnimaRitualEndorsementSerializer
+
+    def get_permissions(self) -> list:
+        permissions = super().get_permissions()
+        if self.action == "answer":
+            permissions.append(PlaysTheRitualPartner())
+        return permissions
+
+    def get_queryset(self) -> QuerySet:
+        from world.magic.constants import AnimaRitualEndorsement  # noqa: PLC0415
+
+        rows = AnimaRitualPerformance.objects.select_related(
+            "performer_persona", "outward_resonance__affinity", "target_character"
+        )
+        if self.action == "answer":
+            # Any row: an answered one is refused in words by the action, not hidden as a 404.
+            return rows
+        played = RosterEntry.objects.for_account(cast(AccountDB, self.request.user)).character_ids()
+        return rows.filter(
+            endorsement=AnimaRitualEndorsement.PENDING, target_character_id__in=played
+        ).order_by("-performed_at")
+
+    @extend_schema(
+        request=AnimaRitualAnswerSerializer,
+        responses={
+            200: inline_serializer(
+                name="AnimaRitualAnswerResponse",
+                fields={
+                    "detail": serializers.CharField(),
+                },
+            )
+        },
+    )
+    @action(detail=True, methods=["post"], url_path="answer")
+    def answer(self, request: Request, pk: str | None = None) -> Response:
+        from actions.definitions.anima_ritual import EndorseAnimaRitualAction  # noqa: PLC0415
+
+        row = self.get_object()
+        serializer = AnimaRitualAnswerSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        result = EndorseAnimaRitualAction().run(
+            actor=row.target_character.character,
+            performance_id=row.pk,
+            endorse=serializer.validated_data["endorse"],
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": result.message})
 
 
 class SettlingRiteView(APIView):

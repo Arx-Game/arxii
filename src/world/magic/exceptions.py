@@ -230,6 +230,17 @@ class AnimaRitualPickError(MagicError):
         self.user_message = message
 
 
+class AnimaRitualAnswerError(MagicError):
+    """An answer to an anima ritual that cannot be taken (#5280).
+
+    Every raise-site authors the sentence the player reads, so it becomes ``user_message``.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.user_message = message
+
+
 class AnimaPoolAtMaximum(MagicError):
     user_message = "Your anima pool is already full."
 

@@ -35,7 +35,11 @@ from world.checks.test_helpers import force_check_outcome
 from world.fatigue.services import get_or_create_fatigue_pool
 from world.gm.factories import GMProfileFactory
 from world.magic.constants import AnimaRitualEndorsement, GainSource
-from world.magic.exceptions import AnimaRitualPickError, CharacterEngagedForRitual
+from world.magic.exceptions import (
+    AnimaRitualAnswerError,
+    AnimaRitualPickError,
+    CharacterEngagedForRitual,
+)
 from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
@@ -58,6 +62,7 @@ from world.magic.models.kindling import AnimaRitualResonanceAward
 from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.services.anima import provision_player_anima_ritual
 from world.magic.services.anima_ritual_action import start_partner_ritual
+from world.magic.services.anima_ritual_endorsement import answer_anima_ritual
 from world.magic.services.anima_ritual_picks import (
     RESONANCES_ARE_SET,
     anima_ritual_choices,
@@ -823,16 +828,21 @@ class Split(_Bonded):
         Run the whole path (ask, accept when a player is asked) for any aura, any picks, any
         roll result and a player character or a story NPC partner. The ritual's resonance grants
         number at most 2, every Primal one is the Primal pick and every other one is the outward
-        pick.
+        pick. A player character partner who is asked then endorses, and the count still holds.
         """
         picks = [(key, 1) for key in (primal_key, outward_key) if key]
-        sheet, _ritual = self.performer(split=split, picks=picks, anima=0)
+        sheet, ritual = self.performer(split=split, picks=picks, anima=0)
         for name, amount in zip(TIERS, awards, strict=True):
             self.author(name, budget=0, award=amount)
         partner = self.partner(kind)
         scene = self.scene_with(sheet, partner.character_sheet)
 
         self.run_ritual(sheet, partner, scene, tier)
+        waiting = AnimaRitualPerformance.objects.filter(
+            ritual=ritual, endorsement=AnimaRitualEndorsement.PENDING
+        ).first()
+        if waiting is not None:
+            answer_anima_ritual(partner.character_sheet, waiting, endorse=True)
 
         grants = ritual_grants(sheet)
         self.assertLessEqual(len(grants), 2)
@@ -1134,3 +1144,150 @@ class FailedRoll(_Bonded):
                 self.assertEqual(performance["outward_amount_pending"], expected)
         finally:
             self._with_failed_endorsement_percent(original)
+
+
+ANSWERS = ("endorse", "withhold", "lapse", "endorse twice", "third character first")
+
+
+def outward_part_of(award: int, split: tuple[int, int, int], outward_key: str) -> int:
+    """The outward part of ``award`` for a "primal 1" pick and the pick ``outward_key``, split by
+    the aura as the maintainer ruled (the outward part is its share of the two, rounded down;
+    half when both shares are 0)."""
+    share_primal = affinity_percent("primal 1", split)
+    share_outward = affinity_percent(outward_key, split)
+    if share_primal + share_outward == 0:
+        return award // 2
+    return award * share_outward // (share_primal + share_outward)
+
+
+class Endorsement(_Bonded):
+    """A player character partner decides whether the outward part of what the ritual earns the
+    performer is granted."""
+
+    @settings(max_examples=40, deadline=None)
+    @given(
+        split=aura_splits(),
+        outward_key=st.sampled_from(OUTWARD_KEYS),
+        tier=st.sampled_from(TIERS),
+        awards=st.lists(st.integers(0, 60), min_size=len(TIERS), max_size=len(TIERS)),
+        percent=st.integers(0, 100),
+        answer=st.sampled_from(ANSWERS),
+    )
+    def test_a_pc_partners_outward_part_is_granted_only_on_endorse(  # noqa: PLR0913
+        self,
+        split: tuple[int, int, int],
+        outward_key: str,
+        tier: str,
+        awards: list[int],
+        percent: int,
+        answer: str,
+    ) -> None:
+        """Maintainer: "endorsement would be about resonance, check would be about anima. A
+        player no-selling what they feel could deny the celestial/abyssal resonance." and "they
+        could give some even if the check fails." and "smaller amount."
+
+        Given any tier, any ``failed_endorsement_percent`` from 0 to 100, and an answer (endorse,
+        withhold, the scene finishing unanswered, endorse twice, or a third character answering
+        first and then the partner endorsing), the outward pick's ritual grants number exactly 1
+        when the partner endorsed (even when they answered twice) and 0 otherwise. Its ledger
+        amount, before the affinity earn rate (100 here), is the outward part of the rolled
+        tier's award on Partial Success or better, or the percent of the outward part of the
+        Success tier's award, rounded down, on Failure or Critical Failure. A partner is asked
+        only when that amount is above 0. The Primal grant is the same in every branch, and a
+        withheld or lapsed ritual takes no later endorse and grants nothing more.
+        """
+        sheet, ritual = self.performer(
+            split=split, picks=[("primal 1", 1), (outward_key, 1)], anima=0
+        )
+        outward = self.resonances[outward_key]
+        for name, amount in zip(TIERS, awards, strict=True):
+            self.author(name, budget=0, award=amount)
+        original = self._set_failed_endorsement_percent(percent)
+        try:
+            partner = self.partner("pc")
+            scene = self.scene_with(sheet, partner.character_sheet)
+            self.run_ritual(sheet, partner, scene, tier)
+            by_tier = dict(zip(TIERS, awards, strict=True))
+            if CANONICAL_OUTCOME_LEVELS[tier] >= 0:
+                expected = outward_part_of(by_tier[tier], split, outward_key)
+                primal_expected = by_tier[tier] - expected
+            else:
+                expected = outward_part_of(by_tier["Success"], split, outward_key) * percent // 100
+                primal_expected = 0
+            row = AnimaRitualPerformance.objects.get(ritual=ritual)
+            endorsed = answer in ("endorse", "endorse twice", "third character first")
+            asked = expected > 0
+            if answer == "third character first":
+                stranger = CharacterSheetFactory()
+                self.play(stranger)
+                with self.assertRaises(AnimaRitualAnswerError):
+                    answer_anima_ritual(stranger, row, endorse=True)
+                self.assertEqual(self.outward_grants(sheet, outward), [])
+            if answer == "lapse":
+                scene.finish_scene()
+            elif asked:
+                answer_anima_ritual(partner.character_sheet, row, endorse=endorsed)
+                if answer == "endorse twice":
+                    with self.assertRaises(AnimaRitualAnswerError):
+                        answer_anima_ritual(partner.character_sheet, row, endorse=True)
+            else:
+                with self.assertRaises(AnimaRitualAnswerError):
+                    answer_anima_ritual(partner.character_sheet, row, endorse=True)
+
+            self.assertEqual(
+                self.outward_grants(sheet, outward), [expected] if endorsed and asked else []
+            )
+            self.assertEqual(
+                self.primal_grants(sheet),
+                [(self.resonances["primal 1"].pk, primal_expected)] if primal_expected else [],
+            )
+            settled = stored_performance(ritual)
+            self.assertEqual(settled["outward_amount_pending"], 0)
+            if not asked:
+                self.assertEqual(settled["endorsement"], AnimaRitualEndorsement.NOT_ASKED)
+            else:
+                self.assertEqual(
+                    settled["endorsement"],
+                    {
+                        "withhold": AnimaRitualEndorsement.WITHHELD,
+                        "lapse": AnimaRitualEndorsement.LAPSED,
+                    }.get(answer, AnimaRitualEndorsement.ENDORSED),
+                )
+                if not endorsed:
+                    with self.assertRaises(AnimaRitualAnswerError):
+                        answer_anima_ritual(partner.character_sheet, row, endorse=True)
+                    self.assertEqual(self.outward_grants(sheet, outward), [])
+        finally:
+            self._set_failed_endorsement_percent(original)
+
+    @staticmethod
+    def _set_failed_endorsement_percent(percent: int) -> int:
+        """Set the config's percent and return what it was (the caller restores it)."""
+        config = AnimaConfig.get_singleton()
+        original = config.failed_endorsement_percent
+        config.failed_endorsement_percent = percent
+        config.save()
+        return original
+
+    @staticmethod
+    def outward_grants(sheet: CharacterSheet, outward: Resonance) -> list[int]:
+        """The ledger amounts of the ritual's grants of ``outward`` to ``sheet``."""
+        return list(
+            ResonanceGrant.objects.filter(
+                character_sheet=sheet, source=GainSource.ANIMA_RITUAL, resonance=outward
+            )
+            .order_by("pk")
+            .values_list("amount", flat=True)
+        )
+
+    def primal_grants(self, sheet: CharacterSheet) -> list[tuple[int, int]]:
+        """(resonance id, amount) of each of the ritual's Primal grants to ``sheet``."""
+        return list(
+            ResonanceGrant.objects.filter(
+                character_sheet=sheet,
+                source=GainSource.ANIMA_RITUAL,
+                resonance__affinity=self.primal,
+            )
+            .order_by("pk")
+            .values_list("resonance_id", "amount")
+        )
