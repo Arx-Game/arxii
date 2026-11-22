@@ -1520,8 +1520,9 @@ Built as one PR (the numbered parts were the build order):
   and outward shares, rounded down; the part paid to the Primal pick is the rest; when both shares are
   0 the award splits in half. A share of exactly 0 beside a non-zero one is paid 0. A Partial Success counts as a success at
   its own tier's award; a lower tier recovers no anima and grows no Primal resonance. A part pays
-  nothing when the performer does not hold that resonance, as when another character on the same
-  account performs the account's ritual.
+  nothing when the performer no longer holds that resonance. The ritual is the character's own: it is
+  the SCENE_ACTION ritual her roster entry knows (`CharacterRitualKnowledge`), never one her player's
+  account authored for another character, and a character nobody is logged in as still has hers.
 - **The partner's answer.** A player partner endorses or withholds the outward part (after a failed roll,
   `AnimaConfig.failed_endorsement_percent` of the Success tier's outward part is held for them to
   endorse). An NPC partner gives it on the roll alone. Unanswered questions lapse when the scene

@@ -9,8 +9,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-from django.test import TestCase
+from django.test import TestCase, tag
 from django.urls import reverse
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -27,9 +28,11 @@ from world.magic.factories import (
     RitualCheckConfigFactory,
     RitualFactory,
     SoulfrayConfigFactory,
+    teach_ritual,
 )
 from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.serializers import RitualSerializer
+from world.roster.factories import RosterTenureFactory
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_serializers import EnhancedSceneActionResultSerializer
 from world.scenes.action_services import respond_to_action_request
@@ -327,6 +330,12 @@ class RitualViewSetPatchTests(APITestCase):
             name="Scene Ritual",
         )
         cls.scene_config = RitualCheckConfigFactory(ritual=cls.scene_ritual)
+        # The anima ritual is the character's (#5280): its author plays the character who
+        # knows it, which is what lets them edit it.
+        cls.knower_tenure = RosterTenureFactory(
+            player_data=cls.author_account.player_data, end_date=None
+        )
+        teach_ritual(cls.scene_ritual, cls.knower_tenure.roster_entry.character_sheet)
 
     def _patch_url(self, pk: int) -> str:
         return reverse("magic:ritual-detail", kwargs={"pk": pk})
@@ -384,6 +393,37 @@ class RitualViewSetPatchTests(APITestCase):
         self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.json())
         self.scene_config.refresh_from_db()
         self.assertEqual(self.scene_config.target_difficulty_level, 2)
+
+    @tag("regression")
+    def test_only_the_player_of_the_character_who_knows_it_can_patch_an_anima_ritual(
+        self,
+    ) -> None:
+        """Regression for #5280. The anima ritual is in character, so it belongs to the
+        character who knows it: once its author no longer plays that character they cannot
+        edit it, and the player who now plays the character can."""
+        self.knower_tenure.end_date = timezone.now()
+        self.knower_tenure.save(update_fields=["end_date"])
+        RosterTenureFactory(
+            roster_entry=self.knower_tenure.roster_entry,
+            player_data=self.other_account.player_data,
+            end_date=None,
+        )
+
+        self.client.force_authenticate(user=self.author_account)
+        resp = self.client.patch(
+            self._patch_url(self.scene_ritual.pk),
+            {"description": "From another character"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+
+        self.client.force_authenticate(user=self.other_account)
+        resp = self.client.patch(
+            self._patch_url(self.scene_ritual.pk),
+            {"description": "From the character who knows it"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, status.HTTP_200_OK, resp.json())
 
     def test_patch_without_config_preserves_top_level_update(self) -> None:
         """A missing check config does not prevent the ritual update."""

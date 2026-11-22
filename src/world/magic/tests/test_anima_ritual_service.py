@@ -62,7 +62,8 @@ def _make_ritual_for_sheet(sheet):
     """Create a SCENE_ACTION Ritual + sidecar for the given character sheet.
 
     Sets character.db_account if not already set, then creates the ritual
-    with author_account pointing to that account.
+    with author_account pointing to that account and the knowledge row that makes it
+    the character's own (#5280).
     """
     character = sheet.character
     if character.db_account is None:
@@ -74,6 +75,7 @@ def _make_ritual_for_sheet(sheet):
         service_function_path="",
         flow=None,
         author_account=character.db_account,
+        known_by=sheet,
     )
     RitualCheckConfigFactory(ritual=ritual)
     return ritual

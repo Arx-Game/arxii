@@ -670,13 +670,14 @@ class CmdRitual(ArxCommand):
         args = self.require_args("Perform which ritual?")
         name, rest = self._split_name_and_rest(args)
 
-        # A SCENE_ACTION ritual is somebody's personal anima ritual (#4451): only its
-        # author can find it here, so another player's ritual name never resolves.
+        # A SCENE_ACTION ritual is somebody's personal anima ritual (#4451): only the
+        # character who knows it can find it here (#5280), so another character's ritual
+        # name never resolves, even one the same player plays.
         ritual = Ritual.objects.filter(
             Q(execution_kind__in=[RitualExecutionKind.SERVICE, RitualExecutionKind.CEREMONY])
             | Q(
                 execution_kind=RitualExecutionKind.SCENE_ACTION,
-                author_account=self.caller.db_account,
+                known_by_records__roster_entry__character_sheet_id=self.caller.pk,
             ),
             name__iexact=name,
         ).first()

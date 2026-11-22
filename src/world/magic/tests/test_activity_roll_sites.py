@@ -155,6 +155,7 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
             service_function_path="",
             flow=None,
             author_account=account,
+            known_by=sheet,
         )
         config = RitualCheckConfigFactory(ritual=ritual)
         # An accepted request: the ritual with a partner rolls its own check once agreed.

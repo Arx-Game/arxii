@@ -100,7 +100,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
 | `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
-| personal anima ritual (a `Ritual` of `execution_kind=SCENE_ACTION` + its `RitualCheckConfig`; the old `CharacterAnimaRitual` model is gone) | The character's recovery ritual: `author_account` is the player, `check_config` holds `check_type`, `target_difficulty`, `stat`, `skill`, `primal_resonance` and `outward_resonance` (the two picks, #5280) | `get_character_anima_ritual(character)` (`services/anima.py`) |
+| personal anima ritual (a `Ritual` of `execution_kind=SCENE_ACTION` + its `RitualCheckConfig`; the old `CharacterAnimaRitual` model is gone) | The character's recovery ritual: it is hers through her roster entry's `CharacterRitualKnowledge` row (`author_account` records the player who created it and keeps it out of the content export, #5280), `check_config` holds `check_type`, `target_difficulty`, `stat`, `skill`, `primal_resonance` and `outward_resonance` (the two picks, #5280) | `get_character_anima_ritual(character)` (`services/anima.py`) |
 
 **Anima band vocabulary (#1446).** `ANIMA_BANDS` (`constants.py`) is a descending
 `(min_ratio, label)` tuple (PLACEHOLDER labels pending Apostate rewrite — brimming /
@@ -584,7 +584,8 @@ per-technique via the FK. Key surfaces:
 | `ensure_character_magic_check_type(character_sheet, *, stat, skill)` | `seeds_checks.py` | Synthesizes a per-character `CheckType` (pattern: `character_magic_check_type_name()`) for that character's stat + skill |
 | `get_character_cast_check(character)` | `services/anima.py` | Resolves the per-character check type for cast resolution |
 | `resolve_cast_check(character, technique)` | `services/magic_skills.py` | The one resolver every cast path calls (#4450, replaces `resolve_cast_check_type`): returns a `CastCheck(check_type, extra_traits)` or None. Check type precedence is unchanged (ADR-0096); `extra_traits` holds the technique skill term |
-| `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's personal SCENE_ACTION `Ritual` (their anima ritual) |
+| `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's personal SCENE_ACTION `Ritual` (their anima ritual): the one her roster entry knows, never her account's (#5280) |
+| `character_scene_action_rituals(character_id)` | `services/anima.py` | The SCENE_ACTION rituals a character knows through `CharacterRitualKnowledge` (#5280); the one query every anima-ritual reader filters |
 | `apply_anima_ritual_outcome(...)` | `services/anima.py` | Applies a rolled outcome of the anima ritual: Soulfray eased first, then anima by `AnimaRitualBudgetAward` tier, for a roll that `ritual_succeeded` (Partial Success and above); a Failure or Critical Failure recovers nothing. Reached by `resolve_ritual_request` (the partner ritual) through `apply_ritual_to_request`. The solo `perform_anima_ritual` is gone (#5280) |
 | `provision_player_anima_ritual(...)` | `services/anima.py` | Points `RitualCheckConfig.check_type` at the per-character check so ritual and technique casts share the same roll |
 | `ensure_technique_catalog_content()` | `seeds_cast.py` | Idempotent seed: curated catalog of consequence-pool flavors (children of the base pool) + matching ActionTemplates |
@@ -644,8 +645,10 @@ splits in half (the outward part rounded down), and a lone pick takes the whole 
 share is exactly 0 beside a non-zero one is paid 0, and a pick keeps paying while she holds the
 resonance, however small its share. Each part also gets the kindled share of its own resonance (`earn_percent`), and a part pays
 nothing when the performer does not hold that resonance (held means a `CharacterResonance` row, which
-persists when her aura share falls), which happens when another character on the same account
-performs the account's ritual, since the ritual belongs to the account. The Primal part is granted at once
+persists when her aura share falls), which happens when a pick has left her held list. The ritual is
+the character's own, never her account's: `get_character_anima_ritual` returns the SCENE_ACTION ritual
+her roster entry has a `CharacterRitualKnowledge` row for, so two characters one player plays each
+perform their own (#5280). The Primal part is granted at once
 through `grant_resonance(source=GainSource.ANIMA_RITUAL)`. The partner's fatigue follows
 `Affinity.ritual_partner_fatigue` of the outward pick on any roll (positive `apply_fatigue` in the
 social category, negative `recover_fatigue`), and the partner reads that sentence ("It will add to your

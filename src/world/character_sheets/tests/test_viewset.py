@@ -1213,7 +1213,7 @@ class TestMagicSectionFull(TestCase):
         )
 
         # --- Anima Ritual ---
-        # Link character to its player account so author_account lookup works.
+        # Link character to its player account (the account a logged-in puppet has).
         cls.character.db_account = cls.player.account
         cls.character.save(update_fields=["db_account"])
 
@@ -1224,6 +1224,7 @@ class TestMagicSectionFull(TestCase):
             service_function_path="",
             flow=None,
             author_account=cls.player.account,
+            known_by=cls.sheet,
             description="Meditate with a blade in hand.",
         )
         RitualCheckConfigFactory(
@@ -2750,7 +2751,7 @@ class TestCharacterSheetQueryCount(TestCase):
 
         stat_will = StatTraitFactory(name="QCWillpower")
         ritual_skill = SkillFactory(name="QCRitualSkill", category=TraitCategory.COMBAT)
-        # Link character to account for author_account lookup.
+        # Link character to its player account (the account a logged-in puppet has).
         cls.character.db_account = cls.player.account
         cls.character.save(update_fields=["db_account"])
         qc_ritual = RitualFactory(
@@ -2758,6 +2759,7 @@ class TestCharacterSheetQueryCount(TestCase):
             service_function_path="",
             flow=None,
             author_account=cls.player.account,
+            known_by=cls.sheet,
         )
         RitualCheckConfigFactory(
             ritual=qc_ritual,
@@ -2819,7 +2821,7 @@ class TestCharacterSheetQueryCount(TestCase):
         10.    character skill ratings (skill-type trait_values)
         11.    character specialization_values
         12.    character distinctions
-        13.    authored_rituals (SCENE_ACTION kind, prefetched via db_account)
+        13.    known anima ritual (SCENE_ACTION kind, prefetched via roster_entry, #5280)
         14.    character_gifts (via CharacterSheet)
         15.    gift resonances (nested Prefetch)
         16.    character_techniques (via CharacterSheet)
@@ -3083,7 +3085,7 @@ class TestPrefetchCompleteness(TestCase):
 
         stat_will = StatTraitFactory(name="PFWill")
         ritual_skill = SkillFactory(name="PFRitSkill", category=TraitCategory.COMBAT)
-        # Link character to account for author_account lookup.
+        # Link character to its player account (the account a logged-in puppet has).
         cls.character.db_account = cls.player.account
         cls.character.save(update_fields=["db_account"])
         pf_ritual = RitualFactory(
@@ -3091,6 +3093,7 @@ class TestPrefetchCompleteness(TestCase):
             service_function_path="",
             flow=None,
             author_account=cls.player.account,
+            known_by=cls.sheet,
         )
         RitualCheckConfigFactory(
             ritual=pf_ritual,

@@ -901,7 +901,9 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `get_character_cast_check(character)` (`services/anima.py`) — resolves the
     per-character CheckType for cast resolution.
     `get_character_anima_ritual(character)` (`services/anima.py`) — retrieves the
-    character's personal SCENE_ACTION `Ritual` (their anima ritual).
+    character's personal SCENE_ACTION `Ritual` (their anima ritual): the one her roster
+    entry knows (`CharacterRitualKnowledge`), never her account's (#5280);
+    `character_scene_action_rituals(character_id)` is the shared query.
     `provision_player_anima_ritual(...)` (`services/anima.py`) — updated to point
     `RitualCheckConfig.check_type` at the per-character check so ritual and technique
     casts roll the same personal check.

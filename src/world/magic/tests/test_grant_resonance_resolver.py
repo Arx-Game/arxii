@@ -61,7 +61,7 @@ class ResolveGrantResonanceTests(TestCase):
         gift = GiftFactory()
         ritual_resonance = ResonanceFactory(affinity=ensure_canonical_affinities()[1])
         RitualCheckConfigFactory(
-            ritual__author_account=sheet.character.db_account,
+            ritual__known_by=sheet,
             primal_resonance=ritual_resonance,
         )
 
@@ -159,7 +159,7 @@ class GrantGiftToCharacterAlwaysProvisionsTests(TestCase):
         gift = GiftFactory()
         ritual_resonance = ResonanceFactory(affinity=ensure_canonical_affinities()[1])
         RitualCheckConfigFactory(
-            ritual__author_account=sheet.character.db_account,
+            ritual__known_by=sheet,
             primal_resonance=ritual_resonance,
         )
 

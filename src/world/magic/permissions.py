@@ -8,7 +8,8 @@ from rest_framework.request import Request
 from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
-from world.magic.models import AnimaRitualPerformance, Thread
+from world.magic.constants import RitualExecutionKind
+from world.magic.models import AnimaRitualPerformance, CharacterRitualKnowledge, Thread
 from world.magic.models.sessions import RitualSession
 from world.roster.models import RosterEntry
 
@@ -30,7 +31,12 @@ class IsRitualAuthorOrStaff(BasePermission):
     Safe methods (GET, HEAD, OPTIONS) are always allowed.
     Mutation (PATCH, PUT, DELETE) is restricted to:
     - Staff accounts (is_staff=True).
-    - The account that authored the ritual (ritual.author_account == request.user).
+    - For a player's anima ritual (SCENE_ACTION with an author): a requester who currently
+      plays a character who knows it (#5280). The ritual is in character and belongs to the
+      character, so authorship alone does not let a player edit it from another character,
+      and a player who takes over the character can.
+    - For any other player-authored ritual: the account that authored it
+      (ritual.author_account == request.user).
 
     Staff-authored rituals (author_account=NULL) cannot be mutated by non-staff.
     """
@@ -43,6 +49,11 @@ class IsRitualAuthorOrStaff(BasePermission):
         author_id = obj.author_account_id
         if author_id is None:
             return False  # staff-authored ritual — non-staff cannot mutate
+        if obj.execution_kind == RitualExecutionKind.SCENE_ACTION:
+            return CharacterRitualKnowledge.objects.filter(
+                ritual=obj,
+                roster_entry__character_sheet_id__in=_active_sheet_ids_for_user(request.user),
+            ).exists()
         return author_id == request.user.id
 
 

@@ -105,7 +105,7 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
     ) -> None:
         # --- 1) Target character accumulates Soulfray to stage 3 (Ripping) ---
         target_sheet = CharacterSheetFactory()
-        # Create SCENE_ACTION Ritual for the character via author_account
+        # Create the character's own SCENE_ACTION Ritual (the knowledge row makes it hers)
         _account = AccountFactory()
         target_sheet.character.db_account = _account
         target_sheet.character.save(update_fields=["db_account"])
@@ -114,6 +114,7 @@ class SoulfrayRecoveryFlowIntegrationTests(TestCase):
             service_function_path="",
             flow=None,
             author_account=_account,
+            known_by=target_sheet,
         )
         RitualCheckConfigFactory(ritual=_ritual)
         target_anima = CharacterAnimaFactory(

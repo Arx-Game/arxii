@@ -70,7 +70,11 @@ from world.magic.models import (
 from world.magic.models.kindling import AnimaRitualResonanceAward
 from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.serializers import AnimaRitualEndorsementSerializer
-from world.magic.services.anima import provision_player_anima_ritual
+from world.magic.services.anima import (
+    anima_ritual_open_in_scene,
+    get_character_anima_ritual,
+    provision_player_anima_ritual,
+)
 from world.magic.services.anima_ritual_action import start_partner_ritual
 from world.magic.services.anima_ritual_attunement import (
     ALREADY_ATTUNED,
@@ -151,13 +155,15 @@ class _AnimaRitualWorld:
         split: tuple[int, int, int] = (0, 100, 0),
         picks: Sequence[tuple[str, int]] = (),
         anima: int = 10,
+        account: AccountDB | None = None,
     ) -> tuple[CharacterSheet, Ritual]:
         """A performer settled in ``split`` who holds her picks and owns her ritual.
 
         ``picks`` are ``(resonance key, creation weight)`` pairs in the order creation was
         given them. Each is held (a ``CharacterResonance`` row), and the ritual is written by
         the service creation uses, from the ``MagicPicks`` properties, so what a property
-        reads back is what character creation would have written.
+        reads back is what character creation would have written. ``account`` seats a player
+        who already plays another character; by default a new player is seated.
         """
         celestial, primal, abyssal = split
         sheet = CharacterSheetFactory()
@@ -171,7 +177,7 @@ class _AnimaRitualWorld:
         weighted = [WeightedResonance(self.resonances[key], weight) for key, weight in picks]
         for pick in weighted:
             CharacterResonanceFactory(character_sheet=sheet, resonance=pick.resonance)
-        account = self.play(sheet)
+        account = self.play(sheet, account=account)
         magic = self.magic_picks(account, weighted)
         ritual = provision_player_anima_ritual(
             account,
@@ -187,11 +193,18 @@ class _AnimaRitualWorld:
         return sheet, ritual
 
     @staticmethod
-    def play(sheet: CharacterSheet) -> AccountDB:
+    def play(sheet: CharacterSheet, *, account: AccountDB | None = None) -> AccountDB:
         """Seat a player on ``sheet`` (an active tenure, the account on the character as a
-        logged-in puppet has it) and return their account."""
+        logged-in puppet has it) and return their account. ``account`` is a player who already
+        plays another character; by default a new player is seated."""
         entry = RosterEntryFactory(character_sheet=sheet)
-        account = RosterTenureFactory(roster_entry=entry, end_date=None).player_data.account
+        if account is None:
+            tenure = RosterTenureFactory(roster_entry=entry, end_date=None)
+        else:
+            tenure = RosterTenureFactory(
+                roster_entry=entry, end_date=None, player_data=account.player_data
+            )
+        account = tenure.player_data.account
         sheet.character.db_account = account
         sheet.character.save(update_fields=["db_account"])
         return account
@@ -1017,12 +1030,12 @@ class Roll(_Bonded):
     ) -> None:
         """Maintainer: the ritual feeds "the resonances that they already have".
 
-        The ritual belongs to the account, so another character on it can perform it with a pick
-        she does not hold. Given an aura settled half Primal and half Abyssal, any of the two
-        picks she does not hold, and a Success, her anima still rises by the budget (no higher
-        than 10) and the partner's fatigue still follows the outward pick's affinity. A part
-        whose resonance she does not hold earns nothing and is not stored as pending; a part she
-        holds earns half the award (the outward part rounds down).
+        A pick stays on the ritual after it leaves her held list. Given an aura settled half
+        Primal and half Abyssal, any of the two picks she does not hold, and a Success, her
+        anima still rises by the budget (no higher than 10) and the partner's fatigue still
+        follows the outward pick's affinity. A part whose resonance she does not hold earns
+        nothing and is not stored as pending; a part she holds earns half the award (the
+        outward part rounds down).
         """
         setting = 4
         original = self.abyssal.ritual_partner_fatigue
@@ -1063,6 +1076,56 @@ class Roll(_Bonded):
         finally:
             self.abyssal.ritual_partner_fatigue = original
             self.abyssal.save()
+
+
+@tag("regression")
+class EachCharacterPerformsHerOwnRitual(_Bonded):
+    """The anima ritual belongs to the character who knows it, never to the player's account."""
+
+    @settings(max_examples=10, deadline=None)
+    @given(
+        first=st.sampled_from(PRIMAL_KEYS),
+        kind=st.sampled_from(PARTNER_KINDS),
+    )
+    def test_two_characters_on_one_account_each_perform_their_own_ritual(
+        self, first: str, kind: str
+    ) -> None:
+        """Regression for #5280. Maintainer: "rituals are IC, they should obviously be
+        character-specific. Being able to use stuff from another character makes absolutely no
+        sense."
+
+        Given one player who plays two characters, each written her own ritual by creation with
+        a different Primal pick, each character's anima ritual is her own, and when the second
+        performs it with a partner and rolls a Success, the performance is recorded against her
+        ritual and her own Primal pick earns. A character whose player is not logged in (no
+        account on the character) still has her ritual.
+        """
+        second = next(key for key in PRIMAL_KEYS if key != first)
+        first_sheet, first_ritual = self.performer(split=(0, 100, 0), picks=[(first, 1)])
+        account = first_sheet.character.db_account
+        second_sheet, second_ritual = self.performer(
+            split=(0, 100, 0), picks=[(second, 1)], account=account
+        )
+        self.assertNotEqual(first_ritual.pk, second_ritual.pk)
+        self.assertEqual(get_character_anima_ritual(first_sheet.character), first_ritual)
+        self.assertEqual(get_character_anima_ritual(second_sheet.character), second_ritual)
+
+        self.author("Success", budget=2, award=4)
+        partner = self.partner(kind)
+        scene = self.scene_with(second_sheet, partner.character_sheet)
+        self.assertTrue(anima_ritual_open_in_scene(second_sheet.character, scene))
+        self.run_ritual(second_sheet, partner, scene, "Success")
+
+        self.assertTrue(
+            AnimaRitualPerformance.objects.filter(ritual=second_ritual, scene=scene).exists()
+        )
+        self.assertFalse(AnimaRitualPerformance.objects.filter(ritual=first_ritual).exists())
+        self.assertIn(self.resonances[second].pk, dict(ritual_grants(second_sheet)))
+
+        offline = first_sheet.character
+        offline.db_account = None
+        offline.save(update_fields=["db_account"])
+        self.assertEqual(get_character_anima_ritual(offline), first_ritual)
 
 
 class FailedRoll(_Bonded):

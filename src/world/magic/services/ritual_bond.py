@@ -120,8 +120,8 @@ def _with_kindled_share(sheet: CharacterSheet, resonance: Resonance, amount: int
 def _holds(sheet: CharacterSheet, resonance: Resonance) -> bool:
     """True when ``sheet`` holds ``resonance`` (a ``CharacterResonance`` row).
 
-    The anima ritual belongs to the account, so another character on it may perform it with a
-    pick she does not hold. The ritual feeds the resonances a character already has.
+    A pick stays on the ritual after it leaves her held list, and pays nothing while she does
+    not hold it. The ritual feeds the resonances a character already has.
     """
     return CharacterResonance.objects.filter(character_sheet=sheet, resonance=resonance).exists()
 

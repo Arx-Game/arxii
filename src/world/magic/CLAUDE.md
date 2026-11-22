@@ -287,8 +287,14 @@ anima ritual IS the character's magical identity.
   award splits in half (the outward part rounded down); a lone pick gets the whole award. A pick
   whose share is exactly 0 beside a non-zero one is paid 0. A pick keeps paying while she holds the
   resonance, however small its share. A part pays nothing when the performer does not hold that
-  resonance, which happens when another character on the same account performs the account's
-  ritual.
+  resonance, which happens when a pick has left her held list.
+- **The ritual is the character's.** `get_character_anima_ritual` and `anima_ritual_open_in_scene`
+  read `character_scene_action_rituals(character_id)`: the SCENE_ACTION ritual her roster entry has a
+  `CharacterRitualKnowledge` row for (creation writes it beside the ritual), never one her player's
+  account authored, so two characters one player plays each have their own, and a character nobody
+  is logged in as still has hers (#5280). The telnet name lookup, the sheet's magic section and the
+  edit permission (`IsRitualAuthorOrStaff`: a player who currently plays a character who knows it)
+  read the same row. `author_account` only records who created it (the content export skips such rows).
 - **The answer.** A player partner endorses or withholds the outward part
   (`answer_anima_ritual`; `AnimaRitualPerformance.endorsement`, `outward_amount_pending`). After a failed
   roll, `AnimaConfig.failed_endorsement_percent` of the Success tier's outward part is held. An NPC

@@ -33,6 +33,7 @@ from world.magic.factories import (
     ThreadFactory,
     ThreadPullCostFactory,
     ThreadPullEffectFactory,
+    teach_ritual,
 )
 from world.magic.models.rituals import Ritual
 from world.magic.services.magic_skills import resolve_cast_check
@@ -554,6 +555,7 @@ class TestEnhancedActionPaidPullFollowsTheActionCheck(SceneMagicTestMixin, TestC
             author_account=account,
             execution_kind=RitualExecutionKind.SCENE_ACTION,
         )
+        teach_ritual(ritual, sheet)
         personal_config = RitualCheckConfigFactory(ritual=ritual)
         CheckTypeTraitFactory(
             check_type=personal_config.check_type, trait=StatTraitFactory(), weight=1

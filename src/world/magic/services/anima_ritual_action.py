@@ -306,25 +306,17 @@ def _resolve_anima_ritual(
     """Apply anima ritual outcome when an accepted request has action_key='anima_ritual'.
 
     Reads the Ritual from action_request.snapshot_ritual (populated at request
-    creation time). Falls back to looking up the initiator's authored SCENE_ACTION
-    Ritual when snapshot_ritual is absent (legacy requests).
+    creation time). Falls back to the initiator's own anima ritual when snapshot_ritual is
+    absent (legacy requests).
     """
-    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
-    from world.magic.models.rituals import Ritual  # noqa: PLC0415
+    from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
 
     initiator_sheet = action_request.initiator_persona.character_sheet
 
-    # Prefer the snapshot copy; fall back to live authorship lookup.
+    # Prefer the snapshot copy; fall back to the ritual the initiator knows.
     ritual = action_request.snapshot_ritual
     if ritual is None:
-        ritual = (
-            Ritual.objects.filter(
-                author_account=initiator_sheet.character.db_account,
-                execution_kind=RitualExecutionKind.SCENE_ACTION,
-            )
-            .select_related("check_config")
-            .first()
-        )
+        ritual = get_character_anima_ritual(initiator_sheet.character)
 
     if ritual is None:
         return  # silently no-op on malformed request

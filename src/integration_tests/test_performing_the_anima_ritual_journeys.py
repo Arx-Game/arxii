@@ -77,6 +77,7 @@ class _AnAnimaRitual(JourneyCase):
             service_function_path="",
             flow=None,
             author_account=character.db_account,
+            known_by=character.sheet_data,
         )
         RitualCheckConfigFactory(
             ritual=ritual,

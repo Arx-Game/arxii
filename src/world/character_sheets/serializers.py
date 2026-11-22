@@ -117,13 +117,13 @@ from world.magic.models import (
     CharacterAura,
     CharacterGift,
     CharacterGlimpseTag,
+    CharacterRitualKnowledge,
     CharacterTechnique,
     KnownUltimate,
     Motif,
     MotifResonance,
     MotifResonanceAssociation,
     MotifResonanceStyle,
-    Ritual,
     TechniqueVariant,
     aura_shares_prefetch,
 )
@@ -944,17 +944,21 @@ _MAGIC_SELECT_RELATED: tuple[str, ...] = ("aura",)
 _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     # Style is caster-derived (#2700) — the magic section reads the current path's style.
     _SHARED_PATH_HISTORY_PREFETCH,
+    # The anima ritual is the character's own (#5280): the SCENE_ACTION ritual her roster
+    # entry knows, never one her player's account authored for another character.
     Prefetch(
-        "character__db_account__authored_rituals",
-        queryset=Ritual.objects.filter(
-            execution_kind=RitualExecutionKind.SCENE_ACTION,
-        ).select_related(
-            "check_config__stat",
-            "check_config__skill",
-            "check_config__primal_resonance",
-            "check_config__outward_resonance",
-        ),
-        to_attr="cached_scene_action_rituals",
+        "roster_entry__known_rituals",
+        queryset=CharacterRitualKnowledge.objects.filter(
+            ritual__execution_kind=RitualExecutionKind.SCENE_ACTION,
+        )
+        .select_related(
+            "ritual__check_config__stat",
+            "ritual__check_config__skill",
+            "ritual__check_config__primal_resonance",
+            "ritual__check_config__outward_resonance",
+        )
+        .order_by("ritual_id"),
+        to_attr="cached_known_scene_action_rituals",
     ),
     Prefetch(
         "character_gifts",
@@ -1118,28 +1122,29 @@ def _build_magic_motif(sheet: CharacterSheet) -> MotifSection | None:
 
 
 def _build_magic_anima_ritual(sheet: CharacterSheet) -> AnimaRitualSection | None:
-    """Build the anima ritual sub-section from the player's authored SCENE_ACTION Ritual.
+    """Build the anima ritual sub-section from the character's own SCENE_ACTION Ritual.
 
-    Reads from the prefetched ``cached_scene_action_rituals`` attribute on the
-    account object, populated by the ``character__db_account__authored_rituals``
-    Prefetch in ``_MAGIC_PREFETCH_RELATED``. Returns ``None`` when the character
-    has no authored anima ritual or no account attached.
+    Reads the prefetched ``cached_known_scene_action_rituals`` attribute on the
+    character's roster entry, populated by the ``roster_entry__known_rituals``
+    Prefetch in ``_MAGIC_PREFETCH_RELATED`` (#5280: the ritual is the character's,
+    not her account's). Returns ``None`` when the character has no roster entry or
+    knows no anima ritual.
     """
-    account = sheet.character.db_account
-    if account is None:
+    entry = sheet.roster_entry_or_none
+    if entry is None:
         return None
 
-    rituals: list[Ritual] = getattr(
-        account,
+    known: list[CharacterRitualKnowledge] = getattr(
+        entry,
         # Suppression justified: mutating prefetch on identity-mapped parent; context-over-cache
         # (#2401).
-        "cached_scene_action_rituals",  # noqa: GETATTR_LITERAL
+        "cached_known_scene_action_rituals",  # noqa: GETATTR_LITERAL
         None,
     )
-    if not rituals:
+    if not known:
         return None
 
-    ritual = rituals[0]
+    ritual = known[0].ritual
     config = ritual.check_config_or_none
     if config is None:
         return None

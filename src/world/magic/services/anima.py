@@ -13,6 +13,7 @@ from world.magic.models import CharacterAnima
 from world.magic.types.ritual import AnimaRegenTickSummary, RitualOutcome
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from evennia.accounts.models import AccountDB
     from evennia.objects.models import ObjectDB
 
@@ -99,17 +100,29 @@ def recompute_max_anima(character_sheet: CharacterSheet) -> int:
     return new_max
 
 
-def get_character_anima_ritual(character):  # noqa: OBJECTDB_PARAM — Evennia character
-    """The character's authored SCENE_ACTION ritual (with check_config), or None."""
+def character_scene_action_rituals(character_id: int) -> QuerySet[Ritual]:
+    """The SCENE_ACTION rituals the character knows: her anima ritual (#5280).
+
+    The anima ritual is in character, so it belongs to the character, never to the account
+    that plays her: it is the ritual her roster entry has a ``CharacterRitualKnowledge`` row
+    for, which creation writes beside the ritual. Takes the character's id (a CharacterSheet
+    shares its character's pk), so it works for a character nobody is logged in as.
+    """
     from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
     from world.magic.models.rituals import Ritual  # noqa: PLC0415
 
+    return Ritual.objects.filter(
+        known_by_records__roster_entry__character_sheet_id=character_id,
+        execution_kind=RitualExecutionKind.SCENE_ACTION,
+    )
+
+
+def get_character_anima_ritual(character):  # noqa: OBJECTDB_PARAM — Evennia character
+    """The character's own SCENE_ACTION ritual (with check_config), or None."""
     return (
-        Ritual.objects.filter(
-            author_account=character.db_account,
-            execution_kind=RitualExecutionKind.SCENE_ACTION,
-        )
+        character_scene_action_rituals(character.pk)
         .select_related("check_config")
+        .order_by("pk")
         .first()
     )
 
@@ -482,15 +495,9 @@ def anima_ritual_open_in_scene(
     One query, so the persona menu can tell the web client whether to offer the ritual (#5181).
     The ritual and the once-per-scene cap are the same ones ``check_partner_ritual`` enforces.
     """
-    from world.magic.constants import RitualExecutionKind  # noqa: PLC0415
-    from world.magic.models.rituals import Ritual  # noqa: PLC0415
-
     return (
-        Ritual.objects.filter(
-            author_account=character.db_account,
-            execution_kind=RitualExecutionKind.SCENE_ACTION,
-            check_config__check_type__isnull=False,
-        )
+        character_scene_action_rituals(character.pk)
+        .filter(check_config__check_type__isnull=False)
         .exclude(performances__scene=scene)
         .exists()
     )

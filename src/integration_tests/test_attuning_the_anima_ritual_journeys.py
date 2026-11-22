@@ -69,6 +69,7 @@ class _MarasRitual(JourneyCase):
             service_function_path="",
             flow=None,
             author_account=self.account_of(self.mara),
+            known_by=sheet,
             hedge_accessible=True,
         )
         RitualCheckConfigFactory(

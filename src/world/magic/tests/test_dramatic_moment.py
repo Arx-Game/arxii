@@ -167,7 +167,7 @@ class CreateDramaticMomentTagServiceTest(TestCase):
         # A type pinning nothing, and no technique/explicit resonance supplied.
         moment_type = DramaticMomentTypeFactory(resonance=None, resonance_amount=15)
         RitualCheckConfigFactory(
-            ritual__author_account=self.sheet.character.db_account,
+            ritual__known_by=self.sheet,
             primal_resonance=self.resonance,
         )
 

@@ -41,7 +41,7 @@ from world.magic.services.ritual_bond import (
     ritual_partner_effect_sentence,
 )
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
-from world.roster.models import RosterTenure
+from world.roster.models import RosterEntry, RosterTenure
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_services import create_action_request, respond_to_action_request
 from world.scenes.factories import PersonaFactory, SceneFactory
@@ -252,6 +252,7 @@ class AcceptingARitualRequestTests(TestCase):
             service_function_path="",
             flow=None,
             author_account=self.sheet.character.db_account,
+            known_by=self.sheet,
         )
         RitualCheckConfigFactory(
             ritual=self.ritual, outward_resonance=self.ruin, check_type=CheckTypeFactory()
@@ -375,7 +376,8 @@ class AcceptingARitualRequestTests(TestCase):
     def test_one_account_cannot_perform_the_ritual_between_two_characters_it_plays(self) -> None:
         tobins = RosterTenure.objects.get(roster_entry__character_sheet=self.tobin.character_sheet)
         RosterTenureFactory(
-            roster_entry=RosterEntryFactory(character_sheet=self.sheet),
+            # Mara's roster entry is the one her ritual's knowledge row hangs on.
+            roster_entry=RosterEntry.objects.get(character_sheet=self.sheet),
             player_data=tobins.player_data,
             end_date=None,
         )

@@ -178,8 +178,8 @@ class GiftSpecializationE2ETest(TestCase):
             skill=SkillFactory(),
             primal_resonance=self.resonance,
         )
-        # Mirrors the runtime path: get_character_anima_ritual queries
-        # author_account=character.db_account.
+        # Mirrors the runtime path (get_character_anima_ritual reads the character's own
+        # knowledge row, which provisioning wrote, #5280).
         self.sheet.character.db_account = account
         self.sheet.character.save(update_fields=["db_account"])
 
