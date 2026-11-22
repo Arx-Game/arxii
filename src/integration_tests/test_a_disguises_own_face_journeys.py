@@ -19,8 +19,8 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import PropertyMock, patch
 
+import cloudinary
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.test import override_settings
 from django.urls import reverse
 from evennia.utils.ansi import strip_ansi
 
@@ -97,12 +97,15 @@ class CloudinaryDouble:
         return {"result": "ok"}
 
 
-@override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
 class DisguiseFaceCase(JourneyCase):
     """Ysmay's owl mask, Hobb who looks at her, and a doubled Cloudinary."""
 
     def setUp(self) -> None:
         super().setUp()
+        # Cloudinary has a cloud name, as on a configured server; the upload calls are doubled.
+        cloud_name = patch.object(cloudinary.config(), "cloud_name", "test_cloud")
+        cloud_name.start()
+        self.addCleanup(cloud_name.stop)
         self.lantern = self.make_room("The Lantern")
         self.ysmay = self.make_player("Ysmay", room=self.lantern)
         self.hobb = self.make_player("Hobb", room=self.lantern)

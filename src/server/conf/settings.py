@@ -193,12 +193,8 @@ import cloudinary
 import cloudinary.api
 import cloudinary.uploader
 
-# ``CloudinaryGalleryService`` reads this Django setting to know uploads are configured; it
-# was never defined, so ``hasattr(settings, "CLOUDINARY_CLOUD_NAME")`` was False everywhere
-# but the tests, which override it (#4889).
-CLOUDINARY_CLOUD_NAME = env("CLOUDINARY_CLOUD_NAME", default="")
 cloudinary.config(
-    cloud_name=CLOUDINARY_CLOUD_NAME,
+    cloud_name=env("CLOUDINARY_CLOUD_NAME", default=""),
     api_key=env("CLOUDINARY_API_KEY", default=""),
     api_secret=env("CLOUDINARY_API_SECRET", default=""),
 )

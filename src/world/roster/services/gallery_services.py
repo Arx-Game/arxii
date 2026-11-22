@@ -95,7 +95,13 @@ def lock_player_media(player_data: PlayerData) -> None:
 
 
 def _require_cloudinary() -> None:
-    if not hasattr(settings, "CLOUDINARY_CLOUD_NAME") or not settings.CLOUDINARY_CLOUD_NAME:
+    """Refuse an upload while Cloudinary itself has no cloud name to upload to.
+
+    Reads Cloudinary's own configuration, the one ``settings.py`` sets from the
+    ``CLOUDINARY_CLOUD_NAME`` environment variable and every upload uses, so the guard
+    answers whether uploads can actually reach an account (#4889).
+    """
+    if not cloudinary.config().cloud_name:
         msg = "Cloudinary is not configured"
         raise ValidationError(msg)
 

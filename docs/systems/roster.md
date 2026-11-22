@@ -633,10 +633,12 @@ stores a new copy of one of the player's pictures (used by face portraits, folde
 portrait deletes once the new one is stored, so a swap is judged on the total after it, inside
 the lock and checks again with the size Cloudinary reports, destroying the asset
 and refusing when that passes the quota. SQLite does not lock rows, so the concurrency is
-proved on Postgres. Both read the Django setting `CLOUDINARY_CLOUD_NAME` (from the
-`CLOUDINARY_CLOUD_NAME` environment variable) to know uploads are configured; until #4889 the
-setting was never defined outside the tests, so a running server refused every upload with
-"Cloudinary is not configured".
+proved on Postgres. Both refuse with "Cloudinary is not configured" while Cloudinary's own
+configuration (`cloudinary.config().cloud_name`, set in `settings.py` from the
+`CLOUDINARY_CLOUD_NAME` environment variable) has no cloud name. Until #4889 the guard read a
+Django setting of that name, which only the test settings defined, so a running server with
+the secrets set still refused every upload. Tests set the cloud name on Cloudinary's config
+object; the test settings blank it so no test can reach a real account.
 
 ### Gallery (`/api/roster/tenure-media/`, #4151)
 
