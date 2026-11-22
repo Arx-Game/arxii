@@ -5385,7 +5385,7 @@ register as additional kinds.
 - **TRAIN offers — Academy training (#2440):** `NPCRole.teaches_tradition` (nullable FK →
   `magic.Tradition`, `SET_NULL`) scopes which tradition's signature techniques a trainer
   role can teach; `TrainOfferDetails` (1:1 per-offer details — `technique` FK, `learn_ap_cost`,
-  `gold_cost`) authors **one offer row per teachable technique** (mirrors how MISSION/PERMIT
+  `gold_cost`, `instruction_bonus`, #2741) authors **one offer row per teachable technique** (mirrors how MISSION/PERMIT
   enumerate per-template/per-kind rows — the smallest shape consistent with MENU/POOL
   selection; MENU-mode already lists every eligible offer as its own menu line). Handler
   (`run_train_offer`): resolve the Academy (`offer.role.faction_affiliation`) → obligation
@@ -5476,7 +5476,9 @@ register as additional kinds.
   `contribute_to_technique_progress` with a learning check. The learner
   rolls intellect ("Technique Training" `CheckType`, seeded by
   `ensure_technique_training_content()`) plus the skills staff map to
-  `TECHNIQUE_LEARNING`; the seed names no skill (#4547). The
+  `TECHNIQUE_LEARNING`, plus the technique's own casting skill (its skill, else its casting
+  style's) through `magic_skills.technique_learning_terms`, counted once (#2740; the seed
+  names no skill, #4547). The
   check outcome maps to a dev-point multiplier via
   `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure=0×, partial=0.5×,
   success=1.0×, critical=1.5×). AP is always spent; only dev-point yield
@@ -5484,7 +5486,11 @@ register as additional kinds.
   `dev_points` + `ap_to_spend` as co-equal params (decoupling AP from
   dev points). Difficulty: `target_difficulty = (technique.tier × step)
   − (learner_level // divisor) − teacher_skill_bonus
-  + (self_study_penalty if teacher is None)`. Four tuning knobs on
+  + (self_study_penalty if neither a player teacher nor an Academy trainer taught it)`.
+  A meter an Academy TRAIN offer opened (`TechniqueProgress.source = ACADEMY_TRAINING`) is paid
+  instruction (#2741): no self-study penalty, and its `instruction_bonus` (copied from
+  `TrainOfferDetails.instruction_bonus` at acceptance by `charge_and_learn`) joins the roll as
+  one labelled `CHARACTER` modifier, "Academy instruction". Four tuning knobs on
   `GiftAcquisitionConfig`.
 - **Player-facing training trigger (#2739):** the production caller #2727 shipped
   without. `TrainTechniqueAction` (`actions/definitions/technique_training.py`, key
@@ -5494,7 +5500,7 @@ register as additional kinds.
   create one: accepting a teaching offer or an Academy TRAIN offer), resolves a
   co-present teacher (`progress.teacher_tenure`'s character sharing the learner's
   room *at session time* — Decision 3a: never a location hard-block, silent
-  self-study fallback otherwise, true for both PC-teacher and Academy meters), and
+  self-study fallback otherwise; an Academy meter is never self-study, #2741), and
   calls `resolve_training_check`. `ap_to_invest` defaults to 1 (no base-session-cost
   constant exists yet) and is rejected when non-positive; the action does not
   pre-bound it further — the seam spends it in full and raises

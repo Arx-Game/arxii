@@ -3351,10 +3351,29 @@ acquisition-provenance record for in-place trait/skill value mutation,
 
 `resolve_training_check()` (`services/technique_training.py`, #2727) wraps
 `contribute_to_technique_progress` with a learning check — the learner rolls
-intellect, plus the skills staff map to `TECHNIQUE_LEARNING`, against a difficulty derived from the technique's tier,
+intellect, plus the skills staff map to `TECHNIQUE_LEARNING` and the technique's own casting
+skill, against a difficulty derived from the technique's tier,
 the learner's level, and any teacher's skill bonus (self-study takes a flat
 penalty) — but shipped with no production caller: nothing dispatched it from telnet
 or the web. #2739 is that trigger, one seam for both surfaces:
+
+**Academy instruction (#2741) and the technique's own skill (#2740).** Two rulings of
+2026-11-20 shape the roll. First, a learner who pays an Academy NPC to train a technique gets a
+staff-set bonus on every session's roll and no self-study penalty. The NPC is never at a session,
+so the bonus is authored on `TrainOfferDetails.instruction_bonus` (check points, 0 adds nothing),
+copied onto `TechniqueProgress.instruction_bonus` when `charge_and_learn` opens the meter, and read
+from that row at every session, so it survives a restart and a later edit of the offer does not move
+an open meter. `is_academy_instructed(progress)` (`technique_training.py`) is true when the meter's
+`source` is `ACADEMY_TRAINING`; the bonus enters the roll as one `ModifierContribution`
+(`CHARACTER`, labelled "Academy instruction") through `perform_check_with_modifiers`'
+`extra_contributions`, so it counts once and the breakdown names it. It tapers with other
+`CHARACTER` modifiers where staff run a taper. A meter a player teacher opened keeps the teacher
+rules above, and any other meter is self-study. The Great Archive librarian's TRAIN offers are
+Academy TRAIN offers too, so they get the same rule. Second, `magic_skills.technique_learning_terms`
+adds the skill the technique is cast with (`technique_skill_term`: its own skill, else its casting
+style's) to the roll and to the teacher's rating, unless that skill is already one of the
+`TECHNIQUE_LEARNING` skills staff mapped or one of the check type's own traits. The stat stays
+intellect. No skill is named in code.
 
 **Content dependency, loud failure (#3043).** The check rolled is the "Technique
 Training" `CheckType`, resolved by exact name. That row (which weights intellect only;
@@ -3377,9 +3396,10 @@ on the web endpoint below. No player-facing string carries an em-dash.
   exists yet on `GiftAcquisitionConfig` or the seam itself; a supplied value ≤ 0 is
   rejected). Resolves a co-present teacher: `progress.teacher_tenure` counts only
   when that tenure's live character shares the learner's room *at session time* —
-  never a location hard-block (Decision 3a), true for both PC-teacher meters and
-  Academy TRAIN meters; a teacher out of the room silently drops to self-study
-  rates for that session. `resolve_training_check`'s own `WeeklyTrainingCapExceeded`
+  never a location hard-block (Decision 3a); a player teacher out of the room silently
+  drops to self-study rates for that session. An Academy TRAIN meter is the exception
+  (#2741): its NPC trainer is never present, so the meter itself says the learner paid
+  for instruction, and `data["self_study"]` is false for it. `resolve_training_check`'s own `WeeklyTrainingCapExceeded`
   / `MagicError` raises map to failure `ActionResult`s; a bare `ValueError` from
   `learn_technique` (reached on meter completion) — raised when the learner already
   holds the `CharacterTechnique`, e.g. a stale meter left open after the technique

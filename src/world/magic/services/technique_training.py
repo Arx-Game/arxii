@@ -11,15 +11,17 @@ from decimal import Decimal
 import math
 from typing import TYPE_CHECKING
 
+from world.achievements.constants import AccessChangeSource
+from world.checks.constants import ModifierSourceKind
 from world.checks.services import (
     compute_check_rating,
     difficulty_step_points,
     perform_check_with_modifiers,
 )
-from world.magic.constants import MagicActivity
+from world.checks.types import ModifierContribution
 from world.magic.models import TrainingOutcomeAward
 from world.magic.services.gift_acquisition import get_gift_acquisition_config
-from world.magic.services.magic_skills import activity_skill_terms
+from world.magic.services.magic_skills import technique_learning_terms
 from world.magic.services.technique_progress import contribute_to_technique_progress
 from world.magic.types.training import TrainingCheckResult
 from world.progression.services.skill_development import get_character_path_level
@@ -31,6 +33,19 @@ if TYPE_CHECKING:
 
 # Name of the seeded CheckType for technique training.
 TECHNIQUE_TRAINING_CHECK_TYPE_NAME = "Technique Training"
+
+# How the Academy trainer's instruction reads in a roll's breakdown (#2741).
+ACADEMY_INSTRUCTION_LABEL = "Academy instruction"
+
+
+def is_academy_instructed(progress: TechniqueProgress) -> bool:
+    """Whether ``progress`` is a meter an Academy trainer's offer opened (#2741).
+
+    That trainer is never present at a session, so the meter itself says the learner
+    paid for instruction: it lifts the self-study penalty and carries the offer's
+    ``instruction_bonus``, which is read from the row so it holds after a restart.
+    """
+    return progress.source == AccessChangeSource.ACADEMY_TRAINING
 
 
 def resolve_training_check(
@@ -50,7 +65,9 @@ def resolve_training_check(
         learner: The learner's CharacterSheet.
         progress: The TechniqueProgress meter to contribute toward.
         ap_to_invest: Base AP the learner wants to invest this session.
-        teacher: The teacher's RosterTenure (None for self-study).
+        teacher: The teacher's RosterTenure (None when no player teacher is present).
+            With none, a meter an Academy offer opened is paid instruction (no self-study
+            penalty, plus the meter's ``instruction_bonus``); any other meter is self-study.
 
     Returns:
         TrainingCheckResult with the outcome, multiplier, dev points, and
@@ -84,12 +101,25 @@ def resolve_training_check(
 
     target_difficulty -= learner_level // config.training_level_divisor
 
-    learning_terms = activity_skill_terms(MagicActivity.TECHNIQUE_LEARNING)
+    learning_terms = technique_learning_terms(learner.character, technique, check_type)
+    instruction: list[ModifierContribution] = []
     if teacher is not None and teacher.character is not None:
         teacher_rating = compute_check_rating(
             teacher.character, check_type, extra_traits=learning_terms
         )
         teacher_skill_bonus = teacher_rating // config.training_teacher_skill_divisor
+    elif is_academy_instructed(progress):
+        # Paid instruction: no self-study penalty, and the offer's bonus joins the roll
+        # through the modifier seam so the breakdown names it.
+        teacher_skill_bonus = 0
+        if progress.instruction_bonus > 0:
+            instruction.append(
+                ModifierContribution(
+                    source_kind=ModifierSourceKind.CHARACTER,
+                    source_label=ACADEMY_INSTRUCTION_LABEL,
+                    value=progress.instruction_bonus,
+                )
+            )
     else:
         teacher_skill_bonus = 0
         target_difficulty += difficulty_step_points(
@@ -104,6 +134,7 @@ def resolve_training_check(
         check_type,
         target_difficulty=target_difficulty,
         extra_traits=learning_terms,
+        extra_contributions=instruction,
     )
 
     # 4. Map outcome to dev-point multiplier.

@@ -553,11 +553,13 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
   `magic_learning_ap_cost_surcharge_percent`. Default 2 (cheaper than the
   technique-learning base of 5).
 - `charge_and_learn(learner, technique, *, base_ap_cost, source, gold_cost=0,
-  gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0)`
+  gold_treasury=None, teacher_tenure=None, teacher_banked_ap=0, instruction_bonus=0)`
   (`services/gift_acquisition.py`, #2440, #2711) — the shared charge+acquire
   core: duplicate gate → has-gift/major-gift multiplier → cross-path multiplier
   → implicit gift acquisition → cap check → teacher banked-AP consumption →
   gold spend → creates `TechniqueProgress` meter (does NOT mint immediately).
+  `instruction_bonus` (#2741) is copied onto the new meter's `instruction_bonus`; only the
+  Academy TRAIN offer handler passes a non-zero value, from `TrainOfferDetails.instruction_bonus`.
   Two front doors: `accept_technique_offer` (player-to-player teaching) and the
   Academy TRAIN offer handler (`world.npc_services.effects.run_train_offer`).
   Returns `TechniqueProgress`, not `CharacterTechnique`.
@@ -572,9 +574,16 @@ serializer (`_RemovedConditionSpecSerializer`), admin (`TechniqueRemovedConditio
 `resolve_training_check(learner, progress, *, ap_to_invest, teacher=None)`
 (`services/technique_training.py`, #2727) is the check layer sitting on top of
 `contribute_to_technique_progress` (above): the learner rolls intellect (the
-"Technique Training" `CheckType`) plus the `TECHNIQUE_LEARNING` skills against `target_difficulty = (technique.tier
-× step) − (learner_level // divisor) − teacher_skill_bonus + (self_study_penalty
-if teacher is None)`, and the outcome maps to a dev-point multiplier via
+"Technique Training" `CheckType`) plus the skill terms from
+`magic_skills.technique_learning_terms` (#2740: the skills staff mapped to `TECHNIQUE_LEARNING`,
+then the skill the technique is cast with, its own skill or else its casting style's, left out
+when it is already a mapped skill or one of the check type's own traits) against
+`target_difficulty = (technique.tier × step) − (learner_level // divisor) − teacher_skill_bonus +
+(self_study_penalty if the meter is self-study)`. A meter is self-study when no player teacher is
+in the room and it is not an Academy meter. An Academy meter (`is_academy_instructed(progress)`,
+true when the meter's `source` is `ACADEMY_TRAINING`, #2741) is never self-study: it takes no
+penalty, and its stored `TechniqueProgress.instruction_bonus` joins the roll as one
+"Academy instruction" `ModifierContribution` through `perform_check_with_modifiers`. The outcome maps to a dev-point multiplier via
 `TrainingOutcomeAward(OutcomeTierAward)` (botch/failure 0×, partial 0.5×, success
 1.0×, critical 1.5×) — AP is always spent regardless of outcome; only the
 dev-point yield varies. Four tuning knobs live on `GiftAcquisitionConfig`. This
@@ -605,9 +614,10 @@ message and an HTTP 400 `{"detail": …}` on the web endpoint below, never a 500
   rejected; the seam spends it in full and raises on pool/cap overruns rather than
   this action pre-bounding it). Resolves a co-present teacher —
   `progress.teacher_tenure` counts only when that tenure's live character shares
-  the learner's room *at session time*; otherwise self-study rates apply silently
-  (Decision 3a — never a location hard-block; true for both PC-teacher meters and
-  Academy TRAIN meters). Maps `WeeklyTrainingCapExceeded`/`MagicError` to a failure
+  the learner's room *at session time*; for a player-teacher meter, a teacher who is
+  away means self-study rates apply silently (Decision 3a — never a location hard-block).
+  An Academy TRAIN meter is the exception (#2741): its NPC trainer is never present, so the
+  meter itself says the learner paid for instruction, and `self_study` is false for it. Maps `WeeklyTrainingCapExceeded`/`MagicError` to a failure
   `ActionResult`; also catches a bare `ValueError` from `learn_technique` (reached
   on meter completion, raised when the learner already holds the
   `CharacterTechnique` — a stale meter left open after the technique arrived by

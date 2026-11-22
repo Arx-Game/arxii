@@ -23,8 +23,8 @@ class TechniqueProgress(SharedMemoryModel):
     ``points_accumulated >= total_required``, the meter is consumed and a
     ``CharacterTechnique`` is minted.
 
-    ``total_required`` is snapshotted at creation so later authoring/config
-    changes don't retroactively alter in-progress meters.
+    ``total_required`` and ``instruction_bonus`` are snapshotted at creation so
+    later authoring/config changes don't retroactively alter in-progress meters.
     """
 
     character_sheet = models.ForeignKey(
@@ -56,6 +56,14 @@ class TechniqueProgress(SharedMemoryModel):
         max_length=30,
         choices=AccessChangeSource.choices,
         help_text="Provenance: how this meter was created.",
+    )
+    instruction_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Check points an Academy trainer's instruction adds to each training session "
+            "(#2741), copied from the TRAIN offer when the meter opened so later edits to "
+            "the offer do not change a meter already open. 0 for every other source."
+        ),
     )
     is_cross_path = models.BooleanField(
         default=False,

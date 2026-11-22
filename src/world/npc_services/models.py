@@ -1033,6 +1033,16 @@ class TrainOfferDetails(SharedMemoryModel):
         default=0,
         help_text="Coin charged to the learner's purse, credited to the Academy's treasury.",
     )
+    instruction_bonus = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Check points the trainer's instruction adds to every training session on the "
+            "meter this offer opens (#2741). The trainer is never present at a session, so "
+            "the bonus is copied onto the meter when the offer is accepted and later edits "
+            "here do not change meters already open. Paying for instruction also lifts the "
+            "self-study penalty, whatever this is set to. 0 adds nothing."
+        ),
+    )
 
     def clean(self) -> None:
         """Reject a nonzero ``offer.ap_cost`` — see the class docstring."""
