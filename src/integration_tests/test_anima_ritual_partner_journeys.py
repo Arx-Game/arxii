@@ -490,7 +490,7 @@ class AnsweringOnTheWeb(_AnAskedPartner):
         self.assertEqual(
             rows[0]["prompt"], "Mara's ritual reached for your ruin. Did it take hold of you?"
         )
-        self.assertEqual(rows[0]["partner_line"], "It will add to your fatigue.")
+        self.assertEqual(rows[0]["partner_line"], "Mara's ritual leaves you wearier.")
         self.assertEqual(self._rows(self.mara), [])
         self.assertEqual(self._rows(self.hobb), [])
         self.assertEqual(self._rows(self.tobin, scene=self.scene.pk + 1), [])
