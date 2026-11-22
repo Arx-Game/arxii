@@ -20,9 +20,9 @@ if TYPE_CHECKING:
     from world.magic.models.affinity import Resonance
     from world.magic.models.rituals import Ritual
     from world.roster.models import RosterEntry
-    from world.scenes.models import Scene
+    from world.scenes.models import Persona, Scene
     from world.skills.models import Skill
-    from world.traits.models import Trait
+    from world.traits.models import CheckOutcome, Trait
 
 logger = logging.getLogger(__name__)
 
@@ -122,6 +122,16 @@ def get_character_cast_check(character):  # noqa: OBJECTDB_PARAM — Evennia cha
     return ritual.check_config.check_type
 
 
+def ritual_succeeded(outcome: CheckOutcome) -> bool:
+    """True when a roll counts as a success for the anima ritual: Partial Success and above.
+
+    The one place the boundary lives (maintainer ruling, 2026-11-22). A success pays its own
+    tier's anima budget and resonance award; only Failure and Critical Failure are failures,
+    and a failed roll gives no anima and no Primal resonance.
+    """
+    return outcome.success_level >= 0
+
+
 def _chosen_patron_share(character_sheet: CharacterSheet, outcome: object) -> tuple[str, int]:
     """(the patron's name, the anima it adds) when the character is a Chosen whose patron favor
     meets the Chosen favor config's threshold: the CHOSEN_ANIMA award for the ritual's result
@@ -138,13 +148,14 @@ def _chosen_patron_share(character_sheet: CharacterSheet, outcome: object) -> tu
     return patronages[0].being.name, share
 
 
-def apply_anima_ritual_outcome(
+def apply_anima_ritual_outcome(  # noqa: PLR0913
     *,
     ritual: Ritual,
-    outcome: object,
+    outcome: CheckOutcome,
     scene: Scene,
     character_sheet: CharacterSheet,
     partner_sheet: CharacterSheet | None = None,
+    performer_persona: Persona | None = None,
 ) -> RitualOutcome:
     """Apply a pre-computed check outcome to anima/soulfray + create audit row.
 
@@ -157,6 +168,8 @@ def apply_anima_ritual_outcome(
         scene: The scene in which the ritual is performed.
         character_sheet: The character performing the ritual.
         partner_sheet: The character who took part (#5181), recorded on the performance row.
+        performer_persona: The persona the performer wore (the request's initiator persona),
+            recorded on the performance row so the partner's card never shows a masked name.
 
     Returns:
         RitualOutcome describing what was recovered and reduced.
@@ -171,7 +184,9 @@ def apply_anima_ritual_outcome(
     character = character_sheet.character
 
     config = SoulfrayConfig.objects.cached_singleton()
-    budget = _budget_for_outcome(outcome)
+    succeeded = ritual_succeeded(outcome)
+    # A failed roll gives no anima and eases no Soulfray, whatever the tier's row holds.
+    budget = _budget_for_outcome(outcome) if succeeded else 0
 
     anima = CharacterAnima.objects.select_for_update().get(character=character_sheet)
 
@@ -211,13 +226,15 @@ def apply_anima_ritual_outcome(
     # Chosen patronage share (#2550, #4349): the CHOSEN_ANIMA award for the ritual's result,
     # additive to the leftover budget after soulfray reduction, before the anima refill. Both
     # call paths (resolve_ritual_request and _resolve_anima_ritual) converge here.
-    patron_name, patron_share = _chosen_patron_share(character_sheet, outcome)
+    patron_name, patron_share = ("", 0)
+    if succeeded:
+        patron_name, patron_share = _chosen_patron_share(character_sheet, outcome)
     budget += patron_share
 
     anima_before = anima.current
     anima.current = min(anima.current + max(0, budget), anima.maximum)
 
-    success_level = int(outcome.success_level)  # type: ignore[union-attr]
+    success_level = outcome.success_level
     if success_level >= 2:  # noqa: PLR2004 - chart success degrees
         anima.current = anima.maximum
 
@@ -230,16 +247,17 @@ def apply_anima_ritual_outcome(
     performance = AnimaRitualPerformance.objects.create(
         ritual=ritual,
         scene=scene,
-        was_successful=success_level >= 1,
+        was_successful=succeeded,
         anima_recovered=anima_recovered,
         outcome=outcome,
         severity_reduced=severity_reduced,
         target_character=partner_sheet,
+        performer_persona=performer_persona,
     )
 
     return RitualOutcome(
         performance=performance,
-        outcome=outcome,  # type: ignore[arg-type]
+        outcome=outcome,
         severity_reduced=severity_reduced,
         anima_recovered=anima_recovered,
         soulfray_stage_after=stage_after,

@@ -227,10 +227,12 @@ class PartialWithHighSoulfrayTests(TestCase):
         self.assertEqual(self.anima.current, 2)
         self.assertEqual(result.anima_recovered, 1)
         self.assertFalse(result.soulfray_resolved)
+        # Partial Success is a success at its own tier (maintainer ruling 2026-11-22).
+        self.assertTrue(result.performance.was_successful)
 
 
 class FailureNoSoulfrayTests(TestCase):
-    """Failure outcome with no Soulfray: small anima refill."""
+    """Failure outcome with no Soulfray: a failed roll gives no anima."""
 
     def setUp(self) -> None:
         self.sheet = CharacterSheetFactory()
@@ -246,16 +248,17 @@ class FailureNoSoulfrayTests(TestCase):
         self.soulfray_template = SoulfrayTemplateFactory()
         self.scene = SceneFactory(is_active=True)
 
-    def test_failure_no_soulfray_small_anima_refill(self) -> None:
+    def test_failure_no_soulfray_gives_no_anima(self) -> None:
         outcome = _outcome(-1)
         AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=1)
 
         result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
         self.anima.refresh_from_db()
-        self.assertEqual(self.anima.current, 1)  # failure budget = 1
-        self.assertEqual(result.anima_recovered, 1)
+        self.assertEqual(self.anima.current, 0)  # the Failure row's budget of 1 is not paid
+        self.assertEqual(result.anima_recovered, 0)
         self.assertEqual(result.severity_reduced, 0)
+        self.assertFalse(result.performance.was_successful)
 
 
 class ChosenPatronShareTests(TestCase):
@@ -291,13 +294,14 @@ class ChosenPatronShareTests(TestCase):
         self.assertEqual(result.anima_recovered, 8)
         self.assertEqual((result.patron_bonus, result.patron_name), (5, "The Tide"))
 
-    def test_a_failure_with_no_patron_row_gets_nothing_from_the_patron(self) -> None:
+    def test_a_failure_gets_nothing_from_the_patron_and_no_anima(self) -> None:
         outcome = _outcome(-1)
         AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=2)
+        self.award(outcome, 5)
 
         result = _perform(self.sheet, self.ritual, outcome, self.scene)
 
-        self.assertEqual((result.anima_recovered, result.patron_bonus), (2, 0))
+        self.assertEqual((result.anima_recovered, result.patron_bonus), (0, 0))
 
 
 class GateTests(TestCase):

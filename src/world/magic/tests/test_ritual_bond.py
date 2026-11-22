@@ -13,9 +13,10 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.types import CheckResult
 from world.fatigue.services import get_or_create_fatigue_pool
-from world.magic.constants import GainSource, RitualExecutionKind
+from world.magic.constants import AnimaRitualEndorsement, GainSource, RitualExecutionKind
 from world.magic.exceptions import RitualAlreadyPerformedThisScene
 from world.magic.factories import (
+    AnimaRitualPerformanceFactory,
     AnimaRitualResonanceAwardFactory,
     CharacterAnimaFactory,
     CharacterAuraFactory,
@@ -66,11 +67,15 @@ class _Bond(TestCase):
 
     def setUp(self) -> None:
         self.performer = CharacterSheetFactory()
+        # A character nobody holds is a story NPC: the outward part is granted at once.
         self.partner = CharacterSheetFactory()
         self.ritual = RitualFactory(
             execution_kind=RitualExecutionKind.SCENE_ACTION, service_function_path="", flow=None
         )
-        # The ritual earns and touches the partner only for a resonance the performer holds.
+        self.performance = AnimaRitualPerformanceFactory(
+            ritual=self.ritual, target_character=self.partner
+        )
+        # The ritual earns only for a resonance the performer holds.
         CharacterResonanceFactory(character_sheet=self.performer, resonance=self.ruin)
 
     def _set_fatigue_setting(self, affinity, value: int) -> None:
@@ -83,7 +88,9 @@ class _Bond(TestCase):
             self.partner,
             self.ritual,
             outcome or self.success,
-            resonance if resonance is not None else self.ruin,
+            self.performance,
+            primal=None,
+            outward=resonance if resonance is not None else self.ruin,
         )
 
 
@@ -95,7 +102,7 @@ class ApplyRitualBondTests(_Bond):
 
         bond = self._bond()
 
-        self.assertEqual(bond.resonance_granted, 6)
+        self.assertEqual(bond.outward_granted, 6)
         self.assertEqual((bond.partner_fatigue_setting, bond.fatigue_change), (1, 10))
         self.assertEqual(_fatigue(self.partner), 10)
         grant = ResonanceGrant.objects.get(character_sheet=self.performer)
@@ -133,11 +140,11 @@ class ApplyRitualBondTests(_Bond):
 
     def test_a_tier_with_no_award_earns_nothing_but_still_touches_the_partner(self) -> None:
         self._set_fatigue_setting(self.abyssal, 10)
-        failure = CheckOutcomeFactory(name="Failure", success_level=0)
+        failure = CheckOutcomeFactory(name="Failure", success_level=-1)
 
         bond = self._bond(outcome=failure)
 
-        self.assertEqual(bond.resonance_granted, 0)
+        self.assertEqual(bond.outward_granted, 0)
         self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.performer).exists())
         self.assertEqual(_fatigue(self.partner), 10)
 
@@ -146,9 +153,17 @@ class ApplyRitualBondTests(_Bond):
     ) -> None:
         self._set_fatigue_setting(self.abyssal, 10)
 
-        bond = apply_ritual_bond(self.performer, self.partner, self.ritual, self.success, None)
+        bond = apply_ritual_bond(
+            self.performer,
+            self.partner,
+            self.ritual,
+            self.success,
+            self.performance,
+            primal=None,
+            outward=None,
+        )
 
-        self.assertIsNone(bond.resonance)
+        self.assertIsNone(bond.outward_resonance)
         self.assertEqual(_fatigue(self.partner), 0)
 
     def test_the_kindled_share_adds_to_the_award_before_the_earn_rate(self) -> None:
@@ -166,7 +181,7 @@ class ApplyRitualBondTests(_Bond):
         ):
             bond = self._bond()
 
-        self.assertEqual(bond.resonance_granted, 13)
+        self.assertEqual(bond.outward_granted, 13)
 
 
 class RitualLinesTests(_Bond):
@@ -185,8 +200,8 @@ class RitualLinesTests(_Bond):
         bond = self._bond()
 
         self.assertEqual(
-            performer_ritual_line(bond, "Tobin"),
-            "Your ritual feeds on Tobin. Your Ruin grows by 6.",
+            performer_ritual_line(bond, "Tobin", 6),
+            "Your ritual feeds on Tobin. You recover 6 anima. Your Ruin grows by 6.",
         )
         self.assertEqual(partner_ritual_line(bond, "Mara"), "Mara's ritual leaves you wearier.")
 
@@ -197,8 +212,8 @@ class RitualLinesTests(_Bond):
         bond = self._bond()
 
         self.assertEqual(
-            performer_ritual_line(bond, "Tobin"),
-            "Your ritual with Tobin is done. Your Ruin grows by 6.",
+            performer_ritual_line(bond, "Tobin", 6),
+            "Your ritual with Tobin is done. You recover 6 anima. Your Ruin grows by 6.",
         )
         self.assertEqual(partner_ritual_line(bond, "Mara"), "")
 
@@ -287,8 +302,11 @@ class AcceptingARitualRequestTests(TestCase):
         self.assertEqual(performance.target_character, self.tobin.character_sheet)
         self.assertEqual(self.sheet.character.anima.current, 8)
         self.assertEqual(_fatigue(self.tobin.character_sheet), 10)
-        grant = ResonanceGrant.objects.get(character_sheet=self.sheet)
-        self.assertEqual((grant.source, grant.amount), (GainSource.ANIMA_RITUAL, 6))
+        # Tobin is a player character, so the outward part waits for his answer.
+        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
+        self.assertEqual(performance.endorsement, AnimaRitualEndorsement.PENDING)
+        self.assertEqual(performance.outward_amount_pending, 6)
+        self.assertEqual(performance.outward_resonance, self.ruin)
 
     def test_an_npc_partner_answers_at_once_and_is_treated_as_a_player_is(self) -> None:
         npc = PersonaFactory()

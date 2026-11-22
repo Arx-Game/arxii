@@ -52,6 +52,7 @@ from world.magic.types.ritual import (
     AnimaRitualCategory,
     AnimaRitualChoices,
     RitualBond,
+    RitualEarningParts,
     RitualOutcome,
     SoulfrayContent,
 )
@@ -110,6 +111,7 @@ __all__ = [
     "ResonancePullResult",
     "ResonanceWeeklySettlementSummary",
     "RitualBond",
+    "RitualEarningParts",
     "RitualOutcome",
     "RuntimeTechniqueStats",
     "SettlementResult",

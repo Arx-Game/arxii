@@ -17,20 +17,24 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from decimal import Decimal
+from fractions import Fraction
 
 from django.core.exceptions import ValidationError
 from evennia.accounts.models import AccountDB
-from hypothesis import given, settings, strategies as st
+from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 from rest_framework.test import APIClient
 
+from actions.constants import ActionCategory
 from actions.definitions.ritual import PerformRitualAction
 from evennia_extensions.factories import AccountFactory, RoomProfileFactory
 from world.character_creation.magic_writer import MagicPicks, WeightedResonance
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.test_helpers import force_check_outcome
+from world.fatigue.services import get_or_create_fatigue_pool
 from world.gm.factories import GMProfileFactory
+from world.magic.constants import AnimaRitualEndorsement, GainSource
 from world.magic.exceptions import AnimaRitualPickError, CharacterEngagedForRitual
 from world.magic.factories import (
     CharacterAnimaFactory,
@@ -45,9 +49,11 @@ from world.magic.models import (
     CharacterAura,
     CharacterResonance,
     Resonance,
+    ResonanceGrant,
     Ritual,
     RitualCheckConfig,
 )
+from world.magic.models.kindling import AnimaRitualResonanceAward
 from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.services.anima import provision_player_anima_ritual
 from world.magic.services.anima_ritual_action import start_partner_ritual
@@ -56,7 +62,9 @@ from world.magic.services.anima_ritual_picks import (
     anima_ritual_choices,
     set_up_anima_ritual_resonances,
 )
+from world.magic.services.ritual_bond import ritual_earning_parts
 from world.mechanics.factories import CharacterEngagementFactory
+from world.progression.seeds import seed_social_engagement_kudos_category
 from world.roster.constants import NPCLoanStatus
 from world.roster.factories import (
     NPCLoanFactory,
@@ -65,8 +73,10 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models.choices import RosterType
-from world.scenes.action_constants import ActionRequestStatus
+from world.scenes import action_services
+from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_models import SceneActionRequest
+from world.scenes.action_services import respond_to_action_request
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.interaction_services import invalidate_active_scene_cache
 from world.scenes.models import Persona, Scene
@@ -600,3 +610,401 @@ class SetUpRoute(_PicksWorld):
         self.assertEqual(
             stored_picks(ritual), (self.resonances[primal_key].pk, self.resonances[outward_key].pk)
         )
+
+
+TIERS = tuple(sorted(CANONICAL_OUTCOME_LEVELS))
+PARTNER_KINDS = ("pc", "gm holder")
+FAILED_TIERS = ("Failure", "Critical Failure")
+
+
+def affinity_percent(key: str, split: tuple[int, int, int]) -> int:
+    """The percent of an aura split ``(celestial, primal, abyssal)`` that the affinity of the
+    resonance ``key`` holds."""
+    celestial, primal, abyssal = split
+    return {"primal": primal, "celestial": celestial, "abyssal": abyssal}[key.split()[0]]
+
+
+def ritual_grants(sheet: CharacterSheet) -> list[tuple[int, str]]:
+    """The anima ritual's resonance grants to ``sheet`` as (resonance id, affinity name)."""
+    return list(
+        ResonanceGrant.objects.filter(character_sheet=sheet, source=GainSource.ANIMA_RITUAL)
+        .order_by("pk")
+        .values_list("resonance_id", "resonance__affinity__name")
+    )
+
+
+def stored_performance(ritual: Ritual) -> dict:
+    """The performance row's answer fields as the database holds them."""
+    return (
+        AnimaRitualPerformance.objects.filter(ritual=ritual)
+        .values("was_successful", "endorsement", "outward_amount_pending", "outward_resonance_id")
+        .get()
+    )
+
+
+class _Bonded(_AnimaRitualWorld, HypothesisTestCase):
+    """Every tier has an anima budget row and a resonance award row, set to 0 here and written
+    by each example (an authored row is one per tier, so the examples rewrite the rows)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # A player character's acceptance awards kudos in this category; the fast tier does not
+        # seed it, and the award code remembers the row it first read.
+        seed_social_engagement_kudos_category()
+        action_services._SOCIAL_ENGAGEMENT_CATEGORY = None
+        cls.addClassCleanup(setattr, action_services, "_SOCIAL_ENGAGEMENT_CATEGORY", None)
+        for outcome in cls.outcomes.values():
+            AnimaRitualBudgetAward.objects.create(outcome_tier=outcome, budget=0)
+            AnimaRitualResonanceAward.objects.create(outcome_tier=outcome, amount=0)
+
+    def author(self, tier: str, *, budget: int, award: int) -> None:
+        """Write the budget and the resonance award of one tier."""
+        outcome = self.outcomes[tier]
+        for model, field, value in (
+            (AnimaRitualBudgetAward, "budget", budget),
+            (AnimaRitualResonanceAward, "amount", award),
+        ):
+            row = model.objects.get(outcome_tier=outcome)
+            setattr(row, field, value)
+            row.save()
+
+    def run_ritual(self, sheet: CharacterSheet, partner: Persona, scene: Scene, tier: str) -> None:
+        """Ask ``partner`` to take part and let the roll land on ``tier``: a story NPC answers at
+        once, a player character accepts."""
+        with force_check_outcome(self.outcomes[tier]):
+            request = start_partner_ritual(
+                scene=scene, initiator_persona=sheet.primary_persona, target_persona=partner
+            )
+            if request.status == ActionRequestStatus.PENDING:
+                respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+
+
+class Split(_Bonded):
+    """The award is split between the two picks by how the performer's aura is set up."""
+
+    @settings(max_examples=40, deadline=None)
+    @given(
+        split=aura_splits(),
+        primal_key=st.one_of(st.none(), st.sampled_from(PRIMAL_KEYS)),
+        outward_key=st.one_of(st.none(), st.sampled_from(OUTWARD_KEYS)),
+        total=st.integers(0, 200),
+    )
+    def test_the_parts_follow_the_aura_and_add_up_to_the_award(
+        self,
+        split: tuple[int, int, int],
+        primal_key: str | None,
+        outward_key: str | None,
+        total: int,
+    ) -> None:
+        """Maintainer: "it should ideally be proportional to how her aura is set up. If it was
+        1:1, then her ratio eventually gets thrown off."
+
+        Given any settled aura split, a total from 0 to 200 and either or both picks, the two
+        parts add up to the total. With both picks and a nonzero share between them the outward
+        part is the total times its share of the two, rounded down (never more, and less than one
+        short of it). One pick gets the whole total. Two picks whose shares are both 0 split it,
+        the outward part rounding down.
+        """
+        assume(primal_key is not None or outward_key is not None)
+        sheet = CharacterSheetFactory()
+        CharacterAuraFactory(
+            character=sheet,
+            celestial=Decimal(split[0]),
+            primal=Decimal(split[1]),
+            abyssal=Decimal(split[2]),
+        )
+        primal = self.resonances[primal_key] if primal_key else None
+        outward = self.resonances[outward_key] if outward_key else None
+
+        parts = ritual_earning_parts(sheet, total, primal, outward)
+
+        self.assertEqual(parts.primal + parts.outward, total)
+        if outward is None:
+            self.assertEqual((parts.primal, parts.outward), (total, 0))
+        elif primal is None:
+            self.assertEqual((parts.primal, parts.outward), (0, total))
+        else:
+            share_primal = affinity_percent(primal_key, split)
+            share_outward = affinity_percent(outward_key, split)
+            if share_primal + share_outward == 0:
+                self.assertEqual(parts.outward, total // 2)
+            else:
+                exact = Fraction(total * share_outward, share_primal + share_outward)
+                self.assertLessEqual(parts.outward, exact)
+                self.assertLess(exact - parts.outward, 1)
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        zero_slot=st.sampled_from(("primal", "outward")),
+        outward_key=st.sampled_from(OUTWARD_KEYS),
+        share=st.integers(1, 100),
+        total=st.integers(1, 200),
+        kind=st.sampled_from(PARTNER_KINDS),
+    )
+    def test_a_pick_whose_affinity_share_is_zero_gets_nothing(
+        self, zero_slot: str, outward_key: str, share: int, total: int, kind: str
+    ) -> None:
+        """Maintainer: "it should ideally be proportional to how her aura is set up."
+
+        Given both picks, one affinity settled at 0 and the other at 1 to 100 (the rest of the
+        aura in the other outward affinity), the zero-share pick's part is 0 and the other pick's
+        part is the whole award, with no floor. Run to the end with a Success worth ``total``, no
+        resonance of the zero-share pick is granted. A story NPC partner's outward part is granted
+        at once; a player character partner's is stored as pending, and when the outward share is
+        0 nothing is stored and the partner is never asked.
+        """
+        other_outward = next(key for key in OUTWARD_KEYS if key != outward_key)
+        percents = {"primal": 0, "celestial": 0, "abyssal": 0}
+        outward_name = outward_key.split()[0]
+        percents[other_outward.split()[0]] = 100 - share
+        if zero_slot == "primal":
+            percents[outward_name] = share
+            percents["primal"] = 0
+        else:
+            percents["primal"] = share
+            percents[outward_name] = 0
+        split = (percents["celestial"], percents["primal"], percents["abyssal"])
+        # The remainder of the aura sits in the other outward affinity, so the shares sum to 100.
+        self.assertEqual(sum(split), 100)
+        sheet, ritual = self.performer(
+            split=split, picks=[("primal 1", 1), (outward_key, 1)], anima=0
+        )
+        primal, outward = self.resonances["primal 1"], self.resonances[outward_key]
+
+        parts = ritual_earning_parts(sheet, total, primal, outward)
+        expected = (0, total) if zero_slot == "primal" else (total, 0)
+        self.assertEqual((parts.primal, parts.outward), expected)
+
+        self.author("Success", budget=0, award=total)
+        partner = self.partner(kind)
+        scene = self.scene_with(sheet, partner.character_sheet, gm=False)
+        self.run_ritual(sheet, partner, scene, "Success")
+
+        granted = {resonance_id: 0 for resonance_id, _ in ritual_grants(sheet)}
+        for resonance_id, _affinity in ritual_grants(sheet):
+            granted[resonance_id] += 1
+        performance = stored_performance(ritual)
+        if zero_slot == "primal":
+            self.assertNotIn(primal.pk, granted)
+            if kind == "pc":
+                self.assertEqual(performance["endorsement"], AnimaRitualEndorsement.PENDING)
+                self.assertEqual(performance["outward_amount_pending"], total)
+            else:
+                self.assertEqual(granted, {outward.pk: 1})
+        else:
+            self.assertNotIn(outward.pk, granted)
+            self.assertEqual(granted, {primal.pk: 1})
+            self.assertEqual(performance["endorsement"], AnimaRitualEndorsement.NOT_ASKED)
+            self.assertEqual(performance["outward_amount_pending"], 0)
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        split=aura_splits(),
+        primal_key=st.one_of(st.none(), st.sampled_from(PRIMAL_KEYS)),
+        outward_key=st.one_of(st.none(), st.sampled_from(OUTWARD_KEYS)),
+        tier=st.sampled_from(TIERS),
+        kind=st.sampled_from(PARTNER_KINDS),
+        awards=st.lists(st.integers(0, 30), min_size=len(TIERS), max_size=len(TIERS)),
+    )
+    def test_a_ritual_earns_at_most_two_resonances_one_primal_one_outward(  # noqa: PLR0913
+        self,
+        split: tuple[int, int, int],
+        primal_key: str | None,
+        outward_key: str | None,
+        tier: str,
+        kind: str,
+        awards: list[int],
+    ) -> None:
+        """Maintainer: "it can always be a primal resonance for how it affects the caster, and a
+        celestial or abyssal resonance for how it affects the target. So up to 2."
+
+        Run the whole path (ask, accept when a player is asked) for any aura, any picks, any
+        roll result and a player character or a story NPC partner. The ritual's resonance grants
+        number at most 2, every Primal one is the Primal pick and every other one is the outward
+        pick.
+        """
+        picks = [(key, 1) for key in (primal_key, outward_key) if key]
+        sheet, _ritual = self.performer(split=split, picks=picks, anima=0)
+        for name, amount in zip(TIERS, awards, strict=True):
+            self.author(name, budget=0, award=amount)
+        partner = self.partner(kind)
+        scene = self.scene_with(sheet, partner.character_sheet)
+
+        self.run_ritual(sheet, partner, scene, tier)
+
+        grants = ritual_grants(sheet)
+        self.assertLessEqual(len(grants), 2)
+        for resonance_id, affinity_name in grants:
+            if affinity_name == self.primal.name:
+                self.assertEqual(resonance_id, self.resonances[primal_key].pk)
+            else:
+                self.assertEqual(resonance_id, self.resonances[outward_key].pk)
+
+
+class Roll(_Bonded):
+    """The roll decides whether anima and Primal growth happen, and the affinity what the
+    partner feels."""
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        tier=st.sampled_from((*FAILED_TIERS, "Partial Success")),
+        budget=st.integers(0, 8),
+        award=st.integers(0, 30),
+        start=st.integers(0, 10),
+        kind=st.sampled_from(PARTNER_KINDS),
+    )
+    def test_a_failed_roll_grants_no_anima_and_no_primal(
+        self, tier: str, budget: int, award: int, start: int, kind: str
+    ) -> None:
+        """Maintainer: "Check determines whether anima happens and whether resonance happens if
+        primal." and "A failed roll gives no anima and no Primal resonance."
+
+        Given a Failure or Critical Failure, whatever budget and award the tier holds, her anima
+        is what it was and none of her Primal pick is granted. A Partial Success counts as a
+        success at its own tier (maintainer ruling 2026-11-22): her anima rises by that tier's
+        budget (no higher than her maximum of 10), she is granted the whole of that tier's award
+        in her Primal pick (her only pick, so it takes the whole award), and the performance is
+        recorded as a success.
+        """
+        sheet, ritual = self.performer(picks=[("primal 1", 1)], anima=start)
+        self.author(tier, budget=budget, award=award)
+        partner = self.partner(kind)
+        scene = self.scene_with(sheet, partner.character_sheet)
+
+        self.run_ritual(sheet, partner, scene, tier)
+
+        primal_grants = [amount for rid, amount in self.primal_grants(sheet)]
+        if tier in FAILED_TIERS:
+            self.assertEqual(anima_of(sheet), start)
+            self.assertEqual(primal_grants, [])
+            self.assertFalse(stored_performance(ritual)["was_successful"])
+        else:
+            self.assertEqual(anima_of(sheet), min(start + budget, 10))
+            self.assertEqual(primal_grants, [award] if award > 0 else [])
+            self.assertTrue(stored_performance(ritual)["was_successful"])
+
+    def primal_grants(self, sheet: CharacterSheet) -> list[tuple[int, int]]:
+        """(resonance id, amount) of each of the ritual's Primal grants to ``sheet``."""
+        return list(
+            ResonanceGrant.objects.filter(
+                character_sheet=sheet,
+                source=GainSource.ANIMA_RITUAL,
+                resonance__affinity=self.primal,
+            )
+            .order_by("pk")
+            .values_list("resonance_id", "amount")
+        )
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        outward_key=st.sampled_from(OUTWARD_KEYS),
+        tier=st.sampled_from(TIERS),
+        kind=st.sampled_from(PARTNER_KINDS),
+        setting=st.integers(1, 10),
+        fatigue=st.integers(0, 10),
+    )
+    def test_abyssal_hurts_and_celestial_helps_the_partner(
+        self, outward_key: str, tier: str, kind: str, setting: int, fatigue: int
+    ) -> None:
+        """Maintainer: "abyssal hurts, celestial helps."
+
+        Given an outward pick, the Abyssal affinity set to add ``setting`` fatigue and the
+        Celestial one set to ease ``setting``, a partner with ``fatigue`` social fatigue ends the
+        ritual ``setting`` higher after an Abyssal pick, and ``setting`` lower (never below 0)
+        after a Celestial one, whatever the roll result and whether the partner is a player
+        character or a story NPC.
+        """
+        originals = (self.abyssal.ritual_partner_fatigue, self.celestial.ritual_partner_fatigue)
+        self.abyssal.ritual_partner_fatigue = setting
+        self.celestial.ritual_partner_fatigue = -setting
+        self.abyssal.save()
+        self.celestial.save()
+        try:
+            sheet, _ritual = self.performer(picks=[("primal 1", 1), (outward_key, 1)], anima=0)
+            partner = self.partner(kind)
+            pool = get_or_create_fatigue_pool(partner.character_sheet)
+            pool.set_current(ActionCategory.SOCIAL, fatigue)
+            pool.save()
+            scene = self.scene_with(sheet, partner.character_sheet)
+
+            self.run_ritual(sheet, partner, scene, tier)
+
+            after = get_or_create_fatigue_pool(partner.character_sheet).get_current(
+                ActionCategory.SOCIAL
+            )
+            if outward_key.startswith("abyssal"):
+                self.assertEqual(after, fatigue + setting)
+            else:
+                self.assertEqual(after, max(fatigue - setting, 0))
+        finally:
+            self.abyssal.ritual_partner_fatigue, self.celestial.ritual_partner_fatigue = originals
+            self.abyssal.save()
+            self.celestial.save()
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        drop_primal=st.booleans(),
+        drop_outward=st.booleans(),
+        budget=st.integers(1, 8),
+        award=st.integers(1, 30),
+        start=st.integers(0, 10),
+        kind=st.sampled_from(PARTNER_KINDS),
+    )
+    def test_a_performer_who_does_not_hold_a_pick_earns_nothing_for_that_part(  # noqa: PLR0913
+        self,
+        drop_primal: bool,
+        drop_outward: bool,
+        budget: int,
+        award: int,
+        start: int,
+        kind: str,
+    ) -> None:
+        """Maintainer: the ritual feeds "the resonances that they already have".
+
+        The ritual belongs to the account, so another character on it can perform it with a pick
+        she does not hold. Given an aura settled half Primal and half Abyssal, any of the two
+        picks she does not hold, and a Success, her anima still rises by the budget (no higher
+        than 10) and the partner's fatigue still follows the outward pick's affinity. A part
+        whose resonance she does not hold earns nothing and is not stored as pending; a part she
+        holds earns half the award (the outward part rounds down).
+        """
+        setting = 4
+        original = self.abyssal.ritual_partner_fatigue
+        self.abyssal.ritual_partner_fatigue = setting
+        self.abyssal.save()
+        try:
+            sheet, ritual = self.performer(
+                split=(0, 50, 50), picks=[("primal 1", 1), ("abyssal 1", 1)], anima=start
+            )
+            primal, outward = self.resonances["primal 1"], self.resonances["abyssal 1"]
+            for dropped, resonance in ((drop_primal, primal), (drop_outward, outward)):
+                if dropped:
+                    CharacterResonance.objects.filter(
+                        character_sheet=sheet, resonance=resonance
+                    ).delete()
+            self.author("Success", budget=budget, award=award)
+            partner = self.partner(kind)
+            scene = self.scene_with(sheet, partner.character_sheet)
+
+            self.run_ritual(sheet, partner, scene, "Success")
+
+            self.assertEqual(anima_of(sheet), min(start + budget, 10))
+            fatigue = get_or_create_fatigue_pool(partner.character_sheet)
+            self.assertEqual(fatigue.get_current(ActionCategory.SOCIAL), setting)
+            outward_part = award // 2
+            granted = dict(ritual_grants(sheet))
+            performance = stored_performance(ritual)
+            self.assertEqual(primal.pk in granted, not drop_primal)
+            if drop_outward or outward_part == 0:
+                self.assertNotIn(outward.pk, granted)
+                self.assertEqual(performance["outward_amount_pending"], 0)
+                self.assertEqual(performance["endorsement"], AnimaRitualEndorsement.NOT_ASKED)
+            elif kind == "pc":
+                self.assertNotIn(outward.pk, granted)
+                self.assertEqual(performance["outward_amount_pending"], outward_part)
+            else:
+                self.assertIn(outward.pk, granted)
+        finally:
+            self.abyssal.ritual_partner_fatigue = original
+            self.abyssal.save()

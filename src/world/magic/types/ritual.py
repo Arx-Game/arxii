@@ -5,6 +5,8 @@ from typing import TYPE_CHECKING
 
 from django.db import models
 
+from world.magic.constants import AnimaRitualEndorsement
+
 if TYPE_CHECKING:
     from world.conditions.models import ConditionStage, ConditionTemplate
     from world.magic.models import Resonance
@@ -55,18 +57,38 @@ class AnimaRitualChoices:
 
 
 @dataclass(frozen=True)
-class RitualBond:
-    """What an Anima ritual with a partner did beyond restoring anima (#5181).
+class RitualEarningParts:
+    """The ritual's resonance award for one roll, split between its two picks (#5280).
 
-    ``resonance`` is the resonance the ritual names (None when it names none, and then nothing
-    else here is set). ``resonance_granted`` is what the ledger recorded after the earn rate of
-    the resonance's own affinity (0 when the roll earned nothing). ``partner_fatigue_setting``
-    is the sign of the affinity's ``ritual_partner_fatigue`` (1 takes, -1 eases, 0 does nothing);
-    ``fatigue_change`` is the fatigue the partner actually gained (positive) or lost (negative).
+    ``primal`` is the part for the Primal pick (how the ritual feels to the performer) and
+    ``outward`` the part for the Celestial or Abyssal pick (what it reaches for in the
+    partner). The two always add up to the award.
     """
 
-    resonance: Resonance | None = None
-    resonance_granted: int = 0
+    primal: int
+    outward: int
+
+
+@dataclass(frozen=True)
+class RitualBond:
+    """What an Anima ritual with a partner did beyond restoring anima (#5181, #5280).
+
+    ``primal_resonance`` and ``outward_resonance`` are the ritual's two picks (None for a pick
+    it has none of). ``primal_granted`` is what the ledger recorded for the Primal pick, after
+    the earn rate of its own affinity. ``outward_granted`` is the same for the outward pick, set
+    only when a story NPC partner took part and the roll succeeded: a player character partner's
+    part is held, not granted, so ``outward_pending`` carries the stored amount and
+    ``endorsement`` is ``pending``. ``partner_fatigue_setting`` is the sign of the outward
+    affinity's ``ritual_partner_fatigue`` (1 takes, -1 eases, 0 does nothing); ``fatigue_change``
+    is the fatigue the partner actually gained (positive) or lost (negative).
+    """
+
+    primal_resonance: Resonance | None = None
+    primal_granted: int = 0
+    outward_resonance: Resonance | None = None
+    outward_granted: int = 0
+    outward_pending: int = 0
+    endorsement: str = AnimaRitualEndorsement.NOT_ASKED
     partner_fatigue_setting: int = 0
     fatigue_change: int = 0
 

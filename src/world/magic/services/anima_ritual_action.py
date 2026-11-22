@@ -1,8 +1,8 @@
 """Anima ritual resolver registration, and the ritual with a partner (#5181).
 
 Registers the "anima_ritual" action_key with the scenes resolver registry.
-On accept, applies the check outcome via apply_anima_ritual_outcome(), then earns the
-ritual's resonance and touches the partner's fatigue via apply_ritual_bond().
+On accept, applies the check outcome via apply_anima_ritual_outcome(), then grows the ritual's
+two resonances and touches the partner's fatigue via apply_ritual_bond().
 
 A player asks a partner to take part with ``start_partner_ritual`` (the web scene-action
 create and telnet ``ritual anima <partner>`` both call it). The request is the ordinary
@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from world.scenes.action_models import SceneActionRequest
     from world.scenes.models import Persona, Scene
     from world.scenes.types import EnhancedSceneActionResult
+    from world.traits.models import CheckOutcome
 
 ANIMA_RITUAL_ACTION_KEY = "anima_ritual"
 _NO_RITUAL = "You have no anima ritual to perform."
@@ -215,13 +216,13 @@ def resolve_ritual_request(action_request: SceneActionRequest) -> None:
 
 
 def apply_ritual_to_request(
-    action_request: SceneActionRequest, ritual: Ritual, outcome: object
+    action_request: SceneActionRequest, ritual: Ritual, outcome: CheckOutcome
 ) -> tuple[RitualOutcome, RitualBond | None]:
     """Apply a rolled outcome for ``action_request``: anima and Soulfray, then the bond.
 
-    The partner is the request's target. The bond (resonance earned, the partner's fatigue)
-    runs after the anima outcome, and only when there is a partner. Both are told privately
-    after commit.
+    The partner is the request's target. The bond (the two resonances earned, the partner's
+    fatigue and the question put to a player character partner) runs after the anima outcome,
+    and only when there is a partner. Both are told privately after commit.
     """
     from world.magic.services.anima import apply_anima_ritual_outcome  # noqa: PLC0415
     from world.magic.services.ritual_bond import apply_ritual_bond  # noqa: PLC0415
@@ -236,13 +237,20 @@ def apply_ritual_to_request(
             scene=action_request.scene,
             character_sheet=performer,
             partner_sheet=partner,
+            performer_persona=action_request.initiator_persona,
         )
         bond = None
         if partner is not None:
             bond = apply_ritual_bond(
-                performer, partner, ritual, outcome, action_request.snapshot_resonance
+                performer,
+                partner,
+                ritual,
+                outcome,
+                ritual_outcome.performance,
+                primal=action_request.snapshot_primal_resonance,
+                outward=action_request.snapshot_resonance,
             )
-            _tell_both(action_request, performer, partner, bond)
+            _tell_both(action_request, performer, partner, bond, ritual_outcome.anima_recovered)
     return ritual_outcome, bond
 
 
@@ -251,10 +259,15 @@ def _tell_both(
     performer: CharacterSheet,
     partner: CharacterSheet,
     bond: RitualBond,
+    anima_recovered: int,
 ) -> None:
     """Tell the performer what their ritual did and the partner what it did to them, privately,
-    once the transaction commits. The room is told nothing: the performance is the pose."""
+    once the transaction commits. A player character partner whose answer is awaited is also
+    asked the question, with how to answer it from telnet. The room is told nothing: the
+    performance is the pose."""
+    from world.magic.constants import AnimaRitualEndorsement  # noqa: PLC0415
     from world.magic.services.ritual_bond import (  # noqa: PLC0415
+        partner_endorsement_prompt,
         partner_ritual_line,
         performer_ritual_line,
     )
@@ -262,12 +275,18 @@ def _tell_both(
 
     initiator_name = action_request.initiator_persona.name
     partner_name = action_request.target_persona.name
-    performer_line = performer_ritual_line(bond, partner_name)
+    performer_line = performer_ritual_line(bond, partner_name, anima_recovered)
     if performer_line:
         send_stored_notice(performer, performer_line, ooc_note="Anima ritual")
     partner_line = partner_ritual_line(bond, initiator_name)
     if partner_line:
         send_stored_notice(partner, partner_line, ooc_note="Anima ritual")
+    if bond.endorsement == AnimaRitualEndorsement.PENDING and bond.outward_resonance is not None:
+        prompt = partner_endorsement_prompt(initiator_name, bond.outward_resonance)
+        how_to = (
+            f"Type |writual endorse {initiator_name}|n or |writual withhold {initiator_name}|n."
+        )
+        send_stored_notice(partner, f"{prompt} {how_to}", ooc_note="Anima ritual")
 
 
 def _resolve_anima_ritual(

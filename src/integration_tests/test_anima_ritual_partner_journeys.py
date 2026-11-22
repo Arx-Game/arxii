@@ -2,17 +2,22 @@
 
 Mara asks Tobin to take part in her Anima ritual in a live scene. Tobin is told what is asked
 and what it will do to his fatigue before he agrees; Hobb stands there and sees none of it. Mara's
-ritual rolls its own check (pinned to a Success), restores her anima and earns the resonance the
-ritual names; the affinity of that resonance decides whether Tobin's fatigue is taken (Abyssal),
-eased (Celestial) or left alone (Primal).
+ritual rolls its own check (pinned to a Success), restores her anima and grows her two picks: a
+Primal one at once, and an outward one (Celestial or Abyssal) that waits on Tobin's answer when he
+is a player and is granted at once when he is a story NPC a GM runs. The affinity of the outward
+pick decides whether Tobin's fatigue is taken (Abyssal), eased (Celestial) or left alone (a
+Celestial affinity set to 0).
 
-Numbers are worked out by hand, not read from the code. The Success award is 6 resonance and the
-anima budget for a Success is 6, so Mara's anima goes from 2 to 8 and she earns 6 in the ritual's
-resonance (the earn rates are left at 100). The affinity sets 10 fatigue taken for Abyssal and 5
-eased for Celestial; Tobin starts at 0 and 7.
+Numbers are worked out by hand, not read from the code. The Success award is 6 resonance, split by
+Mara's aura (half Primal, half the outward affinity) into 3 and 3, and the anima budget for a
+Success is 6, so Mara's anima goes from 2 to 8 and her Primal pick grows by 3 (the earn rates are
+left at 100). The affinity sets 10 fatigue taken for Abyssal and 5 eased for Celestial; Tobin
+starts at 0 and 7.
 """
 
 from __future__ import annotations
+
+from decimal import Decimal
 
 from django.test import override_settings
 from rest_framework import status
@@ -24,10 +29,11 @@ from world.checks.factories import CheckTypeFactory
 from world.checks.services import difficulty_points
 from world.checks.test_helpers import force_check_outcome
 from world.fatigue.services import get_or_create_fatigue_pool
-from world.magic.constants import GainSource, RitualExecutionKind
+from world.magic.constants import AnimaRitualEndorsement, GainSource, RitualExecutionKind
 from world.magic.factories import (
     AnimaRitualResonanceAwardFactory,
     CharacterAnimaFactory,
+    CharacterAuraFactory,
     CharacterResonanceFactory,
     ResonanceFactory,
     RitualCheckConfigFactory,
@@ -87,6 +93,7 @@ class _RitualWithAPartner(JourneyCase):
         Affinity.objects.clear_cache()
         AffinityInteraction.objects.clear_cache()
         self.resonance = ResonanceFactory(name="Ruin", affinity=self.affinity)
+        self.primal_resonance = ResonanceFactory(name="Hollow", affinity=primal)
 
         self.lantern = self.make_room("The Lantern")
         self.scene = SceneFactory(
@@ -105,8 +112,15 @@ class _RitualWithAPartner(JourneyCase):
         AnimaRitualBudgetAward.objects.create(outcome_tier=self.success, budget=6)
         SoulfrayConfigFactory(ritual_severity_cost_per_point=1)
         CharacterAnimaFactory(character=self.mara.sheet_data, current=2, maximum=10)
-        # The ritual's resonance earns only for a character who already holds it.
-        CharacterResonanceFactory(character_sheet=self.mara.sheet_data, resonance=self.resonance)
+        # The ritual feeds only the resonances she already holds, half her aura in each affinity.
+        for held in (self.resonance, self.primal_resonance):
+            CharacterResonanceFactory(character_sheet=self.mara.sheet_data, resonance=held)
+        CharacterAuraFactory(
+            character=self.mara.sheet_data,
+            celestial=Decimal(50 if self.AFFINITY == "Celestial" else 0),
+            primal=Decimal(50),
+            abyssal=Decimal(50 if self.AFFINITY == "Abyssal" else 0),
+        )
         self.check_type = CheckTypeFactory()
         self.ritual = RitualFactory(
             execution_kind=RitualExecutionKind.SCENE_ACTION,
@@ -119,6 +133,7 @@ class _RitualWithAPartner(JourneyCase):
         )
         RitualCheckConfigFactory(
             ritual=self.ritual,
+            primal_resonance=self.primal_resonance,
             outward_resonance=self.resonance,
             check_type=self.check_type,
             target_difficulty_level=2,
@@ -139,9 +154,9 @@ class _RitualWithAPartner(JourneyCase):
         self.capture = capture
         return told
 
-    def balance(self) -> int:
+    def balance(self, resonance=None) -> int:
         row = CharacterResonance.objects.filter(
-            character_sheet=self.mara.sheet_data, resonance=self.resonance
+            character_sheet=self.mara.sheet_data, resonance=resonance or self.primal_resonance
         ).first()
         return row.balance if row is not None else 0
 
@@ -163,15 +178,27 @@ class AnAbyssalRitualFeedsOnItsPartner(_RitualWithAPartner):
         # The ritual rolled its own check type at its own difficulty.
         self.assertEqual(self.capture.check_type, self.check_type)
         self.assertEqual(self.capture.target_difficulty, difficulty_points(2))
-        self.assertTold(self.mara, "Your ritual feeds on Tobin. Your Ruin grows by 6.")
+        self.assertTold(
+            self.mara,
+            "Your ritual feeds on Tobin. You recover 6 anima. Your Hollow grows by 3.",
+        )
         self.assertTold(self.tobin, "Mara's ritual leaves you wearier.")
+        # Tobin is asked whether the ritual reached him; Mara's Ruin waits on his answer.
+        self.assertTold(self.tobin, "Mara's ritual reached for your ruin. Did it take hold of you?")
+        self.assertTold(self.tobin, "ritual endorse Mara")
         self.assertEqual(social_fatigue(self.tobin), 10)
-        self.assertEqual(self.balance(), 6)
+        self.assertEqual(self.balance(), 3)
+        self.assertEqual(self.balance(self.resonance), 0)
         self.assertEqual(CharacterAnima.objects.get(character=self.mara.sheet_data).current, 8)
         performance = AnimaRitualPerformance.objects.get()
         self.assertEqual(performance.target_character, self.tobin.sheet_data)
+        self.assertEqual(performance.endorsement, AnimaRitualEndorsement.PENDING)
+        self.assertEqual(performance.outward_amount_pending, 3)
         grant = ResonanceGrant.objects.get(source=GainSource.ANIMA_RITUAL)
-        self.assertEqual((grant.character_sheet, grant.amount), (self.mara.sheet_data, 6))
+        self.assertEqual(
+            (grant.character_sheet, grant.resonance, grant.amount),
+            (self.mara.sheet_data, self.primal_resonance, 3),
+        )
         request = SceneActionRequest.objects.get(action_key="anima_ritual")
         self.assertEqual(request.status, ActionRequestStatus.RESOLVED)
         # Hobb read none of it.
@@ -246,7 +273,15 @@ class AnNpcPartner(_RitualWithAPartner):
         self.assertEqual(CharacterAnima.objects.get(character=self.mara.sheet_data).current, 8)
         performance = AnimaRitualPerformance.objects.get()
         self.assertEqual(performance.target_character, self.hobb.sheet_data)
-        self.assertEqual(self.balance(), 6)
+        # A story NPC is not asked: both parts are granted at once, 3 to each pick.
+        self.assertEqual(performance.endorsement, AnimaRitualEndorsement.NOT_ASKED)
+        self.assertEqual(self.balance(), 3)
+        self.assertEqual(self.balance(self.resonance), 3)
+        self.assertTold(
+            self.mara,
+            "Your ritual feeds on Hobb. You recover 6 anima. Your Hollow grows by 3."
+            " Your Ruin grows by 3.",
+        )
 
 
 class ACelestialRitualEasesItsPartner(_RitualWithAPartner):
@@ -260,13 +295,15 @@ class ACelestialRitualEasesItsPartner(_RitualWithAPartner):
         self.assertTold(self.tobin, "It will ease your fatigue.")
         self.agree()
 
-        self.assertTold(self.mara, "Your ritual lifts Tobin. Your Ruin grows by 6.")
+        self.assertTold(
+            self.mara, "Your ritual lifts Tobin. You recover 6 anima. Your Hollow grows by 3."
+        )
         self.assertTold(self.tobin, "Mara's ritual leaves you lighter.")
         self.assertEqual(social_fatigue(self.tobin), 2)
 
 
-class APrimalRitualDoesNothingToItsPartner(_RitualWithAPartner):
-    AFFINITY = "Primal"
+class ARitualSetToDoNothingToItsPartner(_RitualWithAPartner):
+    AFFINITY = "Celestial"
     SETTING = 0
 
     def test_tobin_reads_no_effect_sentence_and_his_fatigue_stays(self) -> None:
@@ -276,11 +313,14 @@ class APrimalRitualDoesNothingToItsPartner(_RitualWithAPartner):
         self.assertNotTold(self.tobin, "fatigue")
         self.agree()
 
-        self.assertTold(self.mara, "Your ritual with Tobin is done. Your Ruin grows by 6.")
+        self.assertTold(
+            self.mara,
+            "Your ritual with Tobin is done. You recover 6 anima. Your Hollow grows by 3.",
+        )
         self.assertNotTold(self.tobin, "wearier")
         self.assertNotTold(self.tobin, "lighter")
         self.assertEqual(social_fatigue(self.tobin), 7)
-        self.assertEqual(self.balance(), 6)
+        self.assertEqual(self.balance(), 3)
 
 
 class AskingThroughTheWeb(_RitualWithAPartner):
@@ -320,7 +360,7 @@ class AskingThroughTheWeb(_RitualWithAPartner):
 
         self.assertEqual(responded.status_code, status.HTTP_200_OK, responded.content)
         self.assertEqual(social_fatigue(self.tobin), 10)
-        self.assertEqual(self.balance(), 6)
+        self.assertEqual(self.balance(), 3)
 
     def test_a_ritual_already_performed_in_the_scene_is_refused_with_a_400(self) -> None:
         self.ask()
