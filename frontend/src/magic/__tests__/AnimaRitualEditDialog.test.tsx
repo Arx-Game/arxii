@@ -461,9 +461,9 @@ describe('AnimaRitualEditDialog', () => {
     );
   });
 
-  // 15. A current pick she no longer holds shows selected and disabled, and Attune waits for
-  // that slot to change, because the server refuses an attunement that keeps an unheld pick
-  it('shows an unheld current pick as a disabled selected pill and waits for a change', async () => {
+  // 15. A current pick she no longer holds shows selected and disabled, stays on the ritual while
+  // she changes the other slot, and leaves the picker once she picks another in its slot
+  it('keeps an unheld pick on the ritual while the other slot changes', async () => {
     mockChoices({
       ...lockedChoices,
       primal: [unsetChoices.primal[1]],
@@ -481,11 +481,15 @@ describe('AnimaRitualEditDialog', () => {
     const kept = within(dialog).getByRole('button', { name: 'Thrill' });
     expect(kept).toBeDisabled();
     expect(kept).toHaveAttribute('aria-pressed', 'true');
-    // Changing only the outward pick still keeps the unheld Primal one, so it is not offered.
+
     await userEvent.click(within(dialog).getByRole('button', { name: 'Mercy' }));
-    expect(within(dialog).getByRole('button', { name: 'Attune' })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Attune' }));
+    expect(mockAttune).toHaveBeenCalledWith(
+      { character_sheet_id: 12, primal_resonance_id: 1, outward_resonance_id: 4 },
+      expect.any(Object)
+    );
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Hunger' }));
-    expect(within(dialog).getByRole('button', { name: 'Attune' })).toBeEnabled();
+    expect(within(dialog).queryByRole('button', { name: 'Thrill' })).not.toBeInTheDocument();
   });
 });

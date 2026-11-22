@@ -18,7 +18,10 @@ interface AnimaRitualPillPickerProps {
   allowNone?: boolean;
   disabled?: boolean;
   testId: string;
-  /** A resonance the ritual carries that she no longer holds: shown selected, never pickable. */
+  /**
+   * A resonance the ritual carries that she no longer holds: shown selected and disabled while it
+   * is the pick, gone once she picks another.
+   */
   keptUnheld?: AnimaRitualResonance | null;
 }
 
@@ -51,19 +54,21 @@ export function AnimaRitualPillPicker({
         {label}
       </span>
       <div role="group" aria-labelledby={labelId} className="flex flex-wrap gap-2">
-        {keptUnheld && !resonances.some((resonance) => resonance.id === keptUnheld.id) && (
-          <button
-            type="button"
-            disabled
-            aria-pressed={selectedId === keptUnheld.id}
-            className={pillClass(
-              selectedId === keptUnheld.id,
-              affinityInkClass(keptUnheld.affinity_name)
-            )}
-          >
-            {keptUnheld.name}
-          </button>
-        )}
+        {keptUnheld &&
+          selectedId === keptUnheld.id &&
+          !resonances.some((resonance) => resonance.id === keptUnheld.id) && (
+            <button
+              type="button"
+              disabled
+              aria-pressed={selectedId === keptUnheld.id}
+              className={pillClass(
+                selectedId === keptUnheld.id,
+                affinityInkClass(keptUnheld.affinity_name)
+              )}
+            >
+              {keptUnheld.name}
+            </button>
+          )}
         {resonances.map((resonance) => (
           <button
             key={resonance.id}

@@ -45,11 +45,6 @@ export function AnimaRitualAttuneDialog({
   const currentPrimalId = choices.primal_pick?.id ?? null;
   const currentOutwardId = choices.outward_pick?.id ?? null;
   const changed = primalId !== currentPrimalId || outwardId !== currentOutwardId;
-  // A pick she no longer holds stays on the ritual until changed, but the server refuses an
-  // attunement that keeps it, so Attune waits until that slot holds something she does.
-  const keepsUnheld =
-    (primalId !== null && !choices.primal.some((r) => r.id === primalId)) ||
-    (outwardId !== null && !choices.outward.some((r) => r.id === outwardId));
   const { anima_cost, resonance_cost, ap_cost, check_type_name } = choices.attunement;
 
   const newlyPicked: string[] = [];
@@ -166,11 +161,7 @@ export function AnimaRitualAttuneDialog({
         </dl>
 
         <DialogFooter>
-          <Button
-            type="button"
-            onClick={handleAttune}
-            disabled={!changed || keepsUnheld || attune.isPending}
-          >
+          <Button type="button" onClick={handleAttune} disabled={!changed || attune.isPending}>
             {attune.isPending ? 'Attuning...' : 'Attune'}
           </Button>
           <Button
