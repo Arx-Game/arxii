@@ -974,7 +974,9 @@ which checks in priority order:
    non-PRIMARY persona, or any persona while an alternate self is worn
 6. `fallback_media` (e.g. `CombatOpponent.portrait` for persona-less NPCs)
 7. `placeholder_portrait_url()` for a face that hides the real one and found no image above:
-   staff's `FacePlaceholderConfig.placeholder`, else a built-in grey silhouette (#4889)
+   staff's `FacePlaceholderConfig.placeholder`, else the built-in grey silhouette, the frontend's public
+   file `placeholder-portrait.svg` at `BUILTIN_FACE_PLACEHOLDER_URL` (#4889; `web/urls.py` sends
+   that root path to `/static/dist/` in the Django-served build)
 
 Rows that read a persona's portrait from its text copy (poses, combat and battle lists, the
 persona list) use `persona_face_url`, which ends in the same placeholder for a non-PRIMARY face.

@@ -532,6 +532,11 @@ class TheFaceWithNoPortrait(DisguiseFaceCase):
         sheet = self.hobb_reads_sheet()
         self.assertEqual(sheet["profile_picture"], BUILTIN_FACE_PLACEHOLDER_URL)
         self.assertNotIn(real_url, str(sheet))
+        # The address is the frontend's public file, sent to the built bundle's copy rather
+        # than answered with the app shell.
+        file_reply = self.api().get(BUILTIN_FACE_PLACEHOLDER_URL)
+        self.assertEqual(file_reply.status_code, 301)
+        self.assertEqual(file_reply["Location"], "/static/dist/placeholder-portrait.svg")
 
         art = MediaFactory(player_data=None, slug="silhouette", cloudinary_public_id="art/sil")
         config = get_face_placeholder_config()

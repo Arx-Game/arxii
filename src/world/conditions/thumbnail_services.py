@@ -5,7 +5,6 @@ following ADR-0014 (no persisted derived data — derive on read).
 """
 
 from typing import TYPE_CHECKING
-from urllib.parse import quote
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -16,15 +15,10 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 # The picture a face with no portrait shows until staff choose one in the admin (#4889): a
-# plain grey head and shoulders, the same for every face. It is a data URI so it needs no
-# file served beside the page and no per-face lookup; it never carries a letter or a name.
-BUILTIN_FACE_PLACEHOLDER_URL = "data:image/svg+xml," + quote(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">'
-    '<rect width="100" height="100" fill="#d4d4d8"/>'
-    '<circle cx="50" cy="38" r="18" fill="#a1a1aa"/>'
-    '<path d="M14 100c0-24 16-38 36-38s36 14 36 38z" fill="#a1a1aa"/>'
-    "</svg>"
-)
+# plain grey head and shoulders, the same for every face. It is the frontend's public file
+# ``frontend/public/placeholder-portrait.svg``; it needs no per-face lookup and never carries
+# a letter or a name.
+BUILTIN_FACE_PLACEHOLDER_URL = "/placeholder-portrait.svg"
 
 
 def resolve_thumbnail(
