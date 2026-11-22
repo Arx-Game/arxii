@@ -2562,8 +2562,12 @@ class AnimaRitualEndorsementViewSet(ListModelMixin, GenericViewSet):
             # Any row: an answered one is refused in words by the action, not hidden as a 404.
             return rows
         played = RosterEntry.objects.for_account(cast(AccountDB, self.request.user)).character_ids()
+        # A row whose performer's persona or outward resonance is gone has nothing to ask about.
         return rows.filter(
-            endorsement=AnimaRitualEndorsement.PENDING, target_character_id__in=played
+            endorsement=AnimaRitualEndorsement.PENDING,
+            target_character_id__in=played,
+            performer_persona__isnull=False,
+            outward_resonance__isnull=False,
         ).order_by("-performed_at")
 
     @extend_schema(

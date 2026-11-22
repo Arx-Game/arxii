@@ -41,6 +41,69 @@ def _close(performance: AnimaRitualPerformance, answer: str) -> None:
     performance.save(update_fields=["endorsement", "outward_amount_pending"])
 
 
+def _scene_is_over(scene_id: int | None) -> bool:
+    """True when the ritual's scene is gone (``None``) or finished, read from the database."""
+    from world.scenes.models import Scene  # noqa: PLC0415
+
+    if scene_id is None:
+        return True
+    finished = Scene.objects.filter(pk=scene_id).values_list("date_finished", flat=True).first()
+    return finished is not None
+
+
+def _settle(
+    partner_sheet: CharacterSheet,
+    performance: AnimaRitualPerformance,
+    held: dict,
+    *,
+    endorse: bool,
+) -> str:
+    """Settle a pending ritual the partner may answer, inside the row lock; ``held`` is the row
+    as the lock read it. Returns the partner's read-back line."""
+    from world.magic.services.soul_tether import send_stored_notice  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    performer_sheet = performance.performer_persona.character_sheet
+    partner_name = active_persona_for_sheet(partner_sheet).name
+    performer_name = performance.performer_persona.name
+    if not endorse:
+        _close(performance, AnimaRitualEndorsement.WITHHELD)
+        send_stored_notice(
+            performer_sheet, f"{partner_name} did not feel it.", ooc_note="Anima ritual"
+        )
+        return f"You did not feel {performer_name}'s ritual."
+    outward = (
+        Resonance.objects.filter(pk=held["outward_resonance_id"]).first()
+        if held["outward_resonance_id"] is not None
+        else None
+    )
+    granted = 0
+    pending = held["outward_amount_pending"]
+    if (
+        outward is not None
+        and pending > 0
+        and CharacterResonance.objects.filter(
+            character_sheet=performer_sheet, resonance=outward
+        ).exists()
+    ):
+        ledger: list = []
+        grant_resonance(
+            performer_sheet,
+            outward,
+            pending,
+            source=GainSource.ANIMA_RITUAL,
+            deed_label=performance.ritual.name,
+            ledger_out=ledger,
+        )
+        granted = ledger[-1].amount
+    _close(performance, AnimaRitualEndorsement.ENDORSED)
+    line = f"{partner_name} felt it."
+    if granted > 0 and outward is not None:
+        line += f" Your {outward.name} grows by {granted}."
+    send_stored_notice(performer_sheet, line, ooc_note="Anima ritual")
+    return f"You felt {performer_name}'s ritual."
+
+
 def answer_anima_ritual(
     partner_sheet: CharacterSheet, performance: AnimaRitualPerformance, *, endorse: bool
 ) -> str:
@@ -48,7 +111,9 @@ def answer_anima_ritual(
 
     The row is locked and its answer read from the database, so a second answer (a double
     click, a telnet and a web answer together) finds it settled and grants nothing more. Only
-    the character the ritual reached for may answer, and only while it is pending.
+    the character the ritual reached for may answer, and only while it is pending and its scene
+    is still going: a ritual whose scene is finished or gone is lapsed here, whichever route
+    ended the scene, and refused like any other that is not waiting.
 
     Endorse grants the held outward part to the performer, as an ``ANIMA_RITUAL`` grant, if she
     still holds the outward resonance (the ritual feeds the resonances she already has), and
@@ -56,11 +121,9 @@ def answer_anima_ritual(
     her "<partner> did not feel it."
 
     Raises:
-        AnimaRitualAnswerError: the ritual is not pending, or is not the partner's to answer.
+        AnimaRitualAnswerError: the ritual is not pending, is not the partner's to answer, or
+            its scene is over.
     """
-    from world.magic.services.soul_tether import send_stored_notice  # noqa: PLC0415
-    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
     with transaction.atomic():
         # Read the answer through the lock, never from the identity-mapped instance: another
         # process may have settled the row since this one cached it.
@@ -72,6 +135,7 @@ def answer_anima_ritual(
                 "target_character_id",
                 "outward_amount_pending",
                 "outward_resonance_id",
+                "scene_id",
             )
             .first()
         )
@@ -82,45 +146,15 @@ def answer_anima_ritual(
             or performance.performer_persona is None
         ):
             raise AnimaRitualAnswerError(NOT_WAITING)
-        performer_sheet = performance.performer_persona.character_sheet
-        outward = (
-            Resonance.objects.filter(pk=held["outward_resonance_id"]).first()
-            if held["outward_resonance_id"] is not None
-            else None
-        )
-        partner_name = active_persona_for_sheet(partner_sheet).name
-        performer_name = performance.performer_persona.name
-        if not endorse:
-            _close(performance, AnimaRitualEndorsement.WITHHELD)
-            send_stored_notice(
-                performer_sheet, f"{partner_name} did not feel it.", ooc_note="Anima ritual"
-            )
-            return f"You did not feel {performer_name}'s ritual."
-        granted = 0
-        pending = held["outward_amount_pending"]
-        if (
-            outward is not None
-            and pending > 0
-            and CharacterResonance.objects.filter(
-                character_sheet=performer_sheet, resonance=outward
-            ).exists()
-        ):
-            ledger: list = []
-            grant_resonance(
-                performer_sheet,
-                outward,
-                pending,
-                source=GainSource.ANIMA_RITUAL,
-                deed_label=performance.ritual.name,
-                ledger_out=ledger,
-            )
-            granted = ledger[-1].amount
-        _close(performance, AnimaRitualEndorsement.ENDORSED)
-        line = f"{partner_name} felt it."
-        if granted > 0 and outward is not None:
-            line += f" Your {outward.name} grows by {granted}."
-        send_stored_notice(performer_sheet, line, ooc_note="Anima ritual")
-    return f"You felt {performer_name}'s ritual."
+        line = None
+        if _scene_is_over(held["scene_id"]):
+            _close(performance, AnimaRitualEndorsement.LAPSED)
+        else:
+            line = _settle(partner_sheet, performance, held, endorse=endorse)
+    if line is None:
+        # Raised after the block so the lapse above is committed, not rolled back with it.
+        raise AnimaRitualAnswerError(NOT_WAITING)
+    return line
 
 
 def lapse_pending_endorsements(scene: Scene) -> int:

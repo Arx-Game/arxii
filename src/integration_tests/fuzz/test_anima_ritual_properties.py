@@ -20,6 +20,7 @@ from decimal import Decimal
 from fractions import Fraction
 
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from evennia.accounts.models import AccountDB
 from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
@@ -1146,7 +1147,15 @@ class FailedRoll(_Bonded):
             self._with_failed_endorsement_percent(original)
 
 
-ANSWERS = ("endorse", "withhold", "lapse", "endorse twice", "third character first")
+ANSWERS = (
+    "endorse",
+    "withhold",
+    "lapse",
+    "endorse twice",
+    "third character first",
+    "endorse after the scene ended elsewhere",
+    "endorse after she lost the outward resonance",
+)
 
 
 def outward_part_of(award: int, split: tuple[int, int, int], outward_key: str) -> int:
@@ -1187,9 +1196,13 @@ class Endorsement(_Bonded):
         could give some even if the check fails." and "smaller amount."
 
         Given any tier, any ``failed_endorsement_percent`` from 0 to 100, and an answer (endorse,
-        withhold, the scene finishing unanswered, endorse twice, or a third character answering
-        first and then the partner endorsing), the outward pick's ritual grants number exactly 1
-        when the partner endorsed (even when they answered twice) and 0 otherwise. Its ledger
+        withhold, the scene finishing unanswered, endorse twice, a third character answering
+        first and then the partner endorsing, an endorse after a route that ended the scene
+        without lapsing it (as a battle's end does), or an endorse after the performer lost the
+        outward resonance), the outward pick's ritual grants number exactly 1 when the partner
+        endorsed (even when they answered twice) and 0 otherwise. An endorse after the scene
+        ended is refused and lapses the ritual; an endorse after the performer lost the
+        resonance settles as endorsed and grants nothing. Its ledger
         amount, before the affinity earn rate (100 here), is the outward part of the rolled
         tier's award on Partial Success or better, or the percent of the outward part of the
         Success tier's award, rounded down, on Failure or Critical Failure. A partner is asked
@@ -1216,23 +1229,17 @@ class Endorsement(_Bonded):
                 primal_expected = 0
             row = AnimaRitualPerformance.objects.get(ritual=ritual)
             endorsed = answer in ("endorse", "endorse twice", "third character first")
+            lost_it = answer == "endorse after she lost the outward resonance"
             asked = expected > 0
-            if answer == "third character first":
-                stranger = CharacterSheetFactory()
-                self.play(stranger)
-                with self.assertRaises(AnimaRitualAnswerError):
-                    answer_anima_ritual(stranger, row, endorse=True)
-                self.assertEqual(self.outward_grants(sheet, outward), [])
-            if answer == "lapse":
-                scene.finish_scene()
-            elif asked:
-                answer_anima_ritual(partner.character_sheet, row, endorse=endorsed)
-                if answer == "endorse twice":
-                    with self.assertRaises(AnimaRitualAnswerError):
-                        answer_anima_ritual(partner.character_sheet, row, endorse=True)
-            else:
-                with self.assertRaises(AnimaRitualAnswerError):
-                    answer_anima_ritual(partner.character_sheet, row, endorse=True)
+            self.give_answer(
+                answer,
+                sheet=sheet,
+                outward=outward,
+                partner=partner,
+                scene=scene,
+                row=row,
+                asked=asked,
+            )
 
             self.assertEqual(
                 self.outward_grants(sheet, outward), [expected] if endorsed and asked else []
@@ -1251,14 +1258,57 @@ class Endorsement(_Bonded):
                     {
                         "withhold": AnimaRitualEndorsement.WITHHELD,
                         "lapse": AnimaRitualEndorsement.LAPSED,
+                        "endorse after the scene ended elsewhere": AnimaRitualEndorsement.LAPSED,
                     }.get(answer, AnimaRitualEndorsement.ENDORSED),
                 )
-                if not endorsed:
-                    with self.assertRaises(AnimaRitualAnswerError):
-                        answer_anima_ritual(partner.character_sheet, row, endorse=True)
+                if not endorsed and not lost_it:
+                    self.assert_refused(partner.character_sheet, row)
                     self.assertEqual(self.outward_grants(sheet, outward), [])
         finally:
             self._set_failed_endorsement_percent(original)
+
+    def assert_refused(self, answerer: CharacterSheet, row: AnimaRitualPerformance) -> None:
+        """An endorse by ``answerer`` is refused (nothing is waiting for them)."""
+        with self.assertRaises(AnimaRitualAnswerError):
+            answer_anima_ritual(answerer, row, endorse=True)
+
+    def give_answer(  # noqa: PLR0913
+        self,
+        answer: str,
+        *,
+        sheet: CharacterSheet,
+        outward: Resonance,
+        partner: Persona,
+        scene: Scene,
+        row: AnimaRitualPerformance,
+        asked: bool,
+    ) -> None:
+        """Answer (or fail to answer) the ritual the way ``answer`` names, and check each refusal
+        along the way. ``asked`` is whether the partner was asked at all."""
+        partner_sheet = partner.character_sheet
+        if answer == "third character first":
+            stranger = CharacterSheetFactory()
+            self.play(stranger)
+            self.assert_refused(stranger, row)
+            self.assertEqual(self.outward_grants(sheet, outward), [])
+        if answer == "lapse":
+            scene.finish_scene()
+        elif answer == "endorse after the scene ended elsewhere":
+            scene.date_finished = timezone.now()
+            scene.is_active = False
+            scene.save(update_fields=["date_finished", "is_active"])
+            self.assert_refused(partner_sheet, row)
+        elif not asked:
+            if answer == "endorse after she lost the outward resonance":
+                CharacterResonance.objects.filter(character_sheet=sheet, resonance=outward).delete()
+            self.assert_refused(partner_sheet, row)
+        elif answer == "endorse after she lost the outward resonance":
+            CharacterResonance.objects.filter(character_sheet=sheet, resonance=outward).delete()
+            answer_anima_ritual(partner_sheet, row, endorse=True)
+        else:
+            answer_anima_ritual(partner_sheet, row, endorse=answer != "withhold")
+            if answer == "endorse twice":
+                self.assert_refused(partner_sheet, row)
 
     @staticmethod
     def _set_failed_endorsement_percent(percent: int) -> int:
