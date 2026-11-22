@@ -618,14 +618,15 @@ performances and raises `RitualAlreadyPerformedThisScene`, which `resolve_ritual
 request resolved with no effect and no payment.
 
 *Two picks.* `RitualCheckConfig` carries `primal_resonance` (a Primal resonance: how the ritual feels to
-her) and `outward_resonance` (a Celestial or Abyssal one: what it reaches for in her partner), each
+her) and `outward_resonance` (a Celestial or Abyssal one: the part of the award her partner decides by endorsing), each
 optional, held to its affinity by `clean()`. Creation writes the heaviest Primal and the heaviest
 Celestial or Abyssal pick (`MagicPicks.primal_resonance`, `outward_resonance`, through
 `provision_player_anima_ritual(..., primal_resonance=, outward_resonance=)`).
 `anima_ritual_choices(sheet)` lists the resonances she holds for each slot (a `CharacterResonance` row
 is "held") and the picks now carried; `set_up_anima_ritual_resonances` writes both for free, once
 (`services/anima_ritual_picks.py`); after that the picks are locked and a pick stays on the ritual
-until she changes it, even if the resonance leaves her held list. `gain.anima_ritual_resonance(sheet)`
+until she changes it, even if the resonance leaves her held list, and it pays nothing while she does not
+hold it. `gain.anima_ritual_resonance(sheet)`
 returns the pick of the aura's main affinity, else the Primal pick, else the outward pick.
 
 *The roll and the split.* On accept `resolve_ritual_request` rolls the snapshotted check and
@@ -635,12 +636,15 @@ boundary: a Partial Success counts as a success and pays its own tier's `AnimaRi
 and `AnimaRitualResonanceAward` resonance; a Failure or Critical Failure recovers no anima, eases no
 Soulfray, adds no Chosen patron share and grows no Primal resonance. The tier's resonance award splits
 by `ritual_earning_parts`: each pick's weight is the settled share of its affinity in her aura
-(`CharacterAuraShare.settled_percent`), the outward part is the award times its share of the two,
-rounded down, and the Primal part takes the rest, so the parts add up to the award and a share of 0
-gets 0 (two empty shares split in half, the outward part rounding down; a lone pick takes the whole
-award). Each part also gets the kindled share of its own resonance (`earn_percent`), and each is paid
-only if the performer holds that resonance, since the ritual belongs to the account and another
-character on it may perform it with a pick she does not hold. The Primal part is granted at once
+(`CharacterAuraShare.settled_percent`). The part paid to the outward pick is the award times the
+outward affinity's share divided by the sum of the Primal and outward shares, rounded down. The part
+paid to the Primal pick is the rest, so the parts add up to the award. When both shares are 0 the award
+splits in half (the outward part rounded down), and a lone pick takes the whole award. A pick whose
+share is exactly 0 beside a non-zero one is paid 0, and a pick keeps paying while she holds the
+resonance, however small its share. Each part also gets the kindled share of its own resonance (`earn_percent`), and a part pays
+nothing when the performer does not hold that resonance (held means a `CharacterResonance` row, which
+persists when her aura share falls), which happens when another character on the same account
+performs the account's ritual, since the ritual belongs to the account. The Primal part is granted at once
 through `grant_resonance(source=GainSource.ANIMA_RITUAL)`. The partner's fatigue follows
 `Affinity.ritual_partner_fatigue` of the outward pick on any roll (positive `apply_fatigue` in the
 social category, negative `recover_fatigue`), and the partner reads that sentence ("It will add to your

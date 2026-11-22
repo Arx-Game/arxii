@@ -1513,11 +1513,15 @@ Built as one PR (the numbered parts were the build order):
 - **Two picks.** `RitualCheckConfig.resonance` became `primal_resonance` and `outward_resonance`
   (three migrations: expand, copy by affinity, contract). Creation writes the heaviest Primal and the
   heaviest Celestial or Abyssal pick. The first setup of the picks is free (`/api/magic/anima-ritual/`);
-  after that they are locked and a pick keeps feeding until changed.
-- **The split.** The award at the roll's tier splits by the two affinities' settled aura shares (outward
-  rounded down, Primal takes the rest, a share of 0 gets 0). A Partial Success counts as a success at
-  its own tier's award; a lower tier recovers no anima and grows no Primal resonance. A part is paid
-  only if the performer holds that resonance.
+  after that they are locked and a pick stays until changed. Held means a `CharacterResonance` row, which
+  persists when her aura share falls, so a pick keeps paying while she holds the resonance.
+- **The split.** The award at the roll's tier splits by the two affinities' settled aura shares. The
+  part paid to the outward pick is the award times the outward share divided by the sum of the Primal
+  and outward shares, rounded down; the part paid to the Primal pick is the rest; when both shares are
+  0 the award splits in half. A share of exactly 0 beside a non-zero one is paid 0. A Partial Success counts as a success at
+  its own tier's award; a lower tier recovers no anima and grows no Primal resonance. A part pays
+  nothing when the performer does not hold that resonance, as when another character on the same
+  account performs the account's ritual.
 - **The partner's answer.** A player partner endorses or withholds the outward part (after a failed roll,
   `AnimaConfig.failed_endorsement_percent` of the Success tier's outward part is held for them to
   endorse). An NPC partner gives it on the roll alone. Unanswered questions lapse when the scene

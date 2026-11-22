@@ -273,16 +273,22 @@ anima ritual IS the character's magical identity.
 (persona menu, Rituals page, the ritual's own name, web dispatch, bare `ritual anima`) is refused with
 "Name someone else to take part in your ritual."; the one way in is `start_partner_ritual`, which
 `check_partner_ritual` guards (an NPC partner needs a GM: `partner_is_run_by_a_gm`; refused in combat).
-- **Two picks.** Primal (how it feels to her) and Celestial or Abyssal (what it reaches for in her
-  partner), each from the resonances she holds (`CharacterResonance` row). The first setup is free
-  (`set_up_anima_ritual_resonances`); after that they are locked, and a pick stays on the ritual until
-  changed even if it leaves her held list.
+- **Two picks.** A Primal one (how it feels to her) and a Celestial or Abyssal one (the part of the
+  award her partner decides by endorsing), each from the resonances she holds. Held means a
+  `CharacterResonance` row, which persists when her aura share falls. The first setup is free
+  (`set_up_anima_ritual_resonances`); after that they are locked. A pick stays on the ritual until
+  changed even if it leaves her held list, and pays nothing while she does not hold it.
 - **The split.** `ritual_succeeded` (`success_level >= 0`) is the one success boundary: a Partial
   Success pays its own tier's anima budget and `AnimaRitualResonanceAward`; Failure and Critical
   Failure recover no anima, ease no Soulfray and grow no Primal resonance. `ritual_earning_parts`
-  splits the award by the two affinities' settled aura shares (outward rounded down, Primal takes the
-  rest, a share of 0 gets 0). A part is paid only if the performer holds that resonance, because the
-  ritual is account-scoped.
+  splits the award by the two affinities' settled aura shares. The part paid to the outward pick is
+  the award times the outward affinity's settled share divided by the sum of the Primal and outward
+  shares, rounded down; the part paid to the Primal pick is the rest; when both shares are 0 the
+  award splits in half (the outward part rounded down); a lone pick gets the whole award. A pick
+  whose share is exactly 0 beside a non-zero one is paid 0. A pick keeps paying while she holds the
+  resonance, however small its share. A part pays nothing when the performer does not hold that
+  resonance, which happens when another character on the same account performs the account's
+  ritual.
 - **The answer.** A player partner endorses or withholds the outward part
   (`answer_anima_ritual`; `AnimaRitualPerformance.endorsement`, `outward_amount_pending`). After a failed
   roll, `AnimaConfig.failed_endorsement_percent` of the Success tier's outward part is held. An NPC

@@ -215,8 +215,8 @@ class AnimaConfig(SharedMemoryModel):
         default=50,
         validators=[MaxValueValidator(100)],
         help_text=(
-            "Percent of a ritual's resonance growth a performer keeps for the part the "
-            "partner did not endorse (0 to 100)."
+            "Percent of the Success tier's outward resonance part granted to the performer "
+            "when the partner endorses an anima ritual after a failed roll (0 to 100)."
         ),
     )
     attunement_anima_cost = models.PositiveIntegerField(
