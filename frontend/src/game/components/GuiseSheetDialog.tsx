@@ -146,14 +146,16 @@ export function GuiseSheetDialog({
         </DialogHeader>
         <div className="space-y-3">
           <section className="space-y-2 border-b pb-3" aria-label="How this face looks">
-            <h3 className="text-sm font-semibold">How this face looks</h3>
-            <div className="flex items-start gap-3">
+            <h3 className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+              How this face looks
+            </h3>
+            <div className="flex flex-wrap items-center gap-3">
               <PersonaAvatar
                 source={{ name: faceName, thumbnailMediaUrl: portraitUrl }}
                 size="lg"
                 className="h-[4.5rem] w-[4.5rem]"
               />
-              <div className="flex flex-col items-start gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
                   variant="outline"

@@ -62,7 +62,7 @@ export function FacePortraitPicker({
           <DialogTitle>Choose a portrait</DialogTitle>
         </DialogHeader>
         <div className="gallery">
-          <div className="gallery-head">
+          <div className="gallery-head justify-between">
             <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
               Your pictures
             </span>
@@ -77,7 +77,7 @@ export function FacePortraitPicker({
             busy={busy}
             onFiles={(files) => onUpload(files[0])}
           />
-          <div className="grid max-h-64 grid-cols-3 gap-2 overflow-y-auto">
+          <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto p-0.5">
             {pictures.map((picture) => (
               <button
                 key={picture.id}
@@ -85,27 +85,27 @@ export function FacePortraitPicker({
                 aria-pressed={chosen?.id === picture.id}
                 onClick={() => setChosen(picture)}
                 className={cn(
-                  'flex flex-col gap-1 border p-1 text-left text-xs hover:bg-accent',
+                  'flex flex-col overflow-hidden rounded-md border text-left text-xs hover:bg-accent',
                   chosen?.id === picture.id && 'ring-2 ring-primary'
                 )}
               >
                 <img src={picture.url} alt={picture.title} className="aspect-square object-cover" />
-                <span className="truncate">{picture.title || 'Untitled'}</span>
-                {picture.file_size_bytes !== null && (
-                  <span className="text-muted-foreground">
-                    {formatBytes(picture.file_size_bytes)}
-                  </span>
-                )}
+                <span className="flex justify-between gap-1 px-1.5 py-1 text-muted-foreground">
+                  <span className="truncate">{picture.title || 'Untitled'}</span>
+                  {picture.file_size_bytes !== null && (
+                    <span className="shrink-0">{formatBytes(picture.file_size_bytes)}</span>
+                  )}
+                </span>
               </button>
             ))}
           </div>
-          {chosen && chosen.file_size_bytes !== null && (
-            <p className="text-sm text-muted-foreground">
-              Adds {formatBytes(chosen.file_size_bytes)}
-            </p>
-          )}
         </div>
         <DialogFooter>
+          {chosen && chosen.file_size_bytes !== null && (
+            <span className="text-sm text-muted-foreground sm:mr-auto sm:self-center">
+              Adds {formatBytes(chosen.file_size_bytes)}
+            </span>
+          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
             Cancel
           </Button>
