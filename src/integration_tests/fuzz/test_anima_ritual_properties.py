@@ -37,7 +37,7 @@ from world.character_sheets.models import CharacterSheet
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.conditions.factories import SoulfrayTemplateFactory
-from world.conditions.models import ConditionInstance
+from world.conditions.models import ConditionInstance, ConditionTemplate
 from world.fatigue.services import get_or_create_fatigue_pool
 from world.gm.factories import GMProfileFactory
 from world.magic.constants import AnimaRitualEndorsement, GainSource
@@ -52,6 +52,7 @@ from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
     ResonanceFactory,
+    SoulfrayConfigFactory,
     ensure_conversion_pairs,
     ensure_soulfray_config,
 )
@@ -72,6 +73,7 @@ from world.magic.services.anima import provision_player_anima_ritual
 from world.magic.services.anima_ritual_action import start_partner_ritual
 from world.magic.services.anima_ritual_attunement import (
     ALREADY_ATTUNED,
+    NO_PICKS_YET,
     attune_anima_ritual,
 )
 from world.magic.services.anima_ritual_endorsement import answer_anima_ritual
@@ -1378,13 +1380,28 @@ def action_points_of(sheet: CharacterSheet) -> int:
     return ActionPointPool.objects.values_list("current", flat=True).get(character=sheet)
 
 
+ATTUNEMENT_KINDS = (
+    "setup",
+    "attune",
+    "attune to the same picks",
+    "attune too poor",
+    "attune to a pick she does not hold",
+    "attune to the wrong affinity",
+    "attune in combat",
+)
+
+
+# The operations that must be refused, whatever she holds and pays.
+REFUSED_KINDS = frozenset(ATTUNEMENT_KINDS) - {"setup", "attune"}
+
+
 @st.composite
 def attunement_operations(draw: st.DrawFn) -> tuple[str, str | None, str | None, str]:
     """One step of a character's life with her ritual: what she does, the picks she names (a
     Primal and a Celestial or Abyssal resonance, either may be absent) and the tier the dice
     land on if she rolls."""
     return (
-        draw(st.sampled_from(("setup", "attune", "attune to the same picks", "attune too poor"))),
+        draw(st.sampled_from(ATTUNEMENT_KINDS)),
         draw(st.one_of(st.none(), st.sampled_from(PRIMAL_KEYS))),
         draw(st.one_of(st.none(), st.sampled_from(OUTWARD_KEYS))),
         draw(st.sampled_from(tuple(CANONICAL_OUTCOME_LEVELS))),
@@ -1399,6 +1416,9 @@ class _AttunementWorld(_PicksWorld):
         super().setUpTestData()
         cls.attune_check = CheckTypeFactory()
         AnimaConfig.get_singleton()
+        # Resonances she never holds: one for each slot.
+        cls.unheld_primal = ResonanceFactory(name="Unheld Primal", affinity=cls.primal)
+        cls.unheld_outward = ResonanceFactory(name="Unheld Celestial", affinity=cls.celestial)
 
     def paying_performer(self) -> tuple[CharacterSheet, Ritual]:
         """A performer with an unset ritual who can pay for attunements (anima, resonance and
@@ -1426,7 +1446,9 @@ class _AttunementWorld(_PicksWorld):
         row.save(update_fields=["maximum", "current", "glut"])
 
     def attune_for_anima(self, sheet: CharacterSheet, cost: int) -> AttunementResult:
-        """Attune to a lone Primal pick when the only price is ``cost`` anima."""
+        """Set the ritual up (free) with a lone Primal pick, then attune it to another when the
+        only price is ``cost`` anima."""
+        set_up_anima_ritual_resonances(sheet, self.resonances["primal 2"], None)
         before = self.set_costs(
             attunement_anima_cost=cost,
             attunement_resonance_cost=0,
@@ -1475,7 +1497,9 @@ class Attunement(_AttunementWorld):
 
         Given a sequence of up to five operations (the free setup, an attunement whose roll lands
         on any tier, an attunement to the picks she already has, an attunement she cannot pay
-        for) and any costs from 0 to 10, with or without an attunement check set: the ritual's
+        for, one to a resonance she does not hold, one to a resonance of the wrong affinity, one
+        while in combat; an attunement before any picks are set is refused too) and any costs from
+        0 to 10, with or without an attunement check set: the ritual's
         picks are the first successful setup's, or the last successful attunement's (a Partial
         Success is a success); a failed roll spent exactly the configured action points, anima and
         resonance (the resonance of each newly picked slot) and left the picks; a refusal left
@@ -1519,17 +1543,9 @@ class Attunement(_AttunementWorld):
                 else:
                     with self.assertRaises(AnimaRitualPickError):
                         set_up_anima_ritual_resonances(sheet, primal, outward)
-            elif kind == "attune to the same picks":
-                with self.assertRaises(AnimaRitualPickError) as refused:
-                    attune_anima_ritual(
-                        sheet,
-                        self.resonances[picks[0]] if picks[0] else None,
-                        self.resonances[picks[1]] if picks[1] else None,
-                    )
-                self.assertEqual(refused.exception.user_message, ALREADY_ATTUNED)
-            elif kind == "attune too poor":
-                self.attune_when_too_poor(sheet, picks, target, balances, costs)
-            elif target in {(None, None), picks}:
+            elif kind in REFUSED_KINDS:
+                self.attempt_refused(kind, sheet, picks, target, balances, costs)
+            elif picks == (None, None) or target in {(None, None), picks}:
                 with self.assertRaises(AnimaRitualPickError):
                     attune_anima_ritual(sheet, primal, outward)
             else:
@@ -1558,6 +1574,57 @@ class Attunement(_AttunementWorld):
             self.assertEqual(action_points_of(sheet), points)
             for key, left in balances.items():
                 self.assertEqual(balance_of(sheet, self.resonances[key]), left)
+
+    def attempt_refused(  # noqa: PLR0913 - one operation's whole state
+        self,
+        kind: str,
+        sheet: CharacterSheet,
+        picks: tuple[str | None, str | None],
+        target: tuple[str | None, str | None],
+        balances: dict[str, int],
+        costs: AnimaConfig,
+    ) -> None:
+        """Attempt the attunement ``kind`` names, which must be refused (the caller checks that
+        nothing was spent)."""
+        primal = self.resonances[target[0]] if target[0] else None
+        outward = self.resonances[target[1]] if target[1] else None
+        if kind == "attune to the same picks":
+            with self.assertRaises(AnimaRitualPickError) as refused:
+                attune_anima_ritual(
+                    sheet,
+                    self.resonances[picks[0]] if picks[0] else None,
+                    self.resonances[picks[1]] if picks[1] else None,
+                )
+            unset = picks == (None, None)
+            self.assertEqual(
+                refused.exception.user_message, NO_PICKS_YET if unset else ALREADY_ATTUNED
+            )
+        elif kind == "attune too poor" and picks == (None, None):
+            self.assert_refused_attunement(sheet, primal, outward)
+        elif kind == "attune too poor":
+            self.attune_when_too_poor(sheet, picks, target, balances, costs)
+        elif kind == "attune to a pick she does not hold":
+            if primal is None:
+                self.assert_refused_attunement(sheet, None, self.unheld_outward)
+            else:
+                self.assert_refused_attunement(sheet, self.unheld_primal, outward)
+        elif kind == "attune to the wrong affinity":
+            if primal is None:
+                self.assert_refused_attunement(sheet, self.resonances["celestial 1"], outward)
+            else:
+                self.assert_refused_attunement(sheet, primal, self.resonances["primal 2"])
+        else:
+            engagement = CharacterEngagementFactory(character=sheet)
+            self.assert_refused_attunement(sheet, primal, outward)
+            engagement.delete()
+
+    def assert_refused_attunement(
+        self, sheet: CharacterSheet, primal: Resonance | None, outward: Resonance | None
+    ) -> None:
+        """Attuning to ``primal`` and ``outward`` is refused (the caller checks that nothing was
+        spent)."""
+        with self.assertRaises(AnimaRitualPickError):
+            attune_anima_ritual(sheet, primal, outward)
 
     def attune_when_too_poor(
         self,
@@ -1664,3 +1731,66 @@ class AttunementIntoSoulfray(_AttunementWorld):
             target=sheet.character, condition=self.soulfray
         ).exists()
         self.assertEqual(frayed, cost > current + glut)
+
+
+class AttunementThatFailsMidway(_AttunementWorld):
+    """A spend that raises halfway leaves every row as it was."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        # A Soulfray config that names no condition: a shortfall in anima then raises, after the
+        # action points and the anima have been charged.
+        SoulfrayConfigFactory(condition=None)
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        anima=st.integers(0, 3),
+        extra=st.integers(1, 7),
+        resonance_cost=st.integers(0, 10),
+        ap_cost=st.integers(0, 10),
+    )
+    def test_an_attunement_that_raises_after_spending_leaves_every_row_as_it_was(
+        self, anima: int, extra: int, resonance_cost: int, ap_cost: int
+    ) -> None:
+        """Maintainer: "failure means stuff is consumed without it changing", and a failure that
+        is not the roll consumes nothing.
+
+        Given any costs, and an anima cost that is more than she has, so the spend must go
+        through Soulfray, which here cannot (staff named no Soulfray condition) and raises after
+        the action points and the anima were charged: the database rolls back, and what the game
+        reads (the cached action points, anima, resonance balances and the ritual's picks) shows
+        the values it held before, equal to the database's.
+        """
+        sheet, ritual = self.paying_performer()
+        set_up_anima_ritual_resonances(sheet, self.resonances["primal 2"], None)
+        self.set_anima(sheet, current=anima, glut=0)
+        before = self.set_costs(
+            attunement_anima_cost=anima + extra,
+            attunement_resonance_cost=resonance_cost,
+            attunement_ap_cost=ap_cost,
+            attunement_check_type=None,
+        )
+        try:
+            with self.assertRaises(ConditionTemplate.DoesNotExist):
+                attune_anima_ritual(
+                    sheet, self.resonances["primal 1"], self.resonances["abyssal 1"]
+                )
+        finally:
+            self.set_costs(**before)
+
+        primal_2 = self.resonances["primal 2"].pk
+        self.assertEqual(stored_picks(ritual), (primal_2, None))
+        config = ritual.check_config
+        self.assertEqual(
+            (config.primal_resonance_id, config.outward_resonance_id), (primal_2, None)
+        )
+        self.assertEqual(anima_of(sheet), anima)
+        self.assertEqual(CharacterAnima.objects.get(character=sheet).current, anima)
+        self.assertEqual(action_points_of(sheet), RICH_AP)
+        self.assertEqual(ActionPointPool.objects.get(character=sheet).current, RICH_AP)
+        for key in RESONANCE_KEYS:
+            resonance = self.resonances[key]
+            self.assertEqual(balance_of(sheet, resonance), RICH_BALANCE)
+            cached = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
+            self.assertEqual(cached.balance, RICH_BALANCE)
