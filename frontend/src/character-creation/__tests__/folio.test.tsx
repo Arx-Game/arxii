@@ -13,6 +13,8 @@ import {
   InstrumentGroup,
   PageTurn,
   Paragraphs,
+  PointsHint,
+  pointsHint,
   RecordRail,
   StatRow,
   useChapterRail,
@@ -131,6 +133,28 @@ describe('RecordRail', () => {
     expect(screen.getByText('Perdition')).toBeInTheDocument();
     expect(screen.getByText('not yet chosen')).toHaveClass('unwritten');
     expect(screen.getByText('One of eleven chapters begun.')).toHaveClass('rail-ledger');
+  });
+
+  it('the points row says on hover what becomes of unspent points, and no other row does (#5201)', () => {
+    const rows = [
+      { label: 'Origin', value: 'Perdition' },
+      { label: 'CG points', value: '20 of 100 spent', points: true },
+    ];
+    const { rerender } = render(
+      <PointsHint.Provider value={pointsHint(2)}>
+        <RecordRail rows={rows} />
+      </PointsHint.Provider>
+    );
+    const row = (text: string) => screen.getByText(text).closest('.row');
+    expect(row('20 of 100 spent')).toHaveAttribute(
+      'title',
+      'CG points left unspent convert to XP when the character is approved, 2 XP for each point.'
+    );
+    expect(row('Perdition')).not.toHaveAttribute('title');
+    // Until the budget has loaded the page gives no sentence, and the row has no hover.
+    expect(pointsHint(undefined)).toBeUndefined();
+    rerender(<RecordRail rows={rows} />);
+    expect(row('20 of 100 spent')).not.toHaveAttribute('title');
   });
 });
 

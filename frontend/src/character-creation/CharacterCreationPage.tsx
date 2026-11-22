@@ -33,10 +33,19 @@ import {
   StageErrorBoundary,
 } from './components';
 import { LineagePageTurn } from './components/lineage/LineagePageTurn';
-import { CHAPTERS, CodexWord, ContentsRail, NightPlate, PageTurn } from './folio';
+import {
+  CHAPTERS,
+  CodexWord,
+  ContentsRail,
+  NightPlate,
+  PageTurn,
+  PointsHint,
+  pointsHint,
+} from './folio';
 import {
   useCanCreateCharacter,
   useCGExplanations,
+  useCGPointBudget,
   useCreateDraft,
   useDeleteDraft,
   useDraft,
@@ -51,6 +60,8 @@ export function CharacterCreationPage() {
   const { data: canCreate, isLoading: canCreateLoading } = useCanCreateCharacter();
   const { data: draft, isLoading: draftLoading } = useDraft();
   const { data: copy } = useCGExplanations();
+  // What becomes of unspent points, said on the points row of the selections panel (#5201).
+  const { data: budget } = useCGPointBudget();
   const { data: backgrounds } = usePageBackgrounds();
   const createDraft = useCreateDraft();
   const updateDraft = useUpdateDraft();
@@ -248,33 +259,35 @@ export function CharacterCreationPage() {
 
   return (
     <div className="interview">
-      <div className="interview-grid">
-        <ContentsRail
-          currentStage={draft.current_stage}
-          stageCompletion={draft.stage_completion}
-          stageErrors={draft.stage_errors ?? {}}
-          visitedStages={draft.visited_stages ?? []}
-          optionalStages={draft.optional_stages ?? []}
-          onStageSelect={handleStageSelect}
-          restartSlot={restartDoor}
-        />
-        <div className="chapter-column" id={`chapter-${draft.current_stage}`}>
-          <StageErrorBoundary
+      <PointsHint.Provider value={pointsHint(budget?.xp_conversion_rate)}>
+        <div className="interview-grid">
+          <ContentsRail
             currentStage={draft.current_stage}
-            onNavigateToStage={handleStageSelect}
-          >
-            {renderStage()}
-          </StageErrorBoundary>
-          {/* Stages that own their own PageTurn (Origin, Review) render nothing here.
+            stageCompletion={draft.stage_completion}
+            stageErrors={draft.stage_errors ?? {}}
+            visitedStages={draft.visited_stages ?? []}
+            optionalStages={draft.optional_stages ?? []}
+            onStageSelect={handleStageSelect}
+            restartSlot={restartDoor}
+          />
+          <div className="chapter-column" id={`chapter-${draft.current_stage}`}>
+            <StageErrorBoundary
+              currentStage={draft.current_stage}
+              onNavigateToStage={handleStageSelect}
+            >
+              {renderStage()}
+            </StageErrorBoundary>
+            {/* Stages that own their own PageTurn (Origin, Review) render nothing here.
               Lineage puts "Restart: Clear All Choices" between the two doors (#5146). */}
-          {draft.current_stage === Stage.LINEAGE ? (
-            <LineagePageTurn draft={draft} copy={copy} back={backDoor} next={nextDoor} />
-          ) : (
-            draft.current_stage !== Stage.ORIGIN &&
-            draft.current_stage !== Stage.REVIEW && <PageTurn back={backDoor} next={nextDoor} />
-          )}
+            {draft.current_stage === Stage.LINEAGE ? (
+              <LineagePageTurn draft={draft} copy={copy} back={backDoor} next={nextDoor} />
+            ) : (
+              draft.current_stage !== Stage.ORIGIN &&
+              draft.current_stage !== Stage.REVIEW && <PageTurn back={backDoor} next={nextDoor} />
+            )}
+          </div>
         </div>
-      </div>
+      </PointsHint.Provider>
 
       <Dialog open={restartDialogOpen} onOpenChange={setRestartDialogOpen}>
         <DialogContent className="rounded-none">

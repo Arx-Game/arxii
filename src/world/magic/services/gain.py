@@ -947,13 +947,15 @@ def _resolve_moment_resonance(
 
 
 def anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
-    """The character's anima-ritual resonance — their 'main' one, if authored.
+    """The character's anima-ritual resonance: their 'main' one, if authored.
 
-    The anima ritual is per-character and carries a ``RitualCheckConfig`` whose
-    ``resonance`` is optional, so this is best-effort: no ritual, or no
-    resonance on its config, simply yields no candidate.
+    The ritual carries two picks (#5280), a Primal one and an optional Celestial or
+    Abyssal one. The 'main' is the pick whose affinity is the aura's main affinity;
+    otherwise the Primal pick, else the outward pick. Best-effort: no ritual, or no
+    pick on its config, simply yields no candidate.
     """
     from world.magic.services.anima import get_character_anima_ritual  # noqa: PLC0415
+    from world.magic.services.drift import own_affinity  # noqa: PLC0415
 
     ritual = get_character_anima_ritual(character_sheet.character)
     if ritual is None:
@@ -961,7 +963,15 @@ def anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
     # ``check_config_or_none`` is the model's own ReverseOneToOneOrNone
     # descriptor; the sidecar is optional, so don't reinvent the guard.
     config = ritual.check_config_or_none
-    return config.resonance if config is not None else None
+    if config is None:
+        return None
+    picks = [pick for pick in (config.primal_resonance, config.outward_resonance) if pick]
+    main = own_affinity(character_sheet)
+    if main is not None:
+        for pick in picks:
+            if pick.affinity_id == main.pk:
+                return pick
+    return picks[0] if picks else None
 
 
 def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing one tag event

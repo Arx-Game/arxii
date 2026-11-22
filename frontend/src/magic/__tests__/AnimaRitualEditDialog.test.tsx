@@ -2,10 +2,11 @@
  * AnimaRitualEditDialog tests
  *
  * Covers: field rendering, required-field validation, PATCH body on submit,
- * onSuccess callback, and typed error display.
+ * onSuccess callback, typed error display, and the two resonance picks (#5280): the pickers
+ * and "Set resonances" while the ritual has none, the locked view and the Attune dialog after.
  */
 
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
@@ -14,6 +15,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AnimaRitualEditDialog } from '../components/AnimaRitualEditDialog';
 import type { RitualWithSchema } from '@/rituals/types';
 import * as ritualQueries from '@/rituals/queries';
+import type { AnimaRitualChoices } from '@/rituals/api';
 
 // ---------------------------------------------------------------------------
 // Mock usePatchRitual
@@ -50,6 +52,47 @@ function makeMutationError(error: Error) {
   } as unknown as ReturnType<typeof ritualQueries.usePatchRitual>;
 }
 
+const mockSetUp = vi.fn();
+const mockAttune = vi.fn();
+
+function makeIdle(mutate: typeof mockSetUp) {
+  return {
+    mutate,
+    reset: vi.fn(),
+    isPending: false,
+    isError: false,
+    error: null,
+  };
+}
+
+const unsetChoices: AnimaRitualChoices = {
+  primal: [
+    { id: 1, name: 'Thrill', affinity_name: 'Primal' },
+    { id: 2, name: 'Hunger', affinity_name: 'Primal' },
+  ],
+  outward: [
+    { id: 3, name: 'Dread', affinity_name: 'Abyssal' },
+    { id: 4, name: 'Mercy', affinity_name: 'Celestial' },
+  ],
+  primal_pick: null,
+  outward_pick: null,
+  locked: false,
+  attunement: { anima_cost: 2, resonance_cost: 5, ap_cost: 1, check_type_name: null },
+};
+
+const lockedChoices = {
+  ...unsetChoices,
+  primal_pick: unsetChoices.primal[0],
+  outward_pick: unsetChoices.outward[0],
+  locked: true,
+};
+
+function mockChoices(data: AnimaRitualChoices | undefined) {
+  vi.mocked(ritualQueries.useAnimaRitualChoices).mockReturnValue({
+    data,
+  } as unknown as ReturnType<typeof ritualQueries.useAnimaRitualChoices>);
+}
+
 vi.mock('@/rituals/queries');
 vi.mocked(ritualQueries.usePatchRitual).mockReturnValue(makeMutationIdle());
 
@@ -77,6 +120,7 @@ const baseRitual: RitualWithSchema = {
 
 const defaultProps = {
   ritual: baseRitual,
+  characterSheetId: 12,
   open: true,
   onOpenChange: vi.fn(),
   onSuccess: vi.fn(),
@@ -90,6 +134,13 @@ describe('AnimaRitualEditDialog', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(ritualQueries.usePatchRitual).mockReturnValue(makeMutationIdle());
+    vi.mocked(ritualQueries.useSetUpAnimaRitual).mockReturnValue(
+      makeIdle(mockSetUp) as unknown as ReturnType<typeof ritualQueries.useSetUpAnimaRitual>
+    );
+    vi.mocked(ritualQueries.useAttuneAnimaRitual).mockReturnValue(
+      makeIdle(mockAttune) as unknown as ReturnType<typeof ritualQueries.useAttuneAnimaRitual>
+    );
+    mockChoices(unsetChoices);
   });
 
   // 1. Renders the form with all expected fields
@@ -107,7 +158,7 @@ describe('AnimaRitualEditDialog', () => {
     expect(screen.getByTestId('field-stat-id')).toBeInTheDocument();
     expect(screen.getByTestId('field-skill-id')).toBeInTheDocument();
     expect(screen.getByTestId('field-specialization-id')).toBeInTheDocument();
-    expect(screen.getByTestId('field-resonance-id')).toBeInTheDocument();
+    expect(screen.queryByTestId('field-resonance-id')).not.toBeInTheDocument();
     expect(screen.getByTestId('field-check-type-id')).toBeInTheDocument();
     expect(screen.getByTestId('field-target-difficulty')).toBeInTheDocument();
   });
@@ -281,5 +332,164 @@ describe('AnimaRitualEditDialog', () => {
 
     expect(mockReset).toHaveBeenCalled();
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  // 10. Unset: two pickers, "None" on the outward one, and Set resonances writes both picks
+  it('sets both picks from the pickers while the ritual has none', async () => {
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AnimaRitualEditDialog {...defaultProps} />
+      </Wrapper>
+    );
+
+    const setButton = screen.getByRole('button', { name: 'Set resonances' });
+    expect(setButton).toBeDisabled();
+    // Nothing is selected yet on the outward picker, "None" included.
+    expect(screen.getByRole('button', { name: 'None' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByText('What you feel when you perform it')).toBeInTheDocument();
+    expect(screen.getByText('What it does to the other person')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hunger' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Mercy' }));
+    expect(setButton).toBeEnabled();
+    await userEvent.click(setButton);
+
+    expect(mockSetUp).toHaveBeenCalledWith({
+      character_sheet_id: 12,
+      primal_resonance_id: 2,
+      outward_resonance_id: 4,
+    });
+    expect(screen.queryByRole('button', { name: 'Attune' })).not.toBeInTheDocument();
+  });
+
+  // 11. Locked: read-only picks and an Attune button that opens the dialog with its costs
+  it('shows the locked picks and opens the Attune dialog with the staff-set costs', async () => {
+    mockChoices(lockedChoices);
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AnimaRitualEditDialog {...defaultProps} />
+      </Wrapper>
+    );
+
+    expect(screen.queryByRole('button', { name: 'Set resonances' })).not.toBeInTheDocument();
+    expect(screen.getByText('What you feel')).toBeInTheDocument();
+    expect(screen.getByText('What it does to them')).toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId('anima-ritual-attune-button'));
+
+    expect(screen.getByText('Attune your ritual')).toBeInTheDocument();
+    const costs = screen.getByTestId('anima-ritual-attune-costs');
+    expect(costs).toHaveTextContent('Anima2');
+    expect(costs).toHaveTextContent('Resonance cost5');
+    expect(costs).toHaveTextContent('Action points1');
+    expect(costs).not.toHaveTextContent('Roll');
+  });
+
+  // 12. Attune: a changed pick names itself in the cost row, and the roll shows when staff set one
+  it('attunes to the new pick and shows the roll only when a check is set', async () => {
+    mockChoices({
+      ...lockedChoices,
+      attunement: { ...lockedChoices.attunement, check_type_name: 'Willpower + Ritualism' },
+    });
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AnimaRitualEditDialog {...defaultProps} />
+      </Wrapper>
+    );
+
+    await userEvent.click(screen.getByTestId('anima-ritual-attune-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Attune your ritual' });
+    const attuneButton = within(dialog).getByRole('button', { name: 'Attune' });
+    expect(attuneButton).toBeDisabled();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hunger' }));
+    expect(screen.getByTestId('anima-ritual-attune-costs')).toHaveTextContent(
+      'Resonance cost (Hunger)5'
+    );
+    expect(screen.getByTestId('anima-ritual-attune-costs')).toHaveTextContent(
+      'RollWillpower + Ritualism'
+    );
+    await userEvent.click(attuneButton);
+
+    expect(mockAttune).toHaveBeenCalledWith(
+      { character_sheet_id: 12, primal_resonance_id: 2, outward_resonance_id: 3 },
+      expect.any(Object)
+    );
+  });
+
+  // 13. A refusal reads as the dialog's own error
+  it('shows an attunement refusal as the dialog error', async () => {
+    mockChoices(lockedChoices);
+    vi.mocked(ritualQueries.useAttuneAnimaRitual).mockReturnValue({
+      ...makeIdle(mockAttune),
+      isError: true,
+      error: new Error('You do not have enough Hunger to attune your ritual.'),
+    } as unknown as ReturnType<typeof ritualQueries.useAttuneAnimaRitual>);
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AnimaRitualEditDialog {...defaultProps} />
+      </Wrapper>
+    );
+
+    await userEvent.click(screen.getByTestId('anima-ritual-attune-button'));
+
+    expect(screen.getByTestId('anima-ritual-attune-error')).toHaveTextContent(
+      'You do not have enough Hunger to attune your ritual.'
+    );
+  });
+
+  // 14. The choices query failing shows its error rather than nothing
+  it('shows the error when the ritual choices fail to load', () => {
+    vi.mocked(ritualQueries.useAnimaRitualChoices).mockReturnValue({
+      data: undefined,
+      isError: true,
+      error: new Error('You have no anima ritual to set up.'),
+    } as unknown as ReturnType<typeof ritualQueries.useAnimaRitualChoices>);
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AnimaRitualEditDialog {...defaultProps} />
+      </Wrapper>
+    );
+
+    expect(screen.getByTestId('anima-ritual-choices-error')).toHaveTextContent(
+      'You have no anima ritual to set up.'
+    );
+  });
+
+  // 15. A current pick she no longer holds shows selected and disabled, stays on the ritual while
+  // she changes the other slot, and leaves the picker once she picks another in its slot
+  it('keeps an unheld pick on the ritual while the other slot changes', async () => {
+    mockChoices({
+      ...lockedChoices,
+      primal: [unsetChoices.primal[1]],
+      primal_pick: unsetChoices.primal[0],
+    });
+    const Wrapper = createWrapper();
+    render(
+      <Wrapper>
+        <AnimaRitualEditDialog {...defaultProps} />
+      </Wrapper>
+    );
+
+    await userEvent.click(screen.getByTestId('anima-ritual-attune-button'));
+    const dialog = screen.getByRole('dialog', { name: 'Attune your ritual' });
+    const kept = within(dialog).getByRole('button', { name: 'Thrill' });
+    expect(kept).toBeDisabled();
+    expect(kept).toHaveAttribute('aria-pressed', 'true');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Mercy' }));
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Attune' }));
+    expect(mockAttune).toHaveBeenCalledWith(
+      { character_sheet_id: 12, primal_resonance_id: 1, outward_resonance_id: 4 },
+      expect.any(Object)
+    );
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Hunger' }));
+    expect(within(dialog).queryByRole('button', { name: 'Thrill' })).not.toBeInTheDocument();
   });
 });

@@ -252,13 +252,15 @@ for the five-branch validation gate this data must satisfy before submission.
   `GiftResonanceUnresolvable` and `finalize_magic_data` fails loudly rather than
   minting a character holding a gift with no thread to cast from.
 - **The anima ritual now carries the CG pick too (#2971 Task 3).** The anima ritual
-  IS the character's magical identity, so `_finalize_anima_ritual` resolves
-  the heaviest `gift_resonance_weights` pick (the identical pattern `finalize_magic_data`
-  uses for the gift thread) and passes it to `provision_player_anima_ritual(...,
-  resonance=...)`, which writes it onto the created `RitualCheckConfig.resonance`.
-  `world.magic.services.gain.anima_ritual_resonance(sheet)` — one of the grant-time
-  resolver's own fallback rungs above — now resolves for every freshly finalized
-  character instead of always returning `None` at CG time.
+  IS the character's magical identity, so the magic writer's `_anima` step takes
+  the heaviest Primal pick and the heaviest Celestial or Abyssal pick from the ordered resonance
+  picks (`MagicPicks.primal_resonance`, `outward_resonance`, #5280) and passes them to
+  `provision_player_anima_ritual(..., primal_resonance=..., outward_resonance=...)`, which writes
+  them onto the created `RitualCheckConfig`.
+  `world.magic.services.gain.anima_ritual_resonance(sheet)` (one of the grant-time
+  resolver's own fallback rungs above) now resolves for every freshly finalized
+  character instead of always returning `None` at CG time: the pick of the aura's main
+  affinity, else the Primal pick, else the outward pick.
 - `draft.draft_data["selected_technique_ids"]` names the chosen catalog
   `Technique`s (drawn from the Path's list for the gift, less the techniques other traditions
   keep for their own members, #4555); each

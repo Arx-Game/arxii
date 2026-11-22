@@ -27,6 +27,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueStyleFactory,
     ThreadFactory,
+    teach_ritual,
 )
 from world.magic.models.rituals import Ritual
 from world.magic.services.cast_threads import (
@@ -90,6 +91,7 @@ class ApplicableOnCastTests(CastThreadTraitsBase):
         CheckTypeTraitFactory(check_type=config.check_type, trait=personal_stat, weight=1)
         self.sheet.character.db_account = account
         self.sheet.character.save(update_fields=["db_account"])
+        teach_ritual(ritual, self.sheet)
         thread = self.trait_thread(personal_stat)
         cast_check = resolve_cast_check(self.sheet.character, self.technique)
         self.assertEqual(cast_check.check_type, config.check_type)

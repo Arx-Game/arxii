@@ -89,7 +89,9 @@ class SheetPersonalizationTests(TestCase):
         ``price``/``early_form`` select_related actually rides the existing prefetch
         once those rows are populated. This fixture has both, and its price consumes a
         component: ``price_components_by_price`` costs one fixed query for the whole
-        sheet (the price's real cost, #4099), never one per hold.
+        sheet (the price's real cost, #4099), never one per hold. #5280 adds one fixed
+        query: the anima ritual is read through the character's ritual knowledge, not
+        a prefetch on the shared roster entry, so the cap is 6.
         """
         sheet = get_character_sheet_queryset().get(pk=self.sheet.pk)
         sheet.character.threads.invalidate()
@@ -97,7 +99,7 @@ class SheetPersonalizationTests(TestCase):
             _build_magic(sheet)
         self.assertLessEqual(
             len(ctx.captured_queries),
-            5,
+            6,
             f"_build_magic issued {len(ctx.captured_queries)} queries: "
             f"{[q['sql'] for q in ctx.captured_queries]}",
         )

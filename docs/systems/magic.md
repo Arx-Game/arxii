@@ -100,7 +100,7 @@ part of the Resonance Pivot — relationship flavor is now carried by
 | `CharacterGift` | Acquired gifts | `gift`, `acquired_at` | FK via `character.character_gifts` |
 | `CharacterTechnique` | Known techniques; the character's hold carries their own personalization of it (#4099, ADR-4099) | `technique`, `acquired_at`, `source` (FK mechanics.ModifierSource, nullable — set for granted techniques), `custom_name` (display only, never a lookup key; blank = the catalog name), `custom_description` (blank = the catalog description), `price` (FK `Restriction`, PRICE kind only, nullable), `early_form` (FK `TechniqueVariant`, nullable; bought in creation before the gift thread reaches its level) | FK via `character.character_techniques` |
 | `CharacterAnima` | Magical energy pool | `current`, `maximum`, `last_recovery` | OneToOne via `character.anima` |
-| personal anima ritual (a `Ritual` of `execution_kind=SCENE_ACTION` + its `RitualCheckConfig`; the old `CharacterAnimaRitual` model is gone) | The character's recovery ritual: `author_account` is the player, `check_config` holds `check_type`, `target_difficulty`, `stat`, `skill`, `resonance` | `get_character_anima_ritual(character)` (`services/anima.py`) |
+| personal anima ritual (a `Ritual` of `execution_kind=SCENE_ACTION` + its `RitualCheckConfig`; the old `CharacterAnimaRitual` model is gone) | The character's recovery ritual: it is hers through her roster entry's `CharacterRitualKnowledge` row (`author_account` records the player who created it and keeps it out of the content export, #5280), `check_config` holds `check_type`, `target_difficulty`, `stat`, `skill`, `primal_resonance` and `outward_resonance` (the two picks, #5280) | `get_character_anima_ritual(character)` (`services/anima.py`) |
 
 **Anima band vocabulary (#1446).** `ANIMA_BANDS` (`constants.py`) is a descending
 `(min_ratio, label)` tuple (PLACEHOLDER labels pending Apostate rewrite — brimming /
@@ -584,8 +584,9 @@ per-technique via the FK. Key surfaces:
 | `ensure_character_magic_check_type(character_sheet, *, stat, skill)` | `seeds_checks.py` | Synthesizes a per-character `CheckType` (pattern: `character_magic_check_type_name()`) for that character's stat + skill |
 | `get_character_cast_check(character)` | `services/anima.py` | Resolves the per-character check type for cast resolution |
 | `resolve_cast_check(character, technique)` | `services/magic_skills.py` | The one resolver every cast path calls (#4450, replaces `resolve_cast_check_type`): returns a `CastCheck(check_type, extra_traits)` or None. Check type precedence is unchanged (ADR-0096); `extra_traits` holds the technique skill term |
-| `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's personal SCENE_ACTION `Ritual` (their anima ritual) |
-| `perform_anima_ritual(character_sheet, scene)` | `services/anima.py` | The once-per-scene roll of the character's anima ritual plus `apply_anima_ritual_outcome` (Soulfray eased first, then anima by `AnimaRitualBudgetAward` tier). Reached by `PerformRitualAction`'s SCENE_ACTION branch (#4451) |
+| `get_character_anima_ritual(character)` | `services/anima.py` | Retrieves the character's personal SCENE_ACTION `Ritual` (their anima ritual): the one her roster entry knows, never her account's (#5280) |
+| `character_scene_action_rituals(character_id)` | `services/anima.py` | The SCENE_ACTION rituals a character knows through `CharacterRitualKnowledge` (#5280); the one query every anima-ritual reader filters |
+| `apply_anima_ritual_outcome(...)` | `services/anima.py` | Applies a rolled outcome of the anima ritual: Soulfray eased first, then anima by `AnimaRitualBudgetAward` tier, for a roll that `ritual_succeeded` (Partial Success and above); a Failure or Critical Failure recovers nothing. Reached by `resolve_ritual_request` (the partner ritual) through `apply_ritual_to_request`. The solo `perform_anima_ritual` is gone (#5280) |
 | `provision_player_anima_ritual(...)` | `services/anima.py` | Points `RitualCheckConfig.check_type` at the per-character check so ritual and technique casts share the same roll |
 | `ensure_technique_catalog_content()` | `seeds_cast.py` | Idempotent seed: curated catalog of consequence-pool flavors (children of the base pool) + matching ActionTemplates |
 | `resolve_cast_action_template()` | `services/technique_builder.py` | Resolves a chosen catalog pool id (or `None`) to the ActionTemplate a Technique's `action_template` should point at |
@@ -594,61 +595,108 @@ Cast resolution (`world/scenes/cast_services.py:_resolve_cast`) passes the caste
 check into `start_action_resolution` via the `check_type` override (optional kwarg added to
 `src/actions/services.py`). No schema migration — all seeded via `ensure_technique_cast_content()`.
 
-**Performing the anima ritual (#4451).** `PerformRitualAction.execute()` branches on
-`execution_kind == SCENE_ACTION` before component and pool handling and calls
-`_perform_anima_ritual`: the ritual must be the performer's own
-(`get_character_anima_ritual`), the scene is the one at their location
-(`get_active_scene`), and `perform_anima_ritual` does the roll and outcome. The four
-`MagicError` refusals (`NoRitualConfigured`, `CharacterEngagedForRitual`,
-`RitualScenePrerequisiteFailed`, `RitualAlreadyPerformedThisScene`) come back as a
-failure `ActionResult` carrying their `user_message`. Web: the Perform button on the
-SCENE_ACTION `RitualCard` posts `/api/magic/rituals/perform/`, whose response carries
-`message` and `result {outcome, anima_recovered, severity_reduced, soulfray_resolved}` for
-this kind. Telnet: `ritual anima` (or `ritual <the ritual's name>`; a SCENE_ACTION name
-resolves only for its author). The scene-action-request resolver
-(`anima_ritual_action.py`) is a second path to the same `apply_anima_ritual_outcome`.
-Journey: `src/integration_tests/test_performing_the_anima_ritual_journeys.py`.
+**The anima ritual is never performed alone (#5280, ADR-5280) [BUILT & WIRED].** The old solo
+roll, `perform_anima_ritual` (#4451), is gone. `PerformRitualAction.execute()` still branches on
+`execution_kind == SCENE_ACTION`, but it now refuses with "Name someone else to take part in your
+ritual." (`_NEEDS_PARTNER`) at the web dispatch (`POST /api/magic/rituals/perform/`, the Rituals
+page has no Perform button for the anima ritual any more), at `ritual <the ritual's own name>` and at
+the bare `ritual anima`, which also reads the usage line
+(`ritual anima <partner>`). A ritual that is not the actor's own is refused as no ritual of theirs.
+The one way in is `start_partner_ritual(scene=, initiator_persona=, target_persona=)`
+(`services/anima_ritual_action.py`), reached from the persona menu's "Anima ritual" item
+(`PersonaMenu.anima_ritual_available`, `anima_ritual_open_in_scene`), `POST /api/action-requests/`
+(`SceneActionRequestViewSet._ritual_kwargs`) and telnet `ritual anima <partner>`. The ritual is always
+the initiator's own, found on the server: the client never names it. `check_partner_ritual` is the one
+gate every door runs through and refuses: no ritual or one not set up, no partner or yourself, a
+partner who is not in the scene and the same place (`shared_active_scene`, the rule Sineating uses;
+`resolve_ritual_request` checks again and resolves a request whose partner has left with no effect), a
+partner the same account plays ("You cannot perform your ritual with another character you play.",
+`played_by_one_account`), a performer in combat, an NPC partner no GM runs ("Nobody is playing that
+character."), the ritual already performed in this scene, or already asked of someone and waiting.
+`partner_is_run_by_a_gm` holds when the player now playing the NPC (`current_player_of`: a lent NPC's
+borrower, else its holder) has a `GMProfile`, or the scene has a GM participant. Once per scene holds
+under concurrency: `apply_anima_ritual_outcome` locks the `CharacterAnima` row, re-reads the scene's
+performances and raises `RitualAlreadyPerformedThisScene`, which `resolve_ritual_request` turns into a
+request resolved with no effect and no payment.
 
-**The Anima ritual with a partner (#5181) [BUILT & WIRED].** The solo ritual above still restores anima
-and earns no resonance. With a partner it also earns the resonance the ritual names
-(`RitualCheckConfig.resonance`) and moves the partner's fatigue. A player asks a partner with
-`start_partner_ritual(scene=, initiator_persona=, target_persona=)` (`services/anima_ritual_action.py`),
-which `check_partner_ritual` guards (no ritual or one not set up, no partner or yourself, a partner who
-is not in the scene and the same place as the performer (`shared_active_scene`, the rule Sineating
-uses; `resolve_ritual_request` checks it again at resolve time and resolves a request whose partner has
-left with no effect), a partner the same account plays ("You cannot perform your ritual with another
-character you play.", `played_by_one_account`), already performed in this scene, or already asked of
-someone and waiting) and which opens the ordinary
-`SceneActionRequest` consent request with `action_key` `anima_ritual` and the ritual's check snapshotted
-on it. The ritual is always the initiator's own, found on the server: the client never names it. Web:
-`POST /api/action-requests/` (`SceneActionRequestViewSet._ritual_kwargs`) and the persona menu's "Anima
-ritual" item, which `PersonaMenu.anima_ritual_available` (one query, `anima_ritual_open_in_scene`) shows
-only when the viewer's ritual is set up and not yet performed in the scene. Telnet: `ritual anima
-<partner>` (a bare `ritual anima` is still the solo ritual), which tells the partner what is asked, what
-it does to their fatigue and how to `accept`. A partner who is an NPC answers at once. The partner reads
-`ritual_partner_effect` (on the request and pending-target serializers; "It will add to your fatigue.",
-"It will ease your fatigue." or blank) before agreeing. On accept `resolve_ritual_request` rolls the
-snapshotted check, `apply_anima_ritual_outcome` restores anima, and `apply_ritual_bond(performer_sheet,
-partner_sheet, ritual, outcome, resonance)` (`services/ritual_bond.py`) pays
-`AnimaRitualResonanceAward` for the roll's tier (no row, no pay) plus that amount times the kindled
-strength's `earn_percent` when the ritual's resonance is kindled at that moment, in full at once through
-`grant_resonance(source=GainSource.ANIMA_RITUAL)`, so the earn rate applies. Both the earning and the
-partner effect apply only when the performer already holds the ritual's resonance (a `CharacterResonance`
-row, `performer_holds`); a ritual naming one they do not hold restores anima and does nothing else, the
-partner's consent sentence is blank, and `RitualCheckConfigPatchSerializer` refuses a resonance a
-non-staff player's character does not hold. Once per scene holds under concurrency: after
-`apply_anima_ritual_outcome` locks the `CharacterAnima` row it re-reads the scene's performances and
-raises `RitualAlreadyPerformedThisScene`, which `resolve_ritual_request` turns into a request resolved
-with no effect and no payment. The web request records the partner's worn persona
-(`_worn_ritual_partner`), and telnet tells the partner through `send_stored_notice`, so an offline
-partner reads it at login. The partner's fatigue
-follows `ritual_partner_fatigue` of the affinity of the ritual's resonance (not the performer's leading
-affinity): positive calls `apply_fatigue` in the social category, negative `recover_fatigue`. The
-performer reads "Your ritual feeds on Tobin. Your Ruin grows by 13." (lifts, or "is done" when the
-affinity does nothing) and the partner "<Name>'s ritual leaves you wearier." or "lighter" when their
-fatigue moved. `AnimaRitualPerformance.target_character` now records the partner. The function takes the
-partner as an argument so a later group ritual can call it per member. Journey:
-`src/integration_tests/test_anima_ritual_partner_journeys.py`.
+*Two picks.* `RitualCheckConfig` carries `primal_resonance` (a Primal resonance: how the ritual feels to
+her) and `outward_resonance` (a Celestial or Abyssal one: the part of the award her partner decides by endorsing), each
+optional, held to its affinity by `clean()`. Creation writes the heaviest Primal and the heaviest
+Celestial or Abyssal pick (`MagicPicks.primal_resonance`, `outward_resonance`, through
+`provision_player_anima_ritual(..., primal_resonance=, outward_resonance=)`).
+`anima_ritual_choices(sheet)` lists the resonances she holds for each slot (a `CharacterResonance` row
+is "held") and the picks now carried; `set_up_anima_ritual_resonances` writes both for free, once
+(`services/anima_ritual_picks.py`); after that the picks are locked and a pick stays on the ritual
+until she changes it, even if the resonance leaves her held list, and it pays nothing while she does not
+hold it. `gain.anima_ritual_resonance(sheet)`
+returns the pick of the aura's main affinity, else the Primal pick, else the outward pick.
+
+*The roll and the split.* On accept `resolve_ritual_request` rolls the snapshotted check and
+`apply_ritual_to_request` runs `apply_anima_ritual_outcome` then `apply_ritual_bond`
+(`services/ritual_bond.py`). `ritual_succeeded(outcome)` (`success_level >= 0`) is the one success
+boundary: a Partial Success counts as a success and pays its own tier's `AnimaRitualBudgetAward` anima
+and `AnimaRitualResonanceAward` resonance; a Failure or Critical Failure recovers no anima, eases no
+Soulfray, adds no Chosen patron share and grows no Primal resonance. The tier's resonance award splits
+by `ritual_earning_parts`: each pick's weight is the settled share of its affinity in her aura
+(`CharacterAuraShare.settled_percent`). The part paid to the outward pick is the award times the
+outward affinity's share divided by the sum of the Primal and outward shares, rounded down. The part
+paid to the Primal pick is the rest, so the parts add up to the award. When both shares are 0 the award
+splits in half (the outward part rounded down), and a lone pick takes the whole award. A pick whose
+share is exactly 0 beside a non-zero one is paid 0, and a pick keeps paying while she holds the
+resonance, however small its share. Each part also gets the kindled share of its own resonance (`earn_percent`), and a part pays
+nothing when the performer does not hold that resonance (held means a `CharacterResonance` row, which
+persists when her aura share falls), which happens when a pick has left her held list. The ritual is
+the character's own, never her account's: `get_character_anima_ritual` returns the SCENE_ACTION ritual
+her roster entry has a `CharacterRitualKnowledge` row for, so two characters one player plays each
+perform their own (#5280). The Primal part is granted at once
+through `grant_resonance(source=GainSource.ANIMA_RITUAL)`. The partner's fatigue follows
+`Affinity.ritual_partner_fatigue` of the outward pick on any roll (positive `apply_fatigue` in the
+social category, negative `recover_fatigue`), and the partner reads that sentence ("It will add to your
+fatigue." / "It will ease your fatigue." / blank, `ritual_partner_effect`) before agreeing.
+
+*The partner's answer.* A player partner endorses or withholds the outward part. After a success,
+`apply_ritual_bond` stores the part on the performance (`AnimaRitualPerformance.endorsement=PENDING`,
+`outward_amount_pending`, `outward_resonance`) and the partner is asked; after a failed roll the held
+amount is `AnimaConfig.failed_endorsement_percent` (default 50) of the outward part of the Success
+tier's award, and 0 stores nothing and asks nothing. `answer_anima_ritual(partner_sheet, performance,
+endorse=)` (`services/anima_ritual_endorsement.py`) locks the row and reads its state from the
+database, so a double answer or a non-partner grants nothing; Endorse grants the held part once to the
+performer if she still holds the outward resonance and tells her "<partner> felt it. Your <outward>
+grows by N."; Withhold grants nothing ("<partner> did not feel it."). The partner reads back the
+scene-entry endorsement wording: "You endorse <performer>'s ritual for <outward>." or "You do not
+endorse <performer>'s ritual for <outward>." A pending answer lapses when its
+scene finishes (`lapse_pending_endorsements`, called by `Scene.finish_scene` and by the battle path
+that ends its backing scene), and an answer after that is refused as not waiting. Both
+`EndorseAnimaRitualAction` (`actions/definitions/anima_ritual.py`, key `endorse_anima_ritual`) and the
+web `POST /api/magic/anima-ritual-endorsements/<id>/answer/` (only the partner's player; the list is
+the requester's own pending rows, `?scene=`) converge on it, as does telnet `ritual endorse
+<performer>` / `ritual withhold <performer>`; the partner's card is `AnimaRitualEndorsementCard`. An
+NPC partner needs a GM and gives the outward part on the roll alone, after a success only, with no
+question asked. `AnimaRitualPerformance.performer_persona` records the persona the performer wore, so
+the card never shows a masked name. The performer reads "<opening> You recover N anima. Your <primal>
+grows by N." with the opening "Your ritual feeds on <partner>." / "lifts" / "is done" by the outward
+affinity's fatigue setting, each later sentence left out when its number is 0, and the partner reads
+"<Performer>'s ritual leaves you wearier." or "lighter" when their fatigue moved.
+
+*Attunement.* After the free first setup, `attune_anima_ritual(sheet, primal, outward)`
+(`services/anima_ritual_attunement.py`, through `AttuneAnimaRitualAction` key `attune_anima_ritual`,
+`POST /api/magic/anima-ritual/attune/`, telnet `ritual attune primal=<name|none> outward=<name|none>`)
+changes the picks for staff-set costs on `AnimaConfig`: `attunement_anima_cost`,
+`attunement_resonance_cost` (charged to each newly picked resonance), `attunement_ap_cost` and an
+optional check (`attunement_check_type`, `attunement_difficulty_level`). It checks only the picks it
+changes (held, and of the right affinity), is refused in combat, before any picks are set (the free
+setup is the only way to set empty picks) and when nothing changes, spends action points as its own
+check, never refuses for lack of anima (a shortfall becomes Soulfray, as every other spend of anima
+does), and a failed roll spends the costs and keeps the old picks. A refusal spends nothing, and a
+failure after the first spend rolls back the database and puts the cached rows back.
+`GET /api/magic/anima-ritual/resonances/?character_sheet_id=` lists the choices and the costs, and
+`POST /api/magic/anima-ritual/set-up/` is the free setup (`AnimaRitualSetupViewSet`, a ViewSet of its own
+so a player can write nothing else). Web: the Rituals page's `AnimaRitualEditDialog`,
+`AnimaRitualAttuneDialog` and `AnimaRitualPillPicker`. Journeys:
+`src/integration_tests/test_performing_the_anima_ritual_journeys.py`,
+`test_anima_ritual_partner_journeys.py`, `test_attuning_the_anima_ritual_journeys.py`; properties in
+`src/integration_tests/fuzz/test_anima_ritual_properties.py`. The first design of the partner ritual
+(#5181) is amended by ADR-5280.
 
 **Anima ritual name collisions are resolved silently, not surfaced (#2724).**
 `provision_player_anima_ritual` defaults a player's anima ritual name to
@@ -775,7 +823,7 @@ with no Path gives no term, and so does an inactive skill.
   `world/mechanics/challenge_resolution.py`). The difficulty indicator shown when the approach is
   offered previews with the same terms.
 - Activity rolls keep their check type and add `activity_skill_terms(<activity>)`: the anima
-  ritual (`perform_anima_ritual`), technique learning (learner roll and teacher rating), sanctum
+  ritual (`resolve_ritual_request`), technique learning (learner roll and teacher rating), sanctum
   rituals and the ritual pool shortfall (`RITUAL_WORKING`), sustaining magic, dispelling,
   magical treatment, Soulfray resilience, Soul Tether rescue, the Court emergency draw
   (`COURT_PETITION`), Fury control, moon control, hostile resonance ground, feeding restraint,
@@ -2471,7 +2519,7 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   `get_kindling_config()`, which creates the row when none exists),
   `KindledDeedAward` (an `OutcomeTierAward`: `amount` earned per outcome),
   `AnimaRitualResonanceAward` (#5181, an `OutcomeTierAward`: `amount` an Anima ritual with a partner earns per
-  outcome; a tier with no row earns nothing) and
+  outcome, split between its two picks by the aura's settled shares, #5280; a tier with no row earns nothing) and
   `RallyKindlingStrength` (an `OutcomeTierAward`: the strength a Rally kindles at per outcome; a
   failed Rally has no row and kindles nothing). `Resonance.feeling` is a Property FK: the feeling
   that `OWN_FEELING`, `SHARED_FEELING` and `TARGET_IN_STATE_THEY_CAUSED` look for on a condition.
@@ -3035,14 +3083,15 @@ CG provisioning → base resolve at level 0 → `gift_resonances_for` reads the 
 resonance → advance past `unlock_thread_level=30` → variant resolve (name/intensity/control
 deltas) → discovery beat fires (achievement + codex).
 
-**The anima ritual records the same CG pick too (#2971).** `_finalize_anima_ritual`
-(`world.character_creation.services`) resolves the heaviest `gift_resonance_weights` pick the same way
-`_finalize_gift_and_techniques` does and passes it to `provision_player_anima_ritual(...,
-resonance=...)`, which writes it onto the created `RitualCheckConfig.resonance` — the anima
-ritual IS the character's magical identity, so CG now populates it there instead of leaving it
-`None` until a post-CG edit. `world.magic.services.gain.anima_ritual_resonance(sheet)` — one of
-`_resolve_grant_resonance`'s own fallback rungs above — resolves for every freshly finalized
-character as a result, instead of always returning `None` at CG time.
+**The anima ritual records the CG picks too (#2971, #5280).** The magic writer's `_anima` step
+(`world.character_creation.magic_writer`) takes the heaviest Primal pick and the heaviest Celestial or
+Abyssal pick from the ordered resonance picks and passes them to `provision_player_anima_ritual(...,
+primal_resonance=..., outward_resonance=...)`, which writes them onto the created `RitualCheckConfig`.
+The anima ritual IS the character's magical identity, so CG populates the picks there instead of leaving
+them `None` until the free first setup. `world.magic.services.gain.anima_ritual_resonance(sheet)`, one
+of `_resolve_grant_resonance`'s own fallback rungs above, resolves for every freshly finalized character
+as a result (the pick of the aura's main affinity, else the Primal pick, else the outward pick), instead
+of always returning `None` at CG time.
 
 ### Path-crossing grant — (Gift × Path) → base technique set (grants.py, services/path_magic.py — #1579)
 
@@ -4057,7 +4106,8 @@ technique is a limited form, a high-tier option on an ultimate is the full arriv
 | Dig deep, Rally and the GM name a resonance (`combat/dig_deep.py`, `combat/services/declarations/rally.py`, `services/kindling.py`, `actions/definitions/gm_props.py`, #5124) | [BUILT & WIRED] | `dig_deep(participant, resonance=None)` refuses a resonance she does not hold; a kindled one adds its tier's `dig_deep_scale_percent` to the surge's `intensity_scale` and is named in the surge cause, an unkindled one or none works as before. `declare_rally(participant, ally, resonance=None)` stores `CombatRoundAction.rally_resonance` (the ALLY must hold it; the rallier's picker reads `GET /api/combat/<id>/rally-resonances/?ally=<participant id>`, which runs `rally_resonance_choices` for the one picked ally and returns each `{id, name, kindled}`, never a strength; an active fighter may ask about another active fighter, and a PvP duel returns none; the polled encounter payload carries no kindling evaluation). `_resolve_tuned_rally` reads the ally's kindled tier before writing anything: a kindled resonance adds the same percent to the Rally surge's scale; `record_rally_kindling` then writes one `Kindling(source=RALLY, encounter=, kindled_by=rallier)` at the `RallyKindlingStrength` for the roll outcome (no row for that outcome writes nothing; a repeat Rally on the same ally, resonance and fight raises the one row's strength and never lowers it; an already-kindled resonance gets no new row). The row cascades with its encounter and stops counting when `completed_at` is set. A GM kindles by hand with the `stage_kindle` action (`KindleResonanceAction`, GM/owner/staff of the room's active scene; web Stage tab "Kindle" mode lists via `gm_list_kindling`, which reads only a character in the GM's room; telnet `stage kindle <character>=<resonance>[:<strength name or rank>]`), which writes `kindle_by_gm`'s one `Kindling(source=GM, scene=)` per character, resonance and scene. Web: `combat_dig_deep` / `combat_rally` take `resonance_id` (also on the REST `dig-deep` and `rally` posts); telnet `combat digdeep [<resonance>]`, `combat rally <ally>[=<resonance>]`. |
 | Acting on a kindling situation earns the resonance (`services/kindling.py` `award_kindled_deeds`, `combat/services/techniques/kindled_deed.py`, #5124) | [BUILT & WIRED] | `award_kindled_deeds(sheet, *, act, outcome, resolution=None, mission=None)` (every act builder fills `KindlingAct.label` with the act in player words: the mission option's title, the technique's name "on <target>", "Struck <opponent>", the challenge a reaction answered; the grant stores it as `ResonanceGrant.deed_label` and `reflection.deed_what` reads it, falling back to `situation_reason(row)`, the row's `reason_text` or its theme's player text, never the situation's type name) runs `kindled_resonances` with the act in context (the sheet's own live fight and mission when neither is given) and, for each resonance an authored situation fed, takes `KindledDeedAward(outcome).amount x earn_percent // 100` of the strongest FED row's strength and splits it by `KindlingConfig` (#5181): one `GainSource.KINDLED_DEED` grant through `grant_resonance(kindling_situation=<strongest fed row>, ledger_out=)` for `max(1, amount x instant_percent // 100)`, and `amount x claim_percent // 100` added to `CharacterResonance.kindled_unclaimed` (an `F()` increment) for the character to claim (`KindledResonance.fed_tier`; a Rally or GM raises the panel strength but never what an act earns, and a resonance kindled only by one earns nothing). A missing award row, tier or a 0 share earns nothing; only player characters earn. The actor alone is told "You earned N <resonance>." (N is what the ledger recorded after the earn rate; "M more is waiting to be claimed." follows when something was set aside) after commit (a private `SYSTEM` narrative message). An act with no roll of its own (Cover, a taunt of a player character, using an item, an auto-succeeding mission approach) passes `lowest_success_outcome()`: the `CheckOutcome` with the lowest positive `success_level` (lowest pk on a tie). Wired after a PC's roll in: the scene action-request seam (`_resolve_standard_action` in `world/scenes/action_services.py` calls `_award_kindled_deeds_for_action` after `_resolve_action_against_persona` rolls the primary target, so a multi-target action earns once; `resolve_scene_action` in `actions/services.py` has no production caller), a treatment request (`_resolve_treatment_request`), and a standalone scene technique cast (`_resolve_and_pose_cast` in `world/scenes/cast_services.py`, covering the immediate and the consent-accepted cast); the scene acts share `kindling.award_scene_act` (TECHNIQUE with a technique, else SOCIAL, and a beneficial technique on someone else aids); combat through `award_rolled` / `award_unrolled` (cast, Strike, Cover, Rally, Taunt, Demoralize, Parley, Joust, flee, use item (only when the item use succeeded), the PC's defense roll, technique Interpose, a lock-clash contribution that frees someone) and the shared reaction spine `mechanics/reactions.dispatch_capability_reaction` (Succor, mundane Interpose, scene Cover, catching a faller, all AID acts on the one answered for, with `aids` false when it is not a character); and a mission option that rolls a check (`missions/services/resolution.resolve_option`, grant and routing in one transaction, group and joint picks earn per roller). A pure outcome (a death, a condition tick) and a no-roll branch option earn nothing. `KINDLED_DEED` is in `DEED_GAIN_SOURCES`, so a main-affinity kindled deed in a live scene opens the chance to atone. A mission option shows what it would feed: `BeatOption.feeds` (`KindledFeed{resonance_name, strength_name, reason}`, the viewer's own check options only, authored situations only, read once per beat by `kindled_resonances_for_acts`) renders "Your Domination is kindled: <reason>" in the web `OptionLabel` and the telnet `mission beat` list. |
 | Claiming what a kindled deed set aside (`services/claiming.py`, `serializers_reflection.py` `ClaimFieldsMixin`, `commands/claim.py`, #5181) | [BUILT & WIRED] | `claim_kindled`, `pending_claim_from`, `record_pending_claim`, `waiting_resonances`, `unclaimed_by_resonance`, `resolve_waiting_names`; `GainSource.KINDLED_CLAIM`. The "Earning" and "Claiming" bullets under "Kindled resonances" carry the rules. Web: the pose composer's `ClaimRow` and the journal form read `unclaimed` and `claim_verb` from `GET /api/magic/kindled-resonances/`; the `earned_resonance` frame refreshes the waiting amounts. Telnet: `pose/claim`, `pose/claim <resonance>,...=<text>`. Journeys: `src/integration_tests/test_claiming_kindled_journeys.py`. |
-| The Anima ritual with a partner (`services/anima_ritual_action.py`, `services/ritual_bond.py`, `commands/ritual.py`, #5181) | [BUILT & WIRED] | `start_partner_ritual`, `check_partner_ritual`, `resolve_ritual_request`, `apply_ritual_bond`, `ritual_partner_effect_sentence`, `anima_ritual_open_in_scene`; `GainSource.ANIMA_RITUAL`; `AnimaRitualResonanceAward`; `Affinity.ritual_partner_fatigue`. See "The Anima ritual with a partner" under "Performing the anima ritual". Telnet `ritual anima <partner>`; web persona menu "Anima ritual". |
+| The Anima ritual with a partner (`services/anima_ritual_action.py`, `services/ritual_bond.py`, `commands/ritual.py`, #5181) | [BUILT & WIRED] | `start_partner_ritual`, `check_partner_ritual`, `partner_is_run_by_a_gm`, `resolve_ritual_request`, `ritual_succeeded`, `ritual_earning_parts`, `apply_ritual_bond`, `ritual_partner_effect_sentence`, `anima_ritual_open_in_scene`; `GainSource.ANIMA_RITUAL`; `AnimaRitualResonanceAward`; `Affinity.ritual_partner_fatigue`. Never performed alone, two picks, the partner's answer and attunement (#5280): see "The anima ritual is never performed alone". Telnet `ritual anima <partner>`; web persona menu "Anima ritual". |
+| The anima ritual's picks, the partner's answer and attunement (`services/anima_ritual_picks.py`, `services/anima_ritual_endorsement.py`, `services/anima_ritual_attunement.py`, `actions/definitions/anima_ritual.py`, #5280, ADR-5280) | [BUILT & WIRED] | `anima_ritual_choices`, `set_up_anima_ritual_resonances`, `answer_anima_ritual`, `lapse_pending_endorsements`, `attune_anima_ritual`; `AnimaRitualEndorsement`, `AnimaConfig.failed_endorsement_percent` and the attunement costs; `AnimaRitualSetupViewSet` (`/api/magic/anima-ritual/`), `AnimaRitualEndorsementViewSet` (`/api/magic/anima-ritual-endorsements/`); telnet `ritual endorse`, `ritual withhold`, `ritual attune`. |
 | Reflections: the "Reflecting on" row (`services/reflection.py`, `views_reflection.py`, `serializers_reflection.py`, `types/reflection.py`, `commands/reflection.py`, #5124) | [BUILT & WIRED] | A pose or a journal entry (White or Black) can name one thing it reflects on and Embrace or Disown. `reflectable_for(sheet)` returns a `Reflectable` (the unreflected `KINDLED_DEED` grants with their lines, newest first, and `unsettling_resonance(sheet)`, which is `drift_for(sheet).leading_excess_resonance` while `steps_past > 0`, plus whether a reflection on it already waits); its `options` are the "Reflecting on" row, the deeds (newest first) then the unsettling resonance. `validate_reflection` refuses a deed that is not a kindled deed of this sheet (`ReflectionError`), a deed already reflected on (`DeedAlreadyReflectedError`) and a resonance that is not the unsettling one (`ResonanceNotUnsettlingError`); `record_reflection(sheet, *, writing, grant=None, resonance=None, choice)` re-checks, deletes any older WAITING reflection on the same resonance (a newer one replaces it) and writes the `Reflection`; `writing` is None only for a pose in an ephemeral scene, which keeps no row. A reflection is checked BEFORE the writing is posted (`pending_reflection_from(sheet, params)` reads `reflect_choice` plus one of `reflect_grant_id` or `reflect_resonance_id`) and recorded after it, so a refused one costs the writer nothing. A retry of a pose that already landed (its `client_request_id` is on the `PoseSubmission` ledger, `pose_already_submitted`) skips the check and is answered as the replay it is, in both `submit_pose` and `PoseAction`. A reflection that fails AFTER the pose posted (a race) leaves the pose standing and tells the writer "Your pose was posted, but your reflection was not recorded: <reason>" (`reflection_recorded: false` on the submit-pose response); a journal entry and its reflection are one transaction, so a late failure rolls the entry back and refuses it plainly. `PoseAction` also takes `target_names`, resolved like the REST pose. `PoseAction` and `CreateJournalEntryAction` take the three kwargs; so do the REST `POST /api/interactions/submit-pose/` (`PoseSubmitSerializer`, answers `reflection_line`) and `POST /api/journals/entries/` (`JournalEntryCreateSerializer`) through `ReflectionFieldsMixin`. The room is sent only the pose text; the writer alone is told "Your reflection on <deed or your resonance> is recorded. It waits with your other reflections for the rite of settling." `GET /api/magic/reflectables/?character_sheet=<id>` (owner only, no staff widening, paginated) lists `{kind, id, label, replaces_waiting}`; the web `ReflectingOnRow` (pose composer `CommandInput`, journal `JournalEntryFields`) reads it and warns before a reflection replaces a waiting one. Telnet: `reflect` lists the unsettling resonance (by name) and each deed (by its `#number`); `pose/reflect <deed number or resonance>=<embrace|disown> <text>`; `journal/reflect <deed number or resonance>=<embrace|disown> title=<text> body=<text> [public] [tags=] [about=]`. The rite that carries waiting reflections out is task 10 of the same PR. |
 | `CharacterManifestation.bond_is_active()` | [BUILT & WIRED] | A being option holds while `active_patronage_for(character)` includes that being. An archetype option holds while the companion is the character's own, matches the archetype, and has no `released_at`. |
 | `CharacterManifestation.clean()` | [BUILT & WIRED] | The option must belong to the technique; a being option takes no companion; an archetype option needs one; the bond must be active. |
@@ -4889,7 +4939,7 @@ both. Deeds are the poses and scene entries others endorsed, entry flourishes, d
 moments, style presentations, mission rewards and reports, stake rewards, project
 contributions, combo discoveries, worship rites, kindled deeds, `KINDLED_CLAIM` (the share of a kindled
 deed a claiming pose or journal entry collected), `ANIMA_RITUAL` (what an Anima ritual with a partner
-earned; both #5181) and `SUCCUMBED` (a Sineater
+earned, the Primal part at once and the outward part on the partner's endorsement; both #5181, #5280) and `SUCCUMBED` (a Sineater
 chose to succumb to the Mire, and the player may reflect on it and atone). Passive trickles
 (room residence, outfit), staff grants, sanctum sources, distinction seeds, compromise, both
 conversions (`FALL_CONVERSION`, `DRIFT_CORRECTION`) and the payouts of settling the Mire

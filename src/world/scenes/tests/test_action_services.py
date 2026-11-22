@@ -498,7 +498,7 @@ class TestCreateActionRequestSnapshotFields(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:
         from world.magic.constants import RitualExecutionKind
-        from world.magic.factories import RitualCheckConfigFactory, RitualFactory
+        from world.magic.factories import ResonanceFactory, RitualCheckConfigFactory, RitualFactory
         from world.traits.factories import ensure_level_ladder
 
         cls.scene = SceneFactory()
@@ -516,7 +516,12 @@ class TestCreateActionRequestSnapshotFields(TestCase):
             flow=None,
         )
         ensure_level_ladder()
-        cls.config = RitualCheckConfigFactory(ritual=cls.ritual, target_difficulty_level=2)
+        cls.config = RitualCheckConfigFactory(
+            ritual=cls.ritual,
+            target_difficulty_level=2,
+            primal_resonance=ResonanceFactory(),
+            outward_resonance=ResonanceFactory(),
+        )
 
     def test_create_action_request_with_ritual_id_populates_snapshot(self) -> None:
         """When ritual_id is provided, all snapshot fields are populated from the ritual."""
@@ -532,7 +537,10 @@ class TestCreateActionRequestSnapshotFields(TestCase):
         assert request.snapshot_stat == self.config.stat
         assert request.snapshot_skill == self.config.skill
         assert request.snapshot_specialization == self.config.specialization
-        assert request.snapshot_resonance == self.config.resonance
+        assert request.snapshot_primal_resonance == self.config.primal_resonance
+        assert request.snapshot_resonance == self.config.outward_resonance
+        assert request.snapshot_primal_resonance is not None
+        assert request.snapshot_resonance is not None
         assert request.snapshot_check_type == self.config.check_type
         # The snapshot keeps the points of the authored level: level 2's baseline.
         assert request.snapshot_target_difficulty == 26
@@ -549,6 +557,7 @@ class TestCreateActionRequestSnapshotFields(TestCase):
         assert request.snapshot_stat is None
         assert request.snapshot_skill is None
         assert request.snapshot_specialization is None
+        assert request.snapshot_primal_resonance is None
         assert request.snapshot_resonance is None
         assert request.snapshot_check_type is None
         assert request.snapshot_target_difficulty is None

@@ -409,6 +409,13 @@ Views expose `exc.user_message` per project convention; never `str(exc)`.
 
 ### 5.1 `perform_anima_ritual(character_sheet, scene) -> RitualOutcome`
 
+> **Superseded (#5280, ADR-5280):** `perform_anima_ritual` no longer exists. The ritual is never
+> performed alone: it is asked of a partner (`start_partner_ritual`), and the accepted request rolls
+> the check and calls `apply_anima_ritual_outcome` in `services/anima.py`, which keeps the budget,
+> Soulfray and crit-override steps below. `ritual_succeeded` (Partial Success and above) is the one
+> success boundary: a Failure or Critical Failure recovers no anima, eases no Soulfray and reads no
+> budget row. The gates and steps below describe the first design.
+
 Lives in `magic/services/anima.py`.
 
 **Boundary translation:** Callers pass `CharacterSheet`; the service resolves `character_sheet.character` to the `ObjectDB` instance needed for `perform_check` and engagement queries.
@@ -427,7 +434,7 @@ Lives in `magic/services/anima.py`.
    - `CheckOutcome.CRITICAL_SUCCESS` → `SoulfrayConfig.ritual_budget_critical_success`
    - `CheckOutcome.SUCCESS` → `...budget_success`
    - `CheckOutcome.PARTIAL` (or the nearest equivalent outcome — exact mapping settled during implementation against `world.traits` outcome names) → `...budget_partial`
-   - Any failure outcome → `...budget_failure` (validator ensures > 0)
+   - Any failure outcome → `...budget_failure` (validator ensures > 0) (superseded #5280: a failed roll recovers nothing and reads no budget row)
 3. **Spend severity first** while budget > 0 and an active Soulfray `ConditionInstance` has `severity > 0`:
    - Call `decay_condition_severity(soulfray_instance, amount=1)` (new helper, Section 5.3).
    - Deduct `SoulfrayConfig.ritual_severity_cost_per_point` from budget.
@@ -784,7 +791,7 @@ Tuning target:
 - `ritual_budget_critical_success`: enough severity reduction to clear a stage-1 Soulfray fully; anima also force-refills to max via the crit override (Section 5.1 step 5) regardless of budget leftover.
 - `ritual_budget_success`: ~60% of crit budget.
 - `ritual_budget_partial`: ~30%.
-- `ritual_budget_failure`: ~10% (validator enforces ≥ 1).
+- `ritual_budget_failure`: ~10% (validator enforces ≥ 1). Superseded (#5280): a failed roll recovers nothing, so the Failure tier's row is never read.
 - `ritual_severity_cost_per_point`: 1.
 
 On a crit, the budget effectively governs only severity reduction — anima always tops up regardless of leftover. This is a deliberate feel choice; tuning should assume crit = "full recovery of whatever severity the budget can pay down + full anima".
@@ -806,7 +813,7 @@ Exact numbers set during implementation against the stage-threshold tuning.
 - Crit (Soulfray stage 2, mid-severity) → severity fully paid down, anima max (override).
 - Success (Soulfray stage 2) → severity reduced, partial anima refill.
 - Partial (Soulfray stage 5) → small severity reduction, minimal anima refill.
-- Failure (no active Soulfray) → small anima refill.
+- Failure (no active Soulfray) → no anima refill (superseded #5280: a failed roll recovers nothing; Failure and Critical Failure budget rows are never read).
 - Gate: no `CharacterAnimaRitual` → raises `NoRitualConfigured`.
 - Gate: character engaged → raises `CharacterEngagedForRitual`.
 - Gate: second ritual same scene → raises `RitualAlreadyPerformedThisScene`.
@@ -871,7 +878,7 @@ Full scenario:
 1. Character accumulates Soulfray to stage 3 (Ripping) → aftermath conditions appear via stage-entry hook.
 2. Engagement ends.
 3. Bonded helper performs stabilization on one aftermath → severity reduces.
-4. Target performs anima ritual → Soulfray severity drops, anima partially refilled.
+4. Target performs anima ritual with a partner (#5280: never alone) → Soulfray severity drops, anima partially refilled.
 5. Scheduled-tick cycles (simulated): at Soulfray stage 2, `anima_regen_tick` produces zero regen (blocks_anima_regen property). Pay severity down to stage 1; next tick regens. Assert both behaviours explicitly.
 6. Boundary: at Soulfray stage 2, repeated decay ticks alone never recover the character — ritual is required to cross the `passive_decay_max_severity` boundary.
 

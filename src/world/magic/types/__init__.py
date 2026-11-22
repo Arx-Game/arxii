@@ -50,7 +50,9 @@ from world.magic.types.pull import (
 from world.magic.types.ritual import (
     AnimaRegenTickSummary,
     AnimaRitualCategory,
+    AnimaRitualChoices,
     RitualBond,
+    RitualEarningParts,
     RitualOutcome,
     SoulfrayContent,
 )
@@ -86,6 +88,7 @@ __all__ = [
     "AnimaCostResult",
     "AnimaRegenTickSummary",
     "AnimaRitualCategory",
+    "AnimaRitualChoices",
     "AudereUltimateState",
     "AuraDrift",
     "AuraPercentages",
@@ -108,6 +111,7 @@ __all__ = [
     "ResonancePullResult",
     "ResonanceWeeklySettlementSummary",
     "RitualBond",
+    "RitualEarningParts",
     "RitualOutcome",
     "RuntimeTechniqueStats",
     "SettlementResult",

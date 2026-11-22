@@ -1042,6 +1042,13 @@ def conclude_battle(*, battle: Battle, outcome: str) -> Battle:
 
     end_scene_loans(scene)
 
+    # The same bypass leaves an anima ritual's unanswered question open (#5280).
+    from world.magic.services.anima_ritual_endorsement import (  # noqa: PLC0415
+        lapse_pending_endorsements,
+    )
+
+    lapse_pending_endorsements(scene)
+
     # scene.is_active=False above doesn't bust the room's in-memory
     # _active_scene_cache (mirrors finish_scene_full's identical step,
     # world/scenes/scene_admin_services.py) — without this, a stale cache

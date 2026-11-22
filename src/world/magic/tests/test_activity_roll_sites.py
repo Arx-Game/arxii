@@ -140,8 +140,11 @@ class ActivityTermTestCase(TestCase):
 
 class MagicServiceRollSiteTests(ActivityTermTestCase):
     def test_anima_ritual(self) -> None:
-        from world.magic.services.anima import perform_anima_ritual
-        from world.scenes.factories import SceneFactory
+        from world.magic.services.anima_ritual_action import (
+            ANIMA_RITUAL_ACTION_KEY,
+            resolve_ritual_request,
+        )
+        from world.scenes.factories import SceneActionRequestFactory
 
         sheet = CharacterSheetFactory()
         account = AccountFactory()
@@ -152,16 +155,24 @@ class MagicServiceRollSiteTests(ActivityTermTestCase):
             service_function_path="",
             flow=None,
             author_account=account,
+            known_by=sheet,
         )
-        RitualCheckConfigFactory(ritual=ritual)
-        scene = SceneFactory()
+        config = RitualCheckConfigFactory(ritual=ritual)
+        # An accepted request: the ritual with a partner rolls its own check once agreed.
+        request = SceneActionRequestFactory(
+            scene=SceneFactory(),
+            initiator_persona=sheet.primary_persona,
+            target_persona=None,
+            action_key=ANIMA_RITUAL_ACTION_KEY,
+            snapshot_ritual=ritual,
+            snapshot_check_type=config.check_type,
+        )
 
-        with patch("world.magic.services.anima._scene_participant", return_value=True):
-            self.assert_terms_reach(
-                "world.checks.services.perform_check_with_modifiers",
-                MagicActivity.ANIMA_RITUAL,
-                lambda: perform_anima_ritual(sheet, scene),
-            )
+        self.assert_terms_reach(
+            "world.checks.services.perform_check_with_modifiers",
+            MagicActivity.ANIMA_RITUAL,
+            lambda: resolve_ritual_request(request),
+        )
 
     def test_technique_learning_rolls_and_rates_the_teacher_with_the_terms(self) -> None:
         from world.magic.models import TechniqueProgress

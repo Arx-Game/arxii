@@ -37,6 +37,7 @@ from world.magic.factories import (
     GiftFactory,
     ResonanceFactory,
     TechniqueFactory,
+    ensure_canonical_affinities,
 )
 from world.magic.models import (
     CharacterResonance,
@@ -77,7 +78,7 @@ class GiftSpecializationE2ETest(TestCase):
         # Achievement eligibility requires a live, non-staff RosterTenure (#3024).
         grant_test_tenure(cls.sheet)
         cls.gift = GiftFactory()
-        cls.resonance = ResonanceFactory()
+        cls.resonance = ResonanceFactory(affinity=ensure_canonical_affinities()[1])
         cls.gift.resonances.add(cls.resonance)
         # The gift's starting technique.
         cls.technique = TechniqueFactory(gift=cls.gift)
@@ -175,10 +176,10 @@ class GiftSpecializationE2ETest(TestCase):
             ritual_name="Identity Ritual",
             stat=StatTraitFactory(),
             skill=SkillFactory(),
-            resonance=self.resonance,
+            primal_resonance=self.resonance,
         )
-        # Mirrors the runtime path: get_character_anima_ritual queries
-        # author_account=character.db_account.
+        # Mirrors the runtime path (get_character_anima_ritual reads the character's own
+        # knowledge row, which provisioning wrote, #5280).
         self.sheet.character.db_account = account
         self.sheet.character.save(update_fields=["db_account"])
 

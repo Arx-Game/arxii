@@ -194,8 +194,8 @@ class CastUsesPerCharacterCheckTests(TestCase):
         )
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
-        # Model the runtime/logged-in state: the resolver queries
-        # author_account=character.db_account.
+        # Model the runtime/logged-in state (the resolver itself reads the character's
+        # own ritual knowledge row, #5280).
         character.db_account = account
         character.save(update_fields=["db_account"])
         return character, sheet, account

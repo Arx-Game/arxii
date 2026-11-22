@@ -92,6 +92,7 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueStyleFactory,
     UltimateTechniqueFactory,
+    ensure_canonical_affinities,
 )
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
@@ -1164,7 +1165,9 @@ class TestMagicSectionFull(TestCase):
         )
 
         # --- Gift with resonances and techniques ---
-        cls.resonance_resolve = ResonanceFactory(name="Resolve")
+        cls.resonance_resolve = ResonanceFactory(
+            name="Resolve", affinity=ensure_canonical_affinities()[1]
+        )
         cls.resonance_metal = ResonanceFactory(name="Metal")
 
         cls.gift = GiftFactory(name="Iron Will", description="Unyielding magical will.")
@@ -1210,7 +1213,7 @@ class TestMagicSectionFull(TestCase):
         )
 
         # --- Anima Ritual ---
-        # Link character to its player account so author_account lookup works.
+        # Link character to its player account (the account a logged-in puppet has).
         cls.character.db_account = cls.player.account
         cls.character.save(update_fields=["db_account"])
 
@@ -1221,13 +1224,14 @@ class TestMagicSectionFull(TestCase):
             service_function_path="",
             flow=None,
             author_account=cls.player.account,
+            known_by=cls.sheet,
             description="Meditate with a blade in hand.",
         )
         RitualCheckConfigFactory(
             ritual=cls.ritual,
             stat=cls.stat_willpower,
             skill=cls.melee_skill,
-            resonance=cls.resonance_resolve,
+            primal_resonance=cls.resonance_resolve,
         )
 
         # --- Aura (FK to ObjectDB) ---
@@ -1366,9 +1370,10 @@ class TestMagicSectionFull(TestCase):
         assert magic["anima_ritual"]["skill"] == "Melee"
 
     def test_anima_ritual_resonance(self) -> None:
-        """Anima ritual entry contains the resonance name."""
+        """Anima ritual entry names the Primal pick and leaves the outward pick blank."""
         magic = self._get_magic()
-        assert magic["anima_ritual"]["resonance"] == "Resolve"
+        assert magic["anima_ritual"]["primal_resonance"] == "Resolve"
+        assert magic["anima_ritual"]["outward_resonance"] == ""
 
     def test_anima_ritual_description(self) -> None:
         """Anima ritual entry contains the description."""
@@ -2732,7 +2737,7 @@ class TestCharacterSheetQueryCount(TestCase):
         _seed_house_holding_land(cls.sheet.primary_persona)
 
         # --- Magic ---
-        resonance = ResonanceFactory(name="QCResolve")
+        resonance = ResonanceFactory(name="QCResolve", affinity=ensure_canonical_affinities()[1])
         gift = GiftFactory(name="QCIronWill")
         gift.resonances.add(resonance)
         technique = TechniqueFactory(name="QCSteelSkin", gift=gift, level=2)
@@ -2746,7 +2751,7 @@ class TestCharacterSheetQueryCount(TestCase):
 
         stat_will = StatTraitFactory(name="QCWillpower")
         ritual_skill = SkillFactory(name="QCRitualSkill", category=TraitCategory.COMBAT)
-        # Link character to account for author_account lookup.
+        # Link character to its player account (the account a logged-in puppet has).
         cls.character.db_account = cls.player.account
         cls.character.save(update_fields=["db_account"])
         qc_ritual = RitualFactory(
@@ -2754,12 +2759,13 @@ class TestCharacterSheetQueryCount(TestCase):
             service_function_path="",
             flow=None,
             author_account=cls.player.account,
+            known_by=cls.sheet,
         )
         RitualCheckConfigFactory(
             ritual=qc_ritual,
             stat=stat_will,
             skill=ritual_skill,
-            resonance=resonance,
+            primal_resonance=resonance,
         )
 
         CharacterAuraFactory(
@@ -2815,7 +2821,7 @@ class TestCharacterSheetQueryCount(TestCase):
         10.    character skill ratings (skill-type trait_values)
         11.    character specialization_values
         12.    character distinctions
-        13.    authored_rituals (SCENE_ACTION kind, prefetched via db_account)
+        13.    known anima ritual (SCENE_ACTION kind, prefetched via roster_entry, #5280)
         14.    character_gifts (via CharacterSheet)
         15.    gift resonances (nested Prefetch)
         16.    character_techniques (via CharacterSheet)
@@ -3065,7 +3071,7 @@ class TestPrefetchCompleteness(TestCase):
         CharacterDistinctionFactory(character=cls.character.sheet_data, distinction=dist, rank=1)
 
         # Magic: gifts, techniques, motif, anima ritual, aura
-        resonance = ResonanceFactory(name="PFResolve")
+        resonance = ResonanceFactory(name="PFResolve", affinity=ensure_canonical_affinities()[1])
         gift = GiftFactory(name="PFGift")
         gift.resonances.add(resonance)
         technique = TechniqueFactory(name="PFTech", gift=gift, level=1)
@@ -3079,7 +3085,7 @@ class TestPrefetchCompleteness(TestCase):
 
         stat_will = StatTraitFactory(name="PFWill")
         ritual_skill = SkillFactory(name="PFRitSkill", category=TraitCategory.COMBAT)
-        # Link character to account for author_account lookup.
+        # Link character to its player account (the account a logged-in puppet has).
         cls.character.db_account = cls.player.account
         cls.character.save(update_fields=["db_account"])
         pf_ritual = RitualFactory(
@@ -3087,12 +3093,13 @@ class TestPrefetchCompleteness(TestCase):
             service_function_path="",
             flow=None,
             author_account=cls.player.account,
+            known_by=cls.sheet,
         )
         RitualCheckConfigFactory(
             ritual=pf_ritual,
             stat=stat_will,
             skill=ritual_skill,
-            resonance=resonance,
+            primal_resonance=resonance,
         )
 
         CharacterAuraFactory(
@@ -3174,8 +3181,11 @@ class TestPrefetchCompleteness(TestCase):
 
     def test_magic_zero_queries(self) -> None:
         sheet = self._get_sheet()
-        # 3 queries (the anima ritual's skill name used to cost a fourth, a Skill's
+        # 4 queries (the anima ritual's skill name used to cost one more, a Skill's
         # Trait; a skill is the Trait itself since #5008):
+        #   1. character_scene_action_rituals(sheet.pk) (#5280) - the anima ritual is read
+        #      by one plain query, not a ``to_attr`` prefetch onto the idmapper-shared
+        #      RosterEntry, which would hide a ritual created later in the same process.
         #   2. character.resonances (CharacterResonanceHandler._by_resonance, #2032) —
         #      _build_magic_resonances reads the character's claimed CharacterResonance
         #      rows via the handler; not part of _MAGIC_PREFETCH_RELATED (a per-Character
@@ -3207,7 +3217,7 @@ class TestPrefetchCompleteness(TestCase):
         #      (3)'s cached character.threads handler — this fixture's character
         #      holds no TECHNIQUE thread, so it returns {} before reading any
         #      catalog table.
-        with self.assertNumQueries(3):
+        with self.assertNumQueries(4):
             _build_magic(sheet)
 
     def test_story_zero_queries(self) -> None:

@@ -107,7 +107,7 @@ Unknown field types render as a plain text input with a warning ("unsupported fi
 | Relationship section (stub replacement) | `frontend/src/components/character/RelationshipsSection.tsx` | Compose: existing free-text + tether status panel |
 
 ### 8. Out of scope for this spec
-- Anima ritual UI — same shell will work, but wiring `perform_anima_ritual` as a Ritual row and exposing it is its own task
+- Anima ritual UI: same shell will work, but wiring the anima ritual (since #5280 `apply_anima_ritual_outcome`, driven by a partner request) as a Ritual row and exposing it is its own task
 - Covenant formation ritual — same, future work
 - Imbuing rite UI — already a SERVICE Ritual, frontend exposure is future work
 - Thread weaving UI (acquiring new ThreadWeavingUnlocks) — separate from Thread *display*

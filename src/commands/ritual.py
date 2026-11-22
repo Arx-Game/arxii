@@ -6,8 +6,11 @@ session path).
 
 Single-actor path (SERVICE/CEREMONY kind):
     ``ritual <name>``                       — perform a ritual by name
-    ``ritual anima``                        — perform your personal anima ritual in the
-        scene you stand in (also ``ritual <its name>``); once per scene (#4451)
+    ``ritual anima <partner>``              - ask someone in the scene to take part in your
+        personal anima ritual; it is never done alone (#5280). Bare ``ritual anima`` is refused
+        with the usage line, and so is ``ritual <its name>`` with the same refusal.
+    ``ritual attune primal=<name|none> outward=<name|none>`` - pay to change the two resonances
+        your anima ritual grows, after its free first setup (#5280)
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
         e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``/
         ``resonance=<id>``; ``resonance=`` (alias ``target_resonance=``) names the
@@ -38,6 +41,7 @@ for single-actor rituals — both converge on the same service functions.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q
@@ -62,10 +66,18 @@ _TARGET_RESONANCE_KWARG = "target_resonance"
 _FROM_RESONANCE_KWARG = "from_resonance"
 _FROM_ALIAS_KWARG = "from"
 _AMOUNT_KWARG = "amount"
-#: ``ritual anima`` performs the caller's own personal anima ritual (#4451), whatever
-#: its authored name is.
+#: ``ritual anima <partner>`` asks a partner to take part in the caller's own personal anima
+#: ritual (#5181), whatever its authored name is.
 _ANIMA_SHORTHAND = "anima"
+_ANIMA_USAGE = "Name someone else to take part in your ritual. Usage: ritual anima <partner>"
+#: ``ritual attune primal=<name|none> outward=<name|none>`` changes the ritual's two picks (#5280).
+_ATTUNE_SUBCMD = "attune"
+_ATTUNE_USAGE = "Usage: ritual attune primal=<name|none> outward=<name|none>"
+_ATTUNE_KEYS = re.compile(r"\b(primal|outward)=", re.IGNORECASE)
+_NO_PICK = "none"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
+#: The partner's answer to an anima ritual that reached for them (#5280).
+_ANSWER_SUBCMDS = frozenset({"endorse", "withhold"})
 
 #: Rite of Honors (#3466) telnet tokens — every one may run to multiple words
 #: (a persona's display name, a title, or free-prose journal body), so this
@@ -188,11 +200,16 @@ class CmdRitual(ArxCommand):
         Example: ``ritual Rite of Imbuing thread=5``
         Example: ``ritual <retune rite> thread=5 resonance=12`` - move a thread
             to another resonance (leave out ``resonance=`` to list where it can go)
-        ``ritual anima`` - perform your personal anima ritual in the scene you
-            are in (once per scene; it eases Soulfray, then restores anima)
-        ``ritual anima <partner>`` - ask someone in the scene to take part in it. They are
-            told what it will do to their fatigue and agree with ``accept``; it then earns
-            the resonance your ritual names (#5181)
+        ``ritual anima <partner>`` - ask someone in the scene to take part in your personal
+            anima ritual, which is never done alone (once per scene). A player is told what
+            it will do to their fatigue and agrees with ``accept``; an NPC is accepted at
+            once when a GM runs it or the scene (#5181, #5280)
+        ``ritual attune primal=<name|none> outward=<name|none>`` - change the two resonances
+            your anima ritual grows, after its free first setup; it costs what staff set, may
+            roll, and a failed roll keeps the cost and the old picks (#5280)
+        ``ritual endorse <performer>`` / ``ritual withhold <performer>`` - answer a ritual
+            that reached for your resonance: endorse it if it took hold of you (the
+            performer's outward resonance grows), withhold if it did not (#5280)
 
     **Multi-participant session lifecycle:**
         ``ritual sessions``                              - list pending sessions
@@ -212,7 +229,11 @@ class CmdRitual(ArxCommand):
     def func(self) -> None:
         """Route session subcommands; fall through to single-actor action otherwise."""
         first = (self.args or "").strip().split()[0].lower() if (self.args or "").strip() else ""
-        if self._asked_for_a_partner(first):
+        if (
+            self._asked_for_a_partner(first)
+            or self._answered_a_ritual(first)
+            or self._attuned_the_ritual(first)
+        ):
             return
         if first in _SESSION_SUBCMDS:
             rest = (self.args or "").strip()[len(first) :].strip()
@@ -239,12 +260,15 @@ class CmdRitual(ArxCommand):
     # ------------------------------------------------------------------
 
     def _asked_for_a_partner(self, first: str) -> bool:
-        """Handle ``ritual anima <partner>`` and return True; False for any other line
-        (a bare ``ritual anima`` is the solo ritual, and a name with ``key=value`` after it is
-        not a partner)."""
+        """Handle ``ritual anima [<partner>]`` and return True; False for any other line
+        (a name with ``key=value`` after it is not a partner). A bare ``ritual anima`` is
+        refused with the usage line: the ritual is never done alone."""
         partner = (self.args or "").strip()[len(first) :].strip()
-        if first != _ANIMA_SHORTHAND or not partner or "=" in partner:
+        if first != _ANIMA_SHORTHAND or "=" in partner:
             return False
+        if not partner:
+            self.caller.msg(_ANIMA_USAGE)
+            return True
         try:
             self._handle_anima_with_partner(partner)
         except CommandError as err:
@@ -308,6 +332,80 @@ class CmdRitual(ArxCommand):
             " ".join(part for part in (asked, sentence, how) if part),
             ooc_note="Anima ritual request",
         )
+
+    def _answered_a_ritual(self, first: str) -> bool:
+        """Handle ``ritual endorse|withhold <performer>`` and return True; False for any other
+        line."""
+        if first not in _ANSWER_SUBCMDS:
+            return False
+        performer = (self.args or "").strip()[len(first) :].strip()
+        self._handle_answer(performer, endorse=first == "endorse")  # noqa: STRING_LITERAL
+        return True
+
+    def _handle_answer(self, performer_name: str, *, endorse: bool) -> None:
+        """Answer the newest ritual of ``performer_name`` (any case) that is waiting for the
+        caller's answer."""
+        from actions.definitions.anima_ritual import EndorseAnimaRitualAction  # noqa: PLC0415
+        from world.magic.services.anima_ritual_endorsement import (  # noqa: PLC0415
+            pending_endorsements_for,
+        )
+
+        sheet = self.caller.character_sheet
+        waiting = (
+            [
+                row
+                for row in pending_endorsements_for(sheet)
+                if row.performer_persona is not None
+                and row.performer_persona.name.lower() == performer_name.lower()
+            ]
+            if sheet is not None and performer_name
+            else []
+        )
+        if not waiting:
+            shown = performer_name or "them"
+            self.caller.msg(f"No ritual from {shown} is waiting for your answer.")
+            return
+        result = EndorseAnimaRitualAction().run(
+            actor=self.caller, performance_id=waiting[0].pk, endorse=endorse
+        )
+        self.caller.msg(result.message)
+
+    def _attuned_the_ritual(self, first: str) -> bool:
+        """Handle ``ritual attune primal=<name|none> outward=<name|none>`` and return True;
+        False for any other line. Both picks must be given (``none`` for an empty slot), since an
+        attunement writes both."""
+        if first != _ATTUNE_SUBCMD:
+            return False
+        from actions.definitions.anima_ritual import AttuneAnimaRitualAction  # noqa: PLC0415
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        rest = (self.args or "").strip()[len(first) :].strip()
+        parts = _ATTUNE_KEYS.split(rest)
+        # ``split`` with one group gives [before, key, value, key, value, ...]; anything before
+        # the first key is not a pick.
+        named = {
+            key.lower(): value.strip() for key, value in zip(parts[1::2], parts[2::2], strict=True)
+        }
+        if parts[0].strip() or set(named) != {"primal", "outward"}:
+            self.caller.msg(_ATTUNE_USAGE)
+            return True
+        ids: dict[str, int | None] = {}
+        for slot, name in named.items():
+            if name.lower() == _NO_PICK:
+                ids[slot] = None
+                continue
+            resonance = Resonance.objects.filter(name__iexact=name).first()
+            if resonance is None:
+                self.caller.msg(f"There is no resonance called {name}.")
+                return True
+            ids[slot] = resonance.pk
+        result = AttuneAnimaRitualAction().run(
+            actor=self.caller,
+            primal_resonance_id=ids["primal"],
+            outward_resonance_id=ids["outward"],
+        )
+        self.caller.msg(result.message)
+        return True
 
     # ------------------------------------------------------------------
     # Session handlers
@@ -572,13 +670,14 @@ class CmdRitual(ArxCommand):
         args = self.require_args("Perform which ritual?")
         name, rest = self._split_name_and_rest(args)
 
-        # A SCENE_ACTION ritual is somebody's personal anima ritual (#4451): only its
-        # author can find it here, so another player's ritual name never resolves.
+        # A SCENE_ACTION ritual is somebody's personal anima ritual (#4451): only the
+        # character who knows it can find it here (#5280), so another character's ritual
+        # name never resolves, even one the same player plays.
         ritual = Ritual.objects.filter(
             Q(execution_kind__in=[RitualExecutionKind.SERVICE, RitualExecutionKind.CEREMONY])
             | Q(
                 execution_kind=RitualExecutionKind.SCENE_ACTION,
-                author_account=self.caller.db_account,
+                known_by_records__roster_entry__character_sheet_id=self.caller.pk,
             ),
             name__iexact=name,
         ).first()
