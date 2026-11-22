@@ -1466,6 +1466,7 @@ class RitualSerializer(serializers.ModelSerializer):
     )
     check_config = serializers.SerializerMethodField()
     is_imbuing = serializers.SerializerMethodField()
+    viewer_can_edit = serializers.SerializerMethodField()
 
     class Meta:
         model = Ritual
@@ -1479,6 +1480,7 @@ class RitualSerializer(serializers.ModelSerializer):
             "execution_kind",
             "input_schema",
             "author_account_id",
+            "viewer_can_edit",
             "check_config",
             "client_hosted",
             "participation_rule",
@@ -1494,6 +1496,22 @@ class RitualSerializer(serializers.ModelSerializer):
         if config is None:
             return None
         return RitualCheckConfigSerializer(config).data
+
+    def get_viewer_can_edit(self, obj: Ritual) -> bool:
+        """Whether the requester may edit this ritual (#5280).
+
+        Read through the characters the requester currently plays, not the authoring account:
+        the view passes their known ritual ids once as ``known_ritual_ids`` in the context.
+        Without a request in the context nobody is the viewer, so it is False.
+        """
+        from world.magic.permissions import can_edit_ritual  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None:
+            return False
+        return can_edit_ritual(
+            request.user, obj, known_ritual_ids=self.context.get("known_ritual_ids", set())
+        )
 
     def get_is_imbuing(self, obj: Ritual) -> bool:
         """True for the Rite of Imbuing (2026-07 audit).

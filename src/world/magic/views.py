@@ -109,6 +109,7 @@ from world.magic.permissions import (
     IsStaffOrReadOnly,
     IsThreadOwner,
     PlaysTheRitualPartner,
+    known_ritual_ids_for_user,
 )
 from world.magic.serializers import (
     AcceptSoulTetherSerializer,
@@ -1385,6 +1386,12 @@ class RitualViewSet(viewsets.ModelViewSet):
             return RitualPatchSerializer
         return RitualSerializer
 
+    def get_serializer_context(self) -> dict:
+        """Add the ritual ids the requester's played characters know, once for the page."""
+        context = super().get_serializer_context()
+        context["known_ritual_ids"] = known_ritual_ids_for_user(self.request.user)
+        return context
+
     def get_queryset(self):
         """Visibility IS eligibility (#3001): quiescent viewers see hedge rites only.
 
@@ -1392,6 +1399,9 @@ class RitualViewSet(viewsets.ModelViewSet):
         reads); a selected character with no magical profile browses only
         ``hedge_accessible`` rituals — the same predicate the perform and
         draft seams enforce (``ritual_visible_to``).
+
+        A SCENE_ACTION ritual is a character's own anima ritual (#5280), so a player
+        sees only the ones a character she currently plays knows. Staff see them all.
         """
         from world.magic.services.resonance_environment import magical_profile  # noqa: PLC0415
         from world.roster.services.selection import character_for_request  # noqa: PLC0415
@@ -1400,6 +1410,10 @@ class RitualViewSet(viewsets.ModelViewSet):
         user = self.request.user
         if user.is_staff:
             return queryset
+        queryset = queryset.filter(
+            ~Q(execution_kind=RitualExecutionKind.SCENE_ACTION)
+            | Q(pk__in=known_ritual_ids_for_user(user))
+        )
         puppet = character_for_request(self.request, entry_id=None)
         # Accounts without a selected character browse the unfiltered catalog.
         sheet = puppet.sheet_data if puppet is not None else None

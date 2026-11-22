@@ -32,7 +32,8 @@ from world.magic.factories import (
 )
 from world.magic.models.soulfray import AnimaRitualBudgetAward
 from world.magic.serializers import RitualSerializer
-from world.roster.factories import RosterTenureFactory
+from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.roster.models import RosterEntry
 from world.scenes.action_constants import ActionRequestStatus, ConsentDecision
 from world.scenes.action_serializers import EnhancedSceneActionResultSerializer
 from world.scenes.action_services import respond_to_action_request
@@ -101,6 +102,17 @@ class AnimaRecoverySerializerFieldTests(TestCase):
     def tearDown(self) -> None:
         self.accrue_patcher.stop()
 
+    @staticmethod
+    def _give_a_player(action_request):
+        """The account holding the initiator's roster tenure (she is not puppeted)."""
+        sheet = action_request.initiator_persona.character_sheet
+        account = AccountFactory()
+        entry = RosterEntry.objects.filter(character_sheet=sheet).first()
+        if entry is None:
+            entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(player_data=account.player_data, roster_entry=entry, end_date=None)
+        return account
+
     def _setup(self, success_level: int = 1) -> tuple:
         """Create a full ritual+scene setup and return (action_request, outcome)."""
         persona = PersonaFactory()
@@ -165,11 +177,8 @@ class AnimaRecoverySerializerFieldTests(TestCase):
             )
 
         self.assertIsNotNone(result)
-        # Link a real AccountDB to the initiator character then use it as request.user.
-        initiator_account = AccountFactory()
-        character = action_request.initiator_persona.character_sheet.character
-        character.db_account = initiator_account
-        character.save(update_fields=["db_account"])
+        # The initiator's player is whoever holds her roster tenure.
+        initiator_account = self._give_a_player(action_request)
 
         mock_request = MagicMock()
         mock_request.user = initiator_account
@@ -185,6 +194,29 @@ class AnimaRecoverySerializerFieldTests(TestCase):
         self.assertEqual(recovery["soulfray_reduced"], 0)
         self.assertEqual(recovery["new_pool"], 8)
 
+    @tag("regression")
+    def test_an_initiator_nobody_is_logged_in_as_still_sees_her_recovery(self) -> None:
+        """Regression for #5280. Her recovery is shown to the player who holds her tenure, even
+        when Evennia has cleared the account off the character because she is not puppeted."""
+        action_request, outcome = self._setup(success_level=1)
+
+        with patch(_PERFORM_CHECK_PATCH, return_value=_make_pending_resolution(outcome)):
+            result = respond_to_action_request(
+                action_request=action_request, decision=ConsentDecision.ACCEPT
+            )
+
+        initiator_account = self._give_a_player(action_request)
+        character = action_request.initiator_persona.character_sheet.character
+        self.assertIsNone(character.db_account)
+        mock_request = MagicMock()
+        mock_request.user = initiator_account
+        data = EnhancedSceneActionResultSerializer(
+            result,
+            context={"request": mock_request, "action_request": action_request},
+        ).data
+
+        self.assertEqual(data["anima_recovery"]["recovered"], 6)
+
     def test_target_does_not_see_anima_recovery(self) -> None:
         """Non-initiator account does not see anima_recovery (disguise)."""
         action_request, outcome = self._setup(success_level=1)
@@ -195,12 +227,9 @@ class AnimaRecoverySerializerFieldTests(TestCase):
             )
 
         self.assertIsNotNone(result)
-        # Link a real initiator account, but pass a different account as request.user.
-        initiator_account = AccountFactory()
+        # Give the initiator a player, but pass a different account as request.user.
+        self._give_a_player(action_request)
         other_account = AccountFactory()
-        character = action_request.initiator_persona.character_sheet.character
-        character.db_account = initiator_account
-        character.save(update_fields=["db_account"])
 
         mock_request = MagicMock()
         mock_request.user = other_account  # NOT the initiator
@@ -400,7 +429,7 @@ class RitualViewSetPatchTests(APITestCase):
     ) -> None:
         """Regression for #5280. The anima ritual is in character, so it belongs to the
         character who knows it: once its author no longer plays that character they cannot
-        edit it, and the player who now plays the character can."""
+        see or edit it, and the player who now plays the character can."""
         self.knower_tenure.end_date = timezone.now()
         self.knower_tenure.save(update_fields=["end_date"])
         RosterTenureFactory(
@@ -415,7 +444,7 @@ class RitualViewSetPatchTests(APITestCase):
             {"description": "From another character"},
             format="json",
         )
-        self.assertEqual(resp.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(resp.status_code, status.HTTP_404_NOT_FOUND)
 
         self.client.force_authenticate(user=self.other_account)
         resp = self.client.patch(
@@ -452,3 +481,75 @@ class RitualViewSetPatchTests(APITestCase):
         self.client.force_authenticate(user=self.author_account)
         resp = self.client.delete(self._patch_url(self.ritual.pk))
         self.assertEqual(resp.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
+
+
+# =============================================================================
+# Who can see an anima ritual (#5280)
+# =============================================================================
+
+
+@tag("regression")
+class AnimaRitualVisibilityTests(APITestCase):
+    """The anima ritual is in character: a player sees the ones her characters know."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.mara = AccountFactory()
+        cls.tobin = AccountFactory()
+        cls.staff = AccountFactory(is_staff=True)
+        cls.mara_ritual = cls._anima_ritual(cls.mara, "Mara's Breathing")
+        cls.tobin_ritual = cls._anima_ritual(cls.tobin, "Tobin's Vigil")
+        cls.shared = RitualFactory(
+            name="The Shared Rite",
+            execution_kind=RitualExecutionKind.SERVICE,
+            author_account=None,
+            hedge_accessible=True,
+        )
+
+    @staticmethod
+    def _anima_ritual(account, name: str):
+        ritual = RitualFactory(
+            name=name,
+            execution_kind=RitualExecutionKind.SCENE_ACTION,
+            service_function_path="",
+            flow=None,
+            author_account=account,
+            hedge_accessible=True,
+        )
+        RitualCheckConfigFactory(ritual=ritual)
+        tenure = RosterTenureFactory(player_data=account.player_data, end_date=None)
+        teach_ritual(ritual, tenure.roster_entry.character_sheet)
+        return ritual
+
+    def _listed(self, account) -> dict[str, dict]:
+        self.client.force_authenticate(user=account)
+        response = self.client.get(reverse("magic:ritual-list"))
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        return {row["name"]: row for row in response.data["results"]}
+
+    def test_a_player_lists_her_own_anima_ritual_and_the_shared_catalog_only(self) -> None:
+        """Regression for #5280. Mara lists her ritual and the shared rite, never Tobin's."""
+        self.assertEqual(set(self._listed(self.mara)), {"Mara's Breathing", "The Shared Rite"})
+
+    def test_a_player_cannot_read_another_players_anima_ritual(self) -> None:
+        """Regression for #5280. Tobin asking for Mara's ritual by id is told it is not there."""
+        self.client.force_authenticate(user=self.tobin)
+        url = reverse("magic:ritual-detail", args=[self.mara_ritual.pk])
+        self.assertEqual(self.client.get(url).status_code, status.HTTP_404_NOT_FOUND)
+        own = reverse("magic:ritual-detail", args=[self.tobin_ritual.pk])
+        self.assertEqual(self.client.get(own).status_code, status.HTTP_200_OK)
+
+    def test_the_edit_control_is_offered_only_for_the_ritual_a_played_character_knows(
+        self,
+    ) -> None:
+        """Regression for #5280. Mara may edit her ritual and not the shared rite."""
+        listed = self._listed(self.mara)
+        self.assertTrue(listed["Mara's Breathing"]["viewer_can_edit"])
+        self.assertFalse(listed["The Shared Rite"]["viewer_can_edit"])
+
+    def test_staff_see_every_ritual(self) -> None:
+        """Staff browse the whole catalog, both players' anima rituals included."""
+        self.assertEqual(
+            set(self._listed(self.staff)),
+            {"Mara's Breathing", "Tobin's Vigil", "The Shared Rite"},
+        )

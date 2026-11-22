@@ -9,7 +9,7 @@ from rest_framework.views import APIView
 from rest_framework.viewsets import GenericViewSet
 
 from world.magic.constants import RitualExecutionKind
-from world.magic.models import AnimaRitualPerformance, CharacterRitualKnowledge, Thread
+from world.magic.models import AnimaRitualPerformance, CharacterRitualKnowledge, Ritual, Thread
 from world.magic.models.sessions import RitualSession
 from world.roster.models import RosterEntry
 
@@ -25,11 +25,42 @@ def _active_sheet_ids_for_user(user: object) -> set[int]:
     return set(RosterEntry.objects.for_account(account).character_ids())
 
 
+def known_ritual_ids_for_user(user: object) -> set[int]:
+    """Return the ids of the rituals a character the user currently plays knows (#5280).
+
+    The anima ritual is in character and belongs to the character who knows it, so what a
+    player may see or edit of it is read through ``CharacterRitualKnowledge`` on the characters
+    she plays now, never through the account that authored it.
+    """
+    return set(
+        CharacterRitualKnowledge.objects.filter(
+            roster_entry__character_sheet_id__in=_active_sheet_ids_for_user(user)
+        ).values_list("ritual_id", flat=True)
+    )
+
+
+def can_edit_ritual(user: object, ritual: Ritual, *, known_ritual_ids: set[int]) -> bool:
+    """Whether ``user`` may edit ``ritual``; ``known_ritual_ids`` is her played characters'.
+
+    Staff may edit any ritual. A staff-authored ritual (no author) is staff-only. A player's
+    anima ritual (SCENE_ACTION) is edited by the player of a character who knows it. Any other
+    player-authored ritual is edited by the account that authored it.
+    """
+    if cast(AccountDB, user).is_staff:
+        return True
+    author_id = ritual.author_account_id
+    if author_id is None:
+        return False
+    if ritual.execution_kind == RitualExecutionKind.SCENE_ACTION:
+        return ritual.pk in known_ritual_ids
+    return author_id == cast(AccountDB, user).pk
+
+
 class IsRitualAuthorOrStaff(BasePermission):
     """Allow write access only to the Ritual's author or staff.
 
     Safe methods (GET, HEAD, OPTIONS) are always allowed.
-    Mutation (PATCH, PUT, DELETE) is restricted to:
+    Mutation (PATCH, PUT, DELETE) follows ``can_edit_ritual``:
     - Staff accounts (is_staff=True).
     - For a player's anima ritual (SCENE_ACTION with an author): a requester who currently
       plays a character who knows it (#5280). The ritual is in character and belongs to the
@@ -44,17 +75,9 @@ class IsRitualAuthorOrStaff(BasePermission):
     def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
         if request.method in SAFE_METHODS:
             return True
-        if request.user.is_staff:
-            return True
-        author_id = obj.author_account_id
-        if author_id is None:
-            return False  # staff-authored ritual — non-staff cannot mutate
-        if obj.execution_kind == RitualExecutionKind.SCENE_ACTION:
-            return CharacterRitualKnowledge.objects.filter(
-                ritual=obj,
-                roster_entry__character_sheet_id__in=_active_sheet_ids_for_user(request.user),
-            ).exists()
-        return author_id == request.user.id
+        return can_edit_ritual(
+            request.user, obj, known_ritual_ids=known_ritual_ids_for_user(request.user)
+        )
 
 
 class IsThreadOwner(BasePermission):
