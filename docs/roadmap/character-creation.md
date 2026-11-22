@@ -30,6 +30,23 @@ Attractive, Leal Agent and Generational Talent still have no offer line anywhere
 three Actor's Sheet questions and the Appearance sections still offer no card, and the
 Appearance stage has no section to put one in.
 
+## Built (2026-11-22, #5201: Lineage folds its tarot deck and loses the per-beat Next and the boxes at its foot)
+
+Owner rulings 2026-11-18 on the Lineage stage. On a route with no family the Naming Ritual
+shows the surname, "Draw Random Card", the upright and reversed switch, and one closed door,
+"Choose a card"; the 78 cards are drawn only while that door is open
+(`TarotNamingRitual` in `LineageStage.tsx`). A beat has no Next of its own: the fold arrow
+at its heading closes it and the page's Next is the only Next. The foot of the life holds
+no box: the "N taken, N of M points spent" line, the paragraph of the picks and the
+`LineageRecord` box (the route, its priced answers and the CG points again) are removed,
+since the selections panel lists the picks and the points and each priced answer prints
+its own price. The "CG points" row of the selections panel says on hover, on every stage,
+what becomes of unspent points ("CG points left unspent convert to XP when the character is
+approved, N XP for each point."), with N read from the active budget
+(`folio/pointsHint.ts`, provided once by `CharacterCreationPage`). The copy keys
+`life_next`, `beats_foot` and `life_testament_empty` are no longer read. Lineage keeps its
+older card style; restyling it in the Folio style is not part of this.
+
 ## Built (2026-11-21, #5241: Appearance in compact controls, colour swatches, ten free points of feature qualities)
 
 Owner rulings 2026-11-21 on the Appearance stage. The birthday is typed as two numbers,
@@ -90,7 +107,7 @@ The life page opens with every life stage and every section in it expanded (owne
 with the rest folded, and opening one fold shut the one that was open. Each fold now opens
 and closes by itself. Next folds its own section, opens the one below if the player had
 folded it, and brings the folded section's line back into the window so the one below reads
-from its top. An open section prints its prompt once, in its body, not again on its line.
+from its top (*changed by #5201, above: a section has no Next of its own*). An open section prints its prompt once, in its body, not again on its line.
 The box at the end of a stage is labelled "Background Notes" (it was "Description
 (Optional)", which the owner expected to confuse people) and, while empty, shows in italics
 the owner's sentence saying the text joins the Background on the character sheet. The box is
@@ -140,7 +157,8 @@ waited for the save and then for a whole draft fetch, so the totals named a list
 no longer showed. The page now re-prices them itself (`useShownPicks`): the draft's total,
 less the prices in the draft's own list, plus the prices in the list on screen, with a
 save in flight laid over the saved list. The ledger's rows, its totals, the foot line, the
-Lineage record's line and the Gift summary all move with the click; the save's answer is
+Lineage record's line and the Gift summary all move with the click (*the foot line and the
+Lineage record were removed by #5201, above*); the save's answer is
 written into the cached draft at once and the draft fetch replaces it with the server's
 figures. The ledger's Spent and Gained lines are gone (owner ruling 2026-11-15): it prints
 Starting and Remaining.

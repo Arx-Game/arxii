@@ -200,8 +200,9 @@ describe('LifeGrids', () => {
     }
     for (const name of ['Early Upbringing', 'Influences', 'Known for', 'What marked it']) {
       expect(section(name)).toHaveAttribute('data-open', 'true');
-      // An open section shows its grid and its own Next.
-      expect(within(section(name)).getByRole('button', { name: 'Next' })).toBeInTheDocument();
+      // An open section shows its grid and no Next of its own: the fold arrow at its
+      // heading closes it, and the page's Next is the only Next (#5201).
+      expect(within(section(name)).queryByRole('button', { name: 'Next' })).toBeNull();
     }
     expect(within(section('Early Upbringing')).getByRole('list')).toHaveClass('grid', 'oneof');
     // Every section's cards are on the page without a click.
@@ -267,8 +268,9 @@ describe('LifeGrids', () => {
     draftDistinctions = [picked(101, 11), picked(300, 30)];
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
     expect(within(stage('Childhood')).getByText('1 of 1')).toBeInTheDocument();
-    // Next folds Known for to its answer and points; What marked it stays open under it.
-    await user.click(within(section('Known for')).getByRole('button', { name: 'Next' }));
+    // Its own line folds Known for to its answer and points; What marked it stays open
+    // under it.
+    await user.click(screen.getByTestId('sec-3'));
     const known = section('Known for');
     expect(known).toHaveAttribute('data-open', 'false');
     expect(within(known).getByText('Spied for a house')).toHaveClass('ans');
@@ -277,31 +279,6 @@ describe('LifeGrids', () => {
     // No other fold moved.
     expect(section('Early Upbringing')).toHaveAttribute('data-open', 'true');
     expect(stage('Childhood')).toHaveAttribute('data-open', 'true');
-  });
-
-  it('Next opens the section below when the player had folded it, and the next stage after a stage’s last (#5160)', async () => {
-    const user = userEvent.setup();
-    renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
-    // Inside a stage: What marked it was folded by hand, and Next on Known for opens it.
-    await user.click(screen.getByTestId('sec-4'));
-    expect(section('What marked it')).toHaveAttribute('data-open', 'false');
-    await user.click(within(section('Known for')).getByRole('button', { name: 'Next' }));
-    expect(section('Known for')).toHaveAttribute('data-open', 'false');
-    expect(section('What marked it')).toHaveAttribute('data-open', 'true');
-    // Across stages: Youth and its section were folded, and Next on Childhood's last
-    // section opens both. Childhood itself stays open, its section folded.
-    await user.click(screen.getByTestId('sec-2'));
-    await user.click(screen.getByRole('button', { name: /^Youth/ }));
-    expect(stage('Youth')).toHaveAttribute('data-open', 'false');
-    await user.click(within(section('Early Upbringing')).getByRole('button', { name: 'Next' }));
-    expect(stage('Youth')).toHaveAttribute('data-open', 'true');
-    expect(section('Influences')).toHaveAttribute('data-open', 'true');
-    expect(stage('Childhood')).toHaveAttribute('data-open', 'true');
-    expect(section('Early Upbringing')).toHaveAttribute('data-open', 'false');
-    // The last section of the last stage has nothing below: Next only folds it.
-    await user.click(within(section('What marked it')).getByRole('button', { name: 'Next' }));
-    expect(section('What marked it')).toHaveAttribute('data-open', 'false');
-    expect(stage('Before the Glimpse')).toHaveAttribute('data-open', 'true');
   });
 
   it('a one-of pick drops the sibling already held on that beat', async () => {
@@ -320,7 +297,6 @@ describe('LifeGrids', () => {
     const known = section('Known for');
     expect(within(known).getByRole('button', { name: /^Kept a shop/ })).toBeDisabled();
     expect(within(known).getByRole('button', { name: /^Spied for a house/ })).toBeEnabled();
-    expect(screen.getByText(/^1 taken, \d+ of \d+ points spent$/)).toBeInTheDocument();
   });
 
   it('answers with a group read under headings with counts, the ungrouped last', async () => {
@@ -583,7 +559,7 @@ describe('LifeGrids', () => {
     expect(document.querySelector('.life textarea')).toBeNull();
   });
 
-  it('the choices list every pick under its stage and print no totals, and the life so far (#5148)', async () => {
+  it('the choices list every pick under its stage and print no totals (#5148)', async () => {
     draftDistinctions = [picked(101, 11), picked(300, 30)];
     const draft = createMockDraft({
       cg_points_spent: -5,
@@ -602,17 +578,21 @@ describe('LifeGrids', () => {
       'Childhood',
       'Before the Glimpse',
     ]);
-    const testament = document.querySelector('.testament')!;
-    expect(testament.textContent).toBe(
-      'Spoiled. Spied for a house (secret; cover: Nothing shown).'
-    );
-    expect(Array.from(testament.querySelectorAll('b')).map((b) => b.textContent)).toEqual([
-      'Spoiled',
-      'Spied for a house (secret; cover: Nothing shown)',
-    ]);
   });
 
-  it('while a save is in flight the choices and the foot line read the picks being saved (#5141)', () => {
+  it('the foot of the life holds no box: no count line and no paragraph of the picks (#5201)', () => {
+    draftDistinctions = [picked(101, 11), picked(300, 30)];
+    const { container } = renderWithCharacterCreationProviders(
+      <LifeGrids draft={createMockDraft()} copy={{}} />
+    );
+    expect(container.querySelector('.life-foot')).toBeNull();
+    expect(container.querySelector('.testament')).toBeNull();
+    expect(screen.queryByText(/taken, \d+ of \d+ points spent/)).toBeNull();
+    // The life ends on its last stage.
+    expect(container.querySelector('.life')!.lastElementChild).toHaveClass('stage-acc');
+  });
+
+  it('while a save is in flight the choices read the picks being saved (#5141)', () => {
     // Held: Spoiled (the world pays 10) and Spied for a house (10). The draft's totals
     // were added up from that list, so they net to nothing spent.
     const held = [
@@ -639,8 +619,6 @@ describe('LifeGrids', () => {
     const ledger = screen.getByRole('region', { name: 'Life So Far' });
     const rows = Array.from(ledger.querySelectorAll('.row')).map((el) => el.textContent);
     expect(rows).toEqual(['Patient−10', 'Spied for a house−10']);
-    // Spoiled's 10 is given back and Patient's 10 is paid: 20 spent of the 100.
-    expect(screen.getByText('2 taken, 20 of 100 points spent')).toBeInTheDocument();
   });
 
   it("inside a chapter the choices stand in its right-hand panel, under the stage's selections (#5148)", async () => {
@@ -657,11 +635,10 @@ describe('LifeGrids', () => {
     expect(container.querySelectorAll('.ledger')).toHaveLength(1);
   });
 
-  it('with nothing chosen the rail and the life so far say so', () => {
+  it('with nothing chosen the rail says so', () => {
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
     expect(screen.getByText('Nothing chosen yet.')).toHaveClass('empty');
-    expect(screen.getByText('Nothing written yet.')).toHaveClass('testament');
-    expect(screen.getByText(/^0 taken, \d+ of \d+ points spent$/)).toBeInTheDocument();
+    expect(screen.queryByText('Nothing written yet.')).toBeNull();
   });
 
   it('a beginning that strikes every stage shows its text where the stages were, and nothing to fill in', () => {
@@ -745,8 +722,8 @@ describe('LifeGrids (the suggested life, #4865)', () => {
     expect(loadMutate).not.toHaveBeenCalled();
   });
 
-  it("the life's foot line carries no button: clearing is the stage's Restart door (#5146)", () => {
-    const { container } = renderWithCharacterCreationProviders(
+  it("the life carries no button to clear it: that is the stage's Restart door (#5146)", () => {
+    renderWithCharacterCreationProviders(
       <LifeGrids
         draft={createMockDraft({
           selected_beginnings: mockBeginnings,
@@ -755,8 +732,6 @@ describe('LifeGrids (the suggested life, #4865)', () => {
         copy={{ beats_start_blank: 'Start blank' }}
       />
     );
-    expect(container.querySelector('.life-foot')).toHaveTextContent(/taken/);
-    expect(container.querySelector('.life-foot button')).toBeNull();
     expect(screen.queryByText(/start blank/i)).toBeNull();
   });
 });

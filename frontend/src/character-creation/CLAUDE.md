@@ -49,7 +49,11 @@ character-creation/
 │   │                        #   `[...record.head, ...its own rows, record.points]`. No stage
 │   │                        #   writes the shared rows itself. The surname is the server's
 │   │                        #   (`draft.surname`); on a route with no family the row is
-│   │                        #   "Surname" and holds the drawn card's
+│   │                        #   "Surname" and holds the drawn card's. The points row
+│   │                        #   is marked `points` and takes the page's hover text
+│   │                        #   on what becomes of unspent points (#5201,
+│   │                        #   `pointsHint.ts`: `PointsHint` is provided once by
+│   │                        #   CharacterCreationPage from the active budget's rate)
 │   ├── Entry.tsx            # EntryList/Entry/EntryDoors: choosable record entries (`tag`
 │   │                        #   is optional and marks the exception only, #5207: no
 │   │                        #   "Available" on every row; an
@@ -89,7 +93,11 @@ character-creation/
     │                        #   twin: those come after creation, ADR-5102-A); keeps
     │                        #   InventedParentsCard, FamilyNamePreview, KinSlotPicker,
     │                        #   TarotNamingRitual, TarotCardItem, FamilyCard (exported
-    │                        #   for lineage/). KinSlotPicker (#5130) is the open seats
+    │                        #   for lineage/). TarotNamingRitual keeps its 78 cards
+    │                        #   folded behind "Choose a card" (#5201): the surname, the
+    │                        #   draw and the orientation switch are all that show until
+    │                        #   that door is opened. The stage ends on the life; the
+    │                        #   LineageRecord box is removed (#5201). KinSlotPicker (#5130) is the open seats
     │                        #   of the claimed family and the only way into it: no free
     │                        #   card; a seat reads its relation to the head of the house
     │                        #   (`head_relation` + the response's `head_name`), then its
@@ -302,8 +310,9 @@ character-creation/
         │                         #   should start as expanded"; no one-open-at-a-time). A
         │                         #   closed section reads its answers with signed points or
         │                         #   the prompt with the first name; an open one prints the
-        │                         #   prompt in its body only. Next folds its section and
-        │                         #   opens the one below if the player had folded it;
+        │                         #   prompt in its body only. A section has no Next of
+        │                         #   its own (#5201): its fold arrow closes it and the
+        │                         #   page's Next is the only Next;
         │                         #   every grid ends on an Amnesiac card (#5102: no cost, not a
         │                         #   distinction, copy life_amnesiac_name/_text) that marks
         │                         #   its own beat unknown; the secret marks under a grid, the Cover story box
@@ -317,7 +326,8 @@ character-creation/
         │                         #   are not read; the Background is one box on Final
         │                         #   Touches); the list of choices,
         │                         #   sent to the slot under the chapter's "CG selections"
-        │                         #   (#5148); the testament paragraph.
+        │                         #   (#5148). The life ends on its last stage: no count
+        │                         #   line and no paragraph of the picks (#5201).
         │                         #   Earlier shape, still true underneath: grids by stage
         │                         #   (#4395, the #4124 beats):
         │                         #   one block per stage the beginning offers (a struck
@@ -328,8 +338,7 @@ character-creation/
         │                         #   whose `allowance_is_points` is on (#4829: a ranked
         │                         #   card shows pips, `ChapterOffers` `pointsPicks`), any),
         │                         #   a line of the player's own once a card
-        │                         #   is picked; the footer counts the
-        │                         #   taken beats and the purse. A beginning that
+        │                         #   is picked. A beginning that
         │                         #   strikes every stage shows its struck_stages_text
         │                         #   where the stages would be and nothing else, with no
         │                         #   footer. Replaces BeatsBlock. The suggested life
@@ -434,8 +443,8 @@ the draft, the purse and the offers are still refetched.
 
 On a page that has distinction cards, anything that prints the draft's CG points or lists
 its picks reads `useShownPicks(draft)` (`useShownPicks.ts`), never `draft.cg_points_spent`
-or the saved list directly: the life page's ledger and foot line, the Lineage record's "CG
-points" line, the Gift summary. It
+or the saved list directly: the life page's ledger, the Lineage stage's "CG points" row,
+the Gift summary. It
 returns `picks`, `spent` and `remaining`. With no save in flight those are the saved list
 and the server's own totals. With one, `shownPicks` (`offers/syncHelpers.ts`) lays the
 save's rows over the saved list (a pick left out is let go, a changed rank is re-priced

@@ -1078,9 +1078,9 @@ on arrival and each fold opens and closes by itself (#5160, owner ruling 2026-11
 A folded stage reads its heading and "N of M" (copy `life_stage_progress`) or Unknown; a
 folded section reads its answers with their signed points or the beat's prompt in plain
 text with `{name}` read from `draft_data.first_name`; an open section with nothing picked
-prints the prompt in its body only. Next folds its own section, opens the one below (or
-the next stage and its first section) if the player had folded it, and scrolls the folded
-section's line into the window. Fold state is local: the sets of folded stages and folded
+prints the prompt in its body only. A section has no Next of its own (#5201, owner ruling
+2026-11-18): the fold arrow at its heading closes it, and the page's Next is the only
+Next. Fold state is local: the sets of folded stages and folded
 beats, both empty on arrival, never saved. Every section's grid
 ends on an **Amnesiac** card (#5102, ADR-5102-B; `ChapterOffers`' `trailing` slot): no
 cost and not a distinction, named by copy `life_amnesiac_name` and read by
@@ -1128,8 +1128,13 @@ on the one element): as `.interview .popover` none of them applied, and from #48
 #5148 the box was a blank page-high sheet in the wrong place.
 "View in Codex" in the codex overlay (`codex/components/CodexModal.tsx`, opened only from
 character creation) opens the entry in a new tab and leaves the overlay open (#5148).
-The life ends on the footer and the `.testament` paragraph (every
-answered beat's answers in bold, "Nothing written yet."). The first name is asked on the
+The life ends on its last stage (#5201): the count line and the paragraph of the picks
+that stood under it are removed, and so is the `LineageRecord` box under the life; the
+selections panel lists the picks and the points. On a route with no family the tarot deck
+is folded behind "Choose a card" (`TarotNamingRitual`), so only the surname, the draw and
+the orientation switch stand above the life. The "CG points" row of the selections panel
+carries, on every stage, a hover saying what becomes of unspent points, at the active
+budget's rate (`folio/pointsHint.ts`). The first name is asked on the
 Origin leaf (`OriginStage`, a `Field` saved on blur, listed first in the rail; copy
 `origin_first_name_label`/`origin_first_name_hint`) and `IdentityStage` shows the name as a
 line (`identity_name_missing` when none). Copy keys carry in-code fallbacks; the demo's
