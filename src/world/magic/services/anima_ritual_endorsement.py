@@ -66,17 +66,22 @@ def _settle(
     performer_sheet = performance.performer_persona.character_sheet
     partner_name = active_persona_for_sheet(partner_sheet).name
     performer_name = performance.performer_persona.name
-    if not endorse:
-        _close(performance, AnimaRitualEndorsement.WITHHELD)
-        send_stored_notice(
-            performer_sheet, f"{partner_name} did not feel it.", ooc_note="Anima ritual"
-        )
-        return f"You did not feel {performer_name}'s ritual."
     outward = (
         Resonance.objects.filter(pk=held["outward_resonance_id"]).first()
         if held["outward_resonance_id"] is not None
         else None
     )
+    # The partner's own line reuses the endorsement wording of a scene entry
+    # (``SceneEntryEndorseAction``) and names the resonance the ritual reached for.
+    ritual_for = f"{performer_name}'s ritual"
+    if outward is not None:
+        ritual_for += f" for {outward.name}"
+    if not endorse:
+        _close(performance, AnimaRitualEndorsement.WITHHELD)
+        send_stored_notice(
+            performer_sheet, f"{partner_name} did not feel it.", ooc_note="Anima ritual"
+        )
+        return f"You do not endorse {ritual_for}."
     granted = 0
     pending = held["outward_amount_pending"]
     if (
@@ -101,7 +106,7 @@ def _settle(
     if granted > 0 and outward is not None:
         line += f" Your {outward.name} grows by {granted}."
     send_stored_notice(performer_sheet, line, ooc_note="Anima ritual")
-    return f"You felt {performer_name}'s ritual."
+    return f"You endorse {ritual_for}."
 
 
 def answer_anima_ritual(

@@ -408,7 +408,7 @@ class TobinEndorses(_AnAskedPartner):
     def test_endorsing_grows_marras_ruin_once_and_tells_her_so(self) -> None:
         told = self.telnet(self.tobin, "ritual endorse Mara")
 
-        self.assertIn("You felt Mara's ritual.", told)
+        self.assertIn("You endorse Mara's ritual for Ruin.", told)
         self.assertTold(self.mara, "Tobin felt it. Your Ruin grows by 3.")
         self.assertEqual(self.balance(self.resonance), 3)
         self.assertEqual(self.ruin_grants(), 1)
@@ -438,7 +438,7 @@ class TobinWithholds(_AnAskedPartner):
     def test_withholding_grants_nothing_and_closes_the_question(self) -> None:
         told = self.telnet(self.tobin, "ritual withhold Mara")
 
-        self.assertIn("You did not feel Mara's ritual.", told)
+        self.assertIn("You do not endorse Mara's ritual for Ruin.", told)
         self.assertTold(self.mara, "Tobin did not feel it.")
         self.assertEqual(self.balance(self.resonance), 0)
         self.assertEqual(self.ruin_grants(), 0)
@@ -509,7 +509,7 @@ class AnsweringOnTheWeb(_AnAskedPartner):
         again = self._answer(self.tobin, performance_id, endorse=True)
 
         self.assertEqual(answered.status_code, status.HTTP_200_OK, answered.content)
-        self.assertEqual(answered.json()["detail"], "You felt Mara's ritual.")
+        self.assertEqual(answered.json()["detail"], "You endorse Mara's ritual for Ruin.")
         self.assertEqual(again.status_code, status.HTTP_400_BAD_REQUEST, again.content)
         self.assertEqual(again.json()["detail"], NOT_WAITING)
         self.assertEqual(self.balance(self.resonance), 3)

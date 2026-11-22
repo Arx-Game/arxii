@@ -662,7 +662,9 @@ tier's award, and 0 stores nothing and asks nothing. `answer_anima_ritual(partne
 endorse=)` (`services/anima_ritual_endorsement.py`) locks the row and reads its state from the
 database, so a double answer or a non-partner grants nothing; Endorse grants the held part once to the
 performer if she still holds the outward resonance and tells her "<partner> felt it. Your <outward>
-grows by N."; Withhold grants nothing ("<partner> did not feel it."). A pending answer lapses when its
+grows by N."; Withhold grants nothing ("<partner> did not feel it."). The partner reads back the
+scene-entry endorsement wording: "You endorse <performer>'s ritual for <outward>." or "You do not
+endorse <performer>'s ritual for <outward>." A pending answer lapses when its
 scene finishes (`lapse_pending_endorsements`, called by `Scene.finish_scene` and by the battle path
 that ends its backing scene), and an answer after that is refused as not waiting. Both
 `EndorseAnimaRitualAction` (`actions/definitions/anima_ritual.py`, key `endorse_anima_ritual`) and the
