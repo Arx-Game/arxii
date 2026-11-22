@@ -637,6 +637,7 @@ def run_train_offer(offer: NPCServiceOffer, persona: Persona) -> EffectResult:
                 source=AccessChangeSource.ACADEMY_TRAINING,
                 gold_cost=details.gold_cost,
                 gold_treasury=get_or_create_treasury(academy),
+                instruction_bonus=details.instruction_bonus,
             )
             redeem_favor_token(token, redeemer_org=academy)
     except NoAvailableFavorTokenError as exc:

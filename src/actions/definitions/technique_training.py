@@ -8,8 +8,10 @@ tested but unreachable by any player until this action existed.
 Location policy (Decision 3a, issue #2739): self-study needs no location. A
 teacher only contributes their skill bonus when their tenure's character is
 co-present in the learner's room at session time; otherwise the session
-silently falls back to self-study rates. This is true for BOTH PC-teacher
-meters and Academy TRAIN meters — there is never a location hard-block.
+silently falls back to self-study rates. There is never a location hard-block.
+An Academy TRAIN meter is the exception to the fallback (#2741): its NPC trainer is
+never present, so the learner paid for instruction and the meter itself carries the
+offer's bonus and lifts the self-study penalty, wherever the learner is.
 
 AP handling: the seam (``resolve_training_check`` → ``contribute_to_technique_progress``)
 spends AP in full itself and raises cleanly on pool/cap overruns
@@ -53,7 +55,8 @@ def _co_present_teacher(actor: ObjectDB, progress: TechniqueProgress) -> RosterT
     teacher_character = tenure.character
     if teacher_character is None:
         return None
-    if teacher_character.location != actor.location:
+    # Two characters out of the world both have no room; that is not sharing one (#2741).
+    if actor.location is None or teacher_character.location != actor.location:
         return None
     return tenure
 
@@ -103,7 +106,10 @@ class TrainTechniqueAction(Action):
         """
         from world.magic.exceptions import MagicError, WeeklyTrainingCapExceeded  # noqa: PLC0415
         from world.magic.models import TechniqueProgress  # noqa: PLC0415
-        from world.magic.services.technique_training import resolve_training_check  # noqa: PLC0415
+        from world.magic.services.technique_training import (  # noqa: PLC0415
+            is_academy_instructed,
+            resolve_training_check,
+        )
 
         if ap_to_invest is None:
             ap_to_invest = _DEFAULT_AP_TO_INVEST
@@ -198,6 +204,6 @@ class TrainTechniqueAction(Action):
                 "points_after": points_after,
                 "total_required": total_required,
                 "technique_acquired": result.technique_acquired is not None,
-                "self_study": teacher is None,
+                "self_study": teacher is None and not is_academy_instructed(progress),
             },
         )

@@ -124,6 +124,7 @@ class TrainOfferDetailsFactory(DjangoModelFactory):
     technique = factory.SubFactory("world.magic.factories.TechniqueFactory")
     learn_ap_cost = 5
     gold_cost = 0
+    instruction_bonus = 0
 
 
 class SkillCourseOfferDetailsFactory(DjangoModelFactory):

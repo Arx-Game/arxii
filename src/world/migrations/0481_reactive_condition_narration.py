@@ -4,7 +4,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0479_alter_standoffterms_archetypes_standoffendingaward")]
+    dependencies = [("arxii", "0480_technique_instruction_bonus")]
 
     operations = [
         migrations.AddField(

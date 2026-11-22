@@ -245,6 +245,7 @@ class TechniqueProgressListEndpointTests(TechniqueProgressViewSetTestBase):
                 "points_accumulated",
                 "total_required",
                 "teacher_name",
+                "is_self_study",
                 "source_label",
                 "weekly_remaining",
             },
@@ -254,6 +255,7 @@ class TechniqueProgressListEndpointTests(TechniqueProgressViewSetTestBase):
         self.assertEqual(row["points_accumulated"], 0)
         self.assertEqual(row["total_required"], 50)
         self.assertIsNone(row["teacher_name"])
+        self.assertTrue(row["is_self_study"])
         self.assertTrue(row["source_label"])
         self.assertIsNotNone(row["weekly_remaining"])
 

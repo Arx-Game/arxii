@@ -330,6 +330,7 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
     gold_treasury: OrganizationTreasury | None = None,
     teacher_tenure: RosterTenure | None = None,
     teacher_banked_ap: int = 0,
+    instruction_bonus: int = 0,
 ) -> TechniqueProgress:
     """Shared charge+acquire core for technique acquisition (#1587, #2440, #2711).
 
@@ -375,6 +376,9 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
             no banked-AP consumption happens.
         teacher_banked_ap: AP consumed from ``teacher_tenure``'s pool.
             Meaningless when ``teacher_tenure`` is None.
+        instruction_bonus: Check points the Academy trainer's instruction adds to every
+            session on the new meter (``TrainOfferDetails.instruction_bonus``, #2741).
+            The trainer is never at a session, so the meter carries it.
 
     Returns:
         The new TechniqueProgress meter. The learner trains via
@@ -501,6 +505,7 @@ def charge_and_learn(  # noqa: PLR0913 - shared core for two front doors; params
         teacher_tenure=teacher_tenure,
         source=source,
         is_cross_path=cross_path,
+        instruction_bonus=instruction_bonus,
     )
 
 
