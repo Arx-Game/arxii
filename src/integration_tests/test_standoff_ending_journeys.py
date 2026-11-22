@@ -30,6 +30,7 @@ from world.magic.factories import (
     KindlingSituationFactory,
     ResonanceFactory,
     RitualCheckConfigFactory,
+    teach_ritual,
 )
 from world.magic.models import CharacterResonance, KindledDeedAward, ResonanceGrant
 from world.magic.models.dramatic_moment import DramaticMomentTag
@@ -84,9 +85,9 @@ class StandoffEndingBase(JourneyCase):
         # Her own resonance, the way an anima ritual records it (never the type's).
         self.mercy_resonance = ResonanceFactory(name="Mercy resonance (journey)")
         CharacterResonanceFactory(character_sheet=self.sheet, resonance=self.mercy_resonance)
-        RitualCheckConfigFactory(
-            ritual__author_account=self.account_of(self.ysmay), resonance=self.mercy_resonance
-        )
+        # The anima ritual is hers through her roster entry (#5280), as creation writes it.
+        anima_ritual = RitualCheckConfigFactory(primal_resonance=self.mercy_resonance).ritual
+        teach_ritual(anima_ritual, self.sheet)
         # Staff's table: the better the result, the more the ending pays.
         self.critical = CheckOutcomeFactory(name="Ending critical (journey)", success_level=2)
         self.success = CheckOutcomeFactory(name="Ending success (journey)", success_level=1)
