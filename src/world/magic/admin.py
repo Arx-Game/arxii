@@ -1646,7 +1646,7 @@ class AnimaRitualPerformanceInline(admin.TabularInline):
 
 @admin.register(AnimaRitualPerformance)
 class AnimaRitualPerformanceAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["scene", "target_character"]
+    autocomplete_fields = ["scene", "target_character", "performer_persona", "outward_resonance"]
     list_display = [
         "ritual",
         "target_character",
@@ -2123,7 +2123,15 @@ class RitualCheckConfigInline(admin.StackedInline):
     model = RitualCheckConfig
     extra = 0
     can_delete = True
-    autocomplete_fields = ["stat", "skill", "specialization", "resonance", "check_type"]
+    autocomplete_fields = [
+        "stat",
+        "skill",
+        "specialization",
+        "resonance",
+        "primal_resonance",
+        "outward_resonance",
+        "check_type",
+    ]
 
 
 UNREGISTERED_SERVICE_MESSAGE = "That is not a service a ritual may run."
@@ -3180,7 +3188,14 @@ class AnimaConfigAdmin(admin.ModelAdmin):
         "daily_regen_amount",
         "level_zero_maximum",
         "death_harvest_multiplier",
+        "failed_endorsement_percent",
+        "attunement_anima_cost",
+        "attunement_resonance_cost",
+        "attunement_ap_cost",
+        "attunement_check_type",
+        "attunement_difficulty_level",
     ]
+    autocomplete_fields = ["attunement_check_type"]
 
     def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
         """Prevent adding a second row; this is a pk=1 singleton."""

@@ -7,9 +7,11 @@ execution_kind=SCENE_ACTION and a RitualCheckConfig sidecar.
 """
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from world.magic.constants import AnimaRitualEndorsement
 
 
 class CharacterAnima(SharedMemoryModel):
@@ -137,6 +139,43 @@ class AnimaRitualPerformance(SharedMemoryModel):
         blank=True,
         help_text="Optional notes about this performance.",
     )
+    endorsement = models.CharField(
+        max_length=10,
+        choices=AnimaRitualEndorsement.choices,
+        default=AnimaRitualEndorsement.NOT_ASKED,
+        db_default=AnimaRitualEndorsement.NOT_ASKED,
+        help_text=(
+            "Where the partner's answer stands: not asked (nobody to answer), pending, "
+            "endorsed, withheld or lapsed."
+        ),
+    )
+    outward_amount_pending = models.PositiveIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "The outward resonance growth held until the partner answers. 0 once it is "
+            "granted, withheld or lapsed, or when there was none."
+        ),
+    )
+    outward_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The outward resonance this performance reached for, held for the grant.",
+    )
+    performer_persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="anima_ritual_performances_given",
+        help_text=(
+            "The persona the performer wore for this ritual (the request's initiator "
+            "persona), so the partner's card never shows a masked true name."
+        ),
+    )
 
     class Meta:
         ordering = ["-performed_at"]
@@ -169,6 +208,42 @@ class AnimaConfig(SharedMemoryModel):
         help_text=(
             "Killing a victim by anima drain yields this multiple of their full "
             "maximum (#3001) - the metaphysical engine of ritual murder."
+        ),
+    )
+
+    failed_endorsement_percent = models.PositiveSmallIntegerField(
+        default=50,
+        validators=[MaxValueValidator(100)],
+        help_text=(
+            "Percent of a ritual's resonance growth a performer keeps for the part the "
+            "partner did not endorse (0 to 100)."
+        ),
+    )
+    attunement_anima_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Anima a character spends to attune a new pair of aura resonances.",
+    )
+    attunement_resonance_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Resonance balance a character spends to attune a new pair of aura resonances.",
+    )
+    attunement_ap_cost = models.PositiveIntegerField(
+        default=0,
+        help_text="Action points a character spends to attune a new pair of aura resonances.",
+    )
+    attunement_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="The check a character rolls to attune a new pair of aura resonances.",
+    )
+    attunement_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        help_text=(
+            "Difficulty of the attunement check, authored as a level (0 = no difficulty): "
+            "the roll meets that level's baseline."
         ),
     )
 

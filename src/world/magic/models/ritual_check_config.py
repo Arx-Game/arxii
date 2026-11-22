@@ -5,9 +5,11 @@ Holds the check a ritual rolls when performed. SCENE_ACTION rituals
 rituals) may carry one to source their CheckType and authored difficulty.
 """
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from world.magic.constants import AFFINITY_PRIMAL
 
 
 class RitualCheckConfig(SharedMemoryModel):
@@ -58,6 +60,28 @@ class RitualCheckConfig(SharedMemoryModel):
         related_name="+",
         help_text="Optional resonance filter for this ritual.",
     )
+    primal_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The Primal resonance this anima ritual grows for its performer. Must be a "
+            "Primal-affinity resonance. Replaces the single resonance pick."
+        ),
+    )
+    outward_resonance = models.ForeignKey(
+        "arxii.Resonance",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The Celestial or Abyssal resonance this anima ritual reaches for in its "
+            "partner. Must not be a Primal-affinity resonance."
+        ),
+    )
     check_type = models.ForeignKey(
         "arxii.CheckType",
         on_delete=models.PROTECT,
@@ -98,3 +122,16 @@ class RitualCheckConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"CheckConfig for {self.ritual_id}"
+
+    def clean(self) -> None:
+        """Hold the Primal pick to a Primal resonance and the outward pick to a non-Primal one."""
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.primal_resonance_id and self.primal_resonance.affinity.name != AFFINITY_PRIMAL:
+            errors["primal_resonance"] = "The Primal pick must be a Primal-affinity resonance."
+        if self.outward_resonance_id and self.outward_resonance.affinity.name == AFFINITY_PRIMAL:
+            errors["outward_resonance"] = (
+                "The outward pick must be a Celestial or Abyssal resonance, not a Primal one."
+            )
+        if errors:
+            raise ValidationError(errors)
