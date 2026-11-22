@@ -77,7 +77,7 @@ export function FacePortraitPicker({
             busy={busy}
             onFiles={(files) => onUpload(files[0])}
           />
-          <div className="grid max-h-72 grid-cols-3 gap-2 overflow-y-auto p-0.5">
+          <div className="grid max-h-72 auto-rows-max grid-cols-3 gap-2 overflow-y-auto p-0.5">
             {pictures.map((picture) => (
               <button
                 key={picture.id}
