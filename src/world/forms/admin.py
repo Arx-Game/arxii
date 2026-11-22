@@ -271,16 +271,28 @@ class AlternateSelfAdmin(admin.ModelAdmin):
         """A staff-set Thumbnail reaches the pose picture too (#4889).
 
         Room state reads this self's thumbnail and poses read its persona's text copy, so
-        the persona's two fields are set with it, the way a player's pick sets them.
+        the persona's two fields are set with it, the way a player's pick sets them. The
+        private copies the self and its persona held before are deleted when nothing else
+        wears them, as a player's own replace does.
         """
-        super().save_model(request, obj, form, change)
         # A form field name, not a discriminator.
-        if "thumbnail" in form.changed_data and obj.persona_id is not None:  # noqa: STRING_LITERAL
-            from world.scenes.constants import PersonaType  # noqa: PLC0415
-            from world.scenes.face_services import sync_persona_portrait  # noqa: PLC0415
+        thumbnail_changed = "thumbnail" in form.changed_data  # noqa: STRING_LITERAL
+        previous_id = form.initial.get("thumbnail")
+        super().save_model(request, obj, form, change)
+        if not thumbnail_changed:
+            return
+        from evennia_extensions.models import Media  # noqa: PLC0415
+        from world.scenes.constants import PersonaType  # noqa: PLC0415
+        from world.scenes.face_services import (  # noqa: PLC0415
+            delete_unused_face_copies,
+            sync_persona_portrait,
+        )
 
-            if obj.persona.persona_type != PersonaType.PRIMARY:
-                sync_persona_portrait(obj.persona, obj.thumbnail)
+        replaced = [Media.objects.filter(pk=previous_id).first()] if previous_id else []
+        if obj.persona_id is not None and obj.persona.persona_type != PersonaType.PRIMARY:
+            replaced.append(obj.persona.thumbnail)
+            sync_persona_portrait(obj.persona, obj.thumbnail)
+        delete_unused_face_copies(replaced)
 
 
 @admin.register(ActiveAlternateSelf)

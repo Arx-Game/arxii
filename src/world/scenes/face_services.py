@@ -151,6 +151,20 @@ def set_face_portrait(
                 CloudinaryGalleryService.delete_media(old)
 
 
+def delete_unused_face_copies(replaced: list[Media | None]) -> None:
+    """Delete the private face copies a staff save in the admin stopped using (#4889).
+
+    The admin's Thumbnail field replaces or clears a face's picture without going through
+    ``set_face_portrait``, so the copy the player stored for that face would stay, still
+    counting against her storage. Call this after the save with each picture the face held
+    before: a private copy nothing else wears is deleted, the same rule a player's own
+    replace follows; a staff-authored picture and a gallery picture are never touched.
+    """
+    for old in {media.pk: media for media in replaced if media is not None}.values():
+        if old.player_data is not None and _is_unused_face_copy(old, old.player_data, None, []):
+            CloudinaryGalleryService.delete_media(old)
+
+
 def _stored_portrait(
     player_data: PlayerData,
     *,

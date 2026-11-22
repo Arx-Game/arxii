@@ -125,11 +125,19 @@ class PersonaAdmin(admin.ModelAdmin):
 
         Left alone when staff edited the text copy themselves in the same save.
         """
+        from evennia_extensions.models import Media  # noqa: PLC0415
+        from world.scenes.face_services import delete_unused_face_copies  # noqa: PLC0415
+
         changed = form.changed_data  # ty: ignore[unresolved-attribute]
         # Form field names, not discriminators.
-        if "thumbnail" in changed and "thumbnail_url" not in changed:  # noqa: STRING_LITERAL
+        thumbnail_changed = "thumbnail" in changed  # noqa: STRING_LITERAL
+        if thumbnail_changed and "thumbnail_url" not in changed:  # noqa: STRING_LITERAL
             obj.thumbnail_url = obj.thumbnail.cloudinary_url if obj.thumbnail_id else ""
         super().save_model(request, obj, form, change)  # ty: ignore[invalid-argument-type]
+        # A replaced or removed portrait deletes the player's private copy of it.
+        previous_id = form.initial.get("thumbnail")  # ty: ignore[unresolved-attribute]
+        if thumbnail_changed and previous_id is not None:
+            delete_unused_face_copies([Media.objects.filter(pk=previous_id).first()])
 
 
 class InteractionReceiverInlineForInteraction(admin.TabularInline):

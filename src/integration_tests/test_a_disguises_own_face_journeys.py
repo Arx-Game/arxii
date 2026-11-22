@@ -336,6 +336,19 @@ class TheUploadLimitHolds(DisguiseFaceCase):
         self.assert_nothing_stored(refused, "pdf")
         self.assertEqual(self.cloudinary.calls, [])
 
+    def test_a_gallery_picture_over_the_per_file_limit_is_refused_when_picked(self) -> None:
+        """One per-file limit holds for a pick as for an upload, with the same words."""
+        huge = self.her_picture(size=11 * MIB)
+        stored = Media.objects.count()
+
+        refused = self.ysmay_api().post(
+            SET_PORTRAIT, {"persona_id": self.mask.pk, "media_id": huge.pk}, format="json"
+        )
+
+        self.assert_nothing_stored(refused, FILE_MESSAGE)
+        self.assertEqual(Media.objects.count(), stored)
+        self.assertEqual(self.cloudinary.calls, [])
+
     def test_a_portrait_is_replaced_when_the_new_copy_fits_once_the_old_one_goes(self) -> None:
         """The swap is judged on the total after it, not before it."""
         first = self.her_picture(size=700)
@@ -858,3 +871,94 @@ class AStaffPictureOnAFormReachesThePoseToo(RefusedAdminSaveCase):
         self.assertEqual(saved.status_code, 302, saved.content[:2000])
         persona = Persona.objects.get(pk=form_persona.pk)
         self.assertEqual((persona.thumbnail, persona.thumbnail_url), (art, art.cloudinary_url))
+
+
+class AStaffReplacementDeletesHerPrivateCopy(DisguiseFaceCase, RefusedAdminSaveCase):
+    """Staff replace or clear a face's Thumbnail in the admin: the player's copy goes with it.
+
+    The spec: a replaced or removed portrait deletes its copy, so it stops counting against
+    her storage. A staff-authored picture staff replace is never deleted.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.staff_art = MediaFactory(
+            player_data=None, slug="owl-art", cloudinary_public_id="art/owl"
+        )
+
+    def she_picks_a_portrait(self) -> Media:
+        picked = self.ysmay_api().post(
+            SET_PORTRAIT,
+            {"persona_id": self.mask.pk, "media_id": self.her_picture(size=700).pk},
+            format="json",
+        )
+        self.assertEqual(picked.status_code, 200, picked.content)
+        return Persona.objects.get(pk=self.mask.pk).thumbnail
+
+    def staff_save_persona(self, thumbnail: str) -> None:
+        url = reverse("admin:arxii_persona_change", args=[self.mask.pk])
+        data = self.change_post(url)
+        data["thumbnail"] = thumbnail
+        saved = self.client.post(url, data)
+        self.assertEqual(saved.status_code, 302, saved.content[:2000])
+
+    def test_a_staff_picture_replacing_her_copy_deletes_it_and_frees_her_storage(self) -> None:
+        copy = self.she_picks_a_portrait()
+        before = media_bytes_used(self.player)
+
+        self.staff_save_persona(str(self.staff_art.pk))
+
+        self.assertFalse(Media.objects.filter(pk=copy.pk).exists())
+        self.assertEqual(self.cloudinary.destroyed, [copy.cloudinary_public_id])
+        self.assertEqual(media_bytes_used(self.player), before - copy.file_size_bytes)
+        mask = Persona.objects.get(pk=self.mask.pk)
+        self.assertEqual(
+            (mask.thumbnail, mask.thumbnail_url), (self.staff_art, self.staff_art.cloudinary_url)
+        )
+
+    def test_a_staff_save_that_removes_the_thumbnail_deletes_her_copy_too(self) -> None:
+        copy = self.she_picks_a_portrait()
+
+        self.staff_save_persona("")
+
+        self.assertFalse(Media.objects.filter(pk=copy.pk).exists())
+        self.assertEqual(self.cloudinary.destroyed, [copy.cloudinary_public_id])
+        mask = Persona.objects.get(pk=self.mask.pk)
+        self.assertEqual((mask.thumbnail, mask.thumbnail_url), (None, ""))
+
+    def test_staff_replacing_staff_art_deletes_nothing(self) -> None:
+        self.mask.thumbnail = self.staff_art
+        self.mask.thumbnail_url = self.staff_art.cloudinary_url
+        self.mask.save(update_fields=["thumbnail", "thumbnail_url"])
+        other = MediaFactory(player_data=None, slug="owl-art-2", cloudinary_public_id="art/owl2")
+
+        self.staff_save_persona(str(other.pk))
+
+        self.assertTrue(Media.objects.filter(pk=self.staff_art.pk).exists())
+        self.assertEqual(self.cloudinary.destroyed, [])
+
+    def test_a_staff_picture_on_her_form_deletes_the_copy_the_form_and_its_persona_shared(
+        self,
+    ) -> None:
+        form_persona = PersonaFactory(
+            character_sheet=self.sheet, name="Ashen Wolf", persona_type=PersonaType.ALTERNATE
+        )
+        wolf = AlternateSelfFactory(character=self.sheet, persona=form_persona)
+        picked = self.ysmay_api().post(
+            f"/api/forms/alternate-selves/{wolf.pk}/set-portrait/",
+            {"media_id": self.her_picture(size=700).pk},
+            format="json",
+        )
+        self.assertEqual(picked.status_code, 200, picked.content)
+        copy = Persona.objects.get(pk=form_persona.pk).thumbnail
+        url = reverse("admin:arxii_alternateself_change", args=[wolf.pk])
+        data = self.change_post(url)
+        data["thumbnail"] = str(self.staff_art.pk)
+
+        saved = self.client.post(url, data)
+
+        self.assertEqual(saved.status_code, 302, saved.content[:2000])
+        self.assertFalse(Media.objects.filter(pk=copy.pk).exists())
+        self.assertEqual(self.cloudinary.destroyed, [copy.cloudinary_public_id])
+        persona = Persona.objects.get(pk=form_persona.pk)
+        self.assertEqual(persona.thumbnail, self.staff_art)
