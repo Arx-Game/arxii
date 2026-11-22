@@ -57,6 +57,23 @@ class AnimaRitualChoices:
 
 
 @dataclass(frozen=True)
+class AttunementResult:
+    """What attuning an anima ritual to a new pair of resonances cost and did (#5280).
+
+    ``changed`` is true when the roll held and the picks were written. ``anima_spent`` is the
+    anima the attunement charged and ``soulfray_deficit`` the part of it she did not have, which
+    went into Soulfray. ``resonance_spent`` maps the pk of each newly picked resonance to the
+    balance it paid (kept in memory only).
+    """
+
+    changed: bool
+    anima_spent: int
+    soulfray_deficit: int
+    resonance_spent: dict[int, int]
+    message: str
+
+
+@dataclass(frozen=True)
 class RitualEarningParts:
     """The ritual's resonance award for one roll, split between its two picks (#5280).
 

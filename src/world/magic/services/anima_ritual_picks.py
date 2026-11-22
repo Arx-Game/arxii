@@ -33,7 +33,7 @@ def _is_primal(resonance: Resonance) -> bool:
     return resonance.affinity.name == AFFINITY_PRIMAL
 
 
-def _config_of(sheet: CharacterSheet) -> RitualCheckConfig | None:
+def ritual_config_of(sheet: CharacterSheet) -> RitualCheckConfig | None:
     """The check config of the character's anima ritual, or None when she has no ritual or it
     has no config."""
     ritual = get_character_anima_ritual(sheet.character)
@@ -52,7 +52,7 @@ def anima_ritual_choices(sheet: CharacterSheet) -> AnimaRitualChoices:
         .select_related("resonance__affinity")
         .order_by("resonance__name")
     ]
-    config = _config_of(sheet)
+    config = ritual_config_of(sheet)
     primal_pick = config.primal_resonance if config is not None else None
     outward_pick = config.outward_resonance if config is not None else None
     return AnimaRitualChoices(
@@ -103,7 +103,7 @@ def set_up_anima_ritual_resonances(
             them), or the picks fail ``check_anima_ritual_picks``.
         ValidationError: the config fails its own validation (nothing is kept).
     """
-    config = _config_of(sheet)
+    config = ritual_config_of(sheet)
     if config is None:
         raise AnimaRitualPickError(NO_RITUAL_TO_SET_UP)
     with transaction.atomic():

@@ -119,6 +119,8 @@ from world.magic.serializers import (
     AlterationResolutionResponseSerializer,
     AlterationResolutionSerializer,
     AnimaRitualAnswerSerializer,
+    AnimaRitualAttunedSerializer,
+    AnimaRitualAttuneSerializer,
     AnimaRitualChoicesQuerySerializer,
     AnimaRitualChoicesSerializer,
     AnimaRitualEndorsementSerializer,
@@ -2460,6 +2462,10 @@ class AnimaRitualSetupViewSet(GenericViewSet):
     POST /api/magic/anima-ritual/set-up/  {character_sheet_id, primal_resonance_id,
         outward_resonance_id}
         Writes both picks for free, once. A refusal is a 400 ``{detail}``.
+    POST /api/magic/anima-ritual/attune/  {character_sheet_id, primal_resonance_id,
+        outward_resonance_id}
+        Pays to change the picks after the first setup, through ``AttuneAnimaRitualAction``.
+        Replies ``{choices, message, changed}``; a refusal is a 400 ``{detail}``.
 
     The query serializers are the filter (they require and resolve the one character), and the
     ``GET`` returns one object, so ``pagination_class`` is ``None``.
@@ -2526,6 +2532,44 @@ class AnimaRitualSetupViewSet(GenericViewSet):
         except DjangoValidationError as exc:
             return Response({"detail": " ".join(exc.messages)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(AnimaRitualChoicesSerializer(anima_ritual_choices(sheet)).data)
+
+    @extend_schema(
+        request=AnimaRitualAttuneSerializer,
+        responses={200: AnimaRitualAttunedSerializer},
+    )
+    @action(detail=False, methods=["post"], url_path="attune")
+    def attune(self, request: Request) -> Response:
+        """Pay to change the picks: converges on ``AttuneAnimaRitualAction`` with telnet.
+
+        A refusal (nothing changes, an unheld or wrong-affinity pick, too little resonance or
+        action points) is a 400 ``{detail}`` and spends nothing. A failed roll is a 200: the
+        costs are spent and the picks are as they were, which the ``message`` says.
+        """
+        from actions.definitions.anima_ritual import AttuneAnimaRitualAction  # noqa: PLC0415
+        from world.magic.services.anima_ritual_picks import anima_ritual_choices  # noqa: PLC0415
+
+        serializer = AnimaRitualAttuneSerializer(data=request.data, context={"request": request})
+        if not serializer.is_valid():
+            return Response(
+                {"detail": _plain_detail(serializer.errors)}, status=status.HTTP_400_BAD_REQUEST
+            )
+        data = serializer.validated_data
+        sheet: CharacterSheet = data["character_sheet_id"]
+        self._require_ritual(sheet)
+        primal, outward = data["primal_resonance_id"], data["outward_resonance_id"]
+        result = AttuneAnimaRitualAction().run(
+            actor=sheet.character,
+            primal_resonance_id=primal.pk if primal else None,
+            outward_resonance_id=outward.pk if outward else None,
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        reply = {
+            "choices": anima_ritual_choices(sheet),
+            "message": result.message,
+            "changed": result.data["changed"],
+        }
+        return Response(AnimaRitualAttunedSerializer(reply).data)
 
 
 class AnimaRitualEndorsementViewSet(ListModelMixin, GenericViewSet):

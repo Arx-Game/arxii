@@ -843,6 +843,8 @@ class ActionRegistryTests(TestCase):
             "harvest_primum",
             # #5280 - a partner's answer to an anima ritual that reached for them.
             "endorse_anima_ritual",
+            # #5280 - paying to change the picks of an anima ritual.
+            "attune_anima_ritual",
         }
         assert set(ACTIONS_BY_KEY.keys()) == expected_keys
 

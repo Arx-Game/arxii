@@ -9,6 +9,8 @@ Single-actor path (SERVICE/CEREMONY kind):
     ``ritual anima <partner>``              — ask someone in the scene to take part in your
         personal anima ritual; it is never done alone (#5280). Bare ``ritual anima`` is refused
         with the usage line, and so is ``ritual <its name>`` with the same refusal.
+    ``ritual attune primal=<name|none> outward=<name|none>`` - pay to change the two resonances
+        your anima ritual grows, after its free first setup (#5280)
     ``ritual <name> key=value [key=value]``  — with ritual parameters (numeric only,
         e.g. ``thread=<id>``/``tradition_id=<id>``/``target_affinity=<id>``/
         ``resonance=<id>``; ``resonance=`` (alias ``target_resonance=``) names the
@@ -39,6 +41,7 @@ for single-actor rituals — both converge on the same service functions.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Q
@@ -67,6 +70,11 @@ _AMOUNT_KWARG = "amount"
 #: ritual (#5181), whatever its authored name is.
 _ANIMA_SHORTHAND = "anima"
 _ANIMA_USAGE = "Name someone else to take part in your ritual. Usage: ritual anima <partner>"
+#: ``ritual attune primal=<name|none> outward=<name|none>`` changes the ritual's two picks (#5280).
+_ATTUNE_SUBCMD = "attune"
+_ATTUNE_USAGE = "Usage: ritual attune primal=<resonance|none> outward=<resonance|none>"
+_ATTUNE_KEYS = re.compile(r"\b(primal|outward)=", re.IGNORECASE)
+_NO_PICK = "none"
 _SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
 #: The partner's answer to an anima ritual that reached for them (#5280).
 _ANSWER_SUBCMDS = frozenset({"endorse", "withhold"})
@@ -196,6 +204,9 @@ class CmdRitual(ArxCommand):
             anima ritual, which is never done alone (once per scene). A player is told what
             it will do to their fatigue and agrees with ``accept``; an NPC is accepted at
             once when a GM runs it or the scene (#5181, #5280)
+        ``ritual attune primal=<name|none> outward=<name|none>`` - change the two resonances
+            your anima ritual grows, after its free first setup; it costs what staff set, may
+            roll, and a failed roll keeps the cost and the old picks (#5280)
         ``ritual endorse <performer>`` / ``ritual withhold <performer>`` - answer a ritual
             that reached for your resonance: endorse it if it took hold of you (the
             performer's outward resonance grows), withhold if it did not (#5280)
@@ -218,7 +229,11 @@ class CmdRitual(ArxCommand):
     def func(self) -> None:
         """Route session subcommands; fall through to single-actor action otherwise."""
         first = (self.args or "").strip().split()[0].lower() if (self.args or "").strip() else ""
-        if self._asked_for_a_partner(first) or self._answered_a_ritual(first):
+        if (
+            self._asked_for_a_partner(first)
+            or self._answered_a_ritual(first)
+            or self._attuned_the_ritual(first)
+        ):
             return
         if first in _SESSION_SUBCMDS:
             rest = (self.args or "").strip()[len(first) :].strip()
@@ -354,6 +369,43 @@ class CmdRitual(ArxCommand):
             actor=self.caller, performance_id=waiting[0].pk, endorse=endorse
         )
         self.caller.msg(result.message)
+
+    def _attuned_the_ritual(self, first: str) -> bool:
+        """Handle ``ritual attune primal=<name|none> outward=<name|none>`` and return True;
+        False for any other line. Both picks must be given (``none`` for an empty slot), since an
+        attunement writes both."""
+        if first != _ATTUNE_SUBCMD:
+            return False
+        from actions.definitions.anima_ritual import AttuneAnimaRitualAction  # noqa: PLC0415
+        from world.magic.models import Resonance  # noqa: PLC0415
+
+        rest = (self.args or "").strip()[len(first) :].strip()
+        parts = _ATTUNE_KEYS.split(rest)
+        # ``split`` with one group gives [before, key, value, key, value, ...]; anything before
+        # the first key is not a pick.
+        named = {
+            key.lower(): value.strip() for key, value in zip(parts[1::2], parts[2::2], strict=True)
+        }
+        if parts[0].strip() or set(named) != {"primal", "outward"}:
+            self.caller.msg(_ATTUNE_USAGE)
+            return True
+        ids: dict[str, int | None] = {}
+        for slot, name in named.items():
+            if name.lower() == _NO_PICK:
+                ids[slot] = None
+                continue
+            resonance = Resonance.objects.filter(name__iexact=name).first()
+            if resonance is None:
+                self.caller.msg(f"There is no resonance called {name}.")
+                return True
+            ids[slot] = resonance.pk
+        result = AttuneAnimaRitualAction().run(
+            actor=self.caller,
+            primal_resonance_id=ids["primal"],
+            outward_resonance_id=ids["outward"],
+        )
+        self.caller.msg(result.message)
+        return True
 
     # ------------------------------------------------------------------
     # Session handlers

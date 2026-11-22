@@ -54,7 +54,7 @@ from actions.definitions.almanach import (
     AlmanachWithdrawClaimAction,
 )
 from actions.definitions.alterations import ResolveAlterationAction
-from actions.definitions.anima_ritual import EndorseAnimaRitualAction
+from actions.definitions.anima_ritual import AttuneAnimaRitualAction, EndorseAnimaRitualAction
 from actions.definitions.appetites import DrainAction, FeedAction
 from actions.definitions.areas import DeclareElevationAction
 from actions.definitions.assets import IntroduceAssetAction
@@ -996,6 +996,7 @@ _ALL_ACTIONS: list[Action] = [
     CallUpSubstanceAction(),
     HarvestPrimumAction(),
     EndorseAnimaRitualAction(),
+    AttuneAnimaRitualAction(),
     CompleteStoryAction(),
     ResolveEpisodeAction(),
     PromoteEpisodeAction(),

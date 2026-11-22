@@ -4631,6 +4631,36 @@ class AnimaRitualSetUpSerializer(serializers.Serializer):
         return _resolve_account_sheet(value, self.context.get("request"))
 
 
+class AnimaRitualAttuneSerializer(serializers.Serializer):
+    """Request shape for POST /api/magic/anima-ritual/attune/.
+
+    ``character_sheet_id`` is resolved the way a ritual perform resolves it: the requester must
+    play that character (staff may name any). Both picks are required, each a resonance id or
+    null (null clears that slot), because an attunement writes both. The service decides whether
+    they are held, of the right affinity and paid for.
+    """
+
+    character_sheet_id = serializers.IntegerField()
+    primal_resonance_id = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.select_related("affinity"), allow_null=True
+    )
+    outward_resonance_id = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.select_related("affinity"), allow_null=True
+    )
+
+    def validate_character_sheet_id(self, value: int) -> CharacterSheet:
+        return _resolve_account_sheet(value, self.context.get("request"))
+
+
+class AnimaRitualAttunedSerializer(serializers.Serializer):
+    """The reply to an attunement (read-only): the ritual's choices as they stand now, the line
+    the player reads, and whether the picks changed (false when the roll failed)."""
+
+    choices = AnimaRitualChoicesSerializer(read_only=True)
+    message = serializers.CharField(read_only=True)
+    changed = serializers.BooleanField(read_only=True)
+
+
 # =============================================================================
 # A partner's answer to an anima ritual (#5280)
 # =============================================================================
