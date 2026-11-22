@@ -55,7 +55,8 @@ def _co_present_teacher(actor: ObjectDB, progress: TechniqueProgress) -> RosterT
     teacher_character = tenure.character
     if teacher_character is None:
         return None
-    if teacher_character.location != actor.location:
+    # Two characters out of the world both have no room; that is not sharing one (#2741).
+    if actor.location is None or teacher_character.location != actor.location:
         return None
     return tenure
 

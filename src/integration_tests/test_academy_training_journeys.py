@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+from django.test import tag
 from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import RoomProfileFactory
@@ -352,6 +353,25 @@ class TrainingAtTheAcademy(JourneyCase):
         self.assertFalse(hobb_row["is_self_study"])
         self.assertIn("Wren", ysmay_row["teacher_name"])
         self.assertFalse(ysmay_row["is_self_study"])
+
+    @tag("regression")
+    def test_a_teacher_is_not_present_when_neither_character_is_in_the_world(self) -> None:
+        """Regression for #2741. A player teacher counts only when standing in the learner's
+        room. With both characters out of the world (no room at all) the web session must
+        train at self-study rates, not as if the two shared a room."""
+        self._staff_author_training_check()
+        wren = self.make_player("Wren", room=self.hall)
+        teaching = TechniqueTeachingOfferFactory(
+            teacher=wren.sheet_data.roster_entry.tenures.get(end_date__isnull=True),
+            technique=self.technique,
+            learn_ap_cost=5,
+            banked_ap=0,
+        )
+        self.telnet(self.ysmay, f"learn technique {teaching.pk}")
+        for character in (wren, self.ysmay):
+            character.location = None
+            character.save()
+        self.assertTrue(self._train_once_data(self.ysmay)["self_study"])
 
     def _train_once_data(self, learner) -> dict:
         result = self.web(learner, "train_technique", technique_id=self.technique.pk)
