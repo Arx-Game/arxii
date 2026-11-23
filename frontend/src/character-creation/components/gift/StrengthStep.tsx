@@ -90,6 +90,72 @@ function withArticle(affinity: string): string {
   return `${/^[AEIOU]/.test(affinity) ? 'an' : 'a'} ${affinity}`;
 }
 
+type Text = (key: string, fallback: string) => string;
+
+/** The aura's caption and sentence: none before a feeling is chosen. */
+function auraWords({
+  hasFeeling,
+  balanced,
+  main,
+  otherSide,
+  text,
+}: {
+  hasFeeling: boolean;
+  balanced: boolean;
+  main: string;
+  otherSide: string;
+  text: Text;
+}): { auraName: string | null; said: string | null } {
+  if (balanced) {
+    return {
+      auraName: `${main}, with ${withArticle(otherSide)} side`,
+      said:
+        main === 'Primal'
+          ? text(
+              'gift_strength_aura_mostly_feeling',
+              'Most of your strength comes from what you feel.'
+            )
+          : text(
+              'gift_strength_aura_mostly_others',
+              'Most of your strength comes from what you do to others.'
+            ),
+    };
+  }
+  if (hasFeeling) {
+    return {
+      auraName: 'Primal',
+      said: text('gift_strength_aura_all_feeling', 'All your strength comes from what you feel.'),
+    };
+  }
+  return { auraName: null, said: null };
+}
+
+/** The points under the slider: each pick with its share, or the one pick holding them all. */
+function pointsLineFor({
+  feeling,
+  outward,
+  balanced,
+  neither,
+  primalPoints,
+  outwardPoints,
+  budget,
+}: {
+  feeling: Resonance | undefined;
+  outward: Resonance | undefined;
+  balanced: boolean;
+  neither: boolean;
+  primalPoints: number;
+  outwardPoints: number;
+  budget: number;
+}): string {
+  if (balanced && feeling && outward) {
+    return `${feeling.name} ${primalPoints} · ${outward.name} ${outwardPoints}`;
+  }
+  if (neither && feeling) return `${feeling.name} ${budget}`;
+  const only = feeling ?? outward;
+  return only ? `${only.name} ${budget}` : '';
+}
+
 export function StrengthStep({
   resonances,
   affinities = [],
@@ -153,32 +219,22 @@ export function StrengthStep({
   const main = mainAffinityOf(picks, budget);
   const otherSide = main === 'Primal' && chosenSide ? affinityOfLean(chosenSide) : 'Primal';
   // No name and no sentence before a feeling is chosen: the aura claims nothing she has not.
-  let auraName: string | null = null;
-  let said: string | null = null;
-  if (feeling != null && !balanced) {
-    auraName = 'Primal';
-    said = text('gift_strength_aura_all_feeling', 'All your strength comes from what you feel.');
-  } else if (balanced) {
-    auraName = `${main}, with ${withArticle(otherSide)} side`;
-    said =
-      main === 'Primal'
-        ? text(
-            'gift_strength_aura_mostly_feeling',
-            'Most of your strength comes from what you feel.'
-          )
-        : text(
-            'gift_strength_aura_mostly_others',
-            'Most of your strength comes from what you do to others.'
-          );
-  }
-  let pointsLine = '';
-  if (balanced) {
-    pointsLine = `${feeling.name} ${picks.primalPoints} · ${outward.name} ${outwardPoints}`;
-  } else if (neither) {
-    pointsLine = `${feeling.name} ${budget}`;
-  } else if (feeling || outward) {
-    pointsLine = `${(feeling ?? outward)?.name} ${budget}`;
-  }
+  const { auraName, said } = auraWords({
+    hasFeeling: feeling != null,
+    balanced,
+    main,
+    otherSide,
+    text,
+  });
+  const pointsLine = pointsLineFor({
+    feeling,
+    outward,
+    balanced,
+    neither,
+    primalPoints: picks.primalPoints,
+    outwardPoints,
+    budget,
+  });
   // The aura is drawn in the feeling's colour, the second pick's when only it is chosen, and
   // the neutral grey when neither is.
   const primaryHex = feeling?.color_hex ?? outward?.color_hex ?? NEUTRAL_HEX;

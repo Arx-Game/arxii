@@ -419,7 +419,7 @@ step in character creation until #5231, when that step began drawing its aura wi
 Wraps the sheet's `AuraHalo` (`SpellbookTab`) in a hover card that names each affinity the aura
 holds, with the description staff wrote on the Affinity row (`useAffinities` from
 `@/character-creation/queries`, `GET /api/magic/affinities/`). It opens on hover or keyboard focus
-(the trigger is focusable). An affinity with a blank description is left out; with none left the
+(the trigger is an unstyled button around the halo). An affinity with a blank description is left out; with none left the
 halo is drawn bare, with no trigger. A test that mocks `@/character-creation/queries` wholesale
 and renders `SpellbookTab` must give it `useAffinities`.
 

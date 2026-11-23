@@ -32,15 +32,14 @@ export function AffinityExplanation({ names, children }: Props) {
   return (
     <HoverCard openDelay={200}>
       <HoverCardTrigger asChild>
-        <div
-          tabIndex={0}
-          role="group"
+        <button
+          type="button"
           aria-label={`Aura: ${explained.map((row) => row.name).join(', ')}`}
-          className="cursor-help"
+          className="block w-full cursor-help border-0 bg-transparent p-0 text-left text-inherit"
           data-testid="aura-affinity-trigger"
         >
           {children}
-        </div>
+        </button>
       </HoverCardTrigger>
       <HoverCardContent className="w-72 space-y-2 text-sm" data-testid="aura-affinity-explanation">
         {explained.map((row) => (
