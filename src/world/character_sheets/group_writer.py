@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError
 from django.db import transaction
-from django.db.models import ProtectedError
+from django.db.models import ProtectedError, RestrictedError
 
 from world.character_creation.sheet_writers import SheetWriteError
 from world.character_sheets.types import StaffTieDirection
@@ -117,7 +117,7 @@ def remove_persona(persona: Persona) -> None:
             if sheet.active_persona_id == persona.pk:
                 set_active_persona(sheet, sheet.primary_persona)
             persona.delete()
-    except ProtectedError as exc:
+    except (ProtectedError, RestrictedError) as exc:
         # The rollback restored the sheet's row, not the identity-mapped instance.
         sheet.flush_from_cache(force=True)
         msg = "That identity has history behind it and can't be removed."

@@ -14,6 +14,11 @@ never the PRIMARY face behind a mask.
 
 from __future__ import annotations
 
+import json
+
+from django.test import tag
+from evennia.objects.models import ObjectDB
+
 from integration_tests.harness import JourneyCase
 from world.battles.factories import BattleFactory, BattleSideFactory
 from world.battles.services import enlist_participant
@@ -99,19 +104,22 @@ class AMaskedFighterIsNotNamedByASheetId(JourneyCase):
         }
         self.telnet(self.hobb, "persona mask a hooded man")
 
-    def roster_as(self, player) -> list[dict[str, object]]:
+    def roster_as(self, player: ObjectDB) -> list[dict[str, object]]:
         response = self.api(self.account_of(player)).get(f"/api/battles/{self.battle.pk}/")
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()["participants"]
 
+    @tag("regression")
     def test_regression_a_stranger_gets_no_sheet_id_for_the_masked_fighter(self) -> None:
         """Regression for #5290. Ada's roster carries no character sheet id for Hobb."""
         roster = self.roster_as(self.ada)
 
-        self.assertEqual(
-            [key for row in roster for key in row if key == "character_sheet_id"], [], roster
-        )
+        (hobbs_row,) = (row for row in roster if row["id"] == self.rows["Hobb"].pk)
+        self.assertEqual(hobbs_row["persona"]["name"], "a hooded man", roster)
+        self.assertNotIn("character_sheet_id", hobbs_row)
+        self.assertNotIn("character_sheet_id", json.dumps(roster))
 
+    @tag("regression")
     def test_regression_each_player_still_finds_their_own_row(self) -> None:
         """Regression for #5290. Each browser marks exactly the viewer's own row."""
         for viewer in (self.hobb, self.ada):

@@ -541,7 +541,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Spec C Resonance Gain (endorsements + audit — #1138):** `ResonanceGainConfig`
     (singleton pk=1 tuning surface), `PoseEndorsement` (weekly deferred; `endorser_sheet`
     FK, `resonance` FK (PROTECT), `persona_snapshot` FK to `scenes.Persona` (SET_NULL;
-    the endorsee's face), `endorser_persona` FK to `scenes.Persona` (SET_NULL; the face the
+    the endorsee's face), `endorser_persona` FK to `scenes.Persona` (RESTRICT, so a mask that endorsed cannot be deleted; the face the
     endorser wore when endorsing, what the endorser badge shows, #5290; on the shared
     `EndorsementBase`, so all four endorsement tables carry it),
     unique `(endorser_sheet, interaction)`), `SceneEntryEndorsement` (immediate flat

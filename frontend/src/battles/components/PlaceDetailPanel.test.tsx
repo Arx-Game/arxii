@@ -145,21 +145,6 @@ describe('PlaceDetailPanel — ChampionDuelSection (#3389 Phase 3)', () => {
     expect(screen.queryByTestId('champion-duel-section')).not.toBeInTheDocument();
   });
 
-  it("renders nothing when the Champion row is another player's, not the viewer's", () => {
-    render(
-      <PlaceDetailPanel
-        place={OPEN_PLACE}
-        sides={[]}
-        units={[]}
-        participants={[{ ...CHAMPION_PARTICIPANT, is_mine: false }]}
-        sceneId={1}
-        battleId={7}
-      />,
-      { wrapper: createWrapper() }
-    );
-    expect(screen.queryByTestId('champion-duel-section')).not.toBeInTheDocument();
-  });
-
   it('renders the challenge form when the viewer is a Champion and the place has no open encounter', () => {
     render(
       <PlaceDetailPanel

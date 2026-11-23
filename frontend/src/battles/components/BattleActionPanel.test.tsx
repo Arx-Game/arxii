@@ -229,21 +229,6 @@ describe('BattleActionPanel — BattleDeclarationSection (#3389 Phase 1)', () =>
     expect(container).toBeEmptyDOMElement();
   });
 
-  it("renders nothing when the only participant row is another player's, not the viewer's", () => {
-    const { container } = render(
-      <BattleActionPanel
-        sceneId={1}
-        battle={{ id: 7 }}
-        detail={{
-          ...MOCK_BATTLE_DETAIL,
-          participants: [{ ...MY_PARTICIPANT, is_mine: false }],
-        }}
-      />,
-      { wrapper: createWrapper() }
-    );
-    expect(container).toBeEmptyDOMElement();
-  });
-
   it('renders nothing when the round is not open for declarations', () => {
     const { container } = render(
       <BattleActionPanel

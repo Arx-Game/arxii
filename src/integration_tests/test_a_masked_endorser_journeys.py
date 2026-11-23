@@ -17,13 +17,16 @@ import json
 from typing import Any
 import uuid
 
+from django.test import tag
 from rest_framework import status
 
 from integration_tests.harness import JourneyCase
+from world.character_sheets.group_writer import SheetWriteError, remove_persona
 from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
 from world.roster.factories import MediaFactory
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.models import Persona
 
 SUBMIT_POSE = "/api/interactions/submit-pose/"
 POSE_ENDORSEMENTS = "/api/magic/pose-endorsements/"
@@ -63,7 +66,8 @@ class AMaskedEndorsersBadge(JourneyCase):
         self.assertEqual(posed.status_code, status.HTTP_201_CREATED, posed.data)
         self.pose_id = posed.json()["id"]
 
-        self.telnet(self.ysmay, "persona mask Owl Mask")
+        told = self.telnet(self.ysmay, "persona mask Owl Mask")
+        self.assertIn("You don a mask: 'Owl Mask'", told)
         endorsed = self.ysmay_web.post(
             POSE_ENDORSEMENTS,
             {"interaction": self.pose_id, "resonance": self.resonance.pk},
@@ -98,12 +102,27 @@ class AMaskedEndorsersBadge(JourneyCase):
         self.assertNotIn("Ysmay", json.dumps(row, default=str))
         self.assertNotIn(self.face.cloudinary_url, json.dumps(row, default=str))
 
+    @tag("regression")
     def test_regression_the_badge_shows_the_mask_not_the_real_self(self) -> None:
         """Regression for #5290. Hobb's badges name the Owl Mask, not Ysmay's real face."""
         self.assert_badges_show_the_mask(self.hobbs_pose())
 
+    @tag("regression")
     def test_regression_the_badge_keeps_the_mask_after_she_unmasks(self) -> None:
         """Regression for #5290. Taking the mask off does not rewrite the badges she gave."""
-        self.telnet(self.ysmay, "persona Ysmay")
+        told = self.telnet(self.ysmay, "persona Ysmay")
+        self.assertEqual(
+            self.ysmay.sheet_data.active_persona_id, self.ysmay.sheet_data.primary_persona.pk, told
+        )
+
+        self.assert_badges_show_the_mask(self.hobbs_pose())
+
+    @tag("regression")
+    def test_regression_a_mask_with_endorsements_cannot_be_deleted(self) -> None:
+        """Regression for #5290. Deleting the mask would turn its badges back into her real face."""
+        mask = Persona.objects.get(character_sheet=self.ysmay.sheet_data, name="Owl Mask")
+
+        with self.assertRaises(SheetWriteError):
+            remove_persona(mask)
 
         self.assert_badges_show_the_mask(self.hobbs_pose())

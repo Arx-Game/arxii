@@ -394,11 +394,11 @@ def _endorser_was_present(
         return SceneParticipation.objects.filter(scene=scene, account=endorser_account).exists()
     # Organic grid RP — check receivers. Need endorser's primary Persona.
     try:
-        endorser_persona = endorser_sheet.primary_persona
+        receiver_persona = endorser_sheet.primary_persona
     except Persona.DoesNotExist:
         return False
     return InteractionReceiver.objects.filter(
-        interaction=interaction, persona=endorser_persona
+        interaction=interaction, persona=receiver_persona
     ).exists()
 
 
