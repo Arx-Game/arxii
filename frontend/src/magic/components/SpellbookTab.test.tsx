@@ -11,7 +11,7 @@
  * mocked) live at the bottom of this file.
  */
 
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
@@ -122,6 +122,7 @@ vi.mock('@/magic/auraQueries', () => ({
 vi.mock('@/character-creation/queries', () => ({
   useGlimpseTags: vi.fn(),
   useFacets: () => ({ data: [] }),
+  useAffinities: vi.fn(),
 }));
 
 import * as queries from '@/character_sheets/queries';
@@ -344,6 +345,9 @@ describe('SpellbookTab', () => {
     mockRiteReadings();
     mockMotifStyleQueries();
     mockGlimpseQueries();
+    vi.mocked(cgQueries.useAffinities).mockReturnValue({
+      data: [],
+    } as unknown as ReturnType<typeof cgQueries.useAffinities>);
   });
 
   it('says it is reading while loading', () => {
@@ -397,6 +401,48 @@ describe('SpellbookTab', () => {
     // A viewer who is not the owner sees no settled ring and no Settle button.
     expect(screen.queryByTestId('aura-halo-ring')).not.toBeInTheDocument();
     expect(screen.queryByTestId('settle-aura-button')).not.toBeInTheDocument();
+  });
+
+  it('explains each affinity the aura holds when the reader hovers over it', async () => {
+    // Regression for #5293: staff write each affinity's description and no screen showed it.
+    vi.mocked(cgQueries.useAffinities).mockReturnValue({
+      data: [
+        { id: 1, name: 'Celestial', description: 'What you give to others.' },
+        { id: 2, name: 'Primal', description: 'What you feel.' },
+        { id: 3, name: 'Abyssal', description: '' },
+      ],
+    } as unknown as ReturnType<typeof cgQueries.useAffinities>);
+    mockPayload(
+      makeMagic({
+        aura: makeAura({
+          shares: [
+            { affinity_id: 2, affinity_name: 'Primal', percent: 70 },
+            { affinity_id: 3, affinity_name: 'Abyssal', percent: 30 },
+            { affinity_id: 1, affinity_name: 'Celestial', percent: 0 },
+          ],
+          dominant_affinity: 'Primal',
+        }),
+      })
+    );
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+
+    const trigger = screen.getByTestId('aura-affinity-trigger');
+    expect(within(trigger).getByTestId('aura-halo')).toBeInTheDocument();
+    act(() => trigger.focus());
+    const card = await screen.findByTestId('aura-affinity-explanation');
+    // Primal is held and described; Abyssal is held with no words; Celestial is not held.
+    expect(card).toHaveTextContent('What you feel.');
+    expect(card).not.toHaveTextContent('Abyssal');
+    expect(card).not.toHaveTextContent('What you give to others.');
+  });
+
+  it('draws the aura bare while no affinity it holds has a description (#5293)', () => {
+    vi.mocked(cgQueries.useAffinities).mockReturnValue({
+      data: [{ id: 2, name: 'Primal', description: '   ' }],
+    } as unknown as ReturnType<typeof cgQueries.useAffinities>);
+    mockPayload(makeMagic());
+    renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);
+    expect(screen.queryByTestId('aura-affinity-trigger')).not.toBeInTheDocument();
   });
 
   it('draws the dashed settled ring for the owner (#5123)', () => {

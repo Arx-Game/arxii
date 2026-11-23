@@ -233,7 +233,10 @@ character-creation/
     │   │                        #   three answers about others, the second cards, and the
     │   │                        #   balance slider beside the night plate holding
     │   │                        #   `AuraSwirl` (`@/magic/components`); words from the
-    │   │                        #   `gift_strength_*` CG explanation keys
+    │   │                        #   `gift_strength_*` CG explanation keys; each affinity's
+    │   │                        #   staff-written description (`affinities` prop, from
+    │   │                        #   `useAffinities`) sits under the question for its
+    │   │                        #   cards, nothing while it is blank (#5293)
     │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=); a Gift the
     │   │                        #   Tradition favors is tagged "Teaches well" (#4659)
     │   ├── MagicTrainingBlock.tsx # Body of GiftStage's own "What <Tradition> taught you"

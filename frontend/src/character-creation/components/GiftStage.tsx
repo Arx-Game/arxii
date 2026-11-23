@@ -35,6 +35,7 @@ import {
   useCGCombatStyles,
   useCGGifts,
   useDraftOffers,
+  useAffinities,
   useResonances,
   useSkills,
   useStatDefinitions,
@@ -207,6 +208,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
   const { data: resonances = [] } = useResonances();
+  const { data: affinities = [] } = useAffinities();
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
 
   const draftData = draft.draft_data;
@@ -438,6 +440,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
         >
           <StrengthStep
             resonances={resonances}
+            affinities={affinities}
             weights={resonanceWeights}
             budget={creationPoints}
             copy={copy}

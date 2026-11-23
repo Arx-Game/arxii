@@ -55,6 +55,9 @@ vi.mock('../api', () => ({
   submitDraftForReview: vi.fn(),
   addToRoster: vi.fn(),
   getCGExplanations: vi.fn(),
+  // GiftStage's Strength step reads each affinity's description (useAffinities,
+  // #5293) whether or not that step is the one currently open.
+  getAffinities: vi.fn().mockResolvedValue([]),
   // The Lineage stage's foot (#5146) holds the clear-life mutation.
   clearLife: vi.fn(),
   // GiftStage (#2426 Task 10) calls useResonances() unconditionally at the top

@@ -47,6 +47,7 @@ import { GlimpseEditorDialog } from './glimpse/GlimpseEditorDialog';
 import { AuraHalo } from './AuraHalo';
 import { AuraReflections } from './AuraReflections';
 import { useCharacterAuras } from '@/magic/auraQueries';
+import { AffinityExplanation } from './AffinityExplanation';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
@@ -364,16 +365,24 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               its stretches and the sentence beside it says the split in words. The magic
               app's narrative-not-numerical rule is why the numbers stay off the page. */}
           {magic.aura.shares.some((share) => share.percent > 0) ? (
-            <AuraHalo
-              shares={magic.aura.shares.map((share) => ({
-                name: share.affinity_name,
-                percent: share.percent,
-              }))}
-              settled={ownAura?.shares.some((share) => Number(share.settled_percent) > 0) ?? false}
-              unsettled={ownAura?.unsettled ?? false}
-              unsettledLine={ownAura?.unsettled_line ?? ''}
-              unsettledAffinity={ownAura?.unsettled_affinity_name ?? ''}
-            />
+            <AffinityExplanation
+              names={magic.aura.shares
+                .filter((share) => share.percent > 0)
+                .map((share) => share.affinity_name)}
+            >
+              <AuraHalo
+                shares={magic.aura.shares.map((share) => ({
+                  name: share.affinity_name,
+                  percent: share.percent,
+                }))}
+                settled={
+                  ownAura?.shares.some((share) => Number(share.settled_percent) > 0) ?? false
+                }
+                unsettled={ownAura?.unsettled ?? false}
+                unsettledLine={ownAura?.unsettled_line ?? ''}
+                unsettledAffinity={ownAura?.unsettled_affinity_name ?? ''}
+              />
+            </AffinityExplanation>
           ) : (
             magic.aura.dominant_affinity && (
               <Ledger>{`It reads as ${magic.aura.dominant_affinity.toLowerCase()}.`}</Ledger>

@@ -2344,6 +2344,12 @@
   color: var(--cg-text-soft);
   margin: 1.5rem 0 0.2rem;
 }
+.interview .strength-step .strength-affinity {
+  margin: 0.35rem 0 0;
+  max-width: 46rem;
+  font-size: 0.9rem;
+  color: var(--cg-text-soft);
+}
 .interview .strength-opts {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(8.6rem, 1fr));

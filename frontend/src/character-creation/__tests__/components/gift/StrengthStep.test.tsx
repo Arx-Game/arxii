@@ -14,7 +14,7 @@ import {
   strengthPicksComplete,
   weightsFromPicks,
 } from '../../../resonanceWeights';
-import type { Resonance, ResonanceWeightPick } from '../../../types';
+import type { Affinity, Resonance, ResonanceWeightPick } from '../../../types';
 
 function resonance(id: number, name: string, affinity: string, hex: string): Resonance {
   return {
@@ -43,15 +43,18 @@ function Harness({
   budget = 8,
   start = [],
   copy,
+  affinities,
 }: {
   budget?: number;
   start?: ResonanceWeightPick[];
   copy?: Record<string, string>;
+  affinities?: Affinity[];
 }) {
   const [weights, setWeights] = useState(start);
   return (
     <StrengthStep
       resonances={resonances}
+      affinities={affinities}
       weights={weights}
       budget={budget}
       copy={copy}
@@ -70,6 +73,29 @@ beforeEach(() => {
 });
 
 describe('StrengthStep', () => {
+  it('shows each affinity description with its cards, and nothing for a blank one', async () => {
+    // Regression for #5293: staff write each affinity's description and no screen showed it.
+    const affinities: Affinity[] = [
+      { id: 1, name: 'Primal', description: 'What you feel.' },
+      { id: 2, name: 'Celestial', description: 'What you give to others.' },
+      { id: 3, name: 'Abyssal', description: '' },
+    ];
+    render(<Harness affinities={affinities} />);
+    expect(
+      screen.getAllByTestId('strength-affinity-description').map((p) => p.textContent)
+    ).toEqual(['What you feel.']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Helping them' }));
+    expect(
+      screen.getAllByTestId('strength-affinity-description').map((p) => p.textContent)
+    ).toEqual(['What you feel.', 'What you give to others.']);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Hurting them' }));
+    expect(
+      screen.getAllByTestId('strength-affinity-description').map((p) => p.textContent)
+    ).toEqual(['What you feel.']);
+  });
+
   it('renders every question and the plate from the start, with nothing chosen', () => {
     render(<Harness />);
     expect(screen.getByText('Where your strength comes from')).toBeInTheDocument();
