@@ -416,12 +416,13 @@ step in character creation until #5231, when that step began drawing its aura wi
 
 ### `components/AffinityExplanation.tsx` (#5293)
 
-Wraps the sheet's `AuraHalo` (`SpellbookTab`) in a hover card that names each affinity the aura
-holds, with the description staff wrote on the Affinity row (`useAffinities` from
-`@/character-creation/queries`, `GET /api/magic/affinities/`). It opens on hover or keyboard focus
-(the trigger is an unstyled button around the halo). An affinity with a blank description is left out; with none left the
-halo is drawn bare, with no trigger. A test that mocks `@/character-creation/queries` wholesale
-and renders `SpellbookTab` must give it `useAffinities`.
+Wraps the sheet's `AuraHalo` (`SpellbookTab`) in a hover card that names each affinity the
+aura holds, with the description staff wrote on the Affinity row (`useAffinities` from
+`@/character-creation/queries`, `GET /api/magic/affinities/`). The trigger is an unstyled
+button around the halo, named by the halo's own words, so it opens on hover or keyboard
+focus. An affinity with a blank description is left out; with none left the halo is drawn
+bare, with no trigger. A test that mocks `@/character-creation/queries` wholesale and
+renders `SpellbookTab` must give it `useAffinities`.
 
 ### `auraSwirl.ts`, `components/AuraSwirl.tsx` (#5231)
 

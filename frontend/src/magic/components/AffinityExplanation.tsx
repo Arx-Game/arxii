@@ -34,7 +34,6 @@ export function AffinityExplanation({ names, children }: Props) {
       <HoverCardTrigger asChild>
         <button
           type="button"
-          aria-label={`Aura: ${explained.map((row) => row.name).join(', ')}`}
           className="block w-full cursor-help border-0 bg-transparent p-0 text-left text-inherit"
           data-testid="aura-affinity-trigger"
         >

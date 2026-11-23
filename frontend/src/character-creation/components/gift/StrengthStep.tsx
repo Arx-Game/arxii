@@ -90,7 +90,7 @@ function withArticle(affinity: string): string {
   return `${/^[AEIOU]/.test(affinity) ? 'an' : 'a'} ${affinity}`;
 }
 
-type Text = (key: string, fallback: string) => string;
+type TextLookup = (key: string, fallback: string) => string;
 
 /** The aura's caption and sentence: none before a feeling is chosen. */
 function auraWords({
@@ -104,7 +104,7 @@ function auraWords({
   balanced: boolean;
   main: string;
   otherSide: string;
-  text: Text;
+  text: TextLookup;
 }): { auraName: string | null; said: string | null } {
   if (balanced) {
     return {
