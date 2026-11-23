@@ -41,6 +41,17 @@ class EndorsementBase(SharedMemoryModel):
         blank=True,
         help_text="Endorsee's persona at endorsement time — masquerade audit.",
     )
+    endorser_persona = models.ForeignKey(
+        "arxii.Persona",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="%(class)s_endorsed_as",
+        help_text=(
+            "The face the endorser presented when they endorsed (a mask stays a mask once "
+            "they unmask). Null for rows made before it was recorded."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

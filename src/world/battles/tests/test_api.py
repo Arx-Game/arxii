@@ -262,7 +262,9 @@ class BattleApiJourneyTest(TestCase):
         self.assertNotIn("account", participant_data["persona"])
         self.assertNotIn("username", participant_data["persona"])
         # #3389 additions
-        self.assertEqual(participant_data["character_sheet_id"], self.pc_sheet.pk)
+        # #5290: no sheet id (it names the character behind a mask); this viewer plays no one.
+        self.assertNotIn("character_sheet_id", participant_data)
+        self.assertIs(participant_data["is_mine"], False)
         self.assertIs(participant_data["is_champion"], False)
         self.assertIs(participant_data["declared_this_round"], False)
 
@@ -529,7 +531,7 @@ class BattleApiJourneyTest(TestCase):
         other_sheet = CharacterSheetFactory()
         other_account = AccountFactory(username="battle_other_pc")
         SceneParticipationFactory(scene=self.battle.scene, account=other_account)
-        enlist_participant(
+        other = enlist_participant(
             battle=self.battle,
             character_sheet=other_sheet,
             side=self.defender_side,
@@ -539,11 +541,9 @@ class BattleApiJourneyTest(TestCase):
         client.force_authenticate(user=self.pc_account)
         response = client.get(f"/api/battles/{self.battle.pk}/")
         self.assertEqual(response.status_code, http_status.HTTP_200_OK)
-        by_sheet = {
-            p["character_sheet_id"]: p["declared_this_round"] for p in response.data["participants"]
-        }
-        self.assertIs(by_sheet[self.pc_sheet.pk], True)
-        self.assertIs(by_sheet[other_sheet.pk], False)
+        by_participant = {p["id"]: p["declared_this_round"] for p in response.data["participants"]}
+        self.assertIs(by_participant[self.participant.pk], True)
+        self.assertIs(by_participant[other.pk], False)
 
     def test_scene_filter_returns_exactly_this_battle_for_participant(self) -> None:
         client = APIClient()

@@ -1293,7 +1293,13 @@ class Interaction(SharedMemoryModel):
     def cached_endorsements(self) -> list[PoseEndorsement]:
         """Endorsements on this pose, fed by the interaction feed's Prefetch
         (see ``world/scenes/interaction_views.py``, ``to_attr`` "cached_endorsements")."""
-        return list(self.endorsements.select_related("endorser_sheet", "resonance"))
+        return list(
+            self.endorsements.select_related(
+                "endorser_sheet",
+                "endorser_persona__character_sheet__active_alternate_self__alternate_self",
+                "resonance",
+            )
+        )
 
     @PrunedCachedProperty
     def cached_reaction_windows(self) -> list[ReactionWindow]:

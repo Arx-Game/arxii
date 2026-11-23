@@ -76,7 +76,7 @@ const CHAMPION_PARTICIPANT: BattleParticipant = {
   side_id: 100,
   place_id: 900,
   persona: { id: 5000, name: 'Test Persona', thumbnail_url: null, thumbnail_media_url: null },
-  character_sheet_id: 501,
+  is_mine: true,
   is_champion: true,
   declared_this_round: false,
 };
@@ -137,6 +137,21 @@ describe('PlaceDetailPanel — ChampionDuelSection (#3389 Phase 3)', () => {
         sides={[]}
         units={[]}
         participants={[NON_CHAMPION_PARTICIPANT]}
+        sceneId={1}
+        battleId={7}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.queryByTestId('champion-duel-section')).not.toBeInTheDocument();
+  });
+
+  it("renders nothing when the Champion row is another player's, not the viewer's", () => {
+    render(
+      <PlaceDetailPanel
+        place={OPEN_PLACE}
+        sides={[]}
+        units={[]}
+        participants={[{ ...CHAMPION_PARTICIPANT, is_mine: false }]}
         sceneId={1}
         battleId={7}
       />,

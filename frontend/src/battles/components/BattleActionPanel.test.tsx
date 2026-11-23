@@ -87,7 +87,7 @@ const MY_PARTICIPANT: BattleParticipant = {
   side_id: 100,
   place_id: 900,
   persona: { id: 5000, name: 'Test Persona', thumbnail_url: null, thumbnail_media_url: null },
-  character_sheet_id: 501,
+  is_mine: true,
   is_champion: false,
   declared_this_round: false,
 };
@@ -223,6 +223,21 @@ describe('BattleActionPanel — BattleDeclarationSection (#3389 Phase 1)', () =>
         sceneId={1}
         battle={{ id: 7 }}
         detail={{ ...MOCK_BATTLE_DETAIL, participants: [] }}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("renders nothing when the only participant row is another player's, not the viewer's", () => {
+    const { container } = render(
+      <BattleActionPanel
+        sceneId={1}
+        battle={{ id: 7 }}
+        detail={{
+          ...MOCK_BATTLE_DETAIL,
+          participants: [{ ...MY_PARTICIPANT, is_mine: false }],
+        }}
       />,
       { wrapper: createWrapper() }
     );

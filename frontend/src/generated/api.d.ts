@@ -29718,7 +29718,14 @@ export interface components {
       readonly persona: {
         [key: string]: unknown;
       } | null;
-      readonly character_sheet_id: number;
+      /**
+       * @description True when the requesting account plays this participant's character (#5290).
+       *
+       *     Reads ``character_sheet_ids`` from context (the viewer's own sheet pks, set by
+       *     ``BattleViewSet.get_serializer_context``), so the roster tells each viewer which
+       *     row is theirs and no one else's sheet id.
+       */
+      readonly is_mine: boolean;
       /**
        * @description Mirrors ``open_champion_duel``'s own Champion-standing gate verbatim
        *

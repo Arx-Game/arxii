@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
@@ -140,6 +142,13 @@ class BattleViewSet(ReadOnlyModelViewSet):
 
     def get_queryset(self) -> QuerySet[Battle]:
         return self._filter_readable(self._base_queryset())
+
+    def get_serializer_context(self) -> dict[str, Any]:
+        context = super().get_serializer_context()
+        # The viewer's own character sheet pks: BattleParticipantSerializer.is_mine marks the
+        # viewer's rows with them instead of sending every participant's sheet id (#5290).
+        context["character_sheet_ids"] = self.request.user.played_character_sheet_ids
+        return context
 
     def _filter_readable(self, qs: QuerySet[Battle]) -> QuerySet[Battle]:
         """Restrict list/retrieve to battles whose scene the caller may view.

@@ -1382,7 +1382,7 @@
 - `give_up_item(instance: 'ItemInstance', being: 'WorshippedBeing', *, reading: world.ceremonies.services.ItemReading, counted: bool, granted_by: 'CharacterSheet', reason: str) -> world.ceremonies.services.OfferedItem - Take an offered item out of play and, when it counts, feed ``being``'s pool.`
 - `open_ceremony(*, officiant_persona: 'Persona', type_key: str, honoree_sheets: 'list[CharacterSheet]', location_profile, being: 'WorshippedBeing | None' = None, scene=None, event=None, title=None, is_staff_fiat: bool = False, worship_rite: 'WorshipRite | None' = None) -> world.ceremonies.models.Ceremony - Open a ceremony at a location, recognizing zero or more honorees.`
 - `open_funeral_for(character_sheet: 'CharacterSheet') -> world.ceremonies.models.Ceremony | None - The OPEN funeral honoring this character, if any (the ghost container).`
-- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - PENDING conversion offers addressed to any character this account has ever held,`
+- `pending_conversion_offers_for_account(account: object) -> 'QuerySet[WorshipConversionOffer]' - Pending offers for characters currently held by the account, on open rites.`
 - `pending_seance_offers_for_account(account: object) -> 'QuerySet[SeanceManifestationOffer]' - PENDING seance offers addressed to any character this account has ever held (#2393).`
 - `pending_wedding_consent_offers_for_account(account: object) -> 'QuerySet[WeddingConsentOffer]' - PENDING wedding consent offers addressed to any character this account holds (#2358).`
 - `read_item(instance: 'ItemInstance', sheet: 'CharacterSheet', *, facet: 'Facet | None', being: 'WorshippedBeing | None' = None, request: 'RequestedItem | None' = None) -> world.ceremonies.services.ItemReading - The item's meaning points for ``sheet``, with the favored-facet multiplier.`
@@ -6703,6 +6703,7 @@
   - endorser_sheet -> character_sheets.CharacterSheet [FK]
   - endorsee_sheet -> character_sheets.CharacterSheet [FK]
   - persona_snapshot -> scenes.Persona [FK] (nullable)
+  - endorser_persona -> scenes.Persona [FK] (nullable)
   - interaction -> scenes.Interaction [FK]
   - resonance -> magic.Resonance [FK]
 **Pointed to by:**
@@ -6713,6 +6714,7 @@
   - endorser_sheet -> character_sheets.CharacterSheet [FK]
   - endorsee_sheet -> character_sheets.CharacterSheet [FK]
   - persona_snapshot -> scenes.Persona [FK] (nullable)
+  - endorser_persona -> scenes.Persona [FK] (nullable)
   - presentation -> items.FashionPresentation [FK]
 
 ### PriceComponentRequirement
@@ -6993,6 +6995,7 @@
   - endorser_sheet -> character_sheets.CharacterSheet [FK]
   - endorsee_sheet -> character_sheets.CharacterSheet [FK]
   - persona_snapshot -> scenes.Persona [FK] (nullable)
+  - endorser_persona -> scenes.Persona [FK] (nullable)
   - scene -> scenes.Scene [FK]
   - entry_interaction -> scenes.Interaction [FK] (nullable)
   - resonance -> magic.Resonance [FK]
@@ -7080,6 +7083,7 @@
   - endorser_sheet -> character_sheets.CharacterSheet [FK]
   - endorsee_sheet -> character_sheets.CharacterSheet [FK]
   - persona_snapshot -> scenes.Persona [FK] (nullable)
+  - endorser_persona -> scenes.Persona [FK] (nullable)
   - scene -> scenes.Scene [FK]
   - resonance -> magic.Resonance [FK]
 **Pointed to by:**
@@ -7476,7 +7480,7 @@
 - `create_pending_alteration(*, character: 'CharacterSheet', tier: 'int', origin_affinity: 'Affinity', origin_resonance: 'ResonanceModel', scene: 'Scene | None', triggering_technique: 'Technique | None' = None, triggering_intensity: 'int | None' = None, triggering_control: 'int | None' = None, triggering_anima_cost: 'int | None' = None, triggering_anima_deficit: 'int | None' = None, triggering_soulfray_stage: 'int | None' = None, audere_active: 'bool' = False, is_cosmetic: 'bool' = False) -> 'PendingAlterationResult' - Create or escalate a PendingAlteration for a character.`
 - `cross_thread_xp_lock(character_sheet: 'CharacterSheet', thread: 'Thread', boundary_level: 'int') -> 'ThreadLevelUnlock' - Pay XP to unlock an XP-locked level boundary on a thread.`
 - `deduct_anima(character: 'ObjectDB', effective_cost: 'int', *, lethal: 'bool' = True) -> 'int' - Deduct anima from character, returning the overburn deficit.`
-- `get_character_anima_ritual(character) - The character's authored SCENE_ACTION ritual (with check_config), or None.`
+- `get_character_anima_ritual(character) - The character's own SCENE_ACTION ritual (with check_config), or None.`
 - `get_character_cast_check(character) - The CheckType a character's technique casts roll, or None for fallback.`
 - `get_imbue_cost_multiplier(target_kind: 'str | None') -> 'int' - Resolve the imbue dp cost multiplier for a thread kind (ADR-0051).`
 - `get_library_entries(*, tier: 'int', character_affinity_id: 'int | None' = None) -> 'QuerySet[MagicalAlterationTemplate]' - Return library entries matching the given tier.`
@@ -9831,9 +9835,13 @@
   - random_scene_completed_by <- progression.RandomSceneCompletion
   - anima_ritual_performances_given <- magic.AnimaRitualPerformance
   - poseendorsement_set <- magic.PoseEndorsement
+  - poseendorsement_endorsed_as <- magic.PoseEndorsement
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
+  - sceneentryendorsement_endorsed_as <- magic.SceneEntryEndorsement
   - presentationendorsement_set <- magic.PresentationEndorsement
+  - presentationendorsement_endorsed_as <- magic.PresentationEndorsement
   - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
+  - stylepresentationendorsement_endorsed_as <- magic.StylePresentationEndorsement
   - covenant_roles_sworn <- covenants.CharacterCovenantRole
   - combat_opponents <- combat.CombatOpponent
   - voiced_opponents <- combat.CombatOpponent

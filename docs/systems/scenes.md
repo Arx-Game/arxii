@@ -558,6 +558,10 @@ The live `interaction` frame carries the same room-wide feed fields the REST fee
 `endorsable_resonances`, `conversation`, `availability`, `pose_endorsers`, `entry_endorsers`,
 `reactions`, `reaction_windows` and `dramatic_moment_tags`
 (`test_push_payload_parity.py` keeps the two in step). Viewer-specific fields stay out.
+An endorser badge in `pose_endorsers` and `entry_endorsers` shows the face the endorser wore
+when endorsing (`endorser_persona` on the endorsement, #5290), so a masked endorser reads as the
+mask and keeps reading so after taking it off; a row made before that column existed falls back
+to the endorser's PRIMARY persona (`_endorser_badges` in `interaction_serializers.py`).
 What changes afterwards is announced by `notify_interaction_changed(interaction)`: an ids-only
 `interaction_changed` frame (`interaction_id`, `scene_id`) sent on commit to the pose's
 audience. Endorsing and retracting a pose endorsement, a scene-entry endorsement (every ENTRY
@@ -757,7 +761,7 @@ account's own read state and is never serialized to any other viewer (see its en
 Cursor-paginated endpoints use an opaque base64 `(timestamp, id)` boundary token (`before`/`after`)
 rather than offset pagination.
 
-The reader's per-pose nested data (persona resonances, an endorser's primary persona, endorsements,
+The reader's per-pose nested data (persona resonances, an endorser's primary persona (the fallback face for an endorsement with no `endorser_persona`), endorsements,
 target personas, favorites, receivers, reactions, linked actions and their combat-round rows,
 reaction windows and their reactions, dramatic-moment tags and pending suggestions — 13 distinct
 relations) is batched via `Prefetch(..., to_attr="cached_*")` calls onto `PrunedCachedProperty`

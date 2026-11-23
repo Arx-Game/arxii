@@ -18,11 +18,9 @@
  * `SceneDetail.viewer_can_gm`), exactly like `DuelChallengeControls` decides
  * from `encounter`/`isActiveDuel` rather than an available-actions lookup.
  *
- * `characterId` doubles as the viewer's own `character_sheet_id` —
- * `CharacterSheet` is a `primary_key=True` O2O onto `ObjectDB`
- * (`frontend/src/roster/types.ts`'s `MyRosterEntry.character_id` docstring),
- * so no extra lookup is needed to go from "my active character" to "which
- * `BattleParticipant` row is mine."
+ * The viewer's own `BattleParticipant` row is the one the server marks
+ * `is_mine`. The roster carries no participant's character sheet id: it would
+ * name the character behind a mask (#5290).
  */
 
 import { useMemo, useState, type FormEvent } from 'react';
@@ -85,8 +83,8 @@ export function BattleActionPanel({ sceneId, battle, detail }: Props) {
   );
 
   const myParticipant = useMemo(
-    () => detail?.participants.find((p) => p.character_sheet_id === characterId) ?? null,
-    [detail, characterId]
+    () => detail?.participants.find((p) => p.is_mine) ?? null,
+    [detail]
   );
 
   const round = (detail?.round ?? null) as BattleRoundSummary | null;

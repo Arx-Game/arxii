@@ -1380,11 +1380,15 @@ Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
   `get_resonance_gain_config()`.
 - `PoseEndorsement` - Unsettled endorsement of a pose; settles at weekly tick. FK to
   `endorser_sheet`, single `resonance` FK (PROTECT). Unique per `(endorser_sheet, interaction)`.
-  Captures `persona_snapshot` (FK to `scenes.Persona`, SET_NULL) for masquerade audit. Fields:
+  Captures `persona_snapshot` (FK to `scenes.Persona`, SET_NULL) for masquerade audit, and
+  `endorser_persona` (the face the endorser wore, from `active_persona_for_sheet`, set by
+  every endorsement writer; the scene feed's endorser badge shows it, #5290; a row with none
+  falls back to the endorser's PRIMARY persona). Fields:
   `created_at`, `settled_at` (NULL until weekly settlement).
 - `SceneEntryEndorsement` - Immediate flat grant for endorsing a character's scene entry
   pose. FK `endorser_sheet`, FK `endorsee_sheet`, FK `scene`, single `resonance` FK (PROTECT).
-  Captures `persona_snapshot` (FK to `scenes.Persona`, SET_NULL) for masquerade audit. Unique per
+  Captures `persona_snapshot` (FK to `scenes.Persona`, SET_NULL) for masquerade audit and
+  `endorser_persona` (the endorser's presented face, as on `PoseEndorsement`). Unique per
   `(endorser_sheet, endorsee_sheet, scene)`. Fires `grant_resonance` synchronously on creation.
 - `ResonanceGrant` - Universal audit ledger. Discriminator `source` (TextChoice: POSE_ENDORSEMENT,
   SCENE_ENTRY, ROOM_RESIDENCE, OUTFIT_ITEM, STAFF_GRANT) + typed FKs: `source_room_profile`,

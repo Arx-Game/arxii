@@ -110,6 +110,7 @@ from world.scenes.constants import (
 from world.scenes.interaction_services import notify_interaction_changed
 from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.services import active_persona_for_sheet
 
 logger = logging.getLogger(__name__)
 
@@ -350,6 +351,7 @@ def create_pose_endorsement(  # noqa: C901
         timestamp=interaction.timestamp,
         resonance=resonance,
         persona_snapshot=endorsee_persona,
+        endorser_persona=active_persona_for_sheet(endorser_sheet),
     )
     # PoseEndorsement.objects.create() above runs PoseEndorsement.save(), which
     # (via RelatedCacheClearingMixin + related_cache_fields=["interaction"])
@@ -613,6 +615,7 @@ def create_scene_entry_endorsement(
         entry_interaction_timestamp=entry_interaction.timestamp,
         resonance=resonance,
         persona_snapshot=entry_interaction.persona,
+        endorser_persona=active_persona_for_sheet(endorser_sheet),
         granted_amount=cfg.scene_entry_grant,
     )
     ledger: list = []
@@ -792,6 +795,7 @@ def create_style_presentation_endorsement(
         scene=scene,
         resonance=resonance,
         persona_snapshot=_persona_snapshot,
+        endorser_persona=active_persona_for_sheet(endorser_sheet),
         granted_amount=grant_amount,
     )
     ledger: list = []

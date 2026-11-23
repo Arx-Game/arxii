@@ -31,8 +31,13 @@ class AMaskedFighterOnTheBattleRoster(JourneyCase):
         self.ada = self.make_player("Ada", room=field)
         self.battle = BattleFactory()
         side = BattleSideFactory(battle=self.battle)
-        for fighter in (self.hobb, self.ada):
-            enlist_participant(battle=self.battle, character_sheet=fighter.sheet_data, side=side)
+        rows = {
+            fighter.key: enlist_participant(
+                battle=self.battle, character_sheet=fighter.sheet_data, side=side
+            )
+            for fighter in (self.hobb, self.ada)
+        }
+        self.hobbs_row = rows["Hobb"]
         self.face = MediaFactory()
         primary = self.hobb.sheet_data.primary_persona
         primary.thumbnail = self.face
@@ -41,11 +46,7 @@ class AMaskedFighterOnTheBattleRoster(JourneyCase):
     def hobb_as_ada_reads_him(self) -> dict[str, object]:
         response = self.api(self.account_of(self.ada)).get(f"/api/battles/{self.battle.pk}/")
         self.assertEqual(response.status_code, 200, response.content)
-        (row,) = (
-            row
-            for row in response.json()["participants"]
-            if row["character_sheet_id"] == self.hobb.sheet_data.pk
-        )
+        (row,) = (row for row in response.json()["participants"] if row["id"] == self.hobbs_row.pk)
         return row["persona"]
 
     def test_ada_reads_the_mask_never_hobbs_name_or_face(self) -> None:
@@ -73,3 +74,48 @@ class AMaskedFighterOnTheBattleRoster(JourneyCase):
 
         persona = self.hobb_as_ada_reads_him()
         self.assertEqual(persona["thumbnail_media_url"], hood.cloudinary_url)
+
+
+class AMaskedFighterIsNotNamedByASheetId(JourneyCase):
+    """Hobb fights in a mask; Ada, a stranger, reads the battle the way her browser does.
+
+    The roster already shows Hobb as the mask. It must not also hand Ada his character
+    sheet id, which names the character behind the mask. Each player's own browser still
+    finds the player's own row, which is how the action panel knows where to act.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        field = self.make_room("The Field")
+        self.hobb = self.make_player("Hobb", room=field)
+        self.ada = self.make_player("Ada", room=field)
+        self.battle = BattleFactory()
+        side = BattleSideFactory(battle=self.battle)
+        self.rows = {
+            fighter.key: enlist_participant(
+                battle=self.battle, character_sheet=fighter.sheet_data, side=side
+            )
+            for fighter in (self.hobb, self.ada)
+        }
+        self.telnet(self.hobb, "persona mask a hooded man")
+
+    def roster_as(self, player) -> list[dict[str, object]]:
+        response = self.api(self.account_of(player)).get(f"/api/battles/{self.battle.pk}/")
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()["participants"]
+
+    def test_regression_a_stranger_gets_no_sheet_id_for_the_masked_fighter(self) -> None:
+        """Regression for #5290. Ada's roster carries no character sheet id for Hobb."""
+        roster = self.roster_as(self.ada)
+
+        self.assertEqual(
+            [key for row in roster for key in row if key == "character_sheet_id"], [], roster
+        )
+
+    def test_regression_each_player_still_finds_their_own_row(self) -> None:
+        """Regression for #5290. Each browser marks exactly the viewer's own row."""
+        for viewer in (self.hobb, self.ada):
+            with self.subTest(viewer=viewer.key):
+                roster = self.roster_as(viewer)
+                mine = [row["id"] for row in roster if row["is_mine"]]
+                self.assertEqual(mine, [self.rows[viewer.key].pk], roster)
