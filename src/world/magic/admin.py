@@ -13,6 +13,7 @@ from django.http import HttpRequest, HttpResponseRedirect
 from django.template.response import TemplateResponse
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.text import Truncator
 
 from web.admin.authoring.identity_map import keep_for_this_admin_post
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
@@ -298,10 +299,16 @@ class AffinityAdmin(admin.ModelAdmin):
         "kindled_boost_percent",
         "learn_rate_percent",
         "ritual_partner_fatigue",
-        "description",
+        "description_start",
     ]
     search_fields = ["name"]
     inlines = [AffinityKindlingSituationInline]
+
+    @admin.display(description="Description", ordering="description")
+    def description_start(self, obj: Affinity) -> str:
+        """The start of the description: the full text in a list this wide made a column a
+        pixel wide and the first row several screens tall, hiding the others (#5295)."""
+        return Truncator(obj.description).chars(80)
 
 
 class ResonanceAdminForm(forms.ModelForm):
