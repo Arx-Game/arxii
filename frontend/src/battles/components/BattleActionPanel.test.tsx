@@ -87,7 +87,7 @@ const MY_PARTICIPANT: BattleParticipant = {
   side_id: 100,
   place_id: 900,
   persona: { id: 5000, name: 'Test Persona', thumbnail_url: null, thumbnail_media_url: null },
-  character_sheet_id: 501,
+  is_mine: true,
   is_champion: false,
   declared_this_round: false,
 };

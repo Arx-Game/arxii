@@ -213,8 +213,8 @@ interface ChampionDuelSectionProps {
 
 /**
  * Renders when the place has no open encounter and the viewer's own
- * `BattleParticipant` row (matched via `character_sheet_id`, same doubling as
- * `BattleActionPanel`'s docstring) reads `is_champion: true` — a read-only
+ * `BattleParticipant` row (the one the server marks `is_mine`, as in
+ * `BattleActionPanel`) reads `is_champion: true` — a read-only
  * visibility hint mirroring `open_champion_duel`'s own `CharacterCovenantRole`
  * gate (`world/battles/serializers.py`). The server-side `NotAChampionError`
  * check inside `ChallengeChampionDuelAction`/`open_champion_duel` is
@@ -230,10 +230,7 @@ function ChampionDuelSection({ sceneId, battleId, place, participants }: Champio
     () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
     [myRosterEntries, activeCharacterName]
   );
-  const myParticipant = useMemo(
-    () => participants.find((p) => p.character_sheet_id === characterId) ?? null,
-    [participants, characterId]
-  );
+  const myParticipant = useMemo(() => participants.find((p) => p.is_mine) ?? null, [participants]);
 
   const { mutateAsync: dispatchAction, isPending } = useDispatchPlayerAction(characterId ?? 0);
   const { data: pools = [] } = useThreatPools();

@@ -8,18 +8,44 @@ import type {
   PaginatedBattleUnitTemplateList,
 } from './types';
 
-async function getJson<T>(url: string, fallbackError: string): Promise<T> {
-  const res = await apiFetch(url);
+async function getJson<T>(
+  url: string,
+  fallbackError: string,
+  headers: Record<string, string> = {}
+): Promise<T> {
+  const res = await apiFetch(url, { headers });
   if (!res.ok) await throwApiError(res, fallbackError);
   return (await res.json()) as T;
 }
 
-export function fetchBattlesForScene(sceneId: number): Promise<PaginatedBattleListList> {
-  return getJson(`/api/battles/?scene=${sceneId}`, 'Failed to load the battle.');
+/**
+ * The character this tab plays, sent as `X-Character-ID` (`web.api.mixins.CharacterContextMixin`).
+ * The battle roster marks only that character's row `is_mine`; it carries no sheet ids (#5290).
+ */
+function characterHeaders(characterId: number | null): Record<string, string> {
+  return characterId === null ? {} : { 'X-Character-ID': String(characterId) };
 }
 
-export function fetchBattleDetail(battleId: number): Promise<BattleDetail> {
-  return getJson(`/api/battles/${battleId}/`, 'Failed to load the battle.');
+export function fetchBattlesForScene(
+  sceneId: number,
+  characterId: number | null
+): Promise<PaginatedBattleListList> {
+  return getJson(
+    `/api/battles/?scene=${sceneId}`,
+    'Failed to load the battle.',
+    characterHeaders(characterId)
+  );
+}
+
+export function fetchBattleDetail(
+  battleId: number,
+  characterId: number | null
+): Promise<BattleDetail> {
+  return getJson(
+    `/api/battles/${battleId}/`,
+    'Failed to load the battle.',
+    characterHeaders(characterId)
+  );
 }
 
 /**

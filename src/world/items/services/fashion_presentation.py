@@ -38,6 +38,7 @@ from world.magic.models.endorsement import PresentationEndorsement
 from world.magic.services.gain import account_for_sheet
 from world.mechanics.services import fashion_outfit_bonus
 from world.scenes.models import Scene
+from world.scenes.services import active_persona_for_sheet
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -205,6 +206,7 @@ def judge_presentation(
                 endorser_sheet=judge,
                 endorsee_sheet=presenter,
                 persona_snapshot=persona,
+                endorser_persona=active_persona_for_sheet(judge),
             )
     except IntegrityError as exc:
         msg = "You have already judged this presentation."

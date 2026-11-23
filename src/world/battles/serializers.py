@@ -191,9 +191,9 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
     side_id = serializers.IntegerField(read_only=True)
     place_id = serializers.IntegerField(read_only=True, allow_null=True)
     persona = serializers.SerializerMethodField()
-    # #3389 web declaration/duel surface — internal FK id only, same privacy
-    # tier as the pre-existing side_id/place_id ints (never account/username).
-    character_sheet_id = serializers.IntegerField(read_only=True)
+    # #3389 web declaration/duel surface: the viewer's own row, so the client finds where to
+    # act. Never the sheet id itself: it names the character behind a mask (#5290).
+    is_mine = serializers.SerializerMethodField()
     is_champion = serializers.SerializerMethodField()
     declared_this_round = serializers.SerializerMethodField()
 
@@ -206,7 +206,7 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
             "side_id",
             "place_id",
             "persona",
-            "character_sheet_id",
+            "is_mine",
             "is_champion",
             "declared_this_round",
         ]
@@ -254,6 +254,15 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
             "thumbnail_url": persona_face_url(persona) or None,
             "thumbnail_media_url": thumbnail_media_url,
         }
+
+    def get_is_mine(self, obj: BattleParticipant) -> bool:
+        """True when this is the row of the character the viewer is playing (#5290).
+
+        Reads ``character_sheet_ids`` from context (the sheet of the ``X-Character-ID``
+        character, set by ``BattleViewSet.get_serializer_context``; empty without one), so
+        the roster tells each viewer which row is theirs and no one else's sheet id.
+        """
+        return obj.character_sheet_id in self.context.get("character_sheet_ids", set())
 
     def get_is_champion(self, obj: BattleParticipant) -> bool:
         """Mirrors ``open_champion_duel``'s own Champion-standing gate verbatim

@@ -502,6 +502,9 @@ class InteractionViewSet(
                 queryset=PoseEndorsement.objects.select_related(
                     "endorser_sheet",
                     "endorser_sheet__active_alternate_self__alternate_self",  # #4889
+                    # #5290: the face the endorser wore; persona_face_url reads its sheet's
+                    # presented face and worn alternate self.
+                    "endorser_persona__character_sheet__active_alternate_self__alternate_self",
                     "resonance",
                 ).prefetch_related(
                     Prefetch(

@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 from django.db.models import Prefetch, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.serializers import Serializer
 from rest_framework.viewsets import ReadOnlyModelViewSet
 
+from web.api.mixins import CharacterContextMixin
 from world.battles.models import (
     Battle,
     BattleActionDeclaration,
@@ -36,7 +39,7 @@ from world.societies.models import LegendEntry
 from world.stories.pagination import StandardResultsSetPagination
 
 
-class BattleViewSet(ReadOnlyModelViewSet):
+class BattleViewSet(CharacterContextMixin, ReadOnlyModelViewSet):
     """Read-only battle aggregate API — list (slim) and detail (full aggregate).
 
     Scene-gated exactly like ``CombatEncounterViewSet`` (world/combat/views.py):
@@ -140,6 +143,16 @@ class BattleViewSet(ReadOnlyModelViewSet):
 
     def get_queryset(self) -> QuerySet[Battle]:
         return self._filter_readable(self._base_queryset())
+
+    def get_serializer_context(self) -> dict[str, Any]:
+        context = super().get_serializer_context()
+        # The sheet of the character this tab plays (``X-Character-ID``, validated against
+        # the account's roster): BattleParticipantSerializer.is_mine marks only that row,
+        # instead of sending every participant's sheet id (#5290). No header, or a character
+        # the account does not play, marks none, never every character the account plays.
+        character = self._get_character(self.request)
+        context["character_sheet_ids"] = {character.pk} if character is not None else set()
+        return context
 
     def _filter_readable(self, qs: QuerySet[Battle]) -> QuerySet[Battle]:
         """Restrict list/retrieve to battles whose scene the caller may view.

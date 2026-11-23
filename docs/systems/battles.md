@@ -1054,7 +1054,7 @@ PlaceDetailPanel.tsx`) is the map-side counterpart to telnet's `battle duel <fro
 vs <name>` (`src/commands/battle.py`) — a per-place form, not part of
 `BattleActionPanel`, matching the "View encounter" link's own placement. It renders
 when the selected place has no open `combat_encounter` and the viewer's own
-`BattleParticipant` row (matched via `character_sheet_id`) reads `is_champion: true`
+`BattleParticipant` row (the one the server marks `is_mine`) reads `is_champion: true`
 — `BattleParticipantSerializer.is_champion` (#3389 Phase 1) mirrors
 `open_champion_duel`'s `CharacterCovenantRole` gate verbatim as a read-only
 visibility hint; the server-side `NotAChampionError` check is unchanged and remains
@@ -1335,9 +1335,13 @@ every other mutation in this system, so the "no bypass of Actions" invariant sti
   encounter" link. `vehicle`/`fortifications` are read through
   `Battle.state_cache`/the view's `to_attr` prefetches — zero extra queries per
   place, never a bare related-manager query. `BattleParticipantSerializer` also
-  carries three #3389 web-declaration-surface fields: `character_sheet_id` (an
-  internal FK int, same privacy tier as `side_id`/`place_id` — lets the frontend
-  match "which participant row is mine" without a second lookup),
+  carries three #3389 web-declaration-surface fields: `is_mine` (true only for the
+  row of the character the tab plays: `BattleViewSet` reads `X-Character-ID` through
+  `CharacterContextMixin` and puts that character's sheet pk in context; no header or an
+  unowned id marks no row, and the frontend battle queries send the header and key on the
+  character; the
+  roster sends no participant's `character_sheet_id`, which would name the character
+  behind a mask, #5290),
   `is_champion` (mirrors `open_champion_duel`'s `CharacterCovenantRole` gate —
   a read-only visibility hint, not a new write path), and `declared_this_round`
   (whether this participant has a `BattleActionDeclaration` in the battle's
@@ -1398,9 +1402,8 @@ data already on the page:
 - `BattleDeclarationSection` — the round-action form covering all 12
   `BattleActionKind`s (`frontend/src/battles/constants.ts` hand-mirrors the
   backend enum, same convention as `BATTLE_RISK_LEVELS`). Renders when the
-  viewer's `character_sheet_id` (== their active character's ObjectDB pk,
-  `CharacterSheet` being a `primary_key=True` O2O onto it — no extra lookup
-  needed) matches an `ACTIVE` participant row and the battle's round is
+  own row (the participant the server marks `is_mine`) is an `ACTIVE`
+  participant and the battle's round is
   `declaring`. The action-kind picker drives a target-shape map
   (`BATTLE_ACTION_TARGET_SHAPES`) that swaps in the right target field(s) —
   enemy unit (STRIKE/ROUT), own-side ally (SUPPORT/RESCUE/RALLY), place

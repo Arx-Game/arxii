@@ -41,6 +41,22 @@ class EndorsementBase(SharedMemoryModel):
         blank=True,
         help_text="Endorsee's persona at endorsement time — masquerade audit.",
     )
+    endorser_persona = models.ForeignKey(
+        "arxii.Persona",
+        # RESTRICT, not SET_NULL: a null here reads as "made before it was recorded" and the
+        # badge falls back to the endorser's real face, so deleting a mask must be refused
+        # like it is once the mask has posted (Interaction.persona is PROTECT). RESTRICT, not
+        # PROTECT, so deleting the endorser's character still cascades through.
+        on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
+        related_name="%(class)s_endorsed_as",
+        help_text=(
+            "The face the endorser presented when they endorsed (a mask stays a mask once "
+            "they unmask). Null only for rows made before it was recorded. A worn look "
+            "changes the picture, which is read live as on poses, not the face."
+        ),
+    )
     created_at = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:

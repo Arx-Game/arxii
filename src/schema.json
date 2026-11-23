@@ -48651,8 +48651,14 @@ components:
             FK, joined by ``personas_for_sheets``, so this never issues a query.
             ``thumbnail_url`` is the legacy URLField, kept alongside for callers still on it.
           readOnly: true
-        character_sheet_id:
-          type: integer
+        is_mine:
+          type: boolean
+          description: |-
+            True when this is the row of the character the viewer is playing (#5290).
+
+            Reads ``character_sheet_ids`` from context (the sheet of the ``X-Character-ID``
+            character, set by ``BattleViewSet.get_serializer_context``; empty without one), so
+            the roster tells each viewer which row is theirs and no one else's sheet id.
           readOnly: true
         is_champion:
           type: boolean
@@ -48671,10 +48677,10 @@ components:
             round (#3389).
           readOnly: true
       required:
-      - character_sheet_id
       - declared_this_round
       - id
       - is_champion
+      - is_mine
       - persona
       - place_id
       - side_id

@@ -2397,7 +2397,13 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
 
 @admin.register(PoseEndorsement)
 class PoseEndorsementAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["endorsee_sheet", "endorser_sheet", "interaction", "persona_snapshot"]
+    autocomplete_fields = [
+        "endorsee_sheet",
+        "endorser_sheet",
+        "endorser_persona",
+        "interaction",
+        "persona_snapshot",
+    ]
     list_display = (
         "id",
         "endorser_sheet",
@@ -2421,6 +2427,7 @@ class SceneEntryEndorsementAdmin(admin.ModelAdmin):
     autocomplete_fields = [
         "endorsee_sheet",
         "endorser_sheet",
+        "endorser_persona",
         "entry_interaction",
         "persona_snapshot",
         "scene",

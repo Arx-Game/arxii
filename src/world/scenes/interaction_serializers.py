@@ -28,6 +28,8 @@ from world.scenes.thread_services import thread_anchor_ids, thread_roots
 from world.scenes.types import NarratedEventPayload, PersonaPayload, ReactionAggregation
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from evennia_extensions.models import PlayerData
     from world.species.models import Language
 
@@ -58,6 +60,32 @@ def availability_for(scene: Scene | None) -> str:
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
         return TEMPORARY_AVAILABILITY
     return RETAINED_AVAILABILITY
+
+
+def _endorser_badges(endorsements: "Iterable[Any]") -> list[dict]:
+    """One badge per endorsement, showing the face its endorser wore when endorsing (#5290).
+
+    ``endorser_persona`` is that face, kept when the endorsement was made, so a mask stays a
+    mask on a badge after the wearer takes it off. A row made before it was recorded has none
+    and keeps the endorser's PRIMARY persona (``CharacterSheet.cached_primary_persona``);
+    an endorser with no face at all is skipped.
+    """
+    badges = []
+    for endorsement in endorsements:
+        persona = endorsement.endorser_persona or next(
+            iter(endorsement.endorser_sheet.cached_primary_persona), None
+        )
+        if persona is None:
+            continue
+        badges.append(
+            {
+                "persona_id": persona.pk,
+                "persona_name": persona.name,
+                "thumbnail_url": persona_face_url(persona),
+                "resonance_id": endorsement.resonance_id,
+            }
+        )
+    return badges
 
 
 _UNKNOWN_REPLY_TARGET_FIELDS = "Unknown reply target fields."
@@ -953,26 +981,11 @@ class InteractionListSerializer(serializers.ModelSerializer):
 
     # Reads `Interaction.cached_endorsements` (a `PrunedCachedProperty`,
     # #3816 Task 4) -- fed by the view queryset's Prefetch when available,
-    # and a live query on first read otherwise. Each endorser's primary
-    # persona is similarly read via `CharacterSheet.cached_primary_persona`.
-    # Both properties always exist now, so there is no fallback branch to
-    # maintain here.
+    # and a live query on first read otherwise. Each badge shows the face the
+    # endorser wore when endorsing (#5290), read through `_endorser_badges`.
     def get_pose_endorsers(self, obj: Interaction) -> list[dict]:
         """List of peers who endorsed this pose, with persona info."""
-        out = []
-        for e in obj.cached_endorsements:
-            persona = next(iter(e.endorser_sheet.cached_primary_persona), None)
-            if persona is None:
-                continue
-            out.append(
-                {
-                    "persona_id": persona.pk,
-                    "persona_name": persona.name,
-                    "thumbnail_url": persona_face_url(persona),
-                    "resonance_id": e.resonance_id,
-                }
-            )
-        return out
+        return _endorser_badges(obj.cached_endorsements)
 
     def get_my_pose_endorsement(self, obj: Interaction) -> dict | None:
         """Return the viewer's own endorsement for this pose, or None.
@@ -1003,20 +1016,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         Only non-empty for ENTRY poses. Reads ``scene_entry_endorsements`` from
         context (populated by the view's ``get_serializer_context``).
         """
-        out = []
-        for r in self._entry_rows(obj):
-            persona = next(iter(r.endorser_sheet.cached_primary_persona), None)
-            if persona is None:
-                continue
-            out.append(
-                {
-                    "persona_id": persona.pk,
-                    "persona_name": persona.name,
-                    "thumbnail_url": persona_face_url(persona),
-                    "resonance_id": r.resonance_id,
-                }
-            )
-        return out
+        return _endorser_badges(self._entry_rows(obj))
 
     def get_entry_endorsed_by_me(self, obj: Interaction) -> bool:
         """True when the viewer has given this character a scene-entry endorsement."""
