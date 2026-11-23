@@ -19,11 +19,13 @@ import json
 from django.test import tag
 from evennia.objects.models import ObjectDB
 
+from evennia_extensions.factories import CharacterFactory
 from integration_tests.harness import JourneyCase
 from world.battles.factories import BattleFactory, BattleSideFactory
 from world.battles.services import enlist_participant
+from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.thumbnail_services import BUILTIN_FACE_PLACEHOLDER_URL
-from world.roster.factories import MediaFactory
+from world.roster.factories import MediaFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 
@@ -105,7 +107,10 @@ class AMaskedFighterIsNotNamedByASheetId(JourneyCase):
         self.telnet(self.hobb, "persona mask a hooded man")
 
     def roster_as(self, player: ObjectDB) -> list[dict[str, object]]:
-        response = self.api(self.account_of(player)).get(f"/api/battles/{self.battle.pk}/")
+        """The roster as ``player``'s browser asks for it: as the character the tab plays."""
+        response = self.api(self.account_of(player)).get(
+            f"/api/battles/{self.battle.pk}/", HTTP_X_CHARACTER_ID=str(player.pk)
+        )
         self.assertEqual(response.status_code, 200, response.content)
         return response.json()["participants"]
 
@@ -127,3 +132,54 @@ class AMaskedFighterIsNotNamedByASheetId(JourneyCase):
                 roster = self.roster_as(viewer)
                 mine = [row["id"] for row in roster if row["is_mine"]]
                 self.assertEqual(mine, [self.rows[viewer.key].pk], roster)
+
+
+class AnAccountWithTwoFightersInOneBattle(JourneyCase):
+    """One account plays Hobb and his cousin Hal, and both fight on the same side.
+
+    The battle page asks as the character the tab is playing (the `X-Character-ID` header),
+    so exactly that character's row is the viewer's own. With no header, or a character the
+    account does not play, no row is.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        field = self.make_room("The Field")
+        self.hobb = self.make_player("Hobb", room=field)
+        self.hal = CharacterFactory(db_key="Hal", location=field)
+        CharacterSheetFactory(character=self.hal)
+        entry = RosterEntryFactory(character_sheet__character=self.hal)
+        RosterTenureFactory(
+            roster_entry=entry,
+            player_data=self.account_of(self.hobb).player_data,
+            end_date=None,
+        )
+        self.ada = self.make_player("Ada", room=field)
+        self.battle = BattleFactory()
+        side = BattleSideFactory(battle=self.battle)
+        self.rows = {
+            fighter.key: enlist_participant(
+                battle=self.battle, character_sheet=fighter.sheet_data, side=side
+            )
+            for fighter in (self.hobb, self.hal, self.ada)
+        }
+
+    def mine_as(self, player: ObjectDB, character_id: int | None) -> list[int]:
+        headers = {} if character_id is None else {"HTTP_X_CHARACTER_ID": str(character_id)}
+        response = self.api(self.account_of(player)).get(
+            f"/api/battles/{self.battle.pk}/", **headers
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        return [row["id"] for row in response.json()["participants"] if row["is_mine"]]
+
+    @tag("regression")
+    def test_regression_the_header_picks_which_fighter_is_mine(self) -> None:
+        """Regression for #5290. Only the character the tab plays is the viewer's own row."""
+        self.assertEqual(self.mine_as(self.hobb, self.hobb.pk), [self.rows["Hobb"].pk])
+        self.assertEqual(self.mine_as(self.hobb, self.hal.pk), [self.rows["Hal"].pk])
+
+    @tag("regression")
+    def test_regression_no_header_or_an_unowned_character_marks_no_row(self) -> None:
+        """Regression for #5290. Without a played character there is no row of the viewer's own."""
+        self.assertEqual(self.mine_as(self.hobb, None), [])
+        self.assertEqual(self.mine_as(self.hobb, self.ada.pk), [])

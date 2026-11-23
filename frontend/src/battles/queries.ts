@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 
+import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
+
 import {
   fetchBattleDetail,
   fetchBattleMapBlueprints,
@@ -9,8 +11,17 @@ import {
 
 export const battleKeys = {
   all: ['battles'] as const,
-  detail: (battleId: number) => [...battleKeys.all, 'detail', battleId] as const,
-  forScene: (sceneId: number) => [...battleKeys.all, 'for-scene', sceneId] as const,
+  // A query key carries the character the tab plays, because the roster marks that
+  // character's row `is_mine` (#5290), so switching character refetches. Called without a
+  // character it is the prefix covering every character, which is what invalidation wants.
+  detail: (battleId: number, characterId?: number | null) =>
+    characterId === undefined
+      ? ([...battleKeys.all, 'detail', battleId] as const)
+      : ([...battleKeys.all, 'detail', battleId, characterId] as const),
+  forScene: (sceneId: number, characterId?: number | null) =>
+    characterId === undefined
+      ? ([...battleKeys.all, 'for-scene', sceneId] as const)
+      : ([...battleKeys.all, 'for-scene', sceneId, characterId] as const),
   mapBlueprints: () => [...battleKeys.all, 'map-blueprints'] as const,
   unitTemplates: () => [...battleKeys.all, 'unit-templates'] as const,
 };
@@ -21,10 +32,11 @@ export const battleKeys = {
  * the single-battle shape they actually need.
  */
 export function useBattleForSceneQuery(sceneId: number | null | undefined) {
+  const characterId = useActiveCharacterId();
   return useQuery({
-    queryKey: battleKeys.forScene(sceneId ?? 0),
+    queryKey: battleKeys.forScene(sceneId ?? 0, characterId),
     queryFn: async () => {
-      const data = await fetchBattlesForScene(sceneId!);
+      const data = await fetchBattlesForScene(sceneId!, characterId);
       return data.results[0] ?? null;
     },
     enabled: sceneId != null,
@@ -33,9 +45,10 @@ export function useBattleForSceneQuery(sceneId: number | null | undefined) {
 }
 
 export function useBattleDetailQuery(battleId: number | null | undefined) {
+  const characterId = useActiveCharacterId();
   return useQuery({
-    queryKey: battleKeys.detail(battleId ?? 0),
-    queryFn: () => fetchBattleDetail(battleId!),
+    queryKey: battleKeys.detail(battleId ?? 0, characterId),
+    queryFn: () => fetchBattleDetail(battleId!, characterId),
     enabled: battleId != null,
     // Staging is multi-GM: poll so another GM's changes appear without a reload (#2423).
     refetchInterval: 10_000,

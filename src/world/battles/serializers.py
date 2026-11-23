@@ -256,11 +256,11 @@ class BattleParticipantSerializer(serializers.ModelSerializer):
         }
 
     def get_is_mine(self, obj: BattleParticipant) -> bool:
-        """True when the requesting account plays this participant's character (#5290).
+        """True when this is the row of the character the viewer is playing (#5290).
 
-        Reads ``character_sheet_ids`` from context (the viewer's own sheet pks, set by
-        ``BattleViewSet.get_serializer_context``), so the roster tells each viewer which
-        row is theirs and no one else's sheet id.
+        Reads ``character_sheet_ids`` from context (the sheet of the ``X-Character-ID``
+        character, set by ``BattleViewSet.get_serializer_context``; empty without one), so
+        the roster tells each viewer which row is theirs and no one else's sheet id.
         """
         return obj.character_sheet_id in self.context.get("character_sheet_ids", set())
 

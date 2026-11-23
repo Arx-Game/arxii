@@ -1335,9 +1335,11 @@ every other mutation in this system, so the "no bypass of Actions" invariant sti
   encounter" link. `vehicle`/`fortifications` are read through
   `Battle.state_cache`/the view's `to_attr` prefetches — zero extra queries per
   place, never a bare related-manager query. `BattleParticipantSerializer` also
-  carries three #3389 web-declaration-surface fields: `is_mine` (true for the
-  viewer's own rows: the viewer's played sheet pks, put in context by
-  `BattleViewSet.get_serializer_context`, matched against the participant's sheet; the
+  carries three #3389 web-declaration-surface fields: `is_mine` (true only for the
+  row of the character the tab plays: `BattleViewSet` reads `X-Character-ID` through
+  `CharacterContextMixin` and puts that character's sheet pk in context; no header or an
+  unowned id marks no row, and the frontend battle queries send the header and key on the
+  character; the
   roster sends no participant's `character_sheet_id`, which would name the character
   behind a mask, #5290),
   `is_champion` (mirrors `open_champion_duel`'s `CharacterCovenantRole` gate —
