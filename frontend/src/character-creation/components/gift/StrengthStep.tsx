@@ -13,7 +13,7 @@
 import { useId, useState } from 'react';
 import { NEUTRAL_HEX } from '@/magic/auraSwirl';
 import { AuraSwirl } from '@/magic/components/AuraSwirl';
-import type { CGExplanations, Resonance, ResonanceWeightPick } from '../../types';
+import type { Affinity, CGExplanations, Resonance, ResonanceWeightPick } from '../../types';
 import {
   affinityOfLean,
   defaultPrimalPoints,
@@ -26,6 +26,8 @@ import {
 
 interface StrengthStepProps {
   resonances: Resonance[];
+  /** The three affinities; each one's staff-written description sits with its cards. */
+  affinities?: Affinity[];
   weights: ResonanceWeightPick[];
   /** The points to divide: the server's creation points, never a number kept here. */
   budget: number;
@@ -72,12 +74,30 @@ function ResonanceCards({ label, resonances, picked, onPick }: CardsProps) {
   );
 }
 
+/** The affinity's description, under the question for its cards; nothing while it is blank. */
+function AffinityNote({ affinities, name }: { affinities: Affinity[]; name: string }) {
+  const description = affinities.find((affinity) => affinity.name === name)?.description.trim();
+  if (!description) return null;
+  return (
+    <p className="strength-affinity" data-testid="strength-affinity-description">
+      {description}
+    </p>
+  );
+}
+
 /** "a Celestial", "an Abyssal": the side word with its article. */
 function withArticle(affinity: string): string {
   return `${/^[AEIOU]/.test(affinity) ? 'an' : 'a'} ${affinity}`;
 }
 
-export function StrengthStep({ resonances, weights, budget, copy, onChange }: StrengthStepProps) {
+export function StrengthStep({
+  resonances,
+  affinities = [],
+  weights,
+  budget,
+  copy,
+  onChange,
+}: StrengthStepProps) {
   const sliderId = useId();
   const pointsId = useId();
   const picks = picksFromWeights(weights, resonances, budget);
@@ -176,6 +196,7 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
       <p className="strength-ask">
         {text('gift_strength_feeling_question', 'Which feeling gives you strength')}
       </p>
+      <AffinityNote affinities={affinities} name="Primal" />
       <ResonanceCards
         label={text('gift_strength_feeling_question', 'Which feeling gives you strength')}
         resonances={primalCards}
@@ -207,6 +228,7 @@ export function StrengthStep({ resonances, weights, budget, copy, onChange }: St
           <p className="strength-ask">
             {text('gift_strength_outward_question', 'Which of these gives you strength')}
           </p>
+          <AffinityNote affinities={affinities} name={affinityOfLean(chosenSide)} />
           <ResonanceCards
             label={text('gift_strength_outward_question', 'Which of these gives you strength')}
             resonances={sideCards(chosenSide)}
