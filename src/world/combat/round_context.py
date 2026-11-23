@@ -518,9 +518,6 @@ class CombatRoundContext(RoundContext):
         from world.combat.services.declarations.declaration_validation import (  # noqa: PLC0415
             DeclarationRefusedError,
         )
-        from world.combat.services.declarations.declare_action import (  # noqa: PLC0415
-            refuse_resonance_off_thread,
-        )
         from world.fatigue.constants import EffortLevel  # noqa: PLC0415
 
         fury_commitment = None
@@ -548,14 +545,7 @@ class CombatRoundContext(RoundContext):
 
         slot = player_action.ref.action_slot or CombatActionSlot.FOCUSED
         if slot == CombatActionSlot.FOCUSED:
-            _refuse_weapon_technique(technique)
-            # Refused before the pull is committed, as telnet does: declare_action would
-            # refuse it too, but only after the pull had changed an identity-mapped balance.
-            try:
-                refuse_resonance_off_thread(participant, technique, cast_resonance)
-            except DeclarationRefusedError as exc:
-                raise ActionDispatchError(exc.code) from exc
-            self._commit_focused_pull(participant, technique, kwargs)
+            self._validate_and_commit_focused_pull(participant, technique, cast_resonance, kwargs)
 
         # The frontend dispatches the focused action and each passive as SEPARATE
         # /dispatch/ calls, every one routing through here. To land them all on a
@@ -633,6 +623,30 @@ class CombatRoundContext(RoundContext):
             CombatRoundActionTarget.objects.bulk_create(
                 [CombatRoundActionTarget(action=action, opponent=opp) for opp in aoe_opponents]
             )
+
+    def _validate_and_commit_focused_pull(
+        self,
+        participant: CombatParticipant,
+        technique: Technique,
+        cast_resonance: Resonance | None,
+        kwargs: dict[str, Any],
+    ) -> None:
+        """Refuse invalid focused casts before changing the caster's pull balance."""
+        from world.combat.services.declarations.declaration_validation import (  # noqa: PLC0415
+            DeclarationRefusedError,
+        )
+        from world.combat.services.declarations.declare_action import (  # noqa: PLC0415
+            refuse_resonance_off_thread,
+        )
+
+        _refuse_weapon_technique(technique)
+        # Refused before the pull is committed, as telnet does: declare_action would
+        # refuse it too, but only after the pull had changed an identity-mapped balance.
+        try:
+            refuse_resonance_off_thread(participant, technique, cast_resonance)
+        except DeclarationRefusedError as exc:
+            raise ActionDispatchError(exc.code) from exc
+        self._commit_focused_pull(participant, technique, kwargs)
 
     def _resolve_aoe_opponents(
         self,
