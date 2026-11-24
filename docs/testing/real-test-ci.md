@@ -67,6 +67,11 @@ queue.
    step prints the run URL and the artifact URL in the log and the job summary.
 7. Stops the server (also when a spec failed).
 
+Its screenshots stay in the zip artifact. To put a screenshot on the PR, take it
+locally with `just shot` and post it with `just shot-post` (#5310,
+`tools/skills/real-testing/SKILL.md`); this job is the fallback on the small laptop,
+where `just shot` refuses.
+
 ## Triggers and limits (overridable)
 
 - Runs on pull requests that touch `frontend/**`, `src/web/**`,

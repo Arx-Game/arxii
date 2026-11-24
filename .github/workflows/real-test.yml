@@ -165,7 +165,16 @@ jobs:
           pnpm build
       - name: Install Chromium
         working-directory: frontend
-        run: pnpm exec playwright install --with-deps chromium
+        # The runner's DNS sometimes fails while --with-deps fetches apt packages
+        # ("Temporary failure resolving 'archive.ubuntu.com'", 2026-11-11), which
+        # failed whole runs before a spec ran. Three tries, 20 s apart (#5310).
+        run: |
+          for attempt in 1 2 3; do
+            pnpm exec playwright install --with-deps chromium && exit 0
+            echo "::warning::Chromium install attempt ${attempt} failed; retrying in 20 s"
+            sleep 20
+          done
+          exit 1
       - name: Start the server
         run: |
           uv run arx manage collectstatic --noinput

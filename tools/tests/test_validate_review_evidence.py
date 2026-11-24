@@ -216,5 +216,57 @@ class ReviewEvidenceTests(unittest.TestCase):
         self.assertIn("does not match the reviewed code revision", result.stderr)
 
 
+REPO = "Arx-Game/arxii"
+SCREEN = ["frontend/src/roster/CharacterSheet.tsx", "src/world/roster/views.py"]
+SONAR_BADGE = (
+    "![Quality Gate passed](https://sonarcloud.io/api/project_badges/quality_gate?project=arxii)"
+)
+
+
+class FrontendScreenshotTests(unittest.TestCase):
+    """Regression for #5310: a PR that changed screen code reached main with no picture."""
+
+    def test_screen_change_without_a_screenshot_is_refused(self) -> None:
+        """Regression for #5310. A bot's badge image is not a screenshot of the change."""
+        errors = _VALIDATOR.frontend_screenshot_errors(f"Closes #1\n{SONAR_BADGE}\n", SCREEN, REPO)
+        self.assertEqual(len(errors), 1)
+        self.assertIn("just shot-post", errors[0])
+
+    def test_stated_reason_or_test_only_change_needs_no_screenshot(self) -> None:
+        """Regression for #5310. Test files and a stated reason are not screen changes."""
+        body = "Closes #1\nNo visual change: renames a prop; the page renders the same.\n"
+        self.assertEqual(_VALIDATOR.frontend_screenshot_errors(body, SCREEN, REPO), [])
+        tests_only = ["frontend/src/roster/__tests__/Sheet.test.tsx", "frontend/src/test/x.tsx"]
+        self.assertEqual(_VALIDATOR.frontend_screenshot_errors("Closes #1\n", tests_only, REPO), [])
+
+    def test_placeholder_reason_does_not_count(self) -> None:
+        """Regression for #5310. `No visual change: <reason>` copied verbatim is no reason."""
+        body = "Closes #1\nNo visual change: <reason>\n"
+        self.assertEqual(len(_VALIDATOR.frontend_screenshot_errors(body, SCREEN, REPO)), 1)
+
+    def test_only_images_this_repository_hosts_count(self) -> None:
+        """Regression for #5310. Raw links into another repository are not this PR's evidence."""
+        own = f"![sheet](https://raw.githubusercontent.com/{REPO}/{'a' * 40}/01-sheet.png)"
+        other = f"![x](https://raw.githubusercontent.com/someone/else/{'a' * 40}/x.png)"
+        attached = '<img src="https://github.com/user-attachments/assets/abc" width="400">'
+        found = _VALIDATOR.hosted_image_urls(f"{own}\n{other}\n{attached}\n{SONAR_BADGE}", REPO)
+        self.assertEqual(
+            found,
+            [
+                f"https://raw.githubusercontent.com/{REPO}/{'a' * 40}/01-sheet.png",
+                "https://github.com/user-attachments/assets/abc",
+            ],
+        )
+
+
+class NoIssueTests(unittest.TestCase):
+    def test_chore_pr_states_why_it_closes_no_issue(self) -> None:
+        """Regression for #5310. Chore and dependency PRs failed the closes-an-issue rule."""
+        body = "Bumps four dev dependencies.\n\nNo issue: routine dependency update.\n"
+        self.assertEqual(_VALIDATOR.no_issue_reason(body), "routine dependency update.")
+        self.assertIsNone(_VALIDATOR.no_issue_reason("Bumps things.\nNo issue: TBD\n"))
+        self.assertIsNone(_VALIDATOR.no_issue_reason("Bumps things, no issue: none.\n"))
+
+
 if __name__ == "__main__":
     unittest.main()

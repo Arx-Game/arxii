@@ -303,6 +303,21 @@ output should end with a `static files copied to .../src/server/.static` line). 
 someone disabled the postbuild or runs `tsc -b && vite build` directly bypassing
 pnpm scripts, reinstate the chain.
 
+### Screenshots of a change (`just shot`, `just shot-post`, #5310)
+
+- `just shot <path>...` — full-page PNGs of this worktree's code running on its own
+  server (ports 4100-4106 via `ARX_PORT_BASE`), its own `rt_<issue>` database and its
+  own build, signed in as `e2e_test_account` (`--as <account>`, `--anon`,
+  `--viewport WxH`, `--spec <file>`). Worktree only; waits for the container-wide
+  heavy-work lock; `BLOCKED: resources` under 8 GiB total or 3 GiB available. PNGs
+  land in `frontend/test-results/shots/<stamp>/`.
+- `just shot-post <pr-or-issue> <png>...` — pushes the PNGs to
+  `refs/evidence/<n>/<stamp>` (no branch, no CI), comments on the PR with the images,
+  and prints Markdown to paste into the PR body.
+
+See `tools/skills/real-testing/SKILL.md` and
+`tools/skills/issue-to-merged-pr/references/evidence-screenshots-not-in-main.md`.
+
 ## Integration Testing
 
 - `arx integration-test` — Automated integration test environment (highly automated!)

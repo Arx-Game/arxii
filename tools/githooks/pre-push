@@ -12,6 +12,20 @@ if ! resolve_pre_commit; then
   exit 1
 fi
 
+# git names each pushed ref on stdin: "<local ref> <local sha> <remote ref> <remote sha>".
+pushed="$(cat)"
+# A push of screenshots only (`just shot-post`, #5310) carries image blobs on an
+# orphan commit under refs/evidence/. It has no code to check, and with no common
+# ancestor pre-commit would run every hook over the whole repository.
+evidence_only=1
+while read -r _ _ remote_ref _; do
+  [[ -z "$remote_ref" ]] && continue
+  [[ "$remote_ref" == refs/evidence/* ]] || evidence_only=0
+done <<<"$pushed"
+if [[ -n "$pushed" && "$evidence_only" == 1 ]]; then
+  exit 0
+fi
+
 common_hooks="$(git rev-parse --path-format=absolute --git-common-dir)/hooks"
 exec "${PRE_COMMIT_CMD[@]}" hook-impl --config=.pre-commit-config.yaml \
-  --hook-type=pre-push --hook-dir "$common_hooks" -- "$@"
+  --hook-type=pre-push --hook-dir "$common_hooks" -- "$@" <<<"$pushed"

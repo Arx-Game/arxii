@@ -164,6 +164,10 @@ them as an error rather than a question:
 - **Open code-scanning alerts** on the PR head ref (section 3).
 - **Evidence committed under `docs/reviews/` or `.github/issue-evidence/`** is failed by the
   `review-evidence-not-committed` CI job; the report belongs in a PR comment.
+- **A PR that changes non-test `frontend/src/**/*.tsx` with no screenshot in its body**
+  is failed by the `frontend-screenshot` job. Take one with `just shot`, post it with
+  `just shot-post`, paste the printed Markdown into the body; or add a line
+  `No visual change: <reason>`. The job re-runs when the body is edited.
 
 ## 6. Migration tip, before enqueueing
 
