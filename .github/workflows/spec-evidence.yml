@@ -2,7 +2,8 @@ name: Spec evidence
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    # `edited`: adding a screenshot or a `No ...:` line to the body re-runs the check.
+    types: [opened, synchronize, reopened, ready_for_review, edited]
 
 permissions:
   contents: read
@@ -23,19 +24,12 @@ jobs:
             echo "::error::Review evidence must not be committed. Found forbidden evidence files:"
             echo "$tracked" | sed 's/^/::error::  /'
             cat <<'MSG'
-          Review evidence reports and their screenshots do not belong in main's
-          permanent history. The report is a PR comment; screenshots are served
-          from immutable pushed blobs so they keep rendering after the files come out.
-
-          To fix, in this order:
-            1. Push once with the files still present, so their blobs exist.
-            2. Post the report as a PR comment, with every image linked as
-               https://raw.githubusercontent.com/<owner>/<repo>/<pushed-sha>/<path>
-            3. Point the PR body's "- Report:" line at that comment URL.
-            4. Delete docs/reviews/ and .github/issue-evidence/ and push again.
-
-          Deleting the files without doing steps 2 and 3 does not pass: the
-          review-evidence job then has no report to validate and fails instead.
+          Review evidence reports and their screenshots do not belong in a PR's
+          branch. Remove these files from the branch, then post the screenshots with
+          `just shot-post <pr> <png>...`: it pushes them to refs/evidence/<pr>/...,
+          which no branch and no workflow touches, and prints Markdown links that
+          keep loading. Post the report as a PR comment and point the PR body's
+          "- Report:" line at that comment's URL.
           MSG
             exit 1
           fi
@@ -55,7 +49,11 @@ jobs:
           import json
           import os
 
-          from tools.validate_review_evidence import closing_issue_number, is_dependabot_login
+          from tools.validate_review_evidence import (
+              closing_issue_number,
+              is_dependabot_login,
+              no_issue_reason,
+          )
 
           with open(os.environ["EVENT_PATH"], encoding="utf-8") as stream:
               event = json.load(stream)
@@ -66,9 +64,15 @@ jobs:
               raise SystemExit(0)
           issue_number = closing_issue_number(body)
           if issue_number is None:
+              # A chore or dependency PR may close no issue if it says why (#5310).
+              reason = no_issue_reason(body)
+              if reason is not None:
+                  print(f"PR closes no issue, stated reason: {reason}")
+                  raise SystemExit(0)
               raise SystemExit(
                   "Every non-Dependabot pull request must explicitly close an issue "
-                  "with `Closes #<number>`; use a child issue for partial work."
+                  "with `Closes #<number>`, or say why it closes none on a line of its "
+                  "own: `No issue: <reason>`. Use a child issue for partial work."
               )
           print(f"pull request closes issue #{issue_number}")
 
@@ -127,7 +131,10 @@ jobs:
               echo "review evidence not required for issue #${issue_number}"
               exit 0
           fi
-          readarray -t report_values < <(python3 - <<'PY'
+          # Command substitution, not readarray: a refusal here must stop the step
+          # with its own message (#5310; readarray swallowed the exit and the step
+          # died on `report_values[0]: unbound variable`).
+          report_reference="$(python3 - <<'PY'
           from tools.validate_review_evidence import REPORT_LINE
 
           body = open("/tmp/pr-body.md", encoding="utf-8").read()
@@ -138,8 +145,7 @@ jobs:
               raise SystemExit("labeled issue requires a review report link")
           print(match.group(1) or match.group(2))
           PY
-          )
-          report_reference="${report_values[0]}"
+          )"
           if [[ "$report_reference" == https://github.com/*#issuecomment-* ]]; then
               comment_id="${report_reference##*#issuecomment-}"
               gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
@@ -149,7 +155,8 @@ jobs:
               report_path="$report_reference"
           fi
           # Validate the report first, then prove every update since its reviewed revision.
-          python3 tools/validate_review_evidence.py "$report_path" --pr-body /tmp/pr-body.md
+          python3 tools/validate_review_evidence.py "$report_path" --pr-body /tmp/pr-body.md \
+              --check-urls
           report_sha="$(python3 - "$report_path" <<'PY'
           import sys
           from tools.validate_review_evidence import _field
@@ -159,3 +166,37 @@ jobs:
           PY
           )"
           python3 tools/review_evidence_revision.py "$head_sha" --reviewed-revision "$report_sha"
+  frontend-screenshot:
+    name: frontend-screenshot
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Require a screenshot when the PR changes screen code
+        env:
+          EVENT_PATH: ${{ github.event_path }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # The diff decides, not a label on the issue (#5310): a frontend change on
+          # an unlabelled issue used to reach main with no picture.
+          git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > /tmp/changed.txt
+          python3 - <<'PY'
+          import json
+          import os
+
+          from tools.validate_review_evidence import frontend_screenshot_errors
+
+          with open(os.environ["EVENT_PATH"], encoding="utf-8") as stream:
+              body = json.load(stream)["pull_request"].get("body") or ""
+          with open("/tmp/changed.txt", encoding="utf-8") as stream:
+              changed = [line.strip() for line in stream if line.strip()]
+          errors = frontend_screenshot_errors(body, changed, os.environ["GITHUB_REPOSITORY"])
+          for error in errors:
+              print(f"::error::{error}")
+          if errors:
+              raise SystemExit(1)
+          print("screenshot check passed")
+          PY

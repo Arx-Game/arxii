@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import argparse
+from http import HTTPStatus
 from pathlib import Path
 import re
 import sys
+import urllib.error
+import urllib.request
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _PLACEHOLDER = re.compile(r"(?:TBD|TODO|FILL[- ]?ME|<[^>]+>)", re.IGNORECASE)
@@ -27,6 +30,7 @@ _REQUIRED_FIELDS = (
     "Overall outcome",
 )
 _LEDGER_COLUMNS = 4
+_LISTED_SCREENS = 5
 _UNRESOLVED_HEADING = "## unresolved findings"
 _ISSUE_LINK = re.compile(r"^(Refs|Closes)\s+#([0-9]+)\.?\s*$", re.MULTILINE)
 # `^` (not `\A`) so the line can appear anywhere in the body, not only as the
@@ -37,6 +41,18 @@ _DEPENDABOT_LOGINS = frozenset({"dependabot[bot]", "dependabot-preview[bot]"})
 # The PR body's report reference: a backtick-wrapped repository path, or a bare
 # https URL. The review-evidence workflow imports this rather than copying it.
 REPORT_LINE = re.compile(r"^- Report: (?:`([^`]+)`|(https://\S+))$", re.MULTILINE)
+# A chore or dependency PR that closes no issue says why on a line of its own (#5310).
+_NO_ISSUE_LINE = re.compile(r"^No issue:\s*(.+)$", re.MULTILINE)
+# A frontend PR that changes no screen says so instead of attaching a picture (#5310).
+_NO_VISUAL_CHANGE_LINE = re.compile(r"^No visual change:\s*(.+)$", re.MULTILINE)
+_MARKDOWN_IMAGE = re.compile(r"!\[[^\]]*\]\((https://[^)\s]+)\)")
+_HTML_IMAGE = re.compile(r"<img\b[^>]*\bsrc=\"(https://[^\"]+)\"", re.IGNORECASE)
+# Hosts where GitHub stores images dragged into a comment or PR body.
+_GITHUB_ATTACHMENT_HOSTS = (
+    "https://github.com/user-attachments/",
+    "https://user-images.githubusercontent.com/",
+    "https://private-user-images.githubusercontent.com/",
+)
 
 
 def linked_issue_number(body: str) -> str | None:
@@ -59,6 +75,84 @@ def closing_issue_number(body: str) -> str | None:
 def is_dependabot_login(login: str | None) -> bool:
     """Return whether a pull-request author is a Dependabot account."""
     return login in _DEPENDABOT_LOGINS
+
+
+def _stated_reason(body: str, pattern: re.Pattern[str]) -> str | None:
+    match = pattern.search(body)
+    if not match:
+        return None
+    reason = match.group(1).strip()
+    return reason if _usable(reason) else None
+
+
+def no_issue_reason(body: str) -> str | None:
+    """Return the reason a chore or dependency PR closes no issue, if it states one (#5310)."""
+    return _stated_reason(body, _NO_ISSUE_LINE)
+
+
+def no_visual_change_reason(body: str) -> str | None:
+    """Return the reason a frontend PR carries no screenshot, if it states one (#5310)."""
+    return _stated_reason(body, _NO_VISUAL_CHANGE_LINE)
+
+
+def hosted_image_urls(body: str, repository: str) -> list[str]:
+    """Return the images in a PR body that GitHub hosts for this repository.
+
+    Only these count as evidence of what a screen looks like: a badge from a bot
+    or an outside host is an image too, and the SonarCloud comment carries one.
+    """
+    urls = _MARKDOWN_IMAGE.findall(body) + _HTML_IMAGE.findall(body)
+    own_raw = f"https://raw.githubusercontent.com/{repository}/"
+    return [url for url in urls if url.startswith((own_raw, *_GITHUB_ATTACHMENT_HOSTS))]
+
+
+def unreachable_images(urls: list[str], timeout: float = 15.0) -> list[str]:
+    """Return each URL that does not answer 200 with an image content type."""
+    failures: list[str] = []
+    for url in urls:
+        request = urllib.request.Request(url, method="HEAD")  # noqa: S310 - https only
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+                kind = response.headers.get("Content-Type", "")
+                if response.status != HTTPStatus.OK or not kind.startswith("image/"):
+                    failures.append(f"{url} ({response.status}, {kind or 'no type'})")
+        except (urllib.error.URLError, TimeoutError) as error:
+            failures.append(f"{url} ({error})")
+    return failures
+
+
+def frontend_screenshot_errors(body: str, changed: list[str], repository: str) -> list[str]:
+    """Return errors when a PR changes a screen and shows no picture of it (#5310).
+
+    A change to non-test ``frontend/src/**/*.tsx`` needs an image hosted on GitHub
+    in the PR body, or a ``No visual change: <reason>`` line.
+    """
+    screens = [path for path in changed if is_screen_file(path)]
+    if not screens:
+        return []
+    if no_visual_change_reason(body) is not None:
+        return []
+    images = hosted_image_urls(body, repository)
+    if not images:
+        listed = ", ".join(screens[:_LISTED_SCREENS])
+        if len(screens) > _LISTED_SCREENS:
+            listed += " ..."
+        return [
+            f"this PR changes screen code ({listed}) and its body shows no screenshot. "
+            "Take one with `just shot` and post it with `just shot-post`, then paste the "
+            "printed Markdown into the PR body; or add a line "
+            "`No visual change: <reason>`."
+        ]
+    return [f"screenshot does not load: {failure}" for failure in unreachable_images(images)]
+
+
+def is_screen_file(path: str) -> bool:
+    """Return whether a changed path is frontend screen code rather than a test."""
+    if not path.startswith("frontend/src/") or not path.endswith(".tsx"):
+        return False
+    if path.startswith("frontend/src/test/") or "/__tests__/" in path:
+        return False
+    return not path.endswith((".test.tsx", ".spec.tsx", ".stories.tsx"))
 
 
 def _field(lines: list[str], label: str) -> str:
@@ -157,11 +251,14 @@ def _validate_fields(fields: dict[str, str], expected_revision: str | None) -> l
     return errors
 
 
-def _validate_screenshot_refs(screenshots: str) -> list[str]:
+def _validate_screenshot_refs(screenshots: str, *, check_urls: bool = False) -> list[str]:
     errors: list[str] = []
     image_refs = re.findall(r"!\[[^]]*\]\(([^)]+)\)", screenshots)
     if not image_refs:
         return ["screenshots must include at least one Markdown image"]
+    urls = [reference for reference in image_refs if reference.startswith("https://")]
+    if check_urls:
+        errors.extend(f"screenshot does not load: {bad}" for bad in unreachable_images(urls))
     for reference in image_refs:
         if reference.startswith(("http://", "https://")):
             continue
@@ -227,7 +324,9 @@ def _validate_visual_checklist(lines: list[str]) -> list[str]:
     return errors
 
 
-def _validate_visual_fields(fields: dict[str, str], lines: list[str]) -> list[str]:
+def _validate_visual_fields(
+    fields: dict[str, str], lines: list[str], *, check_urls: bool = False
+) -> list[str]:
     visual = fields["Visual review"].lower()
     verdict = fields["Visual verdict"].strip(" `").upper()
     screenshots = fields["Screenshots"]
@@ -242,7 +341,7 @@ def _validate_visual_fields(fields: dict[str, str], lines: list[str]) -> list[st
         errors.append("completed visual review requires actual screenshot paths or URLs")
     if _PLACEHOLDER.search(screenshots):
         errors.append("screenshot field contains a placeholder")
-    errors.extend(_validate_screenshot_refs(screenshots))
+    errors.extend(_validate_screenshot_refs(screenshots, check_urls=check_urls))
     errors.extend(_validate_visual_checklist(lines))
     return errors
 
@@ -263,8 +362,14 @@ def _validate_unresolved(lines: list[str]) -> list[str]:
     return ["unresolved findings must be empty before an overall PASS"] if unresolved else []
 
 
-def validate_report(path: Path, expected_revision: str | None = None) -> list[str]:
-    """Return validation errors for a review evidence report."""
+def validate_report(
+    path: Path, expected_revision: str | None = None, *, check_urls: bool = False
+) -> list[str]:
+    """Return validation errors for a review evidence report.
+
+    ``check_urls`` also fetches each https screenshot and requires an image back;
+    CI sets it, because a link that 404s still matches the Markdown pattern.
+    """
     if not path.is_file():
         return [f"evidence report does not exist: {path}"]
     text = path.read_text(encoding="utf-8")
@@ -274,7 +379,7 @@ def validate_report(path: Path, expected_revision: str | None = None) -> list[st
         errors.append("report must start with '# Review evidence'")
     fields = {label: _field(lines, label) for label in _REQUIRED_FIELDS}
     errors.extend(_validate_fields(fields, expected_revision))
-    errors.extend(_validate_visual_fields(fields, lines))
+    errors.extend(_validate_visual_fields(fields, lines, check_urls=check_urls))
     errors.extend(_validate_unresolved(lines))
     ledger_errors, statuses = _ledger_rows(lines)
     errors.extend(ledger_errors)
@@ -288,8 +393,11 @@ def main() -> int:
     parser.add_argument("report", type=Path)
     parser.add_argument("--revision", help="require the report to name this commit")
     parser.add_argument("--pr-body", type=Path, help="also validate a PR body file")
+    parser.add_argument(
+        "--check-urls", action="store_true", help="require every https screenshot to load"
+    )
     args = parser.parse_args()
-    errors = validate_report(args.report, args.revision)
+    errors = validate_report(args.report, args.revision, check_urls=args.check_urls)
     if args.pr_body:
         errors.extend(validate_pr_body(args.pr_body.read_text(encoding="utf-8")))
     if errors:
