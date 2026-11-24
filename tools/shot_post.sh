@@ -47,7 +47,8 @@ for png in "$@"; do
   size="$(stat -c %s "$png")"
   (( size <= MAX_BYTES )) || { echo "ERROR: over 5 MB: $png" >&2; exit 1; }
   index=$((index + 1))
-  base="$(basename "$png" .png | tr -c 'A-Za-z0-9._-' '-' | sed 's/-*$//')"
+  # `just shot` already numbers its files; renumber across this post instead.
+  base="$(basename "$png" .png | sed -E 's/^[0-9]+-//' | tr -c 'A-Za-z0-9._-' '-' | sed 's/-*$//')"
   name="$(printf '%02d-%s.png' "$index" "$base")"
   blob="$(git hash-object -w -- "$png")"
   entries+="$(printf '100644 blob %s\t%s' "$blob" "$name")"$'\n'
