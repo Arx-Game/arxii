@@ -183,6 +183,8 @@ class AuraAffinityAtTheAcademy(_AcademyCourseCase):
                 "kindled_boost_percent": self.dawn.kindled_boost_percent,
                 "learn_rate_percent": self.dawn.learn_rate_percent,
                 "ritual_partner_fatigue": self.dawn.ritual_partner_fatigue,
+                # The spend floor (#5308) is a required percentage too; 0 sets no floor.
+                "spend_worth_floor_percent": self.dawn.spend_worth_floor_percent,
                 # The page carries the affinity's kindling situations inline (#5124); a
                 # browser posts the inline's management form with an empty set of rows.
                 "kindling_situations-TOTAL_FORMS": "0",
