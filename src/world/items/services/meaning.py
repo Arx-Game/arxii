@@ -314,19 +314,15 @@ def _resonance_fed(
     for row in (*accrued, *legacy):
         totals[row["resonance_id"]] = totals.get(row["resonance_id"], 0) + row["total"]
         names[row["resonance_id"]] = row["resonance__name"]
-    fed = [
-        {"resonance_id": pk, "resonance__name": names[pk], "total": total}
-        for pk, total in totals.items()
-    ]
     per_point = max(config.resonance_fed_per_point, 1)
     points = 0
     parts: list[str] = []
-    for row in fed:
-        favored = tiers[row["resonance_id"]] == BeingResonanceTier.FAVORED
-        earned = (row["total"] // per_point) * (2 if favored else 1)
+    for resonance_id, total in totals.items():
+        favored = tiers[resonance_id] == BeingResonanceTier.FAVORED
+        earned = (total // per_point) * (2 if favored else 1)
         if earned > 0:
             points += earned
-            parts.append(f"{row['total']} {row['resonance__name']}{', favored' if favored else ''}")
+            parts.append(f"{total} {names[resonance_id]}{', favored' if favored else ''}")
     points = min(points, config.resonance_fed_max_points)
     if points <= 0:
         return None
