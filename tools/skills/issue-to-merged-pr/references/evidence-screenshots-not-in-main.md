@@ -1,132 +1,84 @@
-# Review-evidence screenshots don't belong in `main`'s history
+# Screenshots live on refs/evidence, never on a branch
 
-`PR_EVIDENCE_FILE` supports a repository path (`open-pr.sh`'s docstring calls it
-"a scratch path" too, but a scratch path fails once the agent's session/worktree
-is gone — the file has to be *somewhere durable* for CI to fetch it on later
-pushes, and for a human to read it after). The obvious durable choice is
-committing the report + screenshots into the feature branch. **Don't leave them
-there through to merge.** They exist only to satisfy this review pass, not as
-permanent documentation of the feature — committing them means every future
-`git log`/`git blame`/checkout of `main` carries megabytes of PNGs and a report
-whose only readers were CI and one human review. Two sibling sessions hit this
-independently on the same day (#3759, #3760) before either had asked the
-question.
+A screenshot of the running app belongs on the PR, where a reviewer looks, and
+nowhere in the PR's branch. Since #5310 there is one way to put it there:
 
-## The move
+```bash
+just shot /characters/1/sheet /roster            # from the worktree, by the coordinator
+just shot-post <pr-or-issue> frontend/test-results/shots/<stamp>/*.png
+```
 
-**Reachability warning:** a raw URL is only as durable as the commit that contains
-its blob. Do not amend, rebase, or force-push the branch after publishing image
-URLs; those operations can orphan the upload commit and make GitHub return 404
-from `raw.githubusercontent.com`, even while the old issue comment remains visible.
-Publish screenshots only after the code/history is stable. If the branch must be
-rewritten, re-upload the images afterward and verify every final URL with HTTP
-200 plus `image/png` before editing the report comment.
+`just shot` (`tools/shot.sh`) runs this worktree's own server on its own port block
+(4100-4106) and its own `rt_<issue>` database, under the container-wide heavy-work
+lock, and saves one full-page PNG per path (or runs a spec with `--spec`). See the
+`real-testing` skill.
 
-1. Do the whole evidence pass as normal: commit the report + screenshots to the
-   branch, push, let `open-pr.sh`/CI validate against them (`PR_EVIDENCE_FILE`
-   pointing at the committed path). This is the easiest way to iterate — local
-   files, normal `git diff`, no new external moving parts while you're still
-   fixing findings.
-2. Once the report is final (verdicts settled, nothing left to fix), **before
-   opening the PR or as a follow-up commit on an already-open one**, post the
-   report **as a comment on the PR itself** (`gh pr comment <N> --body-file`)
-   — not the issue. The PR is where a reviewer and CI both actually look;
-   `validate_review_evidence.py`'s regex accepts an issue-comment URL too
-   (`.../issues/*#issuecomment-*`), but that's a fallback for when no PR
-   exists yet, not the default. (#3759's first attempt at this posted only to
-   the issue, on a literal reading of an early instruction to do that — the
-   PR then had no evidence comment at all, which is confusing to anyone
-   reviewing the PR directly and doesn't match this convention. #3760 got it
-   right the first time: evidence comment on the PR, from the start.) Before
-   posting, rewrite the report's screenshot links from repo-relative paths to
-   `https://raw.githubusercontent.com/<owner>/<repo>/<full-40-char-commit-sha>/<path>`
-   — the SHA of the commit that has the files right now (verify at least one
-   resolves: `curl -sI <url>` should return `200` and `content-type: image/…`,
-   not `curl -sI`'s silent everything-looks-fine-when-it-isn't habit on a
-   redirect-to-404). This works, and keeps working, **only while the upload commit remains reachable
-   from the open PR's refs**. A normal fast-forward removal commit preserves that
-   ancestry, but a later amend, rebase, or force-push can orphan it and make the
-   raw URL return 404. After posting, confirm the images actually
-   rendered (don't just trust the markdown syntax): `gh api
-   repos/<owner>/<repo>/issues/comments/<id> -H "Accept:
-   application/vnd.github.html+json" --jq .body_html | grep -c '<img'` should
-   match the number of screenshots you linked.
-3. Get the new comment's URL, then switch `PR_EVIDENCE_FILE` to `PR_EVIDENCE_URL`
-   pointing at it (or edit the PR body's `- Report:` line directly with
-   `gh api -X PATCH` — `gh pr edit --body-file` is known to silently fail on
-   this repo). Validate locally before patching:
-   `uv run python tools/validate_review_evidence.py <(gh api
-   repos/<owner>/<repo>/issues/comments/<id> --jq .body) --revision <sha>
-   --pr-body <(gh pr view <N> --json body --jq .body)` (with the edited body,
-   not the live one, if you haven't patched yet) — this is the exact check
-   CI runs; don't push and find out.
-4. `git rm` the local report + screenshots directory, commit, and make a normal
-   fast-forward push (never `git push --force` after the URLs are published). Since
-   `main` only ever receives a **squash-merge's tree snapshot at the PR's
-   final tip**, this removal commit is what decides what lands in `main` —
-   the earlier commits where the files still existed are simply never part of
-   `main`'s history, even though they're still reachable (and the raw URLs
-   still resolve) via the PR's own ref.
+`just shot-post` (`tools/shot_post.sh`) stores the PNGs on an orphan commit made with
+git plumbing and pushes it to `refs/evidence/<number>/<stamp>`. It checks every image
+link answers 200 with `image/png`, adds the images to its one comment on the PR (or
+issue), and prints the Markdown. **Paste that Markdown into the PR body**: the
+`frontend-screenshot` job in `spec-evidence.yml` requires an image this repository
+hosts in the body of any PR that changes non-test `frontend/src/**/*.tsx`, unless the
+body has a line `No visual change: <reason>`.
 
-## Evidence revision after cleanup
+## Why a ref, not the branch
+
+Until #5310 the images were committed to the PR branch (by hand or through the
+Contents API), linked by the upload commit's SHA, and then removed with a `git rm`
+commit. Every step of that cost something:
+
+- each upload commit restarted CI and changed the PR's head, so "green on the
+  current head" had to be earned again;
+- the local worktree fell behind origin, which invited the force-push that orphans
+  the upload commit and breaks the image links;
+- `review-evidence-not-committed` failed on every push until the removal commit
+  (nine of the last fourteen failed evidence jobs before #5310 were this step).
+
+A commit under `refs/evidence/` is reachable from a ref no one rebases, no workflow
+watches (`push` triggers name `main` only), and a clone does not fetch by default.
+`raw.githubusercontent.com/<owner>/<repo>/<sha>/<file>` serves its files the same
+as a branch commit's (checked 2026-11-24). The pre-push hook skips a push whose refs
+are all under `refs/evidence/`, because pre-commit would otherwise run every hook
+over the whole repository for a commit with no common ancestor.
+
+**Never delete an evidence ref.** A merged PR's screenshots are linked through it.
+
+The `review-evidence-not-committed` job stays: a file under `docs/reviews/` or
+`.github/issue-evidence/` on the branch still fails it.
+
+## The review report
+
+The demo-fidelity report (`# Review evidence ...`) goes in a PR comment (or an issue
+comment, before the PR exists), with its screenshots linked as `just shot-post`
+printed them. Point the PR body's `- Report:` line at that comment's URL
+(`PR_EVIDENCE_URL` for `open-pr.sh`). CI runs `validate_review_evidence.py
+--check-urls`, so a screenshot link that does not load fails the check.
 
 Record the exact commit that was reviewed in the report. The evidence gate carries
-that report across later commits that cannot change what a screen renders. These
-are commits that touch only the temporary evidence directories, test files
-(`src/integration_tests/`, any `tests/` directory under `src/` or `tools/`,
-`frontend/e2e/`, `frontend/src/test/`, frontend `*.test.ts` and `*.test.tsx`
-files, frontend `__tests__/` directories), documents (`docs/` and any `*.md`
-file) or `.github/`. They also include clean main merges the gate reproduces, and
-merges of main that renumber the branch's migrations, whether the migration bot or
-a person made them, when the gate rebuilds the identical tree from the trusted
-transformer. A person gets that tree by running `just migration-rebase-like-bot`
-when `max_migration.txt` is the only conflict; a merge made with
-`arx manage rebase_migration arxii` is not byte-identical to it and needs a fresh
-review. A commit that touches any other path changes application code and
-requires a fresh review and an updated report, as does a merge of main whose
-conflict resolution is anything beyond that renumbering. Changing the revision in
-a report is not a substitute for review.
+that report across later commits that cannot change what a screen renders: commits
+that touch only test files (`src/integration_tests/`, any `tests/` directory under
+`src/` or `tools/`, `frontend/e2e/`, `frontend/src/test/`, frontend `*.test.ts` and
+`*.test.tsx` files, frontend `__tests__/` directories), documents (`docs/` and any
+`*.md` file) or `.github/`. It also carries it across clean main merges the gate
+reproduces, and merges of main that renumber the branch's migrations, whether the
+migration bot or a person made them, when the gate rebuilds the identical tree from
+the trusted transformer. A person gets that tree by running
+`just migration-rebase-like-bot` when `max_migration.txt` is the only conflict; a
+merge made with `arx manage rebase_migration arxii` is not byte-identical to it and
+needs a fresh review. A commit that touches any other path changes application code
+and requires a fresh review and an updated report, as does a merge of main whose
+conflict resolution is anything beyond that renumbering. Changing the revision in a
+report is not a substitute for review. Retaking the screenshots is one `just shot`
+and one `just shot-post`.
 
-## Why not a gist, why not GitHub's own image upload
+## Why not a gist, GitHub's own image upload, or release assets
 
-Tried first (2026-09-11, #3759): `gh gist create` failed with `HTTP 403:
-Resource not accessible by personal access token` — this repo's agents run
-under a fine-grained PAT scoped to `Arx-Game/arxii` specifically, with no
-account-wide `gist` permission; getting one requires a maintainer to grant it
-by hand. The web UI's drag-and-drop image paste (what actually embeds an image
-directly in a comment, independent of any commit) goes through a private,
-session-authenticated upload endpoint — not any documented public REST/GraphQL
-API surface, not reachable from `gh api` under any PAT scope. If GitHub ever
-ships a real public API for that, switch to it — it would be strictly better
-(no dependence on a specific commit's retention at all). Until then, the
-raw-URL-at-commit-SHA technique above needs no new permissions and no new
-external service, which is why it's the default here.
+`gh gist create` fails with `HTTP 403: Resource not accessible by personal access
+token` (2026-09-11, #3759): the agents' PAT is scoped to this repository. The web
+UI's drag-and-drop upload goes through a session-authenticated endpoint that no
+public API reaches. Release assets are mutable and clutter the public Releases page.
+An orphan branch would be fetched by every clone. A separate public evidence
+repository would also work, but needs a maintainer to grant the PAT access to it.
 
-## Posting images before a PR exists
-
-A design/demo reviewer may need to see screenshots on the **issue** while the
-spec is still waiting for approval. GitHub's web comment uploader is not
-available through the repository-scoped PAT, so use the same immutable-content
-approach before a PR exists:
-
-1. Push the feature branch once so it exists on `origin`:
-   `git push --set-upstream origin <branch>`.
-2. Run `tools/skills/issue-to-merged-pr/scripts/publish-issue-images.sh <issue> <branch> <image>...`.
-   The script verifies a supported image extension, uploads each image through the GitHub
-   Contents API under `.github/issue-evidence/<issue>/`, and posts one issue
-   comment containing Markdown images.
-3. The comment links each image to the full 40-character upload commit SHA at
-   `raw.githubusercontent.com`. Confirm the rendered HTML rather than trusting
-   Markdown alone:
-   `gh api repos/<owner>/<repo>/issues/comments/<id> -H 'Accept: application/vnd.github.html+json' --jq .body_html | grep -c '<img'`.
-4. Keep the upload branch separate from `main` when the images are throwaway.
-   Do not amend/rebase/force-push after this upload; if that is unavoidable,
-   rerun the upload and replace the links. If the feature branch later becomes a PR,
-   the evidence files may be removed
-   before merge; the issue comment still points to the upload commits. Do not
-   upload secrets or player data.
-
-For a safe preview, run `publish-issue-images.sh --dry-run ...` first. The
-remote branch check is intentional: it prevents an accidental upload to a
-misspelled branch. This path is for review/demo images only; it does not replace
-the required visual reviewer or its evidence report.
+Do not upload secrets or player data. `just shot` refuses to run in the main
+checkout, whose database is the shared dev copy of production content.
