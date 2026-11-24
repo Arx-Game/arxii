@@ -141,6 +141,9 @@ else
   log "frontend unchanged since the last build; reusing it"
 fi
 
+# The browser build this worktree's Playwright expects; a no-op once it is there.
+pnpm --dir frontend exec playwright install chromium >&2
+
 started=0
 # shellcheck disable=SC2317  # called by the trap below
 cleanup() {
@@ -175,6 +178,10 @@ if [[ -n "$spec" ]]; then
     --workers=1 --output "$out/spec") >&2 || status=$?
   find "$out/spec" -name '*.png' >&2 || true
 fi
-log "screenshots are in $out"
-log "post them with: just shot-post <pr-or-issue> $out/*.png"
+if (( status == 0 )); then
+  log "screenshots are in $out"
+  log "post them with: just shot-post <pr-or-issue> $out/*.png"
+else
+  log "FAILED with exit $status; whatever was saved is in $out"
+fi
 exit "$status"
