@@ -1,0 +1,165 @@
+== Resonance ledger (every row), rt_5308 ==
+ id  | sheet |   res   | amount |      source      | bonus_percent |  bonus_outcome
+-----+-------+---------+--------+------------------+---------------+------------------
+   1 |     3 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+   2 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+   3 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+   4 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+   5 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+   6 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+   7 |     3 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+   8 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+   9 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Partial Success
+  10 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  11 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Partial Success
+  12 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  13 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  14 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Partial Success
+  15 |     3 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  16 |     3 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  17 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  18 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  19 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  20 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  21 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  22 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  23 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  24 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  25 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  26 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  27 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  28 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  29 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  30 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  31 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  32 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  33 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  34 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  35 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  36 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  37 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  38 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  39 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  40 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  41 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  42 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  43 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  44 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  45 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  46 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  47 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  48 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  49 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  50 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  51 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  52 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  53 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  54 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  55 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  56 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  57 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  58 |     3 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  59 |     3 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  60 |     3 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  61 |     3 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  62 |     3 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  63 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  64 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  65 |     3 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  66 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  67 |     3 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  68 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  69 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  70 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  71 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  72 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  73 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  74 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  75 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  76 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  77 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  78 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  79 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  80 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  81 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  82 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  83 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  84 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  85 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  86 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  87 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  88 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  89 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  90 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  91 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  92 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  93 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+  94 |     4 | Cruelty |     15 | KINDLED_DEED     |            50 | Critical Success
+  95 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  96 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  97 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  98 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+  99 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+ 100 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+ 101 |     4 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+ 102 |     4 | Cruelty |     10 | KINDLED_DEED     |             0 | Failure
+ 103 |     3 | Mercy   |     20 | POSE_ENDORSEMENT |             0 | Failure
+ 104 |     4 | Hollow  |     25 | POSE_ENDORSEMENT |            25 | Success
+ 105 |     3 | Cruelty |     12 | TRICKLE_HARVEST  |             0 | Failure
+ 106 |     3 | Cruelty |      6 | ANIMA_RITUAL     |             0 | Failure
+ 107 |     3 | Cruelty |     15 | TRICKLE_HARVEST  |            25 | Success
+ 108 |     3 | Cruelty |      7 | ANIMA_RITUAL     |            25 | Success
+ 109 |     3 | Cruelty |     12 | KINDLED_DEED     |            25 | Success
+ 110 |     3 | Cruelty |    375 | KINDLED_CLAIM    |             0 |
+(110 rows)
+
+== Series summary, kindled deeds after the check config was calibrated (id>8): by sheet (3=Mirelle Villainy 30, 4=Aldric no Villainy; accent +20 on Aldric from id 21) ==
+ sheet | before_accent_aldric_series_a | acts | boosted | total
+-------+-------------------------------+------+---------+-------
+     3 | f                             |   27 |      21 |   321
+     4 | f                             |   62 |      44 |   735
+     4 | t                             |    6 |       1 |    62
+(3 rows)
+
+== Trickle accruals ==
+ id | character_sheet_id | resonance_id | amount |     source     | room_profile_id | outfit_item_facet_id |          accrued_at           |         harvested_at
+----+--------------------+--------------+--------+----------------+-----------------+----------------------+-------------------------------+-------------------------------
+  1 |                  3 |            4 |      4 | ROOM_RESIDENCE |               2 |                      | 2026-11-24 02:40:39.908766+00 | 2026-11-24 02:54:59.299718+00
+  2 |                  3 |            4 |      4 | ROOM_RESIDENCE |               2 |                      | 2026-11-24 02:49:09.887862+00 | 2026-11-24 02:54:59.299718+00
+  3 |                  3 |            4 |      4 | ROOM_RESIDENCE |               2 |                      | 2026-11-24 02:49:09.902193+00 | 2026-11-24 02:54:59.299718+00
+  4 |                  3 |            4 |      4 | ROOM_RESIDENCE |               2 |                      | 2026-11-24 02:55:51.318684+00 | 2026-11-24 02:56:25.829714+00
+  5 |                  3 |            4 |      4 | ROOM_RESIDENCE |               2 |                      | 2026-11-24 02:55:51.332914+00 | 2026-11-24 02:56:25.829714+00
+  6 |                  3 |            4 |      4 | ROOM_RESIDENCE |               2 |                      | 2026-11-24 02:55:51.341897+00 | 2026-11-24 02:56:25.829714+00
+(6 rows)
+
+== Pose reach / endorsements ==
+ id | interaction_id |     interaction_timestamp     | resonance_id
+----+----------------+-------------------------------+--------------
+  1 |              1 | 2026-11-24 02:52:32.105456+00 |            5
+  2 |              2 | 2026-11-24 02:53:52.768533+00 |            6
+  3 |              3 | 2026-11-24 02:54:19.923496+00 |            6
+(3 rows)
+
+ id | endorser_sheet_id | endorsee_sheet_id | resonance_id | granted_amount
+----+-------------------+-------------------+--------------+----------------
+  1 |                 4 |                 3 |            5 |             20
+  2 |                 3 |                 4 |            6 |             25
+(2 rows)
+
+== Combat pull (last round's resolved effect) ==
+ pull_id | authored_value | scaled_value
+---------+----------------+--------------
+      13 |             20 |           26
+(1 row)
+
+== Aura shares ==
+ sheet |   name    | percent | settled_percent
+-------+-----------+---------+-----------------
+     3 | Abyssal   |   96.34 |          100.00
+     3 | Celestial |    2.44 |            0.00
+     3 | Primal    |    1.22 |            0.00
+     4 | Abyssal   |   87.09 |            0.00
+     4 | Celestial |   10.33 |          100.00
+     4 | Primal    |    2.58 |            0.00
+     7 | Abyssal   |  100.00 |          100.00
+(7 rows)

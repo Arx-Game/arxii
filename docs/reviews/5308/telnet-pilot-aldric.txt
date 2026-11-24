@@ -1,0 +1,21 @@
+You become Aldric.
+The Lantern
+This is a room.
+Characters: Aldric
+Now controlling Aldric.
+Already controlling Aldric.
+>>> mission resolve 9 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 10 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 11 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 12 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Partial Success.
+>>> resonances
+Cruelty (Abyssal) - Not kindled
+Mercy (Celestial) - Not kindled

@@ -1,0 +1,294 @@
+You become Aldric.
+The Lantern
+This is a room.
+Characters: Aldric
+Now controlling Aldric.
+Already controlling Aldric.
+>>> mission resolve 37 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 38 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 39 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 40 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 41 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 42 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> resonances
+Cruelty (Abyssal) - Not kindled
+Mercy (Celestial) - Not kindled
+You become Aldric.
+The Lantern
+This is a room.
+Characters: Aldric
+Now controlling Aldric.
+Already controlling Aldric.
+>>> mission resolve 43 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Critical Success.
+>>> mission resolve 44 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 13 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 14 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 15 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 16 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> resonances
+Cruelty (Abyssal) - Not kindled
+Mercy (Celestial) - Not kindled
+You become Aldric.
+The Lantern
+This is a room.
+Characters: Aldric
+Now controlling Aldric.
+Already controlling Aldric.
+>>> mission resolve 65 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 66 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 67 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 68 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 69 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 70 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 71 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 72 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 73 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 74 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 75 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 76 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 77 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 78 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 79 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+��
+>>> mission resolve 80 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 81 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 82 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 83 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 84 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> resonances
+Cruelty (Abyssal) - Not kindled
+Mercy (Celestial) - Not kindled
+You become Aldric.
+The Lantern
+This is a room.
+Characters: Aldric
+Now controlling Aldric.
+Already controlling Aldric.
+>>> mission resolve 85 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Critical Success.
+>>> mission resolve 86 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Critical Success.
+>>> mission resolve 87 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 88 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 89 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 90 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 91 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 92 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 93 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 94 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 95 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Critical Success.
+>>> mission resolve 96 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 97 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 98 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 99 1
+��[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 100 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 101 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 102 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 103 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 104 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 105 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Critical Success.
+>>> mission resolve 106 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 107 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 108 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Critical Success.
+>>> mission resolve 109 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 110 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 111 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 112 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 113 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 114 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> resonances
+Cruelty (Abyssal) - Not kindled
+Mercy (Celestial) - Not kindled
+You become Mirelle.
+The Lantern
+This is a room.
+Characters: Mirelle
+Now controlling Mirelle.
+Already controlling Mirelle.
+>>> mission resolve 45 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 46 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 47 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Critical Success.
+>>> mission resolve 48 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 49 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 50 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 51 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 52 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 53 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 54 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 55 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 56 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 57 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 58 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 59 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+Outcome: Failure.
+��
+>>> mission resolve 60 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 61 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Failure.
+>>> mission resolve 62 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 63 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> mission resolve 64 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+Outcome: Success.
+>>> resonances
+Cruelty (Abyssal) - Not kindled
+  4 waiting for your anima ritual
+Hollow (Primal) - Not kindled
