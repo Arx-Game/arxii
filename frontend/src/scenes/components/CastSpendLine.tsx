@@ -41,6 +41,22 @@ export function CastFocusLines({ result }: { result: CastResultPayload }) {
 }
 
 /**
+ * What the caster's affinity check made the cast worth (#5308): the server's own sentence, the
+ * one telnet prints. Nothing when every worth was 100 percent.
+ */
+export function CastWorthLine({ result }: { result: CastResultPayload }) {
+  const line = result.technique_result?.worth_line ?? '';
+  if (line === '') {
+    return null;
+  }
+  return (
+    <p className="text-xs" data-testid="cast-worth-line">
+      {line}
+    </p>
+  );
+}
+
+/**
  * The sentence above the power ledger when a cast worked in a kindled resonance was made
  * stronger by it (#5231, Screen 4 of the demo). It reads the resonance's name from the option
  * the caster cast in, and shows only while the ledger carries the kindled cast power line, so

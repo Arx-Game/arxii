@@ -5039,7 +5039,9 @@ an affinity twice. Previews (`preview_resonance_pull`, `cast_resonance_options`)
 `worth_clause(result.worth_by_affinity)` to their "pulled" line. `TechniqueUseResult.worth_by_affinity` carries
 the cast's own worth (one affinity, empty when nothing rolled), and the telnet standalone cast
 (`actions/definitions/cast.py`) appends `worth_clause(...)` of it to the actor's "Your technique resolves." line,
-so the one roll that scaled the cast's pull and its kindled power is told to the caster alone. Three paths roll the
+and the web standalone cast carries the same sentence as `technique_result.worth_line` (blank when every worth is
+100), which the cast card shows to the caster only, so the one roll that scaled the cast's pull and its
+kindled power is told to the caster alone. Three paths roll the
 worth and tell no one, because the only line the actor reads there is a scene-wide or round-wide pose or the
 declaration's acknowledgement carries no outcome: a social action's pull (`_charge_social_pull` in
 `scenes/action_services.py`, whose outcome line is the scene's), a combat cast's pull committed at declaration

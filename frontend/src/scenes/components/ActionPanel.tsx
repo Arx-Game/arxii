@@ -26,7 +26,7 @@ import { PowerLedgerPanel } from '@/magic/components/PowerLedgerPanel';
 import { SurroundingsLines } from '@/magic/components/SurroundingsLines';
 import { CastResonancePicker } from '@/magic/components/CastResonancePicker';
 import { GiftCallUpRow } from './GiftCallUpRow';
-import { CastFocusLines, CastKindledLine, CastSpendLine } from './CastSpendLine';
+import { CastFocusLines, CastKindledLine, CastSpendLine, CastWorthLine } from './CastSpendLine';
 import { TechniqueEffectSummaryDisplay } from '@/magic/components/TechniqueEffectSummary';
 import { ThreadPullPicker } from '@/magic/components/threads/ThreadPullPicker';
 import { PullBurnInput } from '@/magic/components/threads/PullBurnInput';
@@ -822,6 +822,7 @@ export function ActionPanel({ sceneId }: Props) {
                     <div className="space-y-2" data-testid="cast-ledger-result">
                       <CastSpendLine result={castLedgerResult.result} />
                       <CastFocusLines result={castLedgerResult.result} />
+                      <CastWorthLine result={castLedgerResult.result} />
                       <CastKindledLine
                         resonanceName={castKindledResonance}
                         ledger={castLedgerResult.result.power_ledger}
