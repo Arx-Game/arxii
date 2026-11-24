@@ -4655,7 +4655,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consumer="world/checks/services.py perform_check() with magic skill extra_traits",
             consequence=(
                 "A magical roll on that check type counts the Magic skill twice when the "
-                "magic skill settings add it too."
+                "magic skill settings add it too. The same holds for the bonus resonance "
+                "check (it adds the affinity's skill) and the settling rite's check."
             ),
             probe=CustomProbe(fn=_probe_check_types_weight_no_magic_skill),
             admin_model="CheckType",

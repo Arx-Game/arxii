@@ -22,9 +22,29 @@ from world.traits.constants import TraitType
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckOutcome, CheckType
+    from world.skills.models import Skill
     from world.traits.models import Trait
 
 FULL_WORTH_PERCENT = 100
+
+
+def active_affinity_skill(affinity: Affinity) -> Skill | None:
+    """The skill of ``affinity`` when it has one and staff have not switched it off, else None.
+
+    An inactive skill is off everywhere a magical roll names a skill, so the affinity's roll and
+    the lines that name its skill both read it through here.
+    """
+    skill = affinity.skill
+    return skill if skill is not None and skill.is_active else None
+
+
+def affinity_skill_terms(affinity: Affinity) -> tuple[ExtraTraitTerm, ...]:
+    """The affinity's skill as the one extra term a roll carries, or none (#5308).
+
+    None when staff linked no skill to the affinity or the skill is inactive.
+    """
+    skill = active_affinity_skill(affinity)
+    return (ExtraTraitTerm(trait=skill, weight=Decimal(1)),) if skill is not None else ()
 
 
 def act_stat(check_type: CheckType) -> Trait | None:
@@ -69,15 +89,12 @@ def _roll_bonus_check(
         return None
     if stat is None and source is not None:
         stat = _source_stat(source)
-    extra_traits = (
-        (ExtraTraitTerm(trait=affinity.skill, weight=Decimal(1)),) if affinity.skill_id else ()
-    )
     result = perform_check(
         sheet.character,
         check_type=cfg.bonus_check_type,
         target_difficulty=difficulty_points(cfg.bonus_difficulty_level),
         stat_override=stat.name if stat is not None else None,
-        extra_traits=extra_traits,
+        extra_traits=affinity_skill_terms(affinity),
     )
     return result.outcome
 
@@ -142,7 +159,7 @@ def worth_clause(worth_by_affinity: Mapping[int, int]) -> str:
         return ""
     affinities = Affinity.objects.filter(pk__in=changed).select_related("skill").order_by("pk")
     return " ".join(
-        f"Your {a.skill.name if a.skill_id else a.name} check made it worth "
+        f"Your {skill.name if skill is not None else a.name} check made it worth "
         f"{changed[a.pk]} percent."
-        for a in affinities
+        for a, skill in ((a, active_affinity_skill(a)) for a in affinities)
     )

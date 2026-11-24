@@ -67,6 +67,7 @@ from world.magic.services.drift import (
 from world.magic.services.mire_settling import apply_burden, apply_fall
 from world.magic.services.reflection import SUCCUMBED_WHAT_RELATED, deed_what
 from world.magic.services.resonance import grant_resonance
+from world.magic.services.resonance_checks import affinity_skill_terms
 from world.magic.services.ritual_components import (
     resolve_ritual_components,
     target_resonance_meaning_bar,
@@ -643,10 +644,9 @@ def _apply_fall(
 
 def _target_skill_terms(target: Resonance | None) -> tuple[ExtraTraitTerm, ...]:
     """The skill of the affinity a conversion turns toward, as the one extra term the rite's
-    roll carries (#5308); none when it turns nowhere or staff linked no skill to the affinity."""
-    if target is None or not target.affinity.skill_id:
-        return ()
-    return (ExtraTraitTerm(trait=target.affinity.skill, weight=Decimal(1)),)
+    roll carries (#5308); none when it turns nowhere, the affinity has no skill, or the skill is
+    inactive."""
+    return affinity_skill_terms(target.affinity) if target is not None else ()
 
 
 @transaction.atomic

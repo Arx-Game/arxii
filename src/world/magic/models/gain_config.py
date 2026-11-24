@@ -91,10 +91,23 @@ class ResonanceGainConfig(SharedMemoryModel):
         return f"ResonanceGainConfig (pk={self.pk})"
 
     def clean(self) -> None:
-        """The bonus check weighs exactly one stat, so the act's own stat can replace it."""
+        """The bonus check weighs exactly one stat, so the act's own stat can replace it, and
+        no skill, because the roll adds the affinity's skill itself and a weighted one would
+        count twice."""
         super().clean()
         if self.bonus_check_type_id is None:
             return
+        if any(
+            ctt.trait.trait_type == TraitType.SKILL for ctt in self.bonus_check_type.traits.all()
+        ):
+            raise ValidationError(
+                {
+                    "bonus_check_type": (
+                        "The bonus check must weigh no skill: the roll adds the affinity's "
+                        "skill itself, so a skill on the check type would count twice."
+                    )
+                }
+            )
         stat_weights = [
             ctt
             for ctt in self.bonus_check_type.traits.all()

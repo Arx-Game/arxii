@@ -44,7 +44,7 @@ from world.magic.models import (
 from world.magic.services.anima import ritual_succeeded
 from world.magic.services.kindling import kindled_for, kindling_context_for
 from world.magic.services.resonance import grant_resonance
-from world.magic.services.resonance_checks import roll_gain_bonus
+from world.magic.services.resonance_checks import active_affinity_skill, roll_gain_bonus
 from world.magic.types.resonance_checks import NO_GAIN_BONUS, GainBonus
 from world.magic.types.ritual import HarvestedTrickle, RitualBond, RitualEarningParts
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -398,7 +398,7 @@ def _harvest_sentence(harvest: HarvestedTrickle) -> str:
     your days arrived. Your Villainy check added 30 percent."; the second sentence only when
     the check added something and the affinity has a skill."""
     sentence = f" {harvest.amount} {harvest.resonance.name} waiting from your days arrived."
-    skill = harvest.resonance.affinity.skill
+    skill = active_affinity_skill(harvest.resonance.affinity)
     if harvest.bonus_percent > 0 and skill is not None:
         sentence += f" Your {skill.name} check added {harvest.bonus_percent} percent."
     return sentence
