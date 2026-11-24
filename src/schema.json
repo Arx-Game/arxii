@@ -90560,8 +90560,11 @@ components:
       - name
     ResonanceGrant:
       type: object
-      description: Read-only serializer for ResonanceGrant audit ledger rows (Spec
-        C Task 25).
+      description: |-
+        Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
+
+        ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
+        no bonus check) say what the bonus check added to ``amount`` (#5308).
       properties:
         id:
           type: integer
@@ -90576,6 +90579,16 @@ components:
         amount:
           type: integer
           readOnly: true
+        bonus_percent:
+          type: integer
+          readOnly: true
+          description: How much the bonus check added to this gain, as a percentage
+            of the amount before it. 0 when none. The amount above already includes
+            it.
+        bonus_outcome:
+          type: string
+          readOnly: true
+          nullable: true
         source:
           allOf:
           - $ref: '#/components/schemas/ResonanceGrantSourceEnum'
@@ -90638,6 +90651,8 @@ components:
           nullable: true
       required:
       - amount
+      - bonus_outcome
+      - bonus_percent
       - character_sheet
       - granted_at
       - id

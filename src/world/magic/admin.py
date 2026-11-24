@@ -2376,6 +2376,7 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
         "character_sheet",
         "resonance",
         "amount",
+        "bonus_percent",
         "source",
         "granted_at",
     )
@@ -2385,6 +2386,8 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
         "character_sheet",
         "resonance",
         "amount",
+        "bonus_percent",
+        "bonus_outcome",
         "source",
         "granted_at",
         "source_room_profile",

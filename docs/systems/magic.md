@@ -4927,7 +4927,7 @@ skill per affinity or a stat per source with no roll of its own is unset.
 | `ResonanceGainConfig.bonus_check_type`, `bonus_difficulty_level` | The check and its difficulty level. `clean()` requires a check type weighing exactly one stat, so the act's stat can stand in for it. Blank turns the whole mechanism off. |
 | `ResonanceCheckAward` (`models/resonance_check.py`) | Staff table, an `OutcomeTierAward`: `gain_bonus_percent` (default 0) grows a gain and `spend_worth_percent` (default 100) sets a pull's worth, per roll result. A result with no row adds 0 and is worth 100. |
 | `ResonanceGainSourceStat` | One row per `GainSource` (unique): the stat the bonus check rolls for a source whose act made no roll of its own. A source with no row rolls the check type's own stat. |
-| `ResonanceGrant.bonus_outcome`, `bonus_percent` | What the check was and what it added to this gain; the recorded `amount` already includes it. |
+| `ResonanceGrant.bonus_outcome`, `bonus_percent` | What the check was and what it added to this gain; the recorded `amount` already includes it. The ledger serializer serves `bonus_percent` and `bonus_outcome` (the tier's name), `resonance history` prints "+15 (Kindled deed, +50% from Villainy)" when `bonus_percent` is above 0, and the admin list shows `bonus_percent`. |
 | `TrickleAccrual` (`models/trickle.py`) | One day's waiting trickle (see "Trickles wait for the anima ritual" below). |
 | `PoseResonanceReach` (`models/endorsement.py`) | The resonance a pose reaches for; one per pose (see "Reaching" below). |
 | `AnimaRitualPerformance.outward_bonus_outcome`, `outward_bonus_percent` | The bonus check result held with the pending outward amount. |

@@ -2216,7 +2216,15 @@ class StylePresentationEndorsementSerializer(serializers.ModelSerializer):
 
 
 class ResonanceGrantSerializer(serializers.ModelSerializer):
-    """Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25)."""
+    """Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
+
+    ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
+    no bonus check) say what the bonus check added to ``amount`` (#5308).
+    """
+
+    bonus_outcome = serializers.CharField(
+        source="bonus_outcome.name", read_only=True, allow_null=True, default=None
+    )
 
     class Meta:
         model = ResonanceGrant
@@ -2225,6 +2233,8 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
             "character_sheet",
             "resonance",
             "amount",
+            "bonus_percent",
+            "bonus_outcome",
             "source",
             "granted_at",
             "source_room_profile",

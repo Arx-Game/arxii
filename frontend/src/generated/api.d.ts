@@ -50856,13 +50856,21 @@ export interface components {
        */
       readonly color_hex: string;
     };
-    /** @description Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25). */
+    /**
+     * @description Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
+     *
+     *     ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
+     *     no bonus check) say what the bonus check added to ``amount`` (#5308).
+     */
     ResonanceGrant: {
       readonly id: number;
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
       readonly resonance: number;
       readonly amount: number;
+      /** @description How much the bonus check added to this gain, as a percentage of the amount before it. 0 when none. The amount above already includes it. */
+      readonly bonus_percent: number;
+      readonly bonus_outcome: string | null;
       /**
        * @description Discriminator. Identifies which source_* FK is populated.
        *

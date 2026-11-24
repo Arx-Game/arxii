@@ -255,7 +255,9 @@ def resonance_grant_history_for_sheet(
     ledger and the telnet ``resonance history`` command. Optionally narrowed to one
     claimed resonance.
     """
-    qs = ResonanceGrant.objects.filter(character_sheet=sheet).select_related("resonance")
+    qs = ResonanceGrant.objects.filter(character_sheet=sheet).select_related(
+        "resonance__affinity__skill"
+    )
     if resonance is not None:
         qs = qs.filter(resonance=resonance)
     return list(qs.order_by("-granted_at")[:limit])
