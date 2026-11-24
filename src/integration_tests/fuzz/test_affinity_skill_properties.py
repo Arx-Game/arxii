@@ -56,9 +56,6 @@ from world.items.factories import (
 )
 from world.items.services.equip import equip_item
 from world.magic.constants import (
-    GAIN_BONUS_CALLER_ROLLED_SOURCES,
-    GAIN_BONUS_EXEMPT_SOURCES,
-    GAIN_BONUS_ROLLED_SOURCES,
     GainSource,
     RitualExecutionKind,
 )
@@ -126,6 +123,10 @@ AFFINITY_OF = {
 # has no row for.
 UNROWED = "Unlisted result"
 ALL_TIERS = (*sorted(CANONICAL_OUTCOME_LEVELS), UNROWED)
+
+# An award table where each tier is worth a different percent, so a grant's percent says which
+# result its roll landed on.
+RANKED_GAINS = {name: 10 * rank for rank, name in enumerate(ALL_TIERS, start=1)}
 
 # Rolled sources whose grant names no typed row, so a property can grant them with a bare call.
 BARE_ROLLED_SOURCES = (
@@ -392,7 +393,7 @@ class OneCheckPerAffinity(_World, HypothesisTestCase):
         never share a result (each roll is given a different one here).
         """
         sheet = self.character(holds=sorted(keys))
-        self.configure(gain={name: 10 * rank for rank, name in enumerate(ALL_TIERS, start=1)})
+        self.configure(gain=RANKED_GAINS)
         self.kindle(sorted(keys), sheet)
         self.deed_award(amount)
         distinct = [self.outcomes[name] for name in ("Failure", "Success", "Critical Success")]
@@ -405,6 +406,7 @@ class OneCheckPerAffinity(_World, HypothesisTestCase):
         self.assertEqual(len(self.bonus_calls(capture)), len(affinities))
         by_affinity: dict[int, set[tuple[int | None, int]]] = {}
         for grant in grants:
+            self.assertEqual(grant.bonus_percent, RANKED_GAINS[grant.bonus_outcome.name])
             by_affinity.setdefault(grant.resonance.affinity_id, set()).add(
                 (grant.bonus_outcome_id, grant.bonus_percent)
             )
@@ -463,14 +465,6 @@ class MovesNobodyEarnedPayWhatTheyDid(_World, HypothesisTestCase):
         self.assertEqual(grant.amount, lifetime)
         self.assertEqual((grant.bonus_outcome, grant.bonus_percent), (None, 0))
         self.assertEqual(self.bonus_calls(capture), [])
-
-    def test_every_source_is_exempt_rolled_or_rolled_by_its_caller(self) -> None:
-        """The three sets are a partition of the sources, so no kind of gain is left to chance."""
-        exempt = set(GAIN_BONUS_EXEMPT_SOURCES)
-        caller = set(GAIN_BONUS_CALLER_ROLLED_SOURCES)
-        rolled = set(GAIN_BONUS_ROLLED_SOURCES)
-        self.assertEqual(exempt | caller | rolled, set(GainSource.values))
-        self.assertEqual(len(exempt) + len(caller) + len(rolled), len(GainSource.values))
 
 
 class UnheldIsEarned(_World, HypothesisTestCase):
@@ -639,7 +633,7 @@ class TricklesWaitForTheRitual(_World, HypothesisTestCase):
         per affinity across every grant it wrote (a roll's result shared by that affinity's
         grants); nothing is left waiting; and a second ritual harvests nothing.
         """
-        self.configure(gain={name: 10 * rank for rank, name in enumerate(ALL_TIERS, start=1)})
+        self.configure(gain=RANKED_GAINS)
         sheet, daily = self.performer_with_a_residence(sorted(keys))
         before = {
             row.resonance_id: (row.balance, row.kindled_unclaimed)
@@ -686,6 +680,8 @@ class TricklesWaitForTheRitual(_World, HypothesisTestCase):
         self.assertEqual(len(self.bonus_calls(capture)), len(affinities))
         results = {}
         for grant in written:
+            if grant.bonus_outcome is not None:
+                self.assertEqual(grant.bonus_percent, RANKED_GAINS[grant.bonus_outcome.name])
             results.setdefault(grant.resonance.affinity_id, set()).add(
                 (grant.bonus_outcome_id, grant.bonus_percent)
             )

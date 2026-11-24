@@ -262,6 +262,14 @@ class _AScene(_Skills, JourneyCase):
             character_sheet=self.mirelle.sheet_data, resonance=self.mercy
         ).first()
 
+    def panel_names(self) -> list[str]:
+        """The resonances Mirelle's "Your resonances" panel lists."""
+        response = self.mirelle_web.get(
+            "/api/magic/kindled-resonances/", {"character_sheet": self.mirelle.sheet_data.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
+        return [row["name"] for row in response.json()["results"]]
+
     def settle(self, *results) -> None:
         """Aldric's week is settled; the bonus check of each grant lands on the next result."""
         with force_check_outcome(*results):
@@ -295,6 +303,9 @@ class AReachedPoseIsEndorsedAndPaysTheReach(_AScene):
         self.assertEqual(self.mercy_row().balance, 30)
         grant = ResonanceGrant.objects.get(source=GainSource.POSE_ENDORSEMENT)
         self.assertEqual((grant.resonance, grant.amount, grant.bonus_percent), (self.mercy, 30, 50))
+        # What she sees: Mercy is on her resonance list, in the panel and on telnet.
+        self.assertIn("Mercy", self.telnet(self.mirelle, "resonances"))
+        self.assertIn("Mercy", self.panel_names())
 
     def test_a_pose_that_reached_for_nothing_asks_the_endorser_which_resonance(self) -> None:
         self.telnet(self.mirelle, "pose lowers the blade and steps back.")
@@ -330,6 +341,8 @@ class AReachedPoseIsEndorsedAndPaysTheReach(_AScene):
         self.settle(self.crit)
 
         self.assertEqual(self.mercy_row().balance, 30)
+        self.assertIn("Mercy", self.panel_names())
+        self.assertIn("Mercy", self.telnet(self.mirelle, "resonances"))
 
 
 class TheVillainsDaysArePiledUpAndHarvestedByHerRitual(_Skills, _RitualWithAPartner):
@@ -356,8 +369,8 @@ class TheVillainsDaysArePiledUpAndHarvestedByHerRitual(_Skills, _RitualWithAPart
         self.assertEqual(self.balance(self.resonance), 0)
 
         self.ask()
-        with force_check_outcome(self.success, self.crit, self.crit) as capture:
-            self.telnet(self.tobin, "accept")
+        self.agree(self.crit, self.crit)
+        capture = self.capture
 
         # Two affinities, two bonus checks: Reflection for the Primal part, Villainy for the
         # Abyssal one and the pile waiting in it.
