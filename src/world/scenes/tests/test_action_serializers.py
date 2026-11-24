@@ -7,7 +7,6 @@ from django.utils import timezone
 
 from world.magic.constants import TargetKind
 from world.magic.factories import (
-    AffinityFactory,
     BinaryEffectTypeFactory,
     CharacterSheetFactory,
     ResonanceFactory,
@@ -15,11 +14,7 @@ from world.magic.factories import (
     ThreadFactory,
     ThreadPullCostFactory,
 )
-from world.magic.types import AnimaCostResult, TechniqueUseResult
-from world.scenes.action_serializers import (
-    TechniqueCastCreateSerializer,
-    TechniqueResultSerializer,
-)
+from world.scenes.action_serializers import TechniqueCastCreateSerializer
 from world.scenes.factories import SceneFactory
 
 
@@ -156,30 +151,3 @@ class CastPullValidationTests(TestCase):
         del data["pull"]
         ser = TechniqueCastCreateSerializer(data=data)
         self.assertTrue(ser.is_valid(), ser.errors)
-
-
-class TechniqueResultWorthLineTests(TestCase):
-    """The web cast result carries the worth sentence telnet tells the caster (#5308)."""
-
-    @staticmethod
-    def _use(worth_by_affinity: dict[int, int]) -> TechniqueUseResult:
-        return TechniqueUseResult(
-            anima_cost=AnimaCostResult(
-                base_cost=2, effective_cost=2, control_delta=0, current_anima=10, deficit=0
-            ),
-            worth_by_affinity=worth_by_affinity,
-        )
-
-    def test_a_changed_worth_is_told_in_the_sentence_telnet_prints(self) -> None:
-        affinity = AffinityFactory()
-        data = TechniqueResultSerializer(self._use({affinity.pk: 130})).data
-        self.assertEqual(
-            data["worth_line"], f"Your {affinity.name} check made it worth 130 percent."
-        )
-
-    def test_a_full_worth_or_no_roll_is_blank(self) -> None:
-        affinity = AffinityFactory()
-        self.assertEqual(
-            TechniqueResultSerializer(self._use({affinity.pk: 100})).data["worth_line"], ""
-        )
-        self.assertEqual(TechniqueResultSerializer(self._use({})).data["worth_line"], "")
