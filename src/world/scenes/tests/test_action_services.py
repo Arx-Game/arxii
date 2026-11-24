@@ -2061,8 +2061,11 @@ class KindledDeedSceneSeamTests(TestCase):
         )
 
     def _result(self) -> "PendingActionResolution":
+        from world.checks.factories import CheckTypeFactory
+
         pending = _make_pending_resolution(success=True)
         pending.main_result.check_result.outcome = self.success
+        pending.main_result.check_result.check_type = CheckTypeFactory()
         return pending
 
     def _request(self):

@@ -613,22 +613,32 @@ def kindled_resonances(
     names directly that the character does not hold (#5308): a deed in a resonance she has
     never held earns it. Only the earn path asks for this; the panel and the casts read held
     resonances only. A situation for a whole affinity names no single resonance, so it feeds
-    held resonances only.
+    held resonances only: an unheld resonance is fed by the rows that name it and no other.
     """
     resonances = list(
         Resonance.objects.filter(character_resonances__character_sheet=sheet).select_related(
             "affinity", "feeling"
         )
     )
+    unheld_ids: frozenset[int] = frozenset()
     if include_named_unheld:
         held_ids = {resonance.pk for resonance in resonances}
-        resonances.extend(
+        named = list(
             Resonance.objects.filter(kindling_situations__is_active=True)
             .exclude(pk__in=held_ids)
             .select_related("affinity", "feeling")
             .distinct()
         )
-    return _evaluate(sheet, resonances, resolution=resolution, mission=mission, act=act)
+        unheld_ids = frozenset(resonance.pk for resonance in named)
+        resonances.extend(named)
+    return _evaluate_acts(
+        sheet,
+        resonances,
+        [act],
+        resolution=resolution,
+        mission=mission,
+        direct_only=unheld_ids,
+    )[0]
 
 
 @dataclass(frozen=True)
@@ -779,13 +789,14 @@ def kindled_resonances_for_acts(
     return _evaluate_acts(sheet, resonances, acts, resolution=resolution, mission=mission)
 
 
-def _evaluate_acts(
+def _evaluate_acts(  # noqa: PLR0913 - the shared reads plus which resonances are direct-only
     sheet: CharacterSheet,
     resonances: list[Resonance],
     acts: list[KindlingAct | None],
     *,
     resolution: object | None,
     mission: MissionInstance | None,
+    direct_only: frozenset[int] = frozenset(),
 ) -> list[list[KindledResonance]]:
     from django.db.models import Q  # noqa: PLC0415
 
@@ -823,6 +834,7 @@ def _evaluate_acts(
             presence=presence,
             resolution=resolution,
             mission=mission,
+            direct_only=direct_only,
         )
         for act in acts
     ]
@@ -840,7 +852,10 @@ def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
     presence: _Presence | None,
     resolution: object | None,
     mission: MissionInstance | None,
+    direct_only: frozenset[int] = frozenset(),
 ) -> list[KindledResonance]:
+    """One act's answer per resonance. A resonance id in ``direct_only`` is fed only by the
+    rows that name it, never by a row for its whole affinity."""
     target = act.target if act is not None else None
     ctx = SituationContext(
         holder=sheet,
@@ -864,7 +879,9 @@ def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
     for resonance in resonances:
         contributions: list[_Contribution] = []
         for row in rows:
-            if row.resonance_id != resonance.pk and row.for_affinity_id != resonance.affinity_id:
+            names_it = row.resonance_id == resonance.pk
+            covers_it = row.for_affinity_id == resonance.affinity_id
+            if not names_it and not (covers_it and resonance.pk not in direct_only):
                 continue
             evidence = evaluation.evidence(row.situation, _effective_params(row, resonance))
             contribution = _row_contribution(row, evidence, tiers, by_rank) if evidence else None
@@ -1115,10 +1132,10 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
     Non-player characters earn nothing.
 
     The bonus resonance check (#5308) rolls once per affinity the act pays, with the stat of
-    the act's own roll (``act_check_type``) or, when the act made none, the stat staff set for
-    kindled deeds; its percent grows both the instant grant and the share set aside. A
-    resonance a situation names that the character does not hold yet is earned too: the
-    grant creates her row for it.
+    the act's own roll (``act_check_type``, passed by the callers that hold one) or, when none
+    is passed, the stat staff set for kindled deeds; its percent grows both the instant grant
+    and the share set aside. A resonance a situation names that the character does not hold
+    yet is earned too: the grant creates her row for it.
 
     With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
     are read. A caller that knows its surroundings and has no round (a standoff is a
