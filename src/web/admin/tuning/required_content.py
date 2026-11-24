@@ -4437,9 +4437,9 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.TUNING,
             consumer="world/magic/services/resonance_checks.py affinity_skill_terms()",
             consequence=(
-                "A character's trained Villainy, Heroism or Reflection adds nothing to the "
-                "bonus check for an affinity with no active skill linked, so training the "
-                "skill does not make that affinity's gains or pulls any stronger."
+                "The skill linked to each affinity adds nothing to the bonus check for an "
+                "affinity with no active skill linked, so training the skill does not make "
+                "that affinity's gains or pulls any stronger."
             ),
             probe=CustomProbe(fn=_probe_affinity_skills),
             admin_model="Affinity",
