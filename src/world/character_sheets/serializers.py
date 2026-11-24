@@ -2479,17 +2479,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             ),
             "theming": _build_theming(sheet),
             "profile_picture": _build_profile_picture(sheet, active, shows_real_face),
-            # #4151: the Gallery veils NSFW pictures for anyone who is not a friend; the
-            # owner and staff count as friends here (they see everything plain).
-            # Both name the real character to a viewer of a mask or a worn alternate self (a
-            # friend list that holds you, a home), so they follow the same rule as the portrait.
-            "viewer_is_friend": shows_real_face
-            and (privileged or access >= 1 or _viewer_is_friend(sheet, user)),
-            "current_residence": _build_current_residence(sheet) if shows_real_face else None,
-            # #3898 — the plate: which images the character can wear, and the ground
-            # colour it is printed on. `plate_ink` is OOC chrome and ungated; it says
-            # nothing about the character, only how their page is printed.
-            "looks": _build_looks(sheet) if shows_real_face else [],
+            **_build_face_details(sheet, user, privileged, access, shows_real_face),
             "plate_ink": sheet.plate_ink,
             # Worn things are visible things, so this is ungated by tier — only the
             # layer walk decides, and only a covered piece is owner-only.
@@ -2515,6 +2505,23 @@ class CharacterSheetSerializer(serializers.Serializer):
             "ties": _build_ties(tie_sides, viewer_sheet, privileged=privileged),
             "ties_ap_this_week": _ties_ap_this_week(tie_sides) if privileged else None,
         }
+
+
+def _build_face_details(
+    sheet: CharacterSheet,
+    user: Any,
+    privileged: bool,
+    access: int,
+    shows_real_face: bool,
+) -> dict[str, Any]:
+    """Build the details that can identify the character behind a face."""
+    return {
+        # A real-face viewer on the friend list can see unveiled Gallery pictures (#4151).
+        "viewer_is_friend": shows_real_face
+        and (privileged or access >= 1 or _viewer_is_friend(sheet, user)),
+        "current_residence": _build_current_residence(sheet) if shows_real_face else None,
+        "looks": _build_looks(sheet) if shows_real_face else [],
+    }
 
 
 def _build_staff_edit(sheet: CharacterSheet) -> StaffEditFields:

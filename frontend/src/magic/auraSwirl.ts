@@ -205,6 +205,34 @@ function buffersFor(canvas: HTMLCanvasElement): MassBuffers | null {
   return made;
 }
 
+/** Fill the reusable sample buffers and find the cut for the requested color share. */
+function sampleSwirl({ size: S, n: N, u: U, v: V }: MassBuffers, q: number, time: number): number {
+  const rot = time * 0.1;
+  const ox = 3 + time * 0.045;
+  const oy = 9 + time * 0.03;
+  let count = 0;
+  for (let y = 0; y < S; y++) {
+    for (let x = 0; x < S; x++) {
+      const nx = ((x + 0.5) / S) * 2 - 1;
+      const ny = ((y + 0.5) / S) * 2 - 1;
+      const r = Math.sqrt(nx * nx + ny * ny);
+      const i = y * S + x;
+      if (r > CLOUD_RADIUS) {
+        N[i] = -1;
+        continue;
+      }
+      const ang = 4.4 * (1 - r / CLOUD_RADIUS) + rot;
+      const cs = Math.cos(ang);
+      const sn = Math.sin(ang);
+      U[i] = (nx * cs - ny * sn) * 2.7 + ox;
+      V[i] = (nx * sn + ny * cs) * 2.7 + oy;
+      N[i] = cloud(U[i], V[i]);
+      count++;
+    }
+  }
+  return swirlThreshold(N, count, q);
+}
+
 /**
  * Draw the mass onto `canvas`: colour `a`, with colour `b` covering a share `q` of it
  * (`b` null or `q` 0 draws `a` alone). `time` is in seconds and moves the swirl.
@@ -222,33 +250,7 @@ export function drawMass(
   const data = img.data;
   const lut = ramp(a, b ?? a);
   const R = DISC_RADIUS;
-  const rot = time * 0.1;
-  const ox = 3 + time * 0.045;
-  const oy = 9 + time * 0.03;
-  let th = NO_SHARE_THRESHOLD;
-  if (q > 0) {
-    let count = 0;
-    for (let y = 0; y < S; y++) {
-      for (let x = 0; x < S; x++) {
-        const nx = ((x + 0.5) / S) * 2 - 1;
-        const ny = ((y + 0.5) / S) * 2 - 1;
-        const r = Math.sqrt(nx * nx + ny * ny);
-        const i = y * S + x;
-        if (r > CLOUD_RADIUS) {
-          N[i] = -1;
-          continue;
-        }
-        const ang = 4.4 * (1 - r / CLOUD_RADIUS) + rot;
-        const cs = Math.cos(ang);
-        const sn = Math.sin(ang);
-        U[i] = (nx * cs - ny * sn) * 2.7 + ox;
-        V[i] = (nx * sn + ny * cs) * 2.7 + oy;
-        N[i] = cloud(U[i], V[i]);
-        count++;
-      }
-    }
-    th = swirlThreshold(N, count, q);
-  }
+  const th = q > 0 ? sampleSwirl(buf, q, time) : NO_SHARE_THRESHOLD;
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const nx = ((x + 0.5) / S) * 2 - 1;

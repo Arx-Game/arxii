@@ -204,10 +204,9 @@ def apply_ritual_bond(  # noqa: PLR0913
     endorsement = AnimaRitualEndorsement.NOT_ASKED
     if outward is not None and _holds(performer_sheet, outward):
         if is_player_character(partner_sheet):
-            if succeeded:
-                outward_pending = _with_kindled_share(performer_sheet, outward, parts.outward)
-            else:
-                outward_pending = _failed_endorsement_pending(performer_sheet, primal, outward)
+            outward_pending = _pending_endorsement_amount(
+                performer_sheet, primal, outward, parts.outward, succeeded=succeeded
+            )
             if outward_pending > 0:
                 endorsement = AnimaRitualEndorsement.PENDING
                 performance.endorsement = endorsement
@@ -221,13 +220,6 @@ def apply_ritual_bond(  # noqa: PLR0913
             outward_granted = _grant(performer_sheet, outward, outward_amount, ritual)
 
     setting_value = outward.affinity.ritual_partner_fatigue if outward is not None else 0
-    change = 0
-    if setting_value > 0:
-        change = apply_fatigue(
-            partner_sheet, ActionCategory.SOCIAL, setting_value, EffortLevel.MEDIUM
-        )
-    elif setting_value < 0:
-        change = -recover_fatigue(partner_sheet, ActionCategory.SOCIAL, -setting_value)
     return RitualBond(
         primal_resonance=primal,
         primal_granted=primal_granted,
@@ -236,8 +228,31 @@ def apply_ritual_bond(  # noqa: PLR0913
         outward_pending=outward_pending,
         endorsement=endorsement,
         partner_fatigue_setting=_sign(setting_value),
-        fatigue_change=change,
+        fatigue_change=_apply_partner_fatigue(partner_sheet, setting_value),
     )
+
+
+def _pending_endorsement_amount(
+    performer: CharacterSheet,
+    primal: Resonance | None,
+    outward: Resonance,
+    outward_award: int,
+    *,
+    succeeded: bool,
+) -> int:
+    """Compute the player partner's pending award at the rolled outcome."""
+    if succeeded:
+        return _with_kindled_share(performer, outward, outward_award)
+    return _failed_endorsement_pending(performer, primal, outward)
+
+
+def _apply_partner_fatigue(partner: CharacterSheet, amount: int) -> int:
+    """Apply the outward affinity's signed change to the partner's social fatigue."""
+    if amount > 0:
+        return apply_fatigue(partner, ActionCategory.SOCIAL, amount, EffortLevel.MEDIUM)
+    if amount < 0:
+        return -recover_fatigue(partner, ActionCategory.SOCIAL, -amount)
+    return 0
 
 
 def performer_ritual_line(bond: RitualBond, partner_name: str, anima_recovered: int) -> str:

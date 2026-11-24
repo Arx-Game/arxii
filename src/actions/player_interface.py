@@ -666,6 +666,36 @@ def _eligible_fury_resonances(
     return tuple(options)
 
 
+def _combat_techniques(
+    sheet: CharacterSheet,
+) -> tuple[dict[int, CharacterTechnique], list[Technique]]:
+    """Read the character's combat holds and include any readied combat ultimate."""
+    from world.magic.services.ultimates import readied_ultimate  # noqa: PLC0415
+
+    # Enumerate techniques the character knows that have an action_template.
+    # select_related ensures no per-technique queries for action_template + check_type.
+    grants = CharacterTechnique.objects.filter(
+        character=sheet,
+        technique__action_template__isnull=False,
+    ).select_related(
+        "technique",
+        "technique__action_template",
+        "technique__action_template__check_type",
+    )
+
+    # The readied Audere ultimate (if any) joins the known-technique list for
+    # this one declaration window -- it never becomes a CharacterTechnique row
+    # (Task 2), so it has to be appended here rather than showing up in `grants`.
+    # #4099: the caster's own name for each hold, built once rather than per
+    # technique. A readied ultimate has no hold and keeps its catalog name.
+    holds = {grant.technique_id: grant for grant in grants}
+    techniques = [grant.technique for grant in grants]
+    readied = readied_ultimate(sheet)
+    if readied is not None and readied.technique.action_template_id is not None:
+        techniques.append(readied.technique)
+    return holds, techniques
+
+
 def _combat_actions(
     character: ObjectDB,
     ctx: RoundContext | None = _UNSET,  # type: ignore[assignment]
@@ -699,17 +729,6 @@ def _combat_actions(
     if ctx is None or not ctx.is_declaration_open:
         return []
 
-    # Enumerate techniques the character knows that have an action_template.
-    # select_related ensures no per-technique queries for action_template + check_type.
-    grants = CharacterTechnique.objects.filter(
-        character=sheet,
-        technique__action_template__isnull=False,
-    ).select_related(
-        "technique",
-        "technique__action_template",
-        "technique__action_template__check_type",
-    )
-
     # Per-technique performability filter: skip techniques the character cannot
     # currently perform (dead, or any unmet capability requirement). Combat
     # techniques per character are bounded (a handful), so a clear per-technique
@@ -733,19 +752,9 @@ def _combat_actions(
         protective_condition_and_flavor,
     )
     from world.magic.services.technique_personalization import hold_display_name  # noqa: PLC0415
-    from world.magic.services.ultimates import readied_ultimate  # noqa: PLC0415
     from world.magic.specialization.services import active_alt_self_resonance  # noqa: PLC0415
 
-    # The readied Audere ultimate (if any) joins the known-technique list for
-    # this one declaration window -- it never becomes a CharacterTechnique row
-    # (Task 2), so it has to be appended here rather than showing up in `grants`.
-    # #4099: the caster's own name for each hold, built once rather than per
-    # technique. A readied ultimate has no hold and keeps its catalog name.
-    holds = {grant.technique_id: grant for grant in grants}
-    techniques = [grant.technique for grant in grants]
-    readied = readied_ultimate(sheet)
-    if readied is not None and readied.technique.action_template_id is not None:
-        techniques.append(readied.technique)
+    holds, techniques = _combat_techniques(sheet)
     if not techniques:
         return []
 
@@ -759,11 +768,10 @@ def _combat_actions(
     # The cast is priced as its encounter will charge it (#4799); lethal unless told otherwise.
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
 
-    lethal = ctx.participant.encounter.is_lethal if isinstance(ctx, CombatRoundContext) else True
+    combat_round = ctx if isinstance(ctx, CombatRoundContext) else None
+    lethal = combat_round.participant.encounter.is_lethal if combat_round else True
     # Her kindling is the same for every technique: read it once, in this round when there is one.
-    kindling = kindling_by_resonance(
-        sheet, resolution=ctx if isinstance(ctx, CombatRoundContext) else None
-    )
+    kindling = kindling_by_resonance(sheet, resolution=combat_round)
     # Her worn alternate self's resonance is the default every technique's picker leads with:
     # read it once, with the kindling, not once per technique (#5231).
     alt_resonance = active_alt_self_resonance(sheet)

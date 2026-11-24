@@ -75,7 +75,6 @@ _ATTUNE_SUBCMD = "attune"
 _ATTUNE_USAGE = "Usage: ritual attune primal=<name|none> outward=<name|none>"
 _ATTUNE_KEYS = re.compile(r"\b(primal|outward)=", re.IGNORECASE)
 _NO_PICK = "none"
-_SESSION_SUBCMDS = frozenset({"sessions", "draft", "join", "decline", "fire", "cancel"})
 #: The partner's answer to an anima ritual that reached for them (#5280).
 _ANSWER_SUBCMDS = frozenset({"endorse", "withhold"})
 
@@ -228,32 +227,30 @@ class CmdRitual(ArxCommand):
 
     def func(self) -> None:
         """Route session subcommands; fall through to single-actor action otherwise."""
-        first = (self.args or "").strip().split()[0].lower() if (self.args or "").strip() else ""
+        args = (self.args or "").strip()
+        first = args.split(maxsplit=1)[0].lower() if args else ""
         if (
             self._asked_for_a_partner(first)
             or self._answered_a_ritual(first)
             or self._attuned_the_ritual(first)
         ):
             return
-        if first in _SESSION_SUBCMDS:
-            rest = (self.args or "").strip()[len(first) :].strip()
-            try:
-                if first == "sessions":  # noqa: STRING_LITERAL
-                    self._handle_sessions()
-                elif first == "draft":  # noqa: STRING_LITERAL
-                    self._handle_draft(rest)
-                elif first == "join":  # noqa: STRING_LITERAL
-                    self._handle_join(rest)
-                elif first == "decline":  # noqa: STRING_LITERAL
-                    self._handle_decline(rest)
-                elif first == "fire":  # noqa: STRING_LITERAL
-                    self._handle_fire(rest)
-                elif first == "cancel":  # noqa: STRING_LITERAL
-                    self._handle_cancel(rest)
-            except CommandError as err:
-                self.caller.msg(str(err))
-        else:
+        handlers = {
+            "sessions": self._handle_sessions,
+            "draft": self._handle_draft,
+            "join": self._handle_join,
+            "decline": self._handle_decline,
+            "fire": self._handle_fire,
+            "cancel": self._handle_cancel,
+        }
+        handler = handlers.get(first)
+        if handler is None:
             super().func()
+            return
+        try:
+            handler(args[len(first) :].strip())
+        except CommandError as err:
+            self.caller.msg(str(err))
 
     # ------------------------------------------------------------------
     # The anima ritual with a partner (#5181)
@@ -411,7 +408,7 @@ class CmdRitual(ArxCommand):
     # Session handlers
     # ------------------------------------------------------------------
 
-    def _handle_sessions(self) -> None:
+    def _handle_sessions(self, _rest: str = "") -> None:
         """List pending sessions where caller is initiator or participant."""
         from world.magic.models.sessions import RitualSession  # noqa: PLC0415
 
