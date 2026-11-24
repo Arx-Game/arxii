@@ -15,22 +15,38 @@ also sets whether the ritual takes the partner's fatigue, eases it or does neith
 ``apply_ritual_bond`` does the earning and the fatigue, and takes the partner as an argument so
 a later ritual that takes in a whole scene can call it once per member. The lines each side
 reads, and the sentence the partner's consent prompt carries, are built here too.
+
+The bonus resonance check (#5308) rolls once per affinity across everything the ritual pays: the
+Primal part, the outward part and the waiting trickles (see ``harvest_trickles``). The roll uses
+the ritual's own stat (``RitualCheckConfig.stat``), and its result grows every grant of that
+affinity. A ritual that fails still harvests: the trickle was earned already and the ritual is
+only the collection step.
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 from typing import TYPE_CHECKING
+
+from django.utils import timezone
 
 from actions.constants import ActionCategory
 from world.fatigue.constants import EffortLevel
 from world.fatigue.services import apply_fatigue, recover_fatigue
 from world.magic.constants import AnimaRitualEndorsement, GainSource
-from world.magic.models import AnimaConfig, AnimaRitualResonanceAward, CharacterResonance
+from world.magic.models import (
+    AnimaConfig,
+    AnimaRitualResonanceAward,
+    CharacterResonance,
+    TrickleAccrual,
+)
 from world.magic.services.anima import ritual_succeeded
 from world.magic.services.kindling import kindled_for, kindling_context_for
 from world.magic.services.resonance import grant_resonance
-from world.magic.types.ritual import RitualBond, RitualEarningParts
+from world.magic.services.resonance_checks import roll_gain_bonus
+from world.magic.types.resonance_checks import NO_GAIN_BONUS, GainBonus
+from world.magic.types.ritual import HarvestedTrickle, RitualBond, RitualEarningParts
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 
 if TYPE_CHECKING:
@@ -126,9 +142,17 @@ def _holds(sheet: CharacterSheet, resonance: Resonance) -> bool:
     return CharacterResonance.objects.filter(character_sheet=sheet, resonance=resonance).exists()
 
 
-def _grant(sheet: CharacterSheet, resonance: Resonance, amount: int, ritual: Ritual) -> int:
-    """Grant ``amount`` of ``resonance`` through the ledger and return what it recorded (0 when
-    there was nothing to grant)."""
+def _grant(  # noqa: PLR0913 - the sheet, resonance, amount, ritual and the roll it grows by
+    sheet: CharacterSheet,
+    resonance: Resonance,
+    amount: int,
+    ritual: Ritual,
+    gain_bonus: GainBonus,
+    *,
+    source: str = GainSource.ANIMA_RITUAL,
+) -> int:
+    """Grant ``amount`` of ``resonance`` through the ledger, grown by ``gain_bonus``, and return
+    what it recorded (0 when there was nothing to grant)."""
     if amount <= 0:
         return 0
     ledger: list = []
@@ -136,11 +160,78 @@ def _grant(sheet: CharacterSheet, resonance: Resonance, amount: int, ritual: Rit
         sheet,
         resonance,
         amount,
-        source=GainSource.ANIMA_RITUAL,
+        source=source,
         deed_label=ritual.name,
         ledger_out=ledger,
+        gain_bonus=gain_bonus,
     )
     return ledger[-1].amount
+
+
+BonusFor = Callable[["Resonance"], GainBonus]
+
+
+def _bonus_roller(sheet: CharacterSheet, ritual: Ritual) -> BonusFor:
+    """A function that rolls the ritual's bonus check for a resonance's affinity the first time
+    it is asked and hands back the same result for every later resonance of that affinity.
+
+    The stat is the ritual's own (``RitualCheckConfig.stat``). A ritual with no check config
+    rolls nothing and every result adds 0.
+    """
+    config = ritual.check_config_or_none
+    results: dict[int, GainBonus] = {}
+
+    def bonus_for(resonance: Resonance) -> GainBonus:
+        if config is None:
+            return NO_GAIN_BONUS
+        affinity = resonance.affinity
+        if affinity.pk not in results:
+            results[affinity.pk] = roll_gain_bonus(
+                sheet, affinity, source=GainSource.ANIMA_RITUAL, stat=config.stat
+            )
+        return results[affinity.pk]
+
+    return bonus_for
+
+
+def harvest_trickles(
+    sheet: CharacterSheet, bonus_for: BonusFor, *, ritual: Ritual
+) -> tuple[HarvestedTrickle, ...]:
+    """Turn every waiting trickle of ``sheet`` into resonance (#5308).
+
+    Each resonance's waiting rows are summed into one ``TRICKLE_HARVEST`` grant, grown by the
+    bonus result ``bonus_for`` gives its affinity, and every row it covered is stamped
+    ``harvested_at`` so a second ritual finds nothing. The rows are locked while they are read,
+    so two rituals at once cannot harvest the same trickle twice.
+    """
+    rows = list(
+        TrickleAccrual.objects.select_for_update()
+        .filter(character_sheet=sheet, harvested_at__isnull=True)
+        .select_related("resonance__affinity__skill")
+    )
+    if not rows:
+        return ()
+    totals: dict[int, int] = {}
+    for row in rows:
+        totals[row.resonance_id] = totals.get(row.resonance_id, 0) + row.amount
+    resonances = {row.resonance_id: row.resonance for row in rows}
+    harvested: list[HarvestedTrickle] = []
+    for resonance_id, total in totals.items():
+        resonance = resonances[resonance_id]
+        gain_bonus = bonus_for(resonance)
+        recorded = _grant(
+            sheet, resonance, total, ritual, gain_bonus, source=GainSource.TRICKLE_HARVEST
+        )
+        harvested.append(HarvestedTrickle(resonance, recorded, gain_bonus.percent))
+    now = timezone.now()
+    for row in rows:
+        row.harvested_at = now
+    # The rows are the identity-mapped instances the locked read returned and already carry the
+    # stamp, so the one bulk write leaves the cache and the table agreeing.
+    TrickleAccrual.objects.bulk_update_with_reason(
+        rows, ["harvested_at"], reason="stamp a ritual's harvested trickles in one write"
+    )
+    return tuple(harvested)
 
 
 def _failed_endorsement_pending(
@@ -158,6 +249,68 @@ def _failed_endorsement_pending(
     parts = ritual_earning_parts(performer_sheet, award.amount, primal, outward)
     outward_part = _with_kindled_share(performer_sheet, outward, parts.outward)
     return outward_part * AnimaConfig.get_singleton().failed_endorsement_percent // 100
+
+
+def _store_pending_outward(
+    performance: AnimaRitualPerformance,
+    outward: Resonance,
+    base_amount: int,
+    gain_bonus: GainBonus,
+) -> None:
+    """Hold the outward part on ``performance`` until the partner answers.
+
+    The base amount waits with the bonus check result the ritual rolled for its affinity; the
+    partner's answer grants it grown by that result and rolls nothing
+    (``anima_ritual_endorsement._settle``, #5308).
+    """
+    performance.endorsement = AnimaRitualEndorsement.PENDING
+    performance.outward_resonance = outward
+    performance.outward_amount_pending = base_amount
+    performance.outward_bonus_outcome = gain_bonus.outcome
+    performance.outward_bonus_percent = gain_bonus.percent
+    performance.save(
+        update_fields=[
+            "endorsement",
+            "outward_resonance",
+            "outward_amount_pending",
+            "outward_bonus_outcome",
+            "outward_bonus_percent",
+        ]
+    )
+
+
+def _earn_outward(  # noqa: PLR0913 - the parties, the roll's result and the shared earn inputs
+    performer_sheet: CharacterSheet,
+    partner_sheet: CharacterSheet,
+    ritual: Ritual,
+    performance: AnimaRitualPerformance,
+    *,
+    succeeded: bool,
+    picks: tuple[Resonance | None, Resonance | None],
+    parts: RitualEarningParts,
+    bonus_for: BonusFor,
+) -> tuple[int, int]:
+    """Earn or hold the outward part; returns ``(granted, pending)``, each 0 when it did not
+    apply. A pick the performer does not hold pays nothing."""
+    from world.roster.services.activity import is_player_character  # noqa: PLC0415
+
+    primal, outward = picks
+    if outward is None or not _holds(performer_sheet, outward):
+        return 0, 0
+    if is_player_character(partner_sheet):
+        if succeeded:
+            pending = _with_kindled_share(performer_sheet, outward, parts.outward)
+        else:
+            pending = _failed_endorsement_pending(performer_sheet, primal, outward)
+        if pending > 0:
+            _store_pending_outward(performance, outward, pending, bonus_for(outward))
+        return 0, pending
+    if not succeeded:
+        return 0, 0
+    amount = _with_kindled_share(performer_sheet, outward, parts.outward)
+    if amount <= 0:
+        return 0, 0
+    return _grant(performer_sheet, outward, amount, ritual, bonus_for(outward)), 0
 
 
 def apply_ritual_bond(  # noqa: PLR0913
@@ -189,36 +342,33 @@ def apply_ritual_bond(  # noqa: PLR0913
     roll: it rises by a positive ``ritual_partner_fatigue`` (scaled by their own fatigue rules,
     as any fatigue is) or falls by a negative one. Corruption is never added.
     """
-    from world.roster.services.activity import is_player_character  # noqa: PLC0415
-
     succeeded = ritual_succeeded(outcome)
     parts = ritual_earning_parts(performer_sheet, _award_total(outcome), primal, outward)
+    bonus_for = _bonus_roller(performer_sheet, ritual)
 
     primal_granted = 0
     if succeeded and primal is not None and _holds(performer_sheet, primal):
         primal_amount = _with_kindled_share(performer_sheet, primal, parts.primal)
-        primal_granted = _grant(performer_sheet, primal, primal_amount, ritual)
+        if primal_amount > 0:
+            primal_granted = _grant(
+                performer_sheet, primal, primal_amount, ritual, bonus_for(primal)
+            )
 
-    outward_granted = 0
-    outward_pending = 0
-    endorsement = AnimaRitualEndorsement.NOT_ASKED
-    if outward is not None and _holds(performer_sheet, outward):
-        if is_player_character(partner_sheet):
-            if succeeded:
-                outward_pending = _with_kindled_share(performer_sheet, outward, parts.outward)
-            else:
-                outward_pending = _failed_endorsement_pending(performer_sheet, primal, outward)
-            if outward_pending > 0:
-                endorsement = AnimaRitualEndorsement.PENDING
-                performance.endorsement = endorsement
-                performance.outward_resonance = outward
-                performance.outward_amount_pending = outward_pending
-                performance.save(
-                    update_fields=["endorsement", "outward_resonance", "outward_amount_pending"]
-                )
-        elif succeeded:
-            outward_amount = _with_kindled_share(performer_sheet, outward, parts.outward)
-            outward_granted = _grant(performer_sheet, outward, outward_amount, ritual)
+    outward_granted, outward_pending = _earn_outward(
+        performer_sheet,
+        partner_sheet,
+        ritual,
+        performance,
+        succeeded=succeeded,
+        picks=(primal, outward),
+        parts=parts,
+        bonus_for=bonus_for,
+    )
+    endorsement = (
+        AnimaRitualEndorsement.PENDING if outward_pending > 0 else AnimaRitualEndorsement.NOT_ASKED
+    )
+
+    harvested = harvest_trickles(performer_sheet, bonus_for, ritual=ritual)
 
     setting_value = outward.affinity.ritual_partner_fatigue if outward is not None else 0
     change = 0
@@ -237,14 +387,27 @@ def apply_ritual_bond(  # noqa: PLR0913
         endorsement=endorsement,
         partner_fatigue_setting=_sign(setting_value),
         fatigue_change=change,
+        harvested=harvested,
     )
+
+
+def _harvest_sentence(harvest: HarvestedTrickle) -> str:
+    """What one harvested trickle adds to the performer's line, e.g. "13 Cruelty waiting from
+    your days arrived. Your Villainy check added 30 percent."; the second sentence only when
+    the check added something and the affinity has a skill."""
+    sentence = f" {harvest.amount} {harvest.resonance.name} waiting from your days arrived."
+    skill = harvest.resonance.affinity.skill
+    if harvest.bonus_percent > 0 and skill is not None:
+        sentence += f" Your {skill.name} check added {harvest.bonus_percent} percent."
+    return sentence
 
 
 def performer_ritual_line(bond: RitualBond, partner_name: str, anima_recovered: int) -> str:
     """The private line the performer reads after the roll, e.g. "Your ritual feeds on Tobin.
     You recover 6 anima. Your Ruin grows by 13."; each sentence after the opening is left out
     when its number is 0. The outward growth appears only when it was granted at once (a story
-    NPC partner after a success)."""
+    NPC partner after a success). Each waiting trickle the ritual harvested is named after
+    them."""
     if bond.partner_fatigue_setting > 0:
         line = f"Your ritual feeds on {partner_name}."
     elif bond.partner_fatigue_setting < 0:
@@ -257,6 +420,9 @@ def performer_ritual_line(bond: RitualBond, partner_name: str, anima_recovered: 
         line += f" Your {bond.primal_resonance.name} grows by {bond.primal_granted}."
     if bond.outward_granted > 0 and bond.outward_resonance is not None:
         line += f" Your {bond.outward_resonance.name} grows by {bond.outward_granted}."
+    for harvest in bond.harvested:
+        if harvest.amount > 0:
+            line += _harvest_sentence(harvest)
     return line
 
 

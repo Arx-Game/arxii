@@ -1251,14 +1251,16 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
     """Daily residence-trickle tick (Spec C §5.3).
 
     Iterates sheets with a declared residence; for each matching
-    (residence-tagged ∩ sheet-claimed) resonance, fires a single
-    grant_resonance call worth cfg.residence_daily_trickle_per_resonance.
+    (residence-tagged ∩ sheet-claimed) resonance, writes one ``TrickleAccrual`` row worth
+    cfg.residence_daily_trickle_per_resonance. The trickle pays nothing on its own: it waits
+    until an anima ritual harvests it (#5308), so a tick changes no balance.
 
-    Per-character grants are wrapped in nested atomic blocks so a single
+    Per-character accruals are wrapped in nested atomic blocks so a single
     failure doesn't poison the whole tick. Non-residence sheets are skipped.
+    ``residence_grants_issued`` on the summary counts the accrual rows written.
     """
-    from world.magic.constants import GainSource  # noqa: PLC0415
-    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.magic.constants import TrickleSource  # noqa: PLC0415
+    from world.magic.models import TrickleAccrual  # noqa: PLC0415
 
     cfg = get_resonance_gain_config()
     grants_issued = 0
@@ -1278,11 +1280,11 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
         for resonance in matched:
             try:
                 with transaction.atomic():
-                    grant_resonance(
-                        sheet,
-                        resonance,
-                        cfg.residence_daily_trickle_per_resonance,
-                        source=GainSource.ROOM_RESIDENCE,
+                    TrickleAccrual.objects.create(
+                        character_sheet=sheet,
+                        resonance=resonance,
+                        amount=cfg.residence_daily_trickle_per_resonance,
+                        source=TrickleSource.ROOM_RESIDENCE,
                         room_profile=rp,
                     )
                     grants_issued += 1
@@ -1308,18 +1310,20 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
     For each equipped item:
       For each ItemFacet on the item:
         If the wearer has a Thread on that Facet:
-          grant_resonance(
-            sheet,
-            thread.resonance,
+          TrickleAccrual(
+            character_sheet=sheet,
+            resonance=thread.resonance,
             amount=trickle_for(item, item_facet, thread),
-            source=GainSource.OUTFIT_TRICKLE,
+            source=TrickleSource.OUTFIT_TRICKLE,
             outfit_item_facet=item_facet,
           )
 
-    Returns: count of grants issued for this sheet.
+    The trickle waits for the next anima ritual to harvest it (#5308); nothing is granted here.
+
+    Returns: count of accrual rows written for this sheet.
     """
-    from world.magic.constants import GainSource  # noqa: PLC0415
-    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.magic.constants import TrickleSource  # noqa: PLC0415
+    from world.magic.models import TrickleAccrual  # noqa: PLC0415
     from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
     config = get_resonance_gain_config()
@@ -1345,16 +1349,33 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
         if amount <= 0:
             continue
 
-        grant_resonance(
-            sheet,
-            thread.resonance,
+        TrickleAccrual.objects.create(
+            character_sheet=sheet,
+            resonance=thread.resonance,
             amount=amount,
-            source=GainSource.OUTFIT_TRICKLE,
+            source=TrickleSource.OUTFIT_TRICKLE,
             outfit_item_facet=item_facet,
         )
         grants_issued += 1
 
     return grants_issued
+
+
+def waiting_trickles(sheet: CharacterSheet) -> dict[int, int]:
+    """Resonance id to what ``sheet``'s days have piled up there and no anima ritual has
+    harvested yet (#5308). The sum of the unharvested ``TrickleAccrual`` rows; the rows are
+    the only store, so nothing here can drift from what a ritual will harvest.
+    """
+    from django.db.models import Sum  # noqa: PLC0415
+
+    from world.magic.models import TrickleAccrual  # noqa: PLC0415
+
+    rows = (
+        TrickleAccrual.objects.filter(character_sheet=sheet, harvested_at__isnull=True)
+        .values_list("resonance_id")
+        .annotate(total=Sum("amount"))
+    )
+    return dict(rows)
 
 
 def outfit_trickle_tick() -> int:

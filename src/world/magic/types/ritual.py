@@ -87,6 +87,19 @@ class RitualEarningParts:
 
 
 @dataclass(frozen=True)
+class HarvestedTrickle:
+    """One resonance's waiting trickle an anima ritual harvested (#5308).
+
+    ``amount`` is what the ledger recorded after the earn rate and the bonus check, and
+    ``bonus_percent`` is the percent that check added (0 when it added nothing or was off).
+    """
+
+    resonance: Resonance
+    amount: int
+    bonus_percent: int
+
+
+@dataclass(frozen=True)
 class RitualBond:
     """What an Anima ritual with a partner did beyond restoring anima (#5181, #5280).
 
@@ -97,7 +110,8 @@ class RitualBond:
     part is held, not granted, so ``outward_pending`` carries the stored amount and
     ``endorsement`` is ``pending``. ``partner_fatigue_setting`` is the sign of the outward
     affinity's ``ritual_partner_fatigue`` (1 takes, -1 eases, 0 does nothing); ``fatigue_change``
-    is the fatigue the partner actually gained (positive) or lost (negative).
+    is the fatigue the partner actually gained (positive) or lost (negative). ``harvested`` is
+    the waiting trickles the ritual turned into resonance, one entry per resonance (#5308).
     """
 
     primal_resonance: Resonance | None = None
@@ -108,6 +122,7 @@ class RitualBond:
     endorsement: str = AnimaRitualEndorsement.NOT_ASKED
     partner_fatigue_setting: int = 0
     fatigue_change: int = 0
+    harvested: tuple[HarvestedTrickle, ...] = ()
 
 
 @dataclass(frozen=True)

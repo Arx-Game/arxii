@@ -195,20 +195,28 @@ class ResonanceGainPipelineTests(TestCase):
         self.assertGreater(cr.balance, 0)
 
     def test_residence_trickle_end_to_end(self) -> None:
-        """Tag room + set residence + run daily tick → balance increments.
+        """Tag room + set residence + run daily tick → a trickle waits, then a harvest pays it.
 
         Pipeline: tag_room_resonance (matched + unmatched) → set_residence →
-        resonance_daily_tick → assert residence_grants_issued == 1 + balance == cfg.rate.
+        resonance_daily_tick → assert residence_grants_issued >= 1, a waiting accrual == cfg.rate
+        and an untouched balance → harvest_trickles → balance == cfg.rate (#5308).
         """
         from evennia_extensions.factories import RoomProfileFactory
-        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            ResonanceFactory,
+            RitualFactory,
+        )
         from world.magic.models import CharacterResonance
         from world.magic.services.gain import (
             get_resonance_gain_config,
             resonance_daily_tick,
             set_residence,
             tag_room_resonance,
+            waiting_trickles,
         )
+        from world.magic.services.ritual_bond import harvest_trickles
+        from world.magic.types.resonance_checks import NO_GAIN_BONUS
 
         sheet = _make_tenure_backed_sheet()
         rp = RoomProfileFactory()
@@ -224,14 +232,21 @@ class ResonanceGainPipelineTests(TestCase):
         summary = resonance_daily_tick()
         self.assertGreaterEqual(summary.residence_grants_issued, 1)
 
+        self.assertEqual(
+            waiting_trickles(sheet), {r_matched.pk: cfg.residence_daily_trickle_per_resonance}
+        )
+        cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=r_matched)
+        self.assertEqual(cr.balance, 0)
+
+        harvest_trickles(sheet, lambda _res: NO_GAIN_BONUS, ritual=RitualFactory())
         cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=r_matched)
         self.assertEqual(cr.balance, cfg.residence_daily_trickle_per_resonance)
 
     def test_journey3_aura_tag_via_action_then_trickle(self) -> None:
         """Journey 3 (#2036): tag via TagRoomResonanceAction (claimed resonance
         only — unclaimed rejected), declare residence via SetPrimaryHomeAction,
-        run residence_trickle_tick() → a ROOM_RESIDENCE grant lands. Untag via
-        UntagRoomResonanceAction → rerun the tick → no further grant.
+        run residence_trickle_tick() → a ROOM_RESIDENCE accrual waits. Untag via
+        UntagRoomResonanceAction → rerun the tick → no further accrual.
         """
         from actions.definitions.locations import (
             SetPrimaryHomeAction,
@@ -241,9 +256,9 @@ class ResonanceGainPipelineTests(TestCase):
         from evennia_extensions.factories import RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.locations.factories import LocationOwnershipFactory
-        from world.magic.constants import GainSource
+        from world.magic.constants import TrickleSource
         from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
-        from world.magic.models import ResonanceGrant
+        from world.magic.models import TrickleAccrual
         from world.magic.services.gain import residence_trickle_tick
 
         sheet = CharacterSheetFactory()
@@ -274,22 +289,17 @@ class ResonanceGainPipelineTests(TestCase):
 
         summary = residence_trickle_tick()
         self.assertEqual(summary.residence_grants_issued, 1)
-        grants = ResonanceGrant.objects.filter(
-            source=GainSource.ROOM_RESIDENCE, character_sheet=sheet, resonance=claimed
+        accruals = TrickleAccrual.objects.filter(
+            source=TrickleSource.ROOM_RESIDENCE, character_sheet=sheet, resonance=claimed
         )
-        self.assertEqual(grants.count(), 1)
+        self.assertEqual(accruals.count(), 1)
 
-        # Untag — the next tick grants nothing further.
+        # Untag — the next tick accrues nothing further.
         untag_result = UntagRoomResonanceAction().run(actor=character, resonance_id=claimed.pk)
         self.assertTrue(untag_result.success, untag_result.message)
         second_summary = residence_trickle_tick()
         self.assertEqual(second_summary.residence_grants_issued, 0)
-        self.assertEqual(
-            ResonanceGrant.objects.filter(
-                source=GainSource.ROOM_RESIDENCE, character_sheet=sheet, resonance=claimed
-            ).count(),
-            1,
-        )
+        self.assertEqual(accruals.count(), 1)
 
     def test_journey5_sanctum_homecoming_satisfies_trickle_gate(self) -> None:
         """Journey 5 (#2036): a Personal Sanctum's own Homecoming-grown
@@ -302,9 +312,9 @@ class ResonanceGainPipelineTests(TestCase):
         from world.locations.constants import HolderType, LocationParentType
         from world.locations.factories import LocationOwnershipFactory
         from world.locations.models import LocationValueModifier
-        from world.magic.constants import GainSource
+        from world.magic.constants import TrickleSource
         from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
-        from world.magic.models import ResonanceGrant, SanctumDetails, SanctumOwnerMode
+        from world.magic.models import SanctumDetails, SanctumOwnerMode, TrickleAccrual
         from world.magic.services.gain import residence_trickle_tick, set_residence
         from world.magic.services.sanctum_lvm import apply_homecoming_gain, homecoming_source_tag
         from world.room_features.constants import RoomFeatureServiceStrategy
@@ -343,8 +353,8 @@ class ResonanceGainPipelineTests(TestCase):
         summary = residence_trickle_tick()
         self.assertEqual(summary.residence_grants_issued, 1)
         self.assertTrue(
-            ResonanceGrant.objects.filter(
-                source=GainSource.ROOM_RESIDENCE, character_sheet=sheet, resonance=resonance
+            TrickleAccrual.objects.filter(
+                source=TrickleSource.ROOM_RESIDENCE, character_sheet=sheet, resonance=resonance
             ).exists()
         )
 

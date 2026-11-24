@@ -17,6 +17,8 @@ from world.magic.constants import AnimaRitualEndorsement, GainSource
 from world.magic.exceptions import AnimaRitualAnswerError
 from world.magic.models import AnimaRitualPerformance, CharacterResonance, Resonance
 from world.magic.services.resonance import grant_resonance
+from world.magic.types.resonance_checks import GainBonus
+from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -92,6 +94,13 @@ def _settle(
         ).exists()
     ):
         ledger: list = []
+        # The held amount is the base; the ritual rolled its bonus check once when it was
+        # performed and stored the result, so the grant grows by it and rolls nothing (#5308).
+        stored_outcome = (
+            CheckOutcome.objects.filter(pk=held["outward_bonus_outcome_id"]).first()
+            if held["outward_bonus_outcome_id"] is not None
+            else None
+        )
         grant_resonance(
             performer_sheet,
             outward,
@@ -99,6 +108,7 @@ def _settle(
             source=GainSource.ANIMA_RITUAL,
             deed_label=performance.ritual.name,
             ledger_out=ledger,
+            gain_bonus=GainBonus(stored_outcome, held["outward_bonus_percent"]),
         )
         granted = ledger[-1].amount
     _close(performance, AnimaRitualEndorsement.ENDORSED)
@@ -140,6 +150,8 @@ def answer_anima_ritual(
                 "target_character_id",
                 "outward_amount_pending",
                 "outward_resonance_id",
+                "outward_bonus_outcome_id",
+                "outward_bonus_percent",
                 "scene_id",
             )
             .first()

@@ -1,8 +1,8 @@
 """End-to-end integration tests for Spec D §5.1 — outfit resonance trickle pipeline.
 
 Pipeline: build sheet + Thread on Facet + equipped item bearing Facet
-→ call resonance_daily_tick → assert ResonanceGrant ledger row +
-CharacterResonance balance increment.
+→ call resonance_daily_tick → assert a waiting TrickleAccrual row and no balance change
+→ an anima ritual's harvest turns it into a TRICKLE_HARVEST grant (#5308).
 """
 
 from __future__ import annotations
@@ -116,14 +116,22 @@ class OutfitResonanceTricklePipelineTests(TestCase):
             )
         )
 
-    def test_orchestrator_grants_resonance_to_outfit_wearing_character(self) -> None:
-        """Pipeline: resonance_daily_tick → ResonanceGrant + CharacterResonance updated.
+    def test_orchestrator_accrues_trickle_for_outfit_wearing_character(self) -> None:
+        """Pipeline: resonance_daily_tick → waiting TrickleAccrual, balance untouched; the
+        anima ritual's harvest → one TRICKLE_HARVEST grant and the balance rises.
 
         Algorithm: base(1) × item_quality(2.0) × attach_quality(3.0) × rung(2, at level 20) = 12.
         """
-        from world.magic.constants import GainSource
-        from world.magic.models import CharacterResonance, ResonanceGrant
-        from world.magic.services.gain import get_resonance_gain_config, resonance_daily_tick
+        from world.magic.constants import GainSource, TrickleSource
+        from world.magic.factories import RitualFactory
+        from world.magic.models import CharacterResonance, ResonanceGrant, TrickleAccrual
+        from world.magic.services.gain import (
+            get_resonance_gain_config,
+            resonance_daily_tick,
+            waiting_trickles,
+        )
+        from world.magic.services.ritual_bond import harvest_trickles
+        from world.magic.types.resonance_checks import NO_GAIN_BONUS
 
         sheet = self.sheet
         item_facet = self.item_facet
@@ -134,32 +142,34 @@ class OutfitResonanceTricklePipelineTests(TestCase):
 
         summary = resonance_daily_tick()
 
-        # Orchestrator summary reports at least 1 outfit grant.
+        # Orchestrator summary reports at least 1 outfit trickle.
         self.assertGreaterEqual(summary.outfit_grants_issued, 1)
-
-        # Ledger row exists with correct source + typed FK.
-        self.assertTrue(
-            ResonanceGrant.objects.filter(
-                character_sheet=sheet,
-                source=GainSource.OUTFIT_TRICKLE,
-                outfit_item_facet=item_facet,
-            ).exists()
-        )
 
         # Amount matches algorithm: base × item_q × attach_q × level.
         cfg = get_resonance_gain_config()
         base = cfg.outfit_daily_trickle_per_item_resonance
         expected_amount = int(base * Decimal("2.00") * Decimal("3.00") * 2)
-        grant = ResonanceGrant.objects.get(
+        accrual = TrickleAccrual.objects.get(
             character_sheet=sheet,
-            source=GainSource.OUTFIT_TRICKLE,
+            source=TrickleSource.OUTFIT_TRICKLE,
             outfit_item_facet=item_facet,
         )
-        self.assertEqual(grant.amount, expected_amount)
+        self.assertEqual(accrual.amount, expected_amount)
+        self.assertEqual(waiting_trickles(sheet), {self.resonance.pk: expected_amount})
 
-        # Balance incremented by the grant amount.
+        # Nothing was granted: the trickle waits for the ritual.
+        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=sheet).exists())
+        mid_cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.resonance)
+        self.assertEqual(mid_cr.balance, 0)
+
+        # The harvest grants it once and stamps the row.
+        harvested = harvest_trickles(sheet, lambda _res: NO_GAIN_BONUS, ritual=RitualFactory())
+        self.assertEqual([(h.resonance, h.amount) for h in harvested], [(self.resonance, 12)])
+        grant = ResonanceGrant.objects.get(character_sheet=sheet, source=GainSource.TRICKLE_HARVEST)
+        self.assertEqual(grant.amount, expected_amount)
         post_cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=self.resonance)
         self.assertEqual(post_cr.balance, expected_amount)
+        self.assertEqual(waiting_trickles(sheet), {})
 
 
 class OutfitTrickleNoThreadPipelineTests(TestCase):
@@ -177,19 +187,13 @@ class OutfitTrickleNoThreadPipelineTests(TestCase):
 
     def test_no_thread_on_facet_means_no_grant(self) -> None:
         """Equipped item with facet but no Thread on that facet → 0 outfit grants."""
-        from world.magic.constants import GainSource
-        from world.magic.models import ResonanceGrant
+        from world.magic.models import TrickleAccrual
         from world.magic.services.gain import resonance_daily_tick
 
         summary = resonance_daily_tick()
 
         self.assertEqual(summary.outfit_grants_issued, 0)
-        self.assertFalse(
-            ResonanceGrant.objects.filter(
-                character_sheet=self.sheet,
-                source=GainSource.OUTFIT_TRICKLE,
-            ).exists()
-        )
+        self.assertFalse(TrickleAccrual.objects.filter(character_sheet=self.sheet).exists())
 
 
 class OutfitTrickleNoItemsPipelineTests(TestCase):
@@ -197,9 +201,9 @@ class OutfitTrickleNoItemsPipelineTests(TestCase):
 
     def test_no_matching_item_means_no_grant(self) -> None:
         """Sheet with Thread but no equipped items → outfit_grants_issued == 0."""
-        from world.magic.constants import GainSource, TargetKind
+        from world.magic.constants import TargetKind
         from world.magic.factories import CharacterResonanceFactory, FacetFactory, ResonanceFactory
-        from world.magic.models import CharacterResonance, ResonanceGrant, Thread
+        from world.magic.models import CharacterResonance, Thread, TrickleAccrual
         from world.magic.services.gain import resonance_daily_tick
 
         bare_sheet = _make_tenure_backed_sheet()
@@ -217,13 +221,8 @@ class OutfitTrickleNoItemsPipelineTests(TestCase):
 
         resonance_daily_tick()
 
-        # No OUTFIT_TRICKLE grants for the bare sheet.
-        self.assertFalse(
-            ResonanceGrant.objects.filter(
-                character_sheet=bare_sheet,
-                source=GainSource.OUTFIT_TRICKLE,
-            ).exists()
-        )
+        # No trickle waits for the bare sheet.
+        self.assertFalse(TrickleAccrual.objects.filter(character_sheet=bare_sheet).exists())
 
         # Balance remains 0.
         cr = CharacterResonance.objects.get(character_sheet=bare_sheet, resonance=resonance)
