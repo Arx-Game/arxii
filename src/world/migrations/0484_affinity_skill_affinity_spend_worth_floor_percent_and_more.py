@@ -354,12 +354,6 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
-                    "interaction_timestamp",
-                    models.DateTimeField(
-                        help_text="Denormalized from the pose, required for the partitioned table's key."
-                    ),
-                ),
-                (
                     "interaction",
                     models.ForeignKey(
                         db_constraint=False,

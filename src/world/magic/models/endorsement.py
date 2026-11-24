@@ -140,9 +140,6 @@ class PoseResonanceReach(RelatedCacheClearingMixin, SharedMemoryModel):
         db_constraint=False,
         help_text="The pose that reached for this resonance.",
     )
-    interaction_timestamp = models.DateTimeField(
-        help_text="Denormalized from the pose, required for the partitioned table's key.",
-    )
     resonance = models.ForeignKey(
         RESONANCE_FK,
         on_delete=models.PROTECT,

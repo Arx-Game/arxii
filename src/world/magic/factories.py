@@ -2393,7 +2393,6 @@ class PoseResonanceReachFactory(factory.django.DjangoModelFactory):
         model = "arxii.PoseResonanceReach"
 
     interaction = factory.SubFactory("world.scenes.factories.InteractionFactory")
-    interaction_timestamp = factory.LazyAttribute(lambda o: o.interaction.timestamp)
     resonance = factory.SubFactory(ResonanceFactory)
 
 

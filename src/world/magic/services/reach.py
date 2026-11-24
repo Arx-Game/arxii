@@ -72,7 +72,6 @@ def record_pending_reach(interaction: Interaction, pending: PendingReach) -> Pos
     """
     reach = PoseResonanceReach.objects.create(
         interaction=interaction,
-        interaction_timestamp=interaction.timestamp,
         resonance=Resonance.objects.get(pk=pending.resonance_id),
     )
     interaction.cached_resonance_reaches = [reach]
