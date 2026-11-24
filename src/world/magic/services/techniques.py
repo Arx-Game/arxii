@@ -1491,17 +1491,17 @@ def _cast_resonance_worth(  # noqa: PLR0913 - one roll's inputs, all keyword
     character: ObjectDB,
     technique: Technique,
     cast_resonance: Resonance | None,
-    pulls: bool,
+    cast_pull: CastPullDeclaration | None,
     cast_check: CastCheck | None,
     situation_ctx: object | None,
 ) -> int:
     """What the cast resonance's affinity check made this cast worth, in percent (#5308).
 
-    One check, rolled only when something here has a strength to scale: the cast pulls
-    threads, or its resonance is kindled now. Any other cast, a caster with no sheet and a
-    cast with no resonance is worth 100 and rolls nothing. The check uses the stat of the
-    cast's own roll. The result scales the pull and the kindled cast term alike, so one cast
-    never rolls an affinity twice.
+    One check, rolled only when something here has a strength to scale: a thread of the cast's
+    pull is paid by this affinity, or the resonance is kindled now. Any other cast, a caster
+    with no sheet and a cast with no resonance is worth 100 and rolls nothing. The check uses
+    the stat of the cast's own roll. The result scales the pull and the kindled cast term
+    alike, so one cast never rolls an affinity twice.
     """
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.services.kindling import kindled_strength_now  # noqa: PLC0415
@@ -1511,13 +1511,18 @@ def _cast_resonance_worth(  # noqa: PLR0913 - one roll's inputs, all keyword
         act_stat,
         roll_spend_worth,
     )
+    from world.magic.types.pull import pull_payer  # noqa: PLC0415
 
     if cast_resonance is None:
         return FULL_WORTH_PERCENT
     sheet = _get_character_sheet(character)
     if sheet is None:
         return FULL_WORTH_PERCENT
-    if not pulls:
+    pulled_here = cast_pull is not None and any(
+        pull_payer(thread, cast_pull.payers).affinity_id == cast_resonance.affinity_id
+        for thread in cast_pull.threads
+    )
+    if not pulled_here:
         resolution = situation_ctx if isinstance(situation_ctx, CombatRoundContext) else None
         if kindled_strength_now(sheet, cast_resonance, resolution=resolution) is None:
             return FULL_WORTH_PERCENT
@@ -1947,7 +1952,7 @@ def use_technique(  # noqa: PLR0913
         character=character,
         technique=technique,
         cast_resonance=cast_resonance,
-        pulls=cast_pull is not None,
+        cast_pull=cast_pull,
         cast_check=cast_check,
         situation_ctx=situation_ctx,
     )
