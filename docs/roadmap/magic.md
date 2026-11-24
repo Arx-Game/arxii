@@ -202,9 +202,10 @@ A code read flags these as "missing"; they are intentional. Verify against the d
 before treating any as a bug:
 
 - **Casting does not grant resonance.** Resonance is earned from *perception* — pose
-  endorsements, scene entry, residence/outfit trickle (the four `grant_resonance`
-  surfaces in Spec C, `docs/architecture/resonance-gain.md`). You earn it when others
-  endorse your dramatic cast pose, not mechanically from the cast.
+  endorsements, scene entry, residence/outfit trickle (the four gain surfaces in Spec C,
+  `docs/architecture/resonance-gain.md`; since #5308 the two trickles pile up as
+  `TrickleAccrual` rows and an anima ritual turns them into resonance). You earn it when
+  others endorse your dramatic cast pose, not mechanically from the cast.
 - **Non-combat casts deal no damage.** A hostile cast at a PC routes into combat
   (`seed_or_feed_encounter_from_cast`), where damage applies. Non-combat = benign / self
   / room. Consistent with the non-lethal-PvP invariant.
@@ -1543,3 +1544,42 @@ Built as one PR (the numbered parts were the build order):
 - **Staff authoring left.** The `AnimaRitualBudgetAward` rows for Failure and Critical Failure are no
   longer read. Staff set the attunement costs and check and `failed_endorsement_percent` (default 50);
   none is seeded.
+
+## Villainy, Heroism and Reflection: a bonus check on every gain and spend (#5308, ADR-5308, BUILT 2026-11-24)
+
+Built as one PR (the numbered parts were the build order):
+
+- **One skill per affinity.** `Affinity.skill` is a one-to-one to a Magic skill (Villainy for Abyssal,
+  Heroism for Celestial, Reflection for Primal; the Primal skill is not the Reflection pose or the
+  Reflection creation step). `Affinity.clean` refuses a skill another magical roll already adds,
+  `MAGIC_PICKER_SKILL_CHOICES` and `RitualCheckConfig.clean` refuse an affinity's skill the other way
+  round, and `Affinity.spend_worth_floor_percent` sets the least a pull or kindled cast is worth.
+- **The bonus check on every earned gain.** `grant_resonance` rolls `ResonanceGainConfig.bonus_check_type`
+  once per affinity paid, with the act's own stat (or the stat `ResonanceGainSourceStat` sets for a source
+  that rolled nothing) plus the affinity's skill; `ResonanceCheckAward.gain_bonus_percent` grows the gain
+  and the grant records `bonus_outcome` and `bonus_percent`. Exempt, rolled and caller-rolled sources are
+  the three `GAIN_BONUS_*_SOURCES` sets. A kindled deed grows its set-aside share by the same percent, and
+  a claim of that share rolls nothing.
+- **Unheld resonances are earned.** A deed in a resonance a situation names but the character does not
+  hold earns it (`include_named_unheld`), and the entry flourish accepts any resonance.
+- **A pose can reach.** `PoseResonanceReach` (web `reach_resonance_id`, telnet `pose/reach <resonance>=<text>`,
+  composer row on the frontend); an endorsement of a reached pose pays that resonance and the endorser
+  only confirms.
+- **Trickles wait.** The residence and worn-piece ticks write `TrickleAccrual` rows. An anima ritual,
+  successful or not, harvests them as one `TRICKLE_HARVEST` grant per resonance with one bonus check per
+  affinity, and the ritual line and the "Your resonances" panel (and telnet `resonances`) say what waits.
+  A harvest earns no pledge favor.
+- **Spending has a worth.** A pull rolls one worth check per paying affinity and scales every effect it
+  bought; a kindled cast rolls one for its resonance. The result sets `ResonanceCheckAward.spend_worth_percent`,
+  held up by the affinity's floor. A line says "Your Villainy check made it worth 130 percent." only when the
+  worth is not 100.
+- **The settling rite** adds the skill of the affinity it converts toward to its roll.
+- **Deviation from the spec.** A combat pull commits at declaration and the cast resolves later, so a
+  combat cast with a pull rolls the pull's worth at declaration and its kindled cast term at resolution.
+  Non-combat casts roll once. See ADR-5308.
+- **Journeys and properties:** `integration_tests/test_affinity_skill_journeys.py` and
+  `integration_tests/fuzz/test_affinity_skill_properties.py`.
+- **Staff authoring left.** The three skills and the affinity link, the `ResonanceCheckAward` rows, the
+  bonus check type and its difficulty, the per-source stats, the Abyssal floor and any skill accents are
+  authored by staff and tracked in an `authoring` issue. Nothing is seeded, so until staff set
+  `bonus_check_type` every gain pays its plain amount and every pull is worth 100 percent.

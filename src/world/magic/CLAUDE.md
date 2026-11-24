@@ -1405,17 +1405,26 @@ Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
   Matching typed FK kwarg required per source: ROOM_RESIDENCE → `room_profile=`,
   POSE_ENDORSEMENT → `pose_endorsement=`, SCENE_ENTRY → `scene_entry_endorsement=`,
   STAFF_GRANT → optional `staff_account=`, OUTFIT_ITEM reserved.
-- `create_pose_endorsement(endorser_sheet, interaction, resonance)` - 8 preconditions
+- `create_pose_endorsement(endorser_sheet, interaction, resonance=None)` - 8 preconditions
   (self, alt, whisper, private, participation, unclaimed resonance, duplicate). Raises
-  `EndorsementValidationError` on failure.
+  `EndorsementValidationError` on failure. A pose whose author reached for a resonance (#5308,
+  `Interaction.cached_resonance_reach`) is endorsed for that resonance: `resonance` is ignored and the
+  unclaimed-resonance check is skipped, since the author named it. A pose that reached for nothing needs
+  `resonance`, claimed by the endorsee, and otherwise answers "Which resonance? This pose did not reach for one."
+  The endorse action, `endorse pose <char> [#N] [confirm]` and `PoseEndorsementSerializer` accept a missing
+  resonance for a reached pose only.
 - `create_scene_entry_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)` -
   Immediate-grant sibling with participation + alt checks.
 - `settle_weekly_pot(endorser_sheet)` - Settles all unsettled PoseEndorsement rows for one
   endorser. Distributes `ceil(weekly_pot_per_character / N)` resonance per endorsement.
   Idempotent.
-- `residence_trickle_tick()` - Daily pass: for each sheet with residence, grant per matching
-  (aura-tagged ∩ sheet-claimed) resonance. Per-character atomic.
-- `resonance_daily_tick()` - Master daily tick (residence trickle + outfit stub).
+- `residence_trickle_tick()` - Daily pass: for each sheet with residence, write one `TrickleAccrual`
+  per matching (aura-tagged ∩ sheet-claimed) resonance. It grants nothing (#5308): an anima ritual
+  harvests the rows. Per-character atomic.
+- `resonance_daily_tick()` - Master daily tick (residence trickle + the worn-piece trickle, which also
+  writes `TrickleAccrual` rows).
+- `waiting_trickles(sheet) -> dict[int, int]` - What her days have piled up per resonance id and no
+  anima ritual has harvested; the only reading of the accrual rows (#5308).
 - `resonance_weekly_settlement_tick()` - Master weekly tick (settle all endorsers).
 - `tag_room_resonance(room_profile, resonance, set_by=None)` / `untag_room_resonance(room_profile, resonance)` -
   Idempotent room aura management.
@@ -1467,7 +1476,7 @@ Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
   trickle fires only when the room has a positive cascade-row LocationValueModifier
   with key_type=RESONANCE matching a claimed resonance)
 - `Interaction.pose_kind` CharField - STANDARD / ENTRY / DEPARTURE
-- `GainSource` TextChoice - POSE_ENDORSEMENT / SCENE_ENTRY / ROOM_RESIDENCE / OUTFIT_ITEM / STAFF_GRANT (and more since; `ANIMA_RITUAL` is the anima ritual's two grants, #5280: the Primal part on the roll, the outward part on the partner's endorsement or, for an NPC partner, on the roll)
+- `GainSource` TextChoice - POSE_ENDORSEMENT / SCENE_ENTRY / ROOM_RESIDENCE / OUTFIT_ITEM / STAFF_GRANT (and more since; `ANIMA_RITUAL` is the anima ritual's two grants, #5280: the Primal part on the roll, the outward part on the partner's endorsement or, for an NPC partner, on the roll; `TRICKLE_HARVEST` is what the ritual turned the waiting trickles into, #5308; `ROOM_RESIDENCE` and `OUTFIT_TRICKLE` are legacy, no longer written)
 
 **Residence declaration + room aura tagging, live end-to-end (#2036):** the daily
 residence-trickle gate above was mechanically inert until #2036 wired every write path —
@@ -1482,7 +1491,8 @@ declaring a residence, tagging a room's aura, and reaching both without a manual
   the room's aura via `tag_room_resonance`/`untag_room_resonance` (telnet `room/aura <resonance>`
   / `room/aura clear <resonance>`, web `RoomAuraPicker`; gated by the owner-or-tenant
   `IsRoomTenantPrerequisite`, tagging additionally requires the caller has claimed that
-  resonance). `residence_trickle_tick()` then grants resonance daily for the intersection of
+  resonance). `residence_trickle_tick()` then writes a waiting trickle (`TrickleAccrual`, harvested by
+  an anima ritual since #5308) daily for the intersection of
   (aura-tagged resonances on `current_residence`) ∩ (the sheet's claimed resonances) —
   `get_residence_resonances()` above. `end_tenancy()` clears `current_residence` when the ended
   tenancy was the declared residence — a character shouldn't keep trickling from a room they no
@@ -1500,8 +1510,42 @@ declaring a residence, tagging a room's aura, and reaching both without a manual
   room_profile=sanctum's room)` row — the exact same row shape `tag_room_resonance` writes, just
   under a different `source` tag. `get_residence_resonances()` doesn't filter on `source`, so a
   character whose `current_residence` is a Sanctum room, with a claimed resonance matching the
-  Sanctum's consecrated type, trickles daily for free as a side effect of ordinary Homecoming
+  Sanctum's consecrated type, accrues a trickle daily for free (harvested by an anima ritual, #5308) as a side effect of ordinary Homecoming
   ritual growth — no extra wiring needed, and no code should special-case it.
+
+### Affinity skills and bonus checks (#5308, ADR-5308)
+
+**Docs:** `docs/systems/magic.md` "Affinity skills and the bonus resonance check";
+`docs/architecture/resonance-gain.md` §13.
+
+- **One skill per affinity, named in no code.** `Affinity.skill` (one-to-one to a Magic skill) is the only way
+  code reaches Villainy, Heroism or Reflection (ADR-4450). The Primal skill Reflection is not the Reflection
+  pose or creation step. `Affinity.clean`, `MAGIC_PICKER_SKILL_CHOICES` and `RitualCheckConfig.clean` keep an
+  affinity's skill off every other magical roll, so one roll never adds a skill twice.
+- **Every earned gain rolls once per affinity.** `grant_resonance` rolls `roll_gain_bonus`
+  (`services/resonance_checks.py`) for a source in `GAIN_BONUS_ROLLED_SOURCES`; a source in
+  `GAIN_BONUS_CALLER_ROLLED_SOURCES` (`KINDLED_DEED`, `ANIMA_RITUAL`, `TRICKLE_HARVEST`) must be given a
+  `gain_bonus=` its caller rolled once per affinity; a source in `GAIN_BONUS_EXEMPT_SOURCES` refuses one. A
+  new `GainSource` goes in exactly one set (`test_deed_classification.py`). Pass `act_stat=act_stat(check_type)`
+  when the act rolled; otherwise the stat comes from `ResonanceGainSourceStat`. Never roll a second time to
+  grow something an earlier roll already grew: a kindled claim, a stored ritual amount and a harvest take the
+  result already rolled.
+- **Spending rolls `roll_spend_worth`.** A pull scales its resolved effects by the worth of each paying
+  affinity (`spend_resonance_for_pull(worth_by_affinity=)` takes a worth already rolled, so one cast never
+  rolls an affinity twice); `kindled_cast_power_term` scales by `PowerTermContext.resonance_worth_percent`.
+  Previews never roll. Set `PullActionContext.check_type` where the action rolls a check. A combat cast with a
+  pull rolls twice for one affinity (declaration and resolution), a recorded deviation.
+- **Trickles wait.** The residence and worn-piece ticks write `TrickleAccrual`, never a grant; a ritual's
+  `harvest_trickles` is the only writer of `TRICKLE_HARVEST` and of `harvested_at`. Do not add a counter:
+  `waiting_trickles(sheet)` sums the rows. Any reader of "what a worn piece fed her" reads accrual rows plus
+  legacy `OUTFIT_TRICKLE` grants.
+- **A pose can reach.** `pending_reach_from` before the pose posts, `record_pending_reach` after
+  (`services/reach.py`); an unheld resonance is a valid reach and a valid kindled deed
+  (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`; the panel and casts
+  never set it).
+- **Authoring left to staff:** the three skills and the affinity link, `ResonanceCheckAward` rows,
+  `bonus_check_type` and its difficulty, per-source stats, the Abyssal floor and any skill accents. With no
+  `bonus_check_type` nothing changes.
 
 ### Soul Tether (Resonance Pivot Spec B; Sineating and the Mire, #5177)
 
@@ -1923,7 +1967,7 @@ the complementary half of the entrance moment).
 - `resolve_entry_flourish_offer(offer: PendingEntryFlourishOffer, *, resonance: Resonance) -> EntryFlourishResult`
   (`entry_flourish.py`) — locked grant then offer deletion; an unheld resonance is earned (#5308).
 - `create_entry_flourish(sheet, resonance, *, scene, amount=None)` (`services/gain.py`) —
-  checks claimed-resonance, creates `EntryFlourishRecord`, writes
+  creates `EntryFlourishRecord` (the resonance need not be held, #5308), writes
   `ResonanceGrant(source=ENTRY_FLOURISH, entry_flourish=record)`. Skips gracefully on
   duplicate `(sheet, scene)`.
 
@@ -1950,7 +1994,8 @@ the complementary half of the entrance moment).
   `PendingEntryFlourishOfferViewSet` (account-scoped, read-only).
 - `POST /api/magic/entry-flourish/respond/` — `EntryFlourishRespondView`; body
   `{offer_id, resonance_id}`; dispatches through `ResolveFlourishOfferAction` (same
-  seam as the telnet `flourish` command); picker data reuses `CharacterResonanceViewSet`.
+  seam as the telnet `flourish` command); picker data reads the resonance catalog
+  (`useResonanceCatalog`) and `CharacterResonanceViewSet` to list held resonances first (#5308).
 
 **Exceptions (`exceptions.py`):**
 - `EntryFlourishOfferError` (base), `EntryFlourishOfferNotFoundError` — both carry

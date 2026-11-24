@@ -28,6 +28,11 @@ by the owner-or-tenant `IsRoomTenantPrerequisite`) and the web
 §2.1–2.4, services §3.0–3.2/3.4–3.5, API §4.3–4.4, rules §5.1/5.2/5.4/5.5)
 matches what shipped.
 
+**Implementation note (changed by #5308):** the two daily trickles (§5.3 residence, §5.4 outfit) no
+longer call `grant_resonance`. They write `TrickleAccrual` rows that wait until an anima ritual
+harvests them, and every earned gain now meets a bonus resonance check. §13 describes both, with the
+trickle flow diagram. §5.3 and §5.4 below carry the corrected rules.
+
 ---
 
 ## 1. Context & Design Intent
@@ -58,10 +63,12 @@ Phase 12 audit hook" — that hook is this spec.
    Peers tag in-scene interactions throughout the week; at weekly tick
    each endorser's fixed pot divides across their endorsements
    (`ceil(pot / N)`).
-3. **Room residence trickle** — daily passive, one grant per claimed
-   resonance that matches the character's current residence's aura tags.
-4. **Outfit trickle** — infrastructure only (empty loop) until the Items
-   system ships.
+3. **Room residence trickle**: daily passive, one waiting `TrickleAccrual`
+   row per claimed resonance that matches the character's current residence's
+   aura tags (since #5308 an anima ritual turns the pile into resonance).
+4. **Outfit trickle**: daily passive, one waiting `TrickleAccrual` row per
+   worn facet the wearer holds a thread on (built since Spec D; harvested like
+   the residence trickle).
 
 **Mechanical auto-gains are cut from scope.** Earlier brainstorming
 considered awarding resonance on technique use, ritual completion, or
@@ -764,20 +771,22 @@ one for pose endorsement and one for scene-entry endorsement.
 | Trigger | Daily tick processes all sheets with `current_residence` set |
 | Cadence | Daily |
 | Value | `config.residence_daily_trickle_per_resonance` per matching resonance |
-| Source enum | `ROOM_RESIDENCE` |
-| Source ref | `RoomAuraProfile.pk` |
+| Written as | One `TrickleAccrual` row (`TrickleSource.ROOM_RESIDENCE`, `room_profile` FK) per matching resonance; no `grant_resonance` call and no balance change until an anima ritual harvests it (#5308, §13) |
+| Source enum | `TrickleSource.ROOM_RESIDENCE` (the `GainSource.ROOM_RESIDENCE` ledger value is legacy and no longer written) |
+| Source ref | `RoomProfile` (the residence room) |
 | Eligibility | Sheet has `current_residence`; residence's `RoomProfile` has an associated `RoomAuraProfile`; at least one tagged resonance matches the sheet's claimed resonances |
 | Matching rule | Union of (aura profile resonance tags) ∩ (sheet's claimed resonances) — one trickle per matching resonance |
 
-### 5.4 Outfit trickle (stubbed)
+### 5.4 Outfit trickle
 
 | Property | Value |
 |---|---|
-| Trigger | Daily tick calls `get_outfit_resonance_contributions(sheet)` |
-| Value | Today: empty iterable. When Items ships: per-(item, resonance) contribution |
-| Source enum | `OUTFIT_ITEM` |
-| Source ref | When implemented: `ItemInstance.pk` |
-| Spec C scope | Hook only — no item authoring, helper returns empty |
+| Trigger | Daily tick calls `outfit_daily_trickle_for_character(sheet)` for each wearer |
+| Value | `trickle_for(item, item_facet, thread)` for each worn facet the wearer holds a thread on |
+| Written as | One `TrickleAccrual` row (`TrickleSource.OUTFIT_TRICKLE`, `outfit_item_facet` FK) per such facet; harvested by an anima ritual (#5308, §13) |
+| Source enum | `TrickleSource.OUTFIT_TRICKLE` (the `GainSource.OUTFIT_TRICKLE` ledger value is legacy and no longer written) |
+| Source ref | `ItemFacet.pk` |
+| Spec C scope | Originally a hook only; the shipped loop is the Spec D outfit work |
 
 ### 5.5 Staff grant
 
@@ -802,7 +811,7 @@ Default `ResonanceGainConfig` values at first migration:
 | `weekly_pot_per_character` | 20 | Active player endorsing 4–6 poses/week → each endorsement worth 3–5 |
 | `scene_entry_grant` | 4 | Memorable scene with 4 endorsers on your entry → +16 for that entry |
 | `residence_daily_trickle_per_resonance` | 1 | One matching resonance → 7/week per claimed resonance |
-| `outfit_daily_trickle_per_item_resonance` | 1 | (Unused until Items ships) |
+| `outfit_daily_trickle_per_item_resonance` | 1 | Per worn facet with a thread; waits for an anima ritual (§13) |
 | `same_pair_daily_cap` | 0 (off) | YAGNI until observed abuse |
 | `settlement_day_of_week` | 0 (Monday) | Server UTC |
 
@@ -812,7 +821,7 @@ An active-RPer-with-fashion baseline per week:
 - 3 scenes × ~4 entry endorsements = **~12** (scene entry)
 - 3 × ~3 pose endorsements (ceil-weighted) = **~9** (pose endorsement)
 - 7 × ~3 residence trickles (3 claimed resonances matched) = **~21**
-- 7 × ~3 outfit trickles (post-Items) = **~21**
+- 7 × ~3 outfit trickles = **~21** (both trickles arrive at the next anima ritual's harvest, §13)
 
 **≈ 63/week active+engaged.** Bob the Bland: 0. That's the intended gap.
 
@@ -1159,3 +1168,86 @@ When public visibility is wanted:
 - Aggregation queries for weekly top-earners, top-aura-farmers-by-
   resonance, etc. — classic leaderboard pattern, reads from
   ResonanceGrant.
+
+---
+
+## 13. Trickles wait for the anima ritual, and every gain meets a bonus check (#5308)
+
+**Status:** built. Decision record:
+`docs/adr/adr-5308-every-earned-gain-rolls-once-per-affinity-and-trickles-wait-for-the-anima-ritual.md`.
+
+### 13.1 Trickles accrue and are harvested
+
+The residence tick and the worn-piece tick write `TrickleAccrual` rows (`models/trickle.py`) instead of
+granting resonance. A row holds `character_sheet`, `resonance`, `amount`, `source`
+(`TrickleSource.ROOM_RESIDENCE` or `OUTFIT_TRICKLE`), exactly one of `room_profile` and
+`outfit_item_facet` (a check constraint ties the FK to the source), `accrued_at` and `harvested_at`.
+A row with no `harvested_at` is waiting. Nothing reads the waiting rows as a balance, and
+`waiting_trickles(sheet)` sums them for display (the "waiting for your anima ritual" figure on the
+"Your resonances" panel and in telnet `resonances`), so there is one store and no counter to drift.
+
+An anima ritual with a partner harvests them (`harvest_trickles`, `services/ritual_bond.py`). The
+harvest runs on every ritual that reaches `apply_ritual_bond`, success or failure, because the trickle
+was earned already and the ritual is only the collection step. A harvest earns no pledge favor
+(`TRICKLE_HARVEST` is in `PASSIVE_DEED_SOURCES`).
+
+```mermaid
+flowchart TD
+    A[Daily tick] --> B{Residence or worn piece}
+    B -->|Residence matches claimed resonance| C[TrickleAccrual ROOM_RESIDENCE]
+    B -->|Worn facet with a thread| D[TrickleAccrual OUTFIT_TRICKLE]
+    C --> E[(Rows with harvested_at empty)]
+    D --> E
+    E --> F[waiting_trickles: panel and telnet figure]
+    G[Anima ritual with a partner, any outcome] --> H[Lock the character's waiting rows]
+    E --> H
+    H --> I[Sum the rows per resonance]
+    I --> J[One bonus check per affinity, the ritual's own stat]
+    J --> K[One TRICKLE_HARVEST grant per resonance, grown by the result]
+    K --> L[Stamp harvested_at on every row covered]
+    L --> M[Ritual line names each harvest and the skill's percent]
+```
+
+The rows are locked with `select_for_update(of=("self",))` while read, so two rituals at once cannot
+harvest the same trickle twice, and a second ritual finds nothing already stamped. A worn piece's
+meaning (`item_meaning`, `docs/systems/items.md`) reads the accrual rows whether harvested or not, plus
+the `OUTFIT_TRICKLE` ledger grants written before this change.
+
+### 13.2 The bonus resonance check on every earned gain
+
+Staff link one Magic skill to each affinity (`Affinity.skill`) and name a check
+(`ResonanceGainConfig.bonus_check_type`, which must weigh exactly one stat). `grant_resonance` rolls it
+last, after the distinction accelerator and the affinity earn rate, once per affinity the act pays:
+the act's own stat replaces the check's stat (`ResonanceGainSourceStat` supplies one for a source that
+rolled nothing), the affinity's skill is added, and the staff table `ResonanceCheckAward` turns the
+result into `gain_bonus_percent`. The grant records `bonus_outcome` and `bonus_percent`. A source is
+exempt (staff and system grants, conversions, a claim of a share that already grew), rolled
+(`grant_resonance` rolls it) or caller-rolled (a kindled deed, an anima ritual and a trickle harvest pay
+several resonances from one act, so the caller rolls once per affinity and passes each result in);
+`GAIN_BONUS_*_SOURCES` in `constants.py` partition every `GainSource`, guarded by a total-classification
+test. With no `bonus_check_type`, every gain pays its plain amount.
+
+Spending uses the same roll for worth. A pull rolls one check per distinct paying affinity and scales
+each resolved effect (including a capability grant's value, but not the distinction's flat bonus) by
+`ResonanceCheckAward.spend_worth_percent`, never below `Affinity.spend_worth_floor_percent`. A
+non-combat cast rolls once for the cast resonance's affinity and uses the result for both its pull and
+its kindled cast power, and only when a pulled thread is paid by that affinity or the resonance is
+kindled.
+
+Combat is the one place a cast can roll twice for one affinity: a combat pull commits at declaration
+and the cast resolves a round later through `use_technique`, so the pull rolls its worth at
+declaration and the kindled cast term rolls at resolution. The spec asked for one roll, and
+persisting the declared worth on `CombatPull` would have needed a column the spec did not name.
+
+### 13.3 Reaching, unheld resonances and the ritual's stored result
+
+A pose can name a resonance it reaches for (`PoseResonanceReach`, one per pose). An endorsement of a
+reached pose pays that resonance and the endorsee need not have claimed it, so the endorser only
+confirms. A deed that a situation names in a resonance the character does not hold earns it: the grant
+creates her row (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`).
+The entry flourish accepts an unheld resonance for the same reason.
+
+The anima ritual's outward part can wait for the partner's answer. It stores the base amount on
+`AnimaRitualPerformance.outward_amount_pending` with the result of the bonus check it rolled
+(`outward_bonus_outcome`, `outward_bonus_percent`), and the answer grants the base amount grown by that
+result with no second roll, so the amount grows exactly once.

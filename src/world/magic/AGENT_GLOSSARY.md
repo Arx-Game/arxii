@@ -692,5 +692,23 @@ A character's record that she has sensed one substance's Primum in one room (`Pr
 **Calling up** (#5018; reshaped by #5125):
 Raising the Primum of a gift's substance in the place she stands by one step, for one shared anima amount set once for every substance, with no resonance charge. It happens automatically as part of a cast where the substance is missing (only up to Trace), or with no technique (`call_up_substance`, telnet `callup`). It writes a `PrimumCallUp` that lasts while she stays, and the room sees one line the game writes ("<name> begins to manifest fire in the area."). Never refused for anima. _Avoid_: summon, conjure, generate.
 
+**Affinity skill** (#5308, ADR-5308):
+The one Magic skill staff link to an affinity (`Affinity.skill`): Villainy for Abyssal, Heroism for Celestial and Reflection for Primal. It is added to the **Bonus resonance check** of every resonance gain or spend in that affinity, so a trained character earns more and gets more from spending it. Reached only through the affinity, never named in code. The Primal skill Reflection is not the **Reflection** a pose or journal entry makes, and not the Reflection step of character creation. _Avoid_: affinity stat, alignment skill.
+
+**Bonus resonance check** (#5308, ADR-5308):
+The check every earned resonance gain rolls, once per affinity the act pays (`ResonanceGainConfig.bonus_check_type`, `roll_gain_bonus`). The stat of the act that earned the resonance replaces the check's stat, the **Affinity skill** is added, and the result sets a percentage (`ResonanceCheckAward.gain_bonus_percent`) the gain grows by. A claim of a kindled deed's set-aside share, a staff grant and every conversion roll nothing. _Avoid_: skill bonus, flat bonus.
+
+**Resonance worth** (#5308, ADR-5308):
+What one resonance is worth when it is spent, as a percentage: a thread pull rolls the same check with the stat of the action and scales every effect it bought by the result (`ResonanceCheckAward.spend_worth_percent`), and a kindled cast scales its kindled power the same way. The affinity's `spend_worth_floor_percent` is the least it can be. Previews show 100 and never roll. _Avoid_: spend bonus, pull multiplier.
+
+**Trickle** (#5308 changes it; #2036 and #4520 made it):
+The small amount of resonance a character's days earn: a resident's room tags and a worn piece's facets, written once a day as a `TrickleAccrual` row. A trickle pays nothing until a **Trickle harvest**, and it is not a grant, so it moves no balance.
+
+**Trickle harvest** (#5308, ADR-5308):
+What an Anima ritual with a partner does to the waiting trickles of the performer, successful or not: one `TRICKLE_HARVEST` grant per resonance, grown by the ritual's **Bonus resonance check** for that resonance's affinity, and every row it covered is stamped `harvested_at`. It earns no pledge favor. _Avoid_: collecting, payout.
+
+**Reach** (#5308, ADR-5308):
+The resonance a pose names when its author poses (`PoseResonanceReach`, one per pose; web `reach_resonance_id`, telnet `pose/reach <resonance>=<text>`), held or not. Whoever endorses the pose confirms that resonance instead of picking one, and the author need not have claimed it. Not a **Reflection** and not a **Claim**. _Avoid_: aim, target resonance.
+
 **Present (substance)**:
 A place that holds at least the first Primum step of a substance (Trace), whether from its ordinary condition, a call-up or a scene's GM mark (`stage_substance`). _Avoid_: available, active.

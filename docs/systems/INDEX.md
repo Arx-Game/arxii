@@ -168,6 +168,35 @@
   "Kindled resonances"; why a deed pays part at once and sets a share aside:
   `docs/adr/adr-5181-a-kindled-deed-pays-part-at-once-and-sets-a-share-aside-to-claim.md`; why Fury's anchor became a resonance: `docs/adr/adr-5124-furys-anchor-person-became-a-kindled-resonance.md`.
 
+- **Affinity skills and the bonus resonance check (#5308) [BUILT & WIRED]:** staff link one Magic skill to
+  each affinity (`Affinity.skill`, a one-to-one to `Skill`, so Villainy, Heroism and Reflection) and set
+  `Affinity.spend_worth_floor_percent`. Every earned resonance gain rolls one bonus check per affinity it pays:
+  `ResonanceGainConfig.bonus_check_type` and `bonus_difficulty_level` name the check, the act's own stat
+  replaces its stat and the affinity's skill is added (`services/resonance_checks.py`: `roll_gain_bonus`,
+  `roll_spend_worth`, `act_stat`, `worth_clause`; type `GainBonus`, `NO_GAIN_BONUS`). The staff table
+  `ResonanceCheckAward` (an `OutcomeTierAward`: `gain_bonus_percent`, `spend_worth_percent`) says what each
+  result is worth, and `ResonanceGainSourceStat` names the stat a source rolls when the act rolled none.
+  `GAIN_BONUS_EXEMPT_SOURCES`, `GAIN_BONUS_CALLER_ROLLED_SOURCES` and `GAIN_BONUS_ROLLED_SOURCES`
+  (`constants.py`) split every `GainSource`; `grant_resonance` takes `act_stat=` and `gain_bonus=` and records
+  `ResonanceGrant.bonus_outcome` and `bonus_percent`. Pulls and kindled casts roll a worth check instead:
+  `PullActionContext.check_type`, `ResonancePullResult.worth_by_affinity`,
+  `spend_resonance_for_pull(worth_by_affinity=)`, `PowerTermContext.resonance_worth_percent`;
+  `commit_combat_pull` now returns the pull result. A deed in a resonance a character does not hold earns it
+  (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`), and the entry flourish
+  accepts an unheld resonance. A pose can name the resonance it reaches for (`PoseResonanceReach`,
+  `services/reach.py`: `pending_reach_from`, `record_pending_reach`, `resolve_reach_name`; `ReachError`;
+  `Interaction.cached_resonance_reach`; wire field `reach_resonance_id`, payload `reached_resonance`; telnet
+  `pose/reach <resonance>=<text>`), and an endorsement of a reached pose pays that resonance
+  (`create_pose_endorsement(resonance=None)`). The daily residence and worn-piece ticks write
+  `TrickleAccrual` rows (`TrickleSource`) instead of granting; an anima ritual harvests them
+  (`harvest_trickles` in `services/ritual_bond.py`, `GainSource.TRICKLE_HARVEST`, `HarvestedTrickle`,
+  `AnimaRitualPerformance.outward_bonus_outcome` and `outward_bonus_percent`), and `waiting_trickles(sheet)`
+  feeds the `waiting_trickle` field of `GET /api/magic/kindled-resonances/` and telnet `resonances`. The
+  settling rite adds the skill of the affinity it converts toward. Journeys:
+  `test_affinity_skill_journeys`; properties: `fuzz/test_affinity_skill_properties`. Details:
+  [magic.md](magic.md) "Affinity skills and the bonus resonance check" and
+  `docs/adr/adr-5308-every-earned-gain-rolls-once-per-affinity-and-trickles-wait-for-the-anima-ritual.md`.
+
 - **Thread retune (slice 6 of #4672, reshaped by #5123):** `services/thread_resonance.py` moves
   part of one `ThreadResonance` row of a thread to another resonance's row through the SERVICE
   ritual at `THREAD_RESONANCE_SERVICE_PATH` (`thread_resonance_ritual`, `thread_resonance_options`
@@ -556,13 +585,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `PoseUnit` (`frontend/src/scenes/components/`) — `kind` prop is `'pose' | 'entry' |
     'style'` (style added #2031), POSTing to `pose-endorsements/` /
     `scene-entry-endorsements/` / `style-presentation-endorsements/` respectively.
-  - **Residence declaration + room aura, live end-to-end (#2036):** the `ROOM_RESIDENCE`
-    daily-trickle `GainSource` above is reachable via a full declare→tag→tick loop —
+  - **Residence declaration + room aura, live end-to-end (#2036):** the room residence daily
+    trickle (`TrickleSource.ROOM_RESIDENCE` since #5308; the `GainSource` of that name is
+    legacy and no longer written) is reachable via a full declare→tag→tick loop:
     `SetPrimaryHomeAction` (`world.locations.services.set_primary_home`) writes
     `CharacterSheet.current_residence`, `tag_room_resonance`/`untag_room_resonance`
     (`world.magic.services.gain`) write/remove the room's aura as a
-    `LocationValueModifier(key_type=RESONANCE)` row, and `residence_trickle_tick()` grants
-    resonance for the intersection of tagged and claimed resonances. `StartingArea
+    `LocationValueModifier(key_type=RESONANCE)` row, and `residence_trickle_tick()` writes a
+    `TrickleAccrual` row (an anima ritual harvests it, #5308) for the intersection of tagged and
+    claimed resonances. `StartingArea
     .grants_residence_tenancy` auto-grants a CG starting tenancy so a new character reaches
     the gate with zero manual step. A Sanctum's Ritual of Homecoming happens to write the same
     row shape onto its own room, so a resident Sanctum owner trickles from Homecoming growth
@@ -860,10 +891,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `refresh_resonance_alignment(*, character_sheet)` / `clear_resonance_alignment(*,
     character_sheet)` (ALIGNED presence buff, wired to `Character.at_post_move` /
     `at_pre_move` / `at_post_unpuppet`)
-  - Outfit trickle (Spec D PR1): `outfit_daily_trickle_for_character(sheet) -> int` —
-    issues `ResonanceGrant` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK)
-    for each worn item with matching facets; `resonance_daily_tick()` now calls this
-    alongside residence trickle
+  - Outfit trickle (Spec D PR1, changed by #5308): `outfit_daily_trickle_for_character(sheet) -> int`:
+    writes `TrickleAccrual` rows (source=OUTFIT_TRICKLE, `outfit_item_facet` typed FK) for each
+    worn item with matching facets, and returns how many; the rows wait until an anima ritual
+    harvests them as `GainSource.TRICKLE_HARVEST` grants. `ResonanceGrant` rows with source
+    OUTFIT_TRICKLE exist only from before #5308. `resonance_daily_tick()` calls this alongside
+    the residence trickle
   - Effect palette (#1584):
     `ensure_effect_palette_content()` (`world/magic/effect_palette_content.py`) — idempotent
     entry point that seeds all 9 castable effects (Summon Spirit, Aegis Field, Mirror Ward,
