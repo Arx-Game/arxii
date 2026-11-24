@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from world.traits.constants import TraitType
 
 
 class ResonanceGainConfig(SharedMemoryModel):
@@ -54,6 +56,27 @@ class ResonanceGainConfig(SharedMemoryModel):
         default=4,
         help_text="Flat grant per style-presentation endorsement (#1152).",
     )
+    bonus_check_type = models.ForeignKey(
+        "arxii.CheckType",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The check rolled once per affinity on every earned resonance gain, and once per "
+            "pull or kindled cast. It must weigh exactly one stat. The act's own stat "
+            "replaces it and the affinity's skill is added. Blank turns the bonus check off: "
+            "every gain pays its plain amount and every pull is worth 100 percent."
+        ),
+    )
+    bonus_difficulty_level = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "Difficulty of the bonus check. Authored as a level (0 = no difficulty): the "
+            "roll meets that level's baseline."
+        ),
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
     updated_by = models.ForeignKey(
@@ -66,3 +89,23 @@ class ResonanceGainConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"ResonanceGainConfig (pk={self.pk})"
+
+    def clean(self) -> None:
+        """The bonus check weighs exactly one stat, so the act's own stat can replace it."""
+        super().clean()
+        if self.bonus_check_type_id is None:
+            return
+        stat_weights = [
+            ctt
+            for ctt in self.bonus_check_type.traits.all()
+            if ctt.trait.trait_type == TraitType.STAT
+        ]
+        if len(stat_weights) != 1:
+            raise ValidationError(
+                {
+                    "bonus_check_type": (
+                        "The bonus check must weigh exactly one stat, so the stat of the "
+                        "act being rewarded can stand in for it."
+                    )
+                }
+            )

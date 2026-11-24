@@ -10,6 +10,7 @@ from django.db import models
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.magic.constants import AFFINITY_PRIMAL
+from world.magic.models.affinity import Affinity
 
 
 class RitualCheckConfig(SharedMemoryModel):
@@ -121,7 +122,7 @@ class RitualCheckConfig(SharedMemoryModel):
         return f"CheckConfig for {self.ritual_id}"
 
     def clean(self) -> None:
-        """Hold the Primal pick to a Primal resonance and the outward pick to a non-Primal one."""
+        """Hold each resonance pick to its affinity, and keep the skill off every affinity."""
         super().clean()
         errors: dict[str, str] = {}
         if self.primal_resonance_id and self.primal_resonance.affinity.name != AFFINITY_PRIMAL:
@@ -129,6 +130,11 @@ class RitualCheckConfig(SharedMemoryModel):
         if self.outward_resonance_id and self.outward_resonance.affinity.name == AFFINITY_PRIMAL:
             errors["outward_resonance"] = (
                 "The outward pick must be a Celestial or Abyssal resonance, not a Primal one."
+            )
+        if self.skill_id and Affinity.objects.filter(skill_id=self.skill_id).exists():
+            errors["skill"] = (
+                "An affinity already adds this skill to its bonus check. Give the ritual a "
+                "skill of its own so no roll counts one skill twice."
             )
         if errors:
             raise ValidationError(errors)

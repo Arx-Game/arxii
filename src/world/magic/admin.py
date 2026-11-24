@@ -104,6 +104,7 @@ from world.magic.models import (
     PathRitualGrant,
     PortalAnchorKind,
     PoseEndorsement,
+    PoseResonanceReach,
     PriceComponentRequirement,
     PrimumStep,
     RallyKindlingStrength,
@@ -111,8 +112,10 @@ from world.magic.models import (
     Reincarnation,
     RelationshipBondPullTuning,
     Resonance,
+    ResonanceCheckAward,
     ResonanceEnvironmentConfig,
     ResonanceGainConfig,
+    ResonanceGainSourceStat,
     ResonanceGrant,
     ResonanceTier,
     Restriction,
@@ -168,6 +171,7 @@ from world.magic.models import (
     TraditionGiftGrant,
     TraditionRitualGrant,
     TraditionTeachingConfig,
+    TrickleAccrual,
     aura_shares_prefetch,
 )
 from world.magic.models.appetites import (
@@ -299,6 +303,8 @@ class AffinityAdmin(admin.ModelAdmin):
         "kindled_boost_percent",
         "learn_rate_percent",
         "ritual_partner_fatigue",
+        "skill",
+        "spend_worth_floor_percent",
         "description_start",
     ]
     search_fields = ["name"]
@@ -2035,6 +2041,8 @@ class ResonanceGainConfigAdmin(admin.ModelAdmin):
         "outfit_daily_trickle_per_item_resonance",
         "same_pair_daily_cap",
         "settlement_day_of_week",
+        "bonus_check_type",
+        "bonus_difficulty_level",
         "updated_at",
     )
 
@@ -2419,6 +2427,24 @@ class PoseEndorsementAdmin(admin.ModelAdmin):
         return False
 
     def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(PoseResonanceReach)
+class PoseResonanceReachAdmin(admin.ModelAdmin):
+    """A pose's reached resonance (#5308): written with the pose, never edited by hand."""
+
+    autocomplete_fields = ["interaction"]
+    list_display = ("id", "interaction", "resonance")
+    readonly_fields = tuple(f.name for f in PoseResonanceReach._meta.fields)  # noqa: SLF001
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
 
 
@@ -2949,6 +2975,44 @@ class TrainingOutcomeAwardAdmin(admin.ModelAdmin):
 
     list_display = ["outcome_tier", "dev_point_multiplier"]
     ordering = ["outcome_tier__success_level"]
+
+
+@admin.register(ResonanceCheckAward)
+class ResonanceCheckAwardAdmin(admin.ModelAdmin):
+    """What the bonus resonance check is worth per roll result (#5308).
+
+    A result with no row adds nothing to a gain and leaves a pull worth 100 percent.
+    """
+
+    list_display = ["outcome_tier", "gain_bonus_percent", "spend_worth_percent"]
+    ordering = ["outcome_tier__success_level"]
+
+
+@admin.register(ResonanceGainSourceStat)
+class ResonanceGainSourceStatAdmin(admin.ModelAdmin):
+    """The stat a kind of gain rolls when the act did not roll one of its own (#5308)."""
+
+    list_display = ["source", "stat"]
+    list_filter = ["source"]
+
+
+@admin.register(TrickleAccrual)
+class TrickleAccrualAdmin(admin.ModelAdmin):
+    """Waiting resonance trickles (#5308): written by the daily ticks, harvested by rituals."""
+
+    autocomplete_fields = ["character_sheet"]
+    list_display = ("id", "character_sheet", "resonance", "amount", "source", "harvested_at")
+    list_filter = ("source", "harvested_at")
+    readonly_fields = tuple(f.name for f in TrickleAccrual._meta.fields)  # noqa: SLF001
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
 
 
 # --- Appetites (#2853) --------------------------------------------------------

@@ -363,6 +363,20 @@ class GainSource(models.TextChoices):
     # the character did; neither names a typed source row.
     KINDLED_CLAIM = "KINDLED_CLAIM", "Kindled deed claimed"
     ANIMA_RITUAL = "ANIMA_RITUAL", "Anima ritual"
+    # #5308: the trickles a character's days piled up (residence, worn pieces) turned into
+    # resonance by an anima ritual. A deed the character did; no typed source row.
+    TRICKLE_HARVEST = "TRICKLE_HARVEST", "Trickle harvest"
+
+
+class TrickleSource(models.TextChoices):
+    """What a waiting resonance trickle came from (#5308).
+
+    A daily tick writes one ``TrickleAccrual`` row per source; the next anima ritual
+    harvests them into resonance.
+    """
+
+    ROOM_RESIDENCE = "ROOM_RESIDENCE", "Room residence"
+    OUTFIT_TRICKLE = "OUTFIT_TRICKLE", "Worn piece"
 
 
 # ADR-0041 total classification of GainSource: which sources are eligible for the
@@ -381,6 +395,8 @@ ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.STYLE_PRESENTATION,
         GainSource.OUTFIT_TRICKLE,
         GainSource.ROOM_RESIDENCE,
+        # #5308: the harvest of those same trickles.
+        GainSource.TRICKLE_HARVEST,
     }
 )
 
@@ -501,6 +517,8 @@ AFFINITY_RATE_SCALED_SOURCES: frozenset[str] = frozenset(
         GainSource.SINEATER_FALL,
         GainSource.KINDLED_CLAIM,
         GainSource.ANIMA_RITUAL,
+        # #5308: the harvest of the waiting trickles, earned like any other gain.
+        GainSource.TRICKLE_HARVEST,
     }
 )
 
@@ -532,6 +550,8 @@ NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.MIRE_PURIFIED,
         GainSource.SUCCUMB_BONUS,
         GainSource.SINEATER_FALL,
+        # #5308: a passive trickle harvested, like the trickles it replaces.
+        GainSource.TRICKLE_HARVEST,
     }
 )
 

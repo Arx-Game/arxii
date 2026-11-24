@@ -201,6 +201,25 @@ class ResonanceGrant(SharedMemoryModel):
             "the rite applied."
         ),
     )
+    bonus_outcome = models.ForeignKey(
+        "arxii.CheckOutcome",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "The result of the bonus check that grew this gain (#5308). Null when the gain "
+            "rolled none: the source takes no bonus, the check is off, or it predates it."
+        ),
+    )
+    bonus_percent = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "How much the bonus check added to this gain, as a percentage of the amount "
+            "before it. 0 when none. The amount above already includes it."
+        ),
+    )
 
     class Meta:
         indexes = [
