@@ -3,7 +3,8 @@
  *
  * On scene entry the server emits a PendingEntryFlourishOffer; this dialog lets
  * the character declare which resonance they broadcast to the room (#5308): any
- * resonance, the ones they hold first. Chip style mirrors ReactionStrip. Mirrors AudereOfferDialog structure.
+ * resonance, the ones they hold first. Chip style mirrors ReactionStrip. Mirrors AudereOfferDialog
+ * structure.
  */
 
 import { useMemo, useState } from 'react';
