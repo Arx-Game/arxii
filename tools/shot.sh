@@ -142,7 +142,10 @@ else
 fi
 
 # The browser build this worktree's Playwright expects; a no-op once it is there.
-pnpm --dir frontend exec playwright install chromium >&2
+# The devcontainer firewall can refuse the download; shot.mjs then falls back to the
+# newest Chromium already in the shared cache.
+pnpm --dir frontend exec playwright install chromium >&2 \
+  || log "could not download Playwright's Chromium; using the newest one already cached"
 
 started=0
 # shellcheck disable=SC2317  # called by the trap below

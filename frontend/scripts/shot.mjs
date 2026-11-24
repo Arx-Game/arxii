@@ -9,7 +9,8 @@
  *
  * With --account it signs in through the login page first, the way a player does.
  */
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -52,7 +53,42 @@ async function settle(page) {
   }
 }
 
-const browser = await chromium.launch({ headless: true });
+/**
+ * The newest headless Chromium in the shared Playwright cache. The devcontainer
+ * firewall can block the download a newer Playwright asks for, while an older build
+ * is already there and renders the same pages.
+ */
+function cachedHeadlessShell() {
+  const cache =
+    process.env.PLAYWRIGHT_BROWSERS_PATH || path.join(os.homedir(), '.cache', 'ms-playwright');
+  if (!existsSync(cache)) return undefined;
+  const builds = readdirSync(cache)
+    .filter((name) => name.startsWith('chromium_headless_shell-'))
+    .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]));
+  for (const build of builds) {
+    const binary = path.join(
+      cache,
+      build,
+      'chrome-headless-shell-linux64',
+      'chrome-headless-shell'
+    );
+    if (existsSync(binary)) return binary;
+  }
+  return undefined;
+}
+
+async function launch() {
+  try {
+    return await chromium.launch({ headless: true });
+  } catch (error) {
+    const fallback = cachedHeadlessShell();
+    if (!String(error).includes("Executable doesn't exist") || !fallback) throw error;
+    console.error(`Playwright's own Chromium is missing; using the cached ${fallback}`);
+    return chromium.launch({ headless: true, executablePath: fallback });
+  }
+}
+
+const browser = await launch();
 let failed = false;
 try {
   const page = await browser.newPage({ viewport: { width, height }, baseURL: values.base });
