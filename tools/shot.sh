@@ -62,7 +62,7 @@ if [[ -z "${SHOT_LOCKED:-}" ]]; then
   log "waiting for the heavy-work lock ($LOCK_FILE, up to ${LOCK_WAIT_SECONDS}s)"
   set +e
   env SHOT_LOCKED=1 flock -w "$LOCK_WAIT_SECONDS" -E 75 "$LOCK_FILE" \
-    timeout "$MAX_SECONDS" "${BASH_SOURCE[0]}" "$@"
+    timeout "$MAX_SECONDS" bash "$top/tools/shot.sh" "$@"
   status=$?
   set -e
   (( status == 75 )) && blocked "another session held the heavy-work lock for ${LOCK_WAIT_SECONDS}s"
