@@ -2,11 +2,11 @@
  * EntryFlourishOfferDialog — resonance picker for the entry-flourish ceremony.
  *
  * On scene entry the server emits a PendingEntryFlourishOffer; this dialog lets
- * the character declare which of their claimed resonances they broadcast to the
- * room. Chip style mirrors ReactionStrip. Mirrors AudereOfferDialog structure.
+ * the character declare which resonance they broadcast to the room (#5308): any
+ * resonance, the ones they hold first. Chip style mirrors ReactionStrip. Mirrors AudereOfferDialog structure.
  */
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import {
   Dialog,
@@ -17,7 +17,11 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { useCharacterResonances, useRespondToEntryFlourish } from '@/magic/queries';
+import {
+  useCharacterResonances,
+  useRespondToEntryFlourish,
+  useResonanceCatalog,
+} from '@/magic/queries';
 import type { PendingEntryFlourishOffer } from '@/magic/types';
 
 interface EntryFlourishOfferDialogProps {
@@ -37,7 +41,17 @@ export function EntryFlourishOfferDialog({
 }: EntryFlourishOfferDialogProps) {
   const [selectedResonanceId, setSelectedResonanceId] = useState<number | null>(null);
 
-  const { data: resonances = [], isLoading } = useCharacterResonances(characterSheetId);
+  const { data: held = [], isLoading: heldLoading } = useCharacterResonances(characterSheetId);
+  const { data: catalog = [], isLoading: catalogLoading } = useResonanceCatalog();
+  const isLoading = heldLoading || catalogLoading;
+  // Every resonance, the ones the character holds first.
+  const resonances = useMemo(() => {
+    const heldIds = new Set(held.map((cr) => cr.resonance));
+    return [
+      ...catalog.filter((resonance) => heldIds.has(resonance.id)),
+      ...catalog.filter((resonance) => !heldIds.has(resonance.id)),
+    ];
+  }, [held, catalog]);
   const respond = useRespondToEntryFlourish(characterSheetId);
 
   function handleConfirm() {
@@ -71,7 +85,7 @@ export function EntryFlourishOfferDialog({
     if (resonances.length === 0) {
       return (
         <p className="text-sm text-muted-foreground" data-testid="entry-flourish-empty">
-          You have no claimed resonances to declare.
+          No resonances.
         </p>
       );
     }
@@ -80,21 +94,21 @@ export function EntryFlourishOfferDialog({
         className="flex flex-wrap gap-2 rounded-md border border-emerald-500/30 bg-emerald-950/20 p-3"
         data-testid="entry-flourish-resonance-picker"
       >
-        {resonances.map((cr) => {
-          const isSelected = selectedResonanceId === cr.resonance;
+        {resonances.map((resonance) => {
+          const isSelected = selectedResonanceId === resonance.id;
           return (
             <button
-              key={cr.resonance}
+              key={resonance.id}
               type="button"
-              onClick={() => setSelectedResonanceId(cr.resonance)}
-              data-testid={`resonance-chip-${cr.resonance}`}
+              onClick={() => setSelectedResonanceId(resonance.id)}
+              data-testid={`resonance-chip-${resonance.id}`}
               className={`rounded-full border px-3 py-1 text-sm transition-colors ${
                 isSelected
                   ? 'border-emerald-500 bg-emerald-500/20 font-semibold text-emerald-300'
                   : 'border-muted-foreground/30 text-muted-foreground hover:border-emerald-500/60 hover:text-emerald-300'
               }`}
             >
-              {cr.resonance_name}
+              {resonance.name}
             </button>
           );
         })}

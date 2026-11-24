@@ -160,6 +160,23 @@ describe('EndorsementControl — kind="pose"', () => {
     expect(mockCreatePoseEndorsement).toHaveBeenCalledWith({ interaction: 1, resonance: 5 });
   });
 
+  it('a reached pose offers its one resonance and sends no resonance', async () => {
+    const user = userEvent.setup();
+    render(
+      <EndorsementControl
+        interaction={makeInteraction({
+          endorsable_resonances: [{ id: 5, name: 'Cruelty' }],
+          reached_resonance: { id: 5, name: 'Cruelty' },
+        })}
+        sceneId="1"
+        kind="pose"
+      />,
+      { wrapper: createWrapper() }
+    );
+    await user.click(screen.getByRole('button', { name: 'Endorse their Cruelty' }));
+    expect(mockCreatePoseEndorsement).toHaveBeenCalledWith({ interaction: 1 });
+  });
+
   it('shows endorsed state + retract affordance when my_pose_endorsement is set and settled=false', () => {
     render(
       <EndorsementControl

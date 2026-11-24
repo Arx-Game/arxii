@@ -503,7 +503,21 @@ response (REST) and the pose action result `data` (socket) carry `claim_lines`, 
 writer alone as feed notes; the journal's 201 carries the same, shown as toasts. A claim-only pose
 outside a scene goes through the socket `pose` action like a reflection does. `refreshKindledResonances`
 re-reads the panel's amounts after a claim and on the `earned_resonance` frame. The panel shows
-"N waiting" on a row with something set aside.
+"N waiting" on a row with something set aside, and "N waiting for your anima ritual" for the
+`waiting_trickle` count (#5308), only above zero.
+
+### `components/ReachRow.tsx`, `reach.ts` (#5308)
+
+The optional "Reaching for" row of a pose, in the `CommandInput` footer after "Claim" (pose mode). The
+"Reaching for" pill opens a select of every resonance from `useResonanceCatalog()`
+(`GET /api/magic/resonances/`, held or not). State is a `ReachDraft` (`{ on, resonanceId }`, `NO_REACH`
+while idle); `reachFields(draft)` gives `reach_resonance_id`, or nothing while off or unchosen. A scene
+pose sends it to `submit-pose`; a reach-only pose outside a scene goes through the socket `pose`
+action like a claim does. It clears when the pose lands. An `Interaction` carries
+`reached_resonance`; `EndorsementControl` then shows one "Endorse their X" button and sends no
+resonance. A live frame goes out before the reach is written and lacks the field; the ids-only
+`interaction_changed` frame refetches the row. The entry-flourish dialog lists the whole catalog, the
+resonances the character holds first.
 
 ### `components/SineatingRow.tsx` (#5177)
 
