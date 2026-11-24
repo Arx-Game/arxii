@@ -1,0 +1,9 @@
+
+Abyssal affinity skill: Villainy
+Aldric's stored Villainy rating rows: none (rating 0)
+Aldric's Villainy rating read through the trait handler: 0
+Aldric's presence stat: 20
+bonus check type: Resonance bonus difficulty level 3 -> points 34
+bonus check #1: trait_points=20 outcome=Success
+bonus check #2: trait_points=20 outcome=Success
+bonus check #3: trait_points=20 outcome=Failure

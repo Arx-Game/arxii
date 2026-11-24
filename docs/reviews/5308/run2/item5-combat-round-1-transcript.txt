@@ -1,0 +1,17 @@
+You become Corin Vale.
+The Ember Yard
+This is a room.
+Characters: Hollow drover and Corin Vale
+Now controlling Corin Vale.
+
+Already controlling Corin Vale.
+
+[Corin] >>> combat pull 1=Embercrown:Cruelty
+You pull 1 thread for the round. Your Villainy check made it worth 130 percent.
+
+[Corin] >>> cast Cinder Lance at Hollow drover
+You ready your action for this round.
+
+[Corin] >>> combat ready
+Corin Vale’s Cinder Lance strikes Hollow drover for 9 damage.
+You are ready.

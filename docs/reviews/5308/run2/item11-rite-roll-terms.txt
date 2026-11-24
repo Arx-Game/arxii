@@ -1,0 +1,7 @@
+
+Aldric's Heroism rating: 100; his charm (the rite's own stat): 15
+--- Disown a deed (conversion toward Mercy, a Celestial resonance)
+rite output: Critical Success. | You disown You lean over the bound prisoner and promise him a long night.: 9 Cruelty became 4 Mercy.
+the rite's roll was given extra skill terms [('Heroism', '1')]; trait points 115; outcome Critical Success
+--- Embrace a deed (nothing is converted)
+rite output: Ritual 'Rite of Drift Correction' requires 1x offering for Cruelty that you don't have.

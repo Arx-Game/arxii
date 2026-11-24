@@ -1,0 +1,52 @@
+You become Aldric.
+The Lantern
+This is a room.
+Characters: Aldric
+Now controlling Aldric.
+
+Already controlling Aldric.
+
+>>> mission resolve 11 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+[NARRATIVE] PLACEHOLDER — The bound prisoner: you commit to 'You lean over the bound prisoner and promise him a long night.'. The outcome: Success. The thread of the story moves on.
+PLACEHOLDER — The bound prisoner: you commit to 'You lean over the bound prisoner and promise him a long night.'. The outcome: Success. The thread of the story moves on.
+Outcome: Success.
+Use 'mission beat 11' to see what comes next.
+
+>>> mission resolve 12 1
+[NARRATIVE] You earned 15 Cruelty. Your Villainy check added 50 percent. 15 more is waiting to be claimed.
+[NARRATIVE] PLACEHOLDER — The bound prisoner: you commit to 'You lean over the bound prisoner and promise him a long night.'. The outcome: Partial Success. The thread of the story moves on.
+PLACEHOLDER — The bound prisoner: you commit to 'You lean over the bound prisoner and promise him a long night.'. The outcome: Partial Success. The thread of the story moves on.
+Outcome: Partial Success.
+Use 'mission beat 12' to see what comes next.
+
+>>> mission resolve 13 1
+[NARRATIVE] You earned 10 Cruelty. 10 more is waiting to be claimed.
+[NARRATIVE] PLACEHOLDER — The bound prisoner: you commit to 'You lean over the bound prisoner and promise him a long night.'. The outcome: Failure. The thread of the story moves on.
+PLACEHOLDER — The bound prisoner: you commit to 'You lean over the bound prisoner and promise him a long night.'. The outcome: Failure. The thread of the story moves on.
+Outcome: Failure.
+Use 'mission beat 13' to see what comes next.
+
+>>> mission resolve 14 1
+[NARRATIVE] You earned 12 Cruelty. Your Villainy check added 25 percent. 12 more is waiting to be claimed.
+[NARRATIVE] PLACEHOLDER — The bound prisoner: you commit to 'You lean over the bound prisoner and promise him a long night.'. The outcome: Success. The thread of the story moves on.
+PLACEHOLDER — The bound prisoner: you commit to 'You lean over the bound prisoner and promise him a long night.'. The outcome: Success. The thread of the story moves on.
+Outcome: Success.
+Use 'mission beat 14' to see what comes next.
+
+>>> resonance history
+Your resonance history:
+  2026-11-24 04:39 — Cruelty +12 (Kindled deed, +25% from Villainy)
+  2026-11-24 04:39 — Cruelty +10 (Kindled deed)
+  2026-11-24 04:39 — Cruelty +15 (Kindled deed, +50% from Villainy)
+  2026-11-24 04:39 — Cruelty +12 (Kindled deed, +25% from Villainy)
+
+>>> aura
+Your aura: Celestial (most), Abyssal (a third).
+Your Cruelty has grown strong enough to make you unsettled.
+You have no reflections waiting.
+Deeds not yet reflected on:
+  #9 You lean over the bound prisoner and promise him a long night. · 12 Cruelty
+  #8 You lean over the bound prisoner and promise him a long night. · 10 Cruelty
+  #7 You lean over the bound prisoner and promise him a long night. · 15 Cruelty
+  #6 You lean over the bound prisoner and promise him a long night. · 12 Cruelty

@@ -1,0 +1,22 @@
+# CombatPullResolvedEffect rows after four rounds of 'combat pull 1=Embercrown:Cruelty' (psql, throwaway database rt_5308b)
+# Authored effect: flat bonus 20 (ThreadPullEffect.flat_bonus_amount). Staff set: Success worth 130, lower results worth 100, Abyssal floor 110.
+ pull_id | round_number |    kind    | authored_value | level_multiplier | scaled_value
+---------+--------------+------------+----------------+------------------+--------------
+       4 |            4 | FLAT_BONUS |             20 |                1 |           22
+(1 row)
+
+ affinity  | spend_worth_floor_percent
+-----------+---------------------------
+ Celestial |                         0
+ Primal    |                         0
+ Abyssal   |                       110
+(3 rows)
+
+      result      | gain_bonus_percent | spend_worth_percent
+------------------+--------------------+---------------------
+ Critical Failure |                  0 |                 100
+ Failure          |                  0 |                 100
+ Partial Success  |                  0 |                 100
+ Success          |                 25 |                 130
+ Critical Success |                 50 |                 160
+(5 rows)

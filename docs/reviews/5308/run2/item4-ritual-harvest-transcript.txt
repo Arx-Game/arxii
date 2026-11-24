@@ -1,0 +1,20 @@
+[Mirelle] >>> resonances
+Cruelty (Abyssal) - Kindled, strong
+  This mission is about Held captive.
+  20 waiting for your anima ritual
+Hollow (Primal) - Not kindled
+
+[Mirelle] >>> ritual anima Aldric
+You ask Aldric to take part in your ritual. Awaiting their response (request #1).
+
+[Aldric] >>> accept
+Mirelle has entered the game.
+[NARRATIVE] Mirelle asks you to take part in their ritual. Type accept 1 to agree or deny 1 to refuse.
+[NARRATIVE] Mirelle's ritual reached for your cruelty. Did it take hold of you? Type ritual endorse Mirelle or ritual withhold Mirelle.
+You accept the action against you.
+
+[Mirelle] >>> resonances
+[NARRATIVE] Your ritual with Aldric is done. You recover 6 anima. 25 Cruelty waiting from your days arrived. Your Villainy check added 25 percent.
+Cruelty (Abyssal) - Kindled, strong
+  This mission is about Held captive.
+Hollow (Primal) - Not kindled

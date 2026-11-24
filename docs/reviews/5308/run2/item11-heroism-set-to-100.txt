@@ -1,0 +1,4 @@
+
+Celestial affinity skill: Heroism
+Aldric's Heroism before: 0
+Aldric's Heroism after: [100]

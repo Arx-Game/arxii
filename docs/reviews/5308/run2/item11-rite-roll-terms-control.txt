@@ -1,0 +1,4 @@
+
+--- Embrace a deed (nothing is converted; the offering is tied to Cruelty). The reflection was recorded earlier by the first run.
+rite output: Partial Success. | You embrace You lean over the bound prisoner and promise him a long night.: your Cruelty grows by 11.
+the rite's roll was given extra skill terms NONE; trait points 15; outcome Partial Success

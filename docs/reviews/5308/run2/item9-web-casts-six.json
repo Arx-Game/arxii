@@ -1,0 +1,56 @@
+[
+  {
+    "cast": 1,
+    "worth_line": "Your Villainy check made it worth 110 percent.",
+    "ledger": [
+      "channeled intensity set 20 -> 20",
+      "kindled cast power add 22 -> 42"
+    ],
+    "total": 42
+  },
+  {
+    "cast": 2,
+    "worth_line": "Your Villainy check made it worth 130 percent.",
+    "ledger": [
+      "channeled intensity set 20 -> 20",
+      "kindled cast power add 26 -> 46"
+    ],
+    "total": 46
+  },
+  {
+    "cast": 3,
+    "worth_line": "Your Villainy check made it worth 130 percent.",
+    "ledger": [
+      "channeled intensity set 20 -> 20",
+      "kindled cast power add 26 -> 46"
+    ],
+    "total": 46
+  },
+  {
+    "cast": 4,
+    "worth_line": "Your Villainy check made it worth 130 percent.",
+    "ledger": [
+      "channeled intensity set 20 -> 20",
+      "kindled cast power add 26 -> 46"
+    ],
+    "total": 46
+  },
+  {
+    "cast": 5,
+    "worth_line": "Your Villainy check made it worth 130 percent.",
+    "ledger": [
+      "channeled intensity set 20 -> 20",
+      "kindled cast power add 26 -> 46"
+    ],
+    "total": 46
+  },
+  {
+    "cast": 6,
+    "worth_line": "Your Villainy check made it worth 160 percent.",
+    "ledger": [
+      "channeled intensity set 20 -> 20",
+      "kindled cast power add 32 -> 52"
+    ],
+    "total": 52
+  }
+]

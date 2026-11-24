@@ -1,0 +1,70 @@
+{
+  "id": 2,
+  "scene": 4,
+  "initiator_persona": 1,
+  "initiator_name": "Mirelle",
+  "target_persona": null,
+  "action_key": "",
+  "action_template": null,
+  "technique": 2,
+  "technique_name": "Ember Veil",
+  "delivery": "",
+  "status": "resolved",
+  "difficulty_choice": "normal",
+  "resolved_difficulty": 75,
+  "result_interaction": 20,
+  "action_interaction": 21,
+  "strain_commitment": 0,
+  "combat_risk_level": null,
+  "combat_stakes": null,
+  "boon": null,
+  "resist_only": false,
+  "resist_check_name": null,
+  "ritual_partner_effect": "",
+  "created_at": "2026-11-24T04:54:29.602949Z",
+  "resolved_at": "2026-11-24T04:54:29.854376Z",
+  "result": {
+    "action_key": "cast",
+    "action_resolution": {
+      "current_phase": "complete",
+      "main_result": {
+        "step_label": "main",
+        "check_outcome": "Partial Success",
+        "consequence_id": null
+      },
+      "gate_results": []
+    },
+    "technique_result": {
+      "confirmed": true,
+      "anima_spent": 0,
+      "soulfray_stage": null,
+      "mishap_label": null,
+      "substance_call_up": null,
+      "focus_lines": [],
+      "worth_line": "Your Villainy check made it worth 130 percent."
+    },
+    "anima_recovery": null,
+    "power_ledger": {
+      "entries": [
+        {
+          "stage": "base",
+          "source_label": "channeled intensity",
+          "op": "set",
+          "amount": 20,
+          "running_total": 20
+        },
+        {
+          "stage": "term",
+          "source_label": "kindled cast power",
+          "op": "add",
+          "amount": 26,
+          "running_total": 46
+        }
+      ],
+      "total": 46
+    },
+    "fizzle_note": null,
+    "disposition_message": null
+  },
+  "outcome_interaction": 20
+}
