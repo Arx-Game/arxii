@@ -187,14 +187,17 @@ PARTIAL_SUCCESS_NAME = "Partial Success"
 
 #: Resonance grant sources with no character action behind them. Favor with a being
 #: comes only from a character's actions (owner ruling 2026-10-16), so a grant from
-#: one of these earns no pledge deed favor: the daily residence and outfit trickles,
-#: a distinction's granted resonance, a staff grant, and the payouts a Sinner gets when their
-#: Sineater succumbs or falls. A worship rite's own grant
+#: one of these earns no pledge deed favor: the daily residence and outfit trickles (and the
+#: anima ritual's harvest of them), a distinction's granted resonance, a staff grant, and the
+#: payouts a Sinner gets when their Sineater succumbs or falls. A worship rite's own grant
 #: is excluded separately (the rite pays its own favor).
 PASSIVE_DEED_SOURCES: frozenset[str] = frozenset(
     {
         GainSource.ROOM_RESIDENCE,
         GainSource.OUTFIT_TRICKLE,
+        # #5308: the anima ritual only collects trickles that piled up from days lived, so a
+        # harvest is as passive as the trickle it pays.
+        GainSource.TRICKLE_HARVEST,
         GainSource.DISTINCTION,
         GainSource.STAFF_GRANT,
         # #4733: a drift correction converts resonance the character already earned

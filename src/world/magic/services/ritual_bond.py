@@ -205,9 +205,11 @@ def harvest_trickles(
     so two rituals at once cannot harvest the same trickle twice.
     """
     rows = list(
-        TrickleAccrual.objects.select_for_update()
+        # ``of=("self",)``: the affinity skill is a nullable join, which Postgres will not lock.
+        TrickleAccrual.objects.select_for_update(of=("self",))
         .filter(character_sheet=sheet, harvested_at__isnull=True)
         .select_related("resonance__affinity__skill")
+        .order_by("pk")
     )
     if not rows:
         return ()
