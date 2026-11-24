@@ -16,9 +16,11 @@
 #   - it waits for the container-wide heavy-work lock ($ARX_HEAVY_LOCK, the one
 #     prod_migration_check.sh takes), so only one session builds and runs a browser
 #     at a time, with a 20 minute ceiling once it holds the lock;
-#   - it checks the server ports instead of process names, so another session's
-#     test run does not block it, but another checkout's server does (`arx stop`
-#     would stop whichever server holds the ports);
+#   - its server binds its own port block, 4100-4106 (ARX_PORT_BASE in settings.py),
+#     never the 4000-4006 that `just start` and the owner's browser use, so it
+#     neither waits on another checkout's server nor stops one: `arx stop` finds the
+#     server through the AMP port, and ours is 4106. The lock means only one shot
+#     server exists at a time; it still checks its ports are free first;
 #   - it stops only the server it started, and keeps its database for next time
 #     (drop it with `dropdb -h db -U arxii <name>` when the branch is done).
 #
@@ -35,8 +37,9 @@ LOCK_WAIT_SECONDS="${ARX_SHOT_LOCK_WAIT:-1800}"
 MAX_SECONDS="${ARX_SHOT_MAX_SECONDS:-1200}"
 readonly MIN_TOTAL_KIB=$((8 * 1024 * 1024))
 readonly MIN_AVAILABLE_KIB=$((3 * 1024 * 1024))
-readonly SERVER_PORTS="4000 4001 4002 4005 4006"
-readonly BASE_URL="http://localhost:4001"
+readonly PORT_BASE="${ARX_SHOT_PORT_BASE:-4100}"
+readonly SERVER_PORTS="$PORT_BASE $((PORT_BASE + 1)) $((PORT_BASE + 2)) $((PORT_BASE + 5)) $((PORT_BASE + 6))"
+readonly BASE_URL="http://localhost:$((PORT_BASE + 1))"
 
 log() { printf '[shot] %s\n' "$*" >&2; }
 blocked() { printf 'BLOCKED: %s\n' "$*" >&2; exit 3; }
@@ -87,7 +90,7 @@ done
 
 for port in $SERVER_PORTS; do
   if ss -ltnH "sport = :$port" | grep -q .; then
-    blocked "port $port is held by another checkout's server; it stops when that session is done (do not run just stop: it would stop theirs)"
+    blocked "port $port is held by another process; find it with: ss -ltnp 'sport = :$port'"
   fi
 done
 
@@ -100,6 +103,8 @@ export DATABASE_URL="postgres://arxii:arxii@db:5432/$db"
 # The shared Postgres has a small /dev/shm; parallel query during a schema build
 # once ran it out and put every session's database into crash recovery (#4669).
 export PGOPTIONS='-c max_parallel_workers_per_gather=0'
+export ARX_PORT_BASE="$PORT_BASE"
+export DJANGO_PORT="$((PORT_BASE + 1))"
 
 if ! PGPASSWORD=arxii psql -h db -U arxii -d postgres -tAc \
   "SELECT 1 FROM pg_database WHERE datname = '$db'" | grep -q 1; then
@@ -117,15 +122,20 @@ fi
 stamp_file="src/web/static/dist/.shot-build-stamp"
 fingerprint="$(
   {
+    echo "ws-port $((PORT_BASE + 2))"
     git rev-parse HEAD:frontend
     git diff HEAD -- frontend ':!frontend/test-results' ':!frontend/e2e'
     git ls-files --others --exclude-standard -- frontend/src | xargs -r sha1sum
   } | sha1sum | cut -d' ' -f1
 )"
-if [[ ! -f "$stamp_file" || "$(cat "$stamp_file")" != "$fingerprint" ]]; then
+# A `just fe-build` since the last shot leaves a newer index.html built for 4002.
+index_file="src/web/static/dist/index.html"
+if [[ ! -f "$stamp_file" || "$(cat "$stamp_file")" != "$fingerprint" \
+  || "$index_file" -nt "$stamp_file" ]]; then
   [[ -d frontend/node_modules ]] || pnpm --dir frontend install --frozen-lockfile --prefer-offline
   log "building the frontend (it changed since the last shot)"
-  pnpm --dir frontend build >&2   # postbuild also runs collectstatic
+  # The page reaches the game socket on this port; postbuild also runs collectstatic.
+  VITE_WS_PORT="$((PORT_BASE + 2))" pnpm --dir frontend build >&2
   echo "$fingerprint" > "$stamp_file"
 else
   log "frontend unchanged since the last build; reusing it"
@@ -148,7 +158,7 @@ for _ in $(seq 1 90); do
   curl -fsS -o /dev/null "$BASE_URL/api/registration/status/" && break
   sleep 2
 done
-curl -fsS -o /dev/null "$BASE_URL/api/registration/status/" || fail "the server did not answer on :4001"
+curl -fsS -o /dev/null "$BASE_URL/api/registration/status/" || fail "the server did not answer on $BASE_URL"
 
 out="$top/frontend/test-results/shots/$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$out"
@@ -161,7 +171,7 @@ if [[ ${#paths[@]} -gt 0 ]]; then
 fi
 if [[ -n "$spec" ]]; then
   # CI=1 makes the backend config keep a screenshot of every test.
-  (cd frontend && CI=1 npx playwright test --config e2e.backend.config.ts "$spec" \
+  (cd frontend && CI=1 E2E_BASE_URL="$BASE_URL" npx playwright test --config e2e.backend.config.ts "$spec" \
     --workers=1 --output "$out/spec") >&2 || status=$?
   find "$out/spec" -name '*.png' >&2 || true
 fi
