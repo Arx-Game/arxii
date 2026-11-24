@@ -485,6 +485,21 @@ fe-e2e-frontend *args:
 fe-e2e-install:
     cd frontend && npx playwright install chromium
 
+# Screenshots of this worktree's code running for real (#5310). Own server, own
+# rt_<issue> database, own build; waits for the container-wide heavy-work lock.
+# Run from a worktree, by the coordinator or PR shepherd, never by an implementer.
+#   just shot /characters/1/sheet /roster
+#   just shot --anon /
+#   just shot --spec e2e/evidence/foo-1234.spec.ts
+shot *args:
+    bash tools/shot.sh {{args}}
+
+# Put screenshots on a PR (or an issue) without touching any branch (#5310): pushes
+# them to refs/evidence/<n>/<stamp>, comments, and prints Markdown for the PR body.
+#   just shot-post 1234 frontend/test-results/shots/<stamp>/*.png
+shot-post *args:
+    bash tools/shot_post.sh {{args}}
+
 # Seed a pre-verified test account for e2e / integration testing.
 # Creates username 'e2e_test_account' with verified email — idempotent.
 #   just seed-test-account
