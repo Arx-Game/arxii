@@ -4916,6 +4916,9 @@ step.) Every earned resonance gain rolls one bonus check with the skill of the a
 every pull and kindled cast rolls one with the skill of the affinity being spent. Anyone can earn any
 affinity; a trained character earns more and gets more from spending it. Nothing is seeded: until staff set
 `ResonanceGainConfig.bonus_check_type`, every gain pays its plain amount and every pull is worth 100 percent.
+The Required content page lists four tuning gaps (`resonance-bonus-check`, `resonance-check-awards`,
+`affinity-skills`, `resonance-gain-source-stats`) while the check type, an award per outcome tier, an active
+skill per affinity or a stat per source with no roll of its own is unset.
 
 | Model or field | Purpose |
 |---|---|
