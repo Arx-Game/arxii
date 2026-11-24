@@ -148,6 +148,7 @@ def get_resonance_gain_config() -> ResonanceGainConfig:
 ROOM_RESONANCE_TAG_SOURCE = "tag_room_resonance"
 _ERR_ALT_ENDORSE = "Cannot endorse an alt character"
 _ERR_RESONANCE_UNCLAIMED = "Endorsee has not claimed this resonance"
+_ERR_NO_RESONANCE = "Which resonance? This pose did not reach for one."
 
 
 @transaction.atomic
@@ -260,13 +261,41 @@ def resonance_grant_history_for_sheet(
     return list(qs.order_by("-granted_at")[:limit])
 
 
+def _endorsed_resonance(
+    endorsee_sheet: CharacterSheet, interaction: Interaction, chosen: Resonance | None
+) -> Resonance:
+    """The resonance an endorsement of ``interaction`` pays (#5308).
+
+    The one the pose reached for when its author named one; otherwise ``chosen``, which the
+    endorsee must have claimed.
+
+    Raises:
+        EndorsementValidationError: no resonance was reached for or chosen, or the one chosen
+            is not claimed.
+    """
+    reach = interaction.cached_resonance_reach
+    if reach is not None:
+        return reach.resonance
+    if chosen is None:
+        raise EndorsementValidationError(_ERR_NO_RESONANCE)
+    if not CharacterResonance.objects.filter(
+        character_sheet=endorsee_sheet, resonance=chosen
+    ).exists():
+        raise EndorsementValidationError(_ERR_RESONANCE_UNCLAIMED)
+    return chosen
+
+
 @transaction.atomic
 def create_pose_endorsement(  # noqa: C901
     endorser_sheet: CharacterSheet,
     interaction: Interaction,
-    resonance: Resonance,
+    resonance: Resonance | None = None,
 ) -> PoseEndorsement:
     """Validate and persist a pose endorsement (Spec C §2.2 + §7).
+
+    A pose whose author reached for a resonance (#5308) is endorsed for that resonance:
+    ``resonance`` is then ignored and precondition 7 does not apply, since the author named
+    it. A pose that reached for nothing needs ``resonance``, claimed by the endorsee.
 
     Preconditions (raises EndorsementValidationError on failure):
     1. Interaction author (persona field) has a character sheet
@@ -275,7 +304,7 @@ def create_pose_endorsement(  # noqa: C901
     4. WHISPER: endorser must be the direct recipient (InteractionReceiver row)
     5. VERY_PRIVATE: endorser must have SceneParticipation (allowed by participants)
     6. Endorser was present (scene participation OR interaction receiver)
-    7. Endorsee has claimed this resonance
+    7. Endorsee has claimed this resonance (unless the pose reached for it)
     8. No duplicate (endorser × interaction already endorsed)
     """
     if endorser_sheet.is_protagonism_locked:
@@ -325,11 +354,7 @@ def create_pose_endorsement(  # noqa: C901
         msg = "Endorser was not present for this interaction"
         raise EndorsementValidationError(msg)
 
-    if not CharacterResonance.objects.filter(
-        character_sheet=endorsee_sheet, resonance=resonance
-    ).exists():
-        msg = _ERR_RESONANCE_UNCLAIMED
-        raise EndorsementValidationError(msg)
+    resonance = _endorsed_resonance(endorsee_sheet, interaction, resonance)
 
     existing = PoseEndorsement.objects.filter(
         endorser_sheet=endorser_sheet, interaction=interaction

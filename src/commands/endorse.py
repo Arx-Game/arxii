@@ -96,12 +96,15 @@ class CmdEndorse(ArxCommand):
     Syntax:
         endorse pose <char> [#N] resonance=<name>
         endorse pose <char> [#N] resonance=<name> confirm
+        endorse pose <char> [#N] [confirm]
         endorse entry <char> resonance=<name>
         endorse style <char> resonance=<name>
 
     For pose endorsements, the first invocation shows a preview of the pose.
     Add ``confirm`` to commit. Use ``poses <char>`` to see position numbers.
-    Scene-entry and style endorsements are one-shot (no confirmation needed).
+    A pose whose author reached for a resonance (``pose/reach``) is endorsed for that
+    resonance, so you leave ``resonance=`` off. Scene-entry and style endorsements are
+    one-shot (no confirmation needed).
 
     Examples:
         endorse pose Alice resonance=Embers
@@ -143,15 +146,20 @@ class CmdEndorse(ArxCommand):
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _pop_resonance(tokens: list[str]) -> tuple[list[str], str]:
-        """Remove ``resonance=<name>`` token; return (remaining, resonance_name)."""
+    def _pop_resonance(tokens: list[str], *, required: bool = True) -> tuple[list[str], str]:
+        """Remove ``resonance=<name>`` token; return (remaining, resonance_name).
+
+        With ``required`` false a missing token returns an empty name: a pose whose author
+        reached for a resonance (#5308) is endorsed without naming one, and the action asks
+        "Which resonance?" for a pose that did not.
+        """
         resonance_name = ""
         remaining = [t for t in tokens if not t.lower().startswith("resonance=")]
         for token in tokens:
             if token.lower().startswith("resonance="):
                 resonance_name = token.split("=", 1)[1].strip()
                 break
-        if not resonance_name:
+        if not resonance_name and required:
             msg = "Specify a resonance: resonance=<name>"
             raise CommandError(msg)
         return remaining, resonance_name
@@ -205,8 +213,8 @@ class CmdEndorse(ArxCommand):
         if confirm:
             tokens = tokens[:-1]
 
-        tokens, resonance_name = self._pop_resonance(tokens)
-        resonance = self._resolve_resonance(resonance_name)
+        tokens, resonance_name = self._pop_resonance(tokens, required=False)
+        resonance = self._resolve_resonance(resonance_name) if resonance_name else None
 
         # Extract optional #N
         pose_n = 1

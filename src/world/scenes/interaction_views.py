@@ -18,9 +18,10 @@ from rest_framework.serializers import BaseSerializer
 from actions.definitions.sineating import run_pose_sineating
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
-from world.magic.exceptions import ClaimError, ReflectionError, SoulTetherError
-from world.magic.models import CharacterResonance, PoseEndorsement
+from world.magic.exceptions import ClaimError, ReachError, ReflectionError, SoulTetherError
+from world.magic.models import CharacterResonance, PoseEndorsement, PoseResonanceReach
 from world.magic.services.claiming import pending_claim_from, record_pending_claim
+from world.magic.services.reach import pending_reach_from, record_pending_reach
 from world.magic.services.reflection import (
     pending_reflection_from,
     record_pending_reflection,
@@ -86,7 +87,7 @@ from world.scenes.services import active_persona_for_sheet
 from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 
 if TYPE_CHECKING:
-    from world.magic.types.kindling import PendingClaim
+    from world.magic.types.kindling import PendingClaim, PendingReach
     from world.magic.types.reflection import PendingReflection
     from world.magic.types.soul_tether import PendingSineating
 
@@ -199,6 +200,7 @@ def _seed_fresh_pose_caches(
         del interaction.cached_reactions
         del interaction.cached_action_links
         del interaction.cached_endorsements
+        del interaction.cached_resonance_reaches
         del interaction.cached_reaction_windows
         del interaction.cached_dramatic_moment_tags
         del interaction.cached_prompt_narrations
@@ -208,6 +210,9 @@ def _seed_fresh_pose_caches(
         interaction.cached_reactions = []
         # cached_action_links already populated by `_on_created` -- see above.
         interaction.cached_endorsements = []
+        # A reach recorded with this pose has already set its own cache (``record_pending_reach``);
+        # a pose that reached for nothing has none.
+        interaction.__dict__.setdefault("cached_resonance_reaches", [])
         del interaction.cached_reaction_windows
         # Neither dramatic-moment tags nor prompt narrations are ever created by
         # `_on_created` above -- both require a technique-entrance cast / GM tag
@@ -249,15 +254,20 @@ def _pose_deed_fields(  # noqa: PLR0913
     reflection: PendingReflection | None,
     sineating: PendingSineating | None,
     claim: PendingClaim | None = None,
+    reach: PendingReach | None = None,
     writing: Interaction | None,
 ) -> dict[str, object]:
-    """The reflection, Sineating and claim lines a new pose answers with (#5124, #5177, #5181).
+    """The reflection, Sineating and claim lines a new pose answers with (#5124, #5177, #5181),
+    and the reach it records (#5308).
 
     Both are carried out once the pose is down, on first acceptance only. A reflection that
     cannot be recorded does not undo the pose: the writer is told why.
     """
     if replayed:
         return {}
+    if reach is not None and writing is not None:
+        # Only the pose's author gets here, with the pose they have just posted.
+        record_pending_reach(writing, reach)
     fields: dict[str, object] = {}
     if reflection is not None:
         reflection_line = None
@@ -308,6 +318,7 @@ def _record_submitted_pose(  # noqa: PLR0913
     reflection: PendingReflection | None = None,
     sineating: PendingSineating | None = None,
     claim: PendingClaim | None = None,
+    reach: PendingReach | None = None,
 ) -> Response:
     """Record, broadcast, and serialize a submitted pose.
 
@@ -316,7 +327,8 @@ def _record_submitted_pose(  # noqa: PLR0913
     ``sineating`` (#5177) is carried out once the pose is down, on first acceptance only; the
     response carries ``sineating_line`` and ``sineating_recorded``. ``claim`` (#5181) collects
     what a kindled deed set aside once the pose is down, on first acceptance only; the response
-    carries ``claim_lines``, one private line per resonance.
+    carries ``claim_lines``, one private line per resonance. ``reach`` (#5308) is the
+    resonance the pose reaches for, written against the new row on first acceptance only.
     """
     target_pks = frozenset(p.pk for p in target_personas) if target_personas else frozenset()
     try:
@@ -369,6 +381,7 @@ def _record_submitted_pose(  # noqa: PLR0913
         reflection=reflection,
         sineating=sineating,
         claim=claim,
+        reach=reach,
         writing=interaction,
     )
     if not result.replayed:
@@ -385,30 +398,41 @@ def _record_submitted_pose(  # noqa: PLR0913
 
 def _checked_pose_deeds(
     persona: Persona, data: Mapping[str, Any]
-) -> tuple[PendingReflection | None, PendingSineating | None, PendingClaim | None, Response | None]:
-    """Check a pose's reflection, Sineating and claim before anything posts (#5124, #5177, #5181).
+) -> tuple[
+    PendingReflection | None,
+    PendingSineating | None,
+    PendingClaim | None,
+    PendingReach | None,
+    Response | None,
+]:
+    """Check a pose's reflection, Sineating, claim and reach before anything posts (#5124,
+    #5177, #5181, #5308).
 
     A refused one costs the writer nothing: the refusal is returned as the response. A retry
     of a pose that already landed is the replay it is, and its deeds were carried out the
     first time, so nothing is checked again.
     """
     if pose_already_submitted(persona, data["client_request_id"]):
-        return None, None, None, None
+        return None, None, None, None, None
     try:
         reflection = pending_reflection_from(persona.character_sheet, data)
     except ReflectionError as exc:
-        return None, None, None, _bad_request(exc.user_message)
+        return None, None, None, None, _bad_request(exc.user_message)
     try:
         sineating = pending_sineating_from(persona.character_sheet, data)
     except SoulTetherError as exc:
-        return None, None, None, _bad_request(exc.user_message)
+        return None, None, None, None, _bad_request(exc.user_message)
     if sineating is not None and reflection is not None:
-        return None, None, None, _bad_request(BOTH_REFLECTION_AND_SINEATING)
+        return None, None, None, None, _bad_request(BOTH_REFLECTION_AND_SINEATING)
     try:
         claim = pending_claim_from(persona.character_sheet, data)
     except ClaimError as exc:
-        return None, None, None, _bad_request(exc.user_message)
-    return reflection, sineating, claim, None
+        return None, None, None, None, _bad_request(exc.user_message)
+    try:
+        reach = pending_reach_from(data)
+    except ReachError as exc:
+        return None, None, None, None, _bad_request(exc.user_message)
+    return reflection, sineating, claim, reach, None
 
 
 def _bad_request(detail: str) -> Response:
@@ -514,6 +538,11 @@ class InteractionViewSet(
                     )
                 ),
                 to_attr="cached_endorsements",
+            ),
+            Prefetch(
+                "resonance_reaches",
+                queryset=PoseResonanceReach.objects.select_related("resonance"),
+                to_attr="cached_resonance_reaches",
             ),
             Prefetch(
                 "interaction_targets",
@@ -716,7 +745,7 @@ class InteractionViewSet(
         # the writer nothing.
         # A retry of a pose that already landed is the replay it is, and its reflection was
         # recorded the first time: it is not checked again (the deed it names is now taken).
-        reflection, sineating, claim, refusal = _checked_pose_deeds(persona, data)
+        reflection, sineating, claim, reach, refusal = _checked_pose_deeds(persona, data)
         if refusal is not None:
             return refusal
 
@@ -777,6 +806,7 @@ class InteractionViewSet(
             reflection=reflection,
             sineating=sineating,
             claim=claim,
+            reach=reach,
         )
 
 

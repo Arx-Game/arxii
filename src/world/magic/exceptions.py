@@ -1033,6 +1033,17 @@ class ClaimError(MagicError):
             self.user_message = user_message
 
 
+class ReachError(MagicError):
+    """A pose's reach for a resonance cannot be made (#5308); the raise site says why."""
+
+    user_message = "You cannot reach for that."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message
+
+
 class DeedAlreadyReflectedError(ReflectionError):
     """A deed can be reflected on only once (#5124)."""
 

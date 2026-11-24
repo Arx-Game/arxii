@@ -35,6 +35,7 @@ from django.db import transaction
 from django.db.models import Max, QuerySet
 
 from world.checks.services import difficulty_points, perform_check_with_modifiers
+from world.checks.types import ExtraTraitTerm
 from world.items.services.materials import consume_materials
 from world.magic.constants import GainSource, ReflectionChoice
 from world.magic.exceptions import (
@@ -640,6 +641,14 @@ def _apply_fall(
     return list(outcome.notices)
 
 
+def _target_skill_terms(target: Resonance | None) -> tuple[ExtraTraitTerm, ...]:
+    """The skill of the affinity a conversion turns toward, as the one extra term the rite's
+    roll carries (#5308); none when it turns nowhere or staff linked no skill to the affinity."""
+    if target is None or not target.affinity.skill_id:
+        return ()
+    return (ExtraTraitTerm(trait=target.affinity.skill, weight=Decimal(1)),)
+
+
 @transaction.atomic
 def perform_settling_rite(
     sheet: CharacterSheet, *, components: list[ItemInstance]
@@ -685,11 +694,21 @@ def perform_settling_rite(
         config, sheet, components, rite_resonances(sheet, reflections)
     )
     bonus = focus_bonus(sheet, offered_for)
+    # Where the rite turns is read-only, so it is settled before the roll: the roll adds the
+    # skill of the affinity the conversion turns toward (#5308). A rite with nowhere to turn
+    # (an embrace-only rite, or no main affinity) adds no skill.
+    target = _conversion_target(
+        sheet,
+        offered_for,
+        main_affinity_rows(sheet),
+        open_caps(sheet) if disowns_unsettling(reflections) else None,
+    )
     check = perform_check_with_modifiers(
         sheet.character,
         config.check_type,
         difficulty_points(config.check_difficulty_level),
         extra_modifiers=bonus,
+        extra_traits=_target_skill_terms(target),
     )
     outcome = check.outcome
     # Safety net: rite_is_ready already refused a table with a missing tier.
@@ -705,12 +724,6 @@ def perform_settling_rite(
     )
     consume_materials(allocations)
 
-    target = _conversion_target(
-        sheet,
-        offered_for,
-        main_affinity_rows(sheet),
-        open_caps(sheet) if disowns_unsettling(reflections) else None,
-    )
     effects, notices = _apply_reflections(
         sheet, reflections, rite, share, target, config.disown_deed_percent
     )

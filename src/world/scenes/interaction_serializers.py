@@ -8,6 +8,7 @@ from rest_framework import serializers
 from world.conditions.thumbnail_services import persona_face_url
 from world.magic.serializers_reflection import (
     ClaimFieldsMixin,
+    ReachFieldsMixin,
     ReflectionFieldsMixin,
     SineatingFieldsMixin,
 )
@@ -166,6 +167,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
     narrates = serializers.SerializerMethodField()
     endorsee_sheet_id = serializers.SerializerMethodField()
     endorsable_resonances = serializers.SerializerMethodField()
+    reached_resonance = serializers.SerializerMethodField()
     pose_endorsers = serializers.SerializerMethodField()
     my_pose_endorsement = serializers.SerializerMethodField()
     entry_endorsers = serializers.SerializerMethodField()
@@ -219,6 +221,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "dramatic_moment_tags",
             "narrates",
             "endorsable_resonances",
+            "reached_resonance",
             "pose_endorsers",
             "my_pose_endorsement",
             "entry_endorsers",
@@ -971,13 +974,27 @@ class InteractionListSerializer(serializers.ModelSerializer):
     # queryset pipeline). The property always exists now, so there is no
     # fallback branch to maintain here.
     def get_endorsable_resonances(self, obj: Interaction) -> list[dict]:
-        """List of resonances claimed by the endorsee (pose author)."""
+        """The resonances an endorsement of this pose can pay.
+
+        A pose that reached for a resonance (#5308) is endorsed for that one alone. Otherwise
+        the endorser picks from the resonances claimed by the endorsee (pose author).
+        """
+        reached = obj.cached_resonance_reach
+        if reached is not None:
+            return [{"id": reached.resonance_id, "name": reached.resonance.name}]
         sheet = obj.persona.character_sheet
         if sheet is None:
             return []
         return [
             {"id": cr.resonance_id, "name": cr.resonance.name} for cr in sheet.cached_resonances
         ]
+
+    def get_reached_resonance(self, obj: Interaction) -> dict | None:
+        """The resonance the poser said this pose reaches for (#5308), or None."""
+        reached = obj.cached_resonance_reach
+        if reached is None:
+            return None
+        return {"id": reached.resonance_id, "name": reached.resonance.name}
 
     # Reads `Interaction.cached_endorsements` (a `PrunedCachedProperty`,
     # #3816 Task 4) -- fed by the view queryset's Prefetch when available,
@@ -1095,7 +1112,9 @@ class ReplyTargetSerializer(serializers.Serializer):
         return attrs
 
 
-class PoseSubmitSerializer(ReflectionFieldsMixin, SineatingFieldsMixin, ClaimFieldsMixin):
+class PoseSubmitSerializer(
+    ReflectionFieldsMixin, SineatingFieldsMixin, ClaimFieldsMixin, ReachFieldsMixin
+):
     """Write serializer for submitting a POSE-mode Interaction from the web frontend.
 
     Validates persona ownership and action_link_ids integrity before the view

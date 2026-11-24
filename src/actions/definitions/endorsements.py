@@ -27,7 +27,8 @@ class PoseEndorseAction(Action):
 
     kwargs:
         interaction: Interaction — the pose to endorse
-        resonance: Resonance — which resonance to award
+        resonance: Resonance — which resonance to award; optional when the pose's author
+            reached for one (#5308), which is then the resonance awarded
         confirm: bool — False = preview, True = commit (default False)
     """
 
@@ -55,6 +56,9 @@ class PoseEndorseAction(Action):
                 success=False,
                 message="Which pose? (endorse pose <char> [#N] resonance=<name>)",
             )
+        reach = interaction.cached_resonance_reach
+        if reach is not None:
+            resonance = reach.resonance
         if resonance is None:
             return ActionResult(
                 success=False,

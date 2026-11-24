@@ -36,6 +36,7 @@ from world.magic.types.kindling import (
     KindlingAct,
     KindlingEvidence,
     PendingClaim,
+    PendingReach,
     WaitingResonance,
 )
 from world.magic.types.magic_skills import CastCheck
@@ -102,6 +103,7 @@ __all__ = [
     "PendingAlterationResult",
     "PendingAlterationTierReduction",
     "PendingClaim",
+    "PendingReach",
     "PullActionContext",
     "PullPreviewResult",
     "QualifyingComponent",
