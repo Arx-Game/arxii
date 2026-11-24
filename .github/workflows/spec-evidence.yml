@@ -79,6 +79,11 @@ jobs:
               if reason is not None and linked_issue_number(body) is None:
                   print(f"PR closes no issue, stated reason: {reason}")
                   raise SystemExit(0)
+              if reason is not None:
+                  raise SystemExit(
+                      f"The PR body says `No issue:` and also names #{linked_issue_number(body)}. "
+                      "A PR for an issue closes it: write `Closes #N` instead."
+                  )
               raise SystemExit(
                   "Every non-Dependabot pull request must explicitly close an issue "
                   "with `Closes #<number>`, or say why it closes none on a line of its "

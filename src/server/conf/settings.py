@@ -156,7 +156,8 @@ WEBCLIENT_ENABLED = True
 # Evennia defaults stand (4000-4006). `just shot` sets it to 4100 so an agent's own
 # server never shares ports with another checkout's: `arx stop` finds its server
 # through AMP_PORT, so it stops only the one on these ports. Never set in production.
-ARX_PORT_BASE = env.int("ARX_PORT_BASE", default=0)
+# An empty value (`ARX_PORT_BASE=`) counts as unset; env.int would refuse to start.
+ARX_PORT_BASE = int(env.str("ARX_PORT_BASE", default="") or 0)
 if ARX_PORT_BASE:
     TELNET_PORTS = [ARX_PORT_BASE]
     WEBSERVER_PORTS = [(ARX_PORT_BASE + 1, ARX_PORT_BASE + 5)]
