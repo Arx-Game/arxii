@@ -51,7 +51,7 @@ from world.mechanics.constants import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Sequence
+    from collections.abc import Callable, Mapping, Sequence
     from typing import Any
 
     from evennia.objects.models import ObjectDB
@@ -583,6 +583,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
     price_payment: PricePayment | None = None,
     substance_lines: Sequence[tuple[str, int]] = (),
     cast_resonance: Resonance | None = None,
+    resonance_worth_percent: int = 100,
 ) -> PowerLedger:
     """Derive effective power as an ordered ledger. NEVER stored — recomputed each cast.
 
@@ -592,6 +593,10 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
 
     ``cast_resonance`` (#5231): the one resonance the cast is worked in, forwarded into
     ``PowerTermContext`` for ``kindled_cast_power_term``. ``None`` (the default) adds nothing.
+
+    ``resonance_worth_percent`` (#5308): what the cast resonance's affinity check made a
+    kindled cast worth, forwarded into ``PowerTermContext`` for ``kindled_cast_power_term``.
+    100 (the default, and every preview) scales nothing.
 
     ``price_payment`` (#4099): the cast's one price decision, forwarded unchanged into
     ``PowerTermContext`` for ``price_power_term``. ``None`` (the default, and every
@@ -687,6 +692,7 @@ def _derive_power(  # noqa: PLR0913 — internal helper, one kwarg per orthogona
         target_sheet=target_sheet,
         price_payment=price_payment,
         cast_resonance=cast_resonance,
+        resonance_worth_percent=resonance_worth_percent,
     )
     for provider in get_power_term_providers():
         builder.add(PowerStage.TERM, _power_term_label(provider), provider(ctx))
@@ -1166,6 +1172,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
     target: ObjectDB | None = None,
     cast_check: CastCheck | None = None,
     burn_result: ResonanceBurnResult | None = None,
+    worth_by_affinity: Mapping[int, int] | None = None,
 ) -> tuple[int, int, list[ResolvedPullEffect], int]:
     """Charge a non-combat cast pull and return resolved effects.
 
@@ -1192,6 +1199,10 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
     #1718) before spending — the identical helper the in-combat path
     (``commit_combat_pull``) uses, so a non-combat ``beseech=N`` cast rolls the
     same Court-grant petition check and gets the same bonus/debt treatment.
+
+    ``worth_by_affinity`` (#5308) is the worth ``use_technique`` already rolled for the cast
+    resonance's affinity, so the pull scales by that check and one cast never rolls an
+    affinity twice.
 
     Returns ``(pull_flat_bonus, effective_power, resolved_effects, resonance_spent)``
     (``resonance_spent`` is the pull's own cost, 0 when nothing was charged) so callers
@@ -1234,12 +1245,14 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
             # skills, or on the technique skill, is in this action.
             involved_traits=cast_involved_trait_ids(cast_check),
             target=target,
+            check_type=cast_check.check_type if cast_check is not None else None,
         ),
         beseech_bonus_thread_id=beseech_bonus_thread_id,
         beseech_bonus=applied_bonus,
         burn=burn_result.reached if burn_result is not None else 0,
         burn_resonance=burn_result.resonance if burn_result is not None else None,
         payers=cast_pull.payers,
+        worth_by_affinity=worth_by_affinity,
     )
     if burn_result is not None:
         from world.magic.services.burn import announce_burn  # noqa: PLC0415
@@ -1473,6 +1486,47 @@ def _resolve_cast_burn(
     )
 
 
+def _cast_resonance_worth(  # noqa: PLR0913 - one roll's inputs, all keyword
+    *,
+    character: ObjectDB,
+    technique: Technique,
+    cast_resonance: Resonance | None,
+    pulls: bool,
+    cast_check: CastCheck | None,
+    situation_ctx: object | None,
+) -> int:
+    """What the cast resonance's affinity check made this cast worth, in percent (#5308).
+
+    One check, rolled only when something here has a strength to scale: the cast pulls
+    threads, or its resonance is kindled now. Any other cast, a caster with no sheet and a
+    cast with no resonance is worth 100 and rolls nothing. The check uses the stat of the
+    cast's own roll. The result scales the pull and the kindled cast term alike, so one cast
+    never rolls an affinity twice.
+    """
+    from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
+    from world.magic.services.kindling import kindled_strength_now  # noqa: PLC0415
+    from world.magic.services.magic_skills import resolve_cast_check  # noqa: PLC0415
+    from world.magic.services.resonance_checks import (  # noqa: PLC0415
+        FULL_WORTH_PERCENT,
+        act_stat,
+        roll_spend_worth,
+    )
+
+    if cast_resonance is None:
+        return FULL_WORTH_PERCENT
+    sheet = _get_character_sheet(character)
+    if sheet is None:
+        return FULL_WORTH_PERCENT
+    if not pulls:
+        resolution = situation_ctx if isinstance(situation_ctx, CombatRoundContext) else None
+        if kindled_strength_now(sheet, cast_resonance, resolution=resolution) is None:
+            return FULL_WORTH_PERCENT
+    if cast_check is None:
+        cast_check = resolve_cast_check(character, technique)
+    stat = act_stat(cast_check.check_type) if cast_check is not None else None
+    return roll_spend_worth(sheet, cast_resonance.affinity, stat=stat)
+
+
 def _prepare_technique_cast(  # noqa: PLR0913
     *,
     character,
@@ -1491,6 +1545,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
     burn_result: ResonanceBurnResult | None = None,
     substance_plan: SubstancePlan | None = None,
     cast_resonance: Resonance | None = None,
+    resonance_worth_percent: int = 100,
 ) -> _CastPreparation | None:
     """Run the pre-cast event and prepare power and pull effects."""
     from world.magic.services.substance import source_power_lines  # noqa: PLC0415
@@ -1515,6 +1570,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
             if substance_plan is not None
             else ()
         ),
+        resonance_worth_percent=resonance_worth_percent,
     )
     pre_payload = TechniquePreCastPayload(
         caster=character,
@@ -1545,6 +1601,11 @@ def _prepare_technique_cast(  # noqa: PLR0913
             target=pull_target or (targets[0] if targets else None),
             cast_check=cast_check,
             burn_result=burn_result,
+            worth_by_affinity=(
+                {cast_resonance.affinity_id: resonance_worth_percent}
+                if cast_resonance is not None
+                else None
+            ),
         )
         # The pull's intensity is counted here and only here (``thread_power_term`` skips
         # pulled threads); itemise it so the ledger's total is the cast's power.
@@ -1882,6 +1943,14 @@ def use_technique(  # noqa: PLR0913
             effective_strain + burn_units, strain_config, strain_power_enabled
         )
     price_payment = price_paid_for_cast(character, technique)
+    resonance_worth_percent = _cast_resonance_worth(
+        character=character,
+        technique=technique,
+        cast_resonance=cast_resonance,
+        pulls=cast_pull is not None,
+        cast_check=cast_check,
+        situation_ctx=situation_ctx,
+    )
     preparation = _prepare_technique_cast(
         character=character,
         technique=technique,
@@ -1899,6 +1968,7 @@ def use_technique(  # noqa: PLR0913
         burn_result=burn_result,
         substance_plan=substance_plan,
         cast_resonance=cast_resonance,
+        resonance_worth_percent=resonance_worth_percent,
     )
     if preparation is None:
         if fury is not None:

@@ -1246,6 +1246,7 @@ def _charge_social_pull(
             involved_traits=involved_traits,
             target=target,
             excluded_kinds=frozenset({TargetKind.GIFT}),
+            check_type=check_type,
         ),
         # Defense-in-depth: beseech_bonus=0 ensures no emergency draw fires
         # even if the declaration somehow carried a bonus.

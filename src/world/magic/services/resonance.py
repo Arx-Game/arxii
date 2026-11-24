@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import dataclasses
 from decimal import Decimal
 import logging
 import math
@@ -39,7 +40,12 @@ from world.magic.models import (
 )
 from world.magic.services.kindled_math import scale_by_kindled_boost, stronger_marks
 from world.magic.services.pull_effects import get_pull_effects_for_thread
-from world.magic.services.resonance_checks import roll_gain_bonus
+from world.magic.services.resonance_checks import (
+    FULL_WORTH_PERCENT,
+    act_stat,
+    roll_gain_bonus,
+    roll_spend_worth,
+)
 from world.magic.services.thread_rows import payer_level_read
 from world.magic.services.threads import (
     cap_exceeded_error,
@@ -1384,6 +1390,66 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     return resolved
 
 
+def _pull_worth_by_affinity(
+    character_sheet: CharacterSheet,
+    threads: list[Thread],
+    action_context: PullActionContext,
+    payers: Mapping[int, ResonanceModel] | None,
+    worth_by_affinity: Mapping[int, int] | None,
+) -> dict[int, int]:
+    """The worth in percent of each affinity paying for this pull (#5308).
+
+    One check per distinct paying affinity, rolled with the stat of the action's own roll
+    (``action_context.check_type``). An affinity the caller already rolled for, such as a
+    cast that also scales its kindled power by the same check, is taken from
+    ``worth_by_affinity`` and never rolled again.
+    """
+    worth = dict(worth_by_affinity or {})
+    stat = None
+    stat_read = False
+    for thread in threads:
+        affinity = pull_payer(thread, payers).affinity
+        if affinity.pk in worth:
+            continue
+        if not stat_read:
+            check_type = action_context.check_type
+            stat = act_stat(check_type) if check_type is not None else None
+            stat_read = True
+        worth[affinity.pk] = roll_spend_worth(character_sheet, affinity, stat=stat)
+    return worth
+
+
+def _scaled_by_worth(
+    resolved: list[ResolvedPullEffect],
+    payers: Mapping[int, ResonanceModel] | None,
+    worth: Mapping[int, int],
+) -> list[ResolvedPullEffect]:
+    """``resolved`` with each effect's magnitude scaled by its payer affinity's worth (#5308).
+
+    The thread's scaled value and, for a capability grant, its frozen curved value are both
+    multiplied; an inactive row stays 0 and an effect worth 100 percent is returned as is.
+    """
+    scaled: list[ResolvedPullEffect] = []
+    for effect in resolved:
+        percent = worth[pull_payer(effect.source_thread, payers).affinity.pk]
+        if percent == FULL_WORTH_PERCENT:
+            scaled.append(effect)
+            continue
+        scaled.append(
+            dataclasses.replace(
+                effect,
+                scaled_value=_worth_of(effect.scaled_value, percent),
+                capability_grant_value=_worth_of(effect.capability_grant_value, percent),
+            )
+        )
+    return scaled
+
+
+def _worth_of(value: int | None, percent: int) -> int | None:
+    """``value`` at ``percent`` of its worth, None staying None."""
+    return None if value is None else value * percent // FULL_WORTH_PERCENT
+
+
 def _fold_distinction_pull_bonus(
     resolved: list[ResolvedPullEffect],
     *,
@@ -1948,6 +2014,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     burn_valuation: BurnValuation | None = None,
     burned_for: str = "",
     payers: Mapping[int, ResonanceModel] | None = None,
+    worth_by_affinity: Mapping[int, int] | None = None,
 ) -> ResonancePullResult:
     """Atomic pull commit (Spec A §5.4 + §7.4).
 
@@ -1983,6 +2050,10 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         payers: Thread id -> the resonance paying for that thread (#5123); a thread not
             named is paid by its leading resonance. A combat pull records each payer on
             its ``CombatPullThread`` row.
+        worth_by_affinity: Affinity id -> the worth in percent a caller already rolled for
+            it (#5308), so one cast never rolls an affinity twice; every other paying
+            affinity rolls its own check here. Every effect a thread bought is scaled by its
+            payer affinity's worth before it is persisted or returned.
         burn_valuation: What the burn is worth, valued at declaration; a combat pull
             stores it so the action reads it at resolution without re-valuing.
         burned_for: The declared action a combat burn strains (``PullBurnAction``);
@@ -2048,9 +2119,15 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         payers=payers,
         kindled=kindled,
     )
-    resolved = _fold_distinction_pull_bonus(
+    # The distinction's flat bonus belongs to the pull as a whole, not to one thread's payer,
+    # so the worth scales the thread effects only (#5308).
+    with_bonus = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, threads=threads, payers=payers
     )
+    worth = _pull_worth_by_affinity(
+        character_sheet, threads, action_context, payers, worth_by_affinity
+    )
+    resolved = [*_scaled_by_worth(resolved, payers, worth), *with_bonus[len(resolved) :]]
 
     applicable = [e for e in resolved if not e.inactive]
     # A thread paid by a resonance it holds no row for is an ordinary pull with no perks
@@ -2117,6 +2194,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         anima_spent=anima_total,
         resolved_effects=resolved,
         resonance_burned=burn,
+        worth_by_affinity=worth,
     )
 
 

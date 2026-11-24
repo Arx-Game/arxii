@@ -9,19 +9,19 @@ is reached only through ``Affinity.skill`` (ADR-4450).
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from world.checks.models import CheckTypeTrait
 from world.checks.types import ExtraTraitTerm
-from world.magic.models import ResonanceCheckAward, ResonanceGainSourceStat
+from world.magic.models import Affinity, ResonanceCheckAward, ResonanceGainSourceStat
 from world.magic.types.resonance_checks import NO_GAIN_BONUS, GainBonus
 from world.traits.constants import TraitType
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckOutcome, CheckType
-    from world.magic.models import Affinity
     from world.traits.models import Trait
 
 FULL_WORTH_PERCENT = 100
@@ -126,3 +126,23 @@ def roll_spend_worth(
     award = _award_for(outcome)
     worth = award.spend_worth_percent if award else FULL_WORTH_PERCENT
     return max(worth, affinity.spend_worth_floor_percent)
+
+
+def worth_clause(worth_by_affinity: Mapping[int, int]) -> str:
+    """The plain sentence telling a player what their check made a pull worth, or "".
+
+    One sentence per affinity whose worth was not 100 percent, named by the affinity's skill
+    ("Your Villainy check made it worth 130 percent."). Empty when every worth is 100, so a
+    pull with nothing configured reads exactly as it did.
+    """
+    changed = {
+        pk: percent for pk, percent in worth_by_affinity.items() if percent != FULL_WORTH_PERCENT
+    }
+    if not changed:
+        return ""
+    affinities = Affinity.objects.filter(pk__in=changed).select_related("skill").order_by("pk")
+    return " ".join(
+        f"Your {a.skill.name if a.skill_id else a.name} check made it worth "
+        f"{changed[a.pk]} percent."
+        for a in affinities
+    )
