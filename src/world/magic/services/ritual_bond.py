@@ -44,7 +44,7 @@ from world.magic.models import (
 from world.magic.services.anima import ritual_succeeded
 from world.magic.services.kindling import kindled_for, kindling_context_for
 from world.magic.services.resonance import grant_resonance
-from world.magic.services.resonance_checks import active_affinity_skill, roll_gain_bonus
+from world.magic.services.resonance_checks import gain_bonus_clause, roll_gain_bonus
 from world.magic.types.resonance_checks import NO_GAIN_BONUS, GainBonus
 from world.magic.types.ritual import HarvestedTrickle, RitualBond, RitualEarningParts
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
@@ -349,12 +349,13 @@ def apply_ritual_bond(  # noqa: PLR0913
     bonus_for = _bonus_roller(performer_sheet, ritual)
 
     primal_granted = 0
+    primal_bonus_percent = 0
     if succeeded and primal is not None and _holds(performer_sheet, primal):
         primal_amount = _with_kindled_share(performer_sheet, primal, parts.primal)
         if primal_amount > 0:
-            primal_granted = _grant(
-                performer_sheet, primal, primal_amount, ritual, bonus_for(primal)
-            )
+            primal_gain = bonus_for(primal)
+            primal_granted = _grant(performer_sheet, primal, primal_amount, ritual, primal_gain)
+            primal_bonus_percent = primal_gain.percent
 
     outward_granted, outward_pending = _earn_outward(
         performer_sheet,
@@ -365,6 +366,10 @@ def apply_ritual_bond(  # noqa: PLR0913
         picks=(primal, outward),
         parts=parts,
         bonus_for=bonus_for,
+    )
+    # The roller hands back the result it rolled for the affinity, so this reads it, not re-rolls.
+    outward_bonus_percent = (
+        bonus_for(outward).percent if outward is not None and outward_granted > 0 else 0
     )
     endorsement = (
         AnimaRitualEndorsement.PENDING if outward_pending > 0 else AnimaRitualEndorsement.NOT_ASKED
@@ -383,8 +388,10 @@ def apply_ritual_bond(  # noqa: PLR0913
     return RitualBond(
         primal_resonance=primal,
         primal_granted=primal_granted,
+        primal_bonus_percent=primal_bonus_percent,
         outward_resonance=outward,
         outward_granted=outward_granted,
+        outward_bonus_percent=outward_bonus_percent,
         outward_pending=outward_pending,
         endorsement=endorsement,
         partner_fatigue_setting=_sign(setting_value),
@@ -396,11 +403,11 @@ def apply_ritual_bond(  # noqa: PLR0913
 def _harvest_sentence(harvest: HarvestedTrickle) -> str:
     """What one harvested trickle adds to the performer's line, e.g. "13 Cruelty waiting from
     your days arrived. Your Villainy check added 30 percent."; the second sentence only when
-    the check added something and the affinity has a skill."""
+    the check added something."""
     sentence = f" {harvest.amount} {harvest.resonance.name} waiting from your days arrived."
-    skill = active_affinity_skill(harvest.resonance.affinity)
-    if harvest.bonus_percent > 0 and skill is not None:
-        sentence += f" Your {skill.name} check added {harvest.bonus_percent} percent."
+    clause = gain_bonus_clause(harvest.resonance.affinity, harvest.bonus_percent)
+    if clause:
+        sentence += f" {clause}"
     return sentence
 
 
@@ -420,8 +427,14 @@ def performer_ritual_line(bond: RitualBond, partner_name: str, anima_recovered: 
         line += f" You recover {anima_recovered} anima."
     if bond.primal_granted > 0 and bond.primal_resonance is not None:
         line += f" Your {bond.primal_resonance.name} grows by {bond.primal_granted}."
+        clause = gain_bonus_clause(bond.primal_resonance.affinity, bond.primal_bonus_percent)
+        if clause:
+            line += f" {clause}"
     if bond.outward_granted > 0 and bond.outward_resonance is not None:
         line += f" Your {bond.outward_resonance.name} grows by {bond.outward_granted}."
+        clause = gain_bonus_clause(bond.outward_resonance.affinity, bond.outward_bonus_percent)
+        if clause:
+            line += f" {clause}"
     for harvest in bond.harvested:
         if harvest.amount > 0:
             line += _harvest_sentence(harvest)

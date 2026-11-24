@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal
 import logging
 from typing import TYPE_CHECKING
@@ -1295,6 +1295,9 @@ class _CastPreparation:
     burn_result: ResonanceBurnResult | None = None
     #: The combat action whose declared burn this cast carries (``PullBurnAction``).
     combat_burn_for: str = ""
+    #: What the cast resonance's affinity check made the cast worth (#5308), affinity id to
+    #: percent; empty when nothing rolled.
+    worth_by_affinity: Mapping[int, int] = field(default_factory=dict)
 
 
 def _validate_strain_commitment(strain_commitment: int) -> None:
@@ -1636,6 +1639,11 @@ def _prepare_technique_cast(  # noqa: PLR0913
         charged_pull=cast_pull,
         charged_pull_spent=pull_spent,
         burn_result=burn_result if cast_pull is not None else None,
+        worth_by_affinity=(
+            {cast_resonance.affinity_id: resonance_worth_percent}
+            if cast_resonance is not None
+            else {}
+        ),
     )
 
 
@@ -1797,6 +1805,7 @@ def _complete_technique_cast(  # noqa: PLR0913
         runtime_intensity=stats.intensity,
         substance_call_up=substance_call_up,
         focus=focus_outcome,
+        worth_by_affinity=preparation.worth_by_affinity,
     )
     from world.magic.audere import maybe_create_audere_offer  # noqa: PLC0415
 

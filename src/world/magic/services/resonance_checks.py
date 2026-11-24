@@ -145,6 +145,24 @@ def roll_spend_worth(
     return max(worth, affinity.spend_worth_floor_percent)
 
 
+def _check_name(affinity: Affinity) -> str:
+    """What a player calls the bonus check: its active skill's name, else the affinity's own."""
+    skill = active_affinity_skill(affinity)
+    return skill.name if skill is not None else affinity.name
+
+
+def gain_bonus_clause(affinity: Affinity, percent: int) -> str:
+    """The plain sentence telling a player what their check added to a gain, or "".
+
+    "Your Villainy check added 30 percent." names the affinity's skill while it is active and
+    the affinity itself otherwise. Empty when the check added nothing, so a gain with nothing
+    configured reads exactly as it did.
+    """
+    if percent <= 0:
+        return ""
+    return f"Your {_check_name(affinity)} check added {percent} percent."
+
+
 def worth_clause(worth_by_affinity: Mapping[int, int]) -> str:
     """The plain sentence telling a player what their check made a pull worth, or "".
 
@@ -159,7 +177,5 @@ def worth_clause(worth_by_affinity: Mapping[int, int]) -> str:
         return ""
     affinities = Affinity.objects.filter(pk__in=changed).select_related("skill").order_by("pk")
     return " ".join(
-        f"Your {skill.name if skill is not None else a.name} check made it worth "
-        f"{changed[a.pk]} percent."
-        for a, skill in ((a, active_affinity_skill(a)) for a in affinities)
+        f"Your {_check_name(a)} check made it worth {changed[a.pk]} percent." for a in affinities
     )

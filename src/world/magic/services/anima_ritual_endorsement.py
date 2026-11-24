@@ -17,6 +17,7 @@ from world.magic.constants import AnimaRitualEndorsement, GainSource
 from world.magic.exceptions import AnimaRitualAnswerError
 from world.magic.models import AnimaRitualPerformance, CharacterResonance, Resonance
 from world.magic.services.resonance import grant_resonance
+from world.magic.services.resonance_checks import gain_bonus_clause
 from world.magic.types.resonance_checks import GainBonus
 from world.traits.models import CheckOutcome
 
@@ -85,6 +86,7 @@ def _settle(
         )
         return f"You do not endorse {ritual_for}."
     granted = 0
+    granted_percent = 0
     pending = held["outward_amount_pending"]
     if (
         outward is not None
@@ -111,10 +113,14 @@ def _settle(
             gain_bonus=GainBonus(stored_outcome, held["outward_bonus_percent"]),
         )
         granted = ledger[-1].amount
+        granted_percent = ledger[-1].bonus_percent
     _close(performance, AnimaRitualEndorsement.ENDORSED)
     line = f"{partner_name} felt it."
     if granted > 0 and outward is not None:
         line += f" Your {outward.name} grows by {granted}."
+        clause = gain_bonus_clause(outward.affinity, granted_percent)
+        if clause:
+            line += f" {clause}"
     send_stored_notice(performer_sheet, line, ooc_note="Anima ritual")
     return f"You endorse {ritual_for}."
 

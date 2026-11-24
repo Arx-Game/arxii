@@ -44,7 +44,7 @@ from world.magic.models import (
     ResonanceGrant,
     Thread,
 )
-from world.magic.services.resonance_checks import act_stat, active_affinity_skill, roll_gain_bonus
+from world.magic.services.resonance_checks import act_stat, gain_bonus_clause, roll_gain_bonus
 from world.magic.services.threads import relationship_side_from_row
 from world.magic.types.kindling import KindledResonance, KindlingAct, KindlingEvidence
 
@@ -1225,9 +1225,9 @@ def _earn_kindled_entry(  # noqa: PLR0913 - the sheet, the entry and the shared 
     if set_aside > 0:
         _set_aside_for_claim(row, set_aside)
     line = f"You earned {grants[-1].amount} {entry.resonance.name}."
-    skill = active_affinity_skill(entry.resonance.affinity)
-    if gain_bonus.percent > 0 and skill is not None:
-        line += f" Your {skill.name} check added {gain_bonus.percent} percent."
+    clause = gain_bonus_clause(entry.resonance.affinity, gain_bonus.percent)
+    if clause:
+        line += f" {clause}"
     if set_aside > 0:
         line += f" {set_aside} more is waiting to be claimed."
     transaction.on_commit(_told_of_deed(sheet, line))

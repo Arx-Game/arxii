@@ -443,12 +443,14 @@ class TheRitualHarvestsWhatHerDaysPiledUp(_RitualWithAPartner):
         self.assertEqual(len(bonus_rolls), 2)
 
         # Hollow: the ritual's 3 grows to 4 and the 4 waiting grows to 6. Ruin: 14 waiting
-        # grows to 21. Both are told, the Abyssal one with the Villainy check named.
+        # grows to 21. Each is told with its check named: Villainy for the Abyssal one, the
+        # affinity itself for the Primal one, which has no skill.
         self.assertTold(
             self.mara,
             "Your ritual feeds on Tobin. You recover 6 anima. Your Hollow grows by 4. "
+            "Your Primal check added 50 percent. "
             "21 Ruin waiting from your days arrived. Your Villainy check added 50 percent. "
-            "6 Hollow waiting from your days arrived.",
+            "6 Hollow waiting from your days arrived. Your Primal check added 50 percent.",
         )
         self.assertEqual(self.balance(), 4 + 6)
         self.assertEqual(self.balance(self.resonance), 21)

@@ -379,8 +379,15 @@ class TheVillainsDaysArePiledUpAndHarvestedByHerRitual(_Skills, _RitualWithAPart
         self.assertTold(
             self.mara,
             "Your ritual feeds on Tobin. You recover 6 anima. Your Hollow grows by 4. "
+            "Your Reflection check added 50 percent. "
             "18 Ruin waiting from your days arrived. Your Villainy check added 50 percent.",
         )
         self.assertEqual(self.balance(self.resonance), 18)
         self.assertEqual(waiting_trickles(self.mara.sheet_data), {})
         self.assertFalse(TrickleAccrual.objects.filter(harvested_at__isnull=True).exists())
+        # Tobin's answer grants the Ruin the ritual held for him, grown by the result it stored,
+        # and the line Mara reads for it names the check too.
+        self.telnet(self.tobin, "ritual endorse Mara")
+        self.assertTold(
+            self.mara, "Tobin felt it. Your Ruin grows by 4. Your Villainy check added 50 percent."
+        )

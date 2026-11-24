@@ -5009,8 +5009,17 @@ facet merge hands a dropped duplicate's accruals to the keeper. `harvest_trickle
 sheet's waiting rows, sums them per resonance, writes one `TRICKLE_HARVEST` grant per resonance grown by the
 bonus result for that resonance's affinity, stamps `harvested_at` on every row it covered and returns
 `HarvestedTrickle(resonance, amount, bonus_percent)` entries, which `performer_ritual_line` names ("13 Ruin
-waiting from your days arrived. Your Villainy check added 30 percent."). The ritual rolls one check per
-affinity across its Primal part, its outward part and the harvest, with its own stat, so two resonances of one
+waiting from your days arrived. Your Villainy check added 30 percent."). `gain_bonus_clause(affinity, percent)`
+(`services/resonance_checks.py`) is the one phrasing of "Your Villainy check added 30 percent." (the affinity's
+name when it has no active skill, empty at 0 percent) and is appended to every
+told line that names a rolled gain: the kindled deed line, the ritual's Primal and outward sentences
+(`RitualBond.primal_bonus_percent`, `outward_bonus_percent`) and harvest sentence, the partner-endorsement settle
+line, the Sineating lines for both parties (`EarnedPart`, `SineatingResult.sineater_bonus_percent`), the Mire
+purify, succumb-bonus and fall notices, a worship rite's action message (`RiteOutcome.resonance_bonus_percent`) and
+a standoff ending's earned line. A rolled source whose acknowledgement names no amount (an entry flourish, a pose
+endorsement's weekly settlement, a dramatic-moment tag the GM reads, project, mission and stake rewards, combo
+discovery, sanctum absorption and the Compromise grant) shows its check only in the ledger (`resonance history`).
+The ritual rolls one check per affinity across its Primal part, its outward part and the harvest, with its own stat, so two resonances of one
 affinity share one result. The outward part that waits for the partner's answer is stored as the base amount
 beside its result, and `_settle` grants it grown by that result with no second roll. `item_meaning` reads
 accruals whether or not harvested, plus legacy `OUTFIT_TRICKLE` grants.
@@ -5027,7 +5036,15 @@ kindled now, and puts the result on `PowerTermContext.resonance_worth_percent`, 
 an affinity twice. Previews (`preview_resonance_pull`, `cast_resonance_options`) show worth 100 and never roll.
 `commit_combat_pull` now returns the `ResonancePullResult`; a pull declared on its own
 (`actions/definitions/round_pull.py`) and the automatic defensive pull (`combat/services/auto_pull.py`) append
-`worth_clause(result.worth_by_affinity)` to their "pulled" line. No new surface carries the worth. A combat pull commits at declaration and the
+`worth_clause(result.worth_by_affinity)` to their "pulled" line. `TechniqueUseResult.worth_by_affinity` carries
+the cast's own worth (one affinity, empty when nothing rolled), and the telnet standalone cast
+(`actions/definitions/cast.py`) appends `worth_clause(...)` of it to the actor's "Your technique resolves." line,
+so the one roll that scaled the cast's pull and its kindled power is told to the caster alone. Three paths roll the
+worth and tell no one, because the only line the actor reads there is a scene-wide or round-wide pose or the
+declaration's acknowledgement carries no outcome: a social action's pull (`_charge_social_pull` in
+`scenes/action_services.py`, whose outcome line is the scene's), a combat cast's pull committed at declaration
+(`CastTechniqueAction._commit_combat_pull`, `CombatRoundContext` and the clash path in `actions/player_interface.py`),
+and the combat resolution of a cast's kindled term (round narration). A combat pull commits at declaration and the
 cast resolves in a later step, so a combat cast with a pull rolls the pull's worth at declaration and its
 kindled cast term at resolution: two rolls for one affinity, a deliberate deviation from the spec (ADR-5308).
 

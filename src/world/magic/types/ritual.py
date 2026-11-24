@@ -105,7 +105,8 @@ class RitualBond:
 
     ``primal_resonance`` and ``outward_resonance`` are the ritual's two picks (None for a pick
     it has none of). ``primal_granted`` is what the ledger recorded for the Primal pick, after
-    the earn rate of its own affinity. ``outward_granted`` is the same for the outward pick, set
+    the earn rate of its own affinity and the bonus check, which added ``primal_bonus_percent``.
+    ``outward_granted`` is the same for the outward pick, set
     only when a story NPC partner took part and the roll succeeded: a player character partner's
     part is held, not granted, so ``outward_pending`` carries the stored amount and
     ``endorsement`` is ``pending``. ``partner_fatigue_setting`` is the sign of the outward
@@ -116,8 +117,10 @@ class RitualBond:
 
     primal_resonance: Resonance | None = None
     primal_granted: int = 0
+    primal_bonus_percent: int = 0
     outward_resonance: Resonance | None = None
     outward_granted: int = 0
+    outward_bonus_percent: int = 0
     outward_pending: int = 0
     endorsement: str = AnimaRitualEndorsement.NOT_ASKED
     partner_fatigue_setting: int = 0

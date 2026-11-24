@@ -72,6 +72,9 @@ class RiteOutcome:
     items_uncounted: int = 0
     #: Base favor of the award that paid owed favor first (#4349), so "+0" says where it went.
     favor_owed_paid: int = 0
+    #: The percent the bonus resonance check added to ``resonance_granted`` (#5308); 0 when it
+    #: added nothing.
+    resonance_bonus_percent: int = 0
 
 
 def rite_ap_cost(rite: WorshipRite) -> int:
@@ -214,6 +217,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
             resonance_granted=resonance_amount,
             favor_granted=favor_amount,
         )
+        resonance_bonus_percent = 0
         if resonance_amount > 0:
             ledger: list = []
             grant_resonance(
@@ -228,6 +232,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
             # What the ledger recorded: the award scaled by the earn rate of the resonance's
             # affinity (#5231).
             resonance_amount = ledger[-1].amount
+            resonance_bonus_percent = ledger[-1].bonus_percent
             if resonance_amount != performance.resonance_granted:
                 performance.resonance_granted = resonance_amount
                 performance.save(update_fields=["resonance_granted"])
@@ -253,6 +258,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
         multiplier_percent=percent,
         consecration_bonus_percent=site_bonus,
         favor_owed_paid=owed_paid,
+        resonance_bonus_percent=resonance_bonus_percent,
     )
 
 

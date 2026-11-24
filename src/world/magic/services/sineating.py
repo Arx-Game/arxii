@@ -39,7 +39,7 @@ from world.magic.services.mire import (
     own_corruptions,
     take_on_corruption,
 )
-from world.magic.services.resonance_checks import act_stat, roll_gain_bonus
+from world.magic.services.resonance_checks import act_stat, gain_bonus_clause, roll_gain_bonus
 from world.magic.services.soul_tether import (
     _MSG_NO_ACTIVE_TETHER,
     _MSG_NOT_IN_SAME_SCENE,
@@ -59,6 +59,7 @@ from world.magic.services.soul_tether import (
 )
 from world.magic.types.soul_tether import (
     CheckedPlea,
+    EarnedPart,
     PendingSineating,
     SineatingLines,
     SineatingOffer,
@@ -70,7 +71,7 @@ from world.roster.services.npc_lending import played_by_one_account
 from world.traits.models import CheckOutcome
 
 if TYPE_CHECKING:
-    from world.magic.models import Thread
+    from world.magic.models import ResonanceGrant, Thread
     from world.magic.models.threads import ThreadResonance
     from world.magic.types.resonance_checks import GainBonus
     from world.scenes.models import Scene
@@ -474,14 +475,18 @@ def perform_sineating(
                 stat=stat,
                 gain_bonus=sinner_bonuses[affinity.pk],
             )
-            sinner_parts_list.append((part_resonance, recorded))
+            if recorded is not None:
+                sinner_parts_list.append(
+                    EarnedPart(part_resonance, recorded.amount, recorded.bonus_percent)
+                )
         sinner_parts = tuple(sinner_parts_list)
-        sinner_earned = sum(recorded for _resonance, recorded in sinner_parts)
-        sineater_earned = (
+        sinner_earned = sum(part.amount for part in sinner_parts)
+        sineater_grant = (
             _grant(sineater_sheet, sineater_resonance, earned, stat=stat)
             if sineater_resonance is not None
-            else 0
+            else None
         )
+        sineater_earned = sineater_grant.amount if sineater_grant is not None else 0
 
         audit_row = Sineating.objects.create(
             sinner_sheet=sinner_sheet,
@@ -517,6 +522,7 @@ def perform_sineating(
         sinner_earned_parts=sinner_parts,
         sineater_resonance=sineater_resonance,
         sineater_resonance_earned=sineater_earned,
+        sineater_bonus_percent=sineater_grant.bonus_percent if sineater_grant is not None else 0,
     )
 
 
@@ -533,18 +539,18 @@ def _grant(
     *,
     stat: Trait | None = None,
     gain_bonus: GainBonus | None = None,
-) -> int:
-    """Grant ``amount`` of ``resonance`` under SINEATING; 0 grants nothing.
+) -> ResonanceGrant | None:
+    """Grant ``amount`` of ``resonance`` under SINEATING; None when there is nothing to grant.
 
-    Returns the amount the ledger row recorded, which is ``amount`` scaled by the earn
-    rate of the resonance's own affinity (#5231) and grown by the bonus resonance check
-    (#5308), so the result lines and the audit row report what was really earned. ``stat`` is
-    the Sineating roll's stat; ``gain_bonus`` a result already rolled for this affinity.
+    Returns the ledger row, whose amount is ``amount`` scaled by the earn rate of the
+    resonance's own affinity (#5231) and grown by the bonus resonance check (#5308), so the
+    result lines and the audit row report what was really earned. ``stat`` is the Sineating
+    roll's stat; ``gain_bonus`` a result already rolled for this affinity.
     """
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
     if amount <= 0:
-        return 0
+        return None
     ledger: list = []
     grant_resonance(
         sheet,
@@ -555,7 +561,7 @@ def _grant(
         act_stat=stat,
         gain_bonus=gain_bonus,
     )
-    return ledger[-1].amount
+    return ledger[-1]
 
 
 def decline_sineating(sinner_sheet: CharacterSheet, sineater_sheet: CharacterSheet) -> Sineating:
@@ -611,15 +617,21 @@ def sineating_lines(result: SineatingResult) -> SineatingLines:
         sinner = [f"{sineater_name} takes on your sins, but you carried no corruption to shed."]
         sineater = [f"You take on {sinner_name}'s sins, but they carried no corruption to shed."]
     if result.sinner_earned_parts:
-        for part_resonance, recorded in result.sinner_earned_parts:
-            if recorded > 0:
-                sinner[-1] += f" Your {part_resonance.name} grows by {recorded}."
+        for part in result.sinner_earned_parts:
+            if part.amount > 0:
+                sinner[-1] += f" Your {part.resonance.name} grows by {part.amount}."
+                if clause := gain_bonus_clause(part.resonance.affinity, part.bonus_percent):
+                    sinner[-1] += f" {clause}"
     if result.sineater_resonance is None:
         sineater.append(_NO_SINEATER_RESONANCE_LINE)
     elif result.sineater_resonance_earned > 0:
         sineater[-1] += (
             f" Your {result.sineater_resonance.name} grows by {result.sineater_resonance_earned}."
         )
+        if clause := gain_bonus_clause(
+            result.sineater_resonance.affinity, result.sineater_bonus_percent
+        ):
+            sineater[-1] += f" {clause}"
     if result.cut_by_ceiling:
         sineater.append(_CUT_LINE)
         sinner.append(f"{sineater_name} could take on only part of it.")
