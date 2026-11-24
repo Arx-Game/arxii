@@ -847,8 +847,10 @@ def create_entry_flourish(
     Called after the Entrance social action resolves successfully. The resonance
     was declared by the player as their flourish's expression.
 
-    Validates the character has claimed the resonance, then creates the
-    EntryFlourishRecord and fires grant_resonance atomically.
+    Creates the EntryFlourishRecord and fires grant_resonance atomically. The resonance need
+    not be one the character holds yet: a flourish in a new resonance earns it (#5308), and
+    the grant creates the character's row. The entrance made no roll that reaches this far,
+    so the bonus resonance check uses the stat staff set for ENTRY_FLOURISH.
 
     Args:
         character_sheet: The character performing the flourish.
@@ -858,9 +860,6 @@ def create_entry_flourish(
 
     Returns:
         The created EntryFlourishRecord.
-
-    Raises:
-        EndorsementValidationError: If the character hasn't claimed this resonance.
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.models.endorsement import EntryFlourishRecord  # noqa: PLC0415
@@ -872,12 +871,6 @@ def create_entry_flourish(
         ).first()
         if existing is not None:
             return existing  # already flourished this scene — skip gracefully
-
-    if not CharacterResonance.objects.filter(
-        character_sheet=character_sheet, resonance=resonance
-    ).exists():
-        msg = "Character has not claimed this resonance"
-        raise EndorsementValidationError(msg)
 
     cfg = get_resonance_gain_config()
     granted = amount if amount is not None else cfg.entry_flourish_grant

@@ -3460,10 +3460,9 @@ moment.
 
 **Services:**
 - `maybe_create_entry_flourish_offer(character, scene) -> PendingEntryFlourishOffer | None`
-  — called on Entrance action success; skips if already flourished this scene or no
-  claimed resonances.
+  — called on Entrance action success; skips if already flourished this scene.
 - `resolve_entry_flourish_offer(offer_id, *, resonance_id) -> EntryFlourishResult` —
-  two-phase staleness + ownership check then atomic grant + offer deletion.
+  atomic grant + offer deletion. The resonance need not be held: the grant earns it (#5308).
 - `create_entry_flourish(sheet, resonance, *, scene, amount=None) -> EntryFlourishRecord`
   — creates the record and fires `grant_resonance(source=ENTRY_FLOURISH)`; skips
   gracefully on a duplicate `(sheet, scene)`.
@@ -3480,7 +3479,7 @@ moment.
 **Config:** `ResonanceGainConfig.entry_flourish_grant` (default 10) — per-flourish amount.
 
 **Exceptions:** `EntryFlourishOfferError`, `EntryFlourishOfferNotFoundError`,
-`EntryFlourishOfferStaleError` (all in `exceptions.py`; carry `user_message`).
+(all in `exceptions.py`; carry `user_message`).
 
 ### Ritual Liturgy (models/liturgy.py — #1352)
 

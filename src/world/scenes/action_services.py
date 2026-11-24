@@ -1611,6 +1611,7 @@ def _award_kindled_deeds_for_action(
         action_request.technique,
         main.check_result.outcome,
         action_name=action_obj.name if action_obj is not None else action_request.action_key,
+        check_type=main.check_result.check_type,
     )
 
 

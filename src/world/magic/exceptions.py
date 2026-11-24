@@ -556,11 +556,6 @@ class EntryFlourishOfferNotFoundError(EntryFlourishOfferError):
     SAFE_MESSAGES = frozenset({user_message})
 
 
-class EntryFlourishOfferStaleError(EntryFlourishOfferError):
-    user_message = "That resonance is no longer available for your flourish."
-    SAFE_MESSAGES = frozenset({user_message})
-
-
 # =============================================================================
 # Trait crossing exceptions (#1989)
 # =============================================================================

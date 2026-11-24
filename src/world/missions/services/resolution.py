@@ -788,6 +788,7 @@ def resolve_option(  # noqa: PLR0913
             ),
             outcome=lowest_success_outcome() if auto else result.outcome,
             mission=instance,
+            act_check_type=result.check_type,
         )
         return _route_graded_outcome(
             instance,

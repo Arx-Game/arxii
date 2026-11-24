@@ -39,6 +39,7 @@ from world.magic.services.mire import (
     own_corruptions,
     take_on_corruption,
 )
+from world.magic.services.resonance_checks import act_stat, roll_gain_bonus
 from world.magic.services.soul_tether import (
     _MSG_NO_ACTIVE_TETHER,
     _MSG_NOT_IN_SAME_SCENE,
@@ -71,7 +72,9 @@ from world.traits.models import CheckOutcome
 if TYPE_CHECKING:
     from world.magic.models import Thread
     from world.magic.models.threads import ThreadResonance
+    from world.magic.types.resonance_checks import GainBonus
     from world.scenes.models import Scene
+    from world.traits.models import Trait
 
 _MSG_NO_PENDING_OFFER = "No pending Sineating offer found."
 _MSG_OFFER_STALE = "This offer expired because you are no longer in the same scene."
@@ -450,14 +453,32 @@ def perform_sineating(
 
         earned = _earned(chosen, cfg, award.earned_share)
         sineater_resonance = sineater_thread.resonance if sineater_thread is not None else None
-        sinner_parts = tuple(
-            (part_resonance, _grant(sinner_sheet, part_resonance, part))
-            for part_resonance, part in _earning_parts(sinner_thread, resonance, earned)
-            if part > 0
-        )
+        # The bonus resonance check borrows the stat of the Sineating roll (#5308). The Sinner's
+        # parts can span affinities, so it rolls once per affinity they pay; the Sineater's one
+        # grant rolls for itself inside the grant.
+        stat = act_stat(cfg.sineating_check_type)
+        sinner_bonuses: dict[int, GainBonus] = {}
+        sinner_parts_list = []
+        for part_resonance, part in _earning_parts(sinner_thread, resonance, earned):
+            if part <= 0:
+                continue
+            affinity = part_resonance.affinity
+            if affinity.pk not in sinner_bonuses:
+                sinner_bonuses[affinity.pk] = roll_gain_bonus(
+                    sinner_sheet, affinity, source=GainSource.SINEATING, stat=stat
+                )
+            recorded = _grant(
+                sinner_sheet,
+                part_resonance,
+                part,
+                stat=stat,
+                gain_bonus=sinner_bonuses[affinity.pk],
+            )
+            sinner_parts_list.append((part_resonance, recorded))
+        sinner_parts = tuple(sinner_parts_list)
         sinner_earned = sum(recorded for _resonance, recorded in sinner_parts)
         sineater_earned = (
-            _grant(sineater_sheet, sineater_resonance, earned)
+            _grant(sineater_sheet, sineater_resonance, earned, stat=stat)
             if sineater_resonance is not None
             else 0
         )
@@ -505,19 +526,35 @@ def _sineating_skill_terms() -> Any:
     return activity_skill_terms(MagicActivity.SINEATING)
 
 
-def _grant(sheet: CharacterSheet, resonance: Resonance, amount: int) -> int:
+def _grant(
+    sheet: CharacterSheet,
+    resonance: Resonance,
+    amount: int,
+    *,
+    stat: Trait | None = None,
+    gain_bonus: GainBonus | None = None,
+) -> int:
     """Grant ``amount`` of ``resonance`` under SINEATING; 0 grants nothing.
 
     Returns the amount the ledger row recorded, which is ``amount`` scaled by the earn
-    rate of the resonance's own affinity (#5231), so the result lines and the audit row report
-    what was really earned.
+    rate of the resonance's own affinity (#5231) and grown by the bonus resonance check
+    (#5308), so the result lines and the audit row report what was really earned. ``stat`` is
+    the Sineating roll's stat; ``gain_bonus`` a result already rolled for this affinity.
     """
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
     if amount <= 0:
         return 0
     ledger: list = []
-    grant_resonance(sheet, resonance, amount, source=GainSource.SINEATING, ledger_out=ledger)
+    grant_resonance(
+        sheet,
+        resonance,
+        amount,
+        source=GainSource.SINEATING,
+        ledger_out=ledger,
+        act_stat=stat,
+        gain_bonus=gain_bonus,
+    )
     return ledger[-1].amount
 
 

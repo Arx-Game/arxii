@@ -44,6 +44,7 @@ from world.magic.models import (
     ResonanceGrant,
     Thread,
 )
+from world.magic.services.resonance_checks import act_stat, roll_gain_bonus
 from world.magic.services.threads import relationship_side_from_row
 from world.magic.types.kindling import KindledResonance, KindlingAct, KindlingEvidence
 
@@ -51,9 +52,11 @@ if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
     from world.combat.models import CombatEncounter
     from world.conditions.models import ConditionInstance
     from world.magic.models import Technique
+    from world.magic.types.resonance_checks import GainBonus
     from world.missions.models import MissionInstance
     from world.scenes.models import Scene
     from world.traits.models import CheckOutcome
@@ -592,6 +595,7 @@ def kindled_resonances(
     resolution: object | None = None,
     mission: MissionInstance | None = None,
     act: KindlingAct | None = None,
+    include_named_unheld: bool = False,
 ) -> list[KindledResonance]:
     """One entry per resonance the character holds, kindled or not.
 
@@ -604,12 +608,26 @@ def kindled_resonances(
     situation counts only if that act feeds it (see the module docstring). Rally and GM
     ``Kindling`` rows for the character's active fight or scene count at their stored
     strength whatever the act.
+
+    ``include_named_unheld`` adds, after the held ones, each resonance an active situation
+    names directly that the character does not hold (#5308): a deed in a resonance she has
+    never held earns it. Only the earn path asks for this; the panel and the casts read held
+    resonances only. A situation for a whole affinity names no single resonance, so it feeds
+    held resonances only.
     """
     resonances = list(
         Resonance.objects.filter(character_resonances__character_sheet=sheet).select_related(
             "affinity", "feeling"
         )
     )
+    if include_named_unheld:
+        held_ids = {resonance.pk for resonance in resonances}
+        resonances.extend(
+            Resonance.objects.filter(kindling_situations__is_active=True)
+            .exclude(pk__in=held_ids)
+            .select_related("affinity", "feeling")
+            .distinct()
+        )
     return _evaluate(sheet, resonances, resolution=resolution, mission=mission, act=act)
 
 
@@ -1014,20 +1032,22 @@ def act_label(what: str, target_name: str | None = None, joiner: str = " ") -> s
     return f"{what}{joiner}{target_name}" if target_name else what
 
 
-def award_scene_act(
+def award_scene_act(  # noqa: PLR0913 - the act, its roll's outcome and check type
     initiator: CharacterSheet,
     target: CharacterSheet | None,
     technique: Technique | None,
     outcome: CheckOutcome | None,
     *,
     action_name: str = "",
+    check_type: CheckType | None = None,
 ) -> list[ResonanceGrant]:
     """Earn what a scene act feeds (#5124), scaled by its roll: the one place a scene act's
     kind is decided.
 
     An act made with a ``technique`` is a TECHNIQUE act and any other is a SOCIAL act. A
     beneficial technique on someone else aids them. The deed is labelled by the technique's
-    name, else by ``action_name`` (the scene action's own name).
+    name, else by ``action_name`` (the scene action's own name). ``check_type`` is the
+    act's own roll, whose stat the bonus resonance check borrows (#5308).
     """
     from world.magic.services.hostility import is_technique_hostile  # noqa: PLC0415
 
@@ -1044,6 +1064,7 @@ def award_scene_act(
             label=act_label(what, sheet_name(initiator, target), " on " if technique else " "),
         ),
         outcome=outcome,
+        act_check_type=check_type,
     )
 
 
@@ -1078,6 +1099,7 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
     resolution: object | None = None,
     mission: MissionInstance | None = None,
     context: KindlingContext | None = None,
+    act_check_type: CheckType | None = None,
 ) -> list[ResonanceGrant]:
     """Earn each resonance ``act`` feeds, scaled by the roll's ``outcome`` (#5124).
 
@@ -1091,6 +1113,12 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
     raises a resonance's panel strength but does not earn by itself and does not raise the
     share. No award row for the tier, no strength tier or a share of 0 earns nothing.
     Non-player characters earn nothing.
+
+    The bonus resonance check (#5308) rolls once per affinity the act pays, with the stat of
+    the act's own roll (``act_check_type``) or, when the act made none, the stat staff set for
+    kindled deeds; its percent grows both the instant grant and the share set aside. A
+    resonance a situation names that the character does not hold yet is earned too: the
+    grant creates her row for it.
 
     With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
     are read. A caller that knows its surroundings and has no round (a standoff is a
@@ -1113,9 +1141,29 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
     if context is not None:
         resolution, mission = context.resolution, context.mission
     config = get_kindling_config()
+    fed = [
+        entry
+        for entry in kindled_resonances(
+            sheet,
+            resolution=resolution,
+            mission=mission,
+            act=act,
+            include_named_unheld=True,
+        )
+        if entry.fed_tier is not None
+        and entry.strongest_situation is not None
+        and award.amount * entry.fed_tier.earn_percent // 100 > 0
+    ]
+    stat = act_stat(act_check_type) if act_check_type is not None and fed else None
+    bonuses: dict[int, GainBonus] = {}
     grants: list[ResonanceGrant] = []
-    for entry in kindled_resonances(sheet, resolution=resolution, mission=mission, act=act):
-        _earn_kindled_entry(sheet, entry, award.amount, config, act, grants)
+    for entry in fed:
+        affinity = entry.resonance.affinity
+        if affinity.pk not in bonuses:
+            bonuses[affinity.pk] = roll_gain_bonus(
+                sheet, affinity, source=GainSource.KINDLED_DEED, stat=stat
+            )
+        _earn_kindled_entry(sheet, entry, award.amount, config, act, grants, bonuses[affinity.pk])
     return grants
 
 
@@ -1126,11 +1174,14 @@ def _earn_kindled_entry(  # noqa: PLR0913 - the sheet, the entry and the shared 
     config: KindlingConfig,
     act: KindlingAct,
     grants: list[ResonanceGrant],
+    gain_bonus: GainBonus,
 ) -> None:
     """Earn one kindled resonance's share of a deed and tell the actor once it commits.
 
     Appends the grant ``grant_resonance`` writes to ``grants``. A resonance no situation fed,
-    or one whose earn rate rounds the award to 0, earns nothing.
+    or one whose earn rate rounds the award to 0, earns nothing. ``gain_bonus`` is the bonus
+    check result rolled for this resonance's affinity; it grows the instant grant (inside
+    ``grant_resonance``) and the set-aside share alike.
     """
     from django.db import transaction  # noqa: PLC0415
 
@@ -1150,11 +1201,16 @@ def _earn_kindled_entry(  # noqa: PLR0913 - the sheet, the entry and the shared 
         kindling_situation=situation,
         deed_label=act.label or None,
         ledger_out=grants,
+        gain_bonus=gain_bonus,
     )
     set_aside = amount * config.claim_percent // 100
+    set_aside += set_aside * gain_bonus.percent // 100
     if set_aside > 0:
         _set_aside_for_claim(row, set_aside)
     line = f"You earned {grants[-1].amount} {entry.resonance.name}."
+    skill = entry.resonance.affinity.skill
+    if gain_bonus.percent > 0 and skill is not None:
+        line += f" Your {skill.name} check added {gain_bonus.percent} percent."
     if set_aside > 0:
         line += f" {set_aside} more is waiting to be claimed."
     transaction.on_commit(_told_of_deed(sheet, line))

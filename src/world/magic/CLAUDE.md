@@ -1919,9 +1919,9 @@ the complementary half of the entrance moment).
 
 **Services:**
 - `maybe_create_entry_flourish_offer(character, scene)` (`entry_flourish.py`) — called on
-  Entrance success; skips if already flourished this scene or no claimed resonances.
+  Entrance success; skips if already flourished this scene.
 - `resolve_entry_flourish_offer(offer: PendingEntryFlourishOffer, *, resonance: Resonance) -> EntryFlourishResult`
-  (`entry_flourish.py`) — two-phase, mirrors `resolve_audere_offer`.
+  (`entry_flourish.py`) — locked grant then offer deletion; an unheld resonance is earned (#5308).
 - `create_entry_flourish(sheet, resonance, *, scene, amount=None)` (`services/gain.py`) —
   checks claimed-resonance, creates `EntryFlourishRecord`, writes
   `ResonanceGrant(source=ENTRY_FLOURISH, entry_flourish=record)`. Skips gracefully on
@@ -1953,8 +1953,8 @@ the complementary half of the entrance moment).
   seam as the telnet `flourish` command); picker data reuses `CharacterResonanceViewSet`.
 
 **Exceptions (`exceptions.py`):**
-- `EntryFlourishOfferError` (base), `EntryFlourishOfferNotFoundError`,
-  `EntryFlourishOfferStaleError` — all carry `user_message` for safe 400 responses.
+- `EntryFlourishOfferError` (base), `EntryFlourishOfferNotFoundError` — both carry
+  `user_message` for safe 400 responses.
 
 **Frontend:**
 - `EntryFlourishOfferGate` + `EntryFlourishOfferDialog`

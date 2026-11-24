@@ -913,20 +913,12 @@ class ResolveFlourishOfferAction(Action):
     ) -> ActionResult:
         from actions.types import ActionResult as _ActionResult  # noqa: PLC0415
         from world.magic.entry_flourish import resolve_entry_flourish_offer  # noqa: PLC0415
-        from world.magic.exceptions import (  # noqa: PLC0415
-            EntryFlourishOfferNotFoundError,
-            EntryFlourishOfferStaleError,
-        )
+        from world.magic.exceptions import EntryFlourishOfferNotFoundError  # noqa: PLC0415
 
         try:
             entry_result = resolve_entry_flourish_offer(offer, resonance=resonance)
         except EntryFlourishOfferNotFoundError:
             return _ActionResult(success=False, message="You have no pending flourish offer.")
-        except EntryFlourishOfferStaleError:
-            return _ActionResult(
-                success=False,
-                message="That resonance is no longer yours to broadcast.",
-            )
         return _ActionResult(
             success=True,
             message=(
