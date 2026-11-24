@@ -522,6 +522,62 @@ AFFINITY_RATE_SCALED_SOURCES: frozenset[str] = frozenset(
     }
 )
 
+# #5308: how each source meets the bonus resonance check (the check rolled on top of every earned
+# gain, once per affinity it pays). EXEMPT sources never roll: staff and system grants, resonance
+# only moved, converted or re-counted, and a deed already rolled elsewhere. ROLLED sources have
+# ``grant_resonance`` roll the check itself. CALLER-ROLLED sources pay several resonances from one
+# act, so the caller rolls once per affinity and passes each result in as ``gain_bonus``. A total-
+# classification test guards that every ``GainSource`` member lands in exactly one of the three.
+GAIN_BONUS_EXEMPT_SOURCES: frozenset[str] = frozenset(
+    {
+        # No longer written (the daily trickles accrue and are harvested instead).
+        GainSource.ROOM_RESIDENCE,
+        GainSource.OUTFIT_TRICKLE,
+        GainSource.STAFF_GRANT,
+        GainSource.SANCTUM_DISSOLUTION_RECOVERY,
+        GainSource.DISTINCTION,
+        GainSource.FALL_CONVERSION,
+        GainSource.DRIFT_CORRECTION,
+        GainSource.CORRUPTION_CLEANSING,
+        GainSource.CHARACTER_CREATION,
+        GainSource.EMBRACED_DEED,
+        GainSource.SUCCUMBED,
+        # Collects a kindled deed's set-aside share, which grew at the deed.
+        GainSource.KINDLED_CLAIM,
+    }
+)
+
+GAIN_BONUS_CALLER_ROLLED_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.KINDLED_DEED,
+        GainSource.ANIMA_RITUAL,
+        GainSource.TRICKLE_HARVEST,
+    }
+)
+
+GAIN_BONUS_ROLLED_SOURCES: frozenset[str] = frozenset(
+    {
+        GainSource.POSE_ENDORSEMENT,
+        GainSource.SCENE_ENTRY,
+        GainSource.SANCTUM_WEAVING,
+        GainSource.SANCTUM_OWNER_BONUS,
+        GainSource.PROJECT_CONTRIBUTION,
+        GainSource.ENTRY_FLOURISH,
+        GainSource.DRAMATIC_MOMENT,
+        GainSource.STYLE_PRESENTATION,
+        GainSource.MISSION_REWARD,
+        GainSource.MISSION_REPORT,
+        GainSource.STAKE_REWARD,
+        GainSource.COMBO_DISCOVERY,
+        GainSource.COMPROMISE,
+        GainSource.WORSHIP_RITE,
+        GainSource.SINEATING,
+        GainSource.MIRE_PURIFIED,
+        GainSource.SUCCUMB_BONUS,
+        GainSource.SINEATER_FALL,
+    }
+)
+
 # #5177: the grants that count as a character INDULGING a Compulsion. A Compulsion lifts for the
 # scene once the character EARNS the compelled resonance there by a deed they did themselves: a
 # kindled deed. A grant that lands from another player (a pose endorsement settled weekly, a scene
