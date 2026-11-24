@@ -642,11 +642,15 @@ def _apply_fall(
     return list(outcome.notices)
 
 
-def _target_skill_terms(target: Resonance | None) -> tuple[ExtraTraitTerm, ...]:
+def _target_skill_terms(
+    target: Resonance | None, reflections: Iterable[Reflection]
+) -> tuple[ExtraTraitTerm, ...]:
     """The skill of the affinity a conversion turns toward, as the one extra term the rite's
-    roll carries (#5308); none when it turns nowhere, the affinity has no skill, or the skill is
+    roll carries (#5308); none when nothing converts (no reflection disowns a deed or the
+    unsettling resonance), when it turns nowhere, the affinity has no skill, or the skill is
     inactive."""
-    return affinity_skill_terms(target.affinity) if target is not None else ()
+    converts = any(r.tether_id is None and r.choice == ReflectionChoice.DISOWN for r in reflections)
+    return affinity_skill_terms(target.affinity) if converts and target is not None else ()
 
 
 @transaction.atomic
@@ -695,8 +699,8 @@ def perform_settling_rite(
     )
     bonus = focus_bonus(sheet, offered_for)
     # Where the rite turns is read-only, so it is settled before the roll: the roll adds the
-    # skill of the affinity the conversion turns toward (#5308). A rite with nowhere to turn
-    # (an embrace-only rite, or no main affinity) adds no skill.
+    # skill of the affinity the conversion turns toward (#5308). A rite that converts nothing
+    # (an embrace-only rite) or has nowhere to turn (no main affinity) adds no skill.
     target = _conversion_target(
         sheet,
         offered_for,
@@ -708,7 +712,7 @@ def perform_settling_rite(
         config.check_type,
         difficulty_points(config.check_difficulty_level),
         extra_modifiers=bonus,
-        extra_traits=_target_skill_terms(target),
+        extra_traits=_target_skill_terms(target, reflections),
     )
     outcome = check.outcome
     # Safety net: rite_is_ready already refused a table with a missing tier.
