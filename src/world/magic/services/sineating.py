@@ -387,6 +387,40 @@ def _count_lifetime_helped(sineater_sheet: CharacterSheet, resonance: Resonance,
     return row.lifetime_helped
 
 
+def _grant_sinner_parts(
+    sinner_sheet: CharacterSheet,
+    sinner_thread: Thread | None,
+    resonance: Resonance,
+    earned: int,
+    stat: Trait | None,
+) -> tuple[EarnedPart, ...]:
+    """Grant the Sinner's share across her thread's resonances (#5231, #5308).
+
+    The bonus resonance check rolls once per affinity the parts pay, so two parts in one
+    affinity share one roll.
+    """
+    bonuses: dict[int, GainBonus] = {}
+    parts: list[EarnedPart] = []
+    for part_resonance, part in _earning_parts(sinner_thread, resonance, earned):
+        if part <= 0:
+            continue
+        affinity = part_resonance.affinity
+        if affinity.pk not in bonuses:
+            bonuses[affinity.pk] = roll_gain_bonus(
+                sinner_sheet, affinity, source=GainSource.SINEATING, stat=stat
+            )
+        recorded = _grant(
+            sinner_sheet,
+            part_resonance,
+            part,
+            stat=stat,
+            gain_bonus=bonuses[affinity.pk],
+        )
+        if recorded is not None:
+            parts.append(EarnedPart(part_resonance, recorded.amount, recorded.bonus_percent))
+    return tuple(parts)
+
+
 def perform_sineating(
     sinner_sheet: CharacterSheet, sineater_sheet: CharacterSheet, units: int
 ) -> SineatingResult:
@@ -458,28 +492,7 @@ def perform_sineating(
         # parts can span affinities, so it rolls once per affinity they pay; the Sineater's one
         # grant rolls for itself inside the grant.
         stat = act_stat(cfg.sineating_check_type)
-        sinner_bonuses: dict[int, GainBonus] = {}
-        sinner_parts_list = []
-        for part_resonance, part in _earning_parts(sinner_thread, resonance, earned):
-            if part <= 0:
-                continue
-            affinity = part_resonance.affinity
-            if affinity.pk not in sinner_bonuses:
-                sinner_bonuses[affinity.pk] = roll_gain_bonus(
-                    sinner_sheet, affinity, source=GainSource.SINEATING, stat=stat
-                )
-            recorded = _grant(
-                sinner_sheet,
-                part_resonance,
-                part,
-                stat=stat,
-                gain_bonus=sinner_bonuses[affinity.pk],
-            )
-            if recorded is not None:
-                sinner_parts_list.append(
-                    EarnedPart(part_resonance, recorded.amount, recorded.bonus_percent)
-                )
-        sinner_parts = tuple(sinner_parts_list)
+        sinner_parts = _grant_sinner_parts(sinner_sheet, sinner_thread, resonance, earned, stat)
         sinner_earned = sum(part.amount for part in sinner_parts)
         sineater_grant = (
             _grant(sineater_sheet, sineater_resonance, earned, stat=stat)
@@ -597,6 +610,14 @@ def decline_sineating(sinner_sheet: CharacterSheet, sineater_sheet: CharacterShe
 # =============================================================================
 
 
+def _grows_clause(resonance: Resonance, amount: int, bonus_percent: int) -> str:
+    """The sentence a grant reads: the resonance it grew, and the bonus check that grew it."""
+    text = f" Your {resonance.name} grows by {amount}."
+    if clause := gain_bonus_clause(resonance.affinity, bonus_percent):
+        text += f" {clause}"
+    return text
+
+
 def sineating_lines(result: SineatingResult) -> SineatingLines:
     """The lines the Sinner and the Sineater each read after a Sineating.
 
@@ -616,22 +637,19 @@ def sineating_lines(result: SineatingResult) -> SineatingLines:
     else:
         sinner = [f"{sineater_name} takes on your sins, but you carried no corruption to shed."]
         sineater = [f"You take on {sinner_name}'s sins, but they carried no corruption to shed."]
-    if result.sinner_earned_parts:
-        for part in result.sinner_earned_parts:
-            if part.amount > 0:
-                sinner[-1] += f" Your {part.resonance.name} grows by {part.amount}."
-                if clause := gain_bonus_clause(part.resonance.affinity, part.bonus_percent):
-                    sinner[-1] += f" {clause}"
+    sinner[-1] += "".join(
+        _grows_clause(part.resonance, part.amount, part.bonus_percent)
+        for part in result.sinner_earned_parts
+        if part.amount > 0
+    )
     if result.sineater_resonance is None:
         sineater.append(_NO_SINEATER_RESONANCE_LINE)
     elif result.sineater_resonance_earned > 0:
-        sineater[-1] += (
-            f" Your {result.sineater_resonance.name} grows by {result.sineater_resonance_earned}."
+        sineater[-1] += _grows_clause(
+            result.sineater_resonance,
+            result.sineater_resonance_earned,
+            result.sineater_bonus_percent,
         )
-        if clause := gain_bonus_clause(
-            result.sineater_resonance.affinity, result.sineater_bonus_percent
-        ):
-            sineater[-1] += f" {clause}"
     if result.cut_by_ceiling:
         sineater.append(_CUT_LINE)
         sinner.append(f"{sineater_name} could take on only part of it.")

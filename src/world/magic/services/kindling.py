@@ -840,6 +840,38 @@ def _evaluate_acts(  # noqa: PLR0913 - the shared reads plus which resonances ar
     ]
 
 
+def _resonance_contributions(  # noqa: PLR0913 - one resonance's share of the act's reads
+    resonance: Resonance,
+    sheet: CharacterSheet,
+    *,
+    rows: list[KindlingSituation],
+    live: list[Kindling],
+    tiers: list[KindledStrengthTier],
+    by_rank: dict[int, KindledStrengthTier],
+    evaluation: _Evaluation,
+    direct_only: frozenset[int],
+) -> list[_Contribution]:
+    """What feeds one resonance in one act: the rows that name it or cover its affinity, then
+    the live kindlings on it. A resonance id in ``direct_only`` is fed only by the rows that
+    name it."""
+    contributions: list[_Contribution] = []
+    for row in rows:
+        names_it = row.resonance_id == resonance.pk
+        covers_it = row.for_affinity_id == resonance.affinity_id
+        if not names_it and not (covers_it and resonance.pk not in direct_only):
+            continue
+        evidence = evaluation.evidence(row.situation, _effective_params(row, resonance))
+        contribution = _row_contribution(row, evidence, tiers, by_rank) if evidence else None
+        if contribution is not None:
+            contributions.append(contribution)
+    contributions.extend(
+        _Contribution(rank=k.strength, reasons=(_live_reason(k, sheet),), situation=None)
+        for k in live
+        if k.resonance_id == resonance.pk and k.strength in by_rank
+    )
+    return contributions
+
+
 def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
     sheet: CharacterSheet,
     resonances: list[Resonance],
@@ -877,20 +909,15 @@ def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
 
     results: list[KindledResonance] = []
     for resonance in resonances:
-        contributions: list[_Contribution] = []
-        for row in rows:
-            names_it = row.resonance_id == resonance.pk
-            covers_it = row.for_affinity_id == resonance.affinity_id
-            if not names_it and not (covers_it and resonance.pk not in direct_only):
-                continue
-            evidence = evaluation.evidence(row.situation, _effective_params(row, resonance))
-            contribution = _row_contribution(row, evidence, tiers, by_rank) if evidence else None
-            if contribution is not None:
-                contributions.append(contribution)
-        contributions.extend(
-            _Contribution(rank=k.strength, reasons=(_live_reason(k, sheet),), situation=None)
-            for k in live
-            if k.resonance_id == resonance.pk and k.strength in by_rank
+        contributions = _resonance_contributions(
+            resonance,
+            sheet,
+            rows=rows,
+            live=live,
+            tiers=tiers,
+            by_rank=by_rank,
+            evaluation=evaluation,
+            direct_only=direct_only,
         )
         results.append(_result(resonance, contributions, by_rank))
     return results
