@@ -153,7 +153,9 @@ implementer subagent never runs it: a build or a lock wait outlasts its two minu
 Seed whatever state the screen needs into `rt_<issue>` first (the shell commands in
 Form B step 1, with `DATABASE_URL` pointing at it). `just shot-post` then puts the
 images on the PR without touching the branch, and prints Markdown for the PR body,
-which the `frontend-screenshot` check reads.
+which the `frontend-screenshot` check reads. A posted screenshot is public and permanent: the repo
+is public and evidence refs are never deleted. Look at every PNG before posting it,
+and post only factory or seed data, never anything copied from the dev database.
 
 ### Form B: your own server (when the ports are free and the machine has room)
 

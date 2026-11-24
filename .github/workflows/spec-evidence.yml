@@ -9,10 +9,16 @@ permissions:
   contents: read
   issues: read
 
+# A body edit re-runs every job; a newer edit or push replaces the run in flight.
+concurrency:
+  group: spec-evidence-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
 jobs:
   review-evidence-not-committed:
     name: review-evidence-not-committed
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Reject review evidence committed to the repository
@@ -36,6 +42,7 @@ jobs:
   review-evidence:
     name: review-evidence
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -52,6 +59,7 @@ jobs:
           from tools.validate_review_evidence import (
               closing_issue_number,
               is_dependabot_login,
+              linked_issue_number,
               no_issue_reason,
           )
 
@@ -65,8 +73,10 @@ jobs:
           issue_number = closing_issue_number(body)
           if issue_number is None:
               # A chore or dependency PR may close no issue if it says why (#5310).
+              # Only one that names no issue at all: `Refs #N` with `No issue:` would
+              # skip the evidence label on #N.
               reason = no_issue_reason(body)
-              if reason is not None:
+              if reason is not None and linked_issue_number(body) is None:
                   print(f"PR closes no issue, stated reason: {reason}")
                   raise SystemExit(0)
               raise SystemExit(
@@ -156,7 +166,7 @@ jobs:
           fi
           # Validate the report first, then prove every update since its reviewed revision.
           python3 tools/validate_review_evidence.py "$report_path" --pr-body /tmp/pr-body.md \
-              --check-urls
+              --check-urls "$GITHUB_REPOSITORY"
           report_sha="$(python3 - "$report_path" <<'PY'
           import sys
           from tools.validate_review_evidence import _field
@@ -169,6 +179,7 @@ jobs:
   frontend-screenshot:
     name: frontend-screenshot
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -182,7 +193,9 @@ jobs:
           set -euo pipefail
           # The diff decides, not a label on the issue (#5310): a frontend change on
           # an unlabelled issue used to reach main with no picture.
-          git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > /tmp/changed.txt
+          # -z: git quotes a non-ASCII name otherwise, and the quoted line would not
+          # start with frontend/src/.
+          git diff -z --name-only "${BASE_SHA}...${HEAD_SHA}" > /tmp/changed.txt
           python3 - <<'PY'
           import json
           import os
@@ -192,7 +205,7 @@ jobs:
           with open(os.environ["EVENT_PATH"], encoding="utf-8") as stream:
               body = json.load(stream)["pull_request"].get("body") or ""
           with open("/tmp/changed.txt", encoding="utf-8") as stream:
-              changed = [line.strip() for line in stream if line.strip()]
+              changed = [name for name in stream.read().split("\0") if name]
           errors = frontend_screenshot_errors(body, changed, os.environ["GITHUB_REPOSITORY"])
           for error in errors:
               print(f"::error::{error}")

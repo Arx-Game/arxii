@@ -31,6 +31,9 @@ _REQUIRED_FIELDS = (
 )
 _LEDGER_COLUMNS = 4
 _LISTED_SCREENS = 5
+# A report or body that links more images than one `just shot-post` call can post
+# is refused rather than fetched one by one on the runner (#5310).
+_MAX_CHECKED_URLS = 20
 _UNRESOLVED_HEADING = "## unresolved findings"
 _ISSUE_LINK = re.compile(r"^(Refs|Closes)\s+#([0-9]+)\.?\s*$", re.MULTILINE)
 # `^` (not `\A`) so the line can appear anywhere in the body, not only as the
@@ -102,19 +105,35 @@ def hosted_image_urls(body: str, repository: str) -> list[str]:
     or an outside host is an image too, and the SonarCloud comment carries one.
     """
     urls = _MARKDOWN_IMAGE.findall(body) + _HTML_IMAGE.findall(body)
+    return [url for url in urls if is_hosted_image_url(url, repository)]
+
+
+def is_hosted_image_url(url: str, repository: str) -> bool:
+    """Return whether GitHub hosts this image for this repository.
+
+    CI fetches only these: a report comes from a comment anyone can write, so an
+    unfiltered fetch would let a commenter point the runner anywhere.
+    """
     own_raw = f"https://raw.githubusercontent.com/{repository}/"
-    return [url for url in urls if url.startswith((own_raw, *_GITHUB_ATTACHMENT_HOSTS))]
+    return url.startswith((own_raw, *_GITHUB_ATTACHMENT_HOSTS))
 
 
 def unreachable_images(urls: list[str], timeout: float = 15.0) -> list[str]:
-    """Return each URL that does not answer 200 with an image content type."""
+    """Return each URL that does not answer with an image.
+
+    It asks for the first byte with GET rather than HEAD: a signed attachment URL is
+    signed for one method and can refuse a HEAD.
+    """
+    if len(urls) > _MAX_CHECKED_URLS:
+        return [f"{len(urls)} images; at most {_MAX_CHECKED_URLS} are checked"]
     failures: list[str] = []
     for url in urls:
-        request = urllib.request.Request(url, method="HEAD")  # noqa: S310 - https only
+        request = urllib.request.Request(url, headers={"Range": "bytes=0-0"})  # noqa: S310
         try:
             with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
                 kind = response.headers.get("Content-Type", "")
-                if response.status != HTTPStatus.OK or not kind.startswith("image/"):
+                ok = response.status in {HTTPStatus.OK, HTTPStatus.PARTIAL_CONTENT}
+                if not ok or not kind.startswith("image/"):
                     failures.append(f"{url} ({response.status}, {kind or 'no type'})")
         except (urllib.error.URLError, TimeoutError) as error:
             failures.append(f"{url} ({error})")
@@ -251,14 +270,19 @@ def _validate_fields(fields: dict[str, str], expected_revision: str | None) -> l
     return errors
 
 
-def _validate_screenshot_refs(screenshots: str, *, check_urls: bool = False) -> list[str]:
+def _validate_screenshot_refs(screenshots: str, *, repository: str | None = None) -> list[str]:
     errors: list[str] = []
     image_refs = re.findall(r"!\[[^]]*\]\(([^)]+)\)", screenshots)
     if not image_refs:
         return ["screenshots must include at least one Markdown image"]
-    urls = [reference for reference in image_refs if reference.startswith("https://")]
-    if check_urls:
-        errors.extend(f"screenshot does not load: {bad}" for bad in unreachable_images(urls))
+    if repository:
+        urls = [reference for reference in image_refs if reference.startswith("https://")]
+        foreign = [url for url in urls if not is_hosted_image_url(url, repository)]
+        errors.extend(
+            f"screenshot is not hosted by GitHub for this repository: {url}" for url in foreign
+        )
+        hosted = [url for url in urls if url not in foreign]
+        errors.extend(f"screenshot does not load: {bad}" for bad in unreachable_images(hosted))
     for reference in image_refs:
         if reference.startswith(("http://", "https://")):
             continue
@@ -325,7 +349,7 @@ def _validate_visual_checklist(lines: list[str]) -> list[str]:
 
 
 def _validate_visual_fields(
-    fields: dict[str, str], lines: list[str], *, check_urls: bool = False
+    fields: dict[str, str], lines: list[str], *, repository: str | None = None
 ) -> list[str]:
     visual = fields["Visual review"].lower()
     verdict = fields["Visual verdict"].strip(" `").upper()
@@ -341,7 +365,7 @@ def _validate_visual_fields(
         errors.append("completed visual review requires actual screenshot paths or URLs")
     if _PLACEHOLDER.search(screenshots):
         errors.append("screenshot field contains a placeholder")
-    errors.extend(_validate_screenshot_refs(screenshots, check_urls=check_urls))
+    errors.extend(_validate_screenshot_refs(screenshots, repository=repository))
     errors.extend(_validate_visual_checklist(lines))
     return errors
 
@@ -363,12 +387,13 @@ def _validate_unresolved(lines: list[str]) -> list[str]:
 
 
 def validate_report(
-    path: Path, expected_revision: str | None = None, *, check_urls: bool = False
+    path: Path, expected_revision: str | None = None, *, repository: str | None = None
 ) -> list[str]:
     """Return validation errors for a review evidence report.
 
-    ``check_urls`` also fetches each https screenshot and requires an image back;
-    CI sets it, because a link that 404s still matches the Markdown pattern.
+    With ``repository`` (``owner/name``), every https screenshot must be hosted by
+    GitHub for that repository and must load as an image. CI sets it, because a link
+    that 404s still matches the Markdown pattern.
     """
     if not path.is_file():
         return [f"evidence report does not exist: {path}"]
@@ -379,7 +404,7 @@ def validate_report(
         errors.append("report must start with '# Review evidence'")
     fields = {label: _field(lines, label) for label in _REQUIRED_FIELDS}
     errors.extend(_validate_fields(fields, expected_revision))
-    errors.extend(_validate_visual_fields(fields, lines, check_urls=check_urls))
+    errors.extend(_validate_visual_fields(fields, lines, repository=repository))
     errors.extend(_validate_unresolved(lines))
     ledger_errors, statuses = _ledger_rows(lines)
     errors.extend(ledger_errors)
@@ -394,10 +419,12 @@ def main() -> int:
     parser.add_argument("--revision", help="require the report to name this commit")
     parser.add_argument("--pr-body", type=Path, help="also validate a PR body file")
     parser.add_argument(
-        "--check-urls", action="store_true", help="require every https screenshot to load"
+        "--check-urls",
+        metavar="OWNER/REPO",
+        help="require every https screenshot to be this repository's image and to load",
     )
     args = parser.parse_args()
-    errors = validate_report(args.report, args.revision, check_urls=args.check_urls)
+    errors = validate_report(args.report, args.revision, repository=args.check_urls)
     if args.pr_body:
         errors.extend(validate_pr_body(args.pr_body.read_text(encoding="utf-8")))
     if errors:
