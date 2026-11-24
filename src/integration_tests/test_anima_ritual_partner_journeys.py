@@ -18,7 +18,6 @@ starts at 0 and 7.
 from __future__ import annotations
 
 from decimal import Decimal
-from unittest.mock import patch
 
 from django.test import override_settings
 from rest_framework import status
@@ -157,8 +156,10 @@ class _RitualWithAPartner(JourneyCase):
     def ask(self) -> str:
         return self.telnet(self.mara, "ritual anima Tobin")
 
-    def agree(self):
-        with force_check_outcome(self.success) as capture:
+    def agree(self, *bonus_results):
+        """Tobin accepts; the ritual's own roll lands on Success and each later roll (the
+        bonus checks) on the next of ``bonus_results``."""
+        with force_check_outcome(self.success, *bonus_results) as capture:
             told = self.telnet(self.tobin, "accept")
         self.capture = capture
         return told
@@ -423,7 +424,8 @@ class TheRitualHarvestsWhatHerDaysPiledUp(_RitualWithAPartner):
         self.affinity.save()
         Affinity.objects.clear_cache()
         cfg = get_resonance_gain_config()
-        cfg.bonus_check_type = CheckTypeFactory()
+        self.bonus_check = CheckTypeFactory()
+        cfg.bonus_check_type = self.bonus_check
         cfg.save()
         ResonanceCheckAwardFactory(outcome_tier=self.success, gain_bonus_percent=50)
         sheet = self.mara.sheet_data
@@ -433,14 +435,12 @@ class TheRitualHarvestsWhatHerDaysPiledUp(_RitualWithAPartner):
 
     def test_the_ritual_harvests_every_waiting_trickle_grown_by_its_affinitys_check(self) -> None:
         self.ask()
-        # The ritual's own roll is forced, and a forced result is spent by the first roll, so the
-        # bonus check is pinned here to Success. It must roll once for each affinity: the Primal
-        # pick's part and its waiting trickle share one roll, as do the Abyssal ones.
-        with patch(
-            "world.magic.services.resonance_checks._roll_bonus_check", return_value=self.success
-        ) as rolled:
-            self.agree()
-        self.assertEqual(rolled.call_count, 2)
+        # The ritual's own roll takes the first queued result and the two bonus checks the next
+        # two, all Success. It must roll once for each affinity: the Primal pick's part and its
+        # waiting trickle share one roll, as do the Abyssal ones.
+        self.agree(self.success, self.success)
+        bonus_rolls = [c for c in self.capture.calls if c.check_type == self.bonus_check]
+        self.assertEqual(len(bonus_rolls), 2)
 
         # Hollow: the ritual's 3 grows to 4 and the 4 waiting grows to 6. Ruin: 14 waiting
         # grows to 21. Both are told, the Abyssal one with the Villainy check named.
