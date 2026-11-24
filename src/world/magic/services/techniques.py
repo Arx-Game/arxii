@@ -1173,7 +1173,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
     cast_check: CastCheck | None = None,
     burn_result: ResonanceBurnResult | None = None,
     worth_by_affinity: Mapping[int, int] | None = None,
-) -> tuple[int, int, list[ResolvedPullEffect], int]:
+) -> tuple[int, int, list[ResolvedPullEffect], int, Mapping[int, int]]:
     """Charge a non-combat cast pull and return resolved effects.
 
     ``burn_result`` (#4736) is the burn ``use_technique`` resolved for this pull; its
@@ -1204,11 +1204,12 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
     resonance's affinity, so the pull scales by that check and one cast never rolls an
     affinity twice.
 
-    Returns ``(pull_flat_bonus, effective_power, resolved_effects, resonance_spent)``
-    (``resonance_spent`` is the pull's own cost, 0 when nothing was charged) so callers
-    can apply further post-resolution steps (e.g. ASSUME_ALTERNATE_SELF) without
-    re-resolving.  Extracting this block reduces ``use_technique``'s cognitive
-    complexity (C901).
+    Returns ``(pull_flat_bonus, effective_power, resolved_effects, resonance_spent,
+    worth_by_affinity)`` (``resonance_spent`` is the pull's own cost, 0 when nothing was
+    charged; ``worth_by_affinity`` is the worth the pull rolled for every affinity paying it,
+    #5308, empty when nothing was charged) so callers can apply further post-resolution steps
+    (e.g. ASSUME_ALTERNATE_SELF) without re-resolving.  Extracting this block reduces
+    ``use_technique``'s cognitive complexity (C901).
     """
     from world.combat.pull_helpers import _resolve_emergency_draw  # noqa: PLC0415
     from world.magic.constants import EffectKind  # noqa: PLC0415
@@ -1222,7 +1223,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
     pull_flat_bonus = 0
     pull_sheet = _get_character_sheet(character)
     if pull_sheet is None:
-        return pull_flat_bonus, effective_power, [], 0
+        return pull_flat_bonus, effective_power, [], 0, {}
 
     beseech_bonus_thread_id = None
     applied_bonus = 0
@@ -1272,6 +1273,7 @@ def _charge_cast_pull(  # noqa: PLR0913 - one pull charge, each argument is a di
         effective_power,
         pull_result.resolved_effects,
         pull_result.resonance_spent,
+        pull_result.worth_by_affinity,
     )
 
 
@@ -1597,11 +1599,22 @@ def _prepare_technique_cast(  # noqa: PLR0913
     pull_flat_bonus = 0
     pull_resolved_effects: list[ResolvedPullEffect] = []
     pull_spent = 0
+    # What the cast's own resonance check made the cast worth, then, once a pull is charged, the
+    # worth it rolled for each affinity paying it: the caster is told every one (#5308).
+    worth_by_affinity: dict[int, int] = (
+        {cast_resonance.affinity_id: resonance_worth_percent} if cast_resonance is not None else {}
+    )
     if cast_pull is not None:
         from world.magic.services.power_terms import thread_power_term  # noqa: PLC0415
 
         power_before_pull = effective_power
-        pull_flat_bonus, effective_power, pull_resolved_effects, pull_spent = _charge_cast_pull(
+        (
+            pull_flat_bonus,
+            effective_power,
+            pull_resolved_effects,
+            pull_spent,
+            pull_worth,
+        ) = _charge_cast_pull(
             character=character,
             technique=technique,
             cast_pull=cast_pull,
@@ -1609,12 +1622,9 @@ def _prepare_technique_cast(  # noqa: PLR0913
             target=pull_target or (targets[0] if targets else None),
             cast_check=cast_check,
             burn_result=burn_result,
-            worth_by_affinity=(
-                {cast_resonance.affinity_id: resonance_worth_percent}
-                if cast_resonance is not None
-                else None
-            ),
+            worth_by_affinity=worth_by_affinity or None,
         )
+        worth_by_affinity = {**worth_by_affinity, **pull_worth}
         # The pull's intensity is counted here and only here (``thread_power_term`` skips
         # pulled threads); itemise it so the ledger's total is the cast's power.
         effective_ledger = (
@@ -1639,11 +1649,7 @@ def _prepare_technique_cast(  # noqa: PLR0913
         charged_pull=cast_pull,
         charged_pull_spent=pull_spent,
         burn_result=burn_result if cast_pull is not None else None,
-        worth_by_affinity=(
-            {cast_resonance.affinity_id: resonance_worth_percent}
-            if cast_resonance is not None
-            else {}
-        ),
+        worth_by_affinity=worth_by_affinity,
     )
 
 

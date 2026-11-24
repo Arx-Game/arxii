@@ -18,11 +18,14 @@ from __future__ import annotations
 from decimal import Decimal
 import uuid
 
+from django.test import tag
+from evennia.utils.ansi import strip_ansi
 from rest_framework import status
 
 from integration_tests.harness import JourneyCase
 from integration_tests.test_anima_ritual_partner_journeys import _RitualWithAPartner
 from integration_tests.test_earning_kindled_deeds_journeys import _Gate
+from integration_tests.test_resonance_strain_journeys import _BurningResonance
 from world.character_creation.sheet_writers import set_skill_values
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
 from world.checks.services import perform_check
@@ -391,3 +394,35 @@ class TheVillainsDaysArePiledUpAndHarvestedByHerRitual(_Skills, _RitualWithAPart
         self.assertTold(
             self.mara, "Tobin felt it. Your Ruin grows by 4. Your Villainy check added 50 percent."
         )
+
+
+class ACastPulledInAnotherAffinityTellsTheCasterWhatItWasWorth(_Skills, _BurningResonance):
+    """Ysmay casts with a thread paid by Ruin, an Abyssal resonance, while her cast is worked in
+    no Abyssal resonance. Her Villainy check made the pull worth 130 percent."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.author_the_skills()
+        ResonanceCheckAwardFactory(
+            outcome_tier=ensure_canonical_check_outcome("Success"),
+            gain_bonus_percent=0,
+            spend_worth_percent=130,
+        )
+        self.ysmay = self.caster("Ysmay")
+        self.ruin = ResonanceFactory(name="Ruin", affinity=self.abyssal)
+        self.thread = self.thread_for(self.ysmay, self.ruin)
+
+    @tag("regression")
+    def test_the_worth_the_pull_rolled_reaches_the_caster_whatever_resonance_the_cast_is_in(
+        self,
+    ) -> None:
+        """Regression for #5308. A pull paid in an affinity other than the cast resonance's rolled
+        its worth, but the cast result dropped it, so the caster's line never said what her check
+        made the pull worth."""
+        with force_every_check_outcome(ensure_canonical_check_outcome("Success")):
+            self.telnet(self.ysmay, f"cast {self.technique.name} pull={self.thread.name}")
+
+        told = strip_ansi(self.said(self.ysmay))
+        self.assertIn("Your technique resolves.", told)
+        self.assertEqual(self.balance(self.ysmay, self.ruin), 10 - 1)
+        self.assertIn("Your Villainy check made it worth 130 percent.", told)
