@@ -29,10 +29,13 @@ A piece the draft does not hold (a draft mid-revision: no path, a removed card, 
 failing validation) leaves its part empty and never raises. ``draft_data["crime"]`` is never
 read: the crime note it becomes is staff-only.
 
-Known differences from the in-game payload, none of which a new character made through the
-ordinary flow reaches: the Glimpse's affinity nudge is not applied to the aura's shares; an
-early form bought in creation, a flourish's next signature and a species gift's drawback card
-are not shown; a property a Beginnings grants (``grant_property``) is not on the keyring.
+Also mirrored, each through the read half finalize itself calls: the Glimpse's nudge on the
+settled self (``glimpse_nudged_shares``), an early form and a flourish bought in creation
+(``creation_technique_forms``, ``creation_next_signature``), the species' gifts, drawback
+cards and natural weapons with their inherent facets (``species_gift_grants``). A property
+house a Beginnings grants (``grant_property``) adds no key-holding row, so the keyring has
+nothing for it in play either. Not mirrored: a species drawback *condition*, which changes
+nothing a new character's sheet shows unless its effects reach a stat.
 """
 
 from __future__ import annotations
@@ -133,7 +136,7 @@ if TYPE_CHECKING:
     from world.checks.modifier_values import ValueTable
     from world.distinctions.models import Distinction
     from world.forms.models import FormTrait
-    from world.magic.models import Gift, Resonance, Technique
+    from world.magic.models import Gift, GlimpseTag, Resonance, Technique
     from world.mechanics.models import ModifierTarget
     from world.mechanics.services import DerivedAmountReader
     from world.roster.models import Family
@@ -161,6 +164,9 @@ class _Holding:
     is_secret: bool = False
     is_cover: bool = False
     from_glimpse: bool = False
+    #: A card the species forces (``SpeciesGiftGrant.drawback_distinction``), granted
+    #: through ``grant_distinction``: no inheritance, keepsake or Secret comes with it.
+    from_species: bool = False
 
     @property
     def feature(self) -> str:
@@ -414,7 +420,24 @@ def _holdings(plan: _Plan) -> list[_Holding]:
             )
         )
     holdings.extend(_covers(marks, picked, {h.distinction.pk for h in holdings}))
+    holdings.extend(_species_drawbacks(draft, holdings))
     return holdings
+
+
+def _species_drawbacks(draft: CharacterDraft, held: list[_Holding]) -> list[_Holding]:
+    """The cards the species forces, as ``provision_species_gifts`` grants them after the
+    picks (``_grant_species_distinction_once``: rank 1, nothing when already held plain)."""
+    from world.species.services import species_gift_grants  # noqa: PLC0415
+
+    plain = {h.distinction.pk for h in held if h.feature == ""}
+    out: list[_Holding] = []
+    for grant in species_gift_grants(draft.selected_species):
+        card = grant.drawback_distinction
+        if card is None or card.pk in plain:
+            continue
+        plain.add(card.pk)
+        out.append(_Holding(distinction=card, rank=1, notes="", from_species=True))
+    return out
 
 
 def _covers(marks: BeatMarks, picked: set[int], held: set[int]) -> list[_Holding]:
@@ -1469,7 +1492,7 @@ def _purse(plan: _Plan) -> PurseSection:
 
     balance = 0
     for holding in plan.holdings:
-        if holding.is_cover:
+        if holding.is_cover or holding.from_species:
             continue
         grant = starting_grant_for(holding.distinction)
         if grant is not None:
@@ -1490,7 +1513,7 @@ def _carried(plan: _Plan) -> list[CarriedItemEntry]:
             suggested_value=None,
         )
         for holding in plan.holdings
-        if not holding.is_cover
+        if not holding.is_cover and not holding.from_species
         for grant in item_grants_for(holding.distinction)
     ]
 
@@ -1587,12 +1610,13 @@ def _magic(plan: _Plan) -> MagicSection | None:
     picks = plan.picks
     if picks is None:
         return None
-    seeds = _resonance_seeds(picks)
+    tags = _glimpse_tags(picks)
+    seeds, settled = _resonance_seeds(picks, tags)
     return MagicSection(
         gifts=_gifts(plan, picks),
         motif=_motif(plan, picks),
         anima_ritual=_anima_ritual(plan, picks),
-        aura=_aura(plan, seeds),
+        aura=_aura(plan, seeds, settled, tags),
         resonances=sorted(
             (
                 ResonanceBalanceEntry(name=resonance.name, balance=0, lifetime_earned=amount)
@@ -1604,45 +1628,76 @@ def _magic(plan: _Plan) -> MagicSection | None:
     )
 
 
-def _resonance_seeds(picks: MagicPicks) -> list[tuple[Resonance, int]]:
-    """Each pick's starting lifetime (``_seed_resonances`` on a sheet holding none), the
-    settled shares taken straight from the weights (no Glimpse nudge)."""
+def _glimpse_tags(picks: MagicPicks) -> list[GlimpseTag]:
+    """The Glimpse tags ``_glimpse`` sets: active ones, by axis, a stand-alone tag alone."""
+    from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
+    from world.magic.models import GlimpseTag  # noqa: PLC0415
+    from world.magic.services.glimpse import keep_stand_alone  # noqa: PLC0415
+
+    if not picks.glimpse_tag_ids:
+        return []
+    rows = list(
+        GlimpseTag.objects.filter(
+            pk__in=list(picks.glimpse_tag_ids), is_active=True
+        ).select_related("affinity")
+    )
+    tags: list[GlimpseTag] = []
+    for axis in GlimpseTagAxis:
+        tags.extend(keep_stand_alone([tag for tag in rows if tag.axis == axis]))
+    return tags
+
+
+def _resonance_seeds(
+    picks: MagicPicks, tags: list[GlimpseTag]
+) -> tuple[list[tuple[Resonance, int]], dict[int, tuple[Any, Decimal]]]:
+    """Each pick's starting lifetime and the settled self, as ``_seed_resonances`` writes
+    them on a sheet holding none: the weights' shares, the Glimpse's nudge
+    (``glimpse_nudged_shares``), then the seeds from the nudged shares."""
     from world.character_creation.magic_writer import (  # noqa: PLC0415
         creation_affinity_base,
         creation_seed_amounts,
     )
     from world.magic.services.aura import rounded_aura_shares  # noqa: PLC0415
     from world.magic.services.drift import get_drift_config  # noqa: PLC0415
+    from world.magic.services.glimpse import glimpse_nudged_shares  # noqa: PLC0415
     from world.magic.types import AffinityShare  # noqa: PLC0415
 
     affinities: dict[int, Any] = {}
     base = creation_affinity_base(picks, {}, affinities, get_drift_config().creation_seed_per_point)
     grand_total = sum(base.values())
     if grand_total == 0:
-        return []
-    settled = {
-        pk: pct
-        for pk, (_affinity, pct) in rounded_aura_shares(
-            [
-                AffinityShare(affinity=affinities[pk], percent=Decimal(total) * 100 / grand_total)
-                for pk, total in base.items()
-                if total
-            ]
-        ).items()
-    }
-    return [
-        (pick.resonance, amount) for pick, amount in creation_seed_amounts(picks, base, {}, settled)
+        return [], {}
+    settled = rounded_aura_shares(
+        [
+            AffinityShare(affinity=affinities[pk], percent=Decimal(total) * 100 / grand_total)
+            for pk, total in base.items()
+            if total
+        ]
+    )
+    nudged = glimpse_nudged_shares(settled, tags)
+    if nudged is not None:
+        settled = rounded_aura_shares(nudged)
+    percents = {pk: pct for pk, (_affinity, pct) in settled.items()}
+    seeds = [
+        (pick.resonance, amount)
+        for pick, amount in creation_seed_amounts(picks, base, {}, percents)
     ]
+    return seeds, settled
 
 
-def _aura(plan: _Plan, seeds: list[tuple[Resonance, int]]) -> AuraData | None:
-    """Mirrors ``_build_magic_aura``: the shares ``recompute_aura`` derives from the seeds,
-    and the Glimpse ``_glimpse`` writes."""
-    from world.magic.constants import GlimpseState, GlimpseTagAxis  # noqa: PLC0415
-    from world.magic.models import CharacterAuraShare, GlimpseTag  # noqa: PLC0415
+def _aura(
+    plan: _Plan,
+    seeds: list[tuple[Resonance, int]],
+    settled: dict[int, tuple[Any, Decimal]],
+    tags: list[GlimpseTag],
+) -> AuraData | None:
+    """Mirrors ``_build_magic_aura``: the shares ``recompute_aura`` derives from the seeds
+    (an affinity settled above 0 with no resonance keeps its row at 0, as
+    ``set_aura_shares`` keeps it), and the Glimpse ``_glimpse`` writes."""
+    from world.magic.constants import GlimpseState  # noqa: PLC0415
+    from world.magic.models import CharacterAuraShare  # noqa: PLC0415
     from world.magic.models.aura import share_lead_key  # noqa: PLC0415
     from world.magic.services.aura import rounded_aura_shares  # noqa: PLC0415
-    from world.magic.services.glimpse import keep_stand_alone  # noqa: PLC0415
     from world.magic.types import AffinityShare  # noqa: PLC0415
 
     picks = plan.picks
@@ -1666,12 +1721,12 @@ def _aura(plan: _Plan, seeds: list[tuple[Resonance, int]]) -> AuraData | None:
         shares = [
             CharacterAuraShare(affinity=affinity, percent=pct) for affinity, pct in rounded.values()
         ]
+        shares.extend(
+            CharacterAuraShare(affinity=affinity, percent=Decimal("0.00"))
+            for pk, (affinity, pct) in settled.items()
+            if pk not in rounded and pct > 0
+        )
     shares.sort(key=lambda share: share_lead_key(share, share.percent))
-    tags: list[GlimpseTag] = []
-    if picks.glimpse_tag_ids:
-        rows = list(GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True))
-        for axis in GlimpseTagAxis:
-            tags.extend(keep_stand_alone([tag for tag in rows if tag.axis == axis]))
     story = picks.glimpse_story or ""
     if story.strip():
         state = GlimpseState.COMPLETE
@@ -1722,6 +1777,7 @@ def _gifts(plan: _Plan, picks: MagicPicks) -> list[GiftEntry]:
         parse_personalization_picks,
     )
     from world.magic.services.technique_forms import (  # noqa: PLC0415
+        creation_next_signature,
         creation_technique_forms,
         technique_price_payload,
     )
@@ -1729,9 +1785,9 @@ def _gifts(plan: _Plan, picks: MagicPicks) -> list[GiftEntry]:
         hold_display_name,
         price_components_by_price,
     )
+    from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
     from world.magic.types.technique_effects import TechniqueSignaturePayload  # noqa: PLC0415
-    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
-    from world.species.services import _inheritable_grant_filter  # noqa: PLC0415
+    from world.species.services import species_gift_grants  # noqa: PLC0415
 
     path = plan.draft.selected_path
     style = path.style.name if path is not None and path.style_id is not None else ""
@@ -1746,6 +1802,9 @@ def _gifts(plan: _Plan, picks: MagicPicks) -> list[GiftEntry]:
     bonuses = SignatureMotifBonus.objects.in_bulk(
         [p.signature_bonus_id for p in personal.values() if p.signature_bonus_id]
     )
+    early_forms = TechniqueVariant.objects.in_bulk(
+        [p.early_form_id for p in personal.values() if p.early_form_id]
+    )
     components = price_components_by_price(prices.keys())
     resonance_ids = [pick.resonance.pk for pick in picks.ordered_resonances]
     lead = picks.lead_resonance
@@ -1759,6 +1818,9 @@ def _gifts(plan: _Plan, picks: MagicPicks) -> list[GiftEntry]:
             price=prices.get(pick.price_id) if pick and pick.price_id else None,
         )
         bonus = bonuses.get(pick.signature_bonus_id) if pick and pick.signature_bonus_id else None
+        if lead is None:
+            bonus = None
+        early = early_forms.get(pick.early_form_id) if pick and pick.early_form_id else None
         return TechniqueEntry(
             name=hold_display_name(hold, fallback=tech.name),
             catalog_name=tech.name,
@@ -1766,18 +1828,24 @@ def _gifts(plan: _Plan, picks: MagicPicks) -> list[GiftEntry]:
             style=style,
             description=hold.custom_description or tech.description,
             effect_summary=tech.cached_effect_summary,
-            forms=creation_technique_forms(tech, resonance_ids),
+            forms=creation_technique_forms(tech, resonance_ids, early_form=early),
             signature=(
                 TechniqueSignaturePayload(
                     name=bonus.name,
                     narrative_snippet=bonus.narrative_snippet,
                     intensity_delta=bonus.flat_intensity_delta,
                 )
-                if bonus is not None and lead is not None
+                if bonus is not None
                 else None
             ),
             price=technique_price_payload(hold, components=components),
-            next_signature=None,
+            # A flourish weaves the TECHNIQUE thread at its own level in the lead
+            # resonance (``apply_creation_personalizations``); the next one is read off it.
+            next_signature=(
+                creation_next_signature(lead.pk, bonus.min_crossing_level)
+                if bonus is not None and lead is not None
+                else None
+            ),
         )
 
     def gift_entry(gift: Gift, techniques: list[TechniqueEntry]) -> GiftEntry:
@@ -1794,15 +1862,11 @@ def _gifts(plan: _Plan, picks: MagicPicks) -> list[GiftEntry]:
     gifts = [
         gift_entry(major, [technique_entry(t) for t in picks.techniques if t.gift_id == major.pk])
     ]
-    species = plan.draft.selected_species
-    if species is not None:
-        seen = {major.pk}
-        for grant in SpeciesGiftGrant.objects.filter(
-            _inheritable_grant_filter(species)
-        ).select_related("gift"):
-            if grant.gift_id not in seen:
-                seen.add(grant.gift_id)
-                gifts.append(gift_entry(grant.gift, []))
+    seen = {major.pk}
+    for grant in species_gift_grants(plan.draft.selected_species):
+        if grant.gift_id not in seen:
+            seen.add(grant.gift_id)
+            gifts.append(gift_entry(grant.gift, []))
     return gifts
 
 
@@ -1863,23 +1927,16 @@ def _anima_ritual(plan: _Plan, picks: MagicPicks) -> AnimaRitualSection | None:
 
 def _natural_weapons(plan: _Plan) -> list[NaturalWeaponEntry]:
     """Mirrors ``_build_natural_weapons``: one per gift naming an active natural weapon
-    (``provision_natural_weapon``), read off its template with no item made."""
+    (``provision_natural_weapon``, the major gift's first, then the species'), read off its
+    template with no item made."""
     from world.items.models import ItemInstance  # noqa: PLC0415
-    from world.species.models import SpeciesGiftGrant  # noqa: PLC0415
-    from world.species.services import _inheritable_grant_filter  # noqa: PLC0415
+    from world.species.services import species_gift_grants  # noqa: PLC0415
 
     picks = plan.picks
-    if picks is None:
-        return []
-    gifts: list[tuple[Gift, bool]] = [(picks.gift, False)] if picks.gift is not None else []
-    species = plan.draft.selected_species
-    if species is not None:
-        gifts.extend(
-            (grant.gift, True)
-            for grant in SpeciesGiftGrant.objects.filter(
-                _inheritable_grant_filter(species)
-            ).select_related("gift__natural_weapon_template")
-        )
+    gifts: list[tuple[Gift, bool]] = (
+        [(picks.gift, False)] if picks is not None and picks.gift is not None else []
+    )
+    gifts.extend((grant.gift, True) for grant in species_gift_grants(plan.draft.selected_species))
     weapons: list[NaturalWeaponEntry] = []
     for gift, from_species in gifts:
         template = gift.natural_weapon_template
@@ -1887,6 +1944,9 @@ def _natural_weapons(plan: _Plan) -> list[NaturalWeaponEntry]:
             continue
         weapon = ItemInstance(template=template, natural_weapon_gift=gift)
         damage_type = weapon.effective_weapon_damage_type
+        # The facets ``stamp_inherent_facets`` puts on a new instance: the template's own,
+        # none of them crafted, listed by name as ``_build_natural_weapons`` lists them.
+        inherent = sorted(template.inherent_facets.all(), key=lambda facet: (facet.name, facet.pk))
         weapons.append(
             NaturalWeaponEntry(
                 id=plan.next_id(),
@@ -1895,7 +1955,7 @@ def _natural_weapons(plan: _Plan) -> list[NaturalWeaponEntry]:
                 from_species=from_species,
                 damage=weapon.effective_weapon_damage,
                 damage_type=damage_type.name if damage_type else "",
-                facets=[],
+                facets=[facet.name for facet in inherent],
                 facets_used=0,
                 facet_capacity=template.facet_capacity,
             )

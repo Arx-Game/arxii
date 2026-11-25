@@ -19,12 +19,13 @@ from world.magic.constants import GLIMPSE_AXIS_CONFIG, GlimpseState, GlimpseTagA
 from world.magic.models.glimpse import CharacterGlimpseTag
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
     from world.distinctions.models import CharacterDistinction
     from world.magic.models.affinity import Affinity
     from world.magic.models.aura import CharacterAura
     from world.magic.models.glimpse import GlimpseTag
+    from world.magic.types import AffinityShare
 
 
 def refresh_glimpse_state(aura: CharacterAura) -> GlimpseState:
@@ -153,52 +154,65 @@ def apply_glimpse_affinity_nudge(aura: CharacterAura) -> None:
     called exactly once from ``_finalize_glimpse_data``.
     """
     from world.magic.models.glimpse import GlimpseTag  # noqa: PLC0415
+    from world.magic.services.aura import set_settled_shares  # noqa: PLC0415
 
-    nudge_axes = {GlimpseTagAxis.TONE, GlimpseTagAxis.TRIGGER}
-    tag_ids = list(
-        CharacterGlimpseTag.objects.filter(aura=aura, tag__axis__in=nudge_axes)
-        .exclude(tag__affinity__isnull=True)
-        .values_list("tag_id", flat=True)
-    )
+    tag_ids = list(CharacterGlimpseTag.objects.filter(aura=aura).values_list("tag_id", flat=True))
     if not tag_ids:
         return
+    tags = list(GlimpseTag.objects.filter(pk__in=tag_ids).select_related("affinity"))
+    settled = {
+        share.affinity_id: (share.affinity, Decimal(share.settled_percent))
+        for share in aura.cached_shares
+    }
+    nudged = glimpse_nudged_shares(settled, tags)
+    if nudged is not None:
+        set_settled_shares(aura, nudged)
 
-    affinity_counts: dict[int, int] = {}
-    affinities: dict[int, Affinity] = {}
-    for tag in GlimpseTag.objects.filter(pk__in=tag_ids).select_related("affinity"):
-        if tag.affinity is None:
-            continue
-        affinities[tag.affinity.pk] = tag.affinity
-        affinity_counts[tag.affinity.pk] = affinity_counts.get(tag.affinity.pk, 0) + 1
 
-    if not affinity_counts:
-        return
+def glimpse_nudged_shares(
+    settled: Mapping[int, tuple[Affinity, Decimal]], tags: Iterable[GlimpseTag]
+) -> list[AffinityShare] | None:
+    """The settled shares after the Glimpse's nudge, or None when no tag nudges (#5206).
 
-    from world.magic.services.aura import set_settled_shares  # noqa: PLC0415
+    ``settled`` maps an affinity pk to the affinity and its settled percent; ``tags`` are
+    the character's chosen Glimpse tags. Each TONE or TRIGGER tag with an ``affinity``
+    shifts that affinity by ``GLIMPSE_AFFINITY_NUDGE_PERCENT`` points, taken evenly from
+    the others, then the shares are clamped to 0-100 and scaled to sum to 100. The pure half
+    of ``apply_glimpse_affinity_nudge``; the waiting sheet computes a new character's aura
+    with it before the character exists.
+    """
     from world.magic.types import AffinityShare  # noqa: PLC0415
 
+    nudge_axes = {GlimpseTagAxis.TONE, GlimpseTagAxis.TRIGGER}
+    affinity_counts: dict[int, int] = {}
+    affinities: dict[int, Affinity] = {}
+    for tag in tags:
+        if tag.axis not in nudge_axes or tag.affinity_id is None:
+            continue
+        affinities[tag.affinity_id] = tag.affinity
+        affinity_counts[tag.affinity_id] = affinity_counts.get(tag.affinity_id, 0) + 1
+    if not affinity_counts:
+        return None
+
     values: dict[int, Decimal] = {}
-    for share in aura.cached_shares:
-        affinities[share.affinity_id] = share.affinity
-        values[share.affinity_id] = Decimal(share.settled_percent)
+    for pk, (affinity, percent) in settled.items():
+        affinities[pk] = affinity
+        values[pk] = Decimal(percent)
     for pk in affinity_counts:
         values.setdefault(pk, Decimal(0))
     _spread_nudges(values, affinity_counts)
 
-    # Clamp to [0, 100] and scale so the shares sum to 100; set_aura_shares fixes the
+    # Clamp to [0, 100] and scale so the shares sum to 100; set_settled_shares fixes the
     # last cent of rounding.
     clamped = {pk: max(Decimal(0), min(Decimal(100), v)) for pk, v in values.items()}
     total = sum(clamped.values())
     if total == 0:
-        return
-    set_settled_shares(
-        aura,
-        [
-            AffinityShare(affinity=affinities[pk], percent=v * Decimal(100) / total)
-            for pk, v in sorted(clamped.items())
-            if v > 0
-        ],
-    )
+        return None
+    return [
+        AffinityShare(affinity=affinities[pk], percent=v * Decimal(100) / total)
+        for pk, v in sorted(clamped.items())
+        if v > 0
+    ]
 
 
 def _spread_nudges(values: dict[int, Decimal], affinity_counts: dict[int, int]) -> None:

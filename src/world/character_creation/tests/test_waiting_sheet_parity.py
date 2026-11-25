@@ -16,7 +16,19 @@ from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.factories import RoomProfileFactory
-from world.character_creation.factories import OriginTemplateFactory, enemy_card_entry
+from world.buildings.factories import PropertyGrantProfileFactory
+from world.buildings.models import Building, BuildingSizeTier
+from world.character_creation.constants import (
+    BEAT_SECRET_OFFER_IDS,
+    TECHNIQUE_PERSONALIZATIONS_KEY,
+    OfferChapter,
+)
+from world.character_creation.factories import (
+    DistinctionOfferFactory,
+    LifeBeatFactory,
+    OriginTemplateFactory,
+    enemy_card_entry,
+)
 from world.character_creation.models import CharacterDraft
 from world.character_creation.services import (
     approve_application,
@@ -41,9 +53,21 @@ from world.classes.factories import (
 from world.currency.models import DistinctionStartingGrant
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
+from world.items.constants import GearArchetype
+from world.items.factories import ItemTemplateFactory, QualityTierFactory
+from world.magic.constants import AFFINITY_CELESTIAL, GiftKind, GlimpseTagAxis
+from world.magic.factories import (
+    FacetFactory,
+    GiftFactory,
+    GlimpseTagFactory,
+    SignatureMotifBonusFactory,
+    TechniqueVariantFactory,
+)
+from world.magic.models import Affinity
 from world.mechanics.constants import STAT_CATEGORY_NAME
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.societies.factories import OrganizationFactory, VacancyFactory
+from world.species.factories import SpeciesGiftGrantFactory
 from world.traits.models import Trait
 
 #: Built from the draft and compared with the in-game payload after approval.
@@ -172,6 +196,55 @@ class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
         upbringing = OriginTemplateFactory(
             beginning=self.beginnings, allows_name_family=False, allows_no_family=True
         )
+        # A card marked secret on a beat of the life it answers.
+        beat = LifeBeatFactory(name="Parity Childhood")
+        marked = self._card("Parity Stolen Bread")
+        marked_offer = DistinctionOfferFactory(
+            distinction=marked, chapter=OfferChapter.BACKGROUNDS, beat=beat
+        )
+        # A group enemy, whose opinion of the character approval seeds.
+        rival = OrganizationFactory(name="Parity Rivals")
+        # The species forces a drawback card and gives clawed hands with a facet.
+        drawback = self._card("Parity Sun Sickness")
+        claws = ItemTemplateFactory(
+            name="Parity Claws", gear_archetype=GearArchetype.UNARMED, base_weapon_damage=4
+        )
+        claws.inherent_facets.add(FacetFactory(name="Parity Keen"))
+        QualityTierFactory(name="Parity Common")
+        SpeciesGiftGrantFactory(
+            species=self.species,
+            gift=GiftFactory(
+                name="Parity Claw Gift", kind=GiftKind.MINOR, natural_weapon_template=claws
+            ),
+            drawback_distinction=drawback,
+        )
+        # The Beginnings grants a property house.
+        BuildingSizeTier.objects.get_or_create(tier=1, defaults={"name": "Hut", "space_budget": 50})
+        self.beginnings.property_grant_profile = PropertyGrantProfileFactory()
+        self.beginnings.save()
+        # An early form and a flourish bought in creation, and the flourish after it.
+        early = TechniqueVariantFactory(
+            parent_technique=self.technique,
+            resonance=self.resonance,
+            unlock_thread_level=10,
+            name_override="Parity Early Flame",
+            creation_point_cost=1,
+        )
+        flourish = SignatureMotifBonusFactory(
+            name="Parity Flourish",
+            required_resonance=self.resonance,
+            min_crossing_level=10,
+            creation_point_cost=1,
+        )
+        SignatureMotifBonusFactory(
+            name="Parity Next Flourish", required_resonance=self.resonance, min_crossing_level=30
+        )
+        # A Glimpse tag that nudges who the character is toward the Celestial.
+        tone = GlimpseTagFactory(
+            axis=GlimpseTagAxis.TONE,
+            name="Parity Radiant",
+            affinity=Affinity.objects.get(name=AFFINITY_CELESTIAL),
+        )
         draft = self._create_base_draft(
             first_name="Wren",
             # The two holdings of the charm card widen the statistics budget by 20.
@@ -187,16 +260,23 @@ class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
                 self._entry(mentor),
                 self._entry(secret),
                 self._entry(wealthy),
+                self._entry(
+                    marked,
+                    offer_ids=[marked_offer.pk],
+                    arrivals=[marked_offer.arrives_as],
+                    sources=[beat.name],
+                ),
                 enemy_card_entry("Parity Grudge"),
             ],
+            beats={str(beat.pk): {BEAT_SECRET_OFFER_IDS: [marked_offer.pk]}},
             enemy={
-                "kind": "person",
-                "organization_id": None,
-                "name": "Old Marrin",
+                "kind": "group",
+                "organization_id": rival.pk,
+                "name": "",
                 "power_tier": "",
                 "degree": "annoyed",
-                "why": "I took his seat.",
-                "public_line": "Marrin and I do not speak.",
+                "why": "I took their seat.",
+                "public_line": "The Rivals and I do not speak.",
             },
             introductions={
                 "application": ["I want to guard doors."],
@@ -216,6 +296,13 @@ class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
         )
         draft.selected_origin_template = upbringing
         draft.selected_vacancy = self.vacancy
+        draft.draft_data["glimpse_tag_ids"] = [tone.pk]
+        draft.draft_data[TECHNIQUE_PERSONALIZATIONS_KEY] = {
+            str(self.technique.pk): {
+                "early_form_id": early.pk,
+                "signature_bonus_id": flourish.pk,
+            }
+        }
         draft.save()
         return draft
 
@@ -247,7 +334,28 @@ class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
                 self.assertFalse(in_game[key])
                 self.assertFalse(waiting[key])
         # The cases the fixture is built to cover reached both sheets.
-        self.assertEqual(len(in_game["distinctions"]), 6)
+        self.assertEqual(len(in_game["distinctions"]), 8)
+        self.assertIn("Parity Sun Sickness", [d["name"] for d in in_game["distinctions"]])
+        technique = in_game["magic"]["gifts"][0]["techniques"][0]
+        self.assertEqual(
+            [form["name"] for form in technique["forms"]],
+            [self.technique.name, "Parity Early Flame"],
+        )
+        self.assertEqual(technique["signature"]["name"], "Parity Flourish")
+        self.assertEqual(technique["next_signature"]["name"], "Parity Next Flourish")
+        self.assertEqual(
+            [share["affinity_name"] for share in in_game["magic"]["aura"]["shares"]],
+            ["Primal", "Celestial"],
+        )
+        (weapon,) = in_game["natural_weapons"]
+        self.assertEqual(weapon["facets"], ["Parity Keen"])
+        self.assertEqual(
+            [row["organization"] for row in in_game["standing"]["reputations"]],
+            ["Parity Rivals"],
+        )
+        self.assertTrue(
+            Building.objects.filter(granted_via_profile=self.beginnings.property_grant_profile)
+        )
         self.assertEqual(in_game["identity"]["vacancy"]["name"], "Doorwarden")
         self.assertIsNotNone(in_game["actor_sheet"]["enemy"])
         self.assertIsNotNone(in_game["current_residence"])
@@ -263,7 +371,8 @@ class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
         self.assertTrue(in_game["standing"]["memberships"])
         self.assertTrue(in_game["keyring"])
         self.assertEqual(waiting["purse"], {"balance": 500})
-        self.assertEqual(len(waiting["secrets"]), 3)
+        # The secret-by-default card, the card marked secret on a beat, two Whispers lines.
+        self.assertEqual(len(waiting["secrets"]), 4)
         self.assertIsNone(waiting["staff_edit"])
         self.assertFalse(waiting["can_edit"])
 
@@ -287,5 +396,8 @@ class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
 
         self.assertIsNone(waiting["path"])
         self.assertIsNone(waiting["magic"])
-        self.assertEqual([row["name"] for row in waiting["distinctions"]], ["Parity Alluring"])
+        self.assertEqual(
+            [row["name"] for row in waiting["distinctions"]],
+            ["Parity Alluring", "Parity Sun Sickness"],
+        )
         self.assertEqual(waiting["stats"], {})

@@ -274,6 +274,28 @@ def total_species_gift_cost(species) -> int:
     )
 
 
+def species_gift_grants(species: Species | None) -> list[SpeciesGiftGrant]:
+    """The gift grants a character of ``species`` is given at creation (#1580, #5206).
+
+    The species' own grants and its ancestors' inheritable ones, with what each grant
+    gives selected: the gift (and its natural weapon template), the drawback and benefit
+    conditions and the drawback card. The read half of ``provision_species_gifts``; the
+    character-creation waiting sheet shows the gifts, natural weapons and drawback cards
+    from it.
+    """
+    if species is None:
+        return []
+    return list(
+        SpeciesGiftGrant.objects.filter(_inheritable_grant_filter(species)).select_related(
+            "gift",
+            "gift__natural_weapon_template",
+            "drawback_condition",
+            "benefit_condition",
+            "drawback_distinction",
+        )
+    )
+
+
 def provision_species_gifts(
     sheet: CharacterSheet, *, resonances: Sequence[Resonance] = ()
 ) -> list[CharacterGift]:
@@ -294,9 +316,7 @@ def provision_species_gifts(
     if sheet.species_id is None:
         return []
 
-    grants = SpeciesGiftGrant.objects.filter(
-        _inheritable_grant_filter(sheet.species)
-    ).select_related("gift", "drawback_condition", "benefit_condition", "drawback_distinction")
+    grants = species_gift_grants(sheet.species)
     minted: list[CharacterGift] = []
     for grant in grants:
         cg, _ = grant_gift_to_character(
