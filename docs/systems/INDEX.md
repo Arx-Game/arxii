@@ -7481,8 +7481,8 @@ Unified modifier system — categories, types, sources, and per-character modifi
   equipment walk (`equipment_walk_target_ids`), and the character-creation waiting sheet feeds
   it a draft's cards. New column `ModifierTarget.spent_at_creation` (migrations 0484 and 0485)
   marks the bonuses creation uses up, which the band leaves out. `ModifierTarget.roll_lane` is
-  the lane a roll prices a target's sized modifiers in, read by the check seam's `_check_lane`
-  and the band. `terms.py`'s `term_label` / `term_definition` name and define a target the
+  the lane a roll prices a target's sized modifiers in (CHECK for every target the check seam
+  reads), read by the band. `terms.py`'s `term_label` / `term_definition` name and define a target the
   same way on a card and on the sheet. See `mechanics.md` "The Bonuses band".
 - **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
   `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through

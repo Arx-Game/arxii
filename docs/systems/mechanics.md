@@ -253,8 +253,8 @@ the statistics budget sums.
 **`ModifierTarget.roll_lane`** is the one answer to which lane a roll prices a sized modifier
 on the target in: the effect kind's `value_lane`, else CHECK for a target bound to a check
 type, an Aspect, a check category or a botch-immunity scope, else STAT for a stat or skill
-target, else None (summed flat). The check seam reads it through `checks.services._check_lane`,
-which falls back to CHECK, so checks compute the same; the Bonuses band reads it too.
+target, else None (summed flat). It is CHECK for every target the check seam reads, which
+prices them in the CHECK lane itself; the Bonuses band reads it, so it shows what a roll adds.
 
 **Terms (`terms.py`).** `term_label(target_name)` is a target's name as a card prints it
 (`physical_development` reads `physical development`, lowercase on purpose).

@@ -576,7 +576,8 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         reads, one bound to a check type, an Aspect or a botch-immunity scope (the check
         seam, #4638, #4827, #4386); the STAT lane for a stat or skill target (the trait
         handler's read, #4726, #4820). None for every other target, which every reader
-        sums flat. The check seam and the sheet's Bonuses band read it.
+        sums flat. The sheet's Bonuses band reads it; the check seam prices its targets in
+        the CHECK lane directly.
         """
         from world.checks.constants import ModifierLane  # noqa: PLC0415
         from world.traits.handlers import MODIFIABLE_TRAIT_TYPES  # noqa: PLC0415
