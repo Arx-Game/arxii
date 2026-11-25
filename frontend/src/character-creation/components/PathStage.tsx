@@ -36,7 +36,7 @@ import {
   RecordRail,
   stageEyebrow,
 } from '../folio';
-import { useCGExplanations, usePaths, useUpdateDraft } from '../queries';
+import { useCGExplanations, usePathSkillSuggestions, usePaths, useUpdateDraft } from '../queries';
 import type { CharacterDraft, Path } from '../types';
 import { NOT_YET_IMPLEMENTED } from '../constants';
 import { Stage } from '../types';
@@ -70,6 +70,10 @@ export function PathStage({ draft }: PathStageProps) {
   const { data: copy } = useCGExplanations();
   const updateDraft = useUpdateDraft();
   const record = cgRecord(draft);
+  // The note promises skill suggestions, so it shows only when the chosen path has some
+  // (#5206, call 14): production holds none yet, and the line returns once staff write them.
+  const { data: suggestions } = usePathSkillSuggestions(draft.selected_path?.id);
+  const hasSuggestions = (suggestions?.length ?? 0) > 0;
 
   const choose = (path: Path | null) => {
     updateDraft.mutate({
@@ -92,12 +96,14 @@ export function PathStage({ draft }: PathStageProps) {
         rows={[...record.head, record.points]}
         ledger={stageEyebrow(draft.current_stage)}
       />
-      <Marginalia id="note-path">
-        {/* PLACEHOLDER: Apostate rewrite */}
-        <Note lead="Paths">
-          set starting skill suggestions; you freely allocate skills in the stage that follows.
-        </Note>
-      </Marginalia>
+      {hasSuggestions && (
+        <Marginalia id="note-path">
+          {/* PLACEHOLDER: Apostate rewrite */}
+          <Note lead="Paths">
+            set starting skill suggestions; you freely allocate skills in the stage that follows.
+          </Note>
+        </Marginalia>
+      )}
     </>
   );
 

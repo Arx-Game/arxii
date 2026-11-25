@@ -16,6 +16,8 @@ export type { TechniqueEffectSummary } from '@/magic/types';
 // extended rather than duplicated (#3648).
 import type { components } from '@/generated/api';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
+import type { CharacterSheetPayload } from '@/character_sheets/api';
+import type { CharacterXpLedger } from '@/progression/types';
 
 export interface StartingArea {
   id: number;
@@ -1779,3 +1781,43 @@ export type OffersResponse = components['schemas']['OffersResponse'];
 export type OfferTerm = components['schemas']['OfferTerm'];
 /** One effect of an offered card with its magnitude (#4874). */
 export type OfferEffectTerm = components['schemas']['OfferEffectTerm'];
+
+// === The waiting sheet (#5206) ===
+
+/** The application's state, for the waiting sheet's "Awaiting approval" mark. */
+export interface WaitingSheetAwaiting {
+  status: ApplicationStatus;
+  status_label: string;
+}
+
+/** One thing a new character will carry, shaped like an inventory row; `id` is below zero. */
+export interface WaitingSheetCarriedItem {
+  id: number;
+  display_name: string;
+  quality_tier: { id: number; name: string } | null;
+  suggested_value: number | null;
+}
+
+/** One of the character's own secrets, shaped like a known-secrets row; `id` is below zero. */
+export type WaitingSheetSecret = Omit<components['schemas']['KnownSecret'], 'found_at'> & {
+  found_at: string | null;
+};
+
+/**
+ * `GET /api/character-creation/drafts/{id}/sheet/` (#5206): a submitted draft laid out as
+ * the in-game sheet will read for its owner (`WaitingSheetPayload` in
+ * `world/character_creation/types.py`, built by `sheet_preview.py`). Typed by hand because
+ * the schema carries no body shape for it. Every in-game key in its own section type, then
+ * the keys only the waiting page reads. There is no character yet, so `id` is null and
+ * `staff_edit` is never built; ids of rows approval will create are negative.
+ */
+export interface WaitingSheetPayload extends Omit<CharacterSheetPayload, 'id' | 'staff_edit'> {
+  id: null;
+  staff_edit: null;
+  awaiting: WaitingSheetAwaiting;
+  purse: { balance: number };
+  carried: WaitingSheetCarriedItem[];
+  xp_ledger: CharacterXpLedger;
+  languages: components['schemas']['MyLanguage'][];
+  secrets: WaitingSheetSecret[];
+}

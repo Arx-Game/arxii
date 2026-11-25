@@ -58,6 +58,9 @@ function arrivalWord(
   return copy?.review_arrival_choice ?? 'choice';
 }
 
+/** The waiting sheet (#5206): the submitted character's sheet, read while staff review it. */
+const WAITING_SHEET_PATH = '/characters/create/sheet';
+
 interface ReviewStageProps {
   draft: CharacterDraft;
   isStaff: boolean;
@@ -108,6 +111,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const familyDisplay = path === 'none' ? 'Unknown' : familyName;
   const upbringingDisplay = draft.selected_origin_template?.name ?? '';
   const fullName = composeFullName(draftData.first_name, familyName, 'Unnamed Character');
+  // The night plate and the status lines name the character by the first name alone.
+  const plateName = draftData.first_name?.trim() || fullName;
 
   const appStatus = application.data?.status ?? null;
   const hasApplication = application.data != null;
@@ -310,15 +315,10 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         {hasApplication && appStatus === 'revisions_requested' && (
           <>
             <p className="ledger-line">
-              {getBannerMessage(
-                appStatus,
-                application.data!.reviewer_name,
-                application.data!.expires_at,
-                copy
-              )}
+              {getBannerMessage(appStatus, plateName, application.data!.expires_at)}
             </p>
             <Link className="quiet-link" to="/characters/create/application">
-              View the application thread
+              View Application
             </Link>
             <RevisionsActions
               resubmitComment={resubmitComment}
@@ -333,15 +333,10 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         {hasApplication && appStatus === 'approved' && (
           <div className="plate-door">
             <p className="ledger-line">
-              {getBannerMessage(
-                appStatus,
-                application.data!.reviewer_name,
-                application.data!.expires_at,
-                copy
-              )}
+              {getBannerMessage(appStatus, plateName, application.data!.expires_at)}
             </p>
             <Link className="quiet-link" to="/characters/create/application">
-              View the application thread
+              View Application
             </Link>
             <button type="button" className="btn" onClick={() => navigate('/game')}>
               {copy?.review_approved_enter_world ?? 'Enter the World'}
@@ -351,12 +346,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
         {hasApplication && (appStatus === 'denied' || appStatus === 'withdrawn') && (
           <>
             <p className="ledger-line">
-              {getBannerMessage(
-                appStatus,
-                application.data!.reviewer_name,
-                application.data!.expires_at,
-                copy
-              )}
+              {getBannerMessage(appStatus, plateName, application.data!.expires_at)}
             </p>
             <TerminalActions />
           </>
@@ -374,12 +364,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
           id="after"
           titleId="after-title"
           titleAs="h2"
-          title={getBannerMessage(
-            appStatus!,
-            application.data!.reviewer_name,
-            application.data!.expires_at,
-            copy
-          )}
+          title={getBannerMessage(appStatus!, plateName, application.data!.expires_at)}
           imprint
           quiet={{
             label: 'Review it again',
@@ -391,9 +376,14 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             },
           }}
         >
-          <Link className="quiet-link" to="/characters/create/application">
-            View the application thread
-          </Link>
+          <div className="plate-links">
+            <Link className="quiet-link" to={WAITING_SHEET_PATH}>
+              Review Sheet
+            </Link>
+            <Link className="quiet-link" to="/characters/create/application">
+              View Application
+            </Link>
+          </div>
           <SubmittedActions
             appStatus={appStatus as 'submitted' | 'in_review'}
             onUnsubmit={handleUnsubmit}
@@ -443,31 +433,26 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
 
 function getBannerMessage(
   status: ApplicationStatus,
-  reviewerName: string | null,
-  expiresAt: string | null,
-  copy: Record<string, string> | undefined
+  name: string,
+  expiresAt: string | null
 ): string {
+  // Short by ruling (#5206, owner 2026-11-25: "the brevity is stylistic"). The submitted
+  // line no longer reads the `review_banner_submitted` copy key: a staff-authored sentence
+  // cannot carry the character's name.
+  const expiry = expiresAt ? ` Draft expires on ${new Date(expiresAt).toLocaleDateString()}.` : '';
   switch (status) {
     case 'submitted':
-      return (
-        copy?.review_banner_submitted ?? 'Your character has been submitted and is awaiting review.'
-      );
+      return `${name} submitted and awaiting review.`;
     case 'in_review':
-      return reviewerName
-        ? `Your character is being reviewed by ${reviewerName}.`
-        : 'Your character is under review.';
+      return `${name} in review.`;
     case 'revisions_requested':
-      return 'Revisions requested. Check the application thread for staff feedback.';
+      return `${name} sent back for revisions.`;
     case 'approved':
-      return 'Your character has been approved!';
+      return `${name} approved.`;
     case 'denied':
-      return expiresAt
-        ? `This application was denied. Draft expires on ${new Date(expiresAt).toLocaleDateString()}.`
-        : 'This application was denied.';
+      return `${name} denied.${expiry}`;
     case 'withdrawn':
-      return expiresAt
-        ? `This application was withdrawn. Draft expires on ${new Date(expiresAt).toLocaleDateString()}.`
-        : 'This application was withdrawn.';
+      return `${name} withdrawn.${expiry}`;
   }
 }
 
@@ -635,6 +620,9 @@ function RevisionsActions({
         <button type="button" className="btn" disabled={resubmitPending} onClick={onResubmit}>
           {resubmitPending ? 'Resubmitting…' : 'Resubmit for review'}
         </button>
+        <Link className="quiet-link" to={WAITING_SHEET_PATH}>
+          Review Sheet
+        </Link>
         <button type="button" className="btn-quiet" disabled={withdrawPending} onClick={onWithdraw}>
           {withdrawPending ? 'Withdrawing…' : 'Withdraw the application'}
         </button>
@@ -653,7 +641,7 @@ function TerminalActions() {
       <Button variant="outline" size="lg" asChild>
         <Link to="/characters/create/application">
           <ExternalLink className="mr-2 h-4 w-4" />
-          View Application Thread
+          View Application
         </Link>
       </Button>
     </div>

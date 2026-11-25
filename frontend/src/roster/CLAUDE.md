@@ -9,7 +9,22 @@ character's pictures live in its sheet's Gallery tab (#4151); the data layer for
 ### `pages/`
 
 - **`RosterListPage.tsx`**: Browsable character roster with filtering
-- **`CharacterSheetPage.tsx`**: Detailed character information display
+- **`CharacterSheetPage.tsx`**: Detailed character information display. Its plate lines
+  come from `character_sheets/components/sheet/glanceLines.ts`, shared with the waiting
+  sheet (`character-creation/WaitingSheetPage.tsx`, #5206), which composes the same plate,
+  section row and panels from a draft
+
+## The sheet's pieces take data as well as an id (#5206)
+
+The waiting sheet has no character to fetch by, so these take what they draw as an optional
+prop and make no query when it is given (absent, each behaves as before): `Plate` `mark` (a
+node above the name), `SectionRow` `sections` (the sections offered), `DistinctionsTab` /
+`DistinctionsPanel` `payload`, `SpellbookTab` / `MagicPanel` `payload`, `SecretsTab`
+`secrets`, `XpLedgerCard` `ledger`, `LanguagesSection` `languages`. The Estate's pieces are
+exported from `panels.tsx` and draw from data: `PurseBlock` (`balance`), `CarriedBlock`
+(`items`, `outfits`, `wardrobe` for the links), `DomainsBlock`, `KeyringBlock`;
+`EstatePanel` fetches and passes them in. `OriginStoryAnswers` is the origin story
+read-only, and `ReputationTab` exports `OrganizationStandingBlock`
 
 ## Key Files
 

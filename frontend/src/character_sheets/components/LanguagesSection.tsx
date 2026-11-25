@@ -49,9 +49,17 @@ function levelValue(row: MyLanguage) {
   );
 }
 
-export function LanguagesSection() {
-  const { data: languages } = useMyLanguages();
-  const rows = languages ?? [];
+export function LanguagesSection({
+  languages: given,
+}: {
+  /**
+   * The languages to draw, when the caller already holds them (#5206: the tongues the
+   * waiting sheet's beginning gives). When given, no query is made.
+   */
+  languages?: MyLanguage[];
+} = {}) {
+  const { data: languages } = useMyLanguages(!given);
+  const rows = given ?? languages ?? [];
 
   if (rows.length === 0) {
     return (

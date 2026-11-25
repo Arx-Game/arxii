@@ -33,7 +33,11 @@ import {
   Subheading,
   Tag,
 } from '@/character_sheets/components/sheet/primitives';
-import type { CharacterSheetAura, CharacterSheetTechnique } from '@/character_sheets/api';
+import type {
+  CharacterSheetAura,
+  CharacterSheetPayload,
+  CharacterSheetTechnique,
+} from '@/character_sheets/api';
 import { priceCostParts } from '@/magic/priceCost';
 import type { TechniqueForm } from '@/magic/types';
 import { MotifFacetPanel } from './MotifFacetPanel';
@@ -65,6 +69,11 @@ interface Props {
    * sheet would want.
    */
   slot?: 'all' | 'main' | 'rail';
+  /**
+   * A sheet payload the caller already holds (#5206: the waiting sheet, which has no
+   * character to fetch by). When given, it is drawn and the sheet query is not made.
+   */
+  payload?: Pick<CharacterSheetPayload, 'magic' | 'distinctions'>;
 }
 
 /**
@@ -186,8 +195,11 @@ function glimpseStateLine(state: CharacterSheetAura['glimpse_state']): string {
   return 'You have not looked into your own aura yet.';
 }
 
-export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props) {
-  const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
+export function SpellbookTab({ characterId, isMyCharacter, slot = 'all', payload: given }: Props) {
+  // Id 0 disables the query, so a caller that hands over its payload asks for nothing.
+  const query = useCharacterSheetQuery(given ? 0 : characterId);
+  const payload = given ?? query.data;
+  const isLoading = !given && query.isLoading;
   const [glimpseDialogOpen, setGlimpseDialogOpen] = useState(false);
   // Who the character is and whether they are unsettled are the owner's to see; the
   // sheet payload carries the shares only.

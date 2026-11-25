@@ -43,12 +43,19 @@ interface SectionRowProps {
   onSelect: (section: SheetSection) => void;
   /** True only on the viewer's own character: adds the break and the three own sections. */
   isMyCharacter: boolean;
+  /**
+   * The sections to offer, when the page offers fewer than all nine (#5206: the waiting
+   * sheet drops Gallery, and Ties or Knowledge when the payload fills nothing there).
+   * The order and the break before the own sections stay as they are.
+   */
+  sections?: SheetSection[];
 }
 
-export function SectionRow({ current, onSelect, isMyCharacter }: SectionRowProps) {
+export function SectionRow({ current, onSelect, isMyCharacter, sections }: SectionRowProps) {
+  const offered = (section: { id: SheetSection }) => !sections || sections.includes(section.id);
   return (
     <nav className="refsheet-sections" aria-label="Character sheet sections">
-      {PUBLIC_SECTIONS.map((section) => (
+      {PUBLIC_SECTIONS.filter(offered).map((section) => (
         <button
           key={section.id}
           type="button"
@@ -62,7 +69,7 @@ export function SectionRow({ current, onSelect, isMyCharacter }: SectionRowProps
         <>
           <span className="refsheet-sections-break" aria-hidden="true" />
           <span className="refsheet-sections-yours">Yours only</span>
-          {OWN_SECTIONS.map((section) => (
+          {OWN_SECTIONS.filter(offered).map((section) => (
             <button
               key={section.id}
               type="button"

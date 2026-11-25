@@ -138,6 +138,20 @@
 .refsheet-plate .refsheet-eyebrow {
   color: var(--plate-accent);
 }
+/* The waiting sheet's "Awaiting approval" mark (#5206): inscription caps in the plate's
+   accent inside a hairline of the same colour, sized to its words. */
+.refsheet-waiting {
+  display: inline-flex;
+  align-items: baseline;
+  width: fit-content;
+  padding: 0.2rem 0.6rem;
+  border: 1px solid var(--plate-accent);
+  color: var(--plate-accent);
+  font-family: var(--sheet-caps);
+  font-size: 0.6875rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
 .refsheet-plate hr {
   border: 0;
   border-top: 1px solid rgb(255 255 255 / 14%);

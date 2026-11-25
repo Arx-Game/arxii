@@ -28,6 +28,7 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { CharacterSheetPage } from './roster/pages/CharacterSheetPage';
 import { TiePage } from './relationships/pages/TiePage';
 import { CharacterCreationPage } from './character-creation';
+import { WaitingSheetPage } from './character-creation/WaitingSheetPage';
 import { RosterListPage } from './roster/pages/RosterListPage';
 import { FriendsTab } from '@/friends/components/FriendsTab';
 import { SettingsPage } from './pages/SettingsPage';
@@ -1002,6 +1003,7 @@ function App() {
             }
           />
           <Route path="/characters/create/application" element={<CharacterCreationPage />} />
+          <Route path="/characters/create/sheet" element={<WaitingSheetPage />} />
 
           {/* ------------------------------------------------------------------ */}
           {/* Stories (Phase 4) — lazy-loaded, route-level code splitting         */}

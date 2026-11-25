@@ -16,9 +16,10 @@ export const speciesKeys = {
  * Languages section. Self-scoped server-side (no character param needed);
  * an account with no active character gets an empty array, never an error.
  */
-export function useMyLanguages() {
+export function useMyLanguages(enabled = true) {
   return useQuery({
     queryKey: speciesKeys.myLanguages(),
     queryFn: fetchMyLanguages,
+    enabled,
   });
 }

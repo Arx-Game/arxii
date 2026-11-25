@@ -2112,6 +2112,13 @@
 .interview .plate-night .plate-door {
   margin: 2.2rem 0 0;
 }
+/* The submitted plate's two links, Review Sheet then View Application (#5206). */
+.interview .plate-night .plate-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1rem 1.5rem;
+}
 .interview .plate-night .btn {
   --cg-btn-bg: transparent;
   --cg-btn-fg: rgb(var(--cg-night-glow));

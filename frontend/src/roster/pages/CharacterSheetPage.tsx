@@ -29,6 +29,7 @@ import { usePersonaTitles } from '@/achievements/queries';
 import { useMyLanguages } from '@/species/queries';
 import '@/character_sheets/sheet.css';
 import { Plate } from '@/character_sheets/components/sheet/Plate';
+import { glanceLines } from '@/character_sheets/components/sheet/glanceLines';
 import { SectionRow, type SheetSection } from '@/character_sheets/components/sheet/SectionRow';
 import { SheetPanel } from '@/character_sheets/components/sheet/SheetPanel';
 import { PhysicalPanel, type WornItem } from '@/character_sheets/components/sheet/PhysicalPanel';
@@ -288,38 +289,4 @@ export function CharacterSheetPage() {
       </div>
     </StaffEditProvider>
   );
-}
-
-/**
- * The two short lines under the quote: who they are, then what they look like.
- *
- * Both are built from whatever the payload actually carried, so a sparse character
- * gets a shorter line rather than a line full of "TBD" — the failure the old Stats
- * block made unmissable.
- */
-function glanceLines(sheet: ReturnType<typeof useCharacterSheetQuery>['data']): string[] {
-  if (!sheet) return [];
-  const { identity, appearance } = sheet;
-
-  // The realm is deliberately NOT here. It has its own "From" row under At a glance,
-  // and a Beginning already carries a place in its name ("A Caretaker of Arx"), so
-  // naming the realm again reads as a stutter.
-  const who = [
-    identity.species?.name,
-    identity.beginnings.map((row) => row.name).join(', ') || null,
-    identity.family?.name,
-    identity.age !== null ? `${identity.age}` : null,
-  ]
-    .filter(Boolean)
-    .join('. ');
-
-  const looks = [
-    appearance.height_band,
-    appearance.build?.name,
-    ...appearance.form_traits.map((trait) => trait.value),
-  ]
-    .filter(Boolean)
-    .join('. ');
-
-  return [who ? `${who}.` : '', looks ? `${looks}.` : ''].filter(Boolean);
 }

@@ -70,6 +70,7 @@ import {
   updateDraft,
   updateTechnique,
   withdrawDraft,
+  fetchWaitingSheet,
 } from './api';
 import type { FinalizeForTablePayload } from './api';
 import { leadResonanceId } from './resonanceWeights';
@@ -175,6 +176,9 @@ export const characterCreationKeys = {
   namingRitualConfig: () => [...characterCreationKeys.all, 'naming-ritual-config'] as const,
   // Application key
   application: (draftId: number) => [...characterCreationKeys.all, 'application', draftId] as const,
+  // The waiting sheet (#5206)
+  waitingSheet: (draftId: number) =>
+    [...characterCreationKeys.all, 'waiting-sheet', draftId] as const,
 };
 
 export function useCGExplanations() {
@@ -233,6 +237,19 @@ export function useFamilies(areaId: number | undefined, kindIds: number[] = [], 
     queryKey: [...characterCreationKeys.families(areaId!), kindIds],
     queryFn: () => getFamilies(areaId!, kindIds),
     enabled: enabled && areaId !== undefined,
+  });
+}
+
+/**
+ * The waiting sheet (#5206) of a submitted draft. Refreshed by every draft save and
+ * application change: `useUpdateDraft` and `useSubmitDraft` name its key, and unsubmit,
+ * resubmit and withdraw refresh everything under `characterCreationKeys.all`.
+ */
+export function useWaitingSheet(draftId: number | undefined) {
+  return useQuery({
+    queryKey: characterCreationKeys.waitingSheet(draftId ?? 0),
+    queryFn: () => fetchWaitingSheet(draftId!),
+    enabled: !!draftId,
   });
 }
 
@@ -327,6 +344,8 @@ export function useUpdateDraft() {
       // Spends recorded in draft_data (species/beginnings/etc.) move the CG
       // point budget — keep the Review page's numbers honest.
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftCGPoints(data.id) });
+      // A revision shows on the waiting sheet at once (#5206).
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.waitingSheet(data.id) });
     },
   });
 }
@@ -351,6 +370,7 @@ export function useSubmitDraft() {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.application(draftId) });
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.canCreate() });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.waitingSheet(draftId) });
     },
   });
 }
@@ -432,6 +452,9 @@ function useLifeMutation(draftId: number, call: (draftId: number) => Promise<Cha
       });
       void queryClient.invalidateQueries({
         queryKey: characterCreationKeys.draftCGPoints(draftId),
+      });
+      void queryClient.invalidateQueries({
+        queryKey: characterCreationKeys.waitingSheet(draftId),
       });
     },
   });
@@ -840,6 +863,7 @@ export function useSelectTradition() {
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draft() });
       // Selecting a tradition may auto-add a required distinction, affecting CG points
       queryClient.invalidateQueries({ queryKey: characterCreationKeys.draftCGPoints(draftId) });
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.waitingSheet(draftId) });
       // The gift (and downstream technique) catalog is scoped per-tradition — refetch
       // immediately so GiftSelector's stale-pick reset (and the funnel UI generally)
       // sees the new tradition's options right away instead of on the next unrelated
