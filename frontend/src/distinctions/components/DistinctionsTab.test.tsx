@@ -45,6 +45,15 @@ describe('DistinctionsTab', () => {
     vi.clearAllMocks();
   });
 
+  // #5206: the waiting sheet hands over its own payload; nothing is fetched by id.
+  it('draws a payload it is handed and asks for no sheet', () => {
+    mockPayload(undefined, true);
+    render(<DistinctionsTab characterId={7} payload={{ distinctions: [makeDistinction()] }} />);
+    expect(screen.getByText('Iron Will')).toBeInTheDocument();
+    expect(queries.useCharacterSheetQuery).toHaveBeenCalledWith(0);
+    expect(queries.useCharacterSheetQuery).not.toHaveBeenCalledWith(7);
+  });
+
   it('shows the empty state when there are no distinctions', () => {
     mockPayload([]);
     render(<DistinctionsTab characterId={1} />);
