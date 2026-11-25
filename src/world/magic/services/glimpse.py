@@ -156,7 +156,15 @@ def apply_glimpse_affinity_nudge(aura: CharacterAura) -> None:
     from world.magic.models.glimpse import GlimpseTag  # noqa: PLC0415
     from world.magic.services.aura import set_settled_shares  # noqa: PLC0415
 
-    tag_ids = list(CharacterGlimpseTag.objects.filter(aura=aura).values_list("tag_id", flat=True))
+    # Only a TONE or TRIGGER tag with an affinity nudges, so a character with none pays
+    # this one query and nothing more.
+    tag_ids = list(
+        CharacterGlimpseTag.objects.filter(
+            aura=aura, tag__axis__in={GlimpseTagAxis.TONE, GlimpseTagAxis.TRIGGER}
+        )
+        .exclude(tag__affinity__isnull=True)
+        .values_list("tag_id", flat=True)
+    )
     if not tag_ids:
         return
     tags = list(GlimpseTag.objects.filter(pk__in=tag_ids).select_related("affinity"))
