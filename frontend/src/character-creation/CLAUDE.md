@@ -448,7 +448,9 @@ as a bare `−N`/`+N` in its bottom-left corner and nothing on a free card; `ter
 mechanics line from `offer.effects` with each term a `.term` role-button (the card is a
 button, so no nested button) that shows one `.popover` through a portal to `body` with the
 definition from the response's `terms`, while the pointer or the keyboard focus is on it;
-a click or tap pins it open, and Escape, a scroll or any other click closes it (#5148). A
+a click or tap pins it open, and Escape, a scroll or any other click closes it (#5148). The
+term and its box are `components/term/DefinedTerm.tsx` (`TermButton`, `TermPopover`) with
+`useTermPopover`, shared with the sheet's Bonuses band (#5206). A
 term whose definition is blank is plain text with no underline; `interceptPick` runs before a click
 changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 `secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.

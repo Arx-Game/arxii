@@ -21,8 +21,9 @@
  * never wraps this component in a second div of its own.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useMemo, type ReactNode } from 'react';
+import { TermButton, TermPopover } from '@/components/term/DefinedTerm';
+import { useTermPopover, type TermPopoverState } from '@/components/term/useTermPopover';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
 import { cn } from '@/lib/utils';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
@@ -198,16 +199,6 @@ function SignedPrice({ cost, rank }: { cost: number; rank: number }) {
   );
 }
 
-/** Where a term's definition box goes: viewport coordinates under the term, clamped so
- * the box stays on screen (the demo's rule). */
-function placeTerm(target: HTMLElement): { top: number; left: number } {
-  const rect = target.getBoundingClientRect();
-  const width = Math.min(352, window.innerWidth - 24);
-  const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-  const top = rect.bottom + 180 > window.innerHeight ? rect.top - 180 : rect.bottom + 6;
-  return { top, left };
-}
-
 /** What stands before a term on the mechanics line: the signed magnitude, the
  * immunity's words, or nothing for an effect with no number. */
 function effectPrefix(effect: VisibleOffer['effects'][number]): string {
@@ -224,16 +215,12 @@ function effectPrefix(effect: VisibleOffer['effects'][number]): string {
 function EffectTerms({
   offer,
   defined,
-  onPeek,
-  onLeave,
-  onPin,
+  popover,
 }: {
   offer: VisibleOffer;
   /** Whether a term has a definition to show. */
   defined: (name: string) => boolean;
-  onPeek: (target: HTMLElement, name: string) => void;
-  onLeave: (name: string) => void;
-  onPin: (target: HTMLElement, name: string) => void;
+  popover: TermPopoverState;
 }) {
   if (offer.effects.length === 0) return null;
   return (
@@ -243,34 +230,14 @@ function EffectTerms({
           {i > 0 && '; '}
           {effectPrefix(effect)}
           {defined(effect.target) ? (
-            // A span with the button role: the card around it is already a button, and
-            // a button may not nest one.
-            <span
-              role="button"
-              tabIndex={0}
+            <TermButton
+              name={effect.target}
               className="term"
-              aria-label={`${effect.label}, definition`}
-              onMouseEnter={(e) => onPeek(e.currentTarget, effect.target)}
-              // Scrolling closes the box, and a pointer that was already on the word
-              // gets no second enter: the next movement over the word shows it again.
-              onMouseMove={(e) => onPeek(e.currentTarget, effect.target)}
-              onMouseLeave={() => onLeave(effect.target)}
-              onFocus={(e) => onPeek(e.currentTarget, effect.target)}
-              onBlur={() => onLeave(effect.target)}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPin(e.currentTarget, effect.target);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onPin(e.currentTarget, effect.target);
-                }
-              }}
+              ariaLabel={`${effect.label}, definition`}
+              popover={popover}
             >
               {effect.label}
-            </span>
+            </TermButton>
           ) : (
             effect.label
           )}
@@ -416,50 +383,10 @@ export function ChapterOffers({
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
   const syncDistinctions = useSyncDistinctions(draft.id);
-  // The one open term popover (#4874): which term, where its button sits, and whether a
-  // click pinned it open (#5148: hovering shows it, and it goes when the pointer leaves
-  // unless it was pinned).
-  const [openTerm, setOpenTerm] = useState<{
-    name: string;
-    top: number;
-    left: number;
-    pinned: boolean;
-  } | null>(null);
-  useEffect(() => {
-    if (!openTerm) return;
-    const close = () => setOpenTerm(null);
-    // Any click closes it: a click on a term stops before it reaches the document, and
-    // the box itself takes no pointer (cg.css).
-    const onClick = () => close();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('click', onClick);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('scroll', close, { passive: true });
-    return () => {
-      document.removeEventListener('click', onClick);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('scroll', close);
-    };
-  }, [openTerm]);
-  // The pointer or the focus is on a term: show it, unless this term is already open
-  // (hovered or pinned), which it stays as it is.
-  const peekTerm = useCallback((target: HTMLElement, name: string) => {
-    setOpenTerm((current) =>
-      current?.name === name ? current : { name, ...placeTerm(target), pinned: false }
-    );
-  }, []);
-  // The pointer or the focus leaves: a pinned box stays.
-  const leaveTerm = useCallback((name: string) => {
-    setOpenTerm((current) => (current?.name === name && !current.pinned ? null : current));
-  }, []);
-  // A click or tap: pin it open, or close the one this click had pinned.
-  const pinTerm = useCallback((target: HTMLElement, name: string) => {
-    setOpenTerm((current) =>
-      current?.name === name && current.pinned ? null : { name, ...placeTerm(target), pinned: true }
-    );
-  }, []);
+  // The one open term popover (#4874, #5148): hovering or focusing shows it, a click pins
+  // it (the shared ``useTermPopover``, which the sheet's Bonuses band uses too).
+  const termPopover = useTermPopover();
+  const openTerm = termPopover.openTerm;
   const termDefinition = useMemo(() => {
     const map = new Map<string, OfferTerm>();
     for (const term of terms ?? []) map.set(term.name, term);
@@ -628,13 +555,7 @@ export function ChapterOffers({
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
           </span>
           {terms ? (
-            <EffectTerms
-              offer={offer}
-              defined={termDefined}
-              onPeek={peekTerm}
-              onLeave={leaveTerm}
-              onPin={pinTerm}
-            />
+            <EffectTerms offer={offer} defined={termDefined} popover={termPopover} />
           ) : (
             offer.effect_line && <span className="fx">{offer.effect_line}</span>
           )}
@@ -762,21 +683,14 @@ export function ChapterOffers({
           </ul>
         </div>
       ))}
-      {openTerm &&
-        // Through a portal (#4874): the life block is a size container, which would
-        // otherwise anchor a fixed box to itself instead of the viewport.
-        createPortal(
-          <dialog
-            open
-            className="interview popover"
-            aria-label={termDefinition.get(openTerm.name)?.label ?? openTerm.name}
-            style={{ top: openTerm.top, left: openTerm.left }}
-          >
-            <b>{termDefinition.get(openTerm.name)?.label ?? openTerm.name}</b>
-            {termDefinition.get(openTerm.name)?.definition ?? ''}
-          </dialog>,
-          document.body
-        )}
+      {/* Through a portal (#4874): the life block is a size container, which would
+          otherwise anchor a fixed box to itself instead of the viewport. */}
+      <TermPopover
+        openTerm={openTerm}
+        label={(openTerm && termDefinition.get(openTerm.name)?.label) ?? openTerm?.name ?? ''}
+        definition={(openTerm && termDefinition.get(openTerm.name)?.definition) ?? ''}
+        scope="interview"
+      />
       {folded.length > 0 && (
         <details className="more">
           <summary>{seeMore}</summary>
