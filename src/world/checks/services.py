@@ -1038,6 +1038,17 @@ def botch_floor_level(levels: "Iterable[int]") -> int | None:
     return next((level for level in ordered if level >= non_botch_floor), ordered[-1])
 
 
+def _check_lane(target: "ModifierTarget") -> str:
+    """The lane the check seam prices ``target``'s sized modifiers in (#5206).
+
+    ``ModifierTarget.roll_lane`` is the one rule for which lane a target is read in, and
+    every target the seam reads (a check type's, an Aspect's, a botch-immunity scope's) is
+    a CHECK-lane target there; the sheet's Bonuses band reads the same property, so it
+    shows the number a roll adds.
+    """
+    return target.roll_lane or ModifierLane.CHECK
+
+
 def botch_immunity_sources(
     character_sheet: "CharacterSheet",
     check_type: "CheckType",
@@ -1060,7 +1071,7 @@ def botch_immunity_sources(
     sources: list[ModifierContribution] = []
     for target in ModifierTarget.botch_immunity_targets_for(check_type):
         sources.extend(
-            modifier_target_contributions(character_sheet, target, lane=ModifierLane.CHECK)
+            modifier_target_contributions(character_sheet, target, lane=_check_lane(target))
         )
         sources.extend(
             ModifierContribution(
@@ -2398,7 +2409,7 @@ def _character_and_equipment_contributions(
         return []
 
     contributions = modifier_target_contributions(
-        character_sheet, scoped_target, lane=ModifierLane.CHECK
+        character_sheet, scoped_target, lane=_check_lane(scoped_target)
     )
 
     # FASHION — perception-relative outfit bonus (best across scene societies).
@@ -2454,7 +2465,7 @@ def _aspect_contributions(
             continue
         weight = check_aspect.weight
         for contribution in modifier_target_contributions(
-            character_sheet, target, lane=ModifierLane.CHECK
+            character_sheet, target, lane=_check_lane(target)
         ):
             value = int(contribution.value * weight)
             if value == 0:

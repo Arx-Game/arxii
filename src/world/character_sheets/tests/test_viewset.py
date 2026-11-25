@@ -2961,12 +2961,16 @@ class TestCharacterSheetQueryCount(TestCase):
         # fixture's character has none.
         # +1 (#5206): the Bonuses band reads the sheet's modifier rows once; the rank
         # sizes prefetch adds one more only when a row exists, and this fixture has none.
+        # +2 (#5206): the band asks which targets equipment reaches, through the
+        # character's thread, equipped-item and covenant-role handlers, which this read
+        # loads for the band; the fixture holds no thread, worn style or engaged role, so
+        # no candidate read follows.
         ModifierTarget.get_for_trait(
             self.character.sheet_data.trait_values.filter(trait__trait_type=TraitType.SKILL)
             .first()
             .trait
         )
-        with self.assertNumQueries(60):
+        with self.assertNumQueries(62):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

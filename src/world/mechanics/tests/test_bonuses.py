@@ -2,19 +2,37 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from decimal import Decimal
 
+from django.db import connection
+from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
+
+from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.constants import ModifierLane, ModifierSize
+from world.checks.factories import CheckTypeAspectFactory, CheckTypeFactory
 from world.checks.modifier_models import ModifierValue
 from world.checks.modifier_values import load_value_table
-from world.classes.factories import CharacterClassLevelFactory
+from world.checks.services import collect_check_modifiers
+from world.classes.factories import AspectFactory, CharacterClassLevelFactory
+from world.covenants.constants import CovenantType
+from world.covenants.factories import CovenantFactory, make_engaged_member
+from world.covenants.models import CovenantLevelBonus
 from world.distinctions.factories import (
     CharacterDistinctionFactory,
     DistinctionEffectFactory,
     DistinctionFactory,
 )
 from world.forms.factories import FormTraitFactory
+from world.items.constants import BodyRegion, EquipmentLayer
+from world.items.factories import (
+    CraftedItemRecipeFactory,
+    CraftingRecipeModifierFactory,
+    EquippedItemFactory,
+    ItemInstanceFactory,
+    QualityTierFactory,
+)
 from world.mechanics.bonuses import bonus_groups_for_sheet
 from world.mechanics.constants import AmountInput
 from world.mechanics.factories import (
@@ -23,9 +41,12 @@ from world.mechanics.factories import (
     ModifierSourceFactory,
     ModifierTargetFactory,
 )
+from world.mechanics.models import ModifierTarget
 from world.mechanics.services import (
     create_distinction_modifiers,
+    ensure_aspect_target,
     get_modifier_breakdown,
+    get_modifier_total,
     sheet_derived_reader,
     value_held_effects,
 )
@@ -253,6 +274,129 @@ class BonusGroupsForSheetTests(TestCase):
         self.assertTrue(row.immune)
 
     def test_query_count_is_bounded(self) -> None:
-        """One read of the rows and one of the rank sizes, however many targets."""
-        with self.assertNumQueries(2):
+        """One read of the rows, one of the rank sizes, and the first load of the thread,
+        equipment and covenant handlers the equipment walk's gate reads, however many
+        targets."""
+        with self.assertNumQueries(5):
             bonus_groups_for_sheet(self.sheet)
+
+
+class BonusBandEquipmentTests(TestCase):
+    """Worn crafted pieces and the equipment walk are sources, as ``get_modifier_total``
+    counts them, including on a target the character has only through equipment."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = CharacterFactory(db_key="BonusBandGearChar")
+        cls.sheet = CharacterSheetFactory(character=cls.character, primary_persona=False)
+        stat = ModifierCategoryFactory(name="stat")
+        cls.stamina = ModifierTargetFactory(category=stat, name="stamina_5206")
+        cls.charm = ModifierTargetFactory(category=stat, name="charm_5206")
+
+        # A card on stamina, plus a worn crafted piece on stamina: one row, two sources.
+        hardy = DistinctionFactory(name="Hardy")
+        DistinctionEffectFactory(distinction=hardy, target=cls.stamina, value_per_rank=5)
+        _grant(cls.sheet, hardy)
+        cls.coat = ItemInstanceFactory(custom_name="Drover's Coat")
+        crafted = CraftedItemRecipeFactory(
+            item_instance=cls.coat, quality_tier=QualityTierFactory(stat_multiplier=Decimal(1))
+        )
+        CraftingRecipeModifierFactory(
+            recipe=crafted.recipe, target=cls.stamina, base_value=3, quality_scale_factor=0
+        )
+        EquippedItemFactory(
+            character=cls.sheet,
+            item_instance=cls.coat,
+            body_region=BodyRegion.TORSO,
+            equipment_layer=EquipmentLayer.BASE,
+        )
+
+        # Charm only through the walk: an engaged covenant's level bonus.
+        CovenantLevelBonus.objects.create(modifier_target=cls.charm, bonus_per_level=2)
+        make_engaged_member(
+            character_sheet=cls.sheet,
+            covenant=CovenantFactory(covenant_type=CovenantType.DURANCE, level=3),
+        )
+
+    def setUp(self) -> None:
+        self.character.equipped_items.invalidate()
+        self.character.covenant_roles.invalidate()
+
+    def _rows(self) -> dict[str, BonusRow]:
+        return {
+            row.target_name: row
+            for group in bonus_groups_for_sheet(self.sheet)
+            for row in group.rows
+        }
+
+    def test_worn_piece_is_a_source_and_in_the_total(self) -> None:
+        stamina = self._rows()["stamina_5206"]
+
+        self.assertEqual(stamina.total, 5 + 3)
+        self.assertEqual(stamina.total, get_modifier_total(self.sheet, self.stamina))
+        self.assertCountEqual(
+            stamina.sources,
+            [
+                BonusSource(label="Hardy", value=5),
+                BonusSource(label="Crafted: Drover's Coat", value=3),
+            ],
+        )
+
+    def test_target_reached_only_through_the_walk_is_listed(self) -> None:
+        charm = self._rows()["charm_5206"]
+
+        self.assertEqual(charm.total, 6)
+        self.assertEqual(charm.total, get_modifier_total(self.sheet, self.charm))
+        self.assertEqual(charm.sources, (BonusSource(label="Equipment & attunement", value=6),))
+
+    def test_query_count_is_bounded_by_what_the_character_holds(self) -> None:
+        """Adding targets the character holds nothing on adds no query."""
+        bonus_groups_for_sheet(self.sheet)  # warm the handlers
+        with CaptureQueriesContext(connection) as before:
+            bonus_groups_for_sheet(self.sheet)
+        stat = ModifierCategoryFactory(name="stat")
+        for index in range(5):
+            ModifierTargetFactory(category=stat, name=f"untouched_{index}")
+        with CaptureQueriesContext(connection) as after:
+            bonus_groups_for_sheet(self.sheet)
+
+        self.assertEqual(len(after), len(before))
+
+
+class BonusBandRollLaneTests(TestCase):
+    """A sized card on an Aspect shows the value the check path adds at the same level."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.sheet = CharacterSheetFactory()
+        CharacterClassLevelFactory(character=cls.sheet, level=4)
+        aspect = AspectFactory(name="Martial 5206")
+        cls.target = ensure_aspect_target(aspect)
+        cls.check_type = CheckTypeFactory(name="Brawl 5206")
+        CheckTypeAspectFactory(check_type=cls.check_type, aspect=aspect, weight=Decimal(1))
+        drilled = DistinctionFactory(name="Drilled")
+        DistinctionEffectFactory(
+            distinction=drilled,
+            target=cls.target,
+            value_per_rank=5,
+            modifier_size=ModifierSize.MINOR,
+        )
+        ModifierValue.objects.create(
+            lane=ModifierLane.CHECK, level=4, size=ModifierSize.MINOR, value=13
+        )
+        _grant(cls.sheet, drilled)
+
+    def test_band_shows_what_the_check_adds(self) -> None:
+        ModifierTarget.clear_trait_cache()
+        check_added = sum(
+            contribution.value
+            for contribution in collect_check_modifiers(self.sheet, self.check_type).contributions
+            if contribution.source_label.endswith("(Martial 5206)")
+        )
+        (group,) = bonus_groups_for_sheet(self.sheet)
+        (row,) = group.rows
+
+        self.assertEqual(self.target.roll_lane, ModifierLane.CHECK)
+        self.assertEqual(check_added, 13)
+        self.assertEqual(row.total, check_added)
+        self.assertEqual(row.sources, (BonusSource(label="Drilled", value=13),))

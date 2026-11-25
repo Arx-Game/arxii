@@ -593,6 +593,88 @@ def equipment_walk_parts(
     )
 
 
+def equipment_walk_target_ids(sheet: CharacterSheet) -> set[int]:
+    """The targets ``equipment_walk_parts`` can give ``sheet`` a non-zero amount on (#5206).
+
+    A superset, read in a bounded number of queries however many targets the game has, so
+    a caller listing every bonus (the sheet's Bonuses band) walks only these targets instead
+    of every one. Keep it in step with ``equipment_walk_parts``'s terms:
+
+    * worn facets' and mantles' tier-0 pulls, and the motif's style coherence, reach only a
+      target whose ``target_resonance`` is one of those threads' or the motif's resonances;
+    * a worn facet's ``FacetEffectBonus`` rows name their own targets;
+    * a facet or mantle thread's crossing choices reach the targets of their conditions'
+      ``ConditionModifierEffect`` rows;
+    * engaged primary covenant roles reach the targets of their ``CovenantRoleBonus`` and
+      ``VowStatScaling`` rows (the anchor role's too) and of any ``CovenantLevelBonus`` row.
+
+    The cached thread, equipment and covenant handlers decide which of these reads run, so a
+    character with no thread, worn style or engaged role runs none.
+    """
+    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
+    from world.covenants.models import (  # noqa: PLC0415
+        CovenantLevelBonus,
+        CovenantRoleBonus,
+        VowStatScaling,
+    )
+    from world.magic.models.crossing import CrossingChoice  # noqa: PLC0415
+
+    char = sheet.character
+    if not isinstance(char, Character):  # threads/equipped_items are Character-only
+        return set()
+    facet_threads = [
+        thread
+        for thread in char.threads.threads_of_kind(TargetKind.FACET)
+        if char.equipped_items.item_facets_for(thread.target_facet)
+    ]
+    threads = facet_threads + char.threads.threads_of_kind(TargetKind.MANTLE)
+    resonance_ids = {thread.resonance_id for thread in threads}
+    target_ids: set[int] = set()
+    if any(item.item_instance.cached_item_styles for item in char.equipped_items):
+        resonance_ids.update(
+            MotifResonance.objects.filter(motif__character=sheet).values_list(
+                "resonance_id", flat=True
+            )
+        )
+    if facet_threads:
+        target_ids.update(
+            FacetEffectBonus.objects.filter(
+                facet_id__in={thread.target_facet_id for thread in facet_threads}
+            ).values_list("target_id", flat=True)
+        )
+    if threads:
+        target_ids.update(
+            ConditionModifierEffect.objects.filter(
+                condition_id__in=CrossingChoice.objects.filter(thread__in=threads).values(
+                    "option__condition_template"
+                )
+            ).values_list("modifier_target_id", flat=True)
+        )
+    roles = char.covenant_roles.currently_engaged_primary_roles()
+    if roles:
+        role_ids = {role.pk for role in roles} | {
+            role.parent_role_id for role in roles if role.parent_role_id is not None
+        }
+        target_ids.update(
+            CovenantRoleBonus.objects.filter(covenant_role__in=roles).values_list(
+                "modifier_target_id", flat=True
+            )
+        )
+        target_ids.update(
+            VowStatScaling.objects.filter(covenant_role_id__in=role_ids).values_list(
+                "modifier_target_id", flat=True
+            )
+        )
+        target_ids.update(CovenantLevelBonus.objects.values_list("modifier_target_id", flat=True))
+    if resonance_ids:
+        target_ids.update(
+            ModifierTarget.objects.filter(target_resonance_id__in=resonance_ids).values_list(
+                "pk", flat=True
+            )
+        )
+    return target_ids
+
+
 # =============================================================================
 # Passive Facet Bonuses (Spec D §5.2)
 # =============================================================================

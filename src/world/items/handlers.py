@@ -209,6 +209,22 @@ class CharacterEquipmentHandler:
                 pieces.append((instance, value))
         return pieces
 
+    def crafted_modifier_target_ids(self) -> set[int]:
+        """Every target a worn piece's recipe outcomes or accents name (#5206).
+
+        A superset of the targets ``crafted_modifier_by_piece`` gives a value on (it also
+        drops a fully concealed piece), read from the cached rows with no query, so a
+        caller listing every bonus asks only these targets.
+        """
+        target_ids: set[int] = set()
+        for piece in self._worn_pieces():
+            for crafted in piece.cached_crafted_recipes:
+                target_ids.update(
+                    outcome.target_id for outcome in crafted.recipe.cached_modifier_outcomes
+                )
+            target_ids.update(accent.target_id for accent in piece.cached_item_accents)
+        return target_ids
+
     def _worn_visibility(self) -> WornVisibility:
         """Memoized visibility over the current equipment snapshot (#2965)."""
         from world.items.services.visibility import compute_worn_visibility  # noqa: PLC0415
