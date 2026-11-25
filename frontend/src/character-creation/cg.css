@@ -2130,12 +2130,13 @@
   color: var(--cg-night-soft);
 }
 /* The paper's muted ink is unreadable on the night ground (1.73:1), so the plate's
-   links take the plate's own soft ink, as its quiet buttons do (#5206). */
+   links take the plate's accent, the ink of its Resubmit button, as the approved demo
+   draws them (#5206). */
 .interview .plate-night .quiet-link {
-  color: var(--cg-night-soft);
+  color: rgb(var(--cg-night-glow));
 }
 .interview .plate-night .quiet-link:hover {
-  color: rgb(var(--cg-night-glow));
+  color: var(--cg-night-soft);
 }
 .interview .plate-night .plate-imprint {
   color: rgb(var(--cg-night-glow));
