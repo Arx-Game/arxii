@@ -118,6 +118,9 @@ class HeldCardBonus:
 
     label: str
     held: HeldEffect
+    #: The card is relocated into a Secret (``CharacterDistinction.is_secret``): its source
+    #: line is shown only to the owner and staff, while its value still counts in the total.
+    secret: bool = False
 
 
 @dataclass(frozen=True)

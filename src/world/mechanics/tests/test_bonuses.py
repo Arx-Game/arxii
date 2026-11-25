@@ -209,12 +209,12 @@ class BonusGroupsForSheetTests(TestCase):
     def _rows(self) -> dict[str, BonusRow]:
         return {
             row.target_name: row
-            for group in bonus_groups_for_sheet(self.sheet)
+            for group in bonus_groups_for_sheet(self.sheet, privileged=True)
             for row in group.rows
         }
 
     def test_groups_and_rows_follow_display_order(self) -> None:
-        groups = bonus_groups_for_sheet(self.sheet)
+        groups = bonus_groups_for_sheet(self.sheet, privileged=True)
 
         self.assertEqual([g.heading for g in groups], ["Aspect", "Roll modifier"])
         self.assertEqual([r.label for r in groups[0].rows], ["warfare", "martial"])
@@ -267,7 +267,7 @@ class BonusGroupsForSheetTests(TestCase):
         )
         _grant(sheet, brave)
 
-        (group,) = bonus_groups_for_sheet(sheet)
+        (group,) = bonus_groups_for_sheet(sheet, privileged=True)
         (row,) = group.rows
 
         self.assertEqual(row.total, 0)
@@ -278,7 +278,7 @@ class BonusGroupsForSheetTests(TestCase):
         equipment and covenant handlers the equipment walk's gate reads, however many
         targets."""
         with self.assertNumQueries(5):
-            bonus_groups_for_sheet(self.sheet)
+            bonus_groups_for_sheet(self.sheet, privileged=True)
 
 
 class BonusBandEquipmentTests(TestCase):
@@ -325,7 +325,7 @@ class BonusBandEquipmentTests(TestCase):
     def _rows(self) -> dict[str, BonusRow]:
         return {
             row.target_name: row
-            for group in bonus_groups_for_sheet(self.sheet)
+            for group in bonus_groups_for_sheet(self.sheet, privileged=True)
             for row in group.rows
         }
 
@@ -351,14 +351,14 @@ class BonusBandEquipmentTests(TestCase):
 
     def test_query_count_is_bounded_by_what_the_character_holds(self) -> None:
         """Adding targets the character holds nothing on adds no query."""
-        bonus_groups_for_sheet(self.sheet)  # warm the handlers
+        bonus_groups_for_sheet(self.sheet, privileged=True)  # warm the handlers
         with CaptureQueriesContext(connection) as before:
-            bonus_groups_for_sheet(self.sheet)
+            bonus_groups_for_sheet(self.sheet, privileged=True)
         stat = ModifierCategoryFactory(name="stat")
         for index in range(5):
             ModifierTargetFactory(category=stat, name=f"untouched_{index}")
         with CaptureQueriesContext(connection) as after:
-            bonus_groups_for_sheet(self.sheet)
+            bonus_groups_for_sheet(self.sheet, privileged=True)
 
         self.assertEqual(len(after), len(before))
 
@@ -393,7 +393,7 @@ class BonusBandRollLaneTests(TestCase):
             for contribution in collect_check_modifiers(self.sheet, self.check_type).contributions
             if contribution.source_label.endswith("(Martial 5206)")
         )
-        (group,) = bonus_groups_for_sheet(self.sheet)
+        (group,) = bonus_groups_for_sheet(self.sheet, privileged=True)
         (row,) = group.rows
 
         self.assertEqual(self.target.roll_lane, ModifierLane.CHECK)

@@ -801,10 +801,12 @@ def _build_buffed_stats(sheet: CharacterSheet) -> dict[str, int]:
     }
 
 
-def _build_bonuses(sheet: CharacterSheet) -> list[BonusGroupEntry]:
+def _build_bonuses(sheet: CharacterSheet, *, privileged: bool) -> list[BonusGroupEntry]:
     """The Bonuses band (#5206): each bonus total by kind, with the sources that gave it.
 
-    Built only when the stats section shows (the caller gates it on ``show_stats``).
+    Built only when the stats section shows (the caller gates it on ``show_stats``). A
+    secret card's source line reaches only a privileged viewer (the owner, staff), the way
+    ``_build_distinctions`` lists the card itself; its value still counts in the total.
     """
     from world.mechanics.bonuses import bonus_groups_for_sheet  # noqa: PLC0415
 
@@ -827,7 +829,7 @@ def _build_bonuses(sheet: CharacterSheet) -> list[BonusGroupEntry]:
                 for row in group.rows
             ],
         )
-        for group in bonus_groups_for_sheet(sheet)
+        for group in bonus_groups_for_sheet(sheet, privileged=privileged)
     ]
 
 
@@ -2499,7 +2501,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             "staff_edit": _build_staff_edit(sheet) if can_edit_npc_sheet(user, sheet) else None,
             **_build_stat_sections(sheet, show=show_stats),
             # #5206 — the Bonuses band follows the stats section's visibility.
-            "bonuses": _build_bonuses(sheet) if show_stats else [],
+            "bonuses": _build_bonuses(sheet, privileged=privileged) if show_stats else [],
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),

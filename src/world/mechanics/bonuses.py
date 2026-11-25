@@ -4,8 +4,8 @@
 It takes the held cards and the flat addends per target and asks a callback for each
 target's equipment shares, so only the source of what is held differs between callers:
 
-* ``bonus_groups_for_sheet(sheet)`` reads a character's ``CharacterModifier`` rows, valued
-  as ``get_modifier_breakdown`` values them (distinction effects through
+* ``bonus_groups_for_sheet(sheet, *, privileged)`` reads a character's ``CharacterModifier``
+  rows, valued as ``get_modifier_breakdown`` values them (distinction effects through
   ``value_held_effects``: sized effects, amplifiers, immunity, derived amounts; home comfort
   and achievement rewards as flat addends; a feature's bonus dropped while clothing covers
   it), each worn crafted piece, and the equipment walk (facets, mantles, motif styles,
@@ -73,8 +73,13 @@ def bonus_groups(  # noqa: PLR0913 - what is held, per target, and how to value 
     equipment: EquipmentSources,
     level_for: LevelForTable,
     derived_reader: DerivedAmountReader,
+    privileged: bool = True,
 ) -> list[BonusGroup]:
     """Every bonus total by kind, each with the sources that gave it (#5206).
+
+    ``privileged`` is the viewer's: the owner or staff read every source line, anyone else
+    reads no line for a secret card (``HeldCardBonus.secret``), whose value still counts in
+    the total, as the buffed statistic counts it.
 
     ``targets`` maps a target's pk to the target (its ``TARGET_RELATIONS`` selected);
     ``cards`` and ``flats`` map a target's pk to what is held on it, in the order a roll
@@ -95,6 +100,7 @@ def bonus_groups(  # noqa: PLR0913 - what is held, per target, and how to value 
             level_for=level_for,
             derived_reader=derived_reader,
             tables=tables,
+            privileged=privileged,
         )
         if bonus is not None:
             by_category[target.category_id].append((target, bonus))
@@ -116,8 +122,10 @@ def bonus_groups(  # noqa: PLR0913 - what is held, per target, and how to value 
     return groups
 
 
-def bonus_groups_for_sheet(sheet: CharacterSheet) -> list[BonusGroup]:
+def bonus_groups_for_sheet(sheet: CharacterSheet, *, privileged: bool) -> list[BonusGroup]:
     """The sheet's bonus totals by kind, each with the sources that gave it (#5206).
+
+    ``privileged`` (the owner or staff) decides whether a secret card's source line shows.
 
     One read of the sheet's modifier rows joined to what the valuation and the labels need,
     the equipment walk's candidate targets (``equipment_walk_target_ids``, a bounded number
@@ -147,8 +155,13 @@ def bonus_groups_for_sheet(sheet: CharacterSheet) -> list[BonusGroup]:
     for row in rows:
         targets[row.target_id] = row.target
         if row.source.distinction_effect is not None:
+            held = row.source.character_distinction
             cards[row.target_id].append(
-                HeldCardBonus(label=_row_card_label(row), held=held_effect_for(row))
+                HeldCardBonus(
+                    label=_row_card_label(row),
+                    held=held_effect_for(row),
+                    secret=held is not None and held.is_secret,
+                )
             )
         elif row.source.source_type not in (SOURCE_TYPE_DISTINCTION, SOURCE_TYPE_UNKNOWN):
             flats[row.target_id].append(FlatBonus(label=row.source.source_display, value=row.value))
@@ -176,6 +189,7 @@ def bonus_groups_for_sheet(sheet: CharacterSheet) -> list[BonusGroup]:
         equipment=equipment,
         level_for=lambda table: sheet_valuation_level(sheet, table),
         derived_reader=sheet_derived_reader(sheet, DerivedInputs()),
+        privileged=privileged,
     )
 
 
@@ -195,6 +209,7 @@ def _bonus_row(  # noqa: PLR0913 - one target's holdings, its equipment, and the
     level_for: LevelForTable,
     derived_reader: DerivedAmountReader,
     tables: dict[str, ValueTable],
+    privileged: bool,
 ) -> BonusRow | None:
     """One target's row, its sources added as ``get_modifier_total`` adds them; None when
     the row adds nothing and grants no immunity.
@@ -226,7 +241,7 @@ def _bonus_row(  # noqa: PLR0913 - one target's holdings, its equipment, and the
     sources = [
         BonusSource(label=card.label, value=detail.final_value)
         for card, detail in zip(cards, valuation.sources, strict=True)
-        if not detail.blocked_by_immunity
+        if not detail.blocked_by_immunity and (privileged or not card.secret)
     ]
     sources.extend(BonusSource(label=flat.label, value=flat.value) for flat in flat_shown)
     sources.extend(equipment)
