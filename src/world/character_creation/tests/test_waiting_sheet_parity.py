@@ -43,7 +43,6 @@ from world.distinctions.factories import DistinctionEffectFactory, DistinctionFa
 from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
 from world.mechanics.constants import STAT_CATEGORY_NAME
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
-from world.roster.models import RosterEntry
 from world.societies.factories import OrganizationFactory, VacancyFactory
 from world.traits.models import Trait
 
@@ -226,9 +225,6 @@ class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
         application = submit_draft_for_review(draft)
         claim_application(application, reviewer=self.staff)
         approve_application(application, reviewer=self.staff)
-        # Approval read the new roster entry's tenures before it wrote the owner's; the
-        # identity map keeps that list, and a request in a fresh process would not have it.
-        RosterEntry.flush_instance_cache()
         sheet = get_character_sheet_queryset().get(
             roster_entry__tenures__player_data__account=self.account
         )
