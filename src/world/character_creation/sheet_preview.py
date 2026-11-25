@@ -1070,7 +1070,10 @@ def _path(plan: _Plan) -> PathDetailSection | None:
 
 def _distinctions(plan: _Plan) -> list[DistinctionEntry]:
     """Mirrors ``_build_distinctions`` for the owner: every card, a card held on two
-    features twice, the secret and cover flags as approval sets them."""
+    features twice, the secret and cover flags as approval sets them, in the sheet's order
+    (``held_distinction_sort_key``)."""
+    from world.distinctions.types import held_distinction_sort_key  # noqa: PLC0415
+
     return [
         DistinctionEntry(
             id=plan.next_id(),
@@ -1082,7 +1085,10 @@ def _distinctions(plan: _Plan) -> list[DistinctionEntry]:
             is_cover=holding.is_cover,
             feature=holding.feature,
         )
-        for holding in plan.holdings
+        for holding in sorted(
+            plan.holdings,
+            key=lambda h: held_distinction_sort_key(h.distinction.name, h.feature),
+        )
     ]
 
 

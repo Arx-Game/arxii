@@ -103,6 +103,7 @@ from world.conditions.models import ConditionInstance
 from world.conditions.thumbnail_services import persona_face_url, placeholder_portrait_url
 from world.covenants.models import CharacterCovenantRole, MentorBond
 from world.distinctions.models import CharacterDistinction
+from world.distinctions.types import held_distinction_sort_key
 from world.forms.models import (
     Build,
     CharacterForm,
@@ -966,8 +967,9 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
     player-gated one): they drop off this public list and surface on the secret tab once learned.
     A non-privileged viewer sees only the non-secret entries; the owner / staff see all, with
     ``is_secret`` flagging which are gated and ``is_cover`` which stand in for one (a stranger
-    reads a cover as any held card). Expects ``sheet.distinctions`` prefetched with
-    ``select_related("distinction")`` so the secret state resolves query-free.
+    reads a cover as any held card). Listed by ``held_distinction_sort_key`` (name, then
+    feature), the order the waiting sheet lists them in too. Expects ``sheet.distinctions``
+    prefetched with ``select_related("distinction")`` so the secret state resolves query-free.
     """
     return [
         DistinctionEntry(
@@ -982,7 +984,10 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             is_cover=privileged and cd.is_cover,
             feature=_feature_name(cd),
         )
-        for cd in sheet.cached_distinctions
+        for cd in sorted(
+            sheet.cached_distinctions,
+            key=lambda cd: held_distinction_sort_key(cd.distinction.name, _feature_name(cd)),
+        )
         if privileged or not cd.is_secret
     ]
 

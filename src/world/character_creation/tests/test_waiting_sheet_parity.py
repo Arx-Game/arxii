@@ -140,6 +140,30 @@ _CREATED_ROW_FIELDS: dict[str, tuple[str, ...]] = {
 }
 
 
+def _by_name_then_feature(pair: tuple[str, str]) -> tuple[str, str]:
+    """The order a sheet lists held cards in: the card's name, then the feature it is on."""
+    name, feature = pair
+    return (name.casefold(), feature.casefold())
+
+
+def waiting_in_pick_order(draft: CharacterDraft) -> list[dict[str, str]]:
+    """The draft's cards in the order the player picked them, named as the sheet names them."""
+    from world.distinctions.models import Distinction
+    from world.forms.models import FormTrait
+
+    cards = Distinction.objects.in_bulk(
+        [e["distinction_id"] for e in draft.draft_data["distinctions"]]
+    )
+    traits = {t.name: t.display_name for t in FormTrait.objects.all()}
+    return [
+        {
+            "name": cards[e["distinction_id"]].name,
+            "feature": traits.get(e.get("feature_trait") or "", ""),
+        }
+        for e in draft.draft_data["distinctions"]
+    ]
+
+
 class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
     """A full draft's waiting sheet equals its owner's in-game sheet after approval."""
 
@@ -363,9 +387,16 @@ class WaitingSheetParityTest(FinalizationTestMixin, TestCase):
         self.assertEqual(len(in_game["goals"]), 1)
         self.assertEqual(len(in_game["actor_sheet"]["introductions"]), 2)
         self.assertEqual(in_game["buffed_stats"], {"charm": 50})
+        # Both sheets list the cards, and a row's card sources, by name then feature, never
+        # in the order the cards were picked or the rows happen to come back from the
+        # database (the fixture picks hair before eyes and Mentor before Grudge).
+        held = [(row["name"], row["feature"]) for row in in_game["distinctions"]]
+        picked = [(row["name"], row["feature"]) for row in waiting_in_pick_order(draft)]
+        self.assertNotEqual(picked, sorted(picked, key=_by_name_then_feature))
+        self.assertEqual(held, sorted(held, key=_by_name_then_feature))
         self.assertEqual(
             [s["label"] for s in in_game["bonuses"][0]["rows"][0]["sources"]],
-            ["Parity Alluring on hair", "Parity Alluring on eyes"],
+            ["Parity Alluring on eyes", "Parity Alluring on hair"],
         )
         self.assertIsNotNone(in_game["magic"])
         self.assertTrue(in_game["standing"]["memberships"])

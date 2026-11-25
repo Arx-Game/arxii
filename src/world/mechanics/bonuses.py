@@ -27,6 +27,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from world.checks.modifier_values import ValueTable, load_value_table
+from world.distinctions.types import held_distinction_sort_key
 from world.mechanics.constants import SOURCE_TYPE_DISTINCTION, SOURCE_TYPE_UNKNOWN
 from world.mechanics.derived_amounts import DerivedInputs
 from world.mechanics.models import CharacterModifier, ModifierTarget
@@ -201,6 +202,12 @@ def _bonus_row(  # noqa: PLR0913 - one target's holdings, its equipment, and the
     ``equipment`` is the worn crafted pieces' and the equipment walk's shares. Immunity
     blocks only the cards' and the flat addends' negatives, as in ``get_modifier_total``.
     """
+    # A row's card sources read in the sheet's card order (``held_distinction_sort_key``),
+    # whatever order the rows or the draft's picks came in; the valuation is order-free.
+    cards = sorted(
+        cards,
+        key=lambda card: held_distinction_sort_key(card.held.effect.distinction.name, card.label),
+    )
     value_table = _value_table(target, cards, tables)
     valuation = value_held_effects(
         [card.held for card in cards],
