@@ -330,7 +330,8 @@ it to the draft's account and staff while the application is submitted, in revie
 (`sheet_preview.WAITING_STATUSES`); anyone else gets 404. Finalize's writers have read halves both
 call (`whisper_lines`, `planned_introductions`, `starting_locked_xp`, `origin_story_state_for`,
 `magic_writer.creation_affinity_base` / `creation_seed_amounts`, and outside the app
-`starting_grant_for`, `item_grants_for`, `starting_languages`, `creation_technique_forms`,
+`starting_grant_for`, `item_grants_for`, `starting_languages`, `species_gift_grants`,
+`creation_technique_forms`, `creation_next_signature`, `glimpse_nudged_shares`,
 `rounded_aura_shares`). When finalize starts writing something a new character's sheet shows,
 mirror it in `sheet_preview.py`: `tests/test_waiting_sheet_parity.py` approves a full draft and
 compares the two payloads key by key, and fails on an in-game key it has not classified.
