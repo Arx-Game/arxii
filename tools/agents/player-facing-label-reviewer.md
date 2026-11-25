@@ -1,6 +1,6 @@
 ---
 name: player-facing-label-reviewer
-description: Checks that text a player actually sees never comes from str(model) / a bare __str__ call. Use when a diff builds a broadcast line, a msg() call, narration, or Interaction content that names a character, participant, or opponent, and when reviewing one. Catches a label that renders as "Sheet for X".
+description: Checks that text a player actually sees never comes from str(model) / a bare __str__ call. Use when a diff builds a broadcast line, a msg() call, narration, or Interaction content that names a character, participant, or opponent, or composes a character's full name, and when reviewing one. Catches a label that renders as "Sheet for X", and a name that repeats its surname.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -80,6 +80,15 @@ exercises.
    renaming) the same way a sheet and a persona diverge. Check any label that
    reads a `.name` off an authored row that also has a display/presentation
    helper.
+6. **A name built by joining stored parts, where one part may already hold
+   another.** A character's key can already end in its family's name, so
+   appending the family's name again prints it twice. The incident (#5206):
+   character creation keys a character "Wren Marrow", and the sheet's
+   identity added the family again, so a character with a family read "Wren
+   Marrow Marrow" on its sheet. Any new place that composes a full name must
+   go through `compose_fullname` (`world/character_sheets/serializers.py`),
+   never `f"{key} {family.name}"`. Flag a composed name that skips it, and ask
+   for a test against a character with a family.
 
 ## What to report
 
