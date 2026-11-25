@@ -213,11 +213,15 @@ def _bonus_row(  # noqa: PLR0913 - one target's holdings, its equipment, and the
     tables: dict[str, ValueTable],
     privileged: bool,
 ) -> BonusRow | None:
-    """One target's row, its sources added as ``get_modifier_total`` adds them; None when
-    the row adds nothing and grants no immunity.
+    """One target's row and its sources; None when the row adds nothing and grants no
+    immunity.
 
-    ``equipment`` is the worn crafted pieces' and the equipment walk's shares. Immunity
-    blocks only the cards' and the flat addends' negatives, as in ``get_modifier_total``.
+    The sources are the ones ``get_modifier_total`` sums, but a sized effect is valued the
+    way the check seam values it, in the target's roll lane (``ModifierTarget.roll_lane``)
+    at the holder's level, where ``get_modifier_total`` keeps the stored flat value; the
+    lane's taper is not applied. ``equipment`` is the worn crafted pieces' and the
+    equipment walk's shares. Immunity blocks only the cards' and the flat addends'
+    negatives, as in ``get_modifier_breakdown``.
     """
     # A row's card sources read in the sheet's card order (``held_distinction_sort_key``),
     # whatever order the rows or the draft's picks came in; the valuation is order-free.

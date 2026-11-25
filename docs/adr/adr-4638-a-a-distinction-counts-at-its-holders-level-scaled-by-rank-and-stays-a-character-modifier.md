@@ -27,7 +27,7 @@ number, by the ratio `get_value_at_rank(rank) / get_value_at_rank(1)`. For a per
 "rank 2 is twice rank 1"; for a `scaling_values` effect it follows the authored curve. The size is
 therefore the size at rank 1. Rank 3 of a Large effect is worth three Large steps at the holder's
 level, in one untapered contribution. This is flagged for the owner: if a rank should instead move
-the size up the ladder, or not count at all, that is a change to `_sized_distinction_value` only.
+the size up the ladder, or not count at all, that is a change to `distinction_effect_value` only.
 
 **Source kind.** Distinction rows stay in `ModifierSourceKind.CHARACTER` and taper in that pile.
 The other `CharacterModifier` rows that can reach a check-scoped target, achievement rewards and

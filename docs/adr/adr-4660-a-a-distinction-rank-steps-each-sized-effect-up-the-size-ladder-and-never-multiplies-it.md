@@ -15,7 +15,7 @@ distinction can step one effect Minor, Minor, Large while its other effects keep
 sized effect with no rank rows is worth the same at every rank. The sign still comes from the
 effect's authored rank-1 value. `value_per_rank` and `scaling_values` no longer scale a sized effect
 on checks; they still drive unsized effects and every non-check reader. The change is confined to
-`_sized_distinction_value` in `world/mechanics/services.py`, which reads
+`distinction_effect_value` in `world/mechanics/services.py`, which reads
 `DistinctionEffect.size_at_rank`; amplification, immunity and the light taper apply to the result
 as before.
 
