@@ -143,6 +143,36 @@ class SkillEntry(TypedDict):
     specializations: list[SpecializationEntry]
 
 
+class BonusSourceEntry(TypedDict):
+    """One thing that gives part of a bonus total (#5206): a card, a home's comfort."""
+
+    label: str
+    value: int
+
+
+class BonusRowEntry(TypedDict):
+    """One thing the character's bonuses add to, with its total and sources (#5206).
+
+    ``label`` and ``definition`` are the term as a card prints it and its hover text.
+    ``immune`` is set when a source grants immunity to negative values on the target.
+    """
+
+    target: str
+    label: str
+    definition: str
+    total: int
+    immune: bool
+    sources: list[BonusSourceEntry]
+
+
+class BonusGroupEntry(TypedDict):
+    """One kind of bonus (a modifier category) and its rows, for the Bonuses band."""
+
+    category: str
+    heading: str
+    rows: list[BonusRowEntry]
+
+
 class PathHistoryEntry(TypedDict):
     """A single entry in the character's path progression history."""
 

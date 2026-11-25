@@ -140,6 +140,14 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Whether this modifier target is currently active in the game",
     )
+    spent_at_creation = models.BooleanField(
+        default=False,
+        help_text=(
+            "A bonus on this target is used up inside character creation (technique picks, "
+            "the training pool, the statistics budget), so the sheet's Bonuses band leaves it "
+            "out (#5206)."
+        ),
+    )
     is_styleable = models.BooleanField(
         default=False,
         help_text=(

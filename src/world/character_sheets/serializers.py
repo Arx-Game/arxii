@@ -40,6 +40,9 @@ from world.character_sheets.types import (
     AuraShareEntry,
     AuraThemingData,
     BeatEntry,
+    BonusGroupEntry,
+    BonusRowEntry,
+    BonusSourceEntry,
     CombatStyleSection,
     CovenantRoleEntry,
     DistinctionEntry,
@@ -783,6 +786,36 @@ def _build_buffed_stats(sheet: CharacterSheet) -> dict[str, int]:
         for tv in sheet.cached_trait_values
         if modifiers.get(tv.trait.pk, 0) != 0
     }
+
+
+def _build_bonuses(sheet: CharacterSheet) -> list[BonusGroupEntry]:
+    """The Bonuses band (#5206): each bonus total by kind, with the sources that gave it.
+
+    Built only when the stats section shows (the caller gates it on ``show_stats``).
+    """
+    from world.mechanics.bonuses import bonus_groups_for_sheet  # noqa: PLC0415
+
+    return [
+        BonusGroupEntry(
+            category=group.category_name,
+            heading=group.heading,
+            rows=[
+                BonusRowEntry(
+                    target=row.target_name,
+                    label=row.label,
+                    definition=row.definition,
+                    total=row.total,
+                    immune=row.immune,
+                    sources=[
+                        BonusSourceEntry(label=source.label, value=source.value)
+                        for source in row.sources
+                    ],
+                )
+                for row in group.rows
+            ],
+        )
+        for group in bonus_groups_for_sheet(sheet)
+    ]
 
 
 def _build_stat_sections(sheet: CharacterSheet, *, show: bool) -> dict[str, dict[str, int]]:
@@ -2448,6 +2481,8 @@ class CharacterSheetSerializer(serializers.Serializer):
             # #3988 — the stored values staff edit mode edits; None for anyone else.
             "staff_edit": _build_staff_edit(sheet) if can_edit_npc_sheet(user, sheet) else None,
             **_build_stat_sections(sheet, show=show_stats),
+            # #5206 — the Bonuses band follows the stats section's visibility.
+            "bonuses": _build_bonuses(sheet) if show_stats else [],
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),

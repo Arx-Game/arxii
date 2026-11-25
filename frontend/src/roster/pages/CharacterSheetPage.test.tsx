@@ -173,6 +173,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     },
     stats: {},
     buffed_stats: {},
+    bonuses: [],
     skills: [],
     path: null,
     distinctions: [],

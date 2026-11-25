@@ -62,6 +62,7 @@ from world.distinctions.types import (
     build_distinction_entry,
     feature_of,
 )
+from world.mechanics.terms import term_definition, term_label
 from world.societies.models import Organization, OrganizationType
 
 if TYPE_CHECKING:
@@ -890,12 +891,6 @@ def _effect_word(effect: DistinctionEffect) -> str:
     return f"{sign}{name}"
 
 
-def term_label(target_name: str) -> str:
-    """A modifier target's name as a card prints it: ``physical_development`` -> ``physical
-    development``. Lowercase on purpose; the card's line reads ``+10 sailing``."""
-    return target_name.replace("_", " ").strip().lower()
-
-
 def effect_terms(effects: list[DistinctionEffect]) -> tuple[OfferEffectTerm, ...]:
     """The effect rows with their magnitudes, for the life page's cards (#4872)."""
     return tuple(
@@ -915,7 +910,8 @@ def terms_for(offers: Iterable[VisibleOffer]) -> list[OfferTerm]:
     Called by the offers view, once per response. The definition comes from the row
     that owns the term (ruled 2026-10-19): ``Trait.description`` for a target bound to
     a stat or skill, ``Aspect.description`` for one bound to an aspect, otherwise the
-    target's own ``description``. One query over the targets, joined to both.
+    target's own ``description`` (``term_definition``, which the sheet's Bonuses band also
+    reads). One query over the targets, joined to both.
     """
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
@@ -925,18 +921,14 @@ def terms_for(offers: Iterable[VisibleOffer]) -> list[OfferTerm]:
     targets = ModifierTarget.objects.filter(name__in=names).select_related(
         "target_trait", "target_aspect"
     )
-    out: list[OfferTerm] = []
-    for target in sorted(targets, key=lambda t: t.name):
-        if target.target_trait_id is not None:
-            definition = target.target_trait.description
-        elif target.target_aspect_id is not None:
-            definition = target.target_aspect.description
-        else:
-            definition = target.description
-        out.append(
-            OfferTerm(name=target.name, label=term_label(target.name), definition=definition)
+    return [
+        OfferTerm(
+            name=target.name,
+            label=term_label(target.name),
+            definition=term_definition(target),
         )
-    return out
+        for target in sorted(targets, key=lambda t: t.name)
+    ]
 
 
 def effect_line(effects: list[DistinctionEffect]) -> str:

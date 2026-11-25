@@ -7,9 +7,10 @@
  * in a full-width band instead.
  *
  * Gating is render-or-vanish. The goals band is absent unless the payload carried
- * goals, the abilities band is absent unless it carried stats or skills, and a viewer
- * who gets neither is offered the rumor band in their place — the page keeps its shape
- * for a stranger, a friend and the character's own player alike.
+ * goals, the abilities band is absent unless it carried stats or skills, the bonuses band
+ * is absent unless it carried bonuses, and a viewer who gets no guidelines is offered the
+ * rumor band in their place — the page keeps its shape for a stranger, a friend and the
+ * character's own player alike.
  */
 
 import type { ReactNode } from 'react';
@@ -25,6 +26,7 @@ import type {
 import { AbilitiesBand } from './AbilitiesBand';
 import { FightingStyle } from './FightingStyle';
 import { BeatsBand } from './BeatsBand';
+import { BonusesBand } from './BonusesBand';
 import { CastRow } from './CastRow';
 import { GuidelinesBand } from './GuidelinesBand';
 import { Entries, Entry, Glance, Heading, Ledger, Prose, Stack, Tag } from './primitives';
@@ -133,6 +135,8 @@ export function SheetPanel({ sheet, isMyCharacter, rumor, languages }: SheetPane
       {hasAbilities && (
         <AbilitiesBand stats={sheet.stats} buffedStats={sheet.buffed_stats} skills={sheet.skills} />
       )}
+
+      {sheet.bonuses.length > 0 && <BonusesBand groups={sheet.bonuses} />}
 
       <div className="refsheet-columns-even">
         {((sheet.appearance.description || '') !== '' || editing) && (

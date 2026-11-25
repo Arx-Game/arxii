@@ -46,6 +46,7 @@ function payload(overrides: { family: { id: number; name: string } | null }) {
     },
     stats: {},
     buffed_stats: {},
+    bonuses: [],
     skills: [],
     path: null,
     distinctions: [],
@@ -176,5 +177,68 @@ describe('SheetPanel', () => {
     expect(rows[1]).toHaveTextContent(/^Agility3$/);
     expect(rows[2]).toHaveTextContent('Wits5 (4 with debuffs)');
     expect(screen.getAllByTestId('stat-buffed')).toHaveLength(2);
+  });
+
+  it('draws the Bonuses band: groups, signed totals, sources, immunity (#5206)', () => {
+    const sheet = payload({ family: null });
+    sheet.bonuses = [
+      {
+        category: 'aspect',
+        heading: 'Aspect',
+        rows: [
+          {
+            target: 'martial',
+            label: 'martial',
+            definition: 'The fighting arts.',
+            total: 15,
+            immune: false,
+            sources: [
+              { label: 'Example Soldier', value: 5 },
+              { label: "Example Drillmaster's Child", value: 10 },
+            ],
+          },
+        ],
+      },
+      {
+        category: 'roll_modifier',
+        heading: 'Roll modifier',
+        rows: [
+          {
+            target: 'poise',
+            label: 'poise',
+            definition: '',
+            total: -10,
+            immune: false,
+            sources: [{ label: 'Example Stiff Manner', value: -10 }],
+          },
+          {
+            target: 'fear',
+            label: 'fear',
+            definition: '',
+            total: 0,
+            immune: true,
+            sources: [],
+          },
+        ],
+      },
+    ];
+    renderSheet(sheet);
+    expect(screen.getByText('Bonuses')).toBeInTheDocument();
+    expect(screen.getByText('Aspect')).toBeInTheDocument();
+    expect(screen.getByText('Roll modifier')).toBeInTheDocument();
+    expect(screen.getByText('martial')).toHaveAttribute('title', 'The fighting arts.');
+    expect(screen.getByText('+15')).toBeInTheDocument();
+    expect(
+      screen.getByText("Example Soldier +5, Example Drillmaster's Child +10")
+    ).toBeInTheDocument();
+    expect(screen.getByText('\u221210')).toBeInTheDocument();
+    expect(screen.getByText('Example Stiff Manner \u221210')).toBeInTheDocument();
+    expect(screen.getByText('Immune to negative')).toBeInTheDocument();
+    expect(screen.getAllByTestId('bonus-row')).toHaveLength(3);
+  });
+
+  it('has no Bonuses band when the payload carries none', () => {
+    renderSheet(payload({ family: null }));
+    expect(screen.queryByText('Bonuses')).not.toBeInTheDocument();
   });
 });

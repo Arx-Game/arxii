@@ -29,6 +29,9 @@ Service functions for modifier operations:
 - **Facet effect bonuses** (#4815): `passive_facet_bonuses` also adds a worn, threaded facet's `FacetEffectBonus` rows (`world/magic/models/motifs.py`) on a maneuver-effect target, `amount_tenths` scaled through the `FACET_EFFECT_BONUS` lane at the facet thread's rung (`thread_rung`, #5093); the facet names the effect, whatever its thread's resonance.
 - **`get_modifier_total(sheet, modifier_target)`**: Get total for a specific ModifierTarget.
 - **`get_modifier_breakdown(sheet, modifier_target)`**: Get detailed breakdown with amplification/immunity.
+- **Shared bonus valuation** (#5206): `distinction_effect_value(effect, *, rank, value, level, value_table, derived_reader)` values one held effect (derived amount, sized table value, else the stored value); `value_held_effects(held, *, level, value_table, derived_reader)` values a target's `HeldEffect`s (`types.py`) with amplification and immunity and returns a `HeldEffectsValuation`. `get_modifier_breakdown` calls it with a character's rows (`held_effect_for`, `sheet_derived_reader`, `sheet_valuation_level`); a caller with no rows (a character-creation draft) calls it with the cards it holds.
+- **`bonus_groups_for_sheet(sheet)`** (`bonuses.py`, #5206): the sheet's Bonuses band, `BonusGroup`s of `BonusRow`s with their `BonusSource`s (`types.py`), from one read of the sheet's modifier rows valued as the breakdown values them (a lane table only for a target with a `value_lane`). Leaves out `spent_at_creation` and inactive targets and rows totalling 0 that grant no immunity. `CharacterSheetSerializer` returns it as `bonuses` when the stats section shows.
+- **`term_label(name)` / `term_definition(target)`** (`terms.py`, #5206): a target's name and definition as a card prints them; `character_creation.offers.terms_for` and the Bonuses band both read them.
 - **`create_distinction_modifiers(char_distinction)`**: Create modifiers when distinction is granted.
 - **`delete_distinction_modifiers(char_distinction)`**: Clean up when distinction is removed.
 - **`update_distinction_rank(char_distinction)`**: Recalculate values when rank changes.
@@ -58,6 +61,7 @@ Slim pointer registry for things that can be modified. Resonance and Affinity do
 | description | TextField | Description of the target |
 | display_order | PositiveIntegerField | Ordering within category |
 | is_active | BooleanField | Whether currently active |
+| spent_at_creation | BooleanField | A bonus used up inside character creation (#5206); the Bonuses band leaves it out. Set by migration 0485 on `starting_technique_picks`, `magic_training_points`, `attribute_free_points`, `max_height_band_bonus`; editable in admin |
 | target_trait | FK(Trait, null) | FK to the Trait this target modifies (stat-category targets) |
 | target_capability | OneToOne(CapabilityType, null) | FK to the CapabilityType this target represents |
 | target_check_type | OneToOne(CheckType, null) | FK to the CheckType this target represents |

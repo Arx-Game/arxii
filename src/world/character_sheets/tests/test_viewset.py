@@ -2959,12 +2959,14 @@ class TestCharacterSheetQueryCount(TestCase):
         # +0 (#4921): the combat style rides the sheet's own query (select_related); a
         # sheet with a style pays four more (gear kinds, skill value, Tradition, vows). This
         # fixture's character has none.
+        # +1 (#5206): the Bonuses band reads the sheet's modifier rows once; the rank
+        # sizes prefetch adds one more only when a row exists, and this fixture has none.
         ModifierTarget.get_for_trait(
             self.character.sheet_data.trait_values.filter(trait__trait_type=TraitType.SKILL)
             .first()
             .trait
         )
-        with self.assertNumQueries(59):
+        with self.assertNumQueries(60):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

@@ -823,6 +823,54 @@
   white-space: nowrap;
   color: hsl(var(--muted-foreground));
 }
+/* The Bonuses band (#5206): one group per bonus kind, a row per total with its sources. */
+.refsheet-bonus-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1.25rem 2rem;
+}
+.refsheet-bonus-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.refsheet-bonus-heading {
+  margin: 0;
+  font-family: var(--sheet-caps);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: hsl(var(--accent));
+}
+.refsheet-bonus {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 0.75rem;
+  border-top: 1px solid var(--sheet-hair);
+  padding-top: 0.3rem;
+  font-size: 1.0625rem;
+}
+/* A term whose definition shows on hover, marked the way a card marks one. */
+.refsheet-term {
+  text-decoration: underline dotted hsl(var(--accent));
+  text-underline-offset: 4px;
+  cursor: help;
+}
+.refsheet-bonus-total {
+  font-family: var(--sheet-sans);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.refsheet-bonus-from {
+  grid-column: 1 / -1;
+  font-size: 0.875rem;
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+}
 .refsheet-skills {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));

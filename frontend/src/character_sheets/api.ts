@@ -550,6 +550,32 @@ export type StaffEditBody = Partial<
   Omit<CharacterSheetStaffEdit, 'prose' | 'rows'> & Record<StaffProseField, string>
 >;
 
+/** #5206 — one thing that gives part of a bonus total: a card, a home's comfort. */
+export interface CharacterSheetBonusSource {
+  label: string;
+  value: number;
+}
+
+/** #5206 — one thing the character's bonuses add to, with its total and sources. */
+export interface CharacterSheetBonusRow {
+  target: string;
+  /** The term as a card prints it ("martial"). */
+  label: string;
+  /** The term's definition, the same hover text the card's term shows. */
+  definition: string;
+  total: number;
+  /** A source grants immunity to negative values on this target. */
+  immune: boolean;
+  sources: CharacterSheetBonusSource[];
+}
+
+/** #5206 — one kind of bonus (a modifier category) and its rows. */
+export interface CharacterSheetBonusGroup {
+  category: string;
+  heading: string;
+  rows: CharacterSheetBonusRow[];
+}
+
 export interface CharacterSheetPayload {
   id: number;
   can_edit: boolean;
@@ -564,6 +590,11 @@ export interface CharacterSheetPayload {
    * buffed value differs from the stored one in `stats`.
    */
   buffed_stats: Record<string, number>;
+  /**
+   * #5206 — each bonus total by kind, with what gave it. Empty when the viewer cannot see
+   * the stats section.
+   */
+  bonuses: CharacterSheetBonusGroup[];
   skills: CharacterSheetSkill[];
   path: CharacterSheetPath | null;
   distinctions: CharacterSheetDistinction[];
