@@ -329,6 +329,19 @@ def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
     )
 
 
+def compose_fullname(key: str, family_name: str) -> str:
+    """The real full name: "FirstName FamilyName", the family's name said once (#5206).
+
+    A character made by character creation is already keyed "FirstName FamilyName"
+    (``_build_character_full_name``), so the family's name is added only to a key that does
+    not already end with it (a staff-made "Alaric" in house Valardin reads "Alaric Valardin").
+    The waiting sheet composes its name the same way.
+    """
+    if not family_name or key == family_name or key.endswith(f" {family_name}"):
+        return key
+    return f"{key} {family_name}"
+
+
 def _resolve_identity_reveal(
     character: ObjectDB,
     family: Any,
@@ -340,8 +353,7 @@ def _resolve_identity_reveal(
         # The presented (mask/cover) name is already resolved; never compose the real db_key
         # with a family name here, and withhold the real progression path.
         return name, None
-    # Compose the real fullname: "FirstName FamilyName" or just the db_key.
-    fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
+    fullname = compose_fullname(character.db_key, family.name if family is not None else "")
     # Latest path from prefetched path_history (ordered by -selected_at).
     path_history: list = sheet.cached_path_history
     path_value = _id_name(path_history[0].path) if path_history else None

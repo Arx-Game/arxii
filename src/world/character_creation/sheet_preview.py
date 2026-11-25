@@ -586,6 +586,7 @@ def _identity(plan: _Plan) -> IdentitySection:
         _PRONOUNS_BY_GENDER_KEY,
     )
     from world.character_sheets.models import Heritage  # noqa: PLC0415
+    from world.character_sheets.serializers import compose_fullname  # noqa: PLC0415
     from world.game_clock.services import format_ic_month_day, get_ic_now  # noqa: PLC0415
 
     draft = plan.draft
@@ -621,7 +622,7 @@ def _identity(plan: _Plan) -> IdentitySection:
         card = TarotCard.objects.filter(name=card_name).first()
         tarot = IdNameRef(id=card.pk, name=card.name) if card is not None else None
     realm = draft.selected_area.realm if draft.selected_area is not None else None
-    fullname = f"{plan.full_name} {plan.family_ref['name']}" if plan.family_ref else plan.full_name
+    fullname = compose_fullname(plan.full_name, plan.family_ref["name"] if plan.family_ref else "")
     # ``set_worship_declaration`` writes a row whenever either being is picked; a CG row's
     # public faith is sincere by default (``WorshipDeclaration.public_is_sincere``).
     declared = draft.public_worship is not None or draft.secret_worship is not None
