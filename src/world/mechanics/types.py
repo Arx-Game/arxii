@@ -108,6 +108,28 @@ class HeldEffectsValuation:
 
 
 @dataclass(frozen=True)
+class HeldCardBonus:
+    """One card's effect on one target, named as the Bonuses band names it (#5206).
+
+    ``bonus_groups`` in ``bonuses.py`` values these through ``value_held_effects``. The
+    sheet builds them from its ``CharacterModifier`` rows; a character-creation draft
+    builds them from the cards it holds.
+    """
+
+    label: str
+    held: HeldEffect
+
+
+@dataclass(frozen=True)
+class FlatBonus:
+    """A flat addend on one target outside the cards (a home's comfort, an achievement
+    reward), as ``get_modifier_total`` adds it; immunity still blocks a negative one."""
+
+    label: str
+    value: int
+
+
+@dataclass(frozen=True)
 class BonusSource:
     """One thing that gives part of a bonus on the sheet's Bonuses band (#5206)."""
 

@@ -72,8 +72,8 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.currency.models import DistinctionPurseDrain
-    from world.distinctions.models import CharacterDistinction
+    from world.currency.models import DistinctionPurseDrain, DistinctionStartingGrant
+    from world.distinctions.models import CharacterDistinction, Distinction
     from world.items.models import ItemInstance, MaterialCategory
     from world.scenes.models import Persona
     from world.societies.models import Organization
@@ -2015,6 +2015,21 @@ def fund_fame_display(persona: Persona, *, amount: int) -> int:
 PURSE_DRAIN_REASON = "Somehow Always Broke weekly drain"
 
 
+def starting_grant_for(distinction: Distinction) -> DistinctionStartingGrant | None:
+    """The inheritance a distinction pays its holder at creation, or None (#4062, #5206).
+
+    The read half of ``apply_starting_grant``: what would be paid, without paying it. A
+    character-creation draft's waiting sheet shows the purse a new character starts with
+    from it.
+    """
+    from world.currency.models import DistinctionStartingGrant  # noqa: PLC0415
+
+    try:
+        return distinction.starting_grant
+    except DistinctionStartingGrant.DoesNotExist:
+        return None
+
+
 def apply_starting_grant(char_dist: CharacterDistinction) -> CurrencyTransfer | None:
     """Pay a distinction's authored inheritance into its holder's purse (#4062).
 
@@ -2024,11 +2039,8 @@ def apply_starting_grant(char_dist: CharacterDistinction) -> CurrencyTransfer | 
     can repeat (a staff grant in play, a re-sync). Returns the audited transfer,
     or ``None`` when the distinction carries no ``DistinctionStartingGrant``.
     """
-    from world.currency.models import DistinctionStartingGrant  # noqa: PLC0415
-
-    try:
-        grant = char_dist.distinction.starting_grant
-    except DistinctionStartingGrant.DoesNotExist:
+    grant = starting_grant_for(char_dist.distinction)
+    if grant is None:
         return None
     purse = get_or_create_purse(char_dist.character)
     return transfer(

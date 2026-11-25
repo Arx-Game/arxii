@@ -5979,6 +5979,28 @@ paths:
               schema:
                 $ref: '#/components/schemas/CharacterDraft'
           description: ''
+  /api/character-creation/drafts/{id}/sheet/:
+    get:
+      operationId: character_creation_drafts_sheet_retrieve
+      description: |-
+        The waiting sheet (#5206): the submitted draft laid out as the in-game sheet.
+
+        The draft's own account and staff may read it, and only while its application is
+        submitted, in review, or sent back for revisions. Anyone else, and any other state,
+        gets 404, so a draft's existence is not disclosed.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-creation/drafts/{id}/submit/:
     post:
       operationId: character_creation_drafts_submit_create

@@ -41,7 +41,7 @@ from world.magic.types.technique_effects import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
@@ -144,6 +144,29 @@ def _variant_form(  # noqa: PLR0913
         is_early=is_early,
         effect_summary=variant.cached_effect_summary,
     )
+
+
+def creation_technique_forms(
+    technique: Technique, resonance_ids: Sequence[int]
+) -> list[TechniqueFormPayload]:
+    """The forms a new character can work of a technique, before the character exists.
+
+    What ``available_technique_forms`` gives a caster whose only thread on the gift is the
+    latent level-0 GIFT thread creation provisions, holding ``resonance_ids`` in its row
+    order: the base form as the default, then one locked form ahead per resonance. Read by
+    the character-creation waiting sheet (#5206); an early form bought in creation is not
+    reflected here.
+    """
+    forms = [_base_form(technique, is_default=True)]
+    seen: set[int] = set()
+    for resonance_id in resonance_ids:
+        ahead = _next_locked_variant(technique, resonance_id=resonance_id, thread_level=0)
+        if ahead is not None and ahead.pk not in seen:
+            seen.add(ahead.pk)
+            forms.append(
+                _variant_form(technique, ahead, thread_level=0, is_default=False, is_locked=True)
+            )
+    return forms
 
 
 def _next_locked_variant(technique: Technique, *, resonance_id: int, thread_level: int):

@@ -93,6 +93,7 @@ from world.character_creation.serializers import (
     SpeciesSerializer,
     StartingAreaSerializer,
     TraditionSerializer,
+    WaitingSheetSerializer,
     favored_affinity_names_by_tradition,
     favored_gift_names_by_tradition,
     schooling_rows,
@@ -1085,6 +1086,38 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             option_sets, many=True, context={"resonance_id": resonance_id}
         )
         return Response(serializer.data)
+
+    @extend_schema(responses={200: WaitingSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def sheet(self, request: Request, pk: int | None = None) -> Response:
+        """The waiting sheet (#5206): the submitted draft laid out as the in-game sheet.
+
+        The draft's own account and staff may read it, and only while its application is
+        submitted, in review, or sent back for revisions. Anyone else, and any other state,
+        gets 404, so a draft's existence is not disclosed.
+        """
+        from world.character_creation.sheet_preview import (  # noqa: PLC0415
+            waiting_sheet_application,
+        )
+
+        try:
+            draft_id = int(str(pk))
+        except ValueError:
+            raise Http404 from None
+        drafts = CharacterDraft.objects.filter(pk=draft_id)
+        if not request.user.is_staff:
+            drafts = drafts.filter(account=request.user)
+        draft = drafts.select_related(
+            "selected_area__realm",
+            "selected_beginnings",
+            "selected_species",
+            "selected_gender",
+            "selected_path",
+            "selected_tradition",
+        ).first()
+        if draft is None or waiting_sheet_application(draft) is None:
+            raise Http404
+        return Response(WaitingSheetSerializer(draft).data)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def submit(self, request: Request, pk: int | None = None) -> Response:

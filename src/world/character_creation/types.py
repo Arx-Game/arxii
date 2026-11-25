@@ -1,9 +1,37 @@
 """Type declarations for character creation."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, TypedDict
 
 if TYPE_CHECKING:
+    from world.character_sheets.types import (
+        ActorSheetSection,
+        AppearanceSection,
+        BeatEntry,
+        BonusGroupEntry,
+        CombatStyleSection,
+        CovenantRoleEntry,
+        DistinctionEntry,
+        GoalEntry,
+        IdentitySection,
+        IdNameRef,
+        KeyringEntry,
+        LookEntry,
+        MagicSection,
+        MentorBondEntry,
+        NaturalWeaponEntry,
+        OrgDomainEntry,
+        PathDetailSection,
+        PersonaEntry,
+        SkillEntry,
+        StandingSection,
+        StorySection,
+        ThemingSection,
+        TieCardEntry,
+        WornEntry,
+    )
     from world.magic.types.teaching_fit import TeachingFit
 
 # Stage number → list of human-readable error messages.
@@ -174,7 +202,7 @@ class MagicTrainingPool:
     affinity_bonus: int
     total: int
     required_spend: int
-    fit: "TeachingFit"
+    fit: TeachingFit
     sources: list[DistinctionBonusSource]
 
 
@@ -185,6 +213,15 @@ class OrganizationChoice:
     id: int
     name: str
     is_covert: bool
+
+
+@dataclass(frozen=True)
+class PlannedIntroduction:
+    """One Introduction a draft answered, as the white journal finalize writes (#5206)."""
+
+    kind: str
+    title: str
+    body: str
 
 
 @dataclass(frozen=True)
@@ -202,3 +239,115 @@ class FinalTouchesCard:
     prompt: str
     detail: str
     choices: tuple[OrganizationChoice, ...] = ()
+
+
+# --- The waiting sheet (#5206) ---------------------------------------------------------
+
+
+class AwaitingSection(TypedDict):
+    """The application's state, for the waiting sheet's "Awaiting approval" mark."""
+
+    status: str
+    status_label: str
+
+
+class PurseSection(TypedDict):
+    """The purse a new character starts with, shaped like ``/api/status/purse/``."""
+
+    balance: int
+
+
+class CarriedItemEntry(TypedDict):
+    """One thing a new character will carry, shaped like an inventory row as the Estate
+    tab's Carried block reads it. ``id`` is below zero: no item exists before approval."""
+
+    id: int
+    display_name: str
+    quality_tier: IdNameRef | None
+    suggested_value: int | None
+
+
+class XpLedgerSection(TypedDict):
+    """The XP ledger a new character starts with, shaped like the sheet's ``xp-ledger``."""
+
+    earned: int
+    spent: int
+    locked: int
+
+
+class StartingLanguageEntry(TypedDict):
+    """One language a new character speaks, shaped like a ``/api/species/my-languages/`` row."""
+
+    language_id: int
+    name: str
+    fluency: int
+    band: str
+    is_current: bool
+    effective_fluency: int
+    effective_band: str
+    temporary_sources: list[str]
+
+
+class OwnSecretEntry(TypedDict):
+    """One of the character's own secrets, shaped like a ``/api/secrets/known/`` row read by
+    its subject. ``id`` is below zero: the Secret is made at approval."""
+
+    id: int
+    level: str
+    content: str
+    provenance: str
+    found_at: str | None
+    can_grieve: bool
+    subject: str
+    category: str
+    consequences: str
+    author: str
+    anchored_to: list[dict[str, str]]
+
+
+class WaitingSheetPayload(TypedDict):
+    """The waiting sheet's payload (``sheet_preview.build_waiting_sheet``, #5206).
+
+    The in-game sheet's keys (``CharacterSheetSerializer.to_representation``) in its own
+    section types, then the keys only the waiting page reads (from ``awaiting`` on).
+    """
+
+    id: None
+    can_edit: bool
+    identity: IdentitySection
+    appearance: AppearanceSection
+    staff_edit: None
+    stats: dict[str, int]
+    buffed_stats: dict[str, int]
+    bonuses: list[BonusGroupEntry]
+    skills: list[SkillEntry]
+    path: PathDetailSection | None
+    distinctions: list[DistinctionEntry]
+    magic: MagicSection | None
+    story: StorySection
+    goals: list[GoalEntry]
+    beats: list[BeatEntry]
+    standing: StandingSection
+    covenants: list[CovenantRoleEntry]
+    actor_sheet: ActorSheetSection
+    personas: list[PersonaEntry]
+    theming: ThemingSection
+    profile_picture: None
+    viewer_is_friend: bool
+    current_residence: IdNameRef | None
+    looks: list[LookEntry]
+    plate_ink: str
+    worn: list[WornEntry]
+    natural_weapons: list[NaturalWeaponEntry]
+    combat_style: CombatStyleSection | None
+    mentors: list[MentorBondEntry]
+    domains: list[OrgDomainEntry]
+    keyring: list[KeyringEntry]
+    ties: list[TieCardEntry]
+    ties_ap_this_week: int
+    awaiting: AwaitingSection
+    purse: PurseSection
+    carried: list[CarriedItemEntry]
+    xp_ledger: XpLedgerSection
+    languages: list[StartingLanguageEntry]
+    secrets: list[OwnSecretEntry]

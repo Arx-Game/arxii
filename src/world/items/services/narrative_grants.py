@@ -16,8 +16,8 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.character_sheets.models import CharacterSheet
-    from world.distinctions.models import CharacterDistinction
-    from world.items.models import ItemInstance, ItemTemplate
+    from world.distinctions.models import CharacterDistinction, Distinction
+    from world.items.models import DistinctionItemGrant, ItemInstance, ItemTemplate
 
 
 def grant_touchstone_item_to_character(
@@ -44,6 +44,22 @@ def grant_touchstone_item_to_character(
     return ItemInstance.objects.create(template=template, holder_character_sheet=character_sheet)
 
 
+def item_grants_for(distinction: Distinction) -> list[DistinctionItemGrant]:
+    """The keepsakes a distinction mints for its holder at creation (#4398, #5206).
+
+    The read half of ``apply_item_grants``: the active templates' grant rows, without
+    minting anything. A character-creation draft's waiting sheet lists what a new
+    character carries from it.
+    """
+    from world.items.models import DistinctionItemGrant  # noqa: PLC0415
+
+    return list(
+        DistinctionItemGrant.objects.filter(
+            distinction=distinction, item_template__is_active=True
+        ).select_related("item_template")
+    )
+
+
 def apply_item_grants(char_dist: CharacterDistinction) -> list[ItemInstance]:
     """Mint a distinction's authored keepsakes into its holder's inventory (#4398).
 
@@ -60,12 +76,9 @@ def apply_item_grants(char_dist: CharacterDistinction) -> list[ItemInstance]:
     on the live server by #4398's real-testing pass). Returns the instances minted,
     empty when the distinction carries none.
     """
-    from world.items.models import DistinctionItemGrant  # noqa: PLC0415
     from world.items.services.materialize import materialize_item_game_object  # noqa: PLC0415
 
-    grants = DistinctionItemGrant.objects.filter(
-        distinction=char_dist.distinction, item_template__is_active=True
-    ).select_related("item_template")
+    grants = item_grants_for(char_dist.distinction)
     minted = [
         grant_touchstone_item_to_character(
             character_sheet=char_dist.character, template=grant.item_template

@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.affinity import Resonance
     from world.magic.models.gifts import CharacterGift
-    from world.species.models import Language
+    from world.species.models import Language, Species
 
 logger = logging.getLogger(__name__)
 
@@ -312,6 +312,24 @@ def provision_species_gifts(
     return minted
 
 
+def starting_languages(species: Species | None, beginnings: Beginnings | None) -> list[Language]:
+    """The languages a new character starts fluent in (#2993, #5206).
+
+    Every ``is_universal`` language, then the Beginnings' computed starting set for the
+    species (which folds the species' racial languages). The read half of
+    ``provision_starting_languages``; a character-creation draft's waiting sheet lists them.
+    """
+    from world.species.models import Language  # noqa: PLC0415
+
+    languages: dict[int, Language] = {
+        lang.pk: lang for lang in Language.objects.filter(is_universal=True)
+    }
+    if beginnings is not None and species is not None:
+        for lang in beginnings.get_starting_languages(species):
+            languages[lang.pk] = lang
+    return list(languages.values())
+
+
 def provision_starting_languages(
     sheet: CharacterSheet,
     *,
@@ -326,22 +344,14 @@ def provision_starting_languages(
     post-CG growth both survive a re-run.
     """
     from world.species.language_constants import FLUENT_GRANT_VALUE  # noqa: PLC0415
-    from world.species.models import Language  # noqa: PLC0415
     from world.traits.models import (  # noqa: PLC0415
         CharacterTraitChange,
         CharacterTraitValue,
         TraitChangeSource,
     )
 
-    languages: dict[int, Language] = {
-        lang.pk: lang for lang in Language.objects.filter(is_universal=True)
-    }
-    if beginnings is not None and sheet.species_id is not None:
-        for lang in beginnings.get_starting_languages(sheet.species):
-            languages[lang.pk] = lang
-
     granted: list[Language] = []
-    for lang in languages.values():
+    for lang in starting_languages(sheet.species, beginnings):
         if lang.trait_id is None:
             continue
         _value, created = CharacterTraitValue.objects.get_or_create(

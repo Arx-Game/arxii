@@ -1,21 +1,29 @@
 """The sheet's Bonuses band: every bonus total a character has and what gave it (#5206).
 
-``bonus_groups_for_sheet(sheet)`` lists every bonus the game adds for a target, as
-``get_modifier_total`` adds them: the sheet's ``CharacterModifier`` rows valued as
-``get_modifier_breakdown`` values them (distinction effects through ``value_held_effects``:
-sized effects, amplifiers, immunity, derived amounts; home comfort and achievement rewards as
-flat addends; a feature's bonus dropped while clothing covers it), each worn crafted piece,
-and the equipment walk (facets, mantles, motif styles, covenant roles and vows). A sized
-effect is priced in the lane a roll reads the target in (``ModifierTarget.roll_lane``), so
-the band shows the number a roll adds before the lane's taper. Targets staff mark
-``spent_at_creation`` are left out, and so are rows whose total is 0 unless they carry
-immunity. Groups follow the category's ``display_order``; rows follow the target's
-``display_order`` then its name.
+``bonus_groups(...)`` is the one place the band is grouped, labelled, valued and filtered.
+It takes the held cards and the flat addends per target and asks a callback for each
+target's equipment shares, so only the source of what is held differs between callers:
+
+* ``bonus_groups_for_sheet(sheet)`` reads a character's ``CharacterModifier`` rows, valued
+  as ``get_modifier_breakdown`` values them (distinction effects through
+  ``value_held_effects``: sized effects, amplifiers, immunity, derived amounts; home comfort
+  and achievement rewards as flat addends; a feature's bonus dropped while clothing covers
+  it), each worn crafted piece, and the equipment walk (facets, mantles, motif styles,
+  covenant roles and vows).
+* ``world.character_creation.sheet_preview`` builds the same input from a draft's cards and
+  its home's comfort, so a waiting sheet and the character approval makes list equal groups.
+
+A sized effect is priced in the lane a roll reads the target in (``ModifierTarget.roll_lane``),
+so the band shows the number a roll adds before the lane's taper. Targets staff mark
+``spent_at_creation`` are left out, and so are inactive targets and rows whose total is 0
+unless they carry immunity. Groups follow the category's ``display_order``; rows follow the
+target's ``display_order`` then its name.
 """
 
 from __future__ import annotations
 
 from collections import defaultdict
+from collections.abc import Callable, Mapping, Sequence
 from typing import TYPE_CHECKING
 
 from world.checks.modifier_values import ValueTable, load_value_table
@@ -23,7 +31,7 @@ from world.mechanics.constants import SOURCE_TYPE_DISTINCTION, SOURCE_TYPE_UNKNO
 from world.mechanics.derived_amounts import DerivedInputs
 from world.mechanics.models import CharacterModifier, ModifierTarget
 from world.mechanics.services import (
-    _flat_source_contributions,
+    DerivedAmountReader,
     _visible_feature_modifiers,
     equipment_walk_target_ids,
     equipment_walk_total,
@@ -34,7 +42,7 @@ from world.mechanics.services import (
     value_held_effects,
 )
 from world.mechanics.terms import term_definition, term_label
-from world.mechanics.types import BonusGroup, BonusRow, BonusSource
+from world.mechanics.types import BonusGroup, BonusRow, BonusSource, FlatBonus, HeldCardBonus
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -44,66 +52,48 @@ if TYPE_CHECKING:
 # a source on the sheet and on a roll.
 EQUIPMENT_WALK_LABEL = "Equipment & attunement"
 CRAFTED_PIECE_LABEL = "Crafted: {piece}"
-_TARGET_RELATIONS = (
+#: The relations a target needs selected so labelling and the lane read run no query.
+TARGET_RELATIONS = (
     "category",
     "target_trait",
     "target_aspect",
     "scope_maneuver_effect",
 )
 
+LevelForTable = Callable[[ValueTable | None], int | None]
+EquipmentSources = Callable[[ModifierTarget], list[BonusSource]]
 
-def bonus_groups_for_sheet(sheet: CharacterSheet) -> list[BonusGroup]:
-    """The sheet's bonus totals by kind, each with the sources that gave it (#5206).
 
-    One read of the sheet's modifier rows joined to what the valuation and the labels need,
-    the equipment walk's candidate targets (``equipment_walk_target_ids``, a bounded number
-    of reads gated by the cached handlers) and the worn crafted pieces' targets (the cached
-    equipment handler, no read), then one read of the targets only equipment reaches. The
-    walk itself runs only on its candidates; a lane's value table loads once, only when a
-    sized effect needs it.
+def bonus_groups(  # noqa: PLR0913 - what is held, per target, and how to value it
+    targets: Mapping[int, ModifierTarget],
+    *,
+    cards: Mapping[int, Sequence[HeldCardBonus]],
+    flats: Mapping[int, Sequence[FlatBonus]],
+    equipment: EquipmentSources,
+    level_for: LevelForTable,
+    derived_reader: DerivedAmountReader,
+) -> list[BonusGroup]:
+    """Every bonus total by kind, each with the sources that gave it (#5206).
+
+    ``targets`` maps a target's pk to the target (its ``TARGET_RELATIONS`` selected);
+    ``cards`` and ``flats`` map a target's pk to what is held on it, in the order a roll
+    reads it. ``equipment`` gives a target's equipment shares, ``level_for`` the level a
+    sized effect reads a lane's table at, and ``derived_reader`` a derived amount. A lane's
+    value table loads once, only when a sized effect needs it.
     """
-    rows = list(
-        CharacterModifier.objects.filter(
-            character=sheet,
-            target__spent_at_creation=False,
-            target__is_active=True,
-        )
-        .select_related(
-            *(f"target__{relation}" for relation in _TARGET_RELATIONS),
-            "source__distinction_effect__distinction",
-            "source__character_distinction__distinction",
-            "source__character_distinction__feature_marking",
-            "source__character_distinction__feature_trait",
-        )
-        .prefetch_related(modifier_rank_sizes_prefetch())
-    )
-    rows = _visible_feature_modifiers(sheet, rows)
-    by_target: dict[int, list[CharacterModifier]] = defaultdict(list)
-    targets: dict[int, ModifierTarget] = {}
-    for row in rows:
-        by_target[row.target_id].append(row)
-        targets[row.target_id] = row.target
-
-    walk_ids = equipment_walk_target_ids(sheet)
-    crafted_ids = _crafted_target_ids(sheet)
-    equipment_only = (walk_ids | crafted_ids) - targets.keys()
-    if equipment_only:
-        targets.update(
-            (target.pk, target)
-            for target in ModifierTarget.objects.filter(
-                pk__in=equipment_only, spent_at_creation=False, is_active=True
-            ).select_related(*_TARGET_RELATIONS)
-        )
-
     tables: dict[str, ValueTable] = {}
-    derived_inputs = DerivedInputs()
     by_category: dict[int, list[tuple[ModifierTarget, BonusRow]]] = defaultdict(list)
     for target_id, target in targets.items():
-        equipment = _equipment_sources(
-            sheet, target, walk=target_id in walk_ids, crafted=target_id in crafted_ids
-        )
+        if target.spent_at_creation or not target.is_active:
+            continue
         bonus = _bonus_row(
-            sheet, target, by_target.get(target_id, []), equipment, tables, derived_inputs
+            target,
+            cards.get(target_id, ()),
+            flats.get(target_id, ()),
+            equipment(target),
+            level_for=level_for,
+            derived_reader=derived_reader,
+            tables=tables,
         )
         if bonus is not None:
             by_category[target.category_id].append((target, bonus))
@@ -125,6 +115,69 @@ def bonus_groups_for_sheet(sheet: CharacterSheet) -> list[BonusGroup]:
     return groups
 
 
+def bonus_groups_for_sheet(sheet: CharacterSheet) -> list[BonusGroup]:
+    """The sheet's bonus totals by kind, each with the sources that gave it (#5206).
+
+    One read of the sheet's modifier rows joined to what the valuation and the labels need,
+    the equipment walk's candidate targets (``equipment_walk_target_ids``, a bounded number
+    of reads gated by the cached handlers) and the worn crafted pieces' targets (the cached
+    equipment handler, no read), then one read of the targets only equipment reaches. The
+    walk itself runs only on its candidates.
+    """
+    rows = list(
+        CharacterModifier.objects.filter(
+            character=sheet,
+            target__spent_at_creation=False,
+            target__is_active=True,
+        )
+        .select_related(
+            *(f"target__{relation}" for relation in TARGET_RELATIONS),
+            "source__distinction_effect__distinction",
+            "source__character_distinction__distinction",
+            "source__character_distinction__feature_marking",
+            "source__character_distinction__feature_trait",
+        )
+        .prefetch_related(modifier_rank_sizes_prefetch())
+    )
+    rows = _visible_feature_modifiers(sheet, rows)
+    cards: dict[int, list[HeldCardBonus]] = defaultdict(list)
+    flats: dict[int, list[FlatBonus]] = defaultdict(list)
+    targets: dict[int, ModifierTarget] = {}
+    for row in rows:
+        targets[row.target_id] = row.target
+        if row.source.distinction_effect is not None:
+            cards[row.target_id].append(
+                HeldCardBonus(label=_row_card_label(row), held=held_effect_for(row))
+            )
+        elif row.source.source_type not in (SOURCE_TYPE_DISTINCTION, SOURCE_TYPE_UNKNOWN):
+            flats[row.target_id].append(FlatBonus(label=row.source.source_display, value=row.value))
+
+    walk_ids = equipment_walk_target_ids(sheet)
+    crafted_ids = _crafted_target_ids(sheet)
+    equipment_only = (walk_ids | crafted_ids) - targets.keys()
+    if equipment_only:
+        targets.update(
+            (target.pk, target)
+            for target in ModifierTarget.objects.filter(
+                pk__in=equipment_only, spent_at_creation=False, is_active=True
+            ).select_related(*TARGET_RELATIONS)
+        )
+
+    def equipment(target: ModifierTarget) -> list[BonusSource]:
+        return _equipment_sources(
+            sheet, target, walk=target.pk in walk_ids, crafted=target.pk in crafted_ids
+        )
+
+    return bonus_groups(
+        targets,
+        cards=cards,
+        flats=flats,
+        equipment=equipment,
+        level_for=lambda table: sheet_valuation_level(sheet, table),
+        derived_reader=sheet_derived_reader(sheet, DerivedInputs()),
+    )
+
+
 def _heading(category_name: str) -> str:
     """A category's name as a card prints a term, first letter capitalized:
     ``roll_modifier`` -> ``Roll modifier``."""
@@ -132,48 +185,43 @@ def _heading(category_name: str) -> str:
     return label[:1].upper() + label[1:]
 
 
-def _bonus_row(  # noqa: PLR0913 - one target's rows, its equipment, and the read's caches
-    sheet: CharacterSheet,
+def _bonus_row(  # noqa: PLR0913 - one target's holdings, its equipment, and the read's caches
     target: ModifierTarget,
-    rows: list[CharacterModifier],
+    cards: Sequence[HeldCardBonus],
+    flats: Sequence[FlatBonus],
     equipment: list[BonusSource],
+    *,
+    level_for: LevelForTable,
+    derived_reader: DerivedAmountReader,
     tables: dict[str, ValueTable],
-    derived_inputs: DerivedInputs,
 ) -> BonusRow | None:
     """One target's row, its sources added as ``get_modifier_total`` adds them; None when
     the row adds nothing and grants no immunity.
 
-    ``equipment`` is the worn crafted pieces' and the equipment walk's shares
-    (``_equipment_sources``). Immunity blocks only the modifier rows' negatives, as in
-    ``get_modifier_total``.
+    ``equipment`` is the worn crafted pieces' and the equipment walk's shares. Immunity
+    blocks only the cards' and the flat addends' negatives, as in ``get_modifier_total``.
     """
-    distinction_rows = [row for row in rows if row.source.distinction_effect is not None]
-    other_rows = [
-        row
-        for row in rows
-        if row.source.source_type not in (SOURCE_TYPE_DISTINCTION, SOURCE_TYPE_UNKNOWN)
-    ]
-    value_table = _value_table(target, distinction_rows, tables)
+    value_table = _value_table(target, cards, tables)
     valuation = value_held_effects(
-        [held_effect_for(row) for row in distinction_rows],
-        level=sheet_valuation_level(sheet, value_table),
+        [card.held for card in cards],
+        level=level_for(value_table),
         value_table=value_table,
-        derived_reader=sheet_derived_reader(sheet, derived_inputs),
+        derived_reader=derived_reader,
     )
-    flat_details, flat_total, _ = _flat_source_contributions(other_rows, valuation.has_immunity)
-    total = valuation.total + flat_total + sum(source.value for source in equipment)
+    flat_shown = [flat for flat in flats if not (valuation.has_immunity and flat.value < 0)]
+    total = (
+        valuation.total
+        + sum(flat.value for flat in flat_shown)
+        + sum(source.value for source in equipment)
+    )
     if total == 0 and not valuation.has_immunity:
         return None
     sources = [
-        BonusSource(label=_card_label(row), value=detail.final_value)
-        for row, detail in zip(distinction_rows, valuation.sources, strict=True)
+        BonusSource(label=card.label, value=detail.final_value)
+        for card, detail in zip(cards, valuation.sources, strict=True)
         if not detail.blocked_by_immunity
     ]
-    sources.extend(
-        BonusSource(label=detail.source_name, value=detail.final_value)
-        for detail in flat_details
-        if not detail.blocked_by_immunity
-    )
+    sources.extend(BonusSource(label=flat.label, value=flat.value) for flat in flat_shown)
     sources.extend(equipment)
     return BonusRow(
         target_name=target.name,
@@ -187,15 +235,13 @@ def _bonus_row(  # noqa: PLR0913 - one target's rows, its equipment, and the rea
 
 def _value_table(
     target: ModifierTarget,
-    distinction_rows: list[CharacterModifier],
+    cards: Sequence[HeldCardBonus],
     tables: dict[str, ValueTable],
 ) -> ValueTable | None:
     """The table of the lane a roll reads the target in (``ModifierTarget.roll_lane``) when
     a sized effect needs it, loaded once per lane."""
     lane = target.roll_lane
-    if lane is None or not any(
-        row.source.distinction_effect.modifier_size is not None for row in distinction_rows
-    ):
+    if lane is None or not any(card.held.effect.modifier_size is not None for card in cards):
         return None
     if lane not in tables:
         tables[lane] = load_value_table(lane)
@@ -239,9 +285,23 @@ def _equipment_sources(
     return sources
 
 
-def _card_label(row: CharacterModifier) -> str:
+def card_label(name: str, *, feature: str = "", rank: int = 1) -> str:
     """A card source by its distinction's name, with the feature a per-feature card is held
-    on and its rank when the rank is above 1: ``Alluring on hair color (Rank 2)``."""
+    on and its rank when the rank is above 1: ``Alluring on hair color (Rank 2)``.
+
+    ``feature`` is the trait's display name or the marking's name, blank for a plain card.
+    The sheet names its rows this way and a character-creation draft names its cards the
+    same way.
+    """
+    if feature:
+        name = f"{name} on {feature.lower()}"
+    if rank > 1:
+        name = f"{name} (Rank {rank})"
+    return name
+
+
+def _row_card_label(row: CharacterModifier) -> str:
+    """A card row's label (``card_label``) from its held distinction."""
     name = row.source.distinction_effect.distinction.name
     held = row.source.character_distinction
     if held is None:
@@ -251,8 +311,4 @@ def _card_label(row: CharacterModifier) -> str:
         feature = held.feature_trait.display_name
     elif held.feature_marking_id is not None:
         feature = held.feature_marking.name
-    if feature:
-        name = f"{name} on {feature.lower()}"
-    if held.rank > 1:
-        name = f"{name} (Rank {held.rank})"
-    return name
+    return card_label(name, feature=feature, rank=held.rank)
