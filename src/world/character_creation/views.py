@@ -18,6 +18,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.generics import get_object_or_404 as drf_get_object_or_404
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -1100,22 +1101,19 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             waiting_sheet_application,
         )
 
-        try:
-            draft_id = int(str(pk))
-        except ValueError:
-            raise Http404 from None
-        drafts = CharacterDraft.objects.filter(pk=draft_id)
-        if not request.user.is_staff:
-            drafts = drafts.filter(account=request.user)
-        draft = drafts.select_related(
+        drafts = CharacterDraft.objects.select_related(
             "selected_area__realm",
             "selected_beginnings",
             "selected_species",
             "selected_gender",
             "selected_path",
             "selected_tradition",
-        ).first()
-        if draft is None or waiting_sheet_application(draft) is None:
+        )
+        if not request.user.is_staff:
+            drafts = drafts.filter(account=request.user)
+        # DRF's lookup answers 404 for a missing or malformed id alike.
+        draft = drf_get_object_or_404(drafts, pk=pk)
+        if waiting_sheet_application(draft) is None:
             raise Http404
         return Response(WaitingSheetSerializer(draft).data)
 

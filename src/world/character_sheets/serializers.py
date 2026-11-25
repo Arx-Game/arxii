@@ -9,8 +9,9 @@ in the future when the frontend needs it.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 import contextlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
@@ -159,6 +160,9 @@ from world.societies.reputation_reasons import reason_lines_by_reputation
 from world.species.models import Species
 from world.tarot.models import TarotCard
 from world.traits.models import CharacterTraitValue, TraitType
+
+if TYPE_CHECKING:
+    from world.mechanics.types import BonusGroup
 
 
 class OriginSlotInputSerializer(serializers.Serializer):
@@ -810,6 +814,12 @@ def _build_bonuses(sheet: CharacterSheet, *, privileged: bool) -> list[BonusGrou
     """
     from world.mechanics.bonuses import bonus_groups_for_sheet  # noqa: PLC0415
 
+    return bonus_group_entries(bonus_groups_for_sheet(sheet, privileged=privileged))
+
+
+def bonus_group_entries(groups: Iterable[BonusGroup]) -> list[BonusGroupEntry]:
+    """The band's groups as the payload's typed entries; the in-game sheet and the
+    character-creation waiting sheet both shape them here (#5206)."""
     return [
         BonusGroupEntry(
             category=group.category_name,
@@ -829,7 +839,7 @@ def _build_bonuses(sheet: CharacterSheet, *, privileged: bool) -> list[BonusGrou
                 for row in group.rows
             ],
         )
-        for group in bonus_groups_for_sheet(sheet, privileged=privileged)
+        for group in groups
     ]
 
 

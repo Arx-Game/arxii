@@ -88,8 +88,6 @@ from world.character_sheets.types import (
     AuraThemingData,
     BeatEntry,
     BonusGroupEntry,
-    BonusRowEntry,
-    BonusSourceEntry,
     CombatStyleSection,
     DistinctionEntry,
     EnemyEntry,
@@ -139,6 +137,7 @@ if TYPE_CHECKING:
     from world.magic.models import Gift, GlimpseTag, Resonance, Technique
     from world.mechanics.models import ModifierTarget
     from world.mechanics.services import DerivedAmountReader
+    from world.mechanics.types import HeldEffect, HeldEffectsValuation
     from world.roster.models import Family
     from world.societies.models import Organization, OrganizationRank
     from world.traits.models import Trait
@@ -816,6 +815,7 @@ def _bonuses(plan: _Plan) -> list[BonusGroupEntry]:
     """The Bonuses band through the in-game builder (``bonus_groups``), from the cards and
     the home's comfort. Capable Mentor's path-aspect row has no effect template, and the
     in-game band leaves such a row out (bug #5316), so it is left out here too."""
+    from world.character_sheets.serializers import bonus_group_entries  # noqa: PLC0415
     from world.mechanics.bonuses import bonus_groups  # noqa: PLC0415
 
     targets, cards = _held_by_target(plan)
@@ -824,35 +824,16 @@ def _bonuses(plan: _Plan) -> list[BonusGroupEntry]:
     for target, flat in comfort:
         targets[target.pk] = target
         flats[target.pk] = [flat]
-    groups = bonus_groups(
-        targets,
-        cards=cards,
-        flats=flats,
-        equipment=lambda _target: [],
-        level_for=_new_character_level,
-        derived_reader=_draft_derived_reader(),
-    )
-    return [
-        BonusGroupEntry(
-            category=group.category_name,
-            heading=group.heading,
-            rows=[
-                BonusRowEntry(
-                    target=row.target_name,
-                    label=row.label,
-                    definition=row.definition,
-                    total=row.total,
-                    immune=row.immune,
-                    sources=[
-                        BonusSourceEntry(label=source.label, value=source.value)
-                        for source in row.sources
-                    ],
-                )
-                for row in group.rows
-            ],
+    return bonus_group_entries(
+        bonus_groups(
+            targets,
+            cards=cards,
+            flats=flats,
+            equipment=lambda _target: [],
+            level_for=_new_character_level,
+            derived_reader=_draft_derived_reader(),
         )
-        for group in groups
-    ]
+    )
 
 
 def _comfort_flats(plan: _Plan) -> list[tuple[ModifierTarget, Any]]:
@@ -873,7 +854,7 @@ def _comfort_flats(plan: _Plan) -> list[tuple[ModifierTarget, Any]]:
         COMFORT_TARGET_NAME,
     )
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
-    from world.mechanics.types import FlatBonus  # noqa: PLC0415
+    from world.mechanics.types import BonusSource  # noqa: PLC0415
 
     room = plan.starting_room
     if room is None:
@@ -882,7 +863,8 @@ def _comfort_flats(plan: _Plan) -> list[tuple[ModifierTarget, Any]]:
     targets, cards = _held_by_target(plan, category=COMFORT_CATEGORY_NAME)
     for target_id, target in targets.items():
         if target.name == COMFORT_TARGET_NAME:
-            shift += _card_total(cards[target_id], target)
+            # ``lever_total`` reads ``get_modifier_total``, which sums the cards flat.
+            shift += _draft_valuation([card.held for card in cards[target_id]], None).total
     room_level = comfort_level(cast("DefaultObject", room)) + shift
     level = max(COMFORT_LEVEL_MIN, min(COMFORT_LEVEL_MAX, room_level))
     delta = level - COMFORT_LEVEL_NEUTRAL
@@ -891,23 +873,26 @@ def _comfort_flats(plan: _Plan) -> list[tuple[ModifierTarget, Any]]:
     rows = ModifierTarget.objects.filter(
         category__name=AP_MODIFIER_CATEGORY, name__in=AP_REGEN_TARGET_NAMES
     ).select_related(*TARGET_RELATIONS)
-    return [(target, FlatBonus(label="Residence comfort", value=delta)) for target in rows]
+    return [(target, BonusSource(label="Residence comfort", value=delta)) for target in rows]
 
 
-def _card_total(cards: list, target: ModifierTarget) -> int:
-    """The cards' total on one target as ``get_modifier_total`` adds it, in its roll lane."""
+def _draft_valuation(held: list[HeldEffect], lane: str | None) -> HeldEffectsValuation:
+    """A new character's held effects on one target, valued as the sheet values them
+    (``value_held_effects``): a sized effect reads ``lane``'s table at the level approval
+    gives (``_new_character_level``), none when ``lane`` is None (a flat sum, as
+    ``get_modifier_total`` reads it), and a derived amount counts nothing yet."""
     from world.checks.modifier_values import load_value_table  # noqa: PLC0415
     from world.mechanics.services import value_held_effects  # noqa: PLC0415
 
     table = None
-    if target.roll_lane is not None and any(c.held.effect.modifier_size for c in cards):
-        table = load_value_table(target.roll_lane)
+    if lane is not None and any(item.effect.modifier_size is not None for item in held):
+        table = load_value_table(lane)
     return value_held_effects(
-        [card.held for card in cards],
+        held,
         level=_new_character_level(table),
         value_table=table,
-        derived_reader=lambda _effect, _per_step: 0,
-    ).total
+        derived_reader=_draft_derived_reader(),
+    )
 
 
 def _trait_modifiers(plan: _Plan, traits: list[Trait]) -> dict[int, int]:
@@ -918,10 +903,9 @@ def _trait_modifiers(plan: _Plan, traits: list[Trait]) -> dict[int, int]:
     from collections import Counter  # noqa: PLC0415
 
     from world.checks.constants import ModifierLane, ModifierSourceKind  # noqa: PLC0415
-    from world.checks.modifier_values import load_taper_rules, load_value_table  # noqa: PLC0415
+    from world.checks.modifier_values import load_taper_rules  # noqa: PLC0415
     from world.checks.types import ModifierBreakdown, ModifierContribution  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
-    from world.mechanics.services import value_held_effects  # noqa: PLC0415
 
     _targets, cards = _held_by_target(plan)
     out: dict[int, int] = {}
@@ -929,18 +913,7 @@ def _trait_modifiers(plan: _Plan, traits: list[Trait]) -> dict[int, int]:
         target = ModifierTarget.get_for_trait(trait)
         if target is None or target.pk not in cards:
             continue
-        held = [card.held for card in cards[target.pk]]
-        table = (
-            load_value_table(ModifierLane.STAT)
-            if any(h.effect.modifier_size is not None for h in held)
-            else None
-        )
-        valuation = value_held_effects(
-            held,
-            level=_new_character_level(table),
-            value_table=table,
-            derived_reader=lambda _effect, _per_step: 0,
-        )
+        valuation = _draft_valuation([card.held for card in cards[target.pk]], ModifierLane.STAT)
         contributions = [
             ModifierContribution(
                 source_kind=ModifierSourceKind.CHARACTER,

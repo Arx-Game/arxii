@@ -1920,21 +1920,17 @@ def _create_worship_declaration(character: ObjectDB, draft: CharacterDraft) -> N
     set_worship_declaration(character.sheet_data, draft.public_worship, draft.secret_worship)
 
 
-def cg_conversion_rate() -> int:
-    """XP per unspent creation point, the rate approval converts them at (#5206)."""
-    from world.character_creation.models import CGPointBudget  # noqa: PLC0415
-
-    return CGPointBudget.get_active_conversion_rate()
-
-
 def starting_locked_xp(draft: CharacterDraft) -> int:
     """The locked XP a draft's unspent creation points become at approval, 0 with none
     left (#5206). The read half of ``_convert_remaining_cg_points_to_xp``, which awards
-    ``remaining x cg_conversion_rate()``; the waiting sheet's Growth tab shows it."""
+    ``remaining x CGPointBudget.get_active_conversion_rate()``; the waiting sheet's Growth
+    tab shows it."""
+    from world.character_creation.models import CGPointBudget  # noqa: PLC0415
+
     remaining = draft.calculate_cg_points_remaining()
     if remaining <= 0:
         return 0
-    return remaining * cg_conversion_rate()
+    return remaining * CGPointBudget.get_active_conversion_rate()
 
 
 def _convert_remaining_cg_points_to_xp(draft: CharacterDraft, character: ObjectDB) -> None:
@@ -1948,9 +1944,10 @@ def _convert_remaining_cg_points_to_xp(draft: CharacterDraft, character: ObjectD
         return
 
     try:
+        from world.character_creation.models import CGPointBudget  # noqa: PLC0415
         from world.progression.services import award_cg_conversion_xp  # noqa: PLC0415
 
-        conversion_rate = cg_conversion_rate()
+        conversion_rate = CGPointBudget.get_active_conversion_rate()
         award_cg_conversion_xp(
             character,
             remaining_cg_points=remaining_cg_points,

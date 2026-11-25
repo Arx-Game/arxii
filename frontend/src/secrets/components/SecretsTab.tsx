@@ -72,29 +72,21 @@ export function SecretsTab({
   // A null viewer disables the query, so a caller that hands over its list asks for nothing.
   const { data, isLoading, isError } = useKnownSecretsQuery(subjectId, given ? null : viewerId);
 
-  if (given) {
-    if (given.length === 0) return <Ledger>You know nothing of theirs.</Ledger>;
-    return (
-      <Entries>
-        {given.map((secret) => (
-          <SecretEntry key={secret.id} secret={secret} viewerId={null} />
-        ))}
-      </Entries>
-    );
-  }
-  if (viewerId === null) {
-    return <Ledger>Choose a character to see the secrets they keep about this one.</Ledger>;
-  }
-  if (isLoading) return <Ledger>Reading what you know…</Ledger>;
-  if (isError) {
-    return (
-      <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
-        Those secrets could not be read.
-      </p>
-    );
+  if (!given) {
+    if (viewerId === null) {
+      return <Ledger>Choose a character to see the secrets they keep about this one.</Ledger>;
+    }
+    if (isLoading) return <Ledger>Reading what you know…</Ledger>;
+    if (isError) {
+      return (
+        <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
+          Those secrets could not be read.
+        </p>
+      );
+    }
   }
 
-  const secrets = data?.results ?? [];
+  const secrets = given ?? data?.results ?? [];
   if (secrets.length === 0) {
     return <Ledger>You know nothing of theirs.</Ledger>;
   }
@@ -102,7 +94,7 @@ export function SecretsTab({
   return (
     <Entries>
       {secrets.map((secret) => (
-        <SecretEntry key={secret.id} secret={secret} viewerId={viewerId} />
+        <SecretEntry key={secret.id} secret={secret} viewerId={given ? null : viewerId} />
       ))}
     </Entries>
   );

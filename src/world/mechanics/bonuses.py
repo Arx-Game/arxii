@@ -43,7 +43,7 @@ from world.mechanics.services import (
     value_held_effects,
 )
 from world.mechanics.terms import term_definition, term_label
-from world.mechanics.types import BonusGroup, BonusRow, BonusSource, FlatBonus, HeldCardBonus
+from world.mechanics.types import BonusGroup, BonusRow, BonusSource, HeldCardBonus
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -69,7 +69,7 @@ def bonus_groups(  # noqa: PLR0913 - what is held, per target, and how to value 
     targets: Mapping[int, ModifierTarget],
     *,
     cards: Mapping[int, Sequence[HeldCardBonus]],
-    flats: Mapping[int, Sequence[FlatBonus]],
+    flats: Mapping[int, Sequence[BonusSource]],
     equipment: EquipmentSources,
     level_for: LevelForTable,
     derived_reader: DerivedAmountReader,
@@ -150,7 +150,7 @@ def bonus_groups_for_sheet(sheet: CharacterSheet, *, privileged: bool) -> list[B
     )
     rows = _visible_feature_modifiers(sheet, rows)
     cards: dict[int, list[HeldCardBonus]] = defaultdict(list)
-    flats: dict[int, list[FlatBonus]] = defaultdict(list)
+    flats: dict[int, list[BonusSource]] = defaultdict(list)
     targets: dict[int, ModifierTarget] = {}
     for row in rows:
         targets[row.target_id] = row.target
@@ -164,7 +164,9 @@ def bonus_groups_for_sheet(sheet: CharacterSheet, *, privileged: bool) -> list[B
                 )
             )
         elif row.source.source_type not in (SOURCE_TYPE_DISTINCTION, SOURCE_TYPE_UNKNOWN):
-            flats[row.target_id].append(FlatBonus(label=row.source.source_display, value=row.value))
+            flats[row.target_id].append(
+                BonusSource(label=row.source.source_display, value=row.value)
+            )
 
     walk_ids = equipment_walk_target_ids(sheet)
     crafted_ids = _crafted_target_ids(sheet)
@@ -203,7 +205,7 @@ def _heading(category_name: str) -> str:
 def _bonus_row(  # noqa: PLR0913 - one target's holdings, its equipment, and the read's caches
     target: ModifierTarget,
     cards: Sequence[HeldCardBonus],
-    flats: Sequence[FlatBonus],
+    flats: Sequence[BonusSource],
     equipment: list[BonusSource],
     *,
     level_for: LevelForTable,
@@ -243,7 +245,7 @@ def _bonus_row(  # noqa: PLR0913 - one target's holdings, its equipment, and the
         for card, detail in zip(cards, valuation.sources, strict=True)
         if not detail.blocked_by_immunity and (privileged or not card.secret)
     ]
-    sources.extend(BonusSource(label=flat.label, value=flat.value) for flat in flat_shown)
+    sources.extend(flat_shown)
     sources.extend(equipment)
     return BonusRow(
         target_name=target.name,

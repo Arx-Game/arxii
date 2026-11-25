@@ -124,15 +124,6 @@ class HeldCardBonus:
 
 
 @dataclass(frozen=True)
-class FlatBonus:
-    """A flat addend on one target outside the cards (a home's comfort, an achievement
-    reward), as ``get_modifier_total`` adds it; immunity still blocks a negative one."""
-
-    label: str
-    value: int
-
-
-@dataclass(frozen=True)
 class BonusSource:
     """One thing that gives part of a bonus on the sheet's Bonuses band (#5206)."""
 
