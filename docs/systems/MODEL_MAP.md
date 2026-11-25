@@ -1690,6 +1690,7 @@
 - `beat_marks(draft: 'CharacterDraft') -> 'BeatMarks' - The secret picks, covers and figure names on the draft's beats (#4872).`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' - Check if an account can create a new character.`
+- `cg_conversion_rate() -> 'int' - XP per unspent creation point, the rate approval converts them at (#5206).`
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' - Claim a submitted application for staff review.`
 - `clear_family_selection(draft: 'CharacterDraft') -> 'None' - Clear everything anchored to the family path/Upbringing (#3648 review fix).`
 - `clear_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot') -> 'None' - Delete a slot answer and recompute state.`
@@ -1703,7 +1704,9 @@
 - `first_journal_offered(draft: 'CharacterDraft') -> 'bool' - The First Journal is offered to an Arx start; anyone else writes one in play.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' - Get all starting areas accessible to an account.`
 - `opened_feature_traits(draft_data: 'dict') -> 'set[str]' - The names of the trait rows this draft has made distinctive (#3739).`
+- `origin_story_state_for(*, has_slots: 'bool', has_prose: 'bool') -> 'OriginStoryState' - The origin story's state from whether answers and a Background exist (#2478, #5206).`
 - `picked_offer_ids(draft: 'CharacterDraft') -> 'set[int]' - Every offer id the draft's distinction picks name.`
+- `planned_introductions(draft: 'CharacterDraft', *, fallback_name: 'str') -> 'list[PlannedIntroduction]' - The Introductions a draft answered, as the white journals finalize writes (#3621).`
 - `reconcile_offer_picks(draft: 'CharacterDraft') -> 'list[str]' - Apply carried and bundled offers, drop picks whose offer has gone, reprice.`
 - `refresh_origin_story_state(sheet: 'CharacterSheet') -> 'OriginStoryState' - Recompute and persist ``origin_story_state`` from slot rows + prose.`
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Request revisions on an application.`
@@ -1714,8 +1717,10 @@
 - `select_origin_template(draft: 'CharacterDraft', template: 'OriginTemplate') -> 'None' - Choose the draft's Upbringing; a change resets everything downstream of it (#3617).`
 - `set_family_path(draft: 'CharacterDraft', path: 'str') -> 'None' - Pick the family path when the Upbringing allows more than one (#3617).`
 - `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None, *, organization: 'Organization | None | _Keep' = <world.character_creation.services._Keep object>, figure_name: 'str | _Keep' = <world.character_creation.services._Keep object>) -> 'None' - Upsert a character's answer (text, picked choice, anchor, person), then refresh state.`
+- `starting_locked_xp(draft: 'CharacterDraft') -> 'int' - The locked XP a draft's unspent creation points become at approval, 0 with none`
 - `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' - Submit a character draft for staff review.`
 - `unsubmit_draft(application: 'DraftApplication') -> 'None' - Un-submit a draft application, returning it to editable state.`
+- `whisper_lines(draft: 'CharacterDraft') -> 'list[str]' - The Whispers Introduction's rumors, one per non-blank line (#3621, #5206).`
 - `withdraw_draft(application: 'DraftApplication') -> 'None' - Withdraw a draft application.`
 
 
@@ -4151,6 +4156,7 @@
 - `settle_obligations(organization: 'Organization') -> 'list[CurrencyTransfer]' - Settle all active obligations against unsettled declared income (#926).`
 - `sign_contract(contract: 'Contract') -> 'Contract' - The consent moment (#928): counterparty accepts the fixed terms.`
 - `snapshot_purse_drains() -> 'int' - SNAPSHOT band: record each drain-holder's opening balance (#2613).`
+- `starting_grant_for(distinction: 'Distinction') -> 'DistinctionStartingGrant | None' - The inheritance a distinction pays its holder at creation, or None (#4062, #5206).`
 - `transfer(*, amount: 'int', reason: 'str', from_purse: 'CharacterPurse | None' = None, from_treasury: 'OrganizationTreasury | None' = None, to_purse: 'CharacterPurse | None' = None, to_treasury: 'OrganizationTreasury | None' = None) -> 'CurrencyTransfer' - Move ``amount`` coppers; null source = mint (faucet), null dest = sink.`
 - `treat_servants(organization: 'Organization', *, payment: 'int', graft_reduction: 'int') -> 'OrgEconomicsProfile' - Spend treasury money treating servants to buy graft down (#926).`
 - `withdraw_from_treasury(*, organization: 'Organization', persona: 'Persona', amount: 'int', reason: 'str' = '') -> 'CurrencyTransfer' - A spend-authorized member draws ``amount`` coppers from the org treasury to their purse.`
@@ -7819,10 +7825,12 @@
 - `derived_amount(sheet: 'CharacterSheet | None', row: 'DerivedAmountMixin', per_step: 'int', inputs: 'DerivedInputs | None' = None) -> 'int' - ``per_step`` times the input's whole steps for ``sheet``, held at the row's cap.`
 - `difficulty_indicator_for_rank_difference(rank_diff: 'int') -> 'DifficultyIndicator' - Classify a check's rank difference.`
 - `difficulty_points(level: int, tables: world.checks.services.DifficultyTables | None = None) -> int - An authored standalone difficulty level as the points a check rolls against (#5093).`
+- `distinction_effect_value(effect: 'DistinctionEffect', *, rank: 'int', value: 'int', level: 'int | None', value_table: 'ValueTable | None', derived_reader: 'DerivedAmountReader') -> 'tuple[int, tuple[int, int] | None]' - One held effect's base value, and its table (value, size) when it was sized (#5206).`
 - `end_engagement(character: 'ObjectDB', engagement_type: 'str', *, source: 'object') -> 'None' - Delete the character's engagement iff it matches type AND source.`
 - `ensure_aspect_target(aspect: 'Aspect') -> 'ModifierTarget | None' - The aspect-category ``ModifierTarget`` an Aspect's bonuses land on, made if missing (#4827).`
 - `ensure_skill_target(trait: 'Trait') -> 'ModifierTarget | None' - The stat-category ``ModifierTarget`` a skill's bonuses land on, created if missing (#4820).`
 - `equipment_walk_parts(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'EquipmentWalkParts' - ``equipment_walk_total``'s terms, split into the worn-item part and the vow part.`
+- `equipment_walk_target_ids(sheet: 'CharacterSheet') -> 'set[int]' - The targets ``equipment_walk_parts`` can give ``sheet`` a non-zero amount on (#5206).`
 - `equipment_walk_total(character: 'object', target: 'ModifierTarget', level_override: 'int | None' = None) -> 'int' - Sum facet + covenant-role + covenant-level + mantle passive bonuses (Spec D §5.5).`
 - `equipment_walk_total_unblended(sheet: 'object', target: 'ModifierTarget') -> 'int' - ``equipment_walk_total`` with the covenant-role component as its raw base (#1174).`
 - `fashion_outfit_bonus(sheet: 'object', target: 'ModifierTarget', society: 'object') -> 'int' - Perception-relative outfit bonus vs. a society's current fashion (#513).`
@@ -7831,10 +7839,12 @@
 - `get_capability_sources_for_character(character: 'ObjectDB') -> 'list[CapabilitySource]' - Collect all Capability sources for a character (per-source, not aggregated).`
 - `get_modifier_breakdown(character, modifier_target: 'ModifierTarget', *, value_lane: 'str | None' = None, inputs: 'DerivedInputs | None' = None) -> 'ModifierBreakdown' - Get detailed breakdown of all modifiers for a target.`
 - `get_modifier_total(character, modifier_target: 'ModifierTarget', *, perceiving_society: 'object | None' = None, level_override: 'int | None' = None) -> 'int' - Get total modifier value for a target.`
+- `held_effect_for(mod: 'CharacterModifier') -> 'HeldEffect' - A distinction-sourced modifier row as the effect, held rank and stored value.`
 - `item_mundane_stat_for_target(item: 'ItemInstance', target: 'ModifierTarget') -> 'int' - Mundane combat stat an equipped item contributes to ``target`` (#985, §5.6).`
 - `load_baselines(lane: 'str' = ModifierLane.CHECK) -> 'BaselineTable' - Load ``lane``'s ``ModifierLevelBaseline`` rows in one query.`
 - `load_difficulty_tables() -> world.checks.services.DifficultyTables - Load the CHECK baselines and the level tiers, two queries.`
 - `load_value_table(lane: 'str' = ModifierLane.CHECK) -> 'ValueTable' - Load ``lane``'s overrides, size fractions and level baselines in three queries.`
+- `modifier_rank_sizes_prefetch() -> 'Prefetch' - The prefetch a read of ``CharacterModifier`` rows uses for their effects' rank sizes.`
 - `motif_coherence_bonus(sheet: 'object', resonance_id: 'int') -> 'int' - Per-resonance fashion-coherence bonus from worn styles bound to the character's Motif.`
 - `passive_facet_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum tier-0 FLAT_BONUS contributions from equipped item facets (Spec D §5.2).`
 - `passive_facet_crossing_bonuses(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum ConditionModifierEffect from FACET thread crossing choices (wear-gated).`
@@ -7846,12 +7856,15 @@
 - `preview_check_difficulty(character: 'ObjectDB', check_type: 'CheckType', target_difficulty: int = 0, extra_modifiers: int = 0, *, stat_override: str | int | None = None, extra_traits: 'Sequence[ExtraTraitTerm]' = ()) -> int - Preview the rank difference for a check without rolling.`
 - `property_damage_bonus(target: 'ObjectDB', damage_type: 'DamageType | None') -> 'int' - Sum PropertyDamageModifier.modifier_value for target's active Properties.`
 - `role_base_bonus_for_target(role: 'CovenantRole', target: 'ModifierTarget', character_level: 'int') -> 'int' - Authored covenant-role bonus for ``target``, scaled by character level (#985).`
+- `sheet_derived_reader(sheet, inputs: 'DerivedInputs | None' = None) -> 'DerivedAmountReader' - The derived-amount reader for a character's sheet: ``derived_amount`` on it.`
+- `sheet_valuation_level(sheet, value_table: 'ValueTable | None') -> 'int | None' - The level a sheet's sized effects read the table at; None without a table.`
 - `source_carries_required_mark(source: 'CapabilitySource', app: 'Application') -> 'bool' - Whether ``source`` carries the effect property ``app`` needs (or it needs none).`
 - `source_matches_application(source: 'CapabilitySource', app: 'Application') -> 'bool' - Whether ``source`` reaches ``app`` (#5066): the same capability, held above the`
 - `stage_property(target: 'ObjectDB', property_: 'Property', value: 'int' = 1) -> 'ObjectProperty' - GM improv: attach or refresh a Property on ``target`` (#2503).`
 - `thread_passive_capability_grants(character_sheet: 'CharacterSheet') -> dict[int, int] - Thread-passive capability grants (#751 B2), by capability pk.`
 - `trait_modifiers_for_sheet(character_sheet: 'CharacterSheet', traits: 'Iterable[Trait]') -> 'dict[int, int]' - ``trait.pk`` to the modifier a roll on that stat or skill gets, for the sheet.`
 - `update_distinction_rank(character_distinction: 'CharacterDistinction') -> 'None' - Update CharacterModifier values when rank changes.`
+- `value_held_effects(held: 'Sequence[HeldEffect]', *, level: 'int | None', value_table: 'ValueTable | None', derived_reader: 'DerivedAmountReader') -> 'HeldEffectsValuation' - Value one target's held distinction effects as a roll does (#5206).`
 - `volatile_object_property(target: 'ObjectDB') -> 'ObjectProperty | None' - Return the ``ObjectProperty`` making *target* volatile (detonatable), or None.`
 - `vow_stat_scaling_bonus(sheet: 'object', target: 'ModifierTarget') -> 'int' - Sum the vow-driven stat scaling across engaged PRIMARY roles (#2022).`
 - `worn_quality_aggregate(rows: 'Iterable[object]') -> 'Decimal' - Sum (item_quality_multiplier × attachment_quality_multiplier) over worn rows.`
@@ -11388,7 +11401,9 @@
 - `reconcile_sunlight_exposure(character, room) -> 'None' - Reconcile the Sunlight Exposure condition to the character's felt sun exposure`
 - `remove_condition(target: 'ObjectDB', condition: world.conditions.models.ConditionTemplate, *, remove_all_stacks: bool = True, include_suppressed: bool = False) -> bool - Remove a condition from a target.`
 - `run_reconcile_safely(character, reconcile, label: 'str') -> 'None' - Best-effort celestial reconcile for hook/cron call sites (#2846/#2845).`
+- `species_gift_grants(species: 'Species | None') -> 'list[SpeciesGiftGrant]' - The gift grants a character of ``species`` is given at creation (#1580, #5206).`
 - `species_innate_distinction_ids(species) -> 'set[int]' - Distinction pks the species (or inheritable ancestors) stamps at finalize (#2846).`
+- `starting_languages(species: 'Species | None', beginnings: 'Beginnings | None') -> 'list[Language]' - The languages a new character starts fluent in (#2993, #5206).`
 - `total_species_gift_cost(species) -> 'int' - Total CG-point cost of a species' gift grants, summed over it and its ancestors.`
 
 

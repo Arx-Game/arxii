@@ -719,6 +719,85 @@ same level-1 class level when one is missing, without clobbering an existing one
 
 ---
 
+## The waiting sheet (#5206)
+
+A player whose character is submitted, in review, or sent back for revisions can read the
+character's sheet before staff approve it. The owner ruled on 2026-11-25 that the sheet is
+built from the draft and that nothing is created before approval; creating the character at
+submission, or when the draft starts, was turned down because every un-submit and revision
+would have had to undo about ten changes made outside the character.
+
+**The builder.** `world/character_creation/sheet_preview.py`'s `build_waiting_sheet(draft)`
+returns the keys `CharacterSheetSerializer` returns, in the same typed sections
+(`world.character_sheets.types`), as the character's owner reads their own sheet. It only
+reads: it never saves the draft, creates a row, calls `reconcile_offer_picks` or calls a
+writer. The keys fall in three groups. The keys filled from the draft
+(`WAITING_FILLED_KEYS`) are what approval writes for a new character. The keys that are always
+empty for a new character are `covenants`, `looks`, `worn`, `mentors`, `ties`,
+`ties_ap_this_week` and `profile_picture`. `staff_edit` is never built, `can_edit` is false,
+`id` is None, and `theming` and `plate_ink` take a new character's defaults. The waiting page
+also reads keys of its own (`WaitingSheetPayload` in `types.py`): `awaiting` (the
+application's state) and the Estate, Growth and Knowledge tabs' contents, `purse`, `carried`,
+`xp_ledger`, `languages` and `secrets`, each shaped like the endpoint the in-game tab reads. A
+row approval will create has no id yet, so the builder numbers such rows below zero. A piece
+the draft does not hold yet, such as a removed card during revisions, leaves its part empty
+and never raises. `draft_data["crime"]` is never read, because the crime note it becomes is
+staff-only. The name is composed with `compose_fullname`, the same function the in-game
+identity uses, so the family's name is said once.
+
+**The read halves finalize now shares.** Where finalize computes a value with a function that
+writes, the read half was split out beside the writer and finalize and the builder both call
+it: `whisper_lines`, `planned_introductions`, `starting_locked_xp` and
+`origin_story_state_for` in this app; `magic_writer.creation_affinity_base` and
+`creation_seed_amounts`; and outside the app `starting_grant_for` (currency),
+`item_grants_for` (items), `starting_languages` and `species_gift_grants` (species),
+`creation_technique_forms` and `creation_next_signature` (magic technique forms),
+`glimpse_nudged_shares` (the Glimpse's nudge on the settled self), `rounded_aura_shares`
+(aura) and `ANIMA_RITUAL_DESCRIPTION` (anima). `strongest_path_aspect` was already a pure
+read. The Bonuses band on the waiting sheet comes from `world.mechanics.bonuses.bonus_groups`,
+fed with the draft's cards and the home's comfort and valued at the level approval gives a new
+character; see `docs/systems/mechanics.md`.
+
+**The endpoint.** `GET /api/character-creation/drafts/{id}/sheet/` (`WaitingSheetSerializer`,
+the `sheet` action on `CharacterDraftViewSet`) serves the waiting sheet to the draft's own
+account and to staff, and only while `waiting_sheet_application(draft)` finds an application
+in one of `sheet_preview.WAITING_STATUSES` (submitted, in review, revisions requested). Anyone
+else, a draft never submitted, a withdrawn draft and an approved one all get 404, so the
+endpoint does not disclose that a draft exists.
+
+**The guard against drift.** The cost of building from the draft is upkeep: when finalize
+starts writing something a new character's sheet shows, `sheet_preview.py` must mirror it.
+`tests/test_waiting_sheet_parity.py` builds a full draft, takes the waiting sheet, approves
+the draft through `approve_application`, takes the owner's in-game sheet, and compares the two
+key by key. It fails when an in-game key is in neither the filled group nor the empty group,
+so a new section cannot be forgotten. The journeys in
+`src/integration_tests/test_waiting_sheet_journeys.py` cover the player from submission
+through revisions, another account, staff, and the 404 states.
+
+**The page.** `frontend/src/character-creation/WaitingSheetPage.tsx` serves
+`/characters/create/sheet`. It draws the in-game plate with an "Awaiting approval" mark and
+the in-game panels, handed the payload instead of a character id. The section row offers only
+what a new character fills: Ties and Knowledge appear only when the payload has something for
+them, and Gallery never appears. A player's page finds their own draft, since an account holds
+at most one; staff open any draft with `?draft=<id>`. A 404 reads "Not found." Every draft
+save, card sync and application change refreshes the page's query.
+
+**The Review stage's night plate.** The status lines are short and name the character by
+first name, by the owner's ruling of 2026-11-25 ("the brevity is stylistic"): "<name>
+submitted and awaiting review.", "<name> in review.", "<name> sent back for revisions.",
+"<name> approved.", "<name> denied." and "<name> withdrawn.", the last two keeping the
+draft's expiry date. The submitted line no longer reads the `review_banner_submitted` copy
+key, because a staff-authored sentence cannot carry the character's name. The submitted plate
+links "Review Sheet" (the waiting sheet) and then "View Application" (the thread), and the
+revisions view puts "Review Sheet" beside Resubmit.
+
+**The path suggestion lines.** The Path stage's "Paths set starting skill suggestions" note
+and the Skills section's opening (`path_skills_desc`) print only when the chosen path has
+`PathSkillSuggestion` rows. Production holds none yet, so the lines stay hidden until staff
+write suggestions, and then return by themselves.
+
+---
+
 ## Email Notifications (#2162)
 
 `world.character_creation.email_service.CGEmailService` sends plain-text notifications at every
@@ -853,6 +932,9 @@ offers no gift on the Path named by `?path_id=`, or on any Path when none is nam
 - `POST /api/character-creation/drafts/{id}/resubmit/` - Resubmit after revisions
 - `POST /api/character-creation/drafts/{id}/withdraw/` - Withdraw application
 - `GET /api/character-creation/drafts/{id}/application/` - Get application with thread
+- `GET /api/character-creation/drafts/{id}/sheet/` - The waiting sheet (#5206): the draft laid
+  out as the in-game sheet, for the draft's account and staff while the application is
+  submitted, in review or sent back; 404 otherwise. See "The waiting sheet" above
 - `POST /api/character-creation/drafts/{id}/application/comments/` - Add comment
 
 ### Staff Review

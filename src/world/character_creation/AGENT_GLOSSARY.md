@@ -145,3 +145,10 @@ _Avoid_: default life (the plan's working name; the player-facing word is "sugge
 **Clear the life** (`offers.clear_life`, the draft's `clear-life` action, #4865; called "Start blank" until #5146):
 The leaf's door out of the suggested life: drops the life's picks and beat states, keeps every other chapter's pick and the `life_loaded_for` stamp, so the suggested life does not return over an emptied one. On the page the door reads "Restart: Clear All Choices" (owner ruling 2026-11-16), stands between Back and Next at the foot of the Lineage stage, and asks before it clears.
 _Avoid_: Start blank (the owner could not tell from the words what it did), reset (the whole draft is not reset; "Restart character creation" in the contents rail does that).
+
+**Waiting sheet** (`sheet_preview.build_waiting_sheet`, `GET drafts/{id}/sheet/`, #5206):
+The sheet a submitted character's player reads before approval, built from the draft alone
+and drawn in the in-game sheet's own panels. Its player and staff may read it while the
+application is submitted, in review or sent back for revisions. The Review stage links it as
+"Review Sheet". _Avoid_: preview sheet, draft sheet, pending sheet (the page's word is the
+sheet itself; the draft is where it comes from, not what it is).

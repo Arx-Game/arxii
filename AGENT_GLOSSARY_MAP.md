@@ -8,7 +8,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 
 ## Per-app glossaries
 
-- [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md)
+- [character_sheets](src/world/character_sheets/AGENT_GLOSSARY.md) - also holds Bonuses band (#5206)
+- [character_creation](src/world/character_creation/AGENT_GLOSSARY.md) - beat, life stage, unknown beat, frame, strike, route, the Final Touches terms, suggested life, clear the life, and Waiting sheet (#5206: the sheet a submitted character's player reads before approval, built from the draft)
 - [magic](src/world/magic/AGENT_GLOSSARY.md) - also holds Substance, Primum, Primum step, Sighting, Calling up and Present (#5018, #5125), technique marks (#5066), Acting aura (#4731), and the Ultimates terms (#4098):
   Ultimate, Known ultimate, Readied ultimate, Reveal, Owned ultimate, Bond ultimate, Gift
   ultimate (#4118); the manifestation terms (#4118): Manifestation option, Character
@@ -84,7 +85,8 @@ term is chosen and the rest are listed under `_Avoid_`.
   Kind, Influence, plus (#3648) Family Template, Vacancy, Importance / Presumed importance,
   Served house, (#3660) Connection, Anchor, Stance, Follow-up, Question kind, (#3675)
   Offer, Opener, Arrives as, Chapter, Tradition state, Standard lines, Schooling line,
-  Closed by route, and (#3983) Believed Dead. Character Creation has no glossary file of its own.
+  Closed by route, and (#3983) Believed Dead. Character Creation's own terms live in its
+  glossary file, listed above.
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md), incl. MissionTheme (#5124)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
