@@ -161,6 +161,15 @@ def creation_technique_forms(
     its resonance (``_prefer_early_form``; the default form when that resonance leads),
     then one locked form ahead per resonance. Read by the character-creation waiting sheet
     (#5206).
+
+    A copy of ``available_technique_forms``'s rules for that one case, not a call to it, on
+    purpose: it cannot run on an unsaved stand-in. It resolves every form through
+    ``resolve_specialized_variant``, which reads the caster's cached handlers (the GIFT
+    thread through ``gift_threads_for`` and ``character.threads``, the early form through
+    ``character.techniques.hold_for``) and the sheet's worn alternate self, all of them
+    queries on rows a draft does not have. Faking those handlers would put a test double in
+    the read path. The parity test (``character_creation/tests/test_waiting_sheet_parity``)
+    compares the two outputs for a draft with an early form and a locked form ahead.
     """
     early = (
         early_form
