@@ -2129,6 +2129,14 @@
 .interview .plate-night .btn-quiet {
   color: var(--cg-night-soft);
 }
+/* The paper's muted ink is unreadable on the night ground (1.73:1), so the plate's
+   links take the plate's own soft ink, as its quiet buttons do (#5206). */
+.interview .plate-night .quiet-link {
+  color: var(--cg-night-soft);
+}
+.interview .plate-night .quiet-link:hover {
+  color: rgb(var(--cg-night-glow));
+}
 .interview .plate-night .plate-imprint {
   color: rgb(var(--cg-night-glow));
 }
