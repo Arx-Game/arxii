@@ -60,6 +60,6 @@ describe('KnowledgePanel', () => {
   it('says so when the character keeps none', () => {
     renderPanel([]);
 
-    expect(screen.getByText('You know nothing of theirs.')).toBeInTheDocument();
+    expect(screen.getByText('No secrets.')).toBeInTheDocument();
   });
 });

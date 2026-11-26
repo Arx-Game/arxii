@@ -88,7 +88,7 @@ export function SecretsTab({
 
   const secrets = given ?? data?.results ?? [];
   if (secrets.length === 0) {
-    return <Ledger>You know nothing of theirs.</Ledger>;
+    return <Ledger>{given ? 'No secrets.' : 'You know nothing of theirs.'}</Ledger>;
   }
 
   return (
