@@ -206,6 +206,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     covenants: [],
     ties: [],
     ties_ap_this_week: null,
+    secrets: [],
     ...overrides,
   };
 }

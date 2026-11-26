@@ -42,6 +42,7 @@ import type {
   CharacterSheetKeyringEntry,
   CharacterSheetMentor,
   CharacterSheetOriginSlot,
+  CharacterSheetOwnSecret,
   CharacterSheetPayload,
   CharacterSheetStanding,
   CharacterSheetTie,
@@ -251,21 +252,30 @@ function ThreadsBlock({ sheetId }: { sheetId: number }) {
   );
 }
 
-/** Knowledge — what they know and what they could tell. The player's own. */
+/**
+ * Knowledge — what they know and what they could tell. The player's own.
+ *
+ * Secrets lists the character's own secrets, the ones it knows about itself (#5206, owner
+ * ruling 2026-11-26: a sheet shows its own player everything but GM and staff notes). They
+ * ride the sheet payload (`secrets`), which carries them for the owner and staff only.
+ */
 export function KnowledgePanel({
   sheetId,
   viewerEntryId,
   isStaff,
+  ownSecrets,
 }: {
   sheetId: number;
   viewerEntryId: number | null;
   isStaff: boolean;
+  /** The character's own secrets from the sheet payload. */
+  ownSecrets: CharacterSheetOwnSecret[];
 }) {
   return (
     <div className="refsheet-columns-3">
       <Stack>
         <Heading>Secrets</Heading>
-        <SecretsTab subjectId={sheetId} viewerId={viewerEntryId} />
+        <SecretsTab subjectId={sheetId} viewerId={viewerEntryId} secrets={ownSecrets} />
         {isStaff && <StaffSecretsPanel subjectId={sheetId} />}
       </Stack>
       <Stack>

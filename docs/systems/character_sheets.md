@@ -56,7 +56,7 @@ attributes.
 
 **Nine sections** replace the old sixteen tabs. Six are public — Sheet, Physical,
 Ties, Distinctions, Magic, Gallery (#4151) — then a visible break labelled "Yours only" and three the
-character's own player reads: Knowledge (secrets, clues, gossip), Estate (purse,
+character's own player reads: Knowledge (their own secrets, clues, gossip), Estate (purse,
 carried, property, the land their organizations hold, agreements, the law) and Growth
 (advancement, sheet-change requests, languages, origin story). Estate is named for what
 it holds rather than "Holdings", which reads as fiefs in this genre and is not what the
@@ -414,6 +414,20 @@ Otherwise the section is an empty list.
 draws it on the Sheet tab, under Abilities (`SheetPanel`). The character-creation waiting
 sheet (`docs/systems/character_creation.md`, "The waiting sheet") fills the same section from
 a draft's cards and home comfort, so the same band draws it before approval.
+
+## A player's own secrets (#5206)
+
+Owner ruling (2026-11-26): a sheet shows its own player everything but GM and staff notes,
+so a player always sees the secrets about their character that the character knows, though
+no other player sees them unless they are shared. The payload's `secrets` is that list for
+the owner and staff (`[]` for anyone else): `world.secrets.own.own_secret_entries(sheet)`,
+one read of the secret shelf `secrets_owned_by(sheet)` (the subject-aware secrets, and any a
+held record has since granted; a secret the character does not know about itself stays
+off), most dangerous first, then newest. Each row is an `OwnSecretEntry` (`types.py`),
+shaped like a known-secrets row and read in full by its subject; `own_secret_entry` builds
+it, and the character-creation waiting sheet builds its own list through the same function,
+so the two read the same. The Knowledge tab's Secrets column (`KnowledgePanel`, given
+`ownSecrets`) draws it through `SecretsTab`'s `secrets` prop.
 
 ## The family name is said once (#5206)
 

@@ -20,7 +20,8 @@ The waiting sheet has no character to fetch by, so these take what they draw as 
 prop and make no query when it is given (absent, each behaves as before): `Plate` `mark` (a
 node above the name), `SectionRow` `sections` (the sections offered), `DistinctionsTab` /
 `DistinctionsPanel` `payload`, `SpellbookTab` / `MagicPanel` `payload`, `SecretsTab`
-`secrets`, `XpLedgerCard` `ledger`, `LanguagesSection` `languages`. The Estate's pieces are
+`secrets` (the in-game Knowledge tab hands it the payload's own secrets too, `KnowledgePanel`
+`ownSecrets`, #5206), `XpLedgerCard` `ledger`, `LanguagesSection` `languages`. The Estate's pieces are
 exported from `panels.tsx` and draw from data: `PurseBlock` (`balance`), `CarriedBlock`
 (`items`, `outfits`, `wardrobe` for the links), `DomainsBlock`, `KeyringBlock`;
 `EstatePanel` fetches and passes them in. `OriginStoryAnswers` is the origin story

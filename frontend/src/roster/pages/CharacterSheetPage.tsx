@@ -241,6 +241,7 @@ export function CharacterSheetPage() {
               sheetId={sheetId}
               viewerEntryId={viewerEntryId}
               isStaff={Boolean(account?.is_staff)}
+              ownSecrets={sheet?.secrets ?? []}
             />
           )}
 

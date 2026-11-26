@@ -16,7 +16,7 @@ export type { TechniqueEffectSummary } from '@/magic/types';
 // extended rather than duplicated (#3648).
 import type { components } from '@/generated/api';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
-import type { CharacterSheetPayload } from '@/character_sheets/api';
+import type { CharacterSheetOwnSecret, CharacterSheetPayload } from '@/character_sheets/api';
 import type { CharacterXpLedger } from '@/progression/types';
 
 export interface StartingArea {
@@ -1798,10 +1798,9 @@ export interface WaitingSheetCarriedItem {
   suggested_value: number | null;
 }
 
-/** One of the character's own secrets, shaped like a known-secrets row; `id` is below zero. */
-export type WaitingSheetSecret = Omit<components['schemas']['KnownSecret'], 'found_at'> & {
-  found_at: string | null;
-};
+/** One of the character's own secrets, as the in-game sheet carries them; `id` is below
+ * zero, since the Secret is made at approval. */
+export type WaitingSheetSecret = CharacterSheetOwnSecret;
 
 /**
  * `GET /api/character-creation/drafts/{id}/sheet/` (#5206): a submitted draft laid out as
@@ -1819,5 +1818,4 @@ export interface WaitingSheetPayload extends Omit<CharacterSheetPayload, 'id' | 
   carried: WaitingSheetCarriedItem[];
   xp_ledger: CharacterXpLedger;
   languages: components['schemas']['MyLanguage'][];
-  secrets: WaitingSheetSecret[];
 }

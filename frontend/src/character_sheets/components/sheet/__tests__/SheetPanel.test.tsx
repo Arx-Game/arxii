@@ -78,6 +78,7 @@ function payload(overrides: { family: { id: number; name: string } | null }) {
     covenants: [],
     ties: [],
     ties_ap_this_week: null,
+    secrets: [],
   } as unknown as CharacterSheetPayload;
 }
 
