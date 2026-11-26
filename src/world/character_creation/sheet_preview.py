@@ -135,6 +135,7 @@ if TYPE_CHECKING:
     from world.distinctions.models import Distinction
     from world.forms.models import FormTrait
     from world.magic.models import Gift, GlimpseTag, Resonance, Technique
+    from world.magic.types.technique_effects import TechniqueSignaturePayload
     from world.mechanics.models import ModifierTarget
     from world.mechanics.services import DerivedAmountReader
     from world.mechanics.types import HeldEffect, HeldEffectsValuation
@@ -341,6 +342,22 @@ def _starting_room(draft: CharacterDraft) -> ObjectDB | None:
     return resolve_fallback_starting_room()
 
 
+@dataclass
+class _CardLookups:
+    """What ``_holdings`` reads once for every pick: the rows its keys name and the marks
+    the life page left on the draft."""
+
+    distinctions: dict[int, Distinction]
+    traits: dict[str, FormTrait]
+    markings: dict[int, DraftMarking]
+    marks: Any
+    marked: set[int]
+    stories: dict
+    figures: dict[int, str]
+    picked: set[int]
+    glimpse_ids: set[int]
+
+
 def _holdings(plan: _Plan) -> list[_Holding]:
     """The cards approval writes, in the order it writes them (``_create_distinctions``).
 
@@ -348,79 +365,125 @@ def _holdings(plan: _Plan) -> list[_Holding]:
     card, as finalize does. Notes take the figure's name and the prestige story the way
     ``_name_figures`` and ``_write_prestige_stories`` set them. Covers follow the picks.
     """
-    from world.character_creation.models import DistinctionOffer, DraftMarking  # noqa: PLC0415
-    from world.character_creation.offers import beat_marks, picked_offer_ids  # noqa: PLC0415
-    from world.character_creation.services import (  # noqa: PLC0415
-        _secret_distinction_ids,
-    )
-    from world.distinctions.models import Distinction  # noqa: PLC0415
-    from world.distinctions.types import feature_key  # noqa: PLC0415
-    from world.forms.models import FormTrait  # noqa: PLC0415
-
     draft = plan.draft
+    entries_by_key = _draft_entries_by_key(draft)
+    if not entries_by_key:
+        return []
+    lookups = _card_lookups(draft, entries_by_key)
+    holdings = [
+        holding
+        for key, entry in entries_by_key.items()
+        if (holding := _holding_for(key, entry, lookups)) is not None
+    ]
+    holdings.extend(_covers(lookups.marks, lookups.picked, {h.distinction.pk for h in holdings}))
+    holdings.extend(_species_drawbacks(draft, holdings))
+    return holdings
+
+
+def _draft_entries_by_key(draft: CharacterDraft) -> dict[tuple, dict]:
+    """The draft's card entries by distinction and feature (``feature_key``), the last
+    entry for a key winning, as ``_create_distinctions`` keys them."""
+    from world.distinctions.types import feature_key  # noqa: PLC0415
+
     entries = [
         entry
         for entry in draft.draft_data.get("distinctions") or []
         if isinstance(entry, dict) and entry.get("distinction_id")
     ]
-    entries_by_key = {feature_key(entry): entry for entry in entries}
-    if not entries_by_key:
-        return []
-    distinctions = Distinction.objects.in_bulk({key[0] for key in entries_by_key})
-    trait_names = {key[1] for key in entries_by_key if key[1]}
-    traits = (
-        {t.name: t for t in FormTrait.objects.filter(name__in=trait_names)} if trait_names else {}
+    return {feature_key(entry): entry for entry in entries}
+
+
+def _card_lookups(draft: CharacterDraft, entries_by_key: dict[tuple, dict]) -> _CardLookups:
+    """The rows and marks every pick reads, each fetched once."""
+    from world.character_creation.models import DraftMarking  # noqa: PLC0415
+    from world.character_creation.offers import beat_marks, picked_offer_ids  # noqa: PLC0415
+    from world.character_creation.services import (  # noqa: PLC0415
+        _secret_distinction_ids,
     )
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.forms.models import FormTrait  # noqa: PLC0415
+
+    trait_names = {key[1] for key in entries_by_key if key[1]}
     marking_ids = {key[2] for key in entries_by_key if key[2]}
-    markings = DraftMarking.objects.filter(draft=draft).in_bulk(marking_ids) if marking_ids else {}
     marks = beat_marks(draft)
-    marked = _secret_distinction_ids(entries_by_key, marks)
-    stories = draft.draft_data.get(PRESTIGE_STORIES_KEY) or {}
-    figure_by_distinction: dict[int, str] = {}
+    picked = picked_offer_ids(draft)
+    return _CardLookups(
+        distinctions=Distinction.objects.in_bulk({key[0] for key in entries_by_key}),
+        traits=(
+            {t.name: t for t in FormTrait.objects.filter(name__in=trait_names)}
+            if trait_names
+            else {}
+        ),
+        markings=(
+            DraftMarking.objects.filter(draft=draft).in_bulk(marking_ids) if marking_ids else {}
+        ),
+        marks=marks,
+        marked=_secret_distinction_ids(entries_by_key, marks),
+        stories=draft.draft_data.get(PRESTIGE_STORIES_KEY) or {},
+        figures=_figure_names(entries_by_key, marks),
+        picked=picked,
+        glimpse_ids=_glimpse_distinction_ids(picked),
+    )
+
+
+def _figure_names(entries_by_key: dict[tuple, dict], marks: BeatMarks) -> dict[int, str]:
+    """Distinction id to the figure name a beat gave one of its picked offers
+    (``_name_figures``), the first one found."""
+    figures: dict[int, str] = {}
     for (distinction_id, _trait, _marking), entry in entries_by_key.items():
         for offer_id in entry.get("offer_ids", []):
             if isinstance(offer_id, int) and offer_id in marks.figures:
-                figure_by_distinction.setdefault(distinction_id, marks.figures[offer_id])
-    picked = picked_offer_ids(draft)
-    glimpse_ids = (
-        set(
-            DistinctionOffer.objects.filter(pk__in=picked, glimpse_tag__isnull=False).values_list(
-                "distinction_id", flat=True
-            )
+                figures.setdefault(distinction_id, marks.figures[offer_id])
+    return figures
+
+
+def _glimpse_distinction_ids(picked: set[int]) -> set[int]:
+    """The distinctions a picked offer born of the Glimpse grants
+    (``_link_glimpse_distinctions``)."""
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+
+    if not picked:
+        return set()
+    return set(
+        DistinctionOffer.objects.filter(pk__in=picked, glimpse_tag__isnull=False).values_list(
+            "distinction_id", flat=True
         )
-        if picked
-        else set()
     )
 
-    holdings: list[_Holding] = []
-    for (distinction_id, trait_name, marking_id), entry in entries_by_key.items():
-        distinction = distinctions.get(distinction_id)
-        if distinction is None:
-            continue
-        trait = traits.get(trait_name) if trait_name else None
-        marking = markings.get(marking_id) if marking_id else None
-        if (trait_name and trait is None) or (marking_id and marking is None):
-            continue
-        notes = str(entry.get("notes", "") or "")
-        figure = figure_by_distinction.get(distinction_id)
-        if figure and distinction.asks_figure_name and not notes:
-            notes = figure
-        if not notes and distinction.prestige_grant_or_none is not None:
-            notes = str(stories.get(str(distinction_id)) or "").strip()
-        holdings.append(
-            _Holding(
-                distinction=distinction,
-                rank=int(entry.get("rank", 1) or 1),
-                notes=notes,
-                feature_trait=trait,
-                feature_marking=marking,
-                is_secret=distinction.secret_by_default or distinction_id in marked,
-                from_glimpse=distinction_id in glimpse_ids,
-            )
-        )
-    holdings.extend(_covers(marks, picked, {h.distinction.pk for h in holdings}))
-    holdings.extend(_species_drawbacks(draft, holdings))
-    return holdings
+
+def _holding_for(key: tuple, entry: dict, lookups: _CardLookups) -> _Holding | None:
+    """One pick's holding, or None when its card is gone or its feature no longer
+    resolves (``_build_character_distinctions``)."""
+    distinction_id, trait_name, marking_id = key
+    distinction = lookups.distinctions.get(distinction_id)
+    if distinction is None:
+        return None
+    trait = lookups.traits.get(trait_name) if trait_name else None
+    marking = lookups.markings.get(marking_id) if marking_id else None
+    if (trait_name and trait is None) or (marking_id and marking is None):
+        return None
+    return _Holding(
+        distinction=distinction,
+        rank=int(entry.get("rank", 1) or 1),
+        notes=_card_notes(distinction, entry, lookups),
+        feature_trait=trait,
+        feature_marking=marking,
+        is_secret=distinction.secret_by_default or distinction_id in lookups.marked,
+        from_glimpse=distinction_id in lookups.glimpse_ids,
+    )
+
+
+def _card_notes(distinction: Distinction, entry: dict, lookups: _CardLookups) -> str:
+    """A pick's notes as finalize leaves them: the entry's own, else the figure's name on a
+    card that asks for one (``_name_figures``), else the prestige story
+    (``_write_prestige_stories``)."""
+    notes = str(entry.get("notes", "") or "")
+    figure = lookups.figures.get(distinction.pk)
+    if figure and distinction.asks_figure_name and not notes:
+        notes = figure
+    if not notes and distinction.prestige_grant_or_none is not None:
+        notes = str(lookups.stories.get(str(distinction.pk)) or "").strip()
+    return notes
 
 
 def _species_drawbacks(draft: CharacterDraft, held: list[_Holding]) -> list[_Holding]:
@@ -603,87 +666,113 @@ def _presented_name(plan: _Plan) -> str:
 
 def _identity(plan: _Plan) -> IdentitySection:
     """Mirrors ``_build_identity`` for the owner (``world.character_sheets.serializers``)."""
-    from world.character_creation.services import _derive_ic_birth_year  # noqa: PLC0415
-    from world.character_creation.sheet_writers import (  # noqa: PLC0415
-        _PRONOUNS_BY_GENDER_KEY,
-    )
-    from world.character_sheets.models import Heritage  # noqa: PLC0415
     from world.character_sheets.serializers import compose_fullname  # noqa: PLC0415
-    from world.game_clock.services import format_ic_month_day, get_ic_now  # noqa: PLC0415
+    from world.game_clock.services import format_ic_month_day  # noqa: PLC0415
 
     draft = plan.draft
     data = draft.draft_data
     beginnings = draft.selected_beginnings
-    # ``_set_heritage``: the Beginnings' heritage, else "Normal", which approval creates if
-    # no row exists yet (an id below zero until then).
-    heritage_row = (
-        beginnings.heritage
-        if beginnings is not None and beginnings.heritage is not None
-        else Heritage.objects.filter(name="Normal").first()
-    )
-    heritage = _ref(heritage_row) if heritage_row is not None else IdNameRef(id=-1, name="Normal")
     age = draft.age or 18
-    chronological = None
-    if draft.age:
-        birth_year = _derive_ic_birth_year(draft)
-        ic_now = get_ic_now() if birth_year is not None else None
-        chronological = (
-            ic_now.year - birth_year if ic_now is not None and birth_year is not None else None
-        )
     gender = draft.selected_gender
-    subject, obj, possessive = (
-        _PRONOUNS_BY_GENDER_KEY.get(gender.key, ("they", "them", "their"))
-        if gender is not None
-        else ("they", "them", "their")
-    )
-    tarot = None
-    card_name = data.get("tarot_card_name")
-    if card_name:
-        from world.tarot.models import TarotCard  # noqa: PLC0415
-
-        card = TarotCard.objects.filter(name=card_name).first()
-        tarot = IdNameRef(id=card.pk, name=card.name) if card is not None else None
     realm = draft.selected_area.realm if draft.selected_area is not None else None
-    fullname = compose_fullname(plan.full_name, plan.family_ref["name"] if plan.family_ref else "")
     # ``set_worship_declaration`` writes a row whenever either being is picked; a CG row's
     # public faith is sincere by default (``WorshipDeclaration.public_is_sincere``).
     declared = draft.public_worship is not None or draft.secret_worship is not None
-    vacancy = draft.selected_vacancy
+    has_birthday = bool(draft.birthday_month and draft.birthday_day)
     return IdentitySection(
         name=_presented_name(plan),
-        fullname=fullname,
+        fullname=compose_fullname(
+            plan.full_name, plan.family_ref["name"] if plan.family_ref else ""
+        ),
         concept=str(data.get("concept") or ""),
         quote=str(data.get("quote") or ""),
         age=age,
         birthday=(
-            format_ic_month_day(draft.birthday_month, draft.birthday_day)
-            if draft.birthday_month and draft.birthday_day
-            else None
+            format_ic_month_day(draft.birthday_month, draft.birthday_day) if has_birthday else None
         ),
-        chronological_age=chronological,
+        chronological_age=_chronological_age(draft),
         biological_age=age,
         withered_years=0,
         gender=IdNameRef(id=gender.pk, name=gender.display_name) if gender is not None else None,
-        pronouns=PronounsData(subject=subject, object=obj, possessive=possessive),
+        pronouns=_pronouns(gender),
         species=_ref(draft.selected_species),
-        heritage=heritage,
+        heritage=_heritage(draft),
         beginnings=[IdNameRef(id=beginnings.pk, name=beginnings.name)] if beginnings else [],
         family=plan.family_ref,
-        tarot_card=tarot,
+        tarot_card=_tarot_card(data),
         origin=_ref(realm),
         path=_ref(draft.selected_path),
         worship=_ref(draft.public_worship) if declared else None,
         worship_sincere=True if declared else None,
         current_mood=None,
-        vacancy=(
-            VacancyRef(
-                name=vacancy.name,
-                presumed_importance=vacancy.presumed_importance,
-                importance=vacancy.importance,
-            )
-            if vacancy is not None
-            else None
-        ),
+        vacancy=_vacancy_ref(draft.selected_vacancy),
+    )
+
+
+def _heritage(draft: CharacterDraft) -> IdNameRef:
+    """``_set_heritage``: the Beginnings' heritage, else "Normal", which approval creates if
+    no row exists yet (an id below zero until then)."""
+    from world.character_sheets.models import Heritage  # noqa: PLC0415
+
+    beginnings = draft.selected_beginnings
+    row = (
+        beginnings.heritage
+        if beginnings is not None and beginnings.heritage is not None
+        else Heritage.objects.filter(name="Normal").first()
+    )
+    return (
+        IdNameRef(id=row.pk, name=row.name) if row is not None else IdNameRef(id=-1, name="Normal")
+    )
+
+
+def _chronological_age(draft: CharacterDraft) -> int | None:
+    """Years since the IC birth year approval writes (``_derive_ic_birth_year``), or None
+    when it is unknowable (a Sleeper, no game clock) or the draft has no age."""
+    from world.character_creation.services import _derive_ic_birth_year  # noqa: PLC0415
+    from world.game_clock.services import get_ic_now  # noqa: PLC0415
+
+    if not draft.age:
+        return None
+    birth_year = _derive_ic_birth_year(draft)
+    if birth_year is None:
+        return None
+    ic_now = get_ic_now()
+    return ic_now.year - birth_year if ic_now is not None else None
+
+
+def _pronouns(gender: Any) -> PronounsData:
+    """The pronouns ``set_pronouns_from_gender`` writes: by the gender's key, else
+    they/them/their."""
+    from world.character_creation.sheet_writers import (  # noqa: PLC0415
+        _PRONOUNS_BY_GENDER_KEY,
+    )
+
+    default = ("they", "them", "their")
+    subject, obj, possessive = (
+        _PRONOUNS_BY_GENDER_KEY.get(gender.key, default) if gender is not None else default
+    )
+    return PronounsData(subject=subject, object=obj, possessive=possessive)
+
+
+def _tarot_card(data: dict) -> IdNameRef | None:
+    """The drawn tarot card (``_set_tarot_card``), when its name still names a card."""
+    card_name = data.get("tarot_card_name")
+    if not card_name:
+        return None
+    from world.tarot.models import TarotCard  # noqa: PLC0415
+
+    card = TarotCard.objects.filter(name=card_name).first()
+    return IdNameRef(id=card.pk, name=card.name) if card is not None else None
+
+
+def _vacancy_ref(vacancy: Any) -> VacancyRef | None:
+    """The held seat as the owner reads it (``_resolve_vacancy``, privileged)."""
+    if vacancy is None:
+        return None
+    return VacancyRef(
+        name=vacancy.name,
+        presumed_importance=vacancy.presumed_importance,
+        importance=vacancy.importance,
     )
 
 
@@ -1089,40 +1178,48 @@ def _origin_slot_entries(plan: _Plan) -> list[OriginSlotEntry]:
     choices = OriginTemplateSlotChoice.objects.in_bulk(
         [answers.picks[sid] for sid in slot_ids if sid in answers.picks]
     )
-    entries: list[tuple[tuple[int, int], OriginSlotEntry]] = []
-    for sid in slot_ids:
-        slot = slots.get(sid)
-        if slot is None:
-            continue
-        choice = choices.get(answers.picks.get(sid, 0))
-        if choice is not None and choice.slot_id != slot.pk:
-            choice = None
-        org = orgs.get(anchors.get(sid))
-        figure = answers.figures.get(sid, "") if slot.kind == QuestionKind.PERSON else ""
-        value = answers.texts.get(sid, "")
-        if not value and choice is None and org is None and not figure:
-            continue
-        entries.append(
-            (
-                (slot.sort_order, slot.pk),
-                OriginSlotEntry(
-                    slot_id=slot.pk,
-                    slot_name=slot.name,
-                    slot_prompt=slot.prompt,
-                    value=value,
-                    kind=slot.kind,
-                    connection_kind=slot.connection_kind,
-                    life_stage=slot.life_stage,
-                    choice_name=choice.name if choice is not None else "",
-                    choice_description=choice.description if choice is not None else "",
-                    organization_id=org.pk if org is not None else None,
-                    organization_name=org.name if org is not None else "",
-                    figure_name=figure,
-                ),
+    ordered = sorted(slots.values(), key=lambda slot: (slot.sort_order, slot.pk))
+    return [
+        entry
+        for slot in ordered
+        if (
+            entry := _origin_slot_entry(
+                slot,
+                answers,
+                choice=choices.get(answers.picks.get(slot.pk, 0)),
+                org=orgs.get(anchors.get(slot.pk)),
             )
         )
-    entries.sort(key=lambda pair: pair[0])
-    return [entry for _, entry in entries]
+        is not None
+    ]
+
+
+def _origin_slot_entry(
+    slot: Any, answers: Any, *, choice: Any, org: Organization | None
+) -> OriginSlotEntry | None:
+    """One answered question as ``_build_story`` lists it, or None when it holds nothing
+    ``set_origin_slot`` would write (no text, pick, anchor or figure). A pick from another
+    question is ignored, as ``_finalize_origin_slots`` ignores it."""
+    if choice is not None and choice.slot_id != slot.pk:
+        choice = None
+    figure = answers.figures.get(slot.pk, "") if slot.kind == QuestionKind.PERSON else ""
+    value = answers.texts.get(slot.pk, "")
+    if not value and choice is None and org is None and not figure:
+        return None
+    return OriginSlotEntry(
+        slot_id=slot.pk,
+        slot_name=slot.name,
+        slot_prompt=slot.prompt,
+        value=value,
+        kind=slot.kind,
+        connection_kind=slot.connection_kind,
+        life_stage=slot.life_stage,
+        choice_name=choice.name if choice is not None else "",
+        choice_description=choice.description if choice is not None else "",
+        organization_id=org.pk if org is not None else None,
+        organization_name=org.name if org is not None else "",
+        figure_name=figure,
+    )
 
 
 def _story(plan: _Plan) -> StorySection:
@@ -1392,53 +1489,63 @@ def _current_residence(plan: _Plan) -> IdNameRef | None:
 
 def _keyring(plan: _Plan) -> list[KeyringEntry]:
     """Mirrors ``_build_keyring`` for the owner: the home's tenant key, then every open
-    grant an organization the character joins already holds."""
+    grant an organization the character joins already holds, by place."""
+    rows = _home_key(plan) + _organization_keys(plan)
+    rows.sort(key=lambda pair: pair[0])
+    return [entry for _, entry in rows]
+
+
+def _home_key(plan: _Plan) -> list[tuple[tuple[str, str], KeyringEntry]]:
+    """The tenant key to the home the residence grant makes, with its sort key."""
+    from world.locations.constants import LocationRole  # noqa: PLC0415
+
+    profile = _residence_room(plan)
+    if profile is None:
+        return []
+    entry = KeyringEntry(
+        id=plan.next_id(),
+        place=profile.objectdb.db_key,
+        where=profile.area.name if profile.area else "",
+        rung=LocationRole(LocationRole.TENANT).label,
+        through="",
+        granted_by="",
+    )
+    return [((profile.objectdb.db_key, ""), entry)]
+
+
+def _organization_keys(plan: _Plan) -> list[tuple[tuple[str, str], KeyringEntry]]:
+    """The open grants the organizations the character joins already hold, as
+    ``_keyring_entry`` shapes them, each with its sort key."""
     from django.db import models  # noqa: PLC0415
 
     from world.character_sheets.serializers import _keyring_entry  # noqa: PLC0415
-    from world.locations.constants import LocationRole  # noqa: PLC0415
     from world.locations.models import LocationTenancy  # noqa: PLC0415
 
-    rows: list[tuple[tuple[str, str], KeyringEntry]] = []
-    profile = _residence_room(plan)
-    if profile is not None:
-        rows.append(
-            (
-                (profile.objectdb.db_key, ""),
-                KeyringEntry(
-                    id=plan.next_id(),
-                    place=profile.objectdb.db_key,
-                    where=profile.area.name if profile.area else "",
-                    rung=LocationRole(LocationRole.TENANT).label,
-                    through="",
-                    granted_by="",
-                ),
-            )
-        )
     org_ids = [m.organization.pk for m in plan.memberships]
-    if org_ids:
-        now = timezone.now()
-        grants = (
-            LocationTenancy.objects.filter(tenant_organization_id__in=org_ids)
-            .filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=now))
-            .select_related(
-                "room_profile__objectdb",
-                "room_profile__area",
-                "area",
-                "tenant_organization",
-                "granted_by",
-            )
+    if not org_ids:
+        return []
+    grants = (
+        LocationTenancy.objects.filter(tenant_organization_id__in=org_ids)
+        .filter(models.Q(ends_at__isnull=True) | models.Q(ends_at__gt=timezone.now()))
+        .select_related(
+            "room_profile__objectdb",
+            "room_profile__area",
+            "area",
+            "tenant_organization",
+            "granted_by",
         )
-        for grant in grants:
-            entry = _keyring_entry(grant)
-            if entry is not None:
-                key = (
-                    grant.room_profile.objectdb.db_key if grant.room_profile else "",
-                    grant.area.name if grant.area else "",
-                )
-                rows.append((key, entry))
-    rows.sort(key=lambda pair: pair[0])
-    return [entry for _, entry in rows]
+    )
+    return [
+        (
+            (
+                grant.room_profile.objectdb.db_key if grant.room_profile else "",
+                grant.area.name if grant.area else "",
+            ),
+            entry,
+        )
+        for grant in grants
+        if (entry := _keyring_entry(grant)) is not None
+    ]
 
 
 def _domains(plan: _Plan) -> list[OrgDomainEntry]:
@@ -1776,32 +1883,57 @@ def _theming(magic: MagicSection | None) -> ThemingSection:
     )
 
 
+@dataclass
+class _TechniquePicks:
+    """What every technique entry reads, fetched once: the path's style, each technique's
+    personalization pick and the rows its ids name, and the gift thread's resonances."""
+
+    style: str
+    personal: dict[int, Any]
+    prices: dict[int, Any]
+    bonuses: dict[int, Any]
+    early_forms: dict[int, Any]
+    components: Any
+    resonance_ids: list[int]
+    lead: Resonance | None
+
+
 def _gifts(plan: _Plan, picks: MagicPicks) -> list[GiftEntry]:
     """Mirrors ``_build_magic_gifts``: the major gift with its techniques (as each pick's
     personalization names and prices it), then the species' gifts."""
-    from world.magic.models import (  # noqa: PLC0415
-        CharacterTechnique,
-        Restriction,
-        SignatureMotifBonus,
-    )
+    from world.species.services import species_gift_grants  # noqa: PLC0415
+
+    major = picks.gift
+    if major is None:
+        return []
+    context = _technique_picks(plan, picks)
+    gifts = [
+        _gift_entry(
+            major,
+            [_technique_entry(t, context) for t in picks.techniques if t.gift_id == major.pk],
+        )
+    ]
+    seen = {major.pk}
+    for grant in species_gift_grants(plan.draft.selected_species):
+        if grant.gift_id not in seen:
+            seen.add(grant.gift_id)
+            gifts.append(_gift_entry(grant.gift, []))
+    return gifts
+
+
+def _technique_picks(plan: _Plan, picks: MagicPicks) -> _TechniquePicks:
+    """The personalization picks ``apply_creation_personalizations`` writes, and the
+    prices, flourishes and early forms they name, each read once."""
+    from world.magic.models import Restriction, SignatureMotifBonus  # noqa: PLC0415
     from world.magic.services.creation_personalization import (  # noqa: PLC0415
         parse_personalization_picks,
     )
-    from world.magic.services.technique_forms import (  # noqa: PLC0415
-        creation_next_signature,
-        creation_technique_forms,
-        technique_price_payload,
-    )
     from world.magic.services.technique_personalization import (  # noqa: PLC0415
-        hold_display_name,
         price_components_by_price,
     )
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
-    from world.magic.types.technique_effects import TechniqueSignaturePayload  # noqa: PLC0415
-    from world.species.services import species_gift_grants  # noqa: PLC0415
 
     path = plan.draft.selected_path
-    style = path.style.name if path is not None and path.style_id is not None else ""
     personal = {
         pick.technique_id: pick
         for pick in parse_personalization_picks(
@@ -1810,75 +1942,89 @@ def _gifts(plan: _Plan, picks: MagicPicks) -> list[GiftEntry]:
         )
     }
     prices = Restriction.objects.in_bulk([p.price_id for p in personal.values() if p.price_id])
-    bonuses = SignatureMotifBonus.objects.in_bulk(
-        [p.signature_bonus_id for p in personal.values() if p.signature_bonus_id]
+    return _TechniquePicks(
+        style=path.style.name if path is not None and path.style_id is not None else "",
+        personal=personal,
+        prices=prices,
+        bonuses=SignatureMotifBonus.objects.in_bulk(
+            [p.signature_bonus_id for p in personal.values() if p.signature_bonus_id]
+        ),
+        early_forms=TechniqueVariant.objects.in_bulk(
+            [p.early_form_id for p in personal.values() if p.early_form_id]
+        ),
+        components=price_components_by_price(prices.keys()),
+        resonance_ids=[pick.resonance.pk for pick in picks.ordered_resonances],
+        lead=picks.lead_resonance,
     )
-    early_forms = TechniqueVariant.objects.in_bulk(
-        [p.early_form_id for p in personal.values() if p.early_form_id]
+
+
+def _picked(rows: dict[int, Any], row_id: int | None) -> Any:
+    """The row a pick names, or None when it names none."""
+    return rows.get(row_id) if row_id else None
+
+
+def _technique_entry(tech: Technique, context: _TechniquePicks) -> TechniqueEntry:
+    """One technique as the new character's spellbook lists it: the hold its pick
+    personalizes, the forms its gift thread reaches, and a flourish's signature."""
+    from world.magic.models import CharacterTechnique  # noqa: PLC0415
+    from world.magic.services.technique_forms import (  # noqa: PLC0415
+        creation_next_signature,
+        creation_technique_forms,
+        technique_price_payload,
     )
-    components = price_components_by_price(prices.keys())
-    resonance_ids = [pick.resonance.pk for pick in picks.ordered_resonances]
-    lead = picks.lead_resonance
+    from world.magic.services.technique_personalization import hold_display_name  # noqa: PLC0415
 
-    def technique_entry(tech: Technique) -> TechniqueEntry:
-        pick = personal.get(tech.pk)
-        hold = CharacterTechnique(
-            technique=tech,
-            custom_name=pick.custom_name if pick else "",
-            custom_description=pick.custom_description if pick else "",
-            price=prices.get(pick.price_id) if pick and pick.price_id else None,
-        )
-        bonus = bonuses.get(pick.signature_bonus_id) if pick and pick.signature_bonus_id else None
-        if lead is None:
-            bonus = None
-        early = early_forms.get(pick.early_form_id) if pick and pick.early_form_id else None
-        return TechniqueEntry(
-            name=hold_display_name(hold, fallback=tech.name),
-            catalog_name=tech.name,
-            level=tech.level,
-            style=style,
-            description=hold.custom_description or tech.description,
-            effect_summary=tech.cached_effect_summary,
-            forms=creation_technique_forms(tech, resonance_ids, early_form=early),
-            signature=(
-                TechniqueSignaturePayload(
-                    name=bonus.name,
-                    narrative_snippet=bonus.narrative_snippet,
-                    intensity_delta=bonus.flat_intensity_delta,
-                )
-                if bonus is not None
-                else None
-            ),
-            price=technique_price_payload(hold, components=components),
-            # A flourish weaves the TECHNIQUE thread at its own level in the lead
-            # resonance (``apply_creation_personalizations``); the next one is read off it.
-            next_signature=(
-                creation_next_signature(lead.pk, bonus.min_crossing_level)
-                if bonus is not None and lead is not None
-                else None
-            ),
-        )
+    pick = context.personal.get(tech.pk)
+    hold = CharacterTechnique(
+        technique=tech,
+        custom_name=pick.custom_name if pick else "",
+        custom_description=pick.custom_description if pick else "",
+        price=_picked(context.prices, pick.price_id) if pick else None,
+    )
+    lead = context.lead
+    # A flourish weaves its TECHNIQUE thread in the lead resonance; without one, none.
+    bonus = _picked(context.bonuses, pick.signature_bonus_id) if pick and lead else None
+    early = _picked(context.early_forms, pick.early_form_id) if pick else None
+    return TechniqueEntry(
+        name=hold_display_name(hold, fallback=tech.name),
+        catalog_name=tech.name,
+        level=tech.level,
+        style=context.style,
+        description=hold.custom_description or tech.description,
+        effect_summary=tech.cached_effect_summary,
+        forms=creation_technique_forms(tech, context.resonance_ids, early_form=early),
+        signature=_signature_payload(bonus),
+        price=technique_price_payload(hold, components=context.components),
+        # The next flourish is read off that thread, at the flourish's own level.
+        next_signature=(
+            creation_next_signature(lead.pk, bonus.min_crossing_level)
+            if bonus is not None and lead is not None
+            else None
+        ),
+    )
 
-    def gift_entry(gift: Gift, techniques: list[TechniqueEntry]) -> GiftEntry:
-        return GiftEntry(
-            name=gift.name,
-            description=gift.description,
-            resonances=[r.name for r in gift.resonances.all()],
-            techniques=techniques,
-        )
 
-    major = picks.gift
-    if major is None:
-        return []
-    gifts = [
-        gift_entry(major, [technique_entry(t) for t in picks.techniques if t.gift_id == major.pk])
-    ]
-    seen = {major.pk}
-    for grant in species_gift_grants(plan.draft.selected_species):
-        if grant.gift_id not in seen:
-            seen.add(grant.gift_id)
-            gifts.append(gift_entry(grant.gift, []))
-    return gifts
+def _signature_payload(bonus: Any) -> TechniqueSignaturePayload | None:
+    """A signed flourish as the spellbook shows it (``technique_signature_payload``)."""
+    from world.magic.types.technique_effects import TechniqueSignaturePayload  # noqa: PLC0415
+
+    if bonus is None:
+        return None
+    return TechniqueSignaturePayload(
+        name=bonus.name,
+        narrative_snippet=bonus.narrative_snippet,
+        intensity_delta=bonus.flat_intensity_delta,
+    )
+
+
+def _gift_entry(gift: Gift, techniques: list[TechniqueEntry]) -> GiftEntry:
+    """One gift as the spellbook lists it, with its authored resonances."""
+    return GiftEntry(
+        name=gift.name,
+        description=gift.description,
+        resonances=[r.name for r in gift.resonances.all()],
+        techniques=techniques,
+    )
 
 
 def _motif(plan: _Plan, picks: MagicPicks) -> MotifSection | None:

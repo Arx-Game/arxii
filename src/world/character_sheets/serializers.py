@@ -2511,8 +2511,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             # #3988 — the stored values staff edit mode edits; None for anyone else.
             "staff_edit": _build_staff_edit(sheet) if can_edit_npc_sheet(user, sheet) else None,
             **_build_stat_sections(sheet, show=show_stats),
-            # #5206 — the Bonuses band follows the stats section's visibility.
-            "bonuses": _build_bonuses(sheet, privileged=privileged) if show_stats else [],
+            **_bonus_and_secret_sections(sheet, show_stats=show_stats, privileged=privileged),
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),
@@ -2569,10 +2568,22 @@ class CharacterSheetSerializer(serializers.Serializer):
             # no ties rather than one per consumer plus their batched reads.
             "ties": _build_ties(tie_sides, viewer_sheet, privileged=privileged),
             "ties_ap_this_week": _ties_ap_this_week(tie_sides) if privileged else None,
-            # Knowledge's own secrets (#5206, owner ruling 2026-11-26): what the character
-            # knows about itself, the owner's and staff's only.
-            "secrets": own_secret_entries(sheet) if privileged else [],
         }
+
+
+def _bonus_and_secret_sections(
+    sheet: CharacterSheet, *, show_stats: bool, privileged: bool
+) -> dict[str, Any]:
+    """The payload's ``bonuses`` and ``secrets`` (#5206).
+
+    The Bonuses band follows the stats section's visibility. The own secrets are Knowledge's
+    (owner ruling 2026-11-26): what the character knows about itself, the owner's and
+    staff's only.
+    """
+    return {
+        "bonuses": _build_bonuses(sheet, privileged=privileged) if show_stats else [],
+        "secrets": own_secret_entries(sheet) if privileged else [],
+    }
 
 
 def _build_face_details(
