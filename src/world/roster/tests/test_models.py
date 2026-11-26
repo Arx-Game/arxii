@@ -189,8 +189,8 @@ class RosterEntryModelTestCase(TestCase):
         entry = RosterEntryFactory()
         assert entry.accepts_applications
 
+        # Saving the tenure clears the entry's cached tenures (#5206), so no manual reset.
         RosterTenureFactory(roster_entry=entry)
-        del entry.cached_tenures
         assert not entry.accepts_applications
 
         # Name the shelf: roster_type is the get_or_create key, so a bare
