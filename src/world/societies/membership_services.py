@@ -168,6 +168,32 @@ def join_organization(
     return membership
 
 
+def covert_membership_secret_level(rank: OrganizationRank | None) -> int:
+    """The level a covert membership's Secret holds, by the rank's tier (#2820)."""
+    from world.societies.constants import (  # noqa: PLC0415
+        COVERT_SECRET_DEFAULT_LEVEL,
+        COVERT_SECRET_LEVEL_BY_TIER,
+    )
+
+    tier = rank.tier if rank is not None else None
+    return COVERT_SECRET_LEVEL_BY_TIER.get(tier, COVERT_SECRET_DEFAULT_LEVEL)
+
+
+def covert_membership_secret_words(
+    persona_name: str, organization: Organization
+) -> tuple[str, str]:
+    """The content and consequences a covert membership's Secret is minted with (#2820).
+    Shared by ``sync_covert_membership_secret`` and the character-creation waiting sheet,
+    which lists the secret before it exists (#5206)."""
+    return (
+        f"PLACEHOLDER {persona_name} is secretly a member of {organization.name}.",
+        (
+            "PLACEHOLDER Exposure ties them to the organization's deeds — and "
+            "marks them for its enemies."
+        ),
+    )
+
+
 def sync_covert_membership_secret(membership: OrganizationMembership) -> None:
     """Mint/level the covert-membership Secret (#2820).
 
@@ -178,16 +204,11 @@ def sync_covert_membership_secret(membership: OrganizationMembership) -> None:
     Idempotent; the secret survives leaving (having been one stays secret).
     """
     from world.secrets.services import author_secret  # noqa: PLC0415
-    from world.societies.constants import (  # noqa: PLC0415
-        COVERT_SECRET_DEFAULT_LEVEL,
-        COVERT_SECRET_LEVEL_BY_TIER,
-    )
 
     org = membership.organization
     if not org.is_covert:
         return
-    tier = membership.rank.tier if membership.rank_id else None
-    level = COVERT_SECRET_LEVEL_BY_TIER.get(tier, COVERT_SECRET_DEFAULT_LEVEL)
+    level = covert_membership_secret_level(membership.rank if membership.rank_id else None)
 
     if membership.covert_secret_id is not None:
         secret = membership.covert_secret
@@ -198,15 +219,13 @@ def sync_covert_membership_secret(membership: OrganizationMembership) -> None:
 
     from world.secrets.constants import SecretProvenance  # noqa: PLC0415
 
+    content, consequences = covert_membership_secret_words(membership.persona.name, org)
     secret = author_secret(
         subject_sheet=membership.persona.character_sheet,
         provenance=SecretProvenance.GM_AUTHORED,
         level=level,
-        content=(f"PLACEHOLDER {membership.persona.name} is secretly a member of {org.name}."),
-        consequences=(
-            "PLACEHOLDER Exposure ties them to the organization's deeds — and "
-            "marks them for its enemies."
-        ),
+        content=content,
+        consequences=consequences,
     )
     # subject_aware: they know they joined. author_secret defaults leave it
     # False; flip it — this is the one field the service doesn't take.

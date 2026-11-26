@@ -151,6 +151,7 @@ from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.scenes.persona_display import mask_description
+from world.secrets.own import own_secret_entries
 from world.skills.models import CharacterSpecializationValue, Skill
 from world.skills.services import is_skill_at_xp_boundary, skill_rating
 from world.societies.constants import MembershipFavor
@@ -2568,6 +2569,9 @@ class CharacterSheetSerializer(serializers.Serializer):
             # no ties rather than one per consumer plus their batched reads.
             "ties": _build_ties(tie_sides, viewer_sheet, privileged=privileged),
             "ties_ap_this_week": _ties_ap_this_week(tie_sides) if privileged else None,
+            # Knowledge's own secrets (#5206, owner ruling 2026-11-26): what the character
+            # knows about itself, the owner's and staff's only.
+            "secrets": own_secret_entries(sheet) if privileged else [],
         }
 
 

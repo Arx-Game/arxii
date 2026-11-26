@@ -97,6 +97,8 @@ FILLED_KEYS: tuple[str, ...] = (
     "theming",
     "plate_ink",
     "viewer_is_friend",
+    # The character's own secrets, the owner's Knowledge tab (owner ruling 2026-11-26).
+    "secrets",
 )
 #: Always empty for a new character, and asserted empty after approval.
 ALWAYS_EMPTY_KEYS: tuple[str, ...] = (
@@ -136,6 +138,7 @@ _CREATED_ROW_FIELDS: dict[str, tuple[str, ...]] = {
     "keyring": ("id",),
     "magic": ("id",),
     "natural_weapons": ("id",),
+    "secrets": ("id",),
     "current_residence": (),
 }
 

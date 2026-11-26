@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         MentorBondEntry,
         NaturalWeaponEntry,
         OrgDomainEntry,
+        OwnSecretEntry,
         PathDetailSection,
         PersonaEntry,
         SkillEntry,
@@ -286,23 +287,6 @@ class StartingLanguageEntry(TypedDict):
     effective_fluency: int
     effective_band: str
     temporary_sources: list[str]
-
-
-class OwnSecretEntry(TypedDict):
-    """One of the character's own secrets, shaped like a ``/api/secrets/known/`` row read by
-    its subject. ``id`` is below zero: the Secret is made at approval."""
-
-    id: int
-    level: str
-    content: str
-    provenance: str
-    found_at: str | None
-    can_grieve: bool
-    subject: str
-    category: str
-    consequences: str
-    author: str
-    anchored_to: list[dict[str, str]]
 
 
 class WaitingSheetPayload(TypedDict):

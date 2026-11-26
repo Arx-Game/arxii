@@ -698,6 +698,29 @@ class CombatStyleSection(TypedDict):
     vows: list[str]
 
 
+class OwnSecretEntry(TypedDict):
+    """One of the character's own secrets, as the sheet shows them to its own player (#5206).
+
+    Shaped like a ``/api/secrets/known/`` row (``KnownSecretSerializer``) so the Secrets tab
+    draws it, read in full: the owner knows their own secret's category and consequences.
+    Built by ``world.secrets.own.own_secret_entry`` for the in-game sheet and the
+    character-creation waiting sheet alike; on the waiting sheet ``id`` is below zero, since
+    the Secret is made at approval.
+    """
+
+    id: int
+    level: str
+    content: str
+    provenance: str
+    found_at: str | None
+    can_grieve: bool
+    subject: str
+    category: str
+    consequences: str
+    author: str
+    anchored_to: list[dict[str, str]]
+
+
 class ProfileTextField(models.TextChoices):
     """Prose fields covered by version history (#2631, widened to every prose field in #3988).
 

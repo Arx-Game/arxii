@@ -2965,12 +2965,14 @@ class TestCharacterSheetQueryCount(TestCase):
         # character's thread, equipped-item and covenant-role handlers, which this read
         # loads for the band; the fixture holds no thread, worn style or engaged role, so
         # no candidate read follows.
+        # +1 (#5206, owner ruling 2026-11-26): the owner's own secrets for Knowledge, one
+        # read of the secret shelf (``secrets_owned_by``) with its joins selected.
         ModifierTarget.get_for_trait(
             self.character.sheet_data.trait_values.filter(trait__trait_type=TraitType.SKILL)
             .first()
             .trait
         )
-        with self.assertNumQueries(62):
+        with self.assertNumQueries(63):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

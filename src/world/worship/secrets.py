@@ -7,7 +7,13 @@ from world.secrets.models import Secret
 from world.worship.constants import WORSHIP_SECRET_DEFAULT_LEVEL
 
 if TYPE_CHECKING:
-    from world.worship.models import WorshipDeclaration
+    from world.worship.models import WorshipDeclaration, WorshippedBeing
+
+
+def worship_secret_content(being: "WorshippedBeing") -> str:
+    """The words of the Secret a secret worship declaration mints (#2355, #5206: the
+    character-creation waiting sheet lists it before it exists)."""
+    return f"Secretly worships {being.name}"
 
 
 def mint_worship_secret(declaration: "WorshipDeclaration") -> Secret:
@@ -23,7 +29,7 @@ def mint_worship_secret(declaration: "WorshipDeclaration") -> Secret:
         subject_sheet=declaration.character_sheet,
         level=WORSHIP_SECRET_DEFAULT_LEVEL,
         provenance=SecretProvenance.GM_AUTHORED,
-        content=f"Secretly worships {declaration.secret_being.name}",
+        content=worship_secret_content(declaration.secret_being),
     )
     declaration.secret = secret
     declaration.save(update_fields=["secret"])

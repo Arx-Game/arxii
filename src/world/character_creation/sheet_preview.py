@@ -73,7 +73,6 @@ from world.character_creation.constants import (
 from world.character_creation.types import (
     AwaitingSection,
     CarriedItemEntry,
-    OwnSecretEntry,
     PurseSection,
     StartingLanguageEntry,
     WaitingSheetPayload,
@@ -107,6 +106,7 @@ from world.character_sheets.types import (
     OrgMembershipEntry,
     OrgReputationEntry,
     OriginSlotEntry,
+    OwnSecretEntry,
     PathDetailSection,
     PathHistoryEntry,
     PersonaEntry,
@@ -1537,48 +1537,80 @@ def _languages(plan: _Plan) -> list[StartingLanguageEntry]:
 
 
 def _secrets(plan: _Plan) -> list[OwnSecretEntry]:
-    """The character's own secrets as the Secrets tab shows them to the subject
-    (``KnownSecretSerializer``): each card approval relocates into a Secret
-    (``_mint_distinction_secrets``) and each Whispers line (``_seed_whispers``)."""
+    """The character's own secrets as the sheet shows them to its player
+    (``world.secrets.own``), in the order approval makes them and then the own shelf's
+    order: each card relocated into a Secret (``_mint_distinction_secrets``), a secret
+    worship (``mint_worship_secret``), a covert seat taken through the vacancy
+    (``sync_covert_membership_secret``), each Whispers line (``_seed_whispers``), then a
+    covert seat a card or a tie opens."""
     from world.character_creation.services import whisper_lines  # noqa: PLC0415
     from world.secrets.constants import SecretLevel, SecretProvenance  # noqa: PLC0415
-    from world.secrets.serializers import UNKNOWN  # noqa: PLC0415
+    from world.secrets.own import own_secret_entry, own_shelf_order  # noqa: PLC0415
+    from world.societies.membership_services import (  # noqa: PLC0415
+        covert_membership_secret_level,
+        covert_membership_secret_words,
+    )
+    from world.worship.constants import WORSHIP_SECRET_DEFAULT_LEVEL  # noqa: PLC0415
+    from world.worship.secrets import worship_secret_content  # noqa: PLC0415
 
-    def entry(level: int, content: str, provenance: str, author: str) -> OwnSecretEntry:
-        return OwnSecretEntry(
-            id=plan.next_id(),
-            level=SecretLevel(level).label,
+    def row(
+        level: int, content: str, provenance: str, *, author: str = "", consequences: str = ""
+    ) -> tuple[int, OwnSecretEntry]:
+        return level, own_secret_entry(
+            secret_id=plan.next_id(),
+            level=level,
             content=content,
-            provenance=SecretProvenance(provenance).label,
-            found_at=None,
-            can_grieve=False,
+            provenance=provenance,
             subject=plan.full_name,
-            category=UNKNOWN,
-            consequences=UNKNOWN,
             author=author,
-            anchored_to=[],
+            consequences=consequences,
         )
 
-    secrets = [
-        entry(
+    def covert(membership: _Membership) -> tuple[int, OwnSecretEntry]:
+        content, consequences = covert_membership_secret_words(
+            plan.full_name, membership.organization
+        )
+        return row(
+            covert_membership_secret_level(membership.rank),
+            content,
+            SecretProvenance.GM_AUTHORED,
+            consequences=consequences,
+        )
+
+    made: list[tuple[int, OwnSecretEntry]] = [
+        row(
             holding.distinction.default_secret_level,
             holding.distinction.name,
             SecretProvenance.GM_AUTHORED,
-            "GM/Staff",
         )
         for holding in plan.holdings
-        if holding.is_secret and not holding.is_cover
+        if holding.is_secret and not holding.is_cover and not holding.from_species
     ]
-    secrets.extend(
-        entry(
+    draft = plan.draft
+    secret_being = draft.secret_worship
+    if secret_being is not None and (
+        draft.public_worship is None or draft.public_worship.pk != secret_being.pk
+    ):
+        made.append(
+            row(
+                WORSHIP_SECRET_DEFAULT_LEVEL,
+                worship_secret_content(secret_being),
+                SecretProvenance.GM_AUTHORED,
+            )
+        )
+    covert_seats = [m for m in plan.memberships if m.organization.is_covert]
+    made.extend(covert(m) for m in covert_seats if m.vacancy is not None)
+    made.extend(
+        row(
             SecretLevel.UNCOMMON_KNOWLEDGE,
             line,
             SecretProvenance.PLAYER_FLAVOR,
-            plan.full_name,
+            author=plan.full_name,
         )
-        for line in whisper_lines(plan.draft)
+        for line in whisper_lines(draft)
     )
-    return secrets
+    made.extend(covert(m) for m in covert_seats if m.vacancy is None)
+    return own_shelf_order(made)
 
 
 # --- Magic, combat --------------------------------------------------------------------

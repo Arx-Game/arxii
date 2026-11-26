@@ -18,6 +18,19 @@ from world.secrets.models import Secret, SecretCategory, SecretKnowledge
 UNKNOWN = "Unknown"
 
 
+def secret_anchors(secret: Secret) -> list[dict[str, str]]:
+    """The recorded acts a secret is the hidden truth behind, as context links (#1573)."""
+    anchors: list[dict[str, str]] = []
+    if secret.legend_deed_id is not None:
+        anchors.append({"kind": "legend", "label": secret.legend_deed.title})
+    if secret.mission_deed_id is not None:
+        anchors.append({"kind": "mission_deed", "label": "a recorded mission deed"})
+    if secret.scene_id is not None:
+        label = secret.scene.name or f"scene #{secret.scene_id}"
+        anchors.append({"kind": "scene", "label": label})
+    return anchors
+
+
 class KnownSecretSerializer(serializers.Serializer):
     """One known secret, from the viewer's side, with locked layers shown as "Unknown"."""
 
@@ -43,16 +56,7 @@ class KnownSecretSerializer(serializers.Serializer):
         return obj.secret.subject_sheet.character.db_key
 
     def get_anchored_to(self, obj: SecretKnowledge) -> list[dict[str, str]]:
-        secret = obj.secret
-        anchors: list[dict[str, str]] = []
-        if secret.legend_deed_id is not None:
-            anchors.append({"kind": "legend", "label": secret.legend_deed.title})
-        if secret.mission_deed_id is not None:
-            anchors.append({"kind": "mission_deed", "label": "a recorded mission deed"})
-        if secret.scene_id is not None:
-            label = secret.scene.name or f"scene #{secret.scene_id}"
-            anchors.append({"kind": "scene", "label": label})
-        return anchors
+        return secret_anchors(obj.secret)
 
     def get_category(self, obj: SecretKnowledge) -> str:
         secret = obj.secret
