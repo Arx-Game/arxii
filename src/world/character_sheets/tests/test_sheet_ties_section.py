@@ -125,7 +125,10 @@ class SheetTiesSectionTests(APITestCase):
         self.assertEqual(response.data["ties"], [])
         self.assertEqual(response.data["ties_ap_this_week"], 0)
         sql = [q["sql"] for q in ctx.captured_queries]
-        sides = [q for q in sql if "arxii_characterrelationship" in q]
+        # Queries that read the sides themselves. The Bonuses band's thread read joins the
+        # relationship table for a relationship-anchored thread (#5206), so a bare mention
+        # of the table is not a ties query.
+        sides = [q for q in sql if 'FROM "arxii_characterrelationship"' in q]
         self.assertEqual(len(sides), 1, sides)
         self.assertEqual([q for q in sql if "arxii_relationshiptier" in q], [])
         self.assertEqual([q for q in sql if "arxii_relationshipallocation" in q], [])
