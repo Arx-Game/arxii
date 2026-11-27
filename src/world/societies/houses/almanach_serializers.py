@@ -14,7 +14,7 @@ from rest_framework import serializers
 
 from world.realms.models import Realm
 from world.roster.models import Family, FamilyKind, Kinsperson, UnionKind
-from world.societies.houses.almanach_reads import ladder_for_realm
+from world.societies.houses.almanach_reads import unclaimed_counts_by_realm
 from world.societies.houses.constants import TitleTier
 from world.societies.houses.models import (
     HoldingKind,
@@ -75,20 +75,32 @@ class LadderPayloadSerializer(serializers.Serializer):
         return _full_unclaimed_by_tier(obj.unclaimed_by_tier)
 
 
+class AlmanachRealmListSerializer(serializers.ListSerializer):
+    """Load unclaimed counts for the realms on this page before serializing rows."""
+
+    def to_representation(self, data):
+        realms = list(data)
+        self.context["unclaimed_by_realm"] = unclaimed_counts_by_realm(
+            [realm.pk for realm in realms]
+        )
+        return super().to_representation(realms)
+
+
 class AlmanachRealmSerializer(serializers.ModelSerializer):
-    """A realm as the Almanach's realm picker lists it, plus its unclaimed
-    counts. Computing a full ladder per row is one extra Title+Area query
-    pair per realm — acceptable at realm scale (six realms today; #3983
-    Task 5 decision) but not something to do per-row on a large list."""
+    """A realm as the Almanach's realm picker lists it, plus its unclaimed counts."""
 
     unclaimed_by_tier = serializers.SerializerMethodField()
 
     class Meta:
         model = Realm
         fields = ["id", "name", "formal_name", "default_tithe_pct", "unclaimed_by_tier"]
+        list_serializer_class = AlmanachRealmListSerializer
 
     def get_unclaimed_by_tier(self, obj: Realm) -> dict[str, int]:
-        return _full_unclaimed_by_tier(ladder_for_realm(obj).unclaimed_by_tier)
+        counts_by_realm = self.context.get("unclaimed_by_realm")
+        if counts_by_realm is None:
+            counts_by_realm = unclaimed_counts_by_realm([obj.pk])
+        return _full_unclaimed_by_tier(counts_by_realm.get(obj.pk, {}))
 
 
 class AlmanachHouseSummarySerializer(serializers.ModelSerializer):

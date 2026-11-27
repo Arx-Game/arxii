@@ -4,7 +4,9 @@ staff-only ladder cut, house list/document, and house-authoring surface."""
 
 from unittest.mock import patch
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
@@ -50,6 +52,35 @@ class AlmanachApiTests(TestCase):
             realm=cls.realm, tier=TitleTier.KINGDOM, name="Inferna", held_by=cls.crown
         )
         publish_house(cls.crown)
+
+    def test_realm_list_counts_unclaimed_titles_with_fixed_queries(self) -> None:
+        client = APIClient()
+        client.force_authenticate(self.player)
+        url = "/api/almanach/realms/"
+        with CaptureQueriesContext(connection) as single_realm_queries:
+            assert client.get(url).status_code == 200
+
+        realm = RealmFactory(name="Seatless Realm")
+        Title.objects.create(realm=realm, tier=TitleTier.BARONY, name="Barony of Nowhere")
+        empty = RealmFactory(name="Empty Realm")
+        with CaptureQueriesContext(connection) as multiple_realm_queries:
+            response = client.get(url)
+        assert response.status_code == 200
+        single_title_queries = sum(
+            'FROM "arxii_title"' in query["sql"] for query in single_realm_queries
+        )
+        multiple_title_queries = sum(
+            'FROM "arxii_title"' in query["sql"] for query in multiple_realm_queries
+        )
+        assert single_title_queries == multiple_title_queries == 1, (
+            f"Expected one title query per request, got {single_title_queries} "
+            f"for one realm and {multiple_title_queries} for multiple realms"
+        )
+        rows = {row["id"]: row["unclaimed_by_tier"] for row in response.data["results"]}
+        assert rows[realm.pk]["barony"] == 1
+        assert rows[self.realm.pk]["kingdom"] == 0
+        assert all(count == 0 for count in rows[empty.pk].values())
+        assert client.get(f"{url}{realm.pk}/").data["unclaimed_by_tier"] == rows[realm.pk]
 
     def test_staff_reads_the_ladder_and_the_document(self) -> None:
         client = APIClient()
