@@ -63,6 +63,7 @@ from world.character_creation.offers import (
     reconcile_offer_picks,
 )
 from world.character_creation.sheet_writers import SheetWriteError
+from world.character_creation.types import PlannedIntroduction
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.constants import MembershipBasis, ParentageKind
@@ -940,35 +941,44 @@ def first_journal_offered(draft: CharacterDraft) -> bool:
     return area is not None and area.realm is not None and area.realm.name == ARX_REALM_NAME
 
 
-def _write_introductions(
-    draft: CharacterDraft,
-    sheet: CharacterSheet,
-    persona: Persona,
-    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
-) -> None:
-    """Write the Introductions the player answered as white journals (#3621).
+def whisper_lines(draft: CharacterDraft) -> list[str]:
+    """The Whispers Introduction's rumors, one per non-blank line (#3621, #5206).
 
-    The First Journal and the Application assemble question and answer pairs (answered
-    ones only); the Whispers keep one rumor per line, and each line also becomes a
-    Level-1 player-flavor Secret about the character with gossip heat seeded in the
-    start region, so it is overhearable at a hub from day one. A skipped Introduction
-    writes nothing. Journal XP applies as for any entry when the character has an
-    account to award.
+    Finalize writes each as a Secret about the character with gossip heat
+    (``_seed_whispers``); the waiting sheet lists the same lines as the character's own
+    secrets before they exist.
+    """
+    from world.character_creation.constants import INTRODUCTION_WHISPERS  # noqa: PLC0415
+
+    intros = draft.draft_data.get("introductions") or {}
+    whispers = intros.get(INTRODUCTION_WHISPERS) if isinstance(intros, dict) else None
+    if not isinstance(whispers, str):
+        return []
+    return [line.strip() for line in whispers.splitlines() if line.strip()]
+
+
+def planned_introductions(
+    draft: CharacterDraft, *, fallback_name: str
+) -> list[PlannedIntroduction]:
+    """The Introductions a draft answered, as the white journals finalize writes (#3621).
+
+    The First Journal (an Arx start only) and the Application assemble question and answer
+    pairs, answered ones only; the Whispers keep one rumor per line (``whisper_lines``). A
+    skipped Introduction is left out. ``fallback_name`` titles the First Journal when the
+    draft has no first name. The read half of ``_write_introductions``; the waiting sheet's
+    Actor's Sheet lists the same entries (#5206).
     """
     from world.character_creation.constants import (  # noqa: PLC0415
         APPLICATION_TITLE,
         INTRODUCTION_APPLICATION,
         INTRODUCTION_FIRST_JOURNAL,
-        INTRODUCTION_WHISPERS,
         WHISPERS_TITLE,
     )
     from world.journals.constants import JournalKind  # noqa: PLC0415
-    from world.journals.services import create_journal_entry  # noqa: PLC0415
 
     intros = draft.draft_data.get("introductions") or {}
-    if not intros:
-        return
-    award_xp = character.db_account is not None
+    if not intros or not isinstance(intros, dict):
+        return []
 
     def answered(kind: str) -> str:
         answers = intros.get(kind) or []
@@ -979,45 +989,59 @@ def _write_introductions(
         ]
         return "\n\n".join(pairs)
 
+    planned: list[PlannedIntroduction] = []
     if first_journal_offered(draft):
         body = answered(INTRODUCTION_FIRST_JOURNAL)
         if body:
-            first_name = draft.draft_data.get("first_name") or persona.name
-            create_journal_entry(
-                author=sheet,
-                title=f"{first_name}'s First Journal",
-                body=body,
-                is_public=True,
-                award_weekly_xp=award_xp,
-                kind=JournalKind.FIRST_JOURNAL,
+            first_name = draft.draft_data.get("first_name") or fallback_name
+            planned.append(
+                PlannedIntroduction(
+                    kind=JournalKind.FIRST_JOURNAL, title=f"{first_name}'s First Journal", body=body
+                )
             )
     body = answered(INTRODUCTION_APPLICATION)
     if body:
+        planned.append(
+            PlannedIntroduction(kind=JournalKind.APPLICATION, title=APPLICATION_TITLE, body=body)
+        )
+    lines = whisper_lines(draft)
+    if lines:
+        planned.append(
+            PlannedIntroduction(
+                kind=JournalKind.WHISPERS, title=WHISPERS_TITLE, body="\n".join(lines)
+            )
+        )
+    return planned
+
+
+def _write_introductions(
+    draft: CharacterDraft,
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """Write the Introductions the player answered as white journals (#3621).
+
+    The entries are ``planned_introductions``. Each Whispers line also becomes a Level-1
+    player-flavor Secret about the character with gossip heat seeded in the start region,
+    so it is overhearable at a hub from day one. Journal XP applies as for any entry when
+    the character has an account to award.
+    """
+    from world.journals.services import create_journal_entry  # noqa: PLC0415
+
+    award_xp = character.db_account is not None
+    for entry in planned_introductions(draft, fallback_name=persona.name):
         create_journal_entry(
             author=sheet,
-            title=APPLICATION_TITLE,
-            body=body,
+            title=entry.title,
+            body=entry.body,
             is_public=True,
             award_weekly_xp=award_xp,
-            kind=JournalKind.APPLICATION,
+            kind=entry.kind,
         )
-    whispers = intros.get(INTRODUCTION_WHISPERS)
-    lines = (
-        [ln.strip() for ln in whispers.splitlines() if ln.strip()]
-        if isinstance(whispers, str)
-        else []
-    )
-    if not lines:
-        return
-    create_journal_entry(
-        author=sheet,
-        title=WHISPERS_TITLE,
-        body="\n".join(lines),
-        is_public=True,
-        award_weekly_xp=award_xp,
-        kind=JournalKind.WHISPERS,
-    )
-    _seed_whispers(sheet, persona, character, lines)
+    lines = whisper_lines(draft)
+    if lines:
+        _seed_whispers(sheet, persona, character, lines)
 
 
 def _seed_whispers(
@@ -1894,6 +1918,19 @@ def _create_worship_declaration(character: ObjectDB, draft: CharacterDraft) -> N
     from world.character_creation.sheet_writers import set_worship_declaration  # noqa: PLC0415
 
     set_worship_declaration(character.sheet_data, draft.public_worship, draft.secret_worship)
+
+
+def starting_locked_xp(draft: CharacterDraft) -> int:
+    """The locked XP a draft's unspent creation points become at approval, 0 with none
+    left (#5206). The read half of ``_convert_remaining_cg_points_to_xp``, which awards
+    ``remaining x CGPointBudget.get_active_conversion_rate()``; the waiting sheet's Growth
+    tab shows it."""
+    from world.character_creation.models import CGPointBudget  # noqa: PLC0415
+
+    remaining = draft.calculate_cg_points_remaining()
+    if remaining <= 0:
+        return 0
+    return remaining * CGPointBudget.get_active_conversion_rate()
 
 
 def _convert_remaining_cg_points_to_xp(draft: CharacterDraft, character: ObjectDB) -> None:
@@ -3507,19 +3544,24 @@ class _Keep:
 _KEEP: Final = _Keep()
 
 
+def origin_story_state_for(*, has_slots: bool, has_prose: bool) -> OriginStoryState:
+    """The origin story's state from whether answers and a Background exist (#2478, #5206)."""
+    if has_prose and has_slots:
+        return OriginStoryState.COMPLETE
+    if has_slots:
+        return OriginStoryState.SLOTS_ONLY
+    return OriginStoryState.NOT_STARTED
+
+
 def refresh_origin_story_state(sheet: CharacterSheet) -> OriginStoryState:
     """Recompute and persist ``origin_story_state`` from slot rows + prose.
 
     Mirrors ``refresh_glimpse_state`` (``glimpse.py:28-39``).
     """
-    has_slots = sheet.origin_slots.exists()
-    has_prose = bool(sheet.background and sheet.background.strip())
-    if has_prose and has_slots:
-        state = OriginStoryState.COMPLETE
-    elif has_slots:
-        state = OriginStoryState.SLOTS_ONLY
-    else:
-        state = OriginStoryState.NOT_STARTED
+    state = origin_story_state_for(
+        has_slots=sheet.origin_slots.exists(),
+        has_prose=bool(sheet.background and sheet.background.strip()),
+    )
     if sheet.origin_story_state != state:
         sheet.origin_story_state = state
         sheet.save(update_fields=["origin_story_state"])

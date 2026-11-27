@@ -18,6 +18,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
+from rest_framework.generics import get_object_or_404 as drf_get_object_or_404
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -93,6 +94,7 @@ from world.character_creation.serializers import (
     SpeciesSerializer,
     StartingAreaSerializer,
     TraditionSerializer,
+    WaitingSheetSerializer,
     favored_affinity_names_by_tradition,
     favored_gift_names_by_tradition,
     schooling_rows,
@@ -1085,6 +1087,35 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             option_sets, many=True, context={"resonance_id": resonance_id}
         )
         return Response(serializer.data)
+
+    @extend_schema(responses={200: WaitingSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def sheet(self, request: Request, pk: int | None = None) -> Response:
+        """The waiting sheet (#5206): the submitted draft laid out as the in-game sheet.
+
+        The draft's own account and staff may read it, and only while its application is
+        submitted, in review, or sent back for revisions. Anyone else, and any other state,
+        gets 404, so a draft's existence is not disclosed.
+        """
+        from world.character_creation.sheet_preview import (  # noqa: PLC0415
+            waiting_sheet_application,
+        )
+
+        drafts = CharacterDraft.objects.select_related(
+            "selected_area__realm",
+            "selected_beginnings",
+            "selected_species",
+            "selected_gender",
+            "selected_path",
+            "selected_tradition",
+        )
+        if not request.user.is_staff:
+            drafts = drafts.filter(account=request.user)
+        # DRF's lookup answers 404 for a missing or malformed id alike.
+        draft = drf_get_object_or_404(drafts, pk=pk)
+        if waiting_sheet_application(draft) is None:
+            raise Http404
+        return Response(WaitingSheetSerializer(draft).data)
 
     @action(detail=True, methods=[HTTPMethod.POST])
     def submit(self, request: Request, pk: int | None = None) -> Response:

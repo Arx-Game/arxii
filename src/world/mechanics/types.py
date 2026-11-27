@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from actions.models.action_templates import ActionTemplate
     from world.checks.models import CheckType, Consequence
     from world.checks.types import CheckResult
+    from world.distinctions.models import DistinctionEffect
     from world.mechanics.models import ChallengeApproach, ChallengeInstance, ChallengeTemplate
 
 from world.checks.types import OutcomeDisplay
@@ -77,6 +78,81 @@ class ModifierBreakdown:
     total: int
     has_immunity: bool
     negatives_blocked: int
+
+
+@dataclass(frozen=True)
+class HeldEffect:
+    """One distinction effect a character holds, ready to be valued (#5206).
+
+    ``rank`` is the held card's rank and ``value`` the stored value a ``CharacterModifier``
+    carries (or would carry, for a character-creation draft that has no rows yet).
+    ``value_held_effects`` in ``services.py`` values a list of these.
+    """
+
+    effect: DistinctionEffect
+    rank: int
+    value: int
+
+
+@dataclass(frozen=True)
+class HeldEffectsValuation:
+    """What ``value_held_effects`` gives for one target's held effects (#5206).
+
+    ``sources`` is in the same order as the held effects it was given.
+    """
+
+    sources: list[ModifierSourceDetail]
+    total: int
+    has_immunity: bool
+    negatives_blocked: int
+
+
+@dataclass(frozen=True)
+class HeldCardBonus:
+    """One card's effect on one target, named as the Bonuses band names it (#5206).
+
+    ``bonus_groups`` in ``bonuses.py`` values these through ``value_held_effects``. The
+    sheet builds them from its ``CharacterModifier`` rows; a character-creation draft
+    builds them from the cards it holds.
+    """
+
+    label: str
+    held: HeldEffect
+    #: The card is relocated into a Secret (``CharacterDistinction.is_secret``): its source
+    #: line is shown only to the owner and staff, while its value still counts in the total.
+    secret: bool = False
+
+
+@dataclass(frozen=True)
+class BonusSource:
+    """One thing that gives part of a bonus on the sheet's Bonuses band (#5206)."""
+
+    label: str
+    value: int
+
+
+@dataclass(frozen=True)
+class BonusRow:
+    """One thing a character's bonuses add to, with its total and its sources (#5206).
+
+    ``immune`` is set when a source grants immunity to negative values on the target.
+    """
+
+    target_name: str
+    label: str
+    definition: str
+    total: int
+    sources: tuple[BonusSource, ...]
+    immune: bool
+
+
+@dataclass(frozen=True)
+class BonusGroup:
+    """One kind of bonus (a ``ModifierCategory``) and its rows, for the Bonuses band."""
+
+    category_name: str
+    heading: str
+    rows: tuple[BonusRow, ...]
 
 
 @dataclass

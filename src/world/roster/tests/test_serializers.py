@@ -521,9 +521,8 @@ class RosterEntrySerializerTestCase(TestCase):
         assert not data["can_apply"]
 
         # Entry no longer accepts applications
+        # Saving the tenure clears the entry's cached tenures (#5206), so no manual reset.
         RosterTenureFactory(roster_entry=self.entry)
-        if hasattr(self.entry, "cached_tenures"):
-            del self.entry.cached_tenures
         data = self._serialize(auth_user)
         assert not data["can_apply"]
 

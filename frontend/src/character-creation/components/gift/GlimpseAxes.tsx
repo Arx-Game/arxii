@@ -9,7 +9,7 @@
  * ("The Circumstances Around Your Glimpse:") in muted italic: 14px against
  * the heading's 13px capitals, so its capitals are no taller than the
  * heading's and the rest of it is lowercase. Its tags are the
- * life page's cards (`ul.stances.grid.pair` of `button.stance`): one width,
+ * life page's cards in look (`ul.stances.grid.pair` of `button.stance`): one width,
  * two across because a description can run to several sentences, the name
  * over its description, a round mark on an axis that takes one answer and
  * a square mark on one that takes several. Owner ruling

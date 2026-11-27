@@ -326,6 +326,14 @@ def _uniquify_ritual_name(base: str) -> str:
 _RITUAL_NAME_ATTEMPTS = 5
 
 
+#: The placeholder description a new character's anima ritual starts with (#5206: the
+#: waiting sheet shows the same words before the ritual exists).
+ANIMA_RITUAL_DESCRIPTION = (
+    "A personal ritual for restoring anima. "
+    "Edit this description to match your character's practice."
+)
+
+
 @transaction.atomic
 def provision_player_anima_ritual(  # noqa: PLR0913
     account: AccountDB,
@@ -424,10 +432,7 @@ def provision_player_anima_ritual(  # noqa: PLR0913
             with transaction.atomic():
                 ritual = Ritual.objects.create(
                     name=_uniquify_ritual_name(ritual_name),
-                    description=(
-                        "A personal ritual for restoring anima. "
-                        "Edit this description to match your character's practice."
-                    ),
+                    description=ANIMA_RITUAL_DESCRIPTION,
                     narrative_prose=f"{ritual_name} is performed to restore anima.",
                     execution_kind=RitualExecutionKind.SCENE_ACTION,
                     service_function_path="",

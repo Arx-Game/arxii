@@ -258,10 +258,13 @@ describe('IdentityStage', () => {
       ).toBeTruthy();
 
       // The life page's cards: the name, the description under it, the price signed.
+      // A card is a box picked by the button on its name (#5206).
       const indolent = screen.getByRole('button', { name: /Indolent/ });
-      expect(indolent).toHaveTextContent('Indolent in a sentence.');
-      expect(indolent).toHaveTextContent('\u22125');
-      expect(screen.getByRole('button', { name: /Tireless/ })).toHaveTextContent('+5');
+      expect(indolent.closest('.stance')).toHaveTextContent('Indolent in a sentence.');
+      expect(indolent.closest('.stance')).toHaveTextContent('\u22125');
+      expect(screen.getByRole('button', { name: /Tireless/ }).closest('.stance')).toHaveTextContent(
+        '+5'
+      );
       // Two across in the reading column, like the Glimpse's cards.
       expect(indolent.closest('ul')).toHaveClass('stances', 'grid', 'pair');
 

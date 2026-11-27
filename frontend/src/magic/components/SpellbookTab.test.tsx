@@ -350,6 +350,22 @@ describe('SpellbookTab', () => {
     } as unknown as ReturnType<typeof cgQueries.useAffinities>);
   });
 
+  // #5206: the waiting sheet hands over its own payload; nothing is fetched by id.
+  it('draws a payload it is handed and asks for no sheet', () => {
+    mockPayload(undefined, { isLoading: true });
+    renderWithProviders(
+      <SpellbookTab
+        characterId={7}
+        isMyCharacter={false}
+        payload={{ magic: makeMagic(), distinctions: [] }}
+      />
+    );
+    expect(screen.getByText('Pyromancy')).toBeInTheDocument();
+    expect(screen.queryByText('Reading their spellbook…')).not.toBeInTheDocument();
+    expect(queries.useCharacterSheetQuery).toHaveBeenCalledWith(0);
+    expect(queries.useCharacterSheetQuery).not.toHaveBeenCalledWith(7);
+  });
+
   it('says it is reading while loading', () => {
     mockPayload(undefined, { isLoading: true });
     renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={false} />);

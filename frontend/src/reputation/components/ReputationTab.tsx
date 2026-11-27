@@ -138,7 +138,7 @@ function OwnRenownView({
  * (Titles beside it speaks a line when empty, and is right to: it is never withheld,
  * so its empty state is always the truth.)
  */
-function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStanding }) {
+export function OrganizationStandingBlock({ standing }: { standing: CharacterSheetStanding }) {
   if (standing.memberships.length === 0 && standing.reputations.length === 0) {
     return null;
   }

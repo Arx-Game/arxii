@@ -11,6 +11,7 @@ import { renderWithCharacterCreationProviders } from '../testUtils';
 
 const mutate = vi.fn();
 const pathsAskedFor = vi.fn();
+let mockSuggestions: { skill_id: number; skill_name: string; suggested_value: number }[] = [];
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
   usePaths: (...args: unknown[]) => {
@@ -27,6 +28,9 @@ vi.mock('../../queries', async (importOriginal) => ({
   },
   useCGExplanations: () => ({ data: mockCGExplanations }),
   useUpdateDraft: () => ({ mutate }),
+  usePathSkillSuggestions: (pathId: number | undefined) => ({
+    data: pathId ? mockSuggestions : undefined,
+  }),
 }));
 
 describe('PathStage (folio)', () => {
@@ -87,5 +91,35 @@ describe('PathStage (folio)', () => {
     renderWithCharacterCreationProviders(<PathStage draft={draft} />);
 
     expect(pathsAskedFor).toHaveBeenCalledWith(draft.selected_beginnings?.id);
+  });
+
+  // #5206, call 14: the note promises skill suggestions, so it waits for the path to have some.
+  describe('the Paths note', () => {
+    afterEach(() => {
+      mockSuggestions = [];
+    });
+
+    it('is absent before a path is chosen', () => {
+      mockSuggestions = [{ skill_id: 1, skill_name: 'Blades', suggested_value: 20 }];
+      renderWithCharacterCreationProviders(
+        <PathStage draft={createMockDraft({ selected_path: null })} />
+      );
+      expect(screen.queryByText(/set starting skill suggestions/)).not.toBeInTheDocument();
+    });
+
+    it('is absent when the chosen path has no suggestions', () => {
+      renderWithCharacterCreationProviders(
+        <PathStage draft={createMockDraft({ selected_path: mockPath })} />
+      );
+      expect(screen.queryByText(/set starting skill suggestions/)).not.toBeInTheDocument();
+    });
+
+    it('prints when the chosen path has suggestions', () => {
+      mockSuggestions = [{ skill_id: 1, skill_name: 'Blades', suggested_value: 20 }];
+      renderWithCharacterCreationProviders(
+        <PathStage draft={createMockDraft({ selected_path: mockPath })} />
+      );
+      expect(screen.getByText(/set starting skill suggestions/)).toBeInTheDocument();
+    });
   });
 });

@@ -22,6 +22,23 @@ character-creation/
 ├── cg.css                   # Scoped under `.interview`; realm is an ink, paper
 │                              #   pinned to Arx (#3540)
 ├── CharacterCreationPage.tsx # Main page component
+├── WaitingSheetPage.tsx     # The waiting sheet (#5206), `/characters/create/sheet`: a
+│                              #   submitted draft's sheet in the in-game plate, section row
+│                              #   and panels, read from `useWaitingSheet` (`GET
+│                              #   .../drafts/{id}/sheet/`, typed by hand as
+│                              #   `WaitingSheetPayload` in `types.ts`). A player's page finds
+│                              #   their own draft; staff pass `?draft=<id>`; a 404 reads "Not
+│                              #   found." The plate carries the "Awaiting approval" mark
+│                              #   (`Plate`'s `mark`, `.refsheet-waiting` in `sheet.css`) and no
+│                              #   titles, looks or actions; no StaffEditProvider. Sections:
+│                              #   Sheet, Physical, Ties (only with memberships or reputations,
+│                              #   the standing block alone), Distinctions, Magic, Knowledge
+│                              #   (only with secrets, the list alone), Estate (purse, carried,
+│                              #   home, domains, keyring), Growth (XP ledger, languages, the
+│                              #   origin story read-only); never Gallery. Every panel is handed
+│                              #   the payload (sheet id 0, so no panel queries). The sheet's
+│                              #   key is refreshed by every draft save, distinction sync, life
+│                              #   load or clear, tradition pick and application change
 ├── folio/                   # Folio chassis primitives (#3540), realm-agnostic
 │   ├── index.ts             # Barrel re-export
 │   ├── ContentsRail.tsx     # Chapter table of contents; replaces StageStepper. What a row
@@ -107,8 +124,11 @@ character-creation/
     │                        #   Task 6) — claim-path house founding is
     │                        #   `almanach/founder/FounderAlmanach.tsx`, mounted from
     │                        #   `FamilyPathSection.tsx`.
-    ├── PathStage.tsx        # Stage 5: Path selection
-    ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
+    ├── PathStage.tsx        # Stage 5: Path selection. The "Paths" note shows only when
+    │                        #   the chosen path has skill suggestions (#5206, call 14)
+    ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage. The
+    │                        #   `path_skills_desc` paragraph shows only when the path has
+    │                        #   skill suggestions (#5206)
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection). A draft
     │                        #   with no saved statistics has the spread on screen saved when
     │                        #   the stage opens, once (#5198), so the even spread needs no click.
@@ -221,7 +241,15 @@ character-creation/
     │                        #   Presumed Dead's card), and a second door of the same shape,
     │                        #   "A second face", when they include alter_ego (saved as
     │                        #   draft_data.alter_ego, null when skipped); both share FaceForm.
-    ├── ReviewStage.tsx      # Stage 11: Review and submit
+    ├── ReviewStage.tsx      # Stage 11: Review and submit. Status lines are short and
+    │                        #   carry the first name (#5206, owner ruling 2026-11-25):
+    │                        #   "<name> submitted and awaiting review.", "<name> in
+    │                        #   review.", "<name> sent back for revisions.", "<name>
+    │                        #   approved.", "<name> denied." / "<name> withdrawn." (plus
+    │                        #   "Draft expires on <date>." when set). The submitted plate's
+    │                        #   links are "Review Sheet" (the waiting sheet) then "View
+    │                        #   Application"; revisions put "Review Sheet" beside Resubmit.
+    │                        #   The `review_banner_submitted` copy key is no longer read
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep
     ├── PerspectivesPanel.tsx # "On {subject}" shop-window opinions; renders as margin
@@ -417,10 +445,14 @@ the distinction's description under its name, not the offer's `player_line` (#50
 `groupBy` splits a grid under `.group-h` headings
 ("Group (count)", the ungrouped cards last); `pricing="signed"` prints a grid card's price
 as a bare `−N`/`+N` in its bottom-left corner and nothing on a free card; `terms` builds the
-mechanics line from `offer.effects` with each term a `.term` role-button (the card is a
-button, so no nested button) that shows one `.popover` through a portal to `body` with the
-definition from the response's `terms`, while the pointer or the keyboard focus is on it;
-a click or tap pins it open, and Escape, a scroll or any other click closes it (#5148). A
+mechanics line from `offer.effects`. An effect whose term has a definition is one
+`button.effect` holding its number and its underlined `.term` (#5206): it shows one
+`.popover` through a portal to `body` with the definition from the response's `terms`,
+while the pointer or the keyboard focus is on it; a click or tap pins it open, and Escape,
+a scroll or any other click closes it (#5148). A button is laid out as one piece, so an
+effect too long for the rest of its line starts the next one and never splits from its
+number. The button and its box are `components/term/DefinedTerm.tsx` (`TermButton`,
+`TermPopover`) with `useTermPopover`, shared with the sheet's Bonuses band (#5206). A
 term whose definition is blank is plain text with no underline; `interceptPick` runs before a click
 changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 `secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.
@@ -428,6 +460,23 @@ changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 Glimpse's rule) with four cards at rest where the others show three, and a grid folded
 under "See N more" keeps its cards; the Identity
 stage's Personality block uses both.
+
+## A card is a box picked by its name (#5206)
+
+A button may hold no other control: HTML forbids it, and a screen reader reads a button's
+contents as one label, so a control inside it is never offered by itself. An unranked
+`ChapterOffers` card therefore is a plain `div.stance.pickable` (plus `picked`, `busy`,
+`cover`), and its name is the `button.pick-name` that picks it (`PickName`). The button's
+`::after` is laid over the whole card, so a click anywhere on the card still picks it and
+the keyboard's ring goes round the card; an effect's button is drawn above that cover
+(`.stance .effect`). The button carries `aria-pressed`, and its `aria-describedby` names
+the card's line, effects, lock reason and price, so they are read after the name. A test
+finds a card through its button (`getByRole('button', { name })`, then
+`.closest('.stance')` for the card's other text). A ranked card was already a
+`div[role=group]` holding real buttons. The Glimpse tags, the schooling stances and the
+Amnesiac card hold no other control and are still each one `button.stance`. The
+`nested-control-reviewer` agent reads a diff for a control put inside a button, and
+`LifeGrids.test.tsx` holds that the life page has none.
 
 ## A card click shows at once (#5134)
 
@@ -583,6 +632,9 @@ whether by Next, Back or the stage list. A refetch of the same stage does not sc
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff direct add
 - `POST /api/character-creation/drafts/{id}/finalize-gm/` - Player-GM direct-to-roster for a
   table they own (`target_table`, `story_title`, optional `story_description`) (#3268)
+- `GET /api/character-creation/drafts/{id}/sheet/` - The waiting sheet (#5206): the draft's
+  account and staff, while the application is submitted, in review or sent back; 404
+  otherwise (`fetchWaitingSheet` returns null)
 - `GET /api/character-creation/drafts/{id}/beats/` - The life's beats as this draft meets
   them (#4124, #4395: each with its `allowance`); the `backgrounds` offers come through
   `GET /api/character-creation/drafts/{id}/offers/?chapter=backgrounds` (#4872: each offer
@@ -596,3 +648,4 @@ whether by Next, Back or the stage list. A refetch of the same stage does not sc
 ## Route
 
 `/characters/create` - Main character creation page
+`/characters/create/sheet` - The waiting sheet (#5206), `?draft=<id>` for staff

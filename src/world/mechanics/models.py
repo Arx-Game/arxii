@@ -140,6 +140,14 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Whether this modifier target is currently active in the game",
     )
+    spent_at_creation = models.BooleanField(
+        default=False,
+        help_text=(
+            "A bonus on this target is used up inside character creation (technique picks, "
+            "the training pool, the statistics budget), so the sheet's Bonuses band leaves it "
+            "out (#5206)."
+        ),
+    )
     is_styleable = models.BooleanField(
         default=False,
         help_text=(
@@ -558,6 +566,38 @@ class ModifierTarget(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         """The ``ModifierLane`` a sized modifier on this target is valued in (#4876), or
         None when its kind takes flat amounts only (``EFFECT_KIND_LANE``)."""
         return EFFECT_KIND_LANE.get(self.effect_kind)
+
+    @property
+    def roll_lane(self) -> str | None:
+        """The ``ModifierLane`` a roll prices a sized modifier on this target in (#5206).
+
+        The one answer to "which lane is this target read in": a maneuver-effect kind's
+        ``value_lane`` (the effect readers, #4876); the CHECK lane for a target a check
+        reads, one bound to a check type, an Aspect or a botch-immunity scope (the check
+        seam, #4638, #4827, #4386); the STAT lane for a stat or skill target (the trait
+        handler's read, #4726, #4820). None for every other target, which every reader
+        sums flat. The sheet's Bonuses band reads it; the check seam prices its targets in
+        the CHECK lane directly.
+        """
+        from world.checks.constants import ModifierLane  # noqa: PLC0415
+        from world.traits.handlers import MODIFIABLE_TRAIT_TYPES  # noqa: PLC0415
+
+        lane = self.value_lane
+        if lane is not None:
+            return lane
+        if (
+            self.target_check_type_id is not None
+            or self.target_aspect_id is not None
+            or self.target_check_category_id is not None
+            or self.target_scope_check_type_id is not None
+        ):
+            return ModifierLane.CHECK
+        if (
+            self.target_trait_id is not None
+            and self.target_trait.trait_type in MODIFIABLE_TRAIT_TYPES
+        ):
+            return ModifierLane.STAT
+        return None
 
     def _set_technique_scope_fields(self) -> list[str]:
         """The narrowing scope fields that are set (technique side, then opponent side), in

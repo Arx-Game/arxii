@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
@@ -340,6 +341,55 @@ def _split_by_weight(total: int, weights: list[int]) -> list[int]:
     return parts
 
 
+def creation_affinity_base(
+    picks: MagicPicks,
+    existing: Mapping[int, int],
+    affinities: dict[int, Any],
+    per_point: int,
+) -> dict[int, int]:
+    """Each affinity's lifetime once creation seeds it, before the Glimpse nudge (#5123).
+
+    ``existing`` is the lifetime the sheet already holds per affinity pk, ``affinities``
+    maps those pks to their rows and gains the picks' affinities. A pick adds its weight
+    times ``per_point``. Shared by ``_seed_resonances`` and the waiting sheet (#5206).
+    """
+    by_affinity: dict[int, int] = {}
+    for pick in picks.ordered_resonances:
+        affinities[pick.resonance.affinity.pk] = pick.resonance.affinity
+        by_affinity[pick.resonance.affinity_id] = (
+            by_affinity.get(pick.resonance.affinity_id, 0) + pick.weight
+        )
+    return {pk: existing.get(pk, 0) + by_affinity.get(pk, 0) * per_point for pk in affinities}
+
+
+def creation_seed_amounts(
+    picks: MagicPicks,
+    base: Mapping[int, int],
+    existing: Mapping[int, int],
+    settled: Mapping[int, Decimal],
+) -> list[tuple[WeightedResonance, int]]:
+    """The lifetime each pick is seeded with, from the settled shares (#5123, #5206).
+
+    Each affinity's resonance gets its settled share of the base total, less what the
+    sheet already holds, split across that affinity's picks by weight; every pick gets
+    at least 1. Pure: ``_seed_resonances`` writes these, the waiting sheet shows them.
+    """
+    from decimal import ROUND_HALF_UP  # noqa: PLC0415
+
+    grand_total = sum(base.values())
+    by_affinity: dict[int, list[WeightedResonance]] = {}
+    for pick in picks.ordered_resonances:
+        by_affinity.setdefault(pick.resonance.affinity_id, []).append(pick)
+    denominator = sum(settled.get(pk, Decimal(0)) for pk in base if base[pk]) or Decimal(100)
+    seeds: list[tuple[WeightedResonance, int]] = []
+    for pk, group in by_affinity.items():
+        target = Decimal(grand_total) * settled.get(pk, Decimal(0)) / denominator
+        wanted = int((target - existing.get(pk, 0)).to_integral_value(ROUND_HALF_UP))
+        amounts = _split_by_weight(max(wanted, len(group)), [pick.weight for pick in group])
+        seeds.extend(zip(group, amounts, strict=True))
+    return seeds
+
+
 def _seed_resonances(sheet: CharacterSheet, picks: MagicPicks, aura: CharacterAura) -> None:
     """Settle who the character is, then seed each pick's lifetime to match it (#5123).
 
@@ -351,8 +401,6 @@ def _seed_resonances(sheet: CharacterSheet, picks: MagicPicks, aura: CharacterAu
     same-affinity tags included), and their first gain extends the aura rather than wiping
     it. With no nudge a pick's lifetime is exactly its weight x ``creation_seed_per_point``.
     """
-    from decimal import ROUND_HALF_UP, Decimal  # noqa: PLC0415
-
     from world.magic.models import CharacterResonance  # noqa: PLC0415
     from world.magic.services.aura import recompute_aura, set_settled_shares  # noqa: PLC0415
     from world.magic.services.drift import get_drift_config  # noqa: PLC0415
@@ -369,14 +417,7 @@ def _seed_resonances(sheet: CharacterSheet, picks: MagicPicks, aura: CharacterAu
         affinity = row.resonance.affinity
         affinities[affinity.pk] = affinity
         existing[affinity.pk] = existing.get(affinity.pk, 0) + row.lifetime_earned
-    by_affinity: dict[int, list[WeightedResonance]] = {}
-    for pick in picks.ordered_resonances:
-        affinities[pick.resonance.affinity.pk] = pick.resonance.affinity
-        by_affinity.setdefault(pick.resonance.affinity_id, []).append(pick)
-    base = {
-        pk: existing.get(pk, 0) + sum(pick.weight for pick in by_affinity.get(pk, ())) * per_point
-        for pk in affinities
-    }
+    base = creation_affinity_base(picks, existing, affinities, per_point)
     grand_total = sum(base.values())
     if grand_total == 0:
         return
@@ -390,13 +431,8 @@ def _seed_resonances(sheet: CharacterSheet, picks: MagicPicks, aura: CharacterAu
     )
     apply_glimpse_affinity_nudge(aura)
     settled = {share.affinity_id: share.settled_percent for share in aura.cached_shares}
-    denominator = sum(settled.get(pk, Decimal(0)) for pk in base if base[pk]) or Decimal(100)
-    for pk, group in by_affinity.items():
-        target = Decimal(grand_total) * settled.get(pk, Decimal(0)) / denominator
-        wanted = int((target - existing.get(pk, 0)).to_integral_value(ROUND_HALF_UP))
-        amounts = _split_by_weight(max(wanted, len(group)), [pick.weight for pick in group])
-        for pick, amount in zip(group, amounts, strict=True):
-            seed_creation_resonance(sheet, pick.resonance, amount)
+    for pick, amount in creation_seed_amounts(picks, base, existing, settled):
+        seed_creation_resonance(sheet, pick.resonance, amount)
     recompute_aura(sheet)
 
 

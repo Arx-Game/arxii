@@ -18,9 +18,24 @@
 import { useCharacterXpLedgerQuery } from '@/progression/queries';
 import { Glance, Ledger, Stack, Subheading } from '@/character_sheets/components/sheet/primitives';
 import type { GlanceRow } from '@/character_sheets/components/sheet/primitives';
+import type { CharacterXpLedger } from '@/progression/types';
 
-export function XpLedgerCard({ sheetId }: { sheetId: number }) {
-  const { data, isLoading, error } = useCharacterXpLedgerQuery(sheetId);
+export function XpLedgerCard({
+  sheetId,
+  ledger,
+}: {
+  sheetId: number;
+  /**
+   * The ledger to draw, when the caller already holds it (#5206: the waiting sheet's
+   * starting XP). When given, no query is made.
+   */
+  ledger?: CharacterXpLedger;
+}) {
+  // Id 0 disables the query, so a caller that hands over its ledger asks for nothing.
+  const query = useCharacterXpLedgerQuery(ledger ? 0 : sheetId);
+  const data = ledger ?? query.data;
+  const isLoading = !ledger && query.isLoading;
+  const error = ledger ? null : query.error;
 
   const rows: GlanceRow[] = data
     ? [

@@ -143,6 +143,36 @@ class SkillEntry(TypedDict):
     specializations: list[SpecializationEntry]
 
 
+class BonusSourceEntry(TypedDict):
+    """One thing that gives part of a bonus total (#5206): a card, a home's comfort."""
+
+    label: str
+    value: int
+
+
+class BonusRowEntry(TypedDict):
+    """One thing the character's bonuses add to, with its total and sources (#5206).
+
+    ``label`` and ``definition`` are the term as a card prints it and its hover text.
+    ``immune`` is set when a source grants immunity to negative values on the target.
+    """
+
+    target: str
+    label: str
+    definition: str
+    total: int
+    immune: bool
+    sources: list[BonusSourceEntry]
+
+
+class BonusGroupEntry(TypedDict):
+    """One kind of bonus (a modifier category) and its rows, for the Bonuses band."""
+
+    category: str
+    heading: str
+    rows: list[BonusRowEntry]
+
+
 class PathHistoryEntry(TypedDict):
     """A single entry in the character's path progression history."""
 
@@ -666,6 +696,29 @@ class CombatStyleSection(TypedDict):
     skill_value: int
     tradition_name: str | None
     vows: list[str]
+
+
+class OwnSecretEntry(TypedDict):
+    """One of the character's own secrets, as the sheet shows them to its own player (#5206).
+
+    Shaped like a ``/api/secrets/known/`` row (``KnownSecretSerializer``) so the Secrets tab
+    draws it, read in full: the owner knows their own secret's category and consequences.
+    Built by ``world.secrets.own.own_secret_entry`` for the in-game sheet and the
+    character-creation waiting sheet alike; on the waiting sheet ``id`` is below zero, since
+    the Secret is made at approval.
+    """
+
+    id: int
+    level: str
+    content: str
+    provenance: str
+    found_at: str | None
+    can_grieve: bool
+    subject: str
+    category: str
+    consequences: str
+    author: str
+    anchored_to: list[dict[str, str]]
 
 
 class ProfileTextField(models.TextChoices):

@@ -36,6 +36,11 @@ interface PlateProps {
   onAddLook?: () => void;
   /** Doors beside the plate: a Journal link for every viewer, plus friend/rival buttons on a foreign sheet. */
   actions?: ReactNode;
+  /**
+   * A mark above the name (#5206: the waiting sheet's "Awaiting approval"), drawn by the
+   * caller; the plate gives it its place and nothing else.
+   */
+  mark?: ReactNode;
 }
 
 export function Plate({
@@ -50,6 +55,7 @@ export function Plate({
   isSaving,
   onAddLook,
   actions,
+  mark,
 }: PlateProps) {
   // Which look the frame is showing. Null means "whatever is worn", which is the entry
   // the server marked current. A viewer clicking the strip moves this locally; the
@@ -95,6 +101,7 @@ export function Plate({
       </div>
 
       <div className="refsheet-plate-body">
+        {mark}
         <h1 className="refsheet-name">
           <StaffEditable field="name" kind="line" label="Name" display={name} />
           {titles.length > 0 && <span className="refsheet-title">{titles.join(' · ')}</span>}

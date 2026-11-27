@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models.affinity import Resonance
     from world.magic.models.gifts import CharacterGift
-    from world.species.models import Language
+    from world.species.models import Language, Species
 
 logger = logging.getLogger(__name__)
 
@@ -274,6 +274,28 @@ def total_species_gift_cost(species) -> int:
     )
 
 
+def species_gift_grants(species: Species | None) -> list[SpeciesGiftGrant]:
+    """The gift grants a character of ``species`` is given at creation (#1580, #5206).
+
+    The species' own grants and its ancestors' inheritable ones, with what each grant
+    gives selected: the gift (and its natural weapon template), the drawback and benefit
+    conditions and the drawback card. The read half of ``provision_species_gifts``; the
+    character-creation waiting sheet shows the gifts, natural weapons and drawback cards
+    from it.
+    """
+    if species is None:
+        return []
+    return list(
+        SpeciesGiftGrant.objects.filter(_inheritable_grant_filter(species)).select_related(
+            "gift",
+            "gift__natural_weapon_template",
+            "drawback_condition",
+            "benefit_condition",
+            "drawback_distinction",
+        )
+    )
+
+
 def provision_species_gifts(
     sheet: CharacterSheet, *, resonances: Sequence[Resonance] = ()
 ) -> list[CharacterGift]:
@@ -294,9 +316,7 @@ def provision_species_gifts(
     if sheet.species_id is None:
         return []
 
-    grants = SpeciesGiftGrant.objects.filter(
-        _inheritable_grant_filter(sheet.species)
-    ).select_related("gift", "drawback_condition", "benefit_condition", "drawback_distinction")
+    grants = species_gift_grants(sheet.species)
     minted: list[CharacterGift] = []
     for grant in grants:
         cg, _ = grant_gift_to_character(
@@ -310,6 +330,24 @@ def provision_species_gifts(
         if grant.drawback_distinction_id is not None:
             _grant_species_distinction_once(sheet, grant.drawback_distinction)
     return minted
+
+
+def starting_languages(species: Species | None, beginnings: Beginnings | None) -> list[Language]:
+    """The languages a new character starts fluent in (#2993, #5206).
+
+    Every ``is_universal`` language, then the Beginnings' computed starting set for the
+    species (which folds the species' racial languages). The read half of
+    ``provision_starting_languages``; a character-creation draft's waiting sheet lists them.
+    """
+    from world.species.models import Language  # noqa: PLC0415
+
+    languages: dict[int, Language] = {
+        lang.pk: lang for lang in Language.objects.filter(is_universal=True)
+    }
+    if beginnings is not None and species is not None:
+        for lang in beginnings.get_starting_languages(species):
+            languages[lang.pk] = lang
+    return list(languages.values())
 
 
 def provision_starting_languages(
@@ -326,22 +364,14 @@ def provision_starting_languages(
     post-CG growth both survive a re-run.
     """
     from world.species.language_constants import FLUENT_GRANT_VALUE  # noqa: PLC0415
-    from world.species.models import Language  # noqa: PLC0415
     from world.traits.models import (  # noqa: PLC0415
         CharacterTraitChange,
         CharacterTraitValue,
         TraitChangeSource,
     )
 
-    languages: dict[int, Language] = {
-        lang.pk: lang for lang in Language.objects.filter(is_universal=True)
-    }
-    if beginnings is not None and sheet.species_id is not None:
-        for lang in beginnings.get_starting_languages(sheet.species):
-            languages[lang.pk] = lang
-
     granted: list[Language] = []
-    for lang in languages.values():
+    for lang in starting_languages(sheet.species, beginnings):
         if lang.trait_id is None:
             continue
         _value, created = CharacterTraitValue.objects.get_or_create(

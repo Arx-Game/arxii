@@ -6,7 +6,7 @@ Service layer for modifier aggregation, calculation, and management.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Sequence
 from contextlib import contextmanager
 import contextvars
 from decimal import Decimal
@@ -29,7 +29,7 @@ from world.conditions.services import (
     condition_capability_contributions,
     thread_passive_capability_grants,
 )
-from world.distinctions.models import CharacterDistinction
+from world.distinctions.models import CharacterDistinction, DistinctionEffect
 from world.magic.constants import EffectKind, TargetKind
 from world.magic.models import (
     FacetEffectBonus,
@@ -74,6 +74,8 @@ from world.mechanics.types import (
     AvailableAction,
     CapabilitySource,
     EquipmentWalkParts,
+    HeldEffect,
+    HeldEffectsValuation,
     ModifierBreakdown,
     ModifierSourceDetail,
     PrerequisiteEvaluation,
@@ -160,95 +162,79 @@ def _flat_source_contributions(
     return sources, total, blocked_count
 
 
-def _amplifiers_and_immunity(distinction_mods: list) -> tuple[list[tuple[int, int]], bool]:
-    """The (modifier_id, bonus) pairs that amplify others, and whether anything grants immunity.
+DerivedAmountReader = Callable[[DistinctionEffect, int], int]
+"""Gives a derived-amount effect's amount from its stored per-step value (#5206).
 
-    Both live on the distinction effect, so only distinction-sourced rows are read.
+A character's reader is ``derived_amount`` on its sheet; a caller with no sheet (a
+character-creation draft) passes one that reads the numbers it has.
+"""
+
+
+def distinction_effect_value(  # noqa: PLR0913 - the valuation's whole input, keyword-only
+    effect: DistinctionEffect,
+    *,
+    rank: int,
+    value: int,
+    level: int | None,
+    value_table: ValueTable | None,
+    derived_reader: DerivedAmountReader,
+) -> tuple[int, tuple[int, int] | None]:
+    """One held effect's base value, and its table (value, size) when it was sized (#5206).
+
+    A derived amount (#4878) is ``derived_reader(effect, value)``, the stored per-step value
+    times its input, and is never sized. A sized effect (#4638) reads ``value_table`` at
+    ``level`` and the size the held ``rank`` names (#4660: ``size_at_rank``; rank steps the
+    size and never multiplies the table's number, ADR-4660-A), signed like the effect's
+    rank-1 value. Anything else, or a sized effect with no table, no level or no table row,
+    keeps the stored ``value``.
     """
-    amplifiers: list[tuple[int, int]] = []
-    has_immunity = False
-    for mod in distinction_mods:
-        effect = mod.source.distinction_effect
-        if effect.amplifies_sources_by:
-            amplifiers.append((mod.id, effect.amplifies_sources_by))
-        if effect.grants_immunity_to_negative:
-            has_immunity = True
-    return amplifiers, has_immunity
-
-
-def _sized_distinction_value(
-    mod: CharacterModifier, value_table: ValueTable | None, level: int | None
-) -> tuple[int, int] | None:
-    """A sized distinction effect's (value, size) from the lane's table, or None for flat.
-
-    #4638: the holder's ``level`` and the effect's size read the table
-    (``ValueTable.signed_value``, signed like the effect's rank-1 value). #4660: the size
-    is the one the held rank names (``DistinctionEffect.size_at_rank``: the highest
-    authored rank size at or below it, else ``modifier_size``); rank steps the size and
-    never multiplies the table's number (ADR-4660-A). None (the flat ``mod.value``) when
-    there is no table, no size, no level, a rank-1 value of 0, or no table row for the
-    pair.
-    """
-    effect = mod.source.distinction_effect
+    if effect.has_amount_input:
+        return derived_reader(effect, value), None
     if value_table is None or effect.modifier_size is None:
-        return None
-    held = mod.source.character_distinction
-    size = effect.size_at_rank(held.rank if held is not None else 1)
+        return value, None
+    size = effect.size_at_rank(rank)
     magnitude = value_table.signed_value(effect.get_value_at_rank(1), level, size)
     if magnitude is None:
-        return None
-    return magnitude, size
+        return value, None
+    return magnitude, (magnitude, size)
 
 
-def _distinction_base_value(
-    mod: CharacterModifier,
-    value_table: ValueTable | None,
-    level: int | None,
-    sheet,
-    inputs: DerivedInputs,
-) -> tuple[int, tuple[int, int] | None]:
-    """One distinction source's base value, and its table (value, size) when it was sized.
-
-    A derived amount (#4878) is the stored per-step value times its input and is never
-    sized; otherwise a sized effect reads the table, and anything else keeps its value.
-    """
-    if mod.source.distinction_effect.has_amount_input:
-        return derived_amount(sheet, mod.source.distinction_effect, mod.value, inputs), None
-    sized = _sized_distinction_value(mod, value_table, level)
-    return (mod.value if sized is None else sized[0]), sized
-
-
-def _distinction_contributions(  # noqa: PLR0913 - one read's rows and its own inputs
-    distinction_mods: list,
-    amplifiers: list[tuple[int, int]],
+def value_held_effects(
+    held: Sequence[HeldEffect],
     *,
-    has_immunity: bool,
-    value_table: ValueTable | None = None,
-    sheet=None,
-    inputs: DerivedInputs | None = None,
-) -> tuple[list[ModifierSourceDetail], int, int]:
-    """Each distinction source's detail row, the running total, and the blocked count.
+    level: int | None,
+    value_table: ValueTable | None,
+    derived_reader: DerivedAmountReader,
+) -> HeldEffectsValuation:
+    """Value one target's held distinction effects as a roll does (#5206).
 
-    A source is amplified by every OTHER amplifier, never by itself. Immunity
-    blocks a source whose amplified value ends up negative — it is still reported,
-    with `blocked_by_immunity` set, but contributes nothing to the total. With a
-    ``value_table`` (#4638), a sized effect's base value is the table's number at the
-    holder's level (``sheet.current_level``, ``_sized_distinction_value``); amplification
-    and immunity then apply to it as they do to a flat value. An effect with a
-    derived-amount input (#4878) takes its base value from ``derived_amount`` on ``sheet``,
-    the stored value being the amount per step; it is never sized. ``inputs`` carries what
-    only the caller knows, the soak of the opponent being hit (#4892); without it a soak row
-    reads 0.
+    Each effect's base value is ``distinction_effect_value``. A source is amplified by
+    every OTHER amplifying effect (``amplifies_sources_by``), never by itself. Any effect
+    granting immunity to negatives blocks every source whose amplified value ends up
+    negative; a blocked source is still reported, with ``blocked_by_immunity`` set, but adds
+    nothing to the total. ``get_modifier_breakdown`` calls this with a character's rows; a
+    caller without rows (a character-creation draft) calls it with the cards it holds.
     """
+    amplifiers = [
+        (index, item.effect.amplifies_sources_by)
+        for index, item in enumerate(held)
+        if item.effect.amplifies_sources_by
+    ]
+    has_immunity = any(item.effect.grants_immunity_to_negative for item in held)
     sources: list[ModifierSourceDetail] = []
     total = 0
     negatives_blocked = 0
-    level = (sheet.current_level or None) if value_table is not None else None
-    inputs = inputs if inputs is not None else DerivedInputs()
-    for mod in distinction_mods:
-        effect = mod.source.distinction_effect
-        base_value, sized = _distinction_base_value(mod, value_table, level, sheet, inputs)
-        amplification = sum(bonus for amp_id, bonus in amplifiers if amp_id != mod.id)
+    for index, item in enumerate(held):
+        effect = item.effect
+        base_value, sized = distinction_effect_value(
+            effect,
+            rank=item.rank,
+            value=item.value,
+            level=level,
+            value_table=value_table,
+            derived_reader=derived_reader,
+        )
+        amplification = sum(bonus for amp_index, bonus in amplifiers if amp_index != index)
         final_value = base_value + amplification
         blocked = has_immunity and final_value < 0
         if blocked:
@@ -269,7 +255,44 @@ def _distinction_contributions(  # noqa: PLR0913 - one read's rows and its own i
                 size=sized[1] if sized is not None else None,
             )
         )
-    return sources, total, negatives_blocked
+    return HeldEffectsValuation(
+        sources=sources,
+        total=total,
+        has_immunity=has_immunity,
+        negatives_blocked=negatives_blocked,
+    )
+
+
+def held_effect_for(mod: CharacterModifier) -> HeldEffect:
+    """A distinction-sourced modifier row as the effect, held rank and stored value."""
+    held = mod.source.character_distinction
+    return HeldEffect(
+        effect=mod.source.distinction_effect,
+        rank=held.rank if held is not None else 1,
+        value=mod.value,
+    )
+
+
+def sheet_derived_reader(sheet, inputs: DerivedInputs | None = None) -> DerivedAmountReader:
+    """The derived-amount reader for a character's sheet: ``derived_amount`` on it."""
+    shared = inputs if inputs is not None else DerivedInputs()
+    return lambda effect, per_step: derived_amount(sheet, effect, per_step, shared)
+
+
+def sheet_valuation_level(sheet, value_table: ValueTable | None) -> int | None:
+    """The level a sheet's sized effects read the table at; None without a table."""
+    return (sheet.current_level or None) if value_table is not None else None
+
+
+def modifier_rank_sizes_prefetch() -> Prefetch:
+    """The prefetch a read of ``CharacterModifier`` rows uses for their effects' rank sizes.
+
+    #4660: a sized effect reads its rank sizes (``size_at_rank``); one query for every row,
+    not one each. ``cached_rank_sizes`` is the effect's ``PrunedCachedProperty``, so a warm
+    (identity-mapped) effect already holding the list is skipped. Shared by
+    ``get_modifier_breakdown`` and the Bonuses band (#5206).
+    """
+    return Prefetch("source__distinction_effect__rank_sizes", to_attr="cached_rank_sizes")
 
 
 def get_modifier_breakdown(
@@ -312,9 +335,7 @@ def get_modifier_breakdown(
         )
         # #4660: a sized effect reads its rank sizes; one query for every row, not one each.
         # A warm (identity-mapped) effect already holds the list and is skipped.
-        .prefetch_related(
-            Prefetch("source__distinction_effect__rank_sizes", to_attr="cached_rank_sizes")
-        )
+        .prefetch_related(modifier_rank_sizes_prefetch())
     )
     modifiers = _visible_feature_modifiers(character, modifiers)
 
@@ -339,20 +360,21 @@ def get_modifier_breakdown(
             negatives_blocked=0,
         )
 
-    amplifiers, has_immunity = _amplifiers_and_immunity(distinction_mods)
     value_table = None
     if value_lane is not None and any(
         mod.source.distinction_effect.modifier_size is not None for mod in distinction_mods
     ):
         value_table = load_value_table(value_lane)
-    sources, total, negatives_blocked = _distinction_contributions(
-        distinction_mods,
-        amplifiers,
-        has_immunity=has_immunity,
+    valuation = value_held_effects(
+        [held_effect_for(mod) for mod in distinction_mods],
+        level=sheet_valuation_level(character, value_table),
         value_table=value_table,
-        sheet=character,
-        inputs=inputs,
+        derived_reader=sheet_derived_reader(character, inputs),
     )
+    sources = valuation.sources
+    total = valuation.total
+    has_immunity = valuation.has_immunity
+    negatives_blocked = valuation.negatives_blocked
 
     # Non-distinction sources are flat addends (outside the amplification graph).
     flat_sources, flat_total, flat_blocked = _flat_source_contributions(other_mods, has_immunity)
@@ -569,6 +591,88 @@ def equipment_walk_parts(
             + vow_stat_scaling_bonus(character, target)
         ),
     )
+
+
+def equipment_walk_target_ids(sheet: CharacterSheet) -> set[int]:
+    """The targets ``equipment_walk_parts`` can give ``sheet`` a non-zero amount on (#5206).
+
+    A superset, read in a bounded number of queries however many targets the game has, so
+    a caller listing every bonus (the sheet's Bonuses band) walks only these targets instead
+    of every one. Keep it in step with ``equipment_walk_parts``'s terms:
+
+    * worn facets' and mantles' tier-0 pulls, and the motif's style coherence, reach only a
+      target whose ``target_resonance`` is one of those threads' or the motif's resonances;
+    * a worn facet's ``FacetEffectBonus`` rows name their own targets;
+    * a facet or mantle thread's crossing choices reach the targets of their conditions'
+      ``ConditionModifierEffect`` rows;
+    * engaged primary covenant roles reach the targets of their ``CovenantRoleBonus`` and
+      ``VowStatScaling`` rows (the anchor role's too) and of any ``CovenantLevelBonus`` row.
+
+    The cached thread, equipment and covenant handlers decide which of these reads run, so a
+    character with no thread, worn style or engaged role runs none.
+    """
+    from world.conditions.models import ConditionModifierEffect  # noqa: PLC0415
+    from world.covenants.models import (  # noqa: PLC0415
+        CovenantLevelBonus,
+        CovenantRoleBonus,
+        VowStatScaling,
+    )
+    from world.magic.models.crossing import CrossingChoice  # noqa: PLC0415
+
+    char = sheet.character
+    if not isinstance(char, Character):  # threads/equipped_items are Character-only
+        return set()
+    facet_threads = [
+        thread
+        for thread in char.threads.threads_of_kind(TargetKind.FACET)
+        if char.equipped_items.item_facets_for(thread.target_facet)
+    ]
+    threads = facet_threads + char.threads.threads_of_kind(TargetKind.MANTLE)
+    resonance_ids = {thread.resonance_id for thread in threads}
+    target_ids: set[int] = set()
+    if any(item.item_instance.cached_item_styles for item in char.equipped_items):
+        resonance_ids.update(
+            MotifResonance.objects.filter(motif__character=sheet).values_list(
+                "resonance_id", flat=True
+            )
+        )
+    if facet_threads:
+        target_ids.update(
+            FacetEffectBonus.objects.filter(
+                facet_id__in={thread.target_facet_id for thread in facet_threads}
+            ).values_list("target_id", flat=True)
+        )
+    if threads:
+        target_ids.update(
+            ConditionModifierEffect.objects.filter(
+                condition_id__in=CrossingChoice.objects.filter(thread__in=threads).values(
+                    "option__condition_template"
+                )
+            ).values_list("modifier_target_id", flat=True)
+        )
+    roles = char.covenant_roles.currently_engaged_primary_roles()
+    if roles:
+        role_ids = {role.pk for role in roles} | {
+            role.parent_role_id for role in roles if role.parent_role_id is not None
+        }
+        target_ids.update(
+            CovenantRoleBonus.objects.filter(covenant_role__in=roles).values_list(
+                "modifier_target_id", flat=True
+            )
+        )
+        target_ids.update(
+            VowStatScaling.objects.filter(covenant_role_id__in=role_ids).values_list(
+                "modifier_target_id", flat=True
+            )
+        )
+        target_ids.update(CovenantLevelBonus.objects.values_list("modifier_target_id", flat=True))
+    if resonance_ids:
+        target_ids.update(
+            ModifierTarget.objects.filter(target_resonance_id__in=resonance_ids).values_list(
+                "pk", flat=True
+            )
+        )
+    return target_ids
 
 
 # =============================================================================

@@ -321,6 +321,21 @@ for the five-branch validation gate this data must satisfy before submission.
   at CG time). Defensive logged skip if the Academy isn't seeded (mirrors
   `seed_beginning_traditions`'s Unbound-tradition skip); `get_or_create`-idempotent.
 
+### The waiting sheet (#5206)
+`sheet_preview.build_waiting_sheet(draft)` lays a submitted draft out as the in-game sheet
+(`CharacterSheetSerializer`) will read it for its owner, reading only, plus the waiting page's
+keys (`awaiting`, `purse`, `carried`, `xp_ledger`, `languages`, `secrets`; `WaitingSheetPayload`
+in `types.py`). `GET /api/character-creation/drafts/{id}/sheet/` (`WaitingSheetSerializer`) serves
+it to the draft's account and staff while the application is submitted, in review or sent back
+(`sheet_preview.WAITING_STATUSES`); anyone else gets 404. Finalize's writers have read halves both
+call (`whisper_lines`, `planned_introductions`, `starting_locked_xp`, `origin_story_state_for`,
+`magic_writer.creation_affinity_base` / `creation_seed_amounts`, and outside the app
+`starting_grant_for`, `item_grants_for`, `starting_languages`, `species_gift_grants`,
+`creation_technique_forms`, `creation_next_signature`, `glimpse_nudged_shares`,
+`rounded_aura_shares`). When finalize starts writing something a new character's sheet shows,
+mirror it in `sheet_preview.py`: `tests/test_waiting_sheet_parity.py` approves a full draft and
+compares the two payloads key by key, and fails on an in-game key it has not classified.
+
 ### Not Yet Implemented marks (#5197)
 A Path, a Tradition or a Beginnings whose content is not written yet is never hidden and
 never blocked (owner ruling 2026-11-18: the gap is an alert to finish the content). Its

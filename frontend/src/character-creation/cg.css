@@ -1150,9 +1150,11 @@
 }
 
 /* offer stances (#3675): the CG chapters' picks, in place of the retired
-   Distinctions stage. Some rows are plain `<div>`s (a ranked offer, whose
-   own +/- buttons carry the interaction); others are the whole row as a
-   `<button>` (an unranked offer, toggled by pressing it): the reset
+   Distinctions stage. Some rows are plain `<div>`s: a ranked offer, whose
+   own +/- buttons carry the interaction, and an unranked offer from
+   `ChapterOffers`, picked by the button on its name (`.pick-name` below, #5206).
+   Others are the whole row as a `<button>` (a Glimpse tag, a schooling
+   stance, the Amnesiac card: rows that hold no other control). The reset
    properties below cover both. */
 .interview .stances {
   list-style: none;
@@ -1175,8 +1177,52 @@
   text-align: left;
   cursor: pointer;
 }
-.interview .stance:disabled {
+.interview .stance:disabled,
+.interview .stance .pick-name:disabled {
   cursor: not-allowed;
+}
+/* An unranked offer's card (#5206). The card is a plain box and its name is the button
+   that picks it; the button's `::after` is laid over the whole card, border included, so
+   a click anywhere on the card picks. An effect on the card that opens a definition is a
+   button of its own and is drawn above that cover. A button may hold no other control, which is why the card
+   itself is not the button. */
+.interview .stance.pickable {
+  position: relative;
+}
+.interview .stance .pick-name {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.interview .stance .pick-name::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+}
+/* The keyboard's ring goes round the card, where it was when the card was the button. */
+.interview .stance .pick-name:focus-visible {
+  outline: none;
+}
+.interview .stance .pick-name:focus-visible::after {
+  outline: 2px solid var(--cg-accent);
+  outline-offset: 3px;
+}
+.interview .stances.grid .stance .pick-name::after {
+  border-radius: 0.6rem;
+}
+.interview .stance .effect {
+  position: relative;
+  z-index: 1;
 }
 /* A collapsed "make it yours" summary row (#4099 demo-fidelity fix, approved
    demo Screen 1): no pressed-dot concept, so two columns (content, price)
@@ -1198,11 +1244,13 @@
 .interview .stance .dot.sq {
   border-radius: 1px;
 }
-.interview .stance[aria-pressed='true'] .dot {
+.interview .stance[aria-pressed='true'] .dot,
+.interview .stance.picked .dot {
   background: var(--cg-accent);
   border-color: var(--cg-accent);
 }
-.interview .stance[aria-disabled='true'] {
+.interview .stance[aria-disabled='true'],
+.interview .stance.busy {
   opacity: 0.55;
 }
 /* A one-of block (#4124) runs ACROSS: its answers are alternatives, each a bordered
@@ -1222,7 +1270,8 @@
 .interview .stances.oneof > li:last-child .stance {
   border-bottom: 1px solid var(--cg-hairline-strong);
 }
-.interview .stances.oneof .stance[aria-pressed='true'] {
+.interview .stances.oneof .stance[aria-pressed='true'],
+.interview .stances.oneof .stance.picked {
   border-color: var(--cg-accent);
 }
 .interview .stances.oneof .stance .price {
@@ -1307,7 +1356,8 @@
 .interview .stances.grid > li:last-child .stance {
   border-bottom: 1px solid var(--cg-hairline-strong);
 }
-.interview .stances.grid .stance[aria-pressed='true'] {
+.interview .stances.grid .stance[aria-pressed='true'],
+.interview .stances.grid .stance.picked {
   border-color: var(--cg-accent);
   border-width: 1.5px;
 }
@@ -1573,17 +1623,25 @@
   background: var(--cg-orn);
   border-color: var(--cg-orn);
 }
-/* A term on a card's mechanics line opens its definition. */
-.interview .term {
-  display: inline;
-  font: inherit;
-  background: transparent;
-  border: 0;
+/* An effect on a card's mechanics line that opens its term's definition: a button holding
+   the number and the term, drawn as the line's own text. A button is laid out as one
+   piece, so an effect too long for the rest of its line starts the next one. */
+.interview .effect {
   padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  text-align: inherit;
+  cursor: pointer;
+}
+/* The term itself, underlined: the underline promises a definition. */
+.interview .term {
   color: var(--cg-accent);
   text-decoration: underline dotted;
   text-underline-offset: 3px;
-  cursor: pointer;
 }
 /* The box is rendered through a portal to <body>, so it is not inside the page's
    `.interview` root and no `.interview <descendant>` rule can reach it. It carries the
@@ -1670,7 +1728,8 @@
   text-transform: uppercase;
   color: var(--cg-accent);
 }
-.interview .stance[aria-pressed='false'] b {
+.interview .stance[aria-pressed='false'] b,
+.interview .stance.pickable:not(.picked) b {
   color: var(--cg-muted);
 }
 .interview .stance .g {
@@ -2112,6 +2171,13 @@
 .interview .plate-night .plate-door {
   margin: 2.2rem 0 0;
 }
+/* The submitted plate's two links, Review Sheet then View Application (#5206). */
+.interview .plate-night .plate-links {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 1rem 1.5rem;
+}
 .interview .plate-night .btn {
   --cg-btn-bg: transparent;
   --cg-btn-fg: rgb(var(--cg-night-glow));
@@ -2120,6 +2186,15 @@
   --cg-btn-hover-fg: var(--cg-night);
 }
 .interview .plate-night .btn-quiet {
+  color: var(--cg-night-soft);
+}
+/* The paper's muted ink is unreadable on the night ground (1.73:1), so the plate's
+   links take the plate's accent, the ink of its Resubmit button, as the approved demo
+   draws them (#5206). */
+.interview .plate-night .quiet-link {
+  color: rgb(var(--cg-night-glow));
+}
+.interview .plate-night .quiet-link:hover {
   color: var(--cg-night-soft);
 }
 .interview .plate-night .plate-imprint {

@@ -3356,6 +3356,14 @@ Character identity, appearance, demographics, and guise system.
   requester's own characters and so returned nothing to a visitor and everything on the
   account to an owner. Styles: `frontend/src/character_sheets/sheet.css` under
   `.refsheet`.
+- **The Bonuses band (#5206):** the payload's `bonuses` (`_build_bonuses`, `BonusGroupEntry` /
+  `BonusRowEntry` / `BonusSourceEntry` in `types.py`) lists every bonus total by kind and what
+  gave it, built from `world.mechanics.bonuses.bonus_groups_for_sheet`. It is built only when
+  the stats section shows, so it follows `stats_visibility`. `BonusesBand.tsx` draws it on the
+  Sheet tab under Abilities. See `character_sheets.md` "The Bonuses band".
+- **`compose_fullname(key, family_name)` (#5206):** the real full name, the family's name added
+  only to a key that does not already end with it; the identity section and the
+  character-creation waiting sheet both call it.
 - **Integrates with:** roster (character management, `set_profile_picture` wears a look,
   `TenureMedia.look`), character_creation (sheet setup),
   gm (table update requests apply prose rewrites), stories (`Era` stamps),
@@ -3437,6 +3445,20 @@ services on a live sheet (`sheet_writers.py`, #4221), shared with staff edit mod
   life-stage-tagged. See [character_creation.md](character_creation.md)'s "Question
   kinds and connections" subsection and ADR-0277.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
+- **The waiting sheet (#5206):** `sheet_preview.build_waiting_sheet(draft)` lays a submitted
+  draft out in the in-game sheet's typed sections, reading only, plus the waiting page's own
+  keys (`WaitingSheetPayload`). `GET /api/character-creation/drafts/{id}/sheet/`
+  (`WaitingSheetSerializer`) serves it to the draft's account and staff while the
+  application is in `sheet_preview.WAITING_STATUSES` (submitted, in review, revisions
+  requested); anyone else gets 404. Finalize's writers gained read halves that finalize and
+  the builder both call (`whisper_lines`, `planned_introductions`, `starting_locked_xp`,
+  `origin_story_state_for`, `magic_writer.creation_affinity_base` / `creation_seed_amounts`,
+  and outside the app `starting_grant_for`, `item_grants_for`, `starting_languages`,
+  `species_gift_grants`, `creation_technique_forms`, `creation_next_signature`,
+  `glimpse_nudged_shares`, `rounded_aura_shares`). `tests/test_waiting_sheet_parity.py`
+  approves a full draft and compares the two sheets key by key. The page is
+  `/characters/create/sheet` (`WaitingSheetPage.tsx`), linked "Review Sheet" from the Review
+  stage. See character_creation.md "The waiting sheet".
 - **Officially dead (#4396):** a Final Touches door names the established face the world meets
   while the character's own is believed dead (`draft_data.officially_dead`, `_write_officially_dead`:
   `create_persona` + `set_persona_profile` + `set_active_persona`, `believed_deceased` on the
@@ -7485,6 +7507,17 @@ Unified modifier system — categories, types, sources, and per-character modifi
   (`web/admin/power_builder/`, `_power_builder/<pk>/`): edits the application, compares every
   technique and other source of its capability at a reference character, lists near misses and
   adds a technique on a gift and path. See `mechanics.md` "Power Builder".
+- **The Bonuses band and the shared bonus valuation (#5206):** `distinction_effect_value` and
+  `value_held_effects` (`services.py`) value a held distinction effect with amplification and
+  immunity for any caller, rows or none; `get_modifier_breakdown` calls them.
+  `bonuses.bonus_groups` groups, values and filters every bonus by kind;
+  `bonus_groups_for_sheet(sheet)` feeds it a sheet's rows, worn crafted pieces and the
+  equipment walk (`equipment_walk_target_ids`), and the character-creation waiting sheet feeds
+  it a draft's cards. New column `ModifierTarget.spent_at_creation` (migrations 0484 and 0485)
+  marks the bonuses creation uses up, which the band leaves out. `ModifierTarget.roll_lane` is
+  the lane a roll prices a target's sized modifiers in (CHECK for every target the check seam
+  reads), read by the band. `terms.py`'s `term_label` / `term_definition` name and define a target the
+  same way on a card and on the sheet. See `mechanics.md` "The Bonuses band".
 - **Levers (#4394):** five `ModifierCategory` rows (`income`, `reputation_gain`,
   `relationship_gain`, `comfort`, `fatigue_cost`) read at one seam each through
   `world/mechanics/levers.py`; see `mechanics.md` "Levers".

@@ -15,15 +15,24 @@
  */
 
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
+import type { CharacterSheetPayload } from '@/character_sheets/api';
 import { Entries, Entry, Ledger, Tag } from '@/character_sheets/components/sheet/primitives';
 
 interface Props {
   /** CharacterSheet pk (shared with the character ObjectDB pk). */
   characterId: number;
+  /**
+   * A sheet payload the caller already holds (#5206: the waiting sheet, which has no
+   * character to fetch by). When given, it is drawn and no query is made.
+   */
+  payload?: Pick<CharacterSheetPayload, 'distinctions'>;
 }
 
-export function DistinctionsTab({ characterId }: Props) {
-  const { data: payload, isLoading } = useCharacterSheetQuery(characterId);
+export function DistinctionsTab({ characterId, payload: given }: Props) {
+  // Id 0 disables the query, so a caller that hands over its payload asks for nothing.
+  const query = useCharacterSheetQuery(given ? 0 : characterId);
+  const payload = given ?? query.data;
+  const isLoading = !given && query.isLoading;
 
   if (isLoading) {
     return <Ledger>Reading their distinctions…</Ledger>;

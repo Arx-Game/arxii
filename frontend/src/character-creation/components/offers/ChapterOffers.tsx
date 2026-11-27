@@ -21,8 +21,9 @@
  * never wraps this component in a second div of its own.
  */
 
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { Fragment, useCallback, useId, useMemo, type ReactNode } from 'react';
+import { TermButton, TermPopover } from '@/components/term/DefinedTerm';
+import { useTermPopover, type TermPopoverState } from '@/components/term/useTermPopover';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
 import { cn } from '@/lib/utils';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
@@ -198,16 +199,6 @@ function SignedPrice({ cost, rank }: { cost: number; rank: number }) {
   );
 }
 
-/** Where a term's definition box goes: viewport coordinates under the term, clamped so
- * the box stays on screen (the demo's rule). */
-function placeTerm(target: HTMLElement): { top: number; left: number } {
-  const rect = target.getBoundingClientRect();
-  const width = Math.min(352, window.innerWidth - 24);
-  const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
-  const top = rect.bottom + 180 > window.innerHeight ? rect.top - 180 : rect.bottom + 6;
-  return { top, left };
-}
-
 /** What stands before a term on the mechanics line: the signed magnitude, the
  * immunity's words, or nothing for an effect with no number. */
 function effectPrefix(effect: VisibleOffer['effects'][number]): string {
@@ -217,65 +208,254 @@ function effectPrefix(effect: VisibleOffer['effects'][number]): string {
 }
 
 /** The mechanics line built from the effect rows (#4874): `+10 sailing; -5 martial`.
- * A term with a definition is underlined and shows it while the pointer or the keyboard
+ * An effect whose term has a definition is a button (#5206): its number and its term
+ * together, the term underlined. It shows the definition while the pointer or the keyboard
  * focus is on it (#5148); a click or tap pins it open, for a screen with no pointer. A
- * term nobody has written a definition for is plain text: the underline promises an
- * explanation. An immunity reads as the list layouts print it. */
+ * button is laid out as one piece, so the number goes inside it with the term: a term too
+ * long for the rest of its line would otherwise drop to the next and leave its number
+ * behind. An effect too long for the rest of the line starts the next one, and the
+ * semicolon stays with the effect it ends. A term nobody has written a definition for is
+ * plain text: the underline promises an explanation. An immunity reads as the list layouts
+ * print it. The button is named by its own text, so the card's description, which reads
+ * this line, says each effect once and nothing more. */
 function EffectTerms({
+  id,
   offer,
   defined,
-  onPeek,
-  onLeave,
-  onPin,
+  popover,
 }: {
+  /** The line's id: the card's pick button names it as part of its description. */
+  id: string;
   offer: VisibleOffer;
   /** Whether a term has a definition to show. */
   defined: (name: string) => boolean;
-  onPeek: (target: HTMLElement, name: string) => void;
-  onLeave: (name: string) => void;
-  onPin: (target: HTMLElement, name: string) => void;
+  popover: TermPopoverState;
 }) {
   if (offer.effects.length === 0) return null;
+  const last = offer.effects.length - 1;
   return (
-    <span className="fx">
-      {offer.effects.map((effect, i) => (
-        <span key={`${effect.target}-${i}`}>
-          {i > 0 && '; '}
-          {effectPrefix(effect)}
-          {defined(effect.target) ? (
-            // A span with the button role: the card around it is already a button, and
-            // a button may not nest one.
-            <span
-              role="button"
-              tabIndex={0}
-              className="term"
-              aria-label={`${effect.label}, definition`}
-              onMouseEnter={(e) => onPeek(e.currentTarget, effect.target)}
-              // Scrolling closes the box, and a pointer that was already on the word
-              // gets no second enter: the next movement over the word shows it again.
-              onMouseMove={(e) => onPeek(e.currentTarget, effect.target)}
-              onMouseLeave={() => onLeave(effect.target)}
-              onFocus={(e) => onPeek(e.currentTarget, effect.target)}
-              onBlur={() => onLeave(effect.target)}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPin(e.currentTarget, effect.target);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  onPin(e.currentTarget, effect.target);
-                }
-              }}
-            >
-              {effect.label}
-            </span>
-          ) : (
-            effect.label
-          )}
+    <span className="fx" id={id}>
+      {offer.effects.map((effect, i) => {
+        const prefix = effectPrefix(effect);
+        const end = i < last ? ';' : '';
+        return (
+          <Fragment key={`${effect.target}-${i}`}>
+            {i > 0 && ' '}
+            {defined(effect.target) ? (
+              <TermButton name={effect.target} className="effect" popover={popover}>
+                {prefix}
+                <span className="term">{effect.label}</span>
+                {end}
+              </TermButton>
+            ) : (
+              `${prefix}${effect.label}${end}`
+            )}
+          </Fragment>
+        );
+      })}
+    </span>
+  );
+}
+
+/**
+ * The name of an unranked card, as the button that picks it (#5206). The card around it is
+ * a plain box, so a term on the card can be a button too: a button may hold no other
+ * control. The button's `::after` covers the card (`cg.css`, `.stance .pick-name`), so a click
+ * anywhere on the card still picks it. The card's other lines are the button's
+ * description, read after its name.
+ */
+function PickName({
+  offer,
+  selected,
+  busy,
+  disabled,
+  describedBy,
+  onPick,
+}: {
+  offer: VisibleOffer;
+  selected: boolean;
+  /** The card cannot be picked now: locked, saving, or its block is full. */
+  busy: boolean;
+  /** Whether the button also refuses the click; false while a caller intercepts it. */
+  disabled: boolean;
+  describedBy: string;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="pick-name"
+      aria-pressed={selected}
+      aria-disabled={busy || undefined}
+      aria-describedby={describedBy}
+      disabled={disabled}
+      onClick={onPick}
+    >
+      {offer.name}
+    </button>
+  );
+}
+
+/** Which of a card's optional lines it shows. */
+interface CardLines {
+  distinction: boolean;
+  effects: boolean;
+  locked: boolean;
+  secret: boolean;
+  cover: boolean;
+}
+
+/** The ids of the lines a card shows under its name, in reading order. */
+function cardLineIds(about: string, lines: CardLines): string {
+  return [
+    lines.distinction && `${about}-distinction`,
+    `${about}-line`,
+    lines.effects && `${about}-fx`,
+    lines.locked && `${about}-locked`,
+    lines.secret && `${about}-secret`,
+    lines.cover && `${about}-cover`,
+    `${about}-price`,
+  ]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** Which optional lines this card shows, for its layout and its marks. */
+function cardLines(
+  offer: VisibleOffer,
+  layout: 'list' | 'grid',
+  withTerms: boolean,
+  marks: { secret: boolean; cover: boolean }
+): CardLines {
+  return {
+    distinction:
+      layout === 'grid' && Boolean(offer.distinction_name) && offer.distinction_name !== offer.name,
+    effects: withTerms ? offer.effects.length > 0 : Boolean(offer.effect_line),
+    locked: offer.is_locked,
+    secret: marks.secret,
+    cover: marks.cover,
+  };
+}
+
+/** A card's mechanics line: the effects with their terms where the block has terms, the
+ * offer's own written line where it has not. */
+function CardEffects({
+  id,
+  offer,
+  withTerms,
+  defined,
+  popover,
+}: {
+  id: string;
+  offer: VisibleOffer;
+  withTerms: boolean;
+  defined: (name: string) => boolean;
+  popover: TermPopoverState;
+}) {
+  if (withTerms) return <EffectTerms id={id} offer={offer} defined={defined} popover={popover} />;
+  if (!offer.effect_line) return null;
+  return (
+    <span className="fx" id={id}>
+      {offer.effect_line}
+    </span>
+  );
+}
+
+/** The lines under a card's name. Each carries the id the pick button's description names
+ * (`cardLineIds`), so what is listed there is rendered here. */
+function CardText({
+  about,
+  offer,
+  lines,
+  layout,
+  showOpener,
+  effects,
+  wordSecret,
+  wordCover,
+}: {
+  about: string;
+  offer: VisibleOffer;
+  lines: CardLines;
+  layout: 'list' | 'grid';
+  showOpener: boolean;
+  effects: ReactNode;
+  wordSecret?: string;
+  wordCover?: string;
+}) {
+  return (
+    <>
+      {lines.distinction && (
+        <span className="g" id={`${about}-distinction`}>
+          {offer.distinction_name}
         </span>
-      ))}
+      )}
+      <span className="g" id={`${about}-line`}>
+        {cardLine(offer, layout)}
+        {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
+      </span>
+      {effects}
+      {lines.locked && (
+        <span className="locked" id={`${about}-locked`}>
+          {offer.lock_reason}
+        </span>
+      )}
+      {lines.secret && (
+        <span className="secret" id={`${about}-secret`}>
+          {wordSecret ?? 'Secret: select a cover story below'}
+        </span>
+      )}
+      {lines.cover && (
+        <span className="secret" id={`${about}-cover`}>
+          {wordCover ?? 'Cover story'}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** A ranked card's ranks as pips (#4829), in the card's top right on a career-point grid.
+ * A pip at or under the held rank is on; one past the points this card could still take
+ * is off; a click sets that rank (the first pip of an unpicked card picks it; the held
+ * rank's own pip clears it). */
+function RankPips({
+  offer,
+  rank,
+  reach,
+  saving,
+  onRank,
+}: {
+  offer: VisibleOffer;
+  rank: number;
+  /** The highest rank the block's remaining points allow this card. */
+  reach: number;
+  saving: boolean;
+  onRank: (rank: number) => void;
+}) {
+  const pips = Array.from({ length: offer.max_rank }, (_, i) => i + 1);
+  return (
+    <span
+      className="pips"
+      role="group"
+      aria-label={`${offer.name}, rank ${rank} of ${offer.max_rank}`}
+    >
+      {pips.map((pip) => {
+        const on = pip <= rank;
+        const off = pip > reach;
+        return (
+          <button
+            key={pip}
+            type="button"
+            className={cn('pip', on && 'on', off && 'off')}
+            aria-pressed={on}
+            aria-label={`${offer.name}, rank ${pip}`}
+            disabled={(offer.is_locked || saving || off) && !on}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRank(pip === rank ? 0 : pip);
+            }}
+          />
+        );
+      })}
     </span>
   );
 }
@@ -416,50 +596,12 @@ export function ChapterOffers({
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
   const syncDistinctions = useSyncDistinctions(draft.id);
-  // The one open term popover (#4874): which term, where its button sits, and whether a
-  // click pinned it open (#5148: hovering shows it, and it goes when the pointer leaves
-  // unless it was pinned).
-  const [openTerm, setOpenTerm] = useState<{
-    name: string;
-    top: number;
-    left: number;
-    pinned: boolean;
-  } | null>(null);
-  useEffect(() => {
-    if (!openTerm) return;
-    const close = () => setOpenTerm(null);
-    // Any click closes it: a click on a term stops before it reaches the document, and
-    // the box itself takes no pointer (cg.css).
-    const onClick = () => close();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    document.addEventListener('click', onClick);
-    document.addEventListener('keydown', onKey);
-    window.addEventListener('scroll', close, { passive: true });
-    return () => {
-      document.removeEventListener('click', onClick);
-      document.removeEventListener('keydown', onKey);
-      window.removeEventListener('scroll', close);
-    };
-  }, [openTerm]);
-  // The pointer or the focus is on a term: show it, unless this term is already open
-  // (hovered or pinned), which it stays as it is.
-  const peekTerm = useCallback((target: HTMLElement, name: string) => {
-    setOpenTerm((current) =>
-      current?.name === name ? current : { name, ...placeTerm(target), pinned: false }
-    );
-  }, []);
-  // The pointer or the focus leaves: a pinned box stays.
-  const leaveTerm = useCallback((name: string) => {
-    setOpenTerm((current) => (current?.name === name && !current.pinned ? null : current));
-  }, []);
-  // A click or tap: pin it open, or close the one this click had pinned.
-  const pinTerm = useCallback((target: HTMLElement, name: string) => {
-    setOpenTerm((current) =>
-      current?.name === name && current.pinned ? null : { name, ...placeTerm(target), pinned: true }
-    );
-  }, []);
+  // The one open term popover (#4874, #5148): hovering or focusing shows it, a click pins
+  // it (the shared ``useTermPopover``, which the sheet's Bonuses band uses too).
+  const termPopover = useTermPopover();
+  const openTerm = termPopover.openTerm;
+  // The stem of every card line's id on this block.
+  const blockId = useId();
   const termDefinition = useMemo(() => {
     const map = new Map<string, OfferTerm>();
     for (const term of terms ?? []) map.set(term.name, term);
@@ -589,29 +731,39 @@ export function ChapterOffers({
     const ranked = offer.max_rank > 1;
     const waiting = full && !selected;
     const busy = offer.is_locked || saving || waiting;
-    // Pips (#4829): on a career-point grid the rank is the pips in the card's top
-    // right. A pip at or under the held rank is on; one past the points this card could
-    // still take is off; a click sets that rank (the first pip of an unpicked card picks
-    // it; the held rank's own pip clears it).
-    const pips =
-      pointsPicks && ranked && !offer.held
-        ? Array.from({ length: offer.max_rank }, (_, i) => i + 1)
-        : null;
+    // On a career-point grid a ranked card's rank is its pips (`RankPips`, #4829).
+    const pips = pointsPicks && ranked && !offer.held;
     const reach = pointsLeft === null ? offer.max_rank : rank + pointsLeft;
-    const showsDistinction =
-      layout === 'grid' && offer.distinction_name && offer.distinction_name !== offer.name;
     const isCover = coverOfferId !== null && coverOfferId === offer.offer_id;
-    const isSecret = secretOfferIds.includes(offer.offer_id);
     const toggle = () => {
       if (interceptPick?.(offer, selected)) return;
       applyRank(offer, selected ? 0 : 1);
     };
+    // An unranked card nobody holds is picked by its name (`PickName`).
+    const pickable = !ranked && !offer.held;
+    const about = `${blockId}-${offer.offer_id}`;
+    const withTerms = Boolean(terms);
+    const lines = cardLines(offer, layout, withTerms, {
+      secret: secretOfferIds.includes(offer.offer_id),
+      cover: isCover,
+    });
     const body = (
       <>
         <span className={exclusive ? 'dot' : 'dot sq'} />
         <span>
           <b>
-            {offer.name}
+            {pickable ? (
+              <PickName
+                offer={offer}
+                selected={selected}
+                busy={busy}
+                disabled={busy && !interceptPick}
+                describedBy={cardLineIds(about, lines)}
+                onPick={toggle}
+              />
+            ) : (
+              offer.name
+            )}
             {ranked && !offer.held && !pips && (
               <RankControl
                 name={offer.name}
@@ -622,29 +774,26 @@ export function ChapterOffers({
               />
             )}
           </b>
-          {showsDistinction && <span className="g">{offer.distinction_name}</span>}
-          <span className="g">
-            {cardLine(offer, layout)}
-            {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
-          </span>
-          {terms ? (
-            <EffectTerms
-              offer={offer}
-              defined={termDefined}
-              onPeek={peekTerm}
-              onLeave={leaveTerm}
-              onPin={pinTerm}
-            />
-          ) : (
-            offer.effect_line && <span className="fx">{offer.effect_line}</span>
-          )}
-          {offer.is_locked && <span className="locked">{offer.lock_reason}</span>}
-          {isSecret && (
-            <span className="secret">{wordSecret ?? 'Secret: select a cover story below'}</span>
-          )}
-          {isCover && <span className="secret">{wordCover ?? 'Cover story'}</span>}
+          <CardText
+            about={about}
+            offer={offer}
+            lines={lines}
+            layout={layout}
+            showOpener={showOpener}
+            effects={
+              <CardEffects
+                id={`${about}-fx`}
+                offer={offer}
+                withTerms={withTerms}
+                defined={termDefined}
+                popover={termPopover}
+              />
+            }
+            wordSecret={wordSecret}
+            wordCover={wordCover}
+          />
         </span>
-        <span className="price">
+        <span className="price" id={`${about}-price`}>
           {offer.held && <span className="locked">{wordHeld ?? 'held'}</span>}
           {pricing === 'signed' ? (
             <SignedPrice cost={offer.cost_per_rank} rank={rank} />
@@ -653,30 +802,13 @@ export function ChapterOffers({
           )}
         </span>
         {pips && (
-          <span
-            className="pips"
-            role="group"
-            aria-label={`${offer.name}, rank ${rank} of ${offer.max_rank}`}
-          >
-            {pips.map((pip) => {
-              const on = pip <= rank;
-              const off = pip > reach;
-              return (
-                <button
-                  key={pip}
-                  type="button"
-                  className={cn('pip', on && 'on', off && 'off')}
-                  aria-pressed={on}
-                  aria-label={`${offer.name}, rank ${pip}`}
-                  disabled={(offer.is_locked || saving || off) && !on}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    applyRank(offer, pip === rank ? 0 : pip);
-                  }}
-                />
-              );
-            })}
-          </span>
+          <RankPips
+            offer={offer}
+            rank={rank}
+            reach={reach}
+            saving={saving}
+            onRank={(next) => applyRank(offer, next)}
+          />
         )}
       </>
     );
@@ -703,16 +835,17 @@ export function ChapterOffers({
             {body}
           </div>
         ) : (
-          <button
-            type="button"
-            className={cn('stance', isCover && 'cover')}
-            aria-pressed={selected}
-            aria-disabled={busy || undefined}
-            disabled={busy && !interceptPick}
-            onClick={toggle}
+          <div
+            className={cn(
+              'stance',
+              'pickable',
+              selected && 'picked',
+              busy && 'busy',
+              isCover && 'cover'
+            )}
           >
             {body}
-          </button>
+          </div>
         )}
       </li>
     );
@@ -762,21 +895,14 @@ export function ChapterOffers({
           </ul>
         </div>
       ))}
-      {openTerm &&
-        // Through a portal (#4874): the life block is a size container, which would
-        // otherwise anchor a fixed box to itself instead of the viewport.
-        createPortal(
-          <dialog
-            open
-            className="interview popover"
-            aria-label={termDefinition.get(openTerm.name)?.label ?? openTerm.name}
-            style={{ top: openTerm.top, left: openTerm.left }}
-          >
-            <b>{termDefinition.get(openTerm.name)?.label ?? openTerm.name}</b>
-            {termDefinition.get(openTerm.name)?.definition ?? ''}
-          </dialog>,
-          document.body
-        )}
+      {/* Through a portal (#4874): the life block is a size container, which would
+          otherwise anchor a fixed box to itself instead of the viewport. */}
+      <TermPopover
+        openTerm={openTerm}
+        label={(openTerm && termDefinition.get(openTerm.name)?.label) ?? openTerm?.name ?? ''}
+        definition={(openTerm && termDefinition.get(openTerm.name)?.definition) ?? ''}
+        scope="interview"
+      />
       {folded.length > 0 && (
         <details className="more">
           <summary>{seeMore}</summary>

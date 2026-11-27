@@ -173,6 +173,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     },
     stats: {},
     buffed_stats: {},
+    bonuses: [],
     skills: [],
     path: null,
     distinctions: [],
@@ -205,6 +206,7 @@ function makeSheet(overrides: Partial<CharacterSheetPayload> = {}): CharacterShe
     covenants: [],
     ties: [],
     ties_ap_this_week: null,
+    secrets: [],
     ...overrides,
   };
 }

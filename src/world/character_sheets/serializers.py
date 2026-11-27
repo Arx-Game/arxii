@@ -9,8 +9,9 @@ in the future when the frontend needs it.
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 import contextlib
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import models
@@ -40,6 +41,9 @@ from world.character_sheets.types import (
     AuraShareEntry,
     AuraThemingData,
     BeatEntry,
+    BonusGroupEntry,
+    BonusRowEntry,
+    BonusSourceEntry,
     CombatStyleSection,
     CovenantRoleEntry,
     DistinctionEntry,
@@ -100,6 +104,7 @@ from world.conditions.models import ConditionInstance
 from world.conditions.thumbnail_services import persona_face_url, placeholder_portrait_url
 from world.covenants.models import CharacterCovenantRole, MentorBond
 from world.distinctions.models import CharacterDistinction
+from world.distinctions.types import held_distinction_sort_key
 from world.forms.models import (
     Build,
     CharacterForm,
@@ -146,6 +151,7 @@ from world.roster.services.gallery import gallery_for, look_url, portrait_url
 from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.scenes.persona_display import mask_description
+from world.secrets.own import own_secret_entries
 from world.skills.models import CharacterSpecializationValue, Skill
 from world.skills.services import is_skill_at_xp_boundary, skill_rating
 from world.societies.constants import MembershipFavor
@@ -155,6 +161,9 @@ from world.societies.reputation_reasons import reason_lines_by_reputation
 from world.species.models import Species
 from world.tarot.models import TarotCard
 from world.traits.models import CharacterTraitValue, TraitType
+
+if TYPE_CHECKING:
+    from world.mechanics.types import BonusGroup
 
 
 class OriginSlotInputSerializer(serializers.Serializer):
@@ -326,6 +335,19 @@ def _presented_bio_fields(bio_profile: Profile | None) -> tuple[str, str, dict]:
     )
 
 
+def compose_fullname(key: str, family_name: str) -> str:
+    """The real full name: "FirstName FamilyName", the family's name said once (#5206).
+
+    A character made by character creation is already keyed "FirstName FamilyName"
+    (``_build_character_full_name``), so the family's name is added only to a key that does
+    not already end with it (a staff-made "Alaric" in house Valardin reads "Alaric Valardin").
+    The waiting sheet composes its name the same way.
+    """
+    if not family_name or key == family_name or key.endswith(f" {family_name}"):
+        return key
+    return f"{key} {family_name}"
+
+
 def _resolve_identity_reveal(
     character: ObjectDB,
     family: Any,
@@ -337,8 +359,7 @@ def _resolve_identity_reveal(
         # The presented (mask/cover) name is already resolved; never compose the real db_key
         # with a family name here, and withhold the real progression path.
         return name, None
-    # Compose the real fullname: "FirstName FamilyName" or just the db_key.
-    fullname = f"{character.db_key} {family.name}" if family is not None else character.db_key
+    fullname = compose_fullname(character.db_key, family.name if family is not None else "")
     # Latest path from prefetched path_history (ordered by -selected_at).
     path_history: list = sheet.cached_path_history
     path_value = _id_name(path_history[0].path) if path_history else None
@@ -785,6 +806,44 @@ def _build_buffed_stats(sheet: CharacterSheet) -> dict[str, int]:
     }
 
 
+def _build_bonuses(sheet: CharacterSheet, *, privileged: bool) -> list[BonusGroupEntry]:
+    """The Bonuses band (#5206): each bonus total by kind, with the sources that gave it.
+
+    Built only when the stats section shows (the caller gates it on ``show_stats``). A
+    secret card's source line reaches only a privileged viewer (the owner, staff), the way
+    ``_build_distinctions`` lists the card itself; its value still counts in the total.
+    """
+    from world.mechanics.bonuses import bonus_groups_for_sheet  # noqa: PLC0415
+
+    return bonus_group_entries(bonus_groups_for_sheet(sheet, privileged=privileged))
+
+
+def bonus_group_entries(groups: Iterable[BonusGroup]) -> list[BonusGroupEntry]:
+    """The band's groups as the payload's typed entries; the in-game sheet and the
+    character-creation waiting sheet both shape them here (#5206)."""
+    return [
+        BonusGroupEntry(
+            category=group.category_name,
+            heading=group.heading,
+            rows=[
+                BonusRowEntry(
+                    target=row.target_name,
+                    label=row.label,
+                    definition=row.definition,
+                    total=row.total,
+                    immune=row.immune,
+                    sources=[
+                        BonusSourceEntry(label=source.label, value=source.value)
+                        for source in row.sources
+                    ],
+                )
+                for row in group.rows
+            ],
+        )
+        for group in groups
+    ]
+
+
 def _build_stat_sections(sheet: CharacterSheet, *, show: bool) -> dict[str, dict[str, int]]:
     """The payload's ``stats`` and ``buffed_stats``, empty when stats are hidden."""
     if not show:
@@ -921,8 +980,9 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
     player-gated one): they drop off this public list and surface on the secret tab once learned.
     A non-privileged viewer sees only the non-secret entries; the owner / staff see all, with
     ``is_secret`` flagging which are gated and ``is_cover`` which stand in for one (a stranger
-    reads a cover as any held card). Expects ``sheet.distinctions`` prefetched with
-    ``select_related("distinction")`` so the secret state resolves query-free.
+    reads a cover as any held card). Listed by ``held_distinction_sort_key`` (name, then
+    feature), the order the waiting sheet lists them in too. Expects ``sheet.distinctions``
+    prefetched with ``select_related("distinction")`` so the secret state resolves query-free.
     """
     return [
         DistinctionEntry(
@@ -937,7 +997,10 @@ def _build_distinctions(sheet: CharacterSheet, *, privileged: bool) -> list[Dist
             is_cover=privileged and cd.is_cover,
             feature=_feature_name(cd),
         )
-        for cd in sheet.cached_distinctions
+        for cd in sorted(
+            sheet.cached_distinctions,
+            key=lambda cd: held_distinction_sort_key(cd.distinction.name, _feature_name(cd)),
+        )
         if privileged or not cd.is_secret
     ]
 
@@ -2448,6 +2511,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             # #3988 — the stored values staff edit mode edits; None for anyone else.
             "staff_edit": _build_staff_edit(sheet) if can_edit_npc_sheet(user, sheet) else None,
             **_build_stat_sections(sheet, show=show_stats),
+            **_bonus_and_secret_sections(sheet, show_stats=show_stats, privileged=privileged),
             "skills": _build_skills(sheet) if show_skills else [],
             "path": _build_path_detail(sheet),
             "distinctions": _build_distinctions(sheet, privileged=privileged),
@@ -2505,6 +2569,21 @@ class CharacterSheetSerializer(serializers.Serializer):
             "ties": _build_ties(tie_sides, viewer_sheet, privileged=privileged),
             "ties_ap_this_week": _ties_ap_this_week(tie_sides) if privileged else None,
         }
+
+
+def _bonus_and_secret_sections(
+    sheet: CharacterSheet, *, show_stats: bool, privileged: bool
+) -> dict[str, Any]:
+    """The payload's ``bonuses`` and ``secrets`` (#5206).
+
+    The Bonuses band follows the stats section's visibility. The own secrets are Knowledge's
+    (owner ruling 2026-11-26): what the character knows about itself, the owner's and
+    staff's only.
+    """
+    return {
+        "bonuses": _build_bonuses(sheet, privileged=privileged) if show_stats else [],
+        "secrets": own_secret_entries(sheet) if privileged else [],
+    }
 
 
 def _build_face_details(

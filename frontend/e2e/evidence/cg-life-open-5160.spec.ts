@@ -135,7 +135,7 @@ test.describe('the life page opens expanded (#5160)', () => {
       await expect(line(page, b.beat_id)).toHaveAttribute('aria-expanded', 'true');
     }
     // Every card of every section is drawn: all fifty-one, each with a box on the page.
-    const cards = page.locator('.interview .life .stances.grid button.stance:not(.amnesiac)');
+    const cards = page.locator('.interview .life .stances.grid .stance.pickable');
     await expect(cards).toHaveCount(OFFERS.length);
     const boxes = await cards.evaluateAll((els) =>
       els.map((el) => {

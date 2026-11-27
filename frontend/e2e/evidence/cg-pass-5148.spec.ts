@@ -277,14 +277,17 @@ test.describe('character creation, three fixes from a look at production (#5148)
   }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
     const { server } = await creation(page, 3, true);
+    // A card is a box picked by the button on its name (#5206); an effect with a
+    // definition is a button of its own on the card, its number with its term.
     const bookish = page.getByRole('button', { name: /^Bookish/ });
-    const poise = bookish.getByRole('button', { name: 'poise, definition' });
+    const bookishCard = page.locator('.stance', { has: bookish });
+    const poise = bookishCard.locator('.effect', { hasText: 'poise' });
     const box = page.locator('.popover');
 
     await expect(box).toHaveCount(0);
     // Bring the card into the window first and let the scroll finish: scrolling closes
     // the box, and `hover()` would otherwise scroll and point in one step.
-    await bookish.scrollIntoViewIfNeeded();
+    await bookishCard.scrollIntoViewIfNeeded();
     await page.waitForTimeout(300);
     await poise.hover();
     await page.screenshot({ path: shot('5-hover-on-poise.png') });
@@ -316,7 +319,7 @@ test.describe('character creation, three fixes from a look at production (#5148)
     await expect(box.getByText(POISE)).toBeInViewport();
 
     // Moving to another trait swaps the box; moving off the card removes it.
-    await bookish.getByRole('button', { name: 'menace, definition' }).hover();
+    await bookishCard.locator('.effect', { hasText: 'menace' }).hover();
     await expect(box).toHaveText('menaceHow much others fear to cross you.');
     await page.mouse.move(5, 5);
     await expect(box).toHaveCount(0);
@@ -358,11 +361,13 @@ test.describe('character creation, three fixes from a look at production (#5148)
     await expect(bookish).toHaveAttribute('aria-pressed', 'true');
 
     // A trait with no definition written is plain text: no underline, nothing to open.
-    const travelled = page.getByRole('button', { name: /^Well travelled/ });
+    const travelled = page.locator('.stance', {
+      has: page.getByRole('button', { name: /^Well travelled/ }),
+    });
     await expect(travelled.locator('.fx')).toHaveText('+5 wayfinding');
     await expect(travelled.locator('.term')).toHaveCount(0);
     expect(
-      await bookish
+      await bookishCard
         .locator('.term')
         .first()
         .evaluate((el) => getComputedStyle(el).textDecorationLine)

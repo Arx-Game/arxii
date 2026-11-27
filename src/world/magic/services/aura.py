@@ -85,6 +85,13 @@ def _normalized_shares(
     return rounded
 
 
+def rounded_aura_shares(shares: Sequence[AffinityShare]) -> dict[int, tuple[Affinity, Decimal]]:
+    """The percents ``set_aura_shares`` would store for ``shares``, without storing them:
+    each rounded to 0.01, the remainder folded into the largest (#5206: the waiting sheet
+    shows a new character's aura before it exists)."""
+    return _normalized_shares(shares, subject="An aura", label="Aura shares")
+
+
 @transaction.atomic
 def set_aura_shares(aura: CharacterAura, shares: Sequence[AffinityShare]) -> None:
     """Replace an aura's share rows. The only writer of CharacterAuraShare.

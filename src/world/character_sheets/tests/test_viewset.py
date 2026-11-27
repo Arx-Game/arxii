@@ -2959,12 +2959,20 @@ class TestCharacterSheetQueryCount(TestCase):
         # +0 (#4921): the combat style rides the sheet's own query (select_related); a
         # sheet with a style pays four more (gear kinds, skill value, Tradition, vows). This
         # fixture's character has none.
+        # +1 (#5206): the Bonuses band reads the sheet's modifier rows once; the rank
+        # sizes prefetch adds one more only when a row exists, and this fixture has none.
+        # +2 (#5206): the band asks which targets equipment reaches, through the
+        # character's thread, equipped-item and covenant-role handlers, which this read
+        # loads for the band; the fixture holds no thread, worn style or engaged role, so
+        # no candidate read follows.
+        # +1 (#5206, owner ruling 2026-11-26): the owner's own secrets for Knowledge, one
+        # read of the secret shelf (``secrets_owned_by``) with its joins selected.
         ModifierTarget.get_for_trait(
             self.character.sheet_data.trait_values.filter(trait__trait_type=TraitType.SKILL)
             .first()
             .trait
         )
-        with self.assertNumQueries(59):
+        with self.assertNumQueries(63):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

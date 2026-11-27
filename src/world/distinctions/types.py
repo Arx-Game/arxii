@@ -61,6 +61,17 @@ class DraftDistinctionEntry(TypedDict):
 type FeatureKey = tuple[int, str, int]
 
 
+def held_distinction_sort_key(name: str, feature: str) -> tuple[str, str]:
+    """The order a sheet lists a character's held cards in: name, then feature (#5206).
+
+    The one rule for the sheet's distinctions and for a Bonuses band row's card sources,
+    on the in-game sheet and on the character-creation waiting sheet alike. Without it the
+    order was whatever the database returned (on PostgreSQL the unique index's, so by
+    distinction id), which no draft can reproduce.
+    """
+    return (name.casefold(), feature.casefold())
+
+
 def feature_key(entry: DraftDistinctionEntry) -> FeatureKey:
     """The identity of one draft entry: its distinction plus the feature it names.
 

@@ -350,7 +350,8 @@ export function SkillsSection({ draft, onPointsChange }: SkillsSectionProps) {
 
   return (
     <div>
-      {copy?.path_skills_desc && (
+      {/* It speaks of the path's suggestions, so it waits for the path to have some (#5206). */}
+      {copy?.path_skills_desc && (suggestions?.length ?? 0) > 0 && (
         <div className="leaf-body">
           <p>{copy.path_skills_desc}</p>
         </div>

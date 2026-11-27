@@ -92,8 +92,9 @@ class ModifierTargetAdmin(admin.ModelAdmin):
         "target_scope_check_type",
         "display_order",
         "is_active",
+        "spent_at_creation",
     ]
-    list_filter = ["category", "is_active"]
+    list_filter = ["category", "is_active", "spent_at_creation"]
     autocomplete_fields = [
         "target_trait",
         "target_check_category",
@@ -109,7 +110,7 @@ class ModifierTargetAdmin(admin.ModelAdmin):
     # name in every picker that autocompletes against this admin.
     search_fields = ["name", "description", "target_being__name"]
     ordering = ["category__display_order", "display_order", "name"]
-    list_editable = ["display_order", "is_active"]
+    list_editable = ["display_order", "is_active", "spent_at_creation"]
     list_select_related = [
         "category",
         "target_being",

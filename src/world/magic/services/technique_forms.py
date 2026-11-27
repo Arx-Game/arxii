@@ -41,7 +41,7 @@ from world.magic.types.technique_effects import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
@@ -52,6 +52,7 @@ if TYPE_CHECKING:
         Technique,
     )
     from world.magic.models.threads import Thread
+    from world.magic.specialization.models import TechniqueVariant
 
 
 def _candidate_threads(character, technique: Technique, character_technique) -> list[Thread]:
@@ -143,6 +144,95 @@ def _variant_form(  # noqa: PLR0913
         thread_level=thread_level,
         is_early=is_early,
         effect_summary=variant.cached_effect_summary,
+    )
+
+
+def creation_technique_forms(
+    technique: Technique,
+    resonance_ids: Sequence[int],
+    *,
+    early_form: TechniqueVariant | None = None,
+) -> list[TechniqueFormPayload]:
+    """The forms a new character can work of a technique, before the character exists.
+
+    What ``available_technique_forms`` gives a caster whose only thread on the gift is the
+    latent level-0 GIFT thread creation provisions, holding ``resonance_ids`` in its row
+    order (the first leads): the base form, an early form bought in creation unlocked on
+    its resonance (``_prefer_early_form``; the default form when that resonance leads),
+    then one locked form ahead per resonance. Read by the character-creation waiting sheet
+    (#5206).
+
+    A copy of ``available_technique_forms``'s rules for that one case, not a call to it, on
+    purpose: it cannot run on an unsaved stand-in. It resolves every form through
+    ``resolve_specialized_variant``, which reads the caster's cached handlers (the GIFT
+    thread through ``gift_threads_for`` and ``character.threads``, the early form through
+    ``character.techniques.hold_for``) and the sheet's worn alternate self, all of them
+    queries on rows a draft does not have. Faking those handlers would put a test double in
+    the read path. The parity test (``character_creation/tests/test_waiting_sheet_parity``)
+    compares the two outputs for a draft with an early form and a locked form ahead.
+    """
+    early = (
+        early_form
+        if early_form is not None and early_form.parent_technique_id == technique.pk
+        else None
+    )
+    default_id = (
+        early.pk
+        if early is not None and resonance_ids and early.resonance_id == resonance_ids[0]
+        else None
+    )
+    forms = [_base_form(technique, is_default=default_id is None)]
+    seen: set[int] = set()
+    locked: list[TechniqueFormPayload] = []
+    for resonance_id in resonance_ids:
+        if early is not None and early.resonance_id == resonance_id and early.pk not in seen:
+            seen.add(early.pk)
+            forms.append(
+                _variant_form(
+                    technique,
+                    early,
+                    thread_level=0,
+                    is_default=early.pk == default_id,
+                    is_locked=False,
+                    is_early=early.unlock_thread_level > 0,
+                )
+            )
+        ahead = _next_locked_variant(technique, resonance_id=resonance_id, thread_level=0)
+        if ahead is not None and ahead.pk not in seen:
+            seen.add(ahead.pk)
+            locked.append(
+                _variant_form(technique, ahead, thread_level=0, is_default=False, is_locked=True)
+            )
+    return forms + locked
+
+
+def creation_next_signature(
+    resonance_id: int, thread_level: int
+) -> TechniqueNextSignaturePayload | None:
+    """The next flourish a TECHNIQUE thread creation weaves will unlock, or None (#5206).
+
+    The thread a flourish bought in creation weaves (``weave_creation_technique_thread``)
+    holds the lead resonance at the flourish's own level; this is what
+    ``next_signatures_by_technique`` reads off it, for a character that does not exist yet.
+    """
+    from world.magic.models import SignatureMotifBonus, Thread  # noqa: PLC0415
+    from world.magic.services.signature import next_signature_bonus  # noqa: PLC0415
+
+    catalog = list(
+        SignatureMotifBonus.objects.filter(
+            required_resonance_id=resonance_id, required_facet__isnull=True
+        )
+    )
+    thread = Thread(resonance_id=resonance_id, level=thread_level)
+    bonus = next_signature_bonus(thread, catalog)
+    return _next_signature_payload(bonus, thread_level) if bonus is not None else None
+
+
+def _next_signature_payload(
+    bonus: SignatureMotifBonus, thread_level: int
+) -> TechniqueNextSignaturePayload:
+    return TechniqueNextSignaturePayload(
+        name=bonus.name, min_level=bonus.min_crossing_level, thread_level=thread_level
     )
 
 
@@ -348,9 +438,5 @@ def next_signatures_by_technique(
         bonus, thread = min(
             pairs, key=lambda pair: (pair[0].min_crossing_level, pair[0].name, pair[0].pk)
         )
-        result[technique_id] = TechniqueNextSignaturePayload(
-            name=bonus.name,
-            min_level=bonus.min_crossing_level,
-            thread_level=thread.level,
-        )
+        result[technique_id] = _next_signature_payload(bonus, thread.level)
     return result

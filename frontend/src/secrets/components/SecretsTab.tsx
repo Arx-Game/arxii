@@ -27,7 +27,10 @@ function layerValue(value: string) {
   return value === UNKNOWN ? <em className="refsheet-soft">{value}</em> : value;
 }
 
-function SecretEntry({ secret, viewerId }: { secret: KnownSecret; viewerId: number }) {
+/** A secret as the list draws it: `found_at` is not read, and a waiting sheet has none. */
+type ShownSecret = Omit<KnownSecret, 'found_at'>;
+
+function SecretEntry({ secret, viewerId }: { secret: ShownSecret; viewerId: number | null }) {
   const rows: GlanceRow[] = [
     { label: 'Category', value: layerValue(secret.category) },
     { label: 'Consequences', value: layerValue(secret.consequences) },
@@ -43,7 +46,9 @@ function SecretEntry({ secret, viewerId }: { secret: KnownSecret; viewerId: numb
       tags={<Tag>{secret.level}</Tag>}
     >
       <Glance rows={rows} />
-      {secret.can_grieve && <GrievancePrompt secretId={secret.id} viewerId={viewerId} />}
+      {secret.can_grieve && viewerId !== null && (
+        <GrievancePrompt secretId={secret.id} viewerId={viewerId} />
+      )}
     </Entry>
   );
 }
@@ -54,33 +59,42 @@ function SecretEntry({ secret, viewerId }: { secret: KnownSecret; viewerId: numb
 export function SecretsTab({
   subjectId,
   viewerId,
+  secrets: given,
 }: {
   subjectId: number;
   viewerId: number | null;
+  /**
+   * The secrets to draw, when the caller already holds them (#5206: the waiting sheet's
+   * own secrets). When given, no query is made.
+   */
+  secrets?: ShownSecret[];
 }) {
-  const { data, isLoading, isError } = useKnownSecretsQuery(subjectId, viewerId);
+  // A null viewer disables the query, so a caller that hands over its list asks for nothing.
+  const { data, isLoading, isError } = useKnownSecretsQuery(subjectId, given ? null : viewerId);
 
-  if (viewerId === null) {
-    return <Ledger>Choose a character to see the secrets they keep about this one.</Ledger>;
-  }
-  if (isLoading) return <Ledger>Reading what you know…</Ledger>;
-  if (isError) {
-    return (
-      <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
-        Those secrets could not be read.
-      </p>
-    );
+  if (!given) {
+    if (viewerId === null) {
+      return <Ledger>Choose a character to see the secrets they keep about this one.</Ledger>;
+    }
+    if (isLoading) return <Ledger>Reading what you know…</Ledger>;
+    if (isError) {
+      return (
+        <p className="refsheet-ledger" style={{ color: 'hsl(var(--destructive))' }}>
+          Those secrets could not be read.
+        </p>
+      );
+    }
   }
 
-  const secrets = data?.results ?? [];
+  const secrets = given ?? data?.results ?? [];
   if (secrets.length === 0) {
-    return <Ledger>You know nothing of theirs.</Ledger>;
+    return <Ledger>{given ? 'No secrets.' : 'You know nothing of theirs.'}</Ledger>;
   }
 
   return (
     <Entries>
       {secrets.map((secret) => (
-        <SecretEntry key={secret.id} secret={secret} viewerId={viewerId} />
+        <SecretEntry key={secret.id} secret={secret} viewerId={given ? null : viewerId} />
       ))}
     </Entries>
   );

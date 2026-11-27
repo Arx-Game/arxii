@@ -368,31 +368,68 @@ describe('ReviewStage', () => {
     });
   });
 
-  describe('application thread link', () => {
-    it('shows the revisions message and a thread link when revisions are requested', async () => {
+  describe('application status (#5206)', () => {
+    const withStatus = (status: string, expires_at: string | null = null) =>
       vi.mocked(useDraftApplication).mockReturnValue({
-        data: { status: 'revisions_requested', reviewer_name: null, expires_at: null },
+        data: { status, reviewer_name: 'Staffer', expires_at },
       } as unknown as ReturnType<typeof useDraftApplication>);
+
+    it('titles the submitted plate with the first name and links the sheet before the application', async () => {
+      withStatus('submitted');
       renderReview(mockCompleteDraft);
       expect(
-        await screen.findByText(
-          'Revisions requested. Check the application thread for staff feedback.'
-        )
+        await screen.findByRole('heading', { name: 'Testchar submitted and awaiting review.' })
       ).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: /view the application thread/i })).toHaveAttribute(
+      const sheet = screen.getByRole('link', { name: 'Review Sheet' });
+      const thread = screen.getByRole('link', { name: 'View Application' });
+      expect(sheet).toHaveAttribute('href', '/characters/create/sheet');
+      expect(thread).toHaveAttribute('href', '/characters/create/application');
+      expect(sheet.compareDocumentPosition(thread) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('titles the plate in review without the reviewer', async () => {
+      withStatus('in_review');
+      renderReview(mockCompleteDraft);
+      expect(
+        await screen.findByRole('heading', { name: 'Testchar in review.' })
+      ).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Review Sheet' })).toBeInTheDocument();
+    });
+
+    it('puts Review Sheet beside Resubmit when revisions are requested', async () => {
+      withStatus('revisions_requested');
+      renderReview(mockCompleteDraft);
+      expect(await screen.findByText('Testchar sent back for revisions.')).toBeInTheDocument();
+      const resubmit = screen.getByRole('button', { name: 'Resubmit for review' });
+      const sheet = screen.getByRole('link', { name: 'Review Sheet' });
+      expect(sheet).toHaveAttribute('href', '/characters/create/sheet');
+      expect(resubmit.parentElement).toBe(sheet.parentElement);
+      expect(screen.getByRole('link', { name: 'View Application' })).toHaveAttribute(
         'href',
         '/characters/create/application'
       );
     });
 
-    it('shows the thread link on the after-plate while submitted', async () => {
-      vi.mocked(useDraftApplication).mockReturnValue({
-        data: { status: 'submitted', reviewer_name: null, expires_at: null },
-      } as unknown as ReturnType<typeof useDraftApplication>);
+    it('reads approved in the same short style', async () => {
+      withStatus('approved');
       renderReview(mockCompleteDraft);
+      expect(await screen.findByText('Testchar approved.')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Review Sheet' })).not.toBeInTheDocument();
+    });
+
+    it('keeps the expiry date on a denied or withdrawn draft', async () => {
+      const expires = '2026-12-31T12:00:00Z';
+      const date = new Date(expires).toLocaleDateString();
+      withStatus('denied', expires);
+      const { unmount } = renderReview(mockCompleteDraft);
       expect(
-        await screen.findByRole('link', { name: /view the application thread/i })
-      ).toHaveAttribute('href', '/characters/create/application');
+        await screen.findByText(`Testchar denied. Draft expires on ${date}.`)
+      ).toBeInTheDocument();
+      unmount();
+      withStatus('withdrawn');
+      renderReview(mockCompleteDraft);
+      expect(await screen.findByText('Testchar withdrawn.')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Review Sheet' })).not.toBeInTheDocument();
     });
   });
 

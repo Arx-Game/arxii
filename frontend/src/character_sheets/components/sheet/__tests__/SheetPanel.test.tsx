@@ -2,7 +2,7 @@
  * SheetPanel (#3898) — the front of the character sheet. Only the rows a reading
  * needs are filled in; the rest of the payload is the serializer's empty shape.
  */
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it } from 'vitest';
 
@@ -46,6 +46,7 @@ function payload(overrides: { family: { id: number; name: string } | null }) {
     },
     stats: {},
     buffed_stats: {},
+    bonuses: [],
     skills: [],
     path: null,
     distinctions: [],
@@ -77,6 +78,7 @@ function payload(overrides: { family: { id: number; name: string } | null }) {
     covenants: [],
     ties: [],
     ties_ap_this_week: null,
+    secrets: [],
   } as unknown as CharacterSheetPayload;
 }
 
@@ -176,5 +178,115 @@ describe('SheetPanel', () => {
     expect(rows[1]).toHaveTextContent(/^Agility3$/);
     expect(rows[2]).toHaveTextContent('Wits5 (4 with debuffs)');
     expect(screen.getAllByTestId('stat-buffed')).toHaveLength(2);
+  });
+
+  it('draws the Bonuses band: groups, signed totals, sources, immunity (#5206)', () => {
+    const sheet = payload({ family: null });
+    sheet.bonuses = [
+      {
+        category: 'aspect',
+        heading: 'Aspect',
+        rows: [
+          {
+            target: 'martial',
+            label: 'martial',
+            definition: 'The fighting arts.',
+            total: 15,
+            immune: false,
+            sources: [
+              { label: 'Example Soldier', value: 5 },
+              { label: "Example Drillmaster's Child", value: 10 },
+            ],
+          },
+        ],
+      },
+      {
+        category: 'roll_modifier',
+        heading: 'Roll modifier',
+        rows: [
+          {
+            target: 'poise',
+            label: 'poise',
+            definition: '',
+            total: -10,
+            immune: false,
+            sources: [{ label: 'Example Stiff Manner', value: -10 }],
+          },
+          {
+            target: 'fear',
+            label: 'fear',
+            definition: '',
+            total: 0,
+            immune: true,
+            sources: [],
+          },
+        ],
+      },
+    ];
+    renderSheet(sheet);
+    expect(screen.getByText('Bonuses')).toBeInTheDocument();
+    expect(screen.getByText('Aspect')).toBeInTheDocument();
+    expect(screen.getByText('Roll modifier')).toBeInTheDocument();
+    expect(screen.getByText('+15')).toBeInTheDocument();
+    expect(
+      screen.getByText("Example Soldier +5, Example Drillmaster's Child +10")
+    ).toBeInTheDocument();
+    expect(screen.getByText('\u221210')).toBeInTheDocument();
+    expect(screen.getByText('Example Stiff Manner \u221210')).toBeInTheDocument();
+    expect(screen.getByText('Immune to negative')).toBeInTheDocument();
+    expect(screen.getAllByTestId('bonus-row')).toHaveLength(3);
+  });
+
+  it("shows a band term's definition the way a card's term does (#5206)", () => {
+    const sheet = payload({ family: null });
+    sheet.bonuses = [
+      {
+        category: 'aspect',
+        heading: 'Aspect',
+        rows: [
+          {
+            target: 'martial',
+            label: 'martial',
+            definition: 'The fighting arts.',
+            total: 15,
+            immune: false,
+            sources: [{ label: 'Example Soldier', value: 15 }],
+          },
+          {
+            target: 'poise',
+            label: 'poise',
+            definition: '',
+            total: 5,
+            immune: false,
+            sources: [{ label: 'Example Calm', value: 5 }],
+          },
+        ],
+      },
+    ];
+    renderSheet(sheet);
+    const term = screen.getByRole('button', { name: 'martial, definition' });
+    // A term nobody defined is plain text: the underline promises an explanation.
+    expect(screen.queryByRole('button', { name: 'poise, definition' })).not.toBeInTheDocument();
+
+    // Focus shows the drawn box, through a portal, carrying the sheet's root class.
+    fireEvent.focus(term);
+    const box = screen.getByRole('dialog', { name: 'martial' });
+    expect(box).toHaveTextContent('The fighting arts.');
+    expect(box).toHaveClass('refsheet', 'popover');
+    // Leaving the word closes an unpinned box.
+    fireEvent.blur(term);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+
+    // A click pins it: it stays when the focus leaves, and Escape closes it.
+    fireEvent.click(term);
+    fireEvent.blur(term);
+    expect(screen.getByRole('dialog', { name: 'martial' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('has no Bonuses band when the payload carries none', () => {
+    renderSheet(payload({ family: null }));
+    expect(screen.queryByText('Bonuses')).not.toBeInTheDocument();
   });
 });

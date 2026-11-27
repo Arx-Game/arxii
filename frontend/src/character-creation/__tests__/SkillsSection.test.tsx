@@ -241,6 +241,22 @@ describe('SkillsSection', () => {
     expect(screen.getByRole('button', { name: /specializations/i })).toHaveClass('quiet-link');
   });
 
+  // #5206, call 14: the opening speaks of the path's suggestions, so it waits for some.
+  describe('the path suggestions line', () => {
+    it('is absent while the path has no suggestions', () => {
+      mockCopy = { path_skills_desc: 'Your path suggests these.' };
+      renderSkillsSection(draft);
+      expect(screen.queryByText('Your path suggests these.')).not.toBeInTheDocument();
+    });
+
+    it('prints once the path has suggestions', () => {
+      mockCopy = { path_skills_desc: 'Your path suggests these.' };
+      mockSuggestions = [{ skill_id: 1, skill_name: 'Blades', suggested_value: 20 }];
+      renderSkillsSection(draft);
+      expect(screen.getByText('Your path suggests these.')).toBeInTheDocument();
+    });
+  });
+
   describe('Magic skills (#4457)', () => {
     const lastSavedSkills = () => {
       const call = mockUpdateDraftMutate.mock.calls.at(-1);

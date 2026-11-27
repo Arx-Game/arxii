@@ -4,6 +4,7 @@ Character Creation serializers.
 
 from collections import defaultdict
 from collections.abc import Iterable
+from typing import Any
 
 from django.db.models import Q
 from drf_spectacular.utils import extend_schema_field
@@ -3475,3 +3476,19 @@ class HouseClaimStatusSerializer(serializers.ModelSerializer):
             {"definition": picked.definition.name, "option": picked.option.name}
             for picked in obj.facets.select_related("definition", "option")
         ]
+
+
+class WaitingSheetSerializer(serializers.Serializer):
+    """Response for ``GET /api/character-creation/drafts/{id}/sheet/`` (#5206).
+
+    A submitted draft laid out as the in-game sheet (``CharacterSheetSerializer``) will read
+    it, plus the waiting page's own keys; ``sheet_preview.build_waiting_sheet`` builds every
+    key from the draft, reading only. The shape is ``WaitingSheetPayload`` in ``types.py``;
+    like the in-game sheet's payload it is built in ``to_representation``, so the frontend
+    types it by hand next to ``CharacterSheetPayload``.
+    """
+
+    def to_representation(self, instance: Any) -> dict[str, Any]:
+        from world.character_creation.sheet_preview import build_waiting_sheet  # noqa: PLC0415
+
+        return dict(build_waiting_sheet(instance))

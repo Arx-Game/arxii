@@ -120,8 +120,8 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   only part of the sheet's appearance a player chooses. The page below the plate
   stays on Arx paper whichever is picked. _Avoid_: theme, skin, realm colour (a
   realm ink is a different, world-facing concept).
-- **Section** — one of the sheet's eight pages (Sheet, Physical, Ties,
-  Distinctions, Magic, and the owner-only Knowledge, Estate, Growth). _Avoid_:
+- **Section** — one of the sheet's nine pages (Sheet, Physical, Ties,
+  Distinctions, Magic, Gallery, and the owner-only Knowledge, Estate, Growth). _Avoid_:
   tab — the sixteen-tab strip is what #3898 replaced, and the word carries it.
 - **Estate** — the owner-only section holding a character's purse, what they
   carry, where they live, the land their organizations hold, what they have
@@ -132,6 +132,13 @@ Domain-local vocabulary. Cross-cutting terms live in the root
 - **Band** — a full-width folding block below the sheet's columns, holding
   material that is gated or simply tall (goals and guidelines, abilities). A
   band a viewer may not read is absent, never empty.
+- **Bonuses band**: the band on the Sheet section, under Abilities, that lists
+  every bonus total by kind and what gave each one (`bonuses` on the payload,
+  #5206). It follows the statistics visibility tier, and it leaves out bonuses
+  used up inside character creation (`ModifierTarget.spent_at_creation`). The
+  waiting sheet draws the same band from a draft. _Avoid_: modifiers list,
+  buffs panel (a buff is one kind of source, and the band lists cards and
+  equipment too).
 - **Entry** — one hairline-separated row in the sheet's index voice: a name, an
   optional tag or two, a gloss beneath. The sheet's unit of listing, and what a
   card used to be everywhere the sheet took a panel over. _Avoid_: card, tile,

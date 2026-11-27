@@ -1,5 +1,40 @@
 # Character Creation & Identity
 
+## Built (2026-11-25, #5206: a player awaiting approval can read their character's sheet)
+
+A player whose character is submitted, in review, or sent back for revisions follows "Review
+Sheet" from the Review stage to `/characters/create/sheet` and reads the character's sheet as
+it will read in play, in the in-game sheet's own plate, panels and tabs, with an "Awaiting
+approval" mark. The owner ruled that the sheet is built from the draft and nothing is created
+before approval (2026-11-25). `sheet_preview.build_waiting_sheet` reads the draft into the
+in-game payload's typed sections, `GET /api/character-creation/drafts/{id}/sheet/` serves it
+to the draft's account and staff (staff open any draft with `?draft=<id>`), and anyone else
+gets 404. Where finalize computed a value with a function that writes, the read half was split
+out so finalize and the waiting sheet call the same code. A parity test approves a full draft
+and compares the waiting sheet with the owner's in-game sheet key by key, and fails on any
+in-game key it has not classified, so the two cannot drift silently.
+
+Every sheet, waiting or in play, gained a Bonuses band on the Sheet tab under Abilities: one
+group per bonus kind, one row per thing the bonuses add to, with the total and each source's
+share, valued the way rolls value them (cards, a home's comfort, achievement rewards and worn
+equipment). It follows the statistics visibility. Bonuses used up inside creation are left out
+through a new `ModifierTarget.spent_at_creation` column, set on four targets by a data
+migration.
+
+The Review stage's status lines became short and name the character ("<name> submitted and
+awaiting review."), and the submitted plate links "Review Sheet" then "View Application". The
+Path stage's note and the Skills opening about path skill suggestions print only when the path
+has suggestions, since production holds none yet.
+
+Two production defects were fixed on the way. A character made in creation read its surname
+twice on its sheet; `compose_fullname` now says the family's name once. A newly approved
+player read their own sheet as a stranger until a restart, because the roster entry kept a
+stale cached tenure list; a tenure's save now clears it. Each fix added a reviewer check
+(`identity-map-write-reviewer`, `player-facing-label-reviewer`).
+
+**Owed on production:** nothing to author. `max_height_band_bonus` is marked
+`spent_at_creation` but no code reads it yet (#5315).
+
 ## Built (2026-11-21, #5255: the enemy is asked only of a card that starts with one; personality cards are picked on Identity)
 
 Owner rulings 2026-11-21 on the last writing stages. The enemy section of Final Touches is

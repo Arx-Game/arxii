@@ -29,6 +29,14 @@ from world.mechanics.constants import (
 from world.mechanics.types import (
     ModifierSourceDetail,  # Dataclass: source_name, base_value, amplification, final_value, is_amplifier, blocked_by_immunity
     ModifierBreakdown,     # Dataclass: modifier_target_name, sources (list[ModifierSourceDetail]), total, has_immunity, negatives_blocked
+    # The shared bonus valuation and the Bonuses band (#5206):
+    HeldEffect,            # One held distinction effect: the effect, the held rank and the stored value
+    HeldEffectsValuation,  # What value_held_effects returns for one target's held effects
+    HeldCardBonus,         # A card's share on a target: its label and its HeldEffect
+    FlatBonus,             # A flat addend on a target (a home's comfort, an achievement reward): label, value
+    BonusSource,           # One source line in the band: label, value
+    BonusRow,              # One target's row: target_name, label, definition, total, immune, sources
+    BonusGroup,            # One category's rows: category_name, heading, rows
 )
 ```
 
@@ -41,7 +49,7 @@ from world.mechanics.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ModifierCategory` | Broad groupings for modifier targets (stat, magic, affinity, resonance, goal, etc.) | `name` (unique), `description`, `display_order` |
-| `ModifierTarget` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `target_trait` (FK Trait, nullable), `target_being` (FK WorshippedBeing, nullable, #4333 favor categories), `target_check_category` (FK CheckCategory, nullable) and `target_scope_check_type` (FK CheckType, nullable), the `botch_immunity` category's scope, exactly one set (#4386), `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity) |
+| `ModifierTarget` | Unified registry of all things that can be modified; replaces separate Affinity, Resonance, GoalDomain models | `name`, `category` (FK ModifierCategory), `description`, `display_order`, `is_active`, `target_trait` (FK Trait, nullable), `target_being` (FK WorshippedBeing, nullable, #4333 favor categories), `target_check_category` (FK CheckCategory, nullable) and `target_scope_check_type` (FK CheckType, nullable), the `botch_immunity` category's scope, exactly one set (#4386), `affiliated_affinity` (self FK), `opposite` (self OneToOne), `resonance_affinity` (ResonanceAffinity), `spent_at_creation` (bool, default False, #5206: a bonus used up inside character creation, which the Bonuses band leaves out) |
 
 ### Per-Character Data
 
@@ -170,6 +178,90 @@ for source in breakdown.sources:
     source.is_amplifier     # Whether this source amplifies others
     source.blocked_by_immunity  # Whether this source was blocked
 ```
+
+### Shared bonus valuation (#5206)
+
+`get_modifier_breakdown` no longer values distinction rows inline. The per-effect valuation
+was pulled out so a caller with no modifier rows, such as a character-creation draft, values a
+card's effect the same way a roll does.
+
+```python
+from world.mechanics.services import (
+    distinction_effect_value,
+    value_held_effects,
+    held_effect_for,
+    sheet_derived_reader,
+    sheet_valuation_level,
+)
+
+# One held effect's base value: a derived amount, else a sized table value, else the stored
+# value. Also returns the table (value, size) when the effect was sized.
+distinction_effect_value(effect, rank=rank, value=value, level=level,
+                         value_table=table, derived_reader=reader)
+
+# One target's held effects valued as a roll values them, with amplification and immunity
+# applied in one place. Returns a HeldEffectsValuation.
+value_held_effects(held, level=level, value_table=table, derived_reader=reader)
+```
+
+`get_modifier_breakdown` calls `value_held_effects` with a character's rows (`held_effect_for`
+turns a distinction-sourced row into a `HeldEffect`, `sheet_derived_reader` reads derived
+amounts off the sheet, `sheet_valuation_level` gives the level a sized effect reads the table
+at). Its behavior did not change. `modifier_rank_sizes_prefetch()` is the prefetch a read of
+`CharacterModifier` rows uses for its effects' rank sizes.
+
+### The Bonuses band (#5206)
+
+`world/mechanics/bonuses.py` builds the character sheet's Bonuses band: each bonus total by
+kind, each with the sources that gave it.
+
+- **`bonus_groups(targets, *, cards, flats, equipment, level_for, derived_reader)`** does the
+  grouping, valuing and filtering. `cards` are `HeldCardBonus` lists per target, `flats` are
+  `FlatBonus` lists per target, `equipment` gives a target's equipment shares, and
+  `level_for` gives the level a sized effect reads a lane's table at. It leaves out targets
+  marked `spent_at_creation`, inactive targets, and rows that total 0 and grant no immunity.
+  A lane's value table loads once, only when a sized effect needs it. The lane's taper is not
+  applied. It returns `BonusGroup`s ordered by the category's `display_order`, each headed by
+  the category's name printed the way a card prints a term.
+- **`bonus_groups_for_sheet(sheet)`** feeds `bonus_groups` from one read of the sheet's
+  modifier rows, joined to what the valuation and the labels need. A feature's bonus drops out
+  while clothing covers it. A sized effect is priced in the target's `roll_lane`, so a sized
+  Aspect card shows what the check adds. `CharacterSheetSerializer` returns the result as
+  `bonuses` when the stats section shows (`docs/systems/character_sheets.md`).
+- **Equipment sources.** Each worn crafted piece is a source named as the check seam names it
+  ("Crafted: <piece>"), and the equipment walk is one "Equipment & attunement" source, read
+  through the functions `get_modifier_total` adds them with. A target reached only through
+  equipment is listed too. The walk runs only on `equipment_walk_target_ids(sheet)`
+  (`services.py`), a bounded superset read through the cached thread, equipment and covenant
+  handlers; crafted pieces are read only on `CharacterEquipmentHandler.crafted_modifier_target_ids()`
+  (`world/items/handlers.py`), which reads the cached rows with no query.
+- **`card_label(name, *, feature, rank)`** names a card source, with the feature a per-feature
+  card is held on. The sheet and the waiting sheet both use it.
+- **The waiting sheet.** `world.character_creation.sheet_preview` calls `bonus_groups` with a
+  draft's cards and the home's comfort, at the level approval gives a new character, so the
+  band reads the same before and after approval.
+
+**`ModifierTarget.spent_at_creation`** (migration 0484 adds it; data migration 0485 sets it)
+marks a target whose bonus is used up inside character creation, so it is not a bonus in play.
+The data migration sets it on four targets, each matched by category and exact name:
+`starting_technique_picks` and `magic_training_points` (`character_creation`),
+`attribute_free_points` (`stat`) and `max_height_band_bonus` (`height_band`). Staff edit it
+in the ModifierTarget admin. It is a column rather than a category because the four targets
+sit in three categories, and moving `attribute_free_points` out of `stat` would change what
+the statistics budget sums.
+
+**`ModifierTarget.roll_lane`** is the one answer to which lane a roll prices a sized modifier
+on the target in: the effect kind's `value_lane`, else CHECK for a target bound to a check
+type, an Aspect, a check category or a botch-immunity scope, else STAT for a stat or skill
+target, else None (summed flat). It is CHECK for every target the check seam reads, which
+prices them in the CHECK lane itself; the Bonuses band reads it, so it shows what a roll adds.
+
+**Terms (`terms.py`).** `term_label(target_name)` is a target's name as a card prints it
+(`physical_development` reads `physical development`, lowercase on purpose).
+`term_definition(target)` is its definition from the row that owns the term:
+`Trait.description` for a stat or skill target, `Aspect.description` for an Aspect target,
+otherwise the target's own `description`. `character_creation.offers.terms_for` and the
+Bonuses band both read them, so a term reads the same on a card and on the sheet.
 
 ### Distinction Lifecycle
 

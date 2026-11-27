@@ -270,7 +270,11 @@ ADR-4726-A): `TraitHandler._get_stat_modifier` calls it with the stat lane, adds
 `condition_target_contributions`, and tapers by the stat lane's rows, so a stat buff is one
 number wherever the stat is read. The stat lane's piles are separate from the check lane's; a
 check reads the buffed stat through its trait points. Every other `get_modifier_breakdown`
-caller reads flat values.
+caller reads flat values. The seam prices every target it reads (a check type's, an Aspect's, a
+botch-immunity scope's) in the CHECK lane. `ModifierTarget.roll_lane` (#5206) names that same
+lane for those targets (the effect kind's `value_lane`, else CHECK for a check-type, Aspect or
+botch-immunity target, else STAT for a stat or skill target, else None, flat); the sheet's
+Bonuses band reads it, so it shows the number a roll adds.
 
 **The aspect lever (#4827).** After the CHARACTER block, `_aspect_contributions` adds, for each
 `CheckTypeAspect` on the check whose Aspect has an active `ModifierTarget` (`target_aspect`), that

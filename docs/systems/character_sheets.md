@@ -56,7 +56,7 @@ attributes.
 
 **Nine sections** replace the old sixteen tabs. Six are public — Sheet, Physical,
 Ties, Distinctions, Magic, Gallery (#4151) — then a visible break labelled "Yours only" and three the
-character's own player reads: Knowledge (secrets, clues, gossip), Estate (purse,
+character's own player reads: Knowledge (their own secrets, clues, gossip), Estate (purse,
 carried, property, the land their organizations hold, agreements, the law) and Growth
 (advancement, sheet-change requests, languages, origin story). Estate is named for what
 it holds rather than "Holdings", which reads as fiefs in this genre and is not what the
@@ -390,6 +390,61 @@ section's `resonances` (claimed-resonance balances, already serialized by `_buil
 alongside Gifts/Motif/Aura. Per-trait development-point progress is NOT part of this payload
 (deferred to #3039's landing) — the skill entry's `at_boundary` flag is the only progress signal (its `value` is the stored rating plus `modifier`, the number a roll uses, #4820)
 shown today.
+
+## The Bonuses band (#5206)
+
+The payload's `bonuses` section lists every bonus total the character has and what gave
+each one. `_build_bonuses(sheet)` turns `world.mechanics.bonuses.bonus_groups_for_sheet(sheet)`
+into `BonusGroupEntry` rows (`types.py`): one group per modifier category, with `category`
+and `heading` (the category's name printed the way a card prints a term, first letter
+capitalized: "Aspect", "Roll modifier", "Stat"); each group holds `BonusRowEntry` rows with
+`target`, `label`, `definition` (the same hover text the card's term shows), `total`,
+`immune`, and `sources`, a list of `BonusSourceEntry` (`label`, `value`). The band counts
+what a roll counts: cards, a home's comfort, achievement rewards and worn equipment. A
+feature's bonus drops out while clothing covers it, and targets marked
+`ModifierTarget.spent_at_creation` are left out. The valuation is described in
+`docs/systems/mechanics.md` under "The Bonuses band".
+
+**Visibility follows statistics.** `bonuses` is built only when the stats section shows
+(`show_stats`), so a stranger never receives it while `stats_visibility` keeps statistics
+private. The owner always receives it, because statistics are always visible to their owner.
+Otherwise the section is an empty list.
+
+**The band on the page.** `frontend/src/character_sheets/components/sheet/BonusesBand.tsx`
+draws it on the Sheet tab, under Abilities (`SheetPanel`). The character-creation waiting
+sheet (`docs/systems/character_creation.md`, "The waiting sheet") fills the same section from
+a draft's cards and home comfort, so the same band draws it before approval.
+
+## A player's own secrets (#5206)
+
+Owner ruling (2026-11-26): a sheet shows its own player everything but GM and staff notes,
+so a player always sees the secrets about their character that the character knows, though
+no other player sees them unless they are shared. The payload's `secrets` is that list for
+the owner and staff (`[]` for anyone else): `world.secrets.own.own_secret_entries(sheet)`,
+one read of the secret shelf `secrets_owned_by(sheet)` (the subject-aware secrets, and any a
+held record has since granted; a secret the character does not know about itself stays
+off), most dangerous first, then newest. Each row is an `OwnSecretEntry` (`types.py`),
+shaped like a known-secrets row and read in full by its subject; `own_secret_entry` builds
+it, and the character-creation waiting sheet builds its own list through the same function,
+so the two read the same. The Knowledge tab's Secrets column (`KnowledgePanel`, given
+`ownSecrets`) draws it through `SecretsTab`'s `secrets` prop.
+
+## The family name is said once (#5206)
+
+`compose_fullname(key, family_name)` in `serializers.py` composes the real full name for the
+identity section. Character creation already keys a character "First Family", so the family's
+name is added only to a key that does not already end with it: a character made in creation
+reads "Wren Marrow", not "Wren Marrow Marrow", and a staff-made "Alaric" in house Valardin
+still reads "Alaric Valardin". The waiting sheet composes its name with the same function.
+
+## A newly approved owner reads their own sheet (#5206)
+
+`RosterTenure.related_cache_fields` now includes `roster_entry`, so saving a tenure clears its
+roster entry's cached properties, `cached_tenures` among them. Approval read the new roster
+entry's tenures before it wrote the player's tenure, and the identity-mapped entry kept that
+empty list, so in the process that approved the character the new owner was served a
+stranger's sheet until a restart. `world/character_creation/tests/test_approved_owner_sheet.py`
+guards it.
 
 ## Related Models
 

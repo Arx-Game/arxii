@@ -41,6 +41,8 @@ import type {
   CharacterSheetDomain,
   CharacterSheetKeyringEntry,
   CharacterSheetMentor,
+  CharacterSheetOriginSlot,
+  CharacterSheetOwnSecret,
   CharacterSheetPayload,
   CharacterSheetStanding,
   CharacterSheetTie,
@@ -150,12 +152,22 @@ export function TiesPanel({
   );
 }
 
-/** Distinctions — the full list; the server already filters secret rows by viewer. */
-export function DistinctionsPanel({ sheetId }: { sheetId: number }) {
+/**
+ * Distinctions — the full list; the server already filters secret rows by viewer.
+ * `payload` is a sheet the caller already holds (#5206: the waiting sheet), read in place
+ * of fetching one by id.
+ */
+export function DistinctionsPanel({
+  sheetId,
+  payload,
+}: {
+  sheetId: number;
+  payload?: CharacterSheetPayload;
+}) {
   return (
     <Stack>
       <Heading>Distinctions</Heading>
-      <DistinctionsTab characterId={sheetId} />
+      <DistinctionsTab characterId={sheetId} payload={payload} />
     </Stack>
   );
 }
@@ -173,23 +185,36 @@ export function DistinctionsPanel({ sheetId }: { sheetId: number }) {
 export function MagicPanel({
   sheetId,
   isMyCharacter,
+  payload,
 }: {
   sheetId: number;
   isMyCharacter: boolean;
+  /** A sheet the caller already holds (#5206: the waiting sheet), read in place of a fetch. */
+  payload?: CharacterSheetPayload;
 }) {
   return (
     <div className="refsheet-columns-2">
       <Stack wide>
         <Stack>
           <Heading>Gifts</Heading>
-          <SpellbookTab characterId={sheetId} isMyCharacter={isMyCharacter} slot="main" />
+          <SpellbookTab
+            characterId={sheetId}
+            isMyCharacter={isMyCharacter}
+            slot="main"
+            payload={payload}
+          />
         </Stack>
         {isMyCharacter && <ThreadsBlock sheetId={sheetId} />}
       </Stack>
       {/* The rail holds what their magic IS, beside what they DO with it: the aura and
           the resonances they hold. Both halves read one payload through one cache key. */}
       <Stack wide>
-        <SpellbookTab characterId={sheetId} isMyCharacter={isMyCharacter} slot="rail" />
+        <SpellbookTab
+          characterId={sheetId}
+          isMyCharacter={isMyCharacter}
+          slot="rail"
+          payload={payload}
+        />
       </Stack>
     </div>
   );
@@ -227,21 +252,30 @@ function ThreadsBlock({ sheetId }: { sheetId: number }) {
   );
 }
 
-/** Knowledge — what they know and what they could tell. The player's own. */
+/**
+ * Knowledge — what they know and what they could tell. The player's own.
+ *
+ * Secrets lists the character's own secrets, the ones it knows about itself (#5206, owner
+ * ruling 2026-11-26: a sheet shows its own player everything but GM and staff notes). They
+ * ride the sheet payload (`secrets`), which carries them for the owner and staff only.
+ */
 export function KnowledgePanel({
   sheetId,
   viewerEntryId,
   isStaff,
+  ownSecrets,
 }: {
   sheetId: number;
   viewerEntryId: number | null;
   isStaff: boolean;
+  /** The character's own secrets from the sheet payload. */
+  ownSecrets: CharacterSheetOwnSecret[];
 }) {
   return (
     <div className="refsheet-columns-3">
       <Stack>
         <Heading>Secrets</Heading>
-        <SecretsTab subjectId={sheetId} viewerId={viewerEntryId} />
+        <SecretsTab subjectId={sheetId} viewerId={viewerEntryId} secrets={ownSecrets} />
         {isStaff && <StaffSecretsPanel subjectId={sheetId} />}
       </Stack>
       <Stack>
@@ -291,22 +325,11 @@ export function EstatePanel({
   return (
     <Stack wide>
       <div className="refsheet-columns-3">
-        <Stack>
-          <Heading>Purse</Heading>
-          {/* The purse row lazy-creates at zero server-side, so a coinless character
-              reads "0c" rather than an absent block; `purse` itself is null only when
-              the endpoint refused the viewer. */}
-          {purse ? (
-            <p style={{ fontSize: '1.375rem' }}>{formatCoppers(purse.balance ?? 0)}</p>
-          ) : (
-            <Ledger>No purse to read.</Ledger>
-          )}
-          <p className="refsheet-note">
-            Coin on hand. Loose caches and minted instruments are items, and travel with the rest of
-            what they carry.
-          </p>
-        </Stack>
-        <CarriedBlock sheetId={sheetId} />
+        {/* The purse row lazy-creates at zero server-side, so a coinless character reads
+            "0c" rather than an absent block; `purse` itself is null only when the
+            endpoint refused the viewer. */}
+        <PurseBlock balance={purse ? (purse.balance ?? 0) : null} />
+        <LiveCarriedBlock sheetId={sheetId} />
         <Stack>
           <Heading>The law</Heading>
           <CrimeTab viewerEntryId={viewerEntryId} />
@@ -318,58 +341,8 @@ export function EstatePanel({
             <Heading>Property</Heading>
             <LocationsTab personaId={viewedPersonaId} isActiveCharacter={isActiveCharacter} />
           </Stack>
-          {/* Render-or-vanish, and here it is the common case: most organizations hold
-              no land, and plenty hold buildings under individual rather than org
-              control. A character whose houses hold nothing gets no block at all. */}
-          {domains.length > 0 && (
-            <Stack>
-              <Heading>Their houses hold</Heading>
-              <Ledger>Land their organizations hold. Not theirs, but theirs to know of.</Ledger>
-              <Entries>
-                {domains.map((domain) => (
-                  <Entry
-                    key={domain.id}
-                    name={domain.name}
-                    aside={<span className="refsheet-note">{domain.where}</span>}
-                    tags={<Tag>{domain.organization}</Tag>}
-                  />
-                ))}
-              </Entries>
-            </Stack>
-          )}
-          {/* The keyring (#3902). Render-or-vanish for the same reason as the block
-              above: plenty of characters hold no grant anywhere. Its job is DISCOVERY
-              -- a friend gave this character a key and nothing else on the sheet could
-              say the house exists, so a new player of the character never learns it.
-              A family keep reached through an organization is the same row, differing
-              only in what `through` says. */}
-          {keyring.length > 0 && (
-            <Stack>
-              <Heading>Keyring</Heading>
-              <Ledger>Where they may walk in, and on whose say-so.</Ledger>
-              <Entries>
-                {keyring.map((key) => (
-                  <Entry
-                    key={key.id}
-                    name={key.place}
-                    aside={
-                      key.where ? <span className="refsheet-note">{key.where}</span> : undefined
-                    }
-                    tags={
-                      <>
-                        <Tag accent>{key.rung}</Tag>
-                        {key.through ? <Tag>{key.through}</Tag> : null}
-                      </>
-                    }
-                    /* The "on whose say-so" half of the line above. Absent for a grant
-                       the world made (character generation, staff) or one an
-                       organization holds, where no persona handed anything over. */
-                    gloss={key.granted_by ? `Given by ${key.granted_by}.` : undefined}
-                  />
-                ))}
-              </Entries>
-            </Stack>
-          )}
+          <DomainsBlock domains={domains} />
+          <KeyringBlock keyring={keyring} />
         </Stack>
         <Stack>
           <Heading>Agreements</Heading>
@@ -378,6 +351,104 @@ export function EstatePanel({
       </div>
     </Stack>
   );
+}
+
+/**
+ * The Estate's pieces that draw from data the caller hands them (#5206). The in-game
+ * Estate fetches the purse and the inventory for its character and passes them in; the
+ * waiting sheet, which has no character yet, passes what approval will give.
+ */
+
+/** Coin on hand; `balance` null means the purse could not be read for this viewer. */
+export function PurseBlock({ balance }: { balance: number | null }) {
+  return (
+    <Stack>
+      <Heading>Purse</Heading>
+      {balance !== null ? (
+        <p style={{ fontSize: '1.375rem' }}>{formatCoppers(balance)}</p>
+      ) : (
+        <Ledger>No purse to read.</Ledger>
+      )}
+      <p className="refsheet-note">
+        Coin on hand. Loose caches and minted instruments are items, and travel with the rest of
+        what they carry.
+      </p>
+    </Stack>
+  );
+}
+
+/** Land the character's organizations hold. Render-or-vanish. */
+export function DomainsBlock({ domains }: { domains: CharacterSheetDomain[] }) {
+  // Render-or-vanish, and here it is the common case: most organizations hold no land,
+  // and plenty hold buildings under individual rather than org control. A character
+  // whose houses hold nothing gets no block at all.
+  if (domains.length === 0) return null;
+  return (
+    <Stack>
+      <Heading>Their houses hold</Heading>
+      <Ledger>Land their organizations hold. Not theirs, but theirs to know of.</Ledger>
+      <Entries>
+        {domains.map((domain) => (
+          <Entry
+            key={domain.id}
+            name={domain.name}
+            aside={<span className="refsheet-note">{domain.where}</span>}
+            tags={<Tag>{domain.organization}</Tag>}
+          />
+        ))}
+      </Entries>
+    </Stack>
+  );
+}
+
+/** The keyring (#3902): every place they may walk into, and on whose authority. */
+export function KeyringBlock({ keyring }: { keyring: CharacterSheetKeyringEntry[] }) {
+  // Render-or-vanish for the same reason as the domains: plenty of characters hold no
+  // grant anywhere. Its job is DISCOVERY -- a friend gave this character a key and
+  // nothing else on the sheet could say the house exists, so a new player of the
+  // character never learns it. A family keep reached through an organization is the
+  // same row, differing only in what `through` says.
+  if (keyring.length === 0) return null;
+  return (
+    <Stack>
+      <Heading>Keyring</Heading>
+      <Ledger>Where they may walk in, and on whose say-so.</Ledger>
+      <Entries>
+        {keyring.map((key) => (
+          <Entry
+            key={key.id}
+            name={key.place}
+            aside={key.where ? <span className="refsheet-note">{key.where}</span> : undefined}
+            tags={
+              <>
+                <Tag accent>{key.rung}</Tag>
+                {key.through ? <Tag>{key.through}</Tag> : null}
+              </>
+            }
+            /* The "on whose say-so" half of the line above. Absent for a grant the world
+               made (character generation, staff) or one an organization holds, where no
+               persona handed anything over. */
+            gloss={key.granted_by ? `Given by ${key.granted_by}.` : undefined}
+          />
+        ))}
+      </Entries>
+    </Stack>
+  );
+}
+
+/** One carried thing, as the Carried block reads an inventory row. */
+export interface CarriedItem {
+  id: number;
+  display_name: string;
+  quality_tier?: { name: string } | null;
+  suggested_value?: number | null;
+}
+
+/** The in-game Carried block: the character's inventory and outfits, fetched by sheet id. */
+function LiveCarriedBlock({ sheetId }: { sheetId: number }) {
+  const { data: inventory = [] } = useInventory(sheetId);
+  const { data: outfits = [] } = useOutfits(sheetId);
+  return <CarriedBlock items={inventory} outfits={outfits.map((outfit) => outfit.name)} wardrobe />;
 }
 
 /**
@@ -391,24 +462,37 @@ export function EstatePanel({
  * The worn outfit is NOT marked, and the demo marks it. `Outfit` carries no worn flag,
  * and inferring one would mean fetching every outfit's slots and comparing them to the
  * equipped set, which is a query per outfit for a marker. Recorded rather than guessed.
+ *
+ * `wardrobe` links the count and the outfits to the wardrobe; the waiting sheet (#5206)
+ * leaves it off, since a character not yet approved has no wardrobe to open.
  */
-function CarriedBlock({ sheetId }: { sheetId: number }) {
-  const { data: inventory = [] } = useInventory(sheetId);
-  const { data: outfits = [] } = useOutfits(sheetId);
-
-  const notable = [...inventory]
+export function CarriedBlock({
+  items,
+  outfits = [],
+  wardrobe = false,
+}: {
+  items: CarriedItem[];
+  outfits?: string[];
+  wardrobe?: boolean;
+}) {
+  const notable = [...items]
     .sort((a, b) => (b.suggested_value ?? 0) - (a.suggested_value ?? 0))
     .slice(0, 4);
+  const count = `${items.length} ${items.length === 1 ? 'thing' : 'things'}`;
 
   return (
     <Stack>
       <Heading>Carried</Heading>
       <Ledger>
-        {inventory.length === 0
-          ? 'They carry nothing.'
-          : `${inventory.length} ${inventory.length === 1 ? 'thing' : 'things'}, sorted in the `}
-        {inventory.length > 0 && <Link to="/wardrobe">wardrobe</Link>}
-        {inventory.length > 0 && '.'}
+        {items.length === 0 && 'They carry nothing.'}
+        {items.length > 0 &&
+          (wardrobe ? (
+            <>
+              {count}, sorted in the <Link to="/wardrobe">wardrobe</Link>.
+            </>
+          ) : (
+            `${count}.`
+          ))}
       </Ledger>
       {(notable.length > 0 || outfits.length > 0) && (
         <Entries>
@@ -426,8 +510,7 @@ function CarriedBlock({ sheetId }: { sheetId: number }) {
               name="Outfits"
               gloss={
                 <>
-                  {outfits.map((outfit) => outfit.name).join(', ')}.{' '}
-                  <Link to="/wardrobe">Change</Link>
+                  {outfits.join(', ')}. {wardrobe && <Link to="/wardrobe">Change</Link>}
                 </>
               }
             />
@@ -486,6 +569,34 @@ export function GrowthPanel({
         )}
       </Stack>
     </div>
+  );
+}
+
+/**
+ * The origin story's answers, read-only (#5206: the waiting sheet's Growth, where the
+ * in-game sheet mounts the editor). Absent when no question has an answer.
+ */
+export function OriginStoryAnswers({ slots }: { slots: CharacterSheetOriginSlot[] }) {
+  const answered = slots.filter((slot) => slot.value || slot.choice_name);
+  if (answered.length === 0) return null;
+  return (
+    <Stack>
+      <Heading>Origin story</Heading>
+      <Entries>
+        {answered.map((slot) => (
+          <Entry
+            key={slot.slot_id}
+            name={slot.slot_prompt || slot.slot_name}
+            aside={
+              slot.organization_name || slot.figure_name ? (
+                <span className="refsheet-note">{slot.organization_name || slot.figure_name}</span>
+              ) : undefined
+            }
+            gloss={slot.value || slot.choice_name}
+          />
+        ))}
+      </Entries>
+    </Stack>
   );
 }
 

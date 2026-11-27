@@ -3823,6 +3823,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/drafts/{id}/sheet/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The waiting sheet (#5206): the submitted draft laid out as the in-game sheet.
+     *
+     *     The draft's own account and staff may read it, and only while its application is
+     *     submitted, in review, or sent back for revisions. Anyone else, and any other state,
+     *     gets 404, so a draft's existence is not disclosed.
+     */
+    get: operations['character_creation_drafts_sheet_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-creation/drafts/{id}/submit/': {
     parameters: {
       query?: never;
@@ -62443,6 +62466,26 @@ export interface operations {
         content: {
           'application/json': components['schemas']['CharacterDraft'];
         };
+      };
+    };
+  };
+  character_creation_drafts_sheet_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

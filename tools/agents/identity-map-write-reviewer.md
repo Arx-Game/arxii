@@ -1,6 +1,6 @@
 ---
 name: identity-map-write-reviewer
-description: Checks that a diff's database writes reach the idmapper cache, not just the table. Use when a diff deletes rows other rows link to, writes through raw SQL, `_raw_delete`, `update_with_reason`/`bulk_update_with_reason`, or a model that is not on `ArxSharedMemoryModel`, and when reviewing one. Catches a write that is correct in the database and stale in every long-lived process until a restart.
+description: Checks that a diff's database writes reach the idmapper cache, not just the table. Use when a diff deletes rows other rows link to, writes through raw SQL, `_raw_delete`, `update_with_reason`/`bulk_update_with_reason`, or a model that is not on `ArxSharedMemoryModel`, or creates a row whose parent caches a list of its children, and when reviewing one. Catches a write that is correct in the database and stale in every long-lived process until a restart.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
@@ -57,7 +57,21 @@ is the paths around it.
    link, a "no relation unhandled" guard) needs
    `_meta.get_fields(include_hidden=True)`. Ask what the walk is for before flagging it:
    one that only offers accessors to a user may rightly skip hidden ones.
-6. **The read-side shape that turned a stale id into a 500.** Code that tests
+6. **A new child row whose parent caches a list of its children.** A parent model
+   often keeps its children in a `cached_property` or a handler (`RosterEntry.
+   cached_tenures`). Creating a child row through the ORM updates the table and leaves
+   the parent's resident list as it was, unless the child model's
+   `related_cache_fields` names the FK to that parent, so its `save()` clears the
+   parent's cached properties. For each row the diff creates, find every cached list
+   on the parent that holds rows of this type, and check whether anything in the same
+   process can have read that list earlier: the same service function, a request
+   earlier in the process, an admin page. If it can, the child model needs the parent
+   in `related_cache_fields`. The incident (#5206): `approve_application` read the new
+   roster entry's tenures before it wrote the player's tenure. `RosterTenure.
+   related_cache_fields` did not name `roster_entry`, so the entry kept its empty
+   list, and the newly approved player was served their own sheet as a stranger until
+   the process restarted.
+7. **The read-side shape that turned a stale id into a 500.** Code that tests
    `obj.<fk>_id is not None` and then dereferences `obj.<fk>.<attr>`. On a correct cache
    the two agree, so do not ask for a guard. Flag it only when one of the writes above
    can make them disagree, and name that write.

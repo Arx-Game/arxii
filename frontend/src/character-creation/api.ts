@@ -20,6 +20,7 @@ import type {
   CGTechniqueOption,
   CharacterDraft,
   CharacterDraftUpdate,
+  WaitingSheetPayload,
   ClaimKinRelation,
   DraftApplication,
   DraftApplicationDetail,
@@ -162,6 +163,18 @@ export async function getDraft(): Promise<CharacterDraft | null> {
   }
 
   return drafts.length > 0 ? drafts[0] : null;
+}
+
+/**
+ * GET /api/character-creation/drafts/{id}/sheet/ (#5206): the waiting sheet. Null on 404,
+ * which the server answers for a draft that is not the caller's (staff excepted) or whose
+ * application is not submitted, in review or sent back.
+ */
+export async function fetchWaitingSheet(draftId: number): Promise<WaitingSheetPayload | null> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/sheet/`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to load the waiting sheet');
+  return res.json();
 }
 
 export async function createDraft(): Promise<CharacterDraft> {

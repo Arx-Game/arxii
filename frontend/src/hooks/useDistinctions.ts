@@ -359,6 +359,8 @@ export function useSyncDistinctions(draftId: number) {
       queryClient.invalidateQueries({
         queryKey: [...characterCreationKeys.all, 'draft-offers', draftId],
       });
+      // A card changed in revisions shows on the waiting sheet at once (#5206).
+      queryClient.invalidateQueries({ queryKey: characterCreationKeys.waitingSheet(draftId) });
     },
   });
   // The picks a save in flight is writing, from this grid or any other on the page.
