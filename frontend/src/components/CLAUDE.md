@@ -85,7 +85,9 @@ Character-specific UI components:
 
 - **`term/DefinedTerm.tsx`** + **`term/useTermPopover.ts`** (#5206): a term that shows its
   definition in a drawn box on hover or focus, pinned by a click or tap, closed by Escape, a
-  scroll or another click. The box is portaled to `body` and carries its page's root class
+  scroll or another click. `TermButton` is a real `<button>`, so nothing that holds one may
+  itself be a button, and it is laid out as one piece: it does not wrap in the middle the
+  way a run of text does. The box is portaled to `body` and carries its page's root class
   (`interview` or `refsheet`); `character-creation/__tests__/portaledStyles.test.ts` holds
   that each root's stylesheet reaches it. Character creation's card terms and the sheet's
   Bonuses band both use it.

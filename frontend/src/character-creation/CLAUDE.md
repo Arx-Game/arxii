@@ -445,12 +445,14 @@ the distinction's description under its name, not the offer's `player_line` (#50
 `groupBy` splits a grid under `.group-h` headings
 ("Group (count)", the ungrouped cards last); `pricing="signed"` prints a grid card's price
 as a bare `−N`/`+N` in its bottom-left corner and nothing on a free card; `terms` builds the
-mechanics line from `offer.effects` with each term a `.term` role-button (the card is a
-button, so no nested button) that shows one `.popover` through a portal to `body` with the
-definition from the response's `terms`, while the pointer or the keyboard focus is on it;
-a click or tap pins it open, and Escape, a scroll or any other click closes it (#5148). The
-term and its box are `components/term/DefinedTerm.tsx` (`TermButton`, `TermPopover`) with
-`useTermPopover`, shared with the sheet's Bonuses band (#5206). A
+mechanics line from `offer.effects`. An effect whose term has a definition is one
+`button.effect` holding its number and its underlined `.term` (#5206): it shows one
+`.popover` through a portal to `body` with the definition from the response's `terms`,
+while the pointer or the keyboard focus is on it; a click or tap pins it open, and Escape,
+a scroll or any other click closes it (#5148). A button is laid out as one piece, so an
+effect too long for the rest of its line starts the next one and never splits from its
+number. The button and its box are `components/term/DefinedTerm.tsx` (`TermButton`,
+`TermPopover`) with `useTermPopover`, shared with the sheet's Bonuses band (#5206). A
 term whose definition is blank is plain text with no underline; `interceptPick` runs before a click
 changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 `secretOfferIds`/`wordSecret`/`wordCover` label the secret pick and the cover on the cards.
@@ -458,6 +460,23 @@ changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 Glimpse's rule) with four cards at rest where the others show three, and a grid folded
 under "See N more" keeps its cards; the Identity
 stage's Personality block uses both.
+
+## A card is a box picked by its name (#5206)
+
+A button may hold no other control: HTML forbids it, and a screen reader reads a button's
+contents as one label, so a control inside it is never offered by itself. An unranked
+`ChapterOffers` card therefore is a plain `div.stance.pickable` (plus `picked`, `busy`,
+`cover`), and its name is the `button.pick-name` that picks it (`PickName`). The button's
+`::after` is laid over the whole card, so a click anywhere on the card still picks it and
+the keyboard's ring goes round the card; an effect's button is drawn above that cover
+(`.stance .effect`). The button carries `aria-pressed`, and its `aria-describedby` names
+the card's line, effects, lock reason and price, so they are read after the name. A test
+finds a card through its button (`getByRole('button', { name })`, then
+`.closest('.stance')` for the card's other text). A ranked card was already a
+`div[role=group]` holding real buttons. The Glimpse tags, the schooling stances and the
+Amnesiac card hold no other control and are still each one `button.stance`. The
+`nested-control-reviewer` agent reads a diff for a control put inside a button, and
+`LifeGrids.test.tsx` holds that the life page has none.
 
 ## A card click shows at once (#5134)
 

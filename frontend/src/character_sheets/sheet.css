@@ -866,13 +866,22 @@
   padding-top: 0.3rem;
   font-size: 1.0625rem;
 }
-/* A term whose definition shows on hover or focus, marked the way a card marks one. */
+/* A term whose definition shows on hover or focus, marked the way a card marks one. It is
+   a button, drawn as the row's own text. */
 .refsheet-term {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
   text-decoration: underline dotted hsl(var(--accent));
   text-underline-offset: 4px;
   cursor: pointer;
 }
-.refsheet-term:focus-visible {
+/* Named under the root so the sheet's own ring for every button does not replace it. */
+.refsheet .refsheet-term:focus-visible {
   outline: 2px solid hsl(var(--accent));
   outline-offset: 2px;
 }

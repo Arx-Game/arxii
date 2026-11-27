@@ -21,7 +21,7 @@
  * never wraps this component in a second div of its own.
  */
 
-import { useCallback, useMemo, type ReactNode } from 'react';
+import { Fragment, useCallback, useId, useMemo, type ReactNode } from 'react';
 import { TermButton, TermPopover } from '@/components/term/DefinedTerm';
 import { useTermPopover, type TermPopoverState } from '@/components/term/useTermPopover';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
@@ -208,43 +208,108 @@ function effectPrefix(effect: VisibleOffer['effects'][number]): string {
 }
 
 /** The mechanics line built from the effect rows (#4874): `+10 sailing; -5 martial`.
- * A term with a definition is underlined and shows it while the pointer or the keyboard
+ * An effect whose term has a definition is a button (#5206): its number and its term
+ * together, the term underlined. It shows the definition while the pointer or the keyboard
  * focus is on it (#5148); a click or tap pins it open, for a screen with no pointer. A
- * term nobody has written a definition for is plain text: the underline promises an
- * explanation. An immunity reads as the list layouts print it. */
+ * button is laid out as one piece, so the number goes inside it with the term: a term too
+ * long for the rest of its line would otherwise drop to the next and leave its number
+ * behind. An effect too long for the rest of the line starts the next one, and the
+ * semicolon stays with the effect it ends. A term nobody has written a definition for is
+ * plain text: the underline promises an explanation. An immunity reads as the list layouts
+ * print it. */
 function EffectTerms({
+  id,
   offer,
   defined,
   popover,
 }: {
+  /** The line's id: the card's pick button names it as part of its description. */
+  id: string;
   offer: VisibleOffer;
   /** Whether a term has a definition to show. */
   defined: (name: string) => boolean;
   popover: TermPopoverState;
 }) {
   if (offer.effects.length === 0) return null;
+  const last = offer.effects.length - 1;
   return (
-    <span className="fx">
-      {offer.effects.map((effect, i) => (
-        <span key={`${effect.target}-${i}`}>
-          {i > 0 && '; '}
-          {effectPrefix(effect)}
-          {defined(effect.target) ? (
-            <TermButton
-              name={effect.target}
-              className="term"
-              ariaLabel={`${effect.label}, definition`}
-              popover={popover}
-            >
-              {effect.label}
-            </TermButton>
-          ) : (
-            effect.label
-          )}
-        </span>
-      ))}
+    <span className="fx" id={id}>
+      {offer.effects.map((effect, i) => {
+        const prefix = effectPrefix(effect);
+        const end = i < last ? ';' : '';
+        return (
+          <Fragment key={`${effect.target}-${i}`}>
+            {i > 0 && ' '}
+            {defined(effect.target) ? (
+              <TermButton
+                name={effect.target}
+                className="effect"
+                ariaLabel={`${prefix}${effect.label}, definition`}
+                popover={popover}
+              >
+                {prefix}
+                <span className="term">{effect.label}</span>
+                {end}
+              </TermButton>
+            ) : (
+              `${prefix}${effect.label}${end}`
+            )}
+          </Fragment>
+        );
+      })}
     </span>
   );
+}
+
+/**
+ * The name of an unranked card, as the button that picks it (#5206). The card around it is
+ * a plain box, so a term on the card can be a button too: a button may hold no other
+ * control. The button's `::after` covers the card (`cg.css`, `.stance .pick-name`), so a click
+ * anywhere on the card still picks it. The card's other lines are the button's
+ * description, read after its name.
+ */
+function PickName({
+  offer,
+  selected,
+  busy,
+  disabled,
+  describedBy,
+  onPick,
+}: {
+  offer: VisibleOffer;
+  selected: boolean;
+  /** The card cannot be picked now: locked, saving, or its block is full. */
+  busy: boolean;
+  /** Whether the button also refuses the click; false while a caller intercepts it. */
+  disabled: boolean;
+  describedBy: string;
+  onPick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      className="pick-name"
+      aria-pressed={selected}
+      aria-disabled={busy || undefined}
+      aria-describedby={describedBy}
+      disabled={disabled}
+      onClick={onPick}
+    >
+      {offer.name}
+    </button>
+  );
+}
+
+/** The ids of the lines a card shows under its name, in reading order. */
+function cardLineIds(about: string, offer: VisibleOffer, hasEffects: boolean): string {
+  return [
+    `${about}-line`,
+    hasEffects && `${about}-fx`,
+    offer.is_locked && `${about}-locked`,
+    `${about}-price`,
+  ]
+    .filter(Boolean)
+    .join(' ');
 }
 
 /** The price line: per-rank (plus a spent/refund total once picked) for a
@@ -387,6 +452,8 @@ export function ChapterOffers({
   // it (the shared ``useTermPopover``, which the sheet's Bonuses band uses too).
   const termPopover = useTermPopover();
   const openTerm = termPopover.openTerm;
+  // The stem of every card line's id on this block.
+  const blockId = useId();
   const termDefinition = useMemo(() => {
     const map = new Map<string, OfferTerm>();
     for (const term of terms ?? []) map.set(term.name, term);
@@ -533,12 +600,27 @@ export function ChapterOffers({
       if (interceptPick?.(offer, selected)) return;
       applyRank(offer, selected ? 0 : 1);
     };
+    // An unranked card nobody holds is picked by its name (`PickName`).
+    const pickable = !ranked && !offer.held;
+    const about = `${blockId}-${offer.offer_id}`;
+    const hasEffects = terms ? offer.effects.length > 0 : Boolean(offer.effect_line);
     const body = (
       <>
         <span className={exclusive ? 'dot' : 'dot sq'} />
         <span>
           <b>
-            {offer.name}
+            {pickable ? (
+              <PickName
+                offer={offer}
+                selected={selected}
+                busy={busy}
+                disabled={busy && !interceptPick}
+                describedBy={cardLineIds(about, offer, hasEffects)}
+                onPick={toggle}
+              />
+            ) : (
+              offer.name
+            )}
             {ranked && !offer.held && !pips && (
               <RankControl
                 name={offer.name}
@@ -550,22 +632,35 @@ export function ChapterOffers({
             )}
           </b>
           {showsDistinction && <span className="g">{offer.distinction_name}</span>}
-          <span className="g">
+          <span className="g" id={`${about}-line`}>
             {cardLine(offer, layout)}
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
           </span>
           {terms ? (
-            <EffectTerms offer={offer} defined={termDefined} popover={termPopover} />
+            <EffectTerms
+              id={`${about}-fx`}
+              offer={offer}
+              defined={termDefined}
+              popover={termPopover}
+            />
           ) : (
-            offer.effect_line && <span className="fx">{offer.effect_line}</span>
+            offer.effect_line && (
+              <span className="fx" id={`${about}-fx`}>
+                {offer.effect_line}
+              </span>
+            )
           )}
-          {offer.is_locked && <span className="locked">{offer.lock_reason}</span>}
+          {offer.is_locked && (
+            <span className="locked" id={`${about}-locked`}>
+              {offer.lock_reason}
+            </span>
+          )}
           {isSecret && (
             <span className="secret">{wordSecret ?? 'Secret: select a cover story below'}</span>
           )}
           {isCover && <span className="secret">{wordCover ?? 'Cover story'}</span>}
         </span>
-        <span className="price">
+        <span className="price" id={`${about}-price`}>
           {offer.held && <span className="locked">{wordHeld ?? 'held'}</span>}
           {pricing === 'signed' ? (
             <SignedPrice cost={offer.cost_per_rank} rank={rank} />
@@ -624,16 +719,17 @@ export function ChapterOffers({
             {body}
           </div>
         ) : (
-          <button
-            type="button"
-            className={cn('stance', isCover && 'cover')}
-            aria-pressed={selected}
-            aria-disabled={busy || undefined}
-            disabled={busy && !interceptPick}
-            onClick={toggle}
+          <div
+            className={cn(
+              'stance',
+              'pickable',
+              selected && 'picked',
+              busy && 'busy',
+              isCover && 'cover'
+            )}
           >
             {body}
-          </button>
+          </div>
         )}
       </li>
     );

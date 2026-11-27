@@ -100,6 +100,8 @@ const picked = (id: number, offerId: number, rank = 1) => ({
 
 const stage = (name: string) => screen.getByRole('region', { name });
 const section = (name: string) => screen.getByRole('article', { name });
+/** The card a pick button sits on: an unranked card is a box picked by its name (#5206). */
+const cardOf = (pick: HTMLElement) => pick.closest<HTMLElement>('.stance')!;
 
 describe('LifeGrids', () => {
   beforeEach(() => {
@@ -314,15 +316,15 @@ describe('LifeGrids', () => {
     const user = userEvent.setup();
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
     const early = section('Early Upbringing');
-    const patient = within(early).getByRole('button', { name: /^Patient/ });
+    const patient = cardOf(within(early).getByRole('button', { name: /^Patient/ }));
     expect(within(patient).getByText('−10')).toHaveClass('cost');
     expect(
-      within(within(early).getByRole('button', { name: /^Spoiled/ })).getByText('+10')
+      within(cardOf(within(early).getByRole('button', { name: /^Spoiled/ }))).getByText('+10')
     ).toHaveClass('award');
-    const free = within(early).getByRole('button', { name: /Unremarkable/ });
+    const free = cardOf(within(early).getByRole('button', { name: /Unremarkable/ }));
     expect(free.querySelector('.price')?.textContent).toBe('');
     expect(within(patient).getByText('+10', { exact: false })).toBeInTheDocument();
-    const term = within(patient).getByRole('button', { name: 'sailing, definition' });
+    const term = within(patient).getByRole('button', { name: '+10 sailing, definition' });
     // Pointing at the term shows its definition; moving off hides it.
     await user.hover(term);
     expect(screen.getByRole('dialog', { name: 'sailing' })).toHaveTextContent(
@@ -345,11 +347,44 @@ describe('LifeGrids', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
+  it('no button on the life page holds another control, and a card is picked by its name (#5206)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithCharacterCreationProviders(
+      <LifeGrids draft={createMockDraft()} copy={{}} />
+    );
+    // A button may hold nothing a person can focus or press: a term inside the card's
+    // button is never told apart from the card by a screen reader.
+    expect(
+      container.querySelectorAll('button button, button [role="button"], button [tabindex]')
+    ).toHaveLength(0);
+    const early = section('Early Upbringing');
+    const pick = within(early).getByRole('button', { name: 'Patient' });
+    const term = within(early).getByRole('button', { name: '+10 sailing, definition' });
+    // The effect is the button, its number with its term, and only the term is underlined.
+    expect(term.tagName).toBe('BUTTON');
+    expect(term).toHaveTextContent('+10 sailing');
+    expect(term.querySelector('.term')).toHaveTextContent(/^sailing$/);
+    expect(pick.contains(term)).toBe(false);
+    expect(cardOf(pick).contains(term)).toBe(true);
+    // The card's other lines are read after the name.
+    expect(pick).toHaveAccessibleDescription(
+      'You learned to wait out every storm. +10 sailing −10'
+    );
+    // A term opens its box and leaves the card unpicked; the name picks the card.
+    await user.click(term);
+    expect(screen.getByRole('dialog', { name: 'sailing' })).toBeInTheDocument();
+    expect(syncMutate).not.toHaveBeenCalled();
+    await user.click(pick);
+    expect(syncMutate).toHaveBeenCalledTimes(1);
+  });
+
   it('a term shows its definition while the keyboard focus is on it', async () => {
     const user = userEvent.setup();
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
-    const patient = within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ });
-    const term = within(patient).getByRole('button', { name: 'sailing, definition' });
+    const patient = cardOf(
+      within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ })
+    );
+    const term = within(patient).getByRole('button', { name: '+10 sailing, definition' });
     act(() => term.focus());
     expect(screen.getByRole('dialog', { name: 'sailing' })).toBeInTheDocument();
     await user.tab();
@@ -377,7 +412,9 @@ describe('LifeGrids', () => {
       ],
     };
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
-    const patient = within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ });
+    const patient = cardOf(
+      within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ })
+    );
     const line = patient.querySelector('.fx')!;
     expect(line.textContent).toBe('+10 sailing; +5 poise; −5 menace');
     expect(Array.from(line.querySelectorAll('.term')).map((el) => el.textContent)).toEqual([
@@ -387,7 +424,9 @@ describe('LifeGrids', () => {
 
   it("a grid card reads its distinction's description, not the offer's line (#5099)", () => {
     renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
-    const patient = within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ });
+    const patient = cardOf(
+      within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ })
+    );
     expect(within(patient).getByText('You learned to wait out every storm.')).toBeInTheDocument();
     // The name prints once, as the card's title; the repeated player_line never shows.
     expect(within(patient).getAllByText('Patient')).toHaveLength(1);
@@ -466,11 +505,11 @@ describe('LifeGrids', () => {
     // The secret pick says so on its card; the row's no-cost card stands as the cover
     // until another is chosen, drawn dashed and labelled.
     expect(
-      within(within(open).getByRole('button', { name: /^Patient/ })).getByText(
+      within(cardOf(within(open).getByRole('button', { name: /^Patient/ }))).getByText(
         'Secret: select a cover story below'
       )
     ).toHaveClass('secret');
-    const unremarkable = within(open).getByRole('button', { name: /^Unremarkable/ });
+    const unremarkable = cardOf(within(open).getByRole('button', { name: /^Unremarkable/ }));
     expect(unremarkable).toHaveClass('cover');
     expect(within(unremarkable).getByText('Cover story')).toHaveClass('secret');
     expect(within(open).getByText('Unremarkable', { selector: '.cover-val' })).toBeInTheDocument();
@@ -487,8 +526,10 @@ describe('LifeGrids', () => {
     });
     renderWithCharacterCreationProviders(<LifeGrids draft={draft} copy={{}} />);
     const covered = screen.getAllByRole('article', { name: 'Early Upbringing' }).at(-1)!;
-    expect(within(covered).getByRole('button', { name: /^Spoiled/ })).toHaveClass('cover');
-    expect(within(covered).getByRole('button', { name: /^Unremarkable/ })).not.toHaveClass('cover');
+    expect(cardOf(within(covered).getByRole('button', { name: /^Spoiled/ }))).toHaveClass('cover');
+    expect(cardOf(within(covered).getByRole('button', { name: /^Unremarkable/ }))).not.toHaveClass(
+      'cover'
+    );
     expect(within(covered).getByText('Spoiled', { selector: '.cover-val' })).toBeInTheDocument();
     // Clicking the real pick again drops the secret and the cover; the pick stays.
     await user.click(within(covered).getByRole('button', { name: /^Patient/ }));
