@@ -324,7 +324,7 @@ describe('LifeGrids', () => {
     const free = cardOf(within(early).getByRole('button', { name: /Unremarkable/ }));
     expect(free.querySelector('.price')?.textContent).toBe('');
     expect(within(patient).getByText('+10', { exact: false })).toBeInTheDocument();
-    const term = within(patient).getByRole('button', { name: '+10 sailing, definition' });
+    const term = within(patient).getByRole('button', { name: '+10 sailing' });
     // Pointing at the term shows its definition; moving off hides it.
     await user.hover(term);
     expect(screen.getByRole('dialog', { name: 'sailing' })).toHaveTextContent(
@@ -359,7 +359,7 @@ describe('LifeGrids', () => {
     ).toHaveLength(0);
     const early = section('Early Upbringing');
     const pick = within(early).getByRole('button', { name: 'Patient' });
-    const term = within(early).getByRole('button', { name: '+10 sailing, definition' });
+    const term = within(early).getByRole('button', { name: '+10 sailing' });
     // The effect is the button, its number with its term, and only the term is underlined.
     expect(term.tagName).toBe('BUTTON');
     expect(term).toHaveTextContent('+10 sailing');
@@ -384,7 +384,7 @@ describe('LifeGrids', () => {
     const patient = cardOf(
       within(section('Early Upbringing')).getByRole('button', { name: /^Patient/ })
     );
-    const term = within(patient).getByRole('button', { name: '+10 sailing, definition' });
+    const term = within(patient).getByRole('button', { name: '+10 sailing' });
     act(() => term.focus());
     expect(screen.getByRole('dialog', { name: 'sailing' })).toBeInTheDocument();
     await user.tab();
@@ -509,6 +509,13 @@ describe('LifeGrids', () => {
         'Secret: select a cover story below'
       )
     ).toHaveClass('secret');
+    // Both labels are read with their card's name.
+    expect(within(open).getByRole('button', { name: /^Patient/ })).toHaveAccessibleDescription(
+      expect.stringContaining('Secret: select a cover story below')
+    );
+    expect(within(open).getByRole('button', { name: /^Unremarkable/ })).toHaveAccessibleDescription(
+      expect.stringContaining('Cover story')
+    );
     const unremarkable = cardOf(within(open).getByRole('button', { name: /^Unremarkable/ }));
     expect(unremarkable).toHaveClass('cover');
     expect(within(unremarkable).getByText('Cover story')).toHaveClass('secret');

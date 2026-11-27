@@ -216,7 +216,8 @@ function effectPrefix(effect: VisibleOffer['effects'][number]): string {
  * behind. An effect too long for the rest of the line starts the next one, and the
  * semicolon stays with the effect it ends. A term nobody has written a definition for is
  * plain text: the underline promises an explanation. An immunity reads as the list layouts
- * print it. */
+ * print it. The button is named by its own text, so the card's description, which reads
+ * this line, says each effect once and nothing more. */
 function EffectTerms({
   id,
   offer,
@@ -241,12 +242,7 @@ function EffectTerms({
           <Fragment key={`${effect.target}-${i}`}>
             {i > 0 && ' '}
             {defined(effect.target) ? (
-              <TermButton
-                name={effect.target}
-                className="effect"
-                ariaLabel={`${prefix}${effect.label}, definition`}
-                popover={popover}
-              >
+              <TermButton name={effect.target} className="effect" popover={popover}>
                 {prefix}
                 <span className="term">{effect.label}</span>
                 {end}
@@ -300,12 +296,24 @@ function PickName({
   );
 }
 
+/** Which of a card's optional lines it shows. */
+interface CardLines {
+  distinction: boolean;
+  effects: boolean;
+  locked: boolean;
+  secret: boolean;
+  cover: boolean;
+}
+
 /** The ids of the lines a card shows under its name, in reading order. */
-function cardLineIds(about: string, offer: VisibleOffer, hasEffects: boolean): string {
+function cardLineIds(about: string, lines: CardLines): string {
   return [
+    lines.distinction && `${about}-distinction`,
     `${about}-line`,
-    hasEffects && `${about}-fx`,
-    offer.is_locked && `${about}-locked`,
+    lines.effects && `${about}-fx`,
+    lines.locked && `${about}-locked`,
+    lines.secret && `${about}-secret`,
+    lines.cover && `${about}-cover`,
     `${about}-price`,
   ]
     .filter(Boolean)
@@ -603,7 +611,13 @@ export function ChapterOffers({
     // An unranked card nobody holds is picked by its name (`PickName`).
     const pickable = !ranked && !offer.held;
     const about = `${blockId}-${offer.offer_id}`;
-    const hasEffects = terms ? offer.effects.length > 0 : Boolean(offer.effect_line);
+    const lines: CardLines = {
+      distinction: Boolean(showsDistinction),
+      effects: terms ? offer.effects.length > 0 : Boolean(offer.effect_line),
+      locked: offer.is_locked,
+      secret: isSecret,
+      cover: isCover,
+    };
     const body = (
       <>
         <span className={exclusive ? 'dot' : 'dot sq'} />
@@ -615,7 +629,7 @@ export function ChapterOffers({
                 selected={selected}
                 busy={busy}
                 disabled={busy && !interceptPick}
-                describedBy={cardLineIds(about, offer, hasEffects)}
+                describedBy={cardLineIds(about, lines)}
                 onPick={toggle}
               />
             ) : (
@@ -631,7 +645,11 @@ export function ChapterOffers({
               />
             )}
           </b>
-          {showsDistinction && <span className="g">{offer.distinction_name}</span>}
+          {showsDistinction && (
+            <span className="g" id={`${about}-distinction`}>
+              {offer.distinction_name}
+            </span>
+          )}
           <span className="g" id={`${about}-line`}>
             {cardLine(offer, layout)}
             {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
@@ -656,9 +674,15 @@ export function ChapterOffers({
             </span>
           )}
           {isSecret && (
-            <span className="secret">{wordSecret ?? 'Secret: select a cover story below'}</span>
+            <span className="secret" id={`${about}-secret`}>
+              {wordSecret ?? 'Secret: select a cover story below'}
+            </span>
           )}
-          {isCover && <span className="secret">{wordCover ?? 'Cover story'}</span>}
+          {isCover && (
+            <span className="secret" id={`${about}-cover`}>
+              {wordCover ?? 'Cover story'}
+            </span>
+          )}
         </span>
         <span className="price" id={`${about}-price`}>
           {offer.held && <span className="locked">{wordHeld ?? 'held'}</span>}

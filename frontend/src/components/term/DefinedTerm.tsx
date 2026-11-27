@@ -37,7 +37,9 @@ export function TermButton({
   /** The term's key, the name the popover is opened under. */
   name: string;
   className: string;
-  ariaLabel: string;
+  /** A name other than the button's own text; omit it where that text is read as part
+   * of something else's description. */
+  ariaLabel?: string;
   popover: TermPopoverState;
   children: ReactNode;
 }) {
