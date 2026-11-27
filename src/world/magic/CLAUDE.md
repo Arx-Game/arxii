@@ -1540,9 +1540,11 @@ declaring a residence, tagging a room's aura, and reaching both without a manual
   `waiting_trickles(sheet)` sums the rows. Any reader of "what a worn piece fed her" reads accrual rows plus
   legacy `OUTFIT_TRICKLE` grants.
 - **A pose can reach.** `pending_reach_from` before the pose posts, `record_pending_reach` after
-  (`services/reach.py`); an unheld resonance is a valid reach and a valid kindled deed
-  (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`; the panel and casts
-  never set it).
+  (`services/reach.py`); an unheld resonance is a valid reach, and an unheld Celestial or Abyssal
+  resonance is a valid kindled deed (`kindled_resonances(include_named_unheld=True)`, set only by
+  `award_kindled_deeds`; the panel and casts never set it). A row on a Primal resonance kindles it only for a
+  character who holds it: Primal is a situation she is in, the other two are something she does to someone
+  else (owner ruling, 2026-11-27). Do not widen the unheld set to Primal.
 - **Authoring left to staff:** the three skills and the affinity link, `ResonanceCheckAward` rows,
   `bonus_check_type` and its difficulty, per-source stats, the Abyssal floor and any skill accents. With no
   `bonus_check_type` nothing changes.

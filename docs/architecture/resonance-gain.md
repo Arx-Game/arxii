@@ -1243,9 +1243,12 @@ persisting the declared worth on `CombatPull` would have needed a column the spe
 
 A pose can name a resonance it reaches for (`PoseResonanceReach`, one per pose). An endorsement of a
 reached pose pays that resonance and the endorsee need not have claimed it, so the endorser only
-confirms. A deed that a situation names in a resonance the character does not hold earns it: the grant
-creates her row (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`).
-The entry flourish accepts an unheld resonance for the same reason.
+confirms. A deed that a situation names in a Celestial or Abyssal resonance the character does not hold
+earns it: the grant creates her row (`kindled_resonances(include_named_unheld=True)`, set only by
+`award_kindled_deeds`). A situation on a Primal resonance kindles it only for a character who holds it,
+because a Primal resonance is a situation she is in and the other two are something she does to someone
+else (owner ruling, 2026-11-27). The entry flourish accepts any unheld resonance, Primal included, and so
+does a reach, so a character who wants a new Primal resonance has those two ways to earn her first of it.
 
 The anima ritual's outward part can wait for the partner's answer. It stores the base amount on
 `AnimaRitualPerformance.outward_amount_pending` with the result of the bonus check it rolled

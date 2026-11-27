@@ -31,7 +31,13 @@ from django.db.models.expressions import ExpressionWrapper
 from world.covenants.perks.constants import Situation
 from world.covenants.perks.context import SituationContext, SituationParams
 from world.covenants.perks.services import SituationCheck
-from world.magic.constants import GainSource, KindlingActKind, KindlingSource, TargetKind
+from world.magic.constants import (
+    AFFINITY_PRIMAL,
+    GainSource,
+    KindlingActKind,
+    KindlingSource,
+    TargetKind,
+)
 from world.magic.models import (
     CharacterResonance,
     KindledDeedAward,
@@ -609,11 +615,15 @@ def kindled_resonances(
     ``Kindling`` rows for the character's active fight or scene count at their stored
     strength whatever the act.
 
-    ``include_named_unheld`` adds, after the held ones, each resonance an active situation
-    names directly that the character does not hold (#5308): a deed in a resonance she has
-    never held earns it. Only the earn path asks for this; the panel and the casts read held
-    resonances only. A situation for a whole affinity names no single resonance, so it feeds
-    held resonances only: an unheld resonance is fed by the rows that name it and no other.
+    ``include_named_unheld`` adds, after the held ones, each Celestial or Abyssal resonance
+    an active situation names directly that the character does not hold (#5308): a deed in a
+    resonance she has never held earns it. A Primal resonance is never added. The owner's rule
+    (2026-11-27): "primal is always a situation you're in, celestial or abyssal is something
+    you're doing to someone else." So a row on a Primal resonance kindles it only for a
+    character who holds it, and a row on a Celestial or Abyssal resonance pays anyone whose act
+    meets it. Only the earn path asks for this; the panel and the casts read held resonances
+    only. A situation for a whole affinity names no single resonance, so it feeds held
+    resonances only: an unheld resonance is fed by the rows that name it and no other.
     """
     resonances = list(
         Resonance.objects.filter(character_resonances__character_sheet=sheet).select_related(
@@ -626,6 +636,8 @@ def kindled_resonances(
         named = list(
             Resonance.objects.filter(kindling_situations__is_active=True)
             .exclude(pk__in=held_ids)
+            # A Primal resonance is a situation she is in: it kindles only for its holder.
+            .exclude(affinity__name=AFFINITY_PRIMAL)
             .select_related("affinity", "feeling")
             .distinct()
         )
@@ -1161,8 +1173,9 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
     The bonus resonance check (#5308) rolls once per affinity the act pays, with the stat of
     the act's own roll (``act_check_type``, passed by the callers that hold one) or, when none
     is passed, the stat staff set for kindled deeds; its percent grows both the instant grant
-    and the share set aside. A resonance a situation names that the character does not hold
-    yet is earned too: the grant creates her row for it.
+    and the share set aside. A Celestial or Abyssal resonance a situation names that the
+    character does not hold yet is earned too: the grant creates her row for it. A Primal
+    resonance is earned only by a character who already holds it.
 
     With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
     are read. A caller that knows its surroundings and has no round (a standoff is a

@@ -1560,8 +1560,9 @@ Built as one PR (the numbered parts were the build order):
   and the grant records `bonus_outcome` and `bonus_percent`. Exempt, rolled and caller-rolled sources are
   the three `GAIN_BONUS_*_SOURCES` sets. A kindled deed grows its set-aside share by the same percent, and
   a claim of that share rolls nothing.
-- **Unheld resonances are earned.** A deed in a resonance a situation names but the character does not
-  hold earns it (`include_named_unheld`), and the entry flourish accepts any resonance.
+- **Unheld Celestial and Abyssal resonances are earned.** A deed in a Celestial or Abyssal resonance a
+  situation names but the character does not hold earns it (`include_named_unheld`). A situation on a Primal
+  resonance kindles it only for a character who holds it. The entry flourish accepts any resonance.
 - **A pose can reach.** `PoseResonanceReach` (web `reach_resonance_id`, telnet `pose/reach <resonance>=<text>`,
   composer row on the frontend); an endorsement of a reached pose pays that resonance and the endorser
   only confirms.

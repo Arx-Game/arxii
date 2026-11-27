@@ -468,7 +468,8 @@ class MovesNobodyEarnedPayWhatTheyDid(_World, HypothesisTestCase):
 
 
 class UnheldIsEarned(_World, HypothesisTestCase):
-    """A deed in a resonance she never held earns it."""
+    """A deed in a Celestial or Abyssal resonance she never held earns it; a Primal resonance
+    is kindled only for a character who holds it."""
 
     @settings(max_examples=30, deadline=None)
     @given(
@@ -476,30 +477,41 @@ class UnheldIsEarned(_World, HypothesisTestCase):
         held=st.sets(st.sampled_from(RESONANCE_KEYS)),
         amount=st.integers(1, 40),
     )
-    def test_a_character_who_does_not_hold_the_resonance_an_act_names_earns_it(
+    def test_a_deed_earns_an_outward_resonance_for_anyone_and_a_primal_one_only_for_its_holder(
         self, named: set[str], held: set[str], amount: int
     ) -> None:
         """Maintainer: "I *do* think characters should earn resonance they don't have - that's
         sort of the entire point of an otherwise celestial hero snapping and doing something
         awful: if they don't earn abyssal resonance that unsettles them, they can't actually
-        have a meaningful consequence from that."
+        have a meaningful consequence from that." And, on 2026-11-27: "primal is always a
+        situation you're in, celestial or abyssal is something you're doing to someone else."
 
         Given any resonances an act's situations name and any she already holds, she earns
-        every named one, held or not: afterwards she holds each, with a balance of exactly what
-        its grant paid.
+        every named Celestial or Abyssal one, held or not, and a named Primal one only when she
+        already holds it. Afterwards she holds each one she earned, and a Primal resonance she
+        did not hold is still not hers.
         """
         sheet = self.character(holds=sorted(held))
         self.configure()
         self.kindle(sorted(named), sheet)
         self.deed_award(amount)
+        earned = {key for key in named if AFFINITY_OF[key] != "primal" or key in held}
 
         grants = self.do_deed(sheet)
 
-        self.assertEqual({grant.resonance for grant in grants}, {self.resonances[k] for k in named})
+        self.assertEqual(
+            {grant.resonance for grant in grants}, {self.resonances[k] for k in earned}
+        )
         for grant in grants:
-            row = CharacterResonance.objects.get(character_sheet=sheet, resonance=grant.resonance)
             self.assertGreater(grant.amount, 0)
-            self.assertEqual(row.balance, grant.amount)
+        for key in named - earned:
+            self.assertFalse(
+                CharacterResonance.objects.filter(
+                    character_sheet=sheet, resonance=self.resonances[key]
+                ).exists()
+            )
+        for key in earned - held:
+            self.assertGreater(self.balance(sheet, key), 0)
 
     @settings(max_examples=20, deadline=None)
     @given(key=st.sampled_from(RESONANCE_KEYS), amount=st.integers(1, 40))
