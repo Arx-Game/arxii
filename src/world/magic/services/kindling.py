@@ -81,6 +81,22 @@ _FEELING_SITUATIONS = frozenset(
     }
 )
 
+#: The situations that are something a character does to someone else (#5308): her target
+#: feels what she made them feel, she aids someone in trouble, or she takes a mission option
+#: that carries the theme. Only a row on one of these pays a Celestial or Abyssal resonance to
+#: a character who does not hold it. Every other situation is a circumstance and kindles the
+#: resonance only for a character who holds it. The owner's rule (2026-11-27): "Celestial
+#: resonance coming from the gratitude of people you help in specific ways, while Abyssal
+#: resonance comes from the emotions of those you make suffer in specific ways. Primal, on the
+#: other hand, is what your character is feeling".
+DEED_SITUATIONS = frozenset(
+    {
+        Situation.TARGET_IN_STATE_THEY_CAUSED,
+        Situation.SOMEONE_IN_TROUBLE,
+        Situation.MISSION_THEME,
+    }
+)
+
 #: "Badly hurt" for ``SOMEONE_IN_TROUBLE``: the same fraction ``ALLY_LOW_HEALTH`` uses.
 _BADLY_HURT_FRACTION = 0.5
 
@@ -616,14 +632,15 @@ def kindled_resonances(
     strength whatever the act.
 
     ``include_named_unheld`` adds, after the held ones, each Celestial or Abyssal resonance
-    an active situation names directly that the character does not hold (#5308): a deed in a
-    resonance she has never held earns it. A Primal resonance is never added. The owner's rule
+    that an active deed situation (``DEED_SITUATIONS``) names directly and the character does
+    not hold (#5308): a deed in a resonance she has never held earns it. The owner's rule
     (2026-11-27): "primal is always a situation you're in, celestial or abyssal is something
-    you're doing to someone else." So a row on a Primal resonance kindles it only for a
-    character who holds it, and a row on a Celestial or Abyssal resonance pays anyone whose act
-    meets it. Only the earn path asks for this; the panel and the casts read held resonances
-    only. A situation for a whole affinity names no single resonance, so it feeds held
-    resonances only: an unheld resonance is fed by the rows that name it and no other.
+    you're doing to someone else." So a Primal resonance is never added, and a Celestial or
+    Abyssal one is fed, for a character who does not hold it, only by the deed rows that name
+    it. A row on any other situation is a circumstance: it kindles the resonance for a
+    character who holds it and pays nobody else. Only the earn path asks for this; the panel
+    and the casts read held resonances only. A situation for a whole affinity names no single
+    resonance, so it feeds held resonances only.
     """
     resonances = list(
         Resonance.objects.filter(character_resonances__character_sheet=sheet).select_related(
@@ -634,7 +651,11 @@ def kindled_resonances(
     if include_named_unheld:
         held_ids = {resonance.pk for resonance in resonances}
         named = list(
-            Resonance.objects.filter(kindling_situations__is_active=True)
+            # One filter call, so both conditions are met by the same row: an active deed row.
+            Resonance.objects.filter(
+                kindling_situations__is_active=True,
+                kindling_situations__situation__in=DEED_SITUATIONS,
+            )
             .exclude(pk__in=held_ids)
             # A Primal resonance is a situation she is in: it kindles only for its holder.
             .exclude(affinity__name=AFFINITY_PRIMAL)
@@ -864,13 +885,16 @@ def _resonance_contributions(  # noqa: PLR0913 - one resonance's share of the ac
     direct_only: frozenset[int],
 ) -> list[_Contribution]:
     """What feeds one resonance in one act: the rows that name it or cover its affinity, then
-    the live kindlings on it. A resonance id in ``direct_only`` is fed only by the rows that
-    name it."""
+    the live kindlings on it. A resonance id in ``direct_only`` is one the character does not
+    hold: it is fed only by the deed rows (``DEED_SITUATIONS``) that name it."""
+    held = resonance.pk not in direct_only
     contributions: list[_Contribution] = []
     for row in rows:
         names_it = row.resonance_id == resonance.pk
         covers_it = row.for_affinity_id == resonance.affinity_id
-        if not names_it and not (covers_it and resonance.pk not in direct_only):
+        if held and not (names_it or covers_it):
+            continue
+        if not held and not (names_it and row.situation in DEED_SITUATIONS):
             continue
         evidence = evaluation.evidence(row.situation, _effective_params(row, resonance))
         contribution = _row_contribution(row, evidence, tiers, by_rank) if evidence else None
@@ -899,7 +923,7 @@ def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
     direct_only: frozenset[int] = frozenset(),
 ) -> list[KindledResonance]:
     """One act's answer per resonance. A resonance id in ``direct_only`` is fed only by the
-    rows that name it, never by a row for its whole affinity."""
+    deed rows that name it, never by a circumstance row or a row for its whole affinity."""
     target = act.target if act is not None else None
     ctx = SituationContext(
         holder=sheet,
@@ -1173,9 +1197,10 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
     The bonus resonance check (#5308) rolls once per affinity the act pays, with the stat of
     the act's own roll (``act_check_type``, passed by the callers that hold one) or, when none
     is passed, the stat staff set for kindled deeds; its percent grows both the instant grant
-    and the share set aside. A Celestial or Abyssal resonance a situation names that the
-    character does not hold yet is earned too: the grant creates her row for it. A Primal
-    resonance is earned only by a character who already holds it.
+    and the share set aside. A Celestial or Abyssal resonance that a deed situation names
+    (``DEED_SITUATIONS``) and the character does not hold yet is earned too: the grant creates
+    her row for it. A circumstance row, and any row on a Primal resonance, pays only a
+    character who already holds the resonance.
 
     With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
     are read. A caller that knows its surroundings and has no round (a standoff is a

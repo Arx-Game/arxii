@@ -1542,9 +1542,11 @@ declaring a residence, tagging a room's aura, and reaching both without a manual
 - **A pose can reach.** `pending_reach_from` before the pose posts, `record_pending_reach` after
   (`services/reach.py`); an unheld resonance is a valid reach, and an unheld Celestial or Abyssal
   resonance is a valid kindled deed (`kindled_resonances(include_named_unheld=True)`, set only by
-  `award_kindled_deeds`; the panel and casts never set it). A row on a Primal resonance kindles it only for a
-  character who holds it: Primal is a situation she is in, the other two are something she does to someone
-  else (owner ruling, 2026-11-27). Do not widen the unheld set to Primal.
+  `award_kindled_deeds`; the panel and casts never set it). For a character who does not hold the resonance,
+  only a row on `DEED_SITUATIONS` counts (a feeling she laid on her target, aiding someone in trouble, a
+  mission option's theme). Every other row is a circumstance and feeds holders only, and so does every row on
+  a Primal resonance: Primal is what she feels, the other two are what she makes someone else feel (owner
+  ruling, 2026-11-27). Do not widen the unheld set to Primal or to a circumstance situation.
 - **Authoring left to staff:** the three skills and the affinity link, `ResonanceCheckAward` rows,
   `bonus_check_type` and its difficulty, per-source stats, the Abyssal floor and any skill accents. With no
   `bonus_check_type` nothing changes.

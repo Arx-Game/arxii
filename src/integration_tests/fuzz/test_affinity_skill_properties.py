@@ -468,43 +468,93 @@ class MovesNobodyEarnedPayWhatTheyDid(_World, HypothesisTestCase):
 
 
 class UnheldIsEarned(_World, HypothesisTestCase):
-    """A deed in a Celestial or Abyssal resonance she never held earns it; a Primal resonance
-    is kindled only for a character who holds it."""
+    """A character who does not hold a Celestial or Abyssal resonance earns it by what she does
+    to someone; a circumstance, and any Primal resonance, feeds only a character who holds it."""
 
-    @settings(max_examples=30, deadline=None)
+    def stage(
+        self, sheet: CharacterSheet, deeds: Sequence[str], circumstances: Sequence[str]
+    ) -> CharacterSheet:
+        """Set one scene and return the other character in it.
+
+        Each resonance in ``deeds`` gets a "target in a state she caused" situation, and the
+        other character bears a condition ``sheet`` laid that carries its feeling. Each
+        resonance in ``circumstances`` gets an "own feeling" situation, and ``sheet`` herself
+        bears a condition carrying its feeling. The one strength tier reaches at severity 1
+        and earns the whole award.
+        """
+        KindledStrengthTierFactory(rank=1, min_severity=1, earn_percent=100)
+        other = CharacterSheetFactory()
+        done_to_them = ConditionTemplateFactory(name=f"What {sheet.pk} did")
+        felt_by_her = ConditionTemplateFactory(name=f"What {sheet.pk} feels")
+        for key in sorted({*deeds, *circumstances}):
+            resonance = self.resonances[key]
+            resonance.feeling = PropertyFactory()
+            resonance.save()
+            if key in deeds:
+                done_to_them.properties.add(resonance.feeling)
+                KindlingSituationFactory(
+                    resonance=resonance,
+                    situation=Situation.TARGET_IN_STATE_THEY_CAUSED,
+                    strength=None,
+                )
+            if key in circumstances:
+                felt_by_her.properties.add(resonance.feeling)
+                KindlingSituationFactory(
+                    resonance=resonance, situation=Situation.OWN_FEELING, strength=None
+                )
+        ConditionInstanceFactory(
+            target=other.character,
+            condition=done_to_them,
+            severity=1,
+            source_character=sheet.character,
+        )
+        ConditionInstanceFactory(target=sheet.character, condition=felt_by_her, severity=1)
+        return other
+
+    @settings(max_examples=40, deadline=None)
     @given(
-        named=st.sets(st.sampled_from(RESONANCE_KEYS), min_size=1),
+        deeds=st.sets(st.sampled_from(RESONANCE_KEYS)),
+        circumstances=st.sets(st.sampled_from(RESONANCE_KEYS)),
         held=st.sets(st.sampled_from(RESONANCE_KEYS)),
         amount=st.integers(1, 40),
     )
-    def test_a_deed_earns_an_outward_resonance_for_anyone_and_a_primal_one_only_for_its_holder(
-        self, named: set[str], held: set[str], amount: int
+    def test_only_a_deed_done_to_someone_earns_a_resonance_she_does_not_hold(
+        self, deeds: set[str], circumstances: set[str], held: set[str], amount: int
     ) -> None:
         """Maintainer: "I *do* think characters should earn resonance they don't have - that's
         sort of the entire point of an otherwise celestial hero snapping and doing something
-        awful: if they don't earn abyssal resonance that unsettles them, they can't actually
-        have a meaningful consequence from that." And, on 2026-11-27: "primal is always a
-        situation you're in, celestial or abyssal is something you're doing to someone else."
+        awful". And, on 2026-11-27: "primal is always a situation you're in, celestial or
+        abyssal is something you're doing to someone else", and "Celestial resonance coming
+        from the gratitude of people you help in specific ways, while Abyssal resonance comes
+        from the emotions of those you make suffer in specific ways. Primal, on the other hand,
+        is what your character is feeling".
 
-        Given any resonances an act's situations name and any she already holds, she earns
-        every named Celestial or Abyssal one, held or not, and a named Primal one only when she
-        already holds it. Afterwards she holds each one she earned, and a Primal resonance she
-        did not hold is still not hers.
+        Given any resonances whose feeling she caused in someone she then acts on (deeds), any
+        whose feeling she only bears herself (circumstances), and any she already holds: she
+        earns every resonance she holds that either kind of situation feeds, and of the ones
+        she does not hold only the Celestial and Abyssal deeds. A circumstance never pays a
+        resonance she does not hold, and nothing pays her a Primal resonance she does not hold.
         """
+        assume(deeds or circumstances)
         sheet = self.character(holds=sorted(held))
         self.configure()
-        self.kindle(sorted(named), sheet)
+        other = self.stage(sheet, sorted(deeds), sorted(circumstances))
         self.deed_award(amount)
-        earned = {key for key in named if AFFINITY_OF[key] != "primal" or key in held}
+        situated = deeds | circumstances
+        earned = (situated & held) | {key for key in deeds if AFFINITY_OF[key] != "primal"}
 
-        grants = self.do_deed(sheet)
+        grants = award_kindled_deeds(
+            sheet,
+            act=KindlingAct(kind="social", target=other, label="Threatened a prisoner"),
+            outcome=self.outcomes["Success"],
+        )
 
         self.assertEqual(
             {grant.resonance for grant in grants}, {self.resonances[k] for k in earned}
         )
         for grant in grants:
             self.assertGreater(grant.amount, 0)
-        for key in named - earned:
+        for key in situated - earned:
             self.assertFalse(
                 CharacterResonance.objects.filter(
                     character_sheet=sheet, resonance=self.resonances[key]

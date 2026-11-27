@@ -182,8 +182,8 @@
   `PullActionContext.check_type`, `ResonancePullResult.worth_by_affinity`,
   `spend_resonance_for_pull(worth_by_affinity=)`, `PowerTermContext.resonance_worth_percent`;
   `commit_combat_pull` now returns the pull result. A deed in a Celestial or Abyssal resonance a character does not hold earns it
-  (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`); a Primal resonance is
-  kindled only for a character who holds it. The entry flourish accepts an unheld resonance. A pose can name the resonance it reaches for (`PoseResonanceReach`,
+  (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`), through rows on
+  `DEED_SITUATIONS` only; a circumstance row, and every row on a Primal resonance, feeds holders only. The entry flourish accepts an unheld resonance. A pose can name the resonance it reaches for (`PoseResonanceReach`,
   `services/reach.py`: `pending_reach_from`, `record_pending_reach`, `resolve_reach_name`; `ReachError`;
   `Interaction.cached_resonance_reach`; wire field `reach_resonance_id`, payload `reached_resonance`; telnet
   `pose/reach <resonance>=<text>`), and an endorsement of a reached pose pays that resonance
