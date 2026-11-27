@@ -176,6 +176,29 @@ class StaffRowEndpointTests(TestCase):
             response = getattr(self.client, method)(f"{self.base}/{path}/", {}, format="json")
             assert response.status_code == 404, path
 
+    def test_staff_set_how_much_of_the_glimpse_is_remembered(self) -> None:
+        """#5292: the switch a story flips when it returns a lost Glimpse."""
+        from world.magic.constants import GlimpseMemory
+        from world.magic.factories import CharacterAuraFactory
+
+        url = f"{self.base}/staff-glimpse-memory/"
+        body = {"memory": GlimpseMemory.NO_MEMORY}
+        self.client.force_authenticate(user=self.staff)
+        no_aura = self.client.put(url, body, format="json")
+        assert no_aura.status_code == 400, no_aura.content[:800]
+
+        aura = CharacterAuraFactory(character=self.sheet)
+        self.client.force_authenticate(user=self.player.account)
+        assert self.client.put(url, body, format="json").status_code == 404
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.put(url, body, format="json")
+        assert response.status_code == 200, response.content[:800]
+        assert response.data["magic"]["aura"]["glimpse_memory"] == GlimpseMemory.NO_MEMORY
+        aura.refresh_from_db()
+        assert aura.glimpse_memory == GlimpseMemory.NO_MEMORY
+        later = self.client.put(url, {"memory": GlimpseMemory.LATER}, format="json")
+        assert later.status_code == 400
+
     def test_distinction_add_then_remove_through_the_api(self) -> None:
         distinction = DistinctionFactory()
         self.client.force_authenticate(user=self.staff)

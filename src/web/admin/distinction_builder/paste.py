@@ -63,6 +63,7 @@ from world.character_creation.models import (
 )
 from world.contributors.models import ContentContributor
 from world.distinctions.models import Distinction, DistinctionCategory, DistinctionEffect
+from world.magic.constants import GLIMPSE_AXIS_CONFIG, GLIMPSE_MEMORY_MARKED, GlimpseTagAxis
 from world.magic.models import GlimpseTag
 from world.mechanics.models import ModifierTarget
 from world.mechanics.services import ensure_skill_target
@@ -90,6 +91,10 @@ _PROMPT_WORDS = {
 _KIND_DEGREE = "degree"
 _KIND_BEAT = "beat"
 _KIND_IDENTITY = "identity"
+_KIND_GLIMPSE = "glimpse"
+_KIND_MEMORY = "memory"
+#: The opener field a Glimpse answer's line sets.
+_GLIMPSE_TAG_FIELD = "glimpse_tag_id"
 _PRESTIGE_WORD = "prestige"
 _FIGURE_WORD = "figure"
 _EFFECT_RE = re.compile(r"^([+-])\s*(\d+)?\s*(.+)$")
@@ -242,7 +247,7 @@ def _parse_effects(raw: str, row: RowSpec) -> None:
 _NAMED_OPENERS: dict[str, tuple[str, str, type, str]] = {
     "reason": (OfferChapter.ENEMY, "enemy_reason_id", EnemyReason, "reason"),
     "appearance": (OfferChapter.APPEARANCE, "appearance_section_id", AppearanceSection, "section"),
-    "glimpse": (OfferChapter.GLIMPSE, "glimpse_tag_id", GlimpseTag, "Glimpse tag"),
+    _KIND_GLIMPSE: (OfferChapter.GLIMPSE, _GLIMPSE_TAG_FIELD, GlimpseTag, "Glimpse tag"),
     "lineage": (OfferChapter.LINEAGE, "origin_choice_id", OriginTemplateSlotChoice, "answer"),
     "schooling": (
         OfferChapter.TRADITION_STEP,
@@ -300,12 +305,59 @@ def _identity_spec(value: str, token: str) -> tuple[OfferSpec | None, str]:
     return OfferSpec(OfferChapter.IDENTITY, OfferArrival.CHOICE, "", "", token, group=value), ""
 
 
+def _memory_spec(value: str, token: str) -> tuple[OfferSpec | None, str]:
+    """``memory:blacked out`` / ``memory:no memory`` -> the card that marks a Glimpse the
+    character does not remember (#5292). It arrives bundled with the memory state."""
+    wanted = value.lower().replace("_", " ")
+    states = [
+        m for m in GLIMPSE_MEMORY_MARKED if wanted in (m.value.replace("_", " "), m.label.lower())
+    ]
+    if not states:
+        known = ", ".join(m.label.lower() for m in GLIMPSE_MEMORY_MARKED)
+        return None, f"memory {value!r} in {token!r} is not one a card marks ({known})"
+    spec = OfferSpec(
+        OfferChapter.GLIMPSE, OfferArrival.BUNDLED, "glimpse_memory", states[0].value, token
+    )
+    return spec, ""
+
+
+def _check_glimpse_lines(row: RowSpec) -> None:
+    """The model's rules for a card the Glimpse gives, before anything is written (#5292).
+
+    ``DistinctionOffer.clean`` holds the same rules; the paste makes the card and its
+    lines together, so the ones about the card's other lines are checked within the row.
+    """
+    glimpse = [o for o in row.offers if o.chapter == OfferChapter.GLIMPSE]
+    if not glimpse:
+        return
+    if len(glimpse) != len(row.offers):
+        row.fail("a card the Glimpse gives is offered on no other stage")
+        return
+    tag_ids = [o.opener_value for o in glimpse if o.opener_field == _GLIMPSE_TAG_FIELD]
+    if not tag_ids:
+        return
+    if len(tag_ids) != len(glimpse):
+        row.fail("a card comes with a Glimpse answer or marks a memory state, never both")
+        return
+    tags = list(GlimpseTag.objects.filter(pk__in=tag_ids))
+    for tag in tags:
+        if not GLIMPSE_AXIS_CONFIG[GlimpseTagAxis(tag.axis)].gives_card:
+            row.fail(f"an answer to {tag.get_axis_display()} gives no card")
+    if len({tag.axis for tag in tags}) > 1:
+        row.fail("a Glimpse card sits under answers of one part")
+    taken = DistinctionOffer.objects.filter(is_active=True, glimpse_tag_id__in=tag_ids)
+    for line in taken.select_related("glimpse_tag", "distinction"):
+        row.fail(f"{line.glimpse_tag.name} already gives {line.distinction.name}")
+
+
 def _opener_spec(kind: str, value: str, token: str) -> tuple[OfferSpec | None, str]:
     """One ``offered_under`` token -> the offer line it names, or why it cannot."""
     if kind == _KIND_BEAT:
         return _beat_spec(value, token)
     if kind == _KIND_IDENTITY:
         return _identity_spec(value, token)
+    if kind == _KIND_MEMORY:
+        return _memory_spec(value, token)
     if kind in _PROMPT_WORDS:
         prompt = _PROMPT_WORDS[kind]
         spec = OfferSpec(OfferChapter.ACTORS_SHEET, OfferArrival.CHOICE, "prompt", prompt, token)
@@ -322,7 +374,10 @@ def _opener_spec(kind: str, value: str, token: str) -> tuple[OfferSpec | None, s
     row, why = _one(model.objects.filter(name__iexact=value), f"{what} {value!r}")
     if row is None:
         return None, why
-    return OfferSpec(chapter, OfferArrival.CHOICE, opener_field, row.pk, token), ""
+    # A Glimpse answer's card comes free with the answer (#5292); every other named
+    # opener offers a priced choice.
+    arrival = OfferArrival.BUNDLED if kind == _KIND_GLIMPSE else OfferArrival.CHOICE
+    return OfferSpec(chapter, arrival, opener_field, row.pk, token), ""
 
 
 def _parse_offers(raw: str, row: RowSpec) -> None:
@@ -338,6 +393,7 @@ def _parse_offers(raw: str, row: RowSpec) -> None:
             row.fail("a card is placed on the Identity stage once")
         else:
             row.offers.append(spec)
+    _check_glimpse_lines(row)
 
 
 def _parse_first_look(raw: str, row: RowSpec) -> None:
@@ -409,6 +465,16 @@ def parse_table(text: str) -> list[RowSpec]:
         if row.slug and row.slug in seen and row.status == STATUS_CREATE:
             row.fail(f"slug {row.slug!r} appears twice in this table")
         seen.add(row.slug)
+    # A Glimpse answer gives one card (#5292), so two rows of one table cannot both
+    # sit under it.
+    answered: set[int | str] = set()
+    for row in rows:
+        for spec in row.offers:
+            if spec.opener_field != _GLIMPSE_TAG_FIELD or row.status != STATUS_CREATE:
+                continue
+            if spec.opener_value in answered:
+                row.fail(f"{spec.label!r} is given a card twice in this table")
+            answered.add(spec.opener_value)
     return rows
 
 
@@ -480,7 +546,7 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
                     distinction=distinction, amount=row.prestige
                 )
             for spec in row.offers:
-                offer = DistinctionOffer.objects.create(
+                offer = DistinctionOffer(
                     distinction=distinction,
                     chapter=spec.chapter,
                     arrives_as=spec.arrives_as,
@@ -489,6 +555,11 @@ def _create_rows(rows: list[RowSpec], contributor: ContentContributor, user_id: 
                     # An Identity line has no opener to set (#5255).
                     **({spec.opener_field: spec.opener_value} if spec.opener_field else {}),
                 )
+                # The model's own rules (#5292), which the preview already ran for the
+                # Glimpse's lines: a failure here means the database changed between
+                # the preview and the confirm, and the batch rolls back.
+                offer.clean()
+                offer.save()
                 stamp_written(offer, contributor)
                 OfferFirstLook.objects.bulk_create(
                     OfferFirstLook(

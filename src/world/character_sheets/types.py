@@ -277,6 +277,9 @@ class AuraData(TypedDict):
     dominant_affinity: str
     glimpse_story: str
     glimpse_state: str
+    #: ``GlimpseMemory`` as the character holds it (#5292): remembered, blacked out
+    #: or no memory.
+    glimpse_memory: str
     glimpse_tags: list[GlimpseTagEntry]
     can_finish_glimpse: bool
 

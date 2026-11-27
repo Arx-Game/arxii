@@ -74,6 +74,12 @@ from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind
 from world.items.constants import BodyRegion
+from world.magic.constants import (
+    GLIMPSE_AXIS_CONFIG,
+    GLIMPSE_MEMORY_MARKED,
+    GlimpseMemory,
+    GlimpseTagAxis,
+)
 from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_POINT_COST
 from world.societies.constants import EnemyReach
 from world.societies.houses.constants import TitleTier
@@ -368,6 +374,17 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         db_default=False,
         help_text=(
             "Strike the Before the Glimpse stage out: its grids never show for this beginning."
+        ),
+    )
+    #: #5292: a character of this beginning has no memory of their Glimpse (the
+    #: Sleeper). The Gift stage then asks no part of it and the draft is always in the
+    #: no-memory state (``glimpse.draft_glimpse_memory``).
+    no_glimpse_memory = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "A character of this beginning has no memory of their Glimpse: the Gift stage "
+            "asks nothing about it and a story settles it in play."
         ),
     )
     #: #4830: what the life page shows in place of the stage rows when every stage is
@@ -2844,7 +2861,25 @@ class DistinctionOffer(
         null=True,
         blank=True,
         related_name="distinction_offers",
-        help_text="Glimpse chapter only: the tag that opens this offer.",
+        help_text="Glimpse chapter only: the answer that gives this card.",
+    )
+    #: #5292: the card that marks a Glimpse the character does not remember. A line
+    #: names an answer or a memory state, never both (``enemy_degree`` is the same
+    #: shape: an opener that is a fixed choice).
+    glimpse_memory = models.CharField(
+        max_length=12,
+        choices=[
+            (value, label)
+            for value, label in GlimpseMemory.choices
+            if value in GLIMPSE_MEMORY_MARKED
+        ],
+        blank=True,
+        default="",
+        db_default="",
+        help_text=(
+            "Glimpse chapter only: the memory state (blacked out or no memory) that gives "
+            "this card, in place of an answer."
+        ),
     )
     origin_choice = models.ForeignKey(
         OriginTemplateSlotChoice,
@@ -2940,6 +2975,7 @@ class DistinctionOffer(
     OPENER_FIELDS: ClassVar[tuple[str, ...]] = (
         "schooling_line",
         "glimpse_tag",
+        "glimpse_memory",
         "origin_choice",
         "prompt",
         "enemy_reason",
@@ -2968,6 +3004,7 @@ class DistinctionOffer(
                         "unlocked_by": None,
                         "prompt": "",
                         "enemy_degree": "",
+                        "glimpse_memory": "",
                         # A boolean opener is unset when False (#3739): a feature-rows
                         # line is offered on every feature, so it can carry no section.
                         "feature_rows": False,
@@ -2991,6 +3028,7 @@ class DistinctionOffer(
             "distinction",
             "chapter",
             "glimpse_tag",
+            "glimpse_memory",
             "origin_choice",
             "schooling_line",
             "prompt",
@@ -3004,7 +3042,7 @@ class DistinctionOffer(
 
     _OPENERS_FOR_CHAPTER: ClassVar[dict[OfferChapter, tuple[str, ...]]] = {
         OfferChapter.TRADITION_STEP: ("schooling_line",),
-        OfferChapter.GLIMPSE: ("glimpse_tag",),
+        OfferChapter.GLIMPSE: ("glimpse_tag", "glimpse_memory"),
         OfferChapter.LINEAGE: ("origin_choice",),
         OfferChapter.APPEARANCE: ("appearance_section", "feature_rows"),
         OfferChapter.ACTORS_SHEET: ("prompt",),
@@ -3021,6 +3059,10 @@ class DistinctionOffer(
     def save(self, *args: object, **kwargs: object) -> None:
         if not self.name:
             self.name = self.distinction.name
+        if self.chapter == OfferChapter.GLIMPSE:
+            # A Glimpse card comes free with its answer or memory state (#5292); it is
+            # never a priced choice, so staff do not pick how it arrives.
+            self.arrives_as = OfferArrival.BUNDLED
         super().save(*args, **kwargs)
 
     @property
@@ -3030,7 +3072,7 @@ class DistinctionOffer(
         return self._OPENERS_FOR_CHAPTER[OfferChapter(self.chapter)]
 
     def _opener_is_set(self, field: str) -> bool:
-        if field in ("prompt", "enemy_degree", "feature_rows"):
+        if field in ("prompt", "enemy_degree", "glimpse_memory", "feature_rows"):
             return bool(getattr(self, field))
         if getattr(self, f"{field}_id") is not None:
             return True
@@ -3048,11 +3090,14 @@ class DistinctionOffer(
     def opener_key(self) -> str:
         """A stable string naming what opens this offer, for grouping on the leaf (#3709).
 
-        ``prompt:never_do``, ``reason:<id>``, ``degree:ruined``, ``section:<id>``; the
-        opener's own id for the older chapters; ``""`` when nothing is set.
+        ``prompt:never_do``, ``reason:<id>``, ``degree:ruined``, ``section:<id>``,
+        ``memory:no_memory``; the opener's own id for the older chapters; ``""`` when
+        nothing is set.
         """
         if self.prompt:
             return f"prompt:{self.prompt}"
+        if self.glimpse_memory:
+            return f"memory:{self.glimpse_memory}"
         if self.enemy_reason_id is not None:
             return f"reason:{self.enemy_reason_id}"
         if self.enemy_degree:
@@ -3098,6 +3143,57 @@ class DistinctionOffer(
             # one would hand the card to every character there is.
             raise ValidationError(
                 {"arrives_as": "A card on the Identity stage is always a choice."}
+            )
+        if self.is_active and self.distinction_id is not None:
+            self._clean_glimpse_card()
+
+    def _other_active_lines(self) -> models.QuerySet[DistinctionOffer]:
+        """This card's other active lines, in any chapter."""
+        return DistinctionOffer.objects.filter(
+            distinction_id=self.distinction_id, is_active=True
+        ).exclude(pk=self.pk)
+
+    def _clean_glimpse_card(self) -> None:
+        """A Glimpse card is offered nowhere else, and under one part only (#5292).
+
+        A card the Glimpse gives is the Glimpse's alone (owner ruling 2026-11-24:
+        "glimpse specific distinctions"), so no other stage sells it. Under answers of
+        two parts, one character could be handed it twice and end one bonus short. An
+        answer gives one card, and only an answer of a part that gives cards.
+        """
+        others = self._other_active_lines()
+        if self.chapter != OfferChapter.GLIMPSE:
+            if others.filter(chapter=OfferChapter.GLIMPSE).exists():
+                raise ValidationError(
+                    {"distinction": "The Glimpse gives this card, so no other stage offers it."}
+                )
+            return
+        if others.exclude(chapter=OfferChapter.GLIMPSE).exists():
+            raise ValidationError(
+                {"distinction": "Another stage offers this card, so the Glimpse cannot give it."}
+            )
+        if self.glimpse_tag_id is None:
+            if others.filter(glimpse_tag__isnull=False).exists():
+                raise ValidationError(
+                    {"distinction": "A Glimpse answer gives this card, so it cannot mark a memory."}
+                )
+            return
+        axis = GlimpseTagAxis(self.glimpse_tag.axis)
+        if not GLIMPSE_AXIS_CONFIG[axis].gives_card:
+            raise ValidationError({"glimpse_tag": f"An answer to {axis.label} gives no card."})
+        if (
+            DistinctionOffer.objects.filter(glimpse_tag_id=self.glimpse_tag_id, is_active=True)
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            raise ValidationError({"glimpse_tag": "This answer already gives a card."})
+        if others.filter(glimpse_memory__gt="").exists():
+            raise ValidationError(
+                {"distinction": "This card marks a memory state, so no answer can give it."}
+            )
+        if others.exclude(glimpse_tag__axis=axis).filter(glimpse_tag__isnull=False).exists():
+            raise ValidationError(
+                {"distinction": "An answer to another part of the Glimpse already gives this card."}
             )
 
 

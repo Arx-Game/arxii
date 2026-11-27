@@ -59,6 +59,8 @@ from world.character_creation.models import (
 from world.character_creation.offers import (
     beats_for,
     clear_life,
+    glimpse_cards,
+    glimpse_effect_lines,
     load_default_life,
     offers_for,
     reconcile_offer_picks,
@@ -830,6 +832,12 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
             )
         )
 
+    def get_serializer_context(self) -> dict:
+        """The cards' mechanics lines, read once for the response (#5292)."""
+        context = super().get_serializer_context()
+        context["glimpse_effect_lines"] = glimpse_effect_lines()
+        return context
+
 
 class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     """List active origin-story templates for the CG guided flow (#2478, #3617).
@@ -1328,6 +1336,9 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         payload = {
             "offers": offers,
             "terms": terms_for(offers),
+            # The Glimpse's lines arrive bundled, so its cards are not in ``offers``; the
+            # Gift stage's panel lists them from here (#5292).
+            "glimpse_cards": glimpse_cards(draft) if chapter == OfferChapter.GLIMPSE else [],
         }
         return Response(OffersResponseSerializer(payload).data)
 

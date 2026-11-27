@@ -874,31 +874,108 @@ class GlimpseState(models.TextChoices):
     COMPLETE = "COMPLETE", "Complete"
 
 
+class GlimpseMemory(models.TextChoices):
+    """How much of the Glimpse the character remembers (#5292).
+
+    A draft holds any of the four. A character (``CharacterAura.glimpse_memory``) holds
+    one of the first three: a Glimpse left for later is stored as remembered, because
+    ``glimpse_state`` already says it is unwritten. An offer line
+    (``DistinctionOffer.glimpse_memory``) names ``BLACKED_OUT`` or ``NO_MEMORY``, the two
+    states marked by a card.
+    """
+
+    REMEMBERED = "remembered", "Remembered"
+    BLACKED_OUT = "blacked_out", "Blacked out"
+    NO_MEMORY = "no_memory", "No memory"
+    LATER = "later", "Written later"
+
+
+#: The memory states a card marks, so the ones an offer line may name (#5292).
+GLIMPSE_MEMORY_MARKED = (GlimpseMemory.BLACKED_OUT, GlimpseMemory.NO_MEMORY)
+
+#: The choices a character's aura takes: every state but ``LATER`` (#5292).
+GLIMPSE_MEMORY_HELD_CHOICES = [
+    (value, label) for value, label in GlimpseMemory.choices if value != GlimpseMemory.LATER
+]
+
+#: The memory states in which a draft is asked no part of the Glimpse (#5292).
+GLIMPSE_MEMORY_UNASKED = (GlimpseMemory.NO_MEMORY, GlimpseMemory.LATER)
+
+
 @dataclass(frozen=True)
 class GlimpseAxisRule:
-    """Select-arity + rendering rule for one glimpse axis (#2427)."""
+    """Select-arity + rendering rule for one glimpse axis (#2427).
+
+    ``gives_card`` (#5292): an answer of this axis may carry a Glimpse card, and an
+    offer line under an answer of any other axis is refused. ``lost_in_blackout``
+    (#5292): a character who blacked out has no answer to this axis.
+    """
 
     multi: bool
     prose_prompt: bool
+    gives_card: bool = False
+    lost_in_blackout: bool = False
 
 
-#: Axis → arity/rendering config (#2427). TONE is single-select; SENSORY
-#: renders as prose prompts in the writing step rather than hard tags
+#: Axis → arity/rendering config (#2427). Every axis takes one answer (#5292, owner
+#: ruling 2026-11-24: an answer carries one bonus, and a part that takes several is
+#: "probably generally bad"). The several-answers path (``multi=True``, and
+#: ``GlimpseTag.stands_alone`` with it) stays in the code and unused, as the way back.
+#: SENSORY renders as prose prompts in the writing step rather than hard tags
 #: (authored SENSORY tags remain possible without a migration).
 #: CHOOSING (#2694) is the Chosen-only "how did it claim you?" step — its
 #: tags are all path-scoped, so the axis renders only when the draft's path
-#: matches. REFLECTION (#2694) is the multi-select "what did you see in
-#: yourself?" step: qualities of the aspirational could-be self shown in the
-#: reflective surface.
+#: matches. REFLECTION (#2694) is the "what did you see in yourself?" step: a quality
+#: of the aspirational could-be self shown in the reflective surface.
+#: TRIGGER, REFLECTION, TONE and CONSEQUENCE each give one Glimpse card; a blackout
+#: takes REFLECTION and TONE together (#5292).
 GLIMPSE_AXIS_CONFIG: dict[GlimpseTagAxis, GlimpseAxisRule] = {
-    GlimpseTagAxis.TONE: GlimpseAxisRule(multi=False, prose_prompt=False),
-    GlimpseTagAxis.CONSEQUENCE: GlimpseAxisRule(multi=True, prose_prompt=False),
-    GlimpseTagAxis.WITNESS: GlimpseAxisRule(multi=True, prose_prompt=False),
-    GlimpseTagAxis.SENSORY: GlimpseAxisRule(multi=True, prose_prompt=True),
-    GlimpseTagAxis.TRIGGER: GlimpseAxisRule(multi=False, prose_prompt=False),
+    GlimpseTagAxis.TONE: GlimpseAxisRule(
+        multi=False, prose_prompt=False, gives_card=True, lost_in_blackout=True
+    ),
+    GlimpseTagAxis.CONSEQUENCE: GlimpseAxisRule(multi=False, prose_prompt=False, gives_card=True),
+    GlimpseTagAxis.WITNESS: GlimpseAxisRule(multi=False, prose_prompt=False),
+    GlimpseTagAxis.SENSORY: GlimpseAxisRule(multi=False, prose_prompt=True),
+    GlimpseTagAxis.TRIGGER: GlimpseAxisRule(multi=False, prose_prompt=False, gives_card=True),
     GlimpseTagAxis.CHOOSING: GlimpseAxisRule(multi=False, prose_prompt=False),
-    GlimpseTagAxis.REFLECTION: GlimpseAxisRule(multi=True, prose_prompt=False),
+    GlimpseTagAxis.REFLECTION: GlimpseAxisRule(
+        multi=False, prose_prompt=False, gives_card=True, lost_in_blackout=True
+    ),
 }
+
+#: The order the parts of the Glimpse are asked in (#5292): what set it off, how it
+#: claimed you (the Chosen only), what you saw, how it felt, what it left, who saw.
+GLIMPSE_AXIS_ORDER = (
+    GlimpseTagAxis.TRIGGER,
+    GlimpseTagAxis.CHOOSING,
+    GlimpseTagAxis.REFLECTION,
+    GlimpseTagAxis.TONE,
+    GlimpseTagAxis.CONSEQUENCE,
+    GlimpseTagAxis.WITNESS,
+    GlimpseTagAxis.SENSORY,
+)
+
+#: The axes whose answers may carry a Glimpse card (#5292).
+GLIMPSE_CARD_AXES = frozenset(axis for axis, rule in GLIMPSE_AXIS_CONFIG.items() if rule.gives_card)
+
+#: The axes a blackout takes (#5292).
+GLIMPSE_BLACKOUT_AXES = frozenset(
+    axis for axis, rule in GLIMPSE_AXIS_CONFIG.items() if rule.lost_in_blackout
+)
+
+
+def glimpse_axes_asked(memory: str) -> frozenset[GlimpseTagAxis]:
+    """The axes a character in this memory state has an answer to (#5292).
+
+    Every axis when the Glimpse is remembered, every axis but the two a blackout takes
+    after one, none with no memory or a Glimpse left for later. Read by character
+    creation (which answers of a draft count) and by play (which axes a player may write).
+    """
+    if memory in GLIMPSE_MEMORY_UNASKED:
+        return frozenset()
+    if memory == GlimpseMemory.BLACKED_OUT:
+        return frozenset(GlimpseTagAxis) - GLIMPSE_BLACKOUT_AXES
+    return frozenset(GlimpseTagAxis)
 
 
 class AcquisitionOrigin(models.TextChoices):

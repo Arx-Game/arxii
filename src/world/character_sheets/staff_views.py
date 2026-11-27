@@ -44,6 +44,7 @@ from world.character_sheets.staff_serializers import (
     StaffEnemySerializer,
     StaffEstateOptionsSerializer,
     StaffFormSerializer,
+    StaffGlimpseMemorySerializer,
     StaffGoalsSerializer,
     StaffGroupOptionsSerializer,
     StaffHouseClaimSerializer,
@@ -259,6 +260,27 @@ class StaffSheetRowsMixin:
         sheet = self._staff_sheet(request)
         data = self._validated(StaffWorshipSerializer, request, sheet)
         set_worship_declaration(sheet, data["public_being"], data["secret_being"])
+        return self._answer(request, sheet)
+
+    @extend_schema(request=StaffGlimpseMemorySerializer, responses={200: CharacterSheetSerializer})
+    @action(detail=True, methods=[HTTPMethod.PUT], url_path="staff-glimpse-memory")
+    def staff_glimpse_memory(self, request: Request, pk: int | None = None) -> Response:
+        """Set how much of the Glimpse the character remembers (#5292).
+
+        What a story flips when it returns a lost Glimpse. The answers themselves are
+        written through the aura's own action, which staff may use on any character.
+        """
+        from world.magic.models import CharacterAura  # noqa: PLC0415
+        from world.magic.services.glimpse import set_glimpse_memory  # noqa: PLC0415
+
+        sheet = self._staff_sheet(request)
+        data = self._validated(StaffGlimpseMemorySerializer, request, sheet)
+        aura = CharacterAura.objects.filter(character=sheet).first()
+        if aura is None:
+            return Response(
+                {"detail": "This character has no aura yet."}, status=status.HTTP_400_BAD_REQUEST
+            )
+        set_glimpse_memory(aura, data["memory"])
         return self._answer(request, sheet)
 
     @extend_schema(request=StaffMarkingAddSerializer, responses={200: CharacterSheetSerializer})

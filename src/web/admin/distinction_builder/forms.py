@@ -8,7 +8,11 @@ from django.contrib.admin.widgets import AutocompleteSelect, FilteredSelectMulti
 from django.forms import BaseInlineFormSet, inlineformset_factory
 from django.utils.text import slugify
 
-from world.character_creation.constants import ENEMY_MARKING_DEGREES, OfferChapter
+from world.character_creation.constants import (
+    ENEMY_MARKING_DEGREES,
+    OfferArrival,
+    OfferChapter,
+)
 from world.character_creation.models import Beginnings, DistinctionOffer
 from world.character_sheets.types import EnemyDegree
 from world.distinctions.models import Distinction, DistinctionEffect
@@ -168,6 +172,8 @@ class OfferForm(forms.ModelForm):
             "player_line",
             "schooling_line",
             "glimpse_tag",
+            # The Glimpse chapter's other opener (#5292): the memory state a card marks.
+            "glimpse_memory",
             "origin_choice",
             "prompt",
             "enemy_reason",
@@ -222,6 +228,15 @@ class OfferForm(forms.ModelForm):
             self.fields["first_look"].initial = list(
                 self.instance.first_look.values_list("pk", flat=True)
             )
+
+    def clean(self) -> dict:
+        cleaned = super().clean()
+        if cleaned.get("chapter") == OfferChapter.GLIMPSE:
+            # A Glimpse card comes free with its answer or memory state (#5292): the
+            # page shows that in place of the select, and the model sets it on save.
+            cleaned["arrives_as"] = OfferArrival.BUNDLED
+            self.instance.arrives_as = OfferArrival.BUNDLED
+        return cleaned
 
 
 DistinctionEffectFormSet = inlineformset_factory(

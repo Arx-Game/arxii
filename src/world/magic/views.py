@@ -37,6 +37,7 @@ from world.character_sheets.models import CharacterSheet
 from world.distinctions.models import CharacterDistinction
 from world.items.models import ItemInstance
 from world.magic.constants import (
+    GlimpseTagAxis,
     PendingAlterationStatus,
     RestrictionKind,
     RitualExecutionKind,
@@ -720,23 +721,43 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
     @extend_schema(request=GlimpseSetTagsSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-tags")
     def set_glimpse_tags(self, request: Request, pk: int | None = None) -> Response:
-        """Replace the aura's glimpse tags for one axis (#2427)."""
+        """Write the aura's answers to one or more axes of the Glimpse (#2427, #5292).
+
+        Through ``write_glimpse``: a player is refused where a story is to settle the
+        Glimpse and where an axis has its answer, and an answer gives its card.
+        """
         serializer = GlimpseSetTagsSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         aura = self.get_object()
-        tags = list(
-            GlimpseTag.objects.filter(pk__in=serializer.validated_data["tag_ids"], is_active=True)
-        )
-        if len(tags) != len(set(serializer.validated_data["tag_ids"])):
+        rows = serializer.validated_data["answers"]
+        wanted = {tag_id for row in rows for tag_id in row["tag_ids"]}
+        tags = {tag.pk: tag for tag in GlimpseTag.objects.filter(pk__in=wanted, is_active=True)}
+        if len(tags) != len(wanted):
             return Response(
                 {"detail": "Unknown or inactive glimpse tag."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
+        answers = {
+            GlimpseTagAxis(row["axis"]): [tags[tag_id] for tag_id in row["tag_ids"]] for row in rows
+        }
+        return self._write_glimpse(request, aura, answers=answers)
+
+    def _write_glimpse(
+        self,
+        request: Request,
+        aura: CharacterAura,
+        *,
+        answers: dict[GlimpseTagAxis, list[GlimpseTag]] | None = None,
+        story: str | None = None,
+    ) -> Response:
+        """One Glimpse write for either action, answered with the aura or the refusal."""
         try:
-            glimpse_services.set_glimpse_tags(aura, tags, axis=serializer.validated_data["axis"])
+            glimpse_services.write_glimpse(
+                aura, by_staff=bool(request.user.is_staff), answers=answers, story=story
+            )
         except DjangoValidationError as exc:
             return Response(
-                {"detail": exc.messages[0] if exc.messages else "Invalid tag selection."},
+                {"detail": exc.messages[0] if exc.messages else "The Glimpse was not saved."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
         return Response(self.get_serializer(aura).data)
@@ -744,12 +765,15 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
     @extend_schema(request=GlimpseSetProseSerializer, responses={200: CharacterAuraSerializer})
     @action(detail=True, methods=["post"], url_path="set-glimpse-prose")
     def set_glimpse_prose(self, request: Request, pk: int | None = None) -> Response:
-        """Write the aura's glimpse story prose (#2427)."""
+        """Write the aura's glimpse story prose (#2427).
+
+        Through ``write_glimpse`` (#5292): refused for a player with no memory of the
+        Glimpse, and it gives any card an earlier answer is still owed.
+        """
         serializer = GlimpseSetProseSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         aura = self.get_object()
-        glimpse_services.set_glimpse_prose(aura, serializer.validated_data["text"])
-        return Response(self.get_serializer(aura).data)
+        return self._write_glimpse(request, aura, story=serializer.validated_data["text"])
 
     @extend_schema(
         request=GlimpseDistinctionLinkSerializer, responses={200: CharacterAuraSerializer}

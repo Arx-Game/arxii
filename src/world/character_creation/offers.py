@@ -35,6 +35,7 @@ from world.character_creation.constants import (
     TraditionState,
     schooling_max_rank,
 )
+from world.character_creation.glimpse import asked_glimpse_tags, draft_glimpse_memory
 from world.character_creation.models import (
     BeginningTradition,
     CharacterDraft,
@@ -49,6 +50,7 @@ from world.character_creation.questionnaire import DraftAnswers, anchor_for, vis
 from world.character_creation.types import (
     BeatPoolEntry,
     FinalTouchesCard,
+    GlimpseCard,
     OfferEffectTerm,
     OfferTerm,
     OrganizationChoice,
@@ -62,6 +64,7 @@ from world.distinctions.types import (
     build_distinction_entry,
     feature_of,
 )
+from world.magic.constants import GLIMPSE_AXIS_ORDER, GlimpseMemory
 from world.societies.models import Organization, OrganizationType
 
 if TYPE_CHECKING:
@@ -448,6 +451,9 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
     ``_context``) already carries every piece of draft state an opener check needs.
     """
     chapter = OfferChapter(offer.chapter)
+    if chapter == OfferChapter.GLIMPSE and offer.glimpse_memory:
+        # The card that marks a blackout or no memory (#5292): opened by the state.
+        return offer.glimpse_memory == ctx["glimpse_memory"]
     membership = {
         OfferChapter.GLIMPSE: (offer.glimpse_tag_id, "tag_ids"),
         OfferChapter.LINEAGE: (offer.origin_choice_id, "choice_ids"),
@@ -493,7 +499,10 @@ def _context(draft: CharacterDraft) -> dict:
     # before its card was let go opens nothing.
     enemy = enemy_answer(draft)
     return {
-        "tag_ids": set(draft.draft_data.get("glimpse_tag_ids", [])),
+        # The Glimpse chapter's two openers (#5292): the answers that are asked in the
+        # draft's memory state, one for each part, and the state itself.
+        "tag_ids": {tag.pk for tag in asked_glimpse_tags(draft)},
+        "glimpse_memory": draft_glimpse_memory(draft),
         "choice_ids": {cid for sid, cid in answers.picks.items() if sid in visible},
         "slate_line": _slate_line(draft),
         # The enemy chapter's two openers (#3709): the reason picked, the degree picked.
@@ -800,6 +809,18 @@ def _origin_opener_label(offer: DistinctionOffer, draft: CharacterDraft | None) 
     return f"{label}, {org.name}" if org is not None else label
 
 
+def _choice_opener_label(offer: DistinctionOffer) -> str:
+    """The label of an opener that is a fixed choice, not a row; blank when none is set."""
+    if offer.prompt:
+        return ActorSheetPrompt(offer.prompt).label
+    if offer.enemy_degree:
+        return EnemyDegree(offer.enemy_degree).label
+    if offer.glimpse_memory:
+        # The card that marks a Glimpse not remembered (#5292) has no answer to name.
+        return GlimpseMemory(offer.glimpse_memory).label
+    return ""
+
+
 def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None) -> str:
     """The name of the thing that opens this offer, for display and as a source string.
 
@@ -814,12 +835,11 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
     provenance. Only a LINEAGE offer on a GROUP question carries an anchor to
     resolve; every other opener is unaffected by ``draft``.
     """
-    if offer.prompt:
-        return ActorSheetPrompt(offer.prompt).label
+    choice_label = _choice_opener_label(offer)
+    if choice_label:
+        return choice_label
     if offer.enemy_reason_id:
         return offer.enemy_reason.name
-    if offer.enemy_degree:
-        return EnemyDegree(offer.enemy_degree).label
     if offer.appearance_section_id:
         return offer.appearance_section.name
     if offer.feature_rows:
@@ -1080,6 +1100,59 @@ def degree_marks() -> dict[str, list[str]]:
     for offer in rows.select_related("distinction").order_by("sort_order", "id"):
         out[offer.enemy_degree].append(offer.distinction.name)
     return dict(out)
+
+
+def glimpse_cards(draft: CharacterDraft) -> list[GlimpseCard]:
+    """The cards the Glimpse has given this draft, in the order of its parts (#5292).
+
+    Called by the offers action for the Glimpse chapter, so the Gift stage's panel can
+    list them. A Glimpse line always arrives bundled, so the chapter's own list
+    (``offers_for``, choice lines only) is empty; ``degree_marks`` is the precedent for
+    reporting a chapter's bundled lines. Read from the lines the draft's answers and
+    memory state open right now, which are the ones ``reconcile_offer_picks`` holds.
+    """
+    lines = [
+        offer
+        for offer in visible_offers(draft).values()
+        if offer.chapter == OfferChapter.GLIMPSE and offer.arrives_as == OfferArrival.BUNDLED
+    ]
+    effects = _effects_by_distinction({offer.distinction_id for offer in lines})
+    cards = [
+        GlimpseCard(
+            offer_id=offer.id,
+            distinction_id=offer.distinction_id,
+            name=offer.name or offer.distinction.name,
+            source=opener_label(offer),
+            axis=offer.glimpse_tag.axis if offer.glimpse_tag_id is not None else "",
+            effect_line=effect_line(effects.get(offer.distinction_id, [])),
+        )
+        for offer in lines
+    ]
+    axis_order = {axis: index for index, axis in enumerate(GLIMPSE_AXIS_ORDER)}
+    # The card that marks a memory state names no part and reads last.
+    return sorted(cards, key=lambda card: (axis_order.get(card.axis, len(axis_order)), card.name))
+
+
+def glimpse_effect_lines() -> dict[int, str]:
+    """Card id -> its mechanics line, for every card a Glimpse line gives (#5292).
+
+    Called once for a response by the answer catalogue (``CGGlimpseTagViewSet``), which
+    prints the card on its answer; one query for the catalogue, never one for a card. A
+    card with no effect row is absent, and reads as a blank line.
+    """
+    by_card: dict[int, list[DistinctionEffect]] = defaultdict(list)
+    rows = (
+        DistinctionEffect.objects.filter(
+            distinction__offers__chapter=OfferChapter.GLIMPSE,
+            distinction__offers__is_active=True,
+        )
+        .select_related("target")
+        .distinct()
+        .order_by("id")
+    )
+    for effect in rows:
+        by_card[effect.distinction_id].append(effect)
+    return {pk: effect_line(effects) for pk, effects in by_card.items()}
 
 
 def entry_price(entry: DraftDistinctionEntry, distinction: Distinction) -> int:

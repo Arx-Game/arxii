@@ -1768,15 +1768,61 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         assert aura.glimpse_state == GlimpseState.TAGS_ONLY
         assert CharacterGlimpseTag.objects.filter(aura=aura).count() == 2
 
+    def test_finalize_keeps_the_first_of_two_answers_to_one_part(self):
+        """A draft holding two answers to a part that takes one finalizes with the first.
+
+        The draft's own save refuses the second (#5292); a list that reached finalize by
+        another route does not fail it.
+        """
+        from world.magic.constants import GlimpseTagAxis
+        from world.magic.factories import GlimpseTagFactory
+        from world.magic.models import CharacterAura, CharacterGlimpseTag
+
+        second = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug="fin-w-second", sort_order=1)
+        first = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug="fin-w-first", sort_order=2)
+        draft = self._create_draft(glimpse_tag_ids=[first.pk, second.pk])
+        character = finalize_character(draft, add_to_roster=True)
+
+        aura = CharacterAura.objects.get(character=character.sheet_data)
+        assert list(
+            CharacterGlimpseTag.objects.filter(aura=aura).values_list("tag__slug", flat=True)
+        ) == ["fin-w-first"]
+
+    def test_finalize_writes_only_what_the_memory_state_asks(self):
+        """#5292: with no memory, answers and a story left in the draft are not written,
+        and the aura holds the state; a Glimpse left for later is stored as remembered."""
+        from world.magic.constants import GlimpseMemory, GlimpseState, GlimpseTagAxis
+        from world.magic.factories import GlimpseTagFactory
+        from world.magic.models import CharacterAura, CharacterGlimpseTag
+
+        tone = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="fin-unasked")
+        for chosen, stored in (
+            (GlimpseMemory.NO_MEMORY, GlimpseMemory.NO_MEMORY),
+            (GlimpseMemory.LATER, GlimpseMemory.REMEMBERED),
+        ):
+            draft = self._create_draft(
+                glimpse_tag_ids=[tone.pk], glimpse_story="Kept, not written.", glimpse_memory=chosen
+            )
+            character = finalize_character(draft, add_to_roster=True)
+            aura = CharacterAura.objects.get(character=character.sheet_data)
+            with self.subTest(chosen=chosen):
+                assert aura.glimpse_memory == stored
+                assert aura.glimpse_story == ""
+                assert aura.glimpse_state == GlimpseState.NOT_STARTED
+                assert not CharacterGlimpseTag.objects.filter(aura=aura).exists()
+
     def test_finalize_keeps_a_stand_alone_tag_alone(self):
         """A draft holding a stand-alone tag beside another finalizes with that tag only.
 
         The draft's list is not checked pick by pick, so finalize must not fail on it
         (#5193): the stand-alone tag wins and the other answer of its axis is dropped.
+        The rule belongs to a part that takes several answers, which none does since
+        #5292, so the test opens The Reflection to hold the kept path.
         """
         from world.magic.constants import GlimpseTagAxis
         from world.magic.factories import GlimpseTagFactory
         from world.magic.models import CharacterAura, CharacterGlimpseTag
+        from world.magic.tests.glimpse_helpers import axis_takes_several
 
         majestic = GlimpseTagFactory(
             axis=GlimpseTagAxis.REFLECTION, slug="fin-majestic", name="Majestic", sort_order=1
@@ -1790,7 +1836,8 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         )
         tone = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="fin-tone-alone")
         draft = self._create_draft(glimpse_tag_ids=[majestic.pk, fugue.pk, tone.pk])
-        character = finalize_character(draft, add_to_roster=True)
+        with axis_takes_several(GlimpseTagAxis.REFLECTION):
+            character = finalize_character(draft, add_to_roster=True)
 
         aura = CharacterAura.objects.get(character=character.sheet_data)
         assert set(

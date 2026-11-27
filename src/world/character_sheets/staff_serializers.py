@@ -19,6 +19,7 @@ from world.forms.models import FormMarking, FormTrait, FormTraitOption
 from world.goals.serializers import GoalInputSerializer
 from world.items.constants import BodyRegion
 from world.journals.constants import JournalKind
+from world.magic.constants import GLIMPSE_MEMORY_HELD_CHOICES
 from world.skills.models import Skill, Specialization
 from world.traits.models import Trait, TraitType
 from world.worship.models import WorshippedBeing
@@ -173,6 +174,12 @@ class StaffWorshipSerializer(serializers.Serializer):
     secret_being = serializers.PrimaryKeyRelatedField(
         queryset=WorshippedBeing.objects.all(), allow_null=True
     )
+
+
+class StaffGlimpseMemorySerializer(serializers.Serializer):
+    """How much of the Glimpse the character remembers (#5292)."""
+
+    memory = serializers.ChoiceField(choices=GLIMPSE_MEMORY_HELD_CHOICES)
 
 
 class StaffMarkingAddSerializer(serializers.Serializer):

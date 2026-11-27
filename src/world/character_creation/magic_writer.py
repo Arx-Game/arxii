@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 from world.character_creation.sheet_writers import SheetWriteError, grant_codex_entries
-from world.magic.constants import AFFINITY_PRIMAL
+from world.magic.constants import AFFINITY_PRIMAL, GlimpseMemory
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -61,7 +61,11 @@ class MagicPicks:
     species: Species | None = None
     beginnings: Beginnings | None = None
     glimpse_story: str = ""
+    #: The answers to write, already narrowed to the ones asked (#5292).
     glimpse_tag_ids: Sequence[int] = field(default_factory=tuple)
+    #: How much of the Glimpse is remembered (#5292); ``GlimpseMemory``. A Glimpse left
+    #: for later is stored on the character as remembered.
+    glimpse_memory: str = GlimpseMemory.REMEMBERED
 
     @property
     def ordered_resonances(self) -> list[WeightedResonance]:
@@ -260,7 +264,7 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
 
     The shares come later: the settled self and the seeded resonance (``_seed_resonances``).
     """
-    from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
+    from world.magic.constants import GLIMPSE_AXIS_CONFIG, GlimpseTagAxis  # noqa: PLC0415
     from world.magic.models import CharacterAura, GlimpseTag  # noqa: PLC0415
     from world.magic.services.glimpse import (  # noqa: PLC0415
         keep_stand_alone,
@@ -270,16 +274,32 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
     )
 
     aura = CharacterAura.objects.filter(character=sheet).first()
+    memory = (
+        GlimpseMemory.REMEMBERED
+        if picks.glimpse_memory == GlimpseMemory.LATER
+        else GlimpseMemory(picks.glimpse_memory)
+    )
     if aura is None:
-        aura = CharacterAura(character=sheet)
+        aura = CharacterAura(character=sheet, glimpse_memory=memory)
         aura.full_clean()
         aura.save()
+    elif aura.glimpse_memory != memory:
+        aura.glimpse_memory = memory
+        aura.save()
     if picks.glimpse_tag_ids:
-        tags = list(GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True))
+        by_id = {
+            tag.pk: tag
+            for tag in GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True)
+        }
+        # In the order the picks came in, so "the first" below is the caller's first.
+        tags = [by_id[pk] for pk in picks.glimpse_tag_ids if pk in by_id]
         for axis in GlimpseTagAxis:
-            # A draft's list is not checked pick by pick, so a tag that stands alone
-            # is kept alone here and never fails the finalize (#5193).
+            # A list that reached here unchecked (a GM's draft, a fixture) never fails
+            # the finalize: a tag that stands alone is kept alone (#5193), and an axis
+            # that takes one answer keeps the first (#5292).
             axis_tags = keep_stand_alone([tag for tag in tags if tag.axis == axis])
+            if not GLIMPSE_AXIS_CONFIG[axis].multi:
+                axis_tags = axis_tags[:1]
             if axis_tags:
                 set_glimpse_tags(aura, axis_tags, axis=axis)
     # An unchanged Glimpse (a blank one, at CG) writes no version; the state is still

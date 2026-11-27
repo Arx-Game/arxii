@@ -1360,6 +1360,34 @@ class TestResonanceColourProbe(TestCase):
         self.assertTrue(rc._probe_resonances_have_a_colour().present)
 
 
+class TestGlimpseMemoryCardsProbe(TestCase):
+    """#5292: a blackout and no memory of the Glimpse are each marked by a card."""
+
+    def test_each_memory_state_with_no_card_is_named_until_it_has_a_line(self) -> None:
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+        from world.magic.constants import GlimpseMemory
+
+        result = rc._probe_glimpse_memory_cards()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, ("Blacked out", "No memory"))
+
+        line = DistinctionOfferFactory(
+            chapter=OfferChapter.GLIMPSE, glimpse_memory=GlimpseMemory.BLACKED_OUT
+        )
+        self.assertEqual(rc._probe_glimpse_memory_cards().missing, ("No memory",))
+        DistinctionOfferFactory(
+            distinction=line.distinction,
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_memory=GlimpseMemory.NO_MEMORY,
+        )
+        self.assertTrue(rc._probe_glimpse_memory_cards().present)
+        # A line switched off marks nothing.
+        line.is_active = False
+        line.save()
+        self.assertEqual(rc._probe_glimpse_memory_cards().missing, ("Blacked out",))
+
+
 class TestManifestOptionProbes(TestCase):
     """#4118: a manifest option that cannot arrive or act is a dashboard row."""
 

@@ -200,6 +200,17 @@ class BeginningsAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
             },
         ),
         (
+            "The Glimpse",
+            {
+                "fields": ["no_glimpse_memory"],
+                "description": (
+                    "Ticked, a character of this beginning has no memory of their Glimpse "
+                    "(#5292): the Gift stage asks nothing about it, the character starts "
+                    "with the card that marks no memory, and a story settles it in play."
+                ),
+            },
+        ),
+        (
             "Languages",
             {
                 "fields": ["starting_languages", "grants_species_languages"],

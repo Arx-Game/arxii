@@ -93,8 +93,11 @@ def preview_from_offers(offers: Iterable[DistinctionOffer]) -> PreviewLine | Non
     if not offers:
         return None
     offer = min(offers, key=offer_sort_key)
+    # A line that arrives bundled or carried costs the player nothing whatever the
+    # card's own price (``offers.entry_price``); every Glimpse line is one (#5292).
+    cost = offer.distinction.cost_per_rank if offer.arrives_as == OfferArrival.CHOICE else 0
     return PreviewLine(
-        price=price_text(offer.distinction.cost_per_rank, per_rank=offer.distinction.max_rank > 1),
+        price=price_text(cost, per_rank=offer.distinction.max_rank > 1),
         name=offer.name or offer.distinction.name,
         player_line=offer.player_line,
     )

@@ -17,6 +17,7 @@ from world.character_creation.constants import LifeStage, OfferArrival, OfferCha
 from world.character_creation.factories import (
     AppearanceSectionFactory,
     BeginningsFactory,
+    DistinctionOfferFactory,
     EnemyReasonFactory,
     LifeBeatFactory,
 )
@@ -24,6 +25,8 @@ from world.character_creation.models import DistinctionOffer
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
 from world.distinctions.models import Distinction
+from world.magic.constants import GlimpseTagAxis
+from world.magic.factories import GlimpseTagFactory
 from world.mechanics.factories import ModifierTargetFactory
 from world.mechanics.models import ModifierTarget
 from world.skills.factories import SkillTraitFactory
@@ -493,6 +496,80 @@ class IdentityOpenerTest(PasteTestCase):
         assert offer.set_openers == []
         assert offer.written_by == self.writer
         offer.full_clean()
+
+
+class GlimpsePasteTest(PasteTestCase):
+    """The table's Glimpse tokens (#5292): a card that comes free with an answer, and
+    the card that marks a Glimpse not remembered."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.wonder = GlimpseTagFactory(name="Wonder", axis=GlimpseTagAxis.TONE)
+        cls.crisis = GlimpseTagFactory(name="Crisis", axis=GlimpseTagAxis.TRIGGER)
+        cls.public = GlimpseTagFactory(name="Public", axis=GlimpseTagAxis.WITNESS)
+
+    def test_a_glimpse_token_arrives_bundled(self):
+        (row,) = parse_table("Stormcalled | Personality | 20 | 1 | | | | glimpse:wonder |")
+        assert row.status == "create", " ".join(row.notes)
+        (line,) = row.offers
+        assert (line.chapter, line.arrives_as, line.opener_value) == (
+            OfferChapter.GLIMPSE,
+            OfferArrival.BUNDLED,
+            self.wonder.pk,
+        )
+
+    def test_a_memory_token_names_a_state_a_card_marks(self):
+        (row,) = parse_table(
+            "Glimpse Mystery | Personality | 0 | 1 | | | | memory:blacked out; memory:no_memory |"
+        )
+        assert row.status == "create", " ".join(row.notes)
+        assert [(o.opener_field, o.opener_value, o.arrives_as) for o in row.offers] == [
+            ("glimpse_memory", "blacked_out", OfferArrival.BUNDLED),
+            ("glimpse_memory", "no_memory", OfferArrival.BUNDLED),
+        ]
+        (bad,) = parse_table("Glimpse Mystery | Personality | 0 | 1 | | | | memory:later |")
+        assert bad.status == "error"
+        assert "not one a card marks" in " ".join(bad.notes)
+
+    def test_the_models_rules_are_told_before_anything_is_written(self):
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Dreadmarked"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=self.crisis,
+        )
+        cases = {
+            "glimpse:public": "an answer to Witness & Secrecy gives no card",
+            "glimpse:crisis": "Crisis already gives Dreadmarked",
+            "glimpse:wonder; rules": "a card the Glimpse gives is offered on no other stage",
+            "glimpse:wonder; memory:no memory": "never both",
+        }
+        for tokens, why in cases.items():
+            (row,) = parse_table(f"Stormcalled | Personality | 20 | 1 | | | | {tokens} |")
+            with self.subTest(tokens=tokens):
+                assert row.status == "error"
+                assert why in " ".join(row.notes)
+
+    def test_two_rows_cannot_sit_under_one_answer(self):
+        first, second = parse_table(
+            "Stormcalled | Personality | 20 | 1 | | | | glimpse:wonder |\n"
+            "Skybroken | Personality | 20 | 1 | | | | glimpse:wonder |"
+        )
+        assert first.status == "create"
+        assert second.status == "error"
+        assert "given a card twice" in " ".join(second.notes)
+
+    def test_create_makes_the_bundled_line_through_the_page(self):
+        self.client.force_login(self.author)
+        text = "Stormcalled | Personality | 20 | 1 | The sky answered. | | | glimpse:wonder |"
+        digest = table_digest(parse_table(text))
+        resp = self.client.post(self.url, {"text": text, "action": "create", "digest": digest})
+        assert resp.status_code == 302
+        (line,) = DistinctionOffer.objects.filter(distinction__slug="stormcalled")
+        assert line.chapter == OfferChapter.GLIMPSE
+        assert line.glimpse_tag == self.wonder
+        assert line.arrives_as == OfferArrival.BUNDLED
+        assert line.written_by == self.writer
 
 
 class PasteStylingTest(PasteTestCase):

@@ -687,11 +687,29 @@ class CharacterAuraSerializer(serializers.ModelSerializer):
         return self.get_dominant_affinity(obj)
 
 
-class GlimpseSetTagsSerializer(serializers.Serializer):
-    """Input for CharacterAuraViewSet.set_glimpse_tags (#2427)."""
+class GlimpseAxisAnswerSerializer(serializers.Serializer):
+    """The answer to one axis of the Glimpse; an empty ``tag_ids`` clears the axis."""
 
     axis = serializers.ChoiceField(choices=GlimpseTagAxis.choices)
     tag_ids = serializers.ListField(child=serializers.IntegerField(), allow_empty=True)
+
+
+class GlimpseSetTagsSerializer(serializers.Serializer):
+    """Input for CharacterAuraViewSet.set_glimpse_tags (#2427).
+
+    The answers to one or more axes, saved together or not at all (#5292): the sheet's
+    editor stages a player's picks and sends them on one confirm, because an answer is
+    final for the player once it is saved.
+    """
+
+    answers = GlimpseAxisAnswerSerializer(many=True, allow_empty=False)
+
+    def validate_answers(self, value: list[dict]) -> list[dict]:
+        axes = [answer["axis"] for answer in value]
+        if len(axes) != len(set(axes)):
+            msg = "Each part of the Glimpse is answered once."
+            raise serializers.ValidationError(msg)
+        return value
 
 
 class GlimpseSetProseSerializer(serializers.Serializer):

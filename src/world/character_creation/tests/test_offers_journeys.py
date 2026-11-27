@@ -38,9 +38,7 @@ from world.character_creation.tests.finalization_fixtures import FinalizationTes
 from world.distinctions.factories import DistinctionFactory
 from world.distinctions.models import CharacterDistinction
 from world.distinctions.types import DistinctionOrigin, build_distinction_entry
-from world.magic.constants import GlimpseTagAxis
 from world.magic.factories import GlimpseTagFactory, TraditionFactory, TraditionGiftGrantFactory
-from world.magic.models import CharacterAura
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 
 
@@ -302,92 +300,9 @@ class TraditionStepJourneyTests(FinalizationTestMixin, TestCase):
         assert cd.origin == DistinctionOrigin.CHARACTER_CREATION
 
 
-class GlimpseJourneyTests(FinalizationTestMixin, TestCase):
-    """Journey 3: Glimpse tags, a ranked pick, a closed distinction, from_glimpse at finalize."""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls._setup_finalization_base(
-            cls, prefix="Glimpse Journey", height_min=1600, height_max=1700
-        )
-
-        cls.mark = GlimpseTagFactory(name="Mark", axis=GlimpseTagAxis.TONE)
-        cls.loss = GlimpseTagFactory(name="Loss", axis=GlimpseTagAxis.CONSEQUENCE)
-        cls.public = GlimpseTagFactory(name="Public", axis=GlimpseTagAxis.WITNESS)
-
-        cls.mark_dist = DistinctionFactory(name="Scar Mark", cost_per_rank=5, max_rank=1)
-        cls.mark_offer = DistinctionOfferFactory(
-            distinction=cls.mark_dist, chapter=OfferChapter.GLIMPSE, glimpse_tag=cls.mark
-        )
-        cls.loss_dist = DistinctionFactory(name="Grief Debt", cost_per_rank=-10, max_rank=1)
-        cls.loss_offer = DistinctionOfferFactory(
-            distinction=cls.loss_dist, chapter=OfferChapter.GLIMPSE, glimpse_tag=cls.loss
-        )
-        cls.public_dist = DistinctionFactory(name="Known Face", cost_per_rank=8, max_rank=3)
-        cls.public_offer = DistinctionOfferFactory(
-            distinction=cls.public_dist, chapter=OfferChapter.GLIMPSE, glimpse_tag=cls.public
-        )
-
-        cls.highborn = DistinctionFactory(name="Highborn", cost_per_rank=15, max_rank=1)
-        cls.highborn_offer = DistinctionOfferFactory(
-            distinction=cls.highborn, chapter=OfferChapter.GLIMPSE, glimpse_tag=cls.public
-        )
-        cls.route = OriginTemplateFactory(
-            beginning=cls.beginnings,
-            allows_name_family=False,
-            allows_no_family=True,
-        )
-        cls.route.closed_distinctions.add(cls.highborn)
-
-    def setUp(self):
-        self._flush_common_caches()
-        self.account = AccountDB.objects.create(username=f"glimpse_journey_{id(self)}")
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.account)
-
-    def test_glimpse_offers_picks_closed_and_finalize_links_from_glimpse(self):
-        draft = self._create_base_draft(
-            first_name="GlimpseJourney",
-            glimpse_tag_ids=[self.mark.id, self.loss.id, self.public.id],
-        )
-        draft.selected_origin_template = self.route
-        draft.save(update_fields=["selected_origin_template"])
-
-        offers_resp = self.client.get(
-            f"/api/character-creation/drafts/{draft.id}/offers/?chapter=glimpse"
-        )
-        assert offers_resp.status_code == status.HTTP_200_OK
-        offer_ids = {row["offer_id"] for row in offers_resp.data["offers"]}
-        assert offer_ids == {self.mark_offer.id, self.loss_offer.id, self.public_offer.id}
-        assert self.highborn_offer.id not in offer_ids
-        # The route-closed card is absent and named nowhere in the payload (#4979).
-        assert "closed" not in offers_resp.data
-        assert "Highborn" not in str(offers_resp.data)
-
-        sync_resp = self.client.put(
-            f"/api/distinctions/drafts/{draft.id}/distinctions/sync/",
-            {
-                "distinctions": [
-                    {"id": self.mark_dist.id, "rank": 1, "offer_id": self.mark_offer.id},
-                    {"id": self.loss_dist.id, "rank": 1, "offer_id": self.loss_offer.id},
-                    {"id": self.public_dist.id, "rank": 2, "offer_id": self.public_offer.id},
-                ]
-            },
-            format="json",
-        )
-        assert sync_resp.status_code == status.HTTP_200_OK
-        draft.refresh_from_db()
-        entries_by_id = {e["distinction_id"]: e for e in draft.draft_data["distinctions"]}
-        assert entries_by_id[self.public_dist.id]["rank"] == 2
-        assert entries_by_id[self.mark_dist.id]["rank"] == 1
-        assert entries_by_id[self.loss_dist.id]["rank"] == 1
-
-        character = finalize_character(draft, add_to_roster=True)
-        sheet = character.sheet_data
-        aura = CharacterAura.objects.get(character=sheet)
-        for dist in (self.mark_dist, self.loss_dist, self.public_dist):
-            cd = CharacterDistinction.objects.get(character=sheet, distinction=dist)
-            assert cd.from_glimpse_id == aura.pk
+# Journey 3 (Glimpse answers, their cards, and ``from_glimpse`` at finalize) lives in
+# ``integration_tests/test_glimpse_journeys.py`` since #5292: a Glimpse answer now gives
+# its card free with the answer, so there is no priced pick to sync.
 
 
 class UpbringingBundleAndOfferJourneyTests(TestCase):
@@ -453,17 +368,19 @@ class UpbringingBundleAndOfferJourneyTests(TestCase):
         offer_ids = {row["offer_id"] for row in offers_resp.data["offers"]}
         assert offer_ids == {self.offered_offer.id}
 
+        # The Glimpse answer brings its own card with it, free (#5292).
         tag_resp = self.client.patch(
             url, {"draft_data": {"glimpse_tag_ids": [self.glimpse_tag.id]}}, format="json"
         )
         assert tag_resp.status_code == status.HTTP_200_OK
 
+        # The sync carries the one priced pick; the two cards that came with an answer
+        # are in no save and are put back by the reconcile that follows it.
         sync_resp = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
             {
                 "distinctions": [
                     {"id": self.offered_dist.id, "rank": 1, "offer_id": self.offered_offer.id},
-                    {"id": self.glimpse_dist.id, "rank": 1, "offer_id": self.glimpse_offer.id},
                 ]
             },
             format="json",
@@ -478,7 +395,7 @@ class UpbringingBundleAndOfferJourneyTests(TestCase):
         self.draft.refresh_from_db()
         remaining_ids = {e["distinction_id"] for e in self.draft.draft_data["distinctions"]}
         # Both the bundled and the offered pick leave (their opener is gone);
-        # the Glimpse pick, unrelated to the answer, stays.
+        # the Glimpse answer's card, unrelated to that answer, stays.
         assert remaining_ids == {self.glimpse_dist.id}
 
 

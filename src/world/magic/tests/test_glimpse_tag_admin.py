@@ -1,4 +1,4 @@
-"""GlimpseTag's stock change form gains a "What it offers" inline (#3675, Task 9).
+"""GlimpseTag's stock change form carries "The card it gives" inline (#3675, Task 9; #5292).
 
 A stock admin change form, extended - not a new builder page. Mirrors the
 Distinction Builder's own offer save/credit test shape
@@ -20,6 +20,7 @@ from world.character_creation.constants import OfferArrival
 from world.character_creation.models import DistinctionOffer
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionFactory
+from world.magic.constants import GlimpseTagAxis
 from world.magic.factories import GlimpseTagFactory
 
 
@@ -65,7 +66,9 @@ class GlimpseTagOfferGetTest(GlimpseTagOfferTestCase):
         resp = self.client.get(self._change_url())
         assert resp.status_code == 200
         body = resp.content.decode()
-        assert "What it offers" in body
+        assert "The card it gives" in body
+        # How a Glimpse card arrives is stated, never chosen (#5292).
+        assert 'name="distinction_offers-0-arrives_as"' not in body
         assert 'name="distinction_offers-TOTAL_FORMS"' in body
 
     def test_change_form_renders_the_preview_line_once_offered(self):
@@ -124,7 +127,6 @@ class GlimpseTagOfferSaveTest(GlimpseTagOfferTestCase):
             "distinction_offers-MIN_NUM_FORMS": "0",
             "distinction_offers-MAX_NUM_FORMS": "1000",
             "distinction_offers-0-distinction": str(self.distinction.pk),
-            "distinction_offers-0-arrives_as": OfferArrival.CHOICE,
             "distinction_offers-0-name": "",
             "distinction_offers-0-player_line": "A scar that answers magic.",
             "distinction_offers-0-sort_order": "0",
@@ -143,6 +145,37 @@ class GlimpseTagOfferSaveTest(GlimpseTagOfferTestCase):
         assert offer.origin_choice_id is None
         assert offer.schooling_line_id is None
         assert offer.written_by == self.writer
+        # The card comes free with the answer (#5292), whatever the form posts.
+        assert offer.arrives_as == OfferArrival.BUNDLED
+
+    def test_a_second_card_under_one_answer_is_rejected(self):
+        """#5292: an answer gives one card."""
+        other = DistinctionFactory(name="Second Card")
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                "distinction_offers-TOTAL_FORMS": "2",
+                "distinction_offers-1-distinction": str(other.pk),
+                "distinction_offers-1-name": "",
+                "distinction_offers-1-player_line": "",
+                "distinction_offers-1-sort_order": "1",
+                "distinction_offers-1-is_active": "on",
+            }
+        )
+        resp = self.client.post(self._change_url(), data)
+        assert resp.status_code == 200
+        assert "An answer gives one card." in resp.content.decode()
+        assert not DistinctionOffer.objects.filter(glimpse_tag=self.tag).exists()
+
+    def test_a_card_under_an_answer_of_a_part_that_gives_none_is_rejected(self):
+        """#5292: Witness & Secrecy, The Choosing and Sensory give no card."""
+        witness = GlimpseTagFactory(name="Public", axis=GlimpseTagAxis.WITNESS)
+        self.client.force_login(self.author)
+        data = self._post_data(axis=witness.axis, name=witness.name, slug=witness.slug)
+        resp = self.client.post(reverse("admin:arxii_glimpsetag_change", args=[witness.pk]), data)
+        assert resp.status_code == 200
+        assert "An answer to Witness &amp; Secrecy gives no card." in resp.content.decode()
+        assert not DistinctionOffer.objects.filter(glimpse_tag=witness).exists()
 
     def test_posting_without_a_linked_contributor_still_saves_uncredited(self):
         """No setup-guidance gate exists on a stock change form (unlike the Builder pages)."""
@@ -159,7 +192,6 @@ class GlimpseTagOfferSaveTest(GlimpseTagOfferTestCase):
             **{
                 "distinction_offers-TOTAL_FORMS": "2",
                 "distinction_offers-1-distinction": str(self.distinction.pk),
-                "distinction_offers-1-arrives_as": OfferArrival.BUNDLED,
                 "distinction_offers-1-name": "",
                 "distinction_offers-1-player_line": "A second line.",
                 "distinction_offers-1-sort_order": "1",

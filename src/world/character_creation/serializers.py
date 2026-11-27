@@ -45,6 +45,7 @@ from world.character_creation.constants import (
     TieKind,
     schooling_max_rank,
 )
+from world.character_creation.glimpse import GLIMPSE_MEMORY_KEY, GLIMPSE_TAG_IDS_KEY
 from world.character_creation.magic_training import reconcile_combat_style
 from world.character_creation.models import (
     AGE_MAX,
@@ -92,6 +93,7 @@ from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.game_clock.constants import IC_MONTH_NAMES
 from world.game_clock.services import get_ic_now
+from world.magic.constants import GLIMPSE_AXIS_CONFIG, GlimpseMemory, GlimpseTagAxis
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition, TraditionGiftGrant
 from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.magic.types.personalization import PersonalizationOptionSet
@@ -857,12 +859,15 @@ class CGTechniquePersonalizationOptionsSerializer(serializers.Serializer):
         return list(CGPersonalizationOptionSerializer(rows, many=True).data)
 
 
-def _offer_row(offer: DistinctionOffer, *, with_arrival: bool) -> dict:
+def _offer_row(
+    offer: DistinctionOffer, *, with_arrival: bool, effect_line: str | None = None
+) -> dict:
     """One ``DistinctionOffer`` shaped for embedding on a Glimpse tag or Upbringing
     answer row (#3675). ``name`` falls back to the distinction's own name when the
     offer's ``name`` is blank (per ``DistinctionOffer.name``'s help text). Shared by
-    ``CGGlimpseTagSerializer.get_offers`` (``with_arrival=False``, since a Glimpse
-    offer is always a priced choice) and
+    ``CGGlimpseTagSerializer.get_offers`` (``with_arrival=False``: a Glimpse line always
+    arrives bundled, the card coming free with its answer, #5292; it passes the card's
+    ``effect_line`` so the page can print the card on the answer) and
     ``OriginTemplateSlotChoiceSerializer.get_offers`` (``with_arrival=True``, since a
     Lineage answer's offer can arrive bundled, carried, or as a choice).
     """
@@ -876,6 +881,8 @@ def _offer_row(offer: DistinctionOffer, *, with_arrival: bool) -> dict:
     }
     if with_arrival:
         row["arrives_as"] = offer.arrives_as
+    if effect_line is not None:
+        row["effect_line"] = effect_line
     return row
 
 
@@ -888,14 +895,16 @@ class CGGlimpseTagOfferSerializer(serializers.Serializer):
     player_line = serializers.CharField()
     cost_per_rank = serializers.IntegerField()
     max_rank = serializers.IntegerField()
+    #: The card's mechanics line, "+Deception; -Willpower" (#5292).
+    effect_line = serializers.CharField(allow_blank=True)
 
 
 class CGGlimpseTagSerializer(serializers.ModelSerializer):
     """Glimpse tag row for the CG guided flow (#2427, #3675).
 
-    Backs ``GET /api/character-creation/glimpse-tags/``. The distinctions this tag
-    opens are embedded as offers (prefetched); the client dedupes across the chosen
-    tag set.
+    Backs ``GET /api/character-creation/glimpse-tags/``. The card an answer gives is
+    embedded under ``offers`` (prefetched) with its mechanics line (#5292), so the page
+    prints the card on the answer.
     """
 
     offers = serializers.SerializerMethodField()
@@ -920,7 +929,13 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
     def get_offers(self, obj: GlimpseTag) -> list[dict]:
         # obj.offers is a PrunedCachedProperty (ADR-0298) - fed for the whole page
         # by CGGlimpseTagViewSet.get_queryset()'s Prefetch, select_related("distinction").
-        return [_offer_row(offer, with_arrival=False) for offer in obj.offers]
+        # The mechanics lines come once for the response in the serializer's context
+        # (``offers.glimpse_effect_lines``), never one query for a card.
+        lines = self.context.get("glimpse_effect_lines", {})
+        return [
+            _offer_row(offer, with_arrival=False, effect_line=lines.get(offer.distinction_id, ""))
+            for offer in obj.offers
+        ]
 
 
 _GLOSS_MAX_LEN = 160
@@ -1357,6 +1372,17 @@ class BeatPoolEntrySerializer(serializers.Serializer):
     allowance_is_points = serializers.BooleanField()
 
 
+class GlimpseCardSerializer(serializers.Serializer):
+    """A ``world.character_creation.types.GlimpseCard`` (#5292)."""
+
+    offer_id = serializers.IntegerField()
+    distinction_id = serializers.IntegerField()
+    name = serializers.CharField()
+    source = serializers.CharField()
+    axis = serializers.CharField(allow_blank=True)
+    effect_line = serializers.CharField(allow_blank=True)
+
+
 class OffersResponseSerializer(serializers.Serializer):
     """The ``offers`` payload the offers action returns (#3675). A distinction the route
     closes is absent from ``offers`` and named nowhere else (#4979)."""
@@ -1364,6 +1390,8 @@ class OffersResponseSerializer(serializers.Serializer):
     offers = VisibleOfferSerializer(many=True)
     #: The terms on the offers' mechanics lines with their definitions (#4872).
     terms = OfferTermSerializer(many=True)
+    #: The cards the Glimpse has given the draft (#5292); empty for any other chapter.
+    glimpse_cards = GlimpseCardSerializer(many=True)
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):
@@ -2232,6 +2260,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         self._validate_technique_personalizations(value)
         self._validate_gift_facets(value)
         self._validate_gift_resonance_weights(value)
+        self._validate_glimpse(value)
 
         goals = value.get("goals")
         if goals is not None:
@@ -2239,6 +2268,34 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         self._validate_actor_sheet(value)
         return value
+
+    @staticmethod
+    def _validate_glimpse(data: dict) -> None:
+        """The Glimpse's memory state and its answers, one for each part (#5292).
+
+        An answer carries a card, so a second answer in one part would hand the draft
+        two. Answers the memory state does not ask are kept and not counted, so they
+        are checked the same way: the rule is about the list, whatever is asked of it.
+        """
+        memory = data.get(GLIMPSE_MEMORY_KEY)
+        if memory is not None and memory not in GlimpseMemory.values:
+            raise serializers.ValidationError({GLIMPSE_MEMORY_KEY: "Unknown memory state."})
+        tag_ids = data.get(GLIMPSE_TAG_IDS_KEY)
+        if not tag_ids:
+            return
+        if not isinstance(tag_ids, list) or not all(
+            isinstance(tag_id, int) and not isinstance(tag_id, bool) for tag_id in tag_ids
+        ):
+            raise serializers.ValidationError(
+                {GLIMPSE_TAG_IDS_KEY: "The Glimpse's answers are a list of ids."}
+            )
+        answered: set[str] = set()
+        for tag in GlimpseTag.objects.filter(pk__in=tag_ids):
+            if tag.axis in answered and not GLIMPSE_AXIS_CONFIG[GlimpseTagAxis(tag.axis)].multi:
+                raise serializers.ValidationError(
+                    {GLIMPSE_TAG_IDS_KEY: f"{tag.get_axis_display()} takes one answer."}
+                )
+            answered.add(tag.axis)
 
     @staticmethod
     def _personalization_key_is_valid(key: object) -> bool:

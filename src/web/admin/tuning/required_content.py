@@ -966,6 +966,30 @@ def _probe_resonances_have_a_colour() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_glimpse_memory_cards() -> ProbeResult:
+    """Each memory state a card marks has a line that gives one (#5292).
+
+    Consumer: ``world.character_creation.offers._opener_satisfied``. A draft that
+    blacked out, or has no memory of its Glimpse, is given the card of the Glimpse
+    line opened by that state. With no such line the character is made with nothing
+    marking the mystery, and a GM cannot find them by the card.
+    """
+    from world.character_creation.constants import OfferChapter  # noqa: PLC0415
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+    from world.magic.constants import GLIMPSE_MEMORY_MARKED  # noqa: PLC0415
+
+    marked = set(
+        DistinctionOffer.objects.filter(is_active=True, chapter=OfferChapter.GLIMPSE)
+        .exclude(glimpse_memory="")
+        .values_list("glimpse_memory", flat=True)
+    )
+    missing = tuple(state.label for state in GLIMPSE_MEMORY_MARKED if state.value not in marked)
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} memory state(s) have no card to mark them."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_manifest_archetypes_have_abilities() -> ProbeResult:
     """Every companion archetype a technique can manifest has abilities (#4118).
 
@@ -4502,6 +4526,20 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_resonances_have_a_colour),
             admin_model="Resonance",
+        ),
+        ContentDependency(
+            key="glimpse-memory-cards",
+            label="A blackout and no memory of the Glimpse each have a card",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/character_creation/offers.py _opener_satisfied()",
+            consequence=(
+                "A character who blacked out, or has no memory of their Glimpse, is made "
+                "with no card marking it, so a GM cannot find them to run the story that "
+                "settles it."
+            ),
+            probe=CustomProbe(fn=_probe_glimpse_memory_cards),
+            # A line is added on its card's own page, the Distinction Builder.
+            admin_model="Distinction",
         ),
         ContentDependency(
             key="manifest-archetype-abilities",

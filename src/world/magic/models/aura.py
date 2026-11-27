@@ -16,7 +16,12 @@ from django.db.models import Prefetch
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
-from world.magic.constants import AFFINITY_PRIMAL, GlimpseState
+from world.magic.constants import (
+    AFFINITY_PRIMAL,
+    GLIMPSE_MEMORY_HELD_CHOICES,
+    GlimpseMemory,
+    GlimpseState,
+)
 from world.magic.models.affinity import Affinity, Resonance
 
 if TYPE_CHECKING:
@@ -59,6 +64,21 @@ class CharacterAura(CachedPropertiesMixin, SharedMemoryModel):
             "Deferral/progress state of the Glimpse (#2427). Cache of "
             "prose+tag truth — maintained by world.magic.services.glimpse, "
             "never written directly."
+        ),
+    )
+    #: #5292. Set at CG finalize with the card that marks a blackout or no memory, and
+    #: changed afterwards by staff alone, without the card: once a story has returned
+    #: the memory the card still says the Glimpse was a mystery, which stays true as
+    #: history. ``write_glimpse`` reads it to refuse a player's write.
+    glimpse_memory = models.CharField(
+        max_length=12,
+        choices=GLIMPSE_MEMORY_HELD_CHOICES,
+        default=GlimpseMemory.REMEMBERED,
+        db_default=GlimpseMemory.REMEMBERED,
+        help_text=(
+            "How much of the Glimpse the character remembers. With no memory the player "
+            "cannot write the Glimpse; after a blackout they cannot write The Reflection "
+            "or Tone. Set to remembered when a story has returned it."
         ),
     )
     updated_at = models.DateTimeField(auto_now=True)
