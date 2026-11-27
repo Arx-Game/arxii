@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { cloud, hexToOklch, noise, swirlThreshold } from '@/magic/auraSwirl';
+import { describe, expect, it, vi } from 'vitest';
+import { cloud, drawMass, hexToOklch, noise, swirlThreshold } from '@/magic/auraSwirl';
 
 function cloudSamples(count: number): Float32Array {
   const side = Math.sqrt(count);
@@ -47,5 +47,37 @@ describe('noise', () => {
   it('matches the approved demo at a fixed point', () => {
     // 0.3189504 is the demo's own noise(3.3, 9.7), run from its <script> with its seed 20261120.
     expect(noise(3.3, 9.7)).toBeCloseTo(0.3189504, 9);
+  });
+});
+
+describe('drawMass', () => {
+  it('reuses its pixel buffer and restores the flat color after drawing a moving swirl', () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 32;
+    const data = new Uint8ClampedArray(canvas.width * canvas.height * 4);
+    const context = {
+      createImageData: vi.fn(() => ({ data })),
+      putImageData: vi.fn(),
+    };
+    vi.spyOn(canvas, 'getContext').mockReturnValue(context as unknown as CanvasRenderingContext2D);
+
+    const a = hexToOklch('#ff0000');
+    const b = hexToOklch('#2962ff');
+    drawMass(canvas, a, b, 0, 0);
+    const flat = data.slice();
+    const center = (16 * canvas.width + 16) * 4;
+    expect(flat.slice(center, center + 4)).toEqual(new Uint8ClampedArray([255, 0, 0, 255]));
+    expect(flat[3]).toBe(0);
+
+    drawMass(canvas, a, b, 0.5, 0);
+    const swirl = data.slice();
+    expect(swirl).not.toEqual(flat);
+    drawMass(canvas, a, b, 0.5, 4);
+    expect(data).not.toEqual(swirl);
+
+    drawMass(canvas, a, b, 0, 4);
+    expect(data).toEqual(flat);
+    expect(context.createImageData).toHaveBeenCalledTimes(1);
+    expect(context.putImageData).toHaveBeenCalledTimes(4);
   });
 });

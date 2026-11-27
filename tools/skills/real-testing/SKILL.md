@@ -123,6 +123,40 @@ Record the browser or server part as `BLOCKED: shared server` (or
 `BLOCKED: resources`) and say in the report that this was the smaller form.
 It cannot show that a page renders or that the WebSocket path works.
 
+### Screenshots of a screen: `just shot` (#5310)
+
+For any change a player or staff member sees, the evidence includes a screenshot
+of the running app, posted on the PR. An HTML mock or a Claude artifact of the
+design is never that screenshot. One command does Form B's whole setup for you:
+
+```bash
+just shot /characters/1/sheet /roster         # signed in as e2e_test_account
+just shot --anon /                            # signed out
+just shot --as other_account /journals        # an account your seed made
+just shot --spec e2e/evidence/foo-1234.spec.ts  # a spec that clicks through steps
+just shot-post <pr-or-issue> frontend/test-results/shots/<stamp>/*.png
+```
+
+- It runs only from a worktree, and refuses with `BLOCKED: resources` under 8 GiB
+  total or 3 GiB available.
+- It waits for the container-wide heavy-work lock, so one session at a time builds
+  and runs a browser; a neighbour's test run does not block it.
+- Its server binds ports 4100-4106 (`ARX_PORT_BASE` in `settings.py`), so it never
+  waits on, or stops, a server on 4000-4006.
+- It creates `rt_<issue>` on first use (schema and `e2e_test_account`) and keeps it;
+  it rebuilds the frontend only when the frontend changed.
+- It stops only its own server when it finishes.
+
+The coordinator or PR shepherd runs it, in the background (`run_in_background`),
+because a first run builds a database and the frontend and can pass ten minutes. An
+implementer subagent never runs it: a build or a lock wait outlasts its two minutes.
+Seed whatever state the screen needs into `rt_<issue>` first (the shell commands in
+Form B step 1, with `DATABASE_URL` pointing at it). `just shot-post` then puts the
+images on the PR without touching the branch, and prints Markdown for the PR body,
+which the `frontend-screenshot` check reads. A posted screenshot is public and permanent: the repo
+is public and evidence refs are never deleted. Look at every PNG before posting it,
+and post only factory or seed data, never anything copied from the dev database.
+
 ### Form B: your own server (when the ports are free and the machine has room)
 
 Only from a worktree. A worktree has no `src/.env`, so settings read

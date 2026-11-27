@@ -498,25 +498,23 @@ the child. Genuinely separable remaining scope gets its own issue via
 `file-followup.sh` (below), and the PR must close the issue that precisely
 matches the work it delivers.
 
-**The evidence report and its screenshots never belong in `main`'s permanent
-history, and this is enforced.** The `review-evidence-not-committed` CI job
-fails any PR with a tracked file under `docs/reviews/` or `.github/issue-evidence/`. Deleting the files
-without doing the rest does not pass either: the `review-evidence` job then has
-no report to validate and fails instead. The two gates only both go green when
-the evidence actually lives in a PR comment.
+**Screenshots and the evidence report never go on the branch (#5310).** The
+`review-evidence-not-committed` CI job fails any PR with a tracked file under
+`docs/reviews/` or `.github/issue-evidence/`. Do it this way instead:
 
-Do it in this order. It is four steps and skipping any of them turns the build
-red, so do not treat it as cleanup to get to later:
-
-1. **Push once with the report and screenshots still committed**, so their blobs
-   exist on the remote. Note the pushed SHA.
-2. **Post the report as a PR comment**, rewriting every image link to
-   `https://raw.githubusercontent.com/<owner>/<repo>/<pushed-sha>/<path>`. Those
-   URLs keep rendering after the files leave the branch tip, which is the whole
-   trick.
-3. **Point the PR body's `- Report:` line at that comment URL.** The
-   `review-evidence` job reads that line; a stale path there fails it.
-4. **Delete `docs/reviews/` and `.github/issue-evidence/`, then push again.**
+1. **Take the screenshots from the running app**: `just shot <path>...` from the
+   worktree (the coordinator or shepherd runs it, never an implementer subagent).
+   It runs this worktree's own server on ports 4100-4106 under the heavy-work lock.
+   An HTML mock is never a screenshot of the change.
+2. **Post them**: `just shot-post <pr-or-issue> <png>...`. It pushes them to
+   `refs/evidence/<n>/<stamp>`, which touches no branch and starts no CI, comments
+   with the images, and prints their Markdown.
+3. **Paste that Markdown into the PR body.** The `frontend-screenshot` job requires
+   an image in the body of any PR that changes non-test `frontend/src/**/*.tsx`,
+   unless a line says `No visual change: <reason>`.
+4. **When a report is required, post it as a PR comment** with the images linked as
+   `just shot-post` printed them, and point the PR body's `- Report:` line at that
+   comment URL (`PR_EVIDENCE_URL`). CI checks every screenshot link loads.
 5. Keep the report's `Reviewed revision` as the exact commit reviewed. The gate
    carries the report across later commits that cannot change what a screen
    renders: commits that touch only test files, documents or `.github/`; clean
@@ -602,7 +600,9 @@ The PR body links the committed report and uses `Closes #<issue>`. `open-pr.sh`
 rejects the former `PR_KEEP_OPEN` override; partial work must close a child
 issue instead of leaving its parent open. CI also rejects non-Dependabot PRs
 without an explicit closing issue reference. Dependabot pull requests are the deliberate exception because
-automated dependency updates may not have repository issues.
+automated dependency updates may not have repository issues. A chore or dependency PR
+opened outside this flow may instead carry a line `No issue: <reason>` (#5310); a
+PR this skill opens always closes its issue.
 
 **Do NOT run `uv run pre-commit run --all-files` (or `just test-affected` /
 `just regression` / any whole-repo suite) as a pre-push precheck.** Running the

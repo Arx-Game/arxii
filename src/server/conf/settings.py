@@ -151,6 +151,19 @@ MIDDLEWARE += [
 # Enable webclient
 WEBCLIENT_ENABLED = True
 
+# Move every port this server binds to one block (#5310): telnet on the base, web
+# on base+1 (proxied to base+5), the websocket on base+2, AMP on base+6. Unset, the
+# Evennia defaults stand (4000-4006). `just shot` sets it to 4100 so an agent's own
+# server never shares ports with another checkout's: `arx stop` finds its server
+# through AMP_PORT, so it stops only the one on these ports. Never set in production.
+# An empty value (`ARX_PORT_BASE=`) counts as unset; env.int would refuse to start.
+ARX_PORT_BASE = int(env.str("ARX_PORT_BASE", default="") or 0)
+if ARX_PORT_BASE:
+    TELNET_PORTS = [ARX_PORT_BASE]
+    WEBSERVER_PORTS = [(ARX_PORT_BASE + 1, ARX_PORT_BASE + 5)]
+    WEBSOCKET_CLIENT_PORT = ARX_PORT_BASE + 2
+    AMP_PORT = ARX_PORT_BASE + 6
+
 # Reject unsupported telnet framing at the Portal boundary.
 TELNET_PROTOCOL_CLASS = "server.portal.telnet.ValidatedTelnetProtocol"
 

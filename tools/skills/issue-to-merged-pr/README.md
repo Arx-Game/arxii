@@ -84,16 +84,12 @@ See `references/design.md` for
 the full design: phase-detection table, CI watch cadence, bail conditions,
 cross-issue overlap detection, token scopes, distribution model.
 
-## Issue/demo image fallback
+## Screenshots on an issue or PR
 
-When an issue needs screenshots before a PR exists and the interactive Artifact
-publisher is unavailable, push the feature branch and run
-`tools/skills/issue-to-merged-pr/scripts/publish-issue-images.sh`. It uploads
-images through the GitHub Contents API and posts an issue comment with immutable
-raw URLs. Do this only after branch history is stable: amending, rebasing, or
-force-pushing afterward can orphan the upload commits and break the URLs. See
-`references/evidence-screenshots-not-in-main.md` for the exact sequence and
-verification command.
+`just shot-post <issue-or-pr> <png>...` (`tools/shot_post.sh`, #5310) pushes the
+images to `refs/evidence/<n>/<stamp>`, which touches no branch, and comments with
+links by commit SHA. Take the PNGs from the running app with `just shot`. See
+`references/evidence-screenshots-not-in-main.md`.
 
 ## Updating
 

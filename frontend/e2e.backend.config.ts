@@ -22,7 +22,8 @@ export default defineConfig({
     ? [['list'], ['html', { open: 'never', outputFolder: 'playwright-report' }]]
     : 'list',
   use: {
-    baseURL: 'http://localhost:4001',
+    // `just shot` runs its own server on another port block (#5310).
+    baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:4001',
     headless: true,
     screenshot: process.env.CI ? 'on' : 'off',
     trace: process.env.CI ? 'on' : 'off',
