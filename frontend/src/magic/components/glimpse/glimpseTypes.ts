@@ -5,6 +5,13 @@
  * `GlimpseTagOption` — re-export it rather than redeclaring it elsewhere.
  */
 
+/**
+ * How much of the Glimpse the character remembers (#5292). The server's
+ * `GlimpseMemory` choices: a draft holds any of the four; a character holds
+ * the first three, a Glimpse left for later being stored as remembered.
+ */
+export type GlimpseMemory = 'remembered' | 'blacked_out' | 'no_memory' | 'later';
+
 /** A `DistinctionOffer` embedded on a glimpse tag row (#3675). */
 export interface TagOffer {
   offer_id: number;

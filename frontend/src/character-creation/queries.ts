@@ -289,6 +289,9 @@ function optimisticPicks(data: CharacterDraftUpdate): Partial<CharacterDraft> {
   return picks;
 }
 
+/** The draft_data keys whose save can give or take a Glimpse card (#5292). */
+const GLIMPSE_CARD_KEYS = ['glimpse_tag_ids', 'glimpse_memory'] as const;
+
 export function useUpdateDraft() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -317,12 +320,28 @@ export function useUpdateDraft() {
         queryClient.setQueryData(characterCreationKeys.draft(), context.previous);
       }
     },
-    onSuccess: (data) => {
+    onSuccess: (data, { data: sent }) => {
       // Apply the server echo only when this is the LAST in-flight draft
       // mutation — an out-of-order response otherwise snaps newer optimistic
       // values back to older server state.
-      if (queryClient.isMutating({ mutationKey: DRAFT_UPDATE_MUTATION_KEY }) <= 1) {
+      const isLast = queryClient.isMutating({ mutationKey: DRAFT_UPDATE_MUTATION_KEY }) <= 1;
+      if (isLast) {
         queryClient.setQueryData(characterCreationKeys.draft(), data);
+      }
+      // A Glimpse answer or memory state gives and takes cards with the save (#5292).
+      // The held cards are in the answer, so they are written as they stand; the
+      // draft's offers (the Glimpse's own list of what it gave among them) are asked
+      // for again. Without this a card showed only after a reload.
+      if (GLIMPSE_CARD_KEYS.some((key) => sent.draft_data?.[key] !== undefined)) {
+        if (isLast && data.draft_data.distinctions) {
+          queryClient.setQueryData(
+            distinctionKeys.draftDistinctions(data.id),
+            data.draft_data.distinctions
+          );
+        }
+        void queryClient.invalidateQueries({
+          queryKey: [...characterCreationKeys.all, 'draft-offers', data.id],
+        });
       }
       // Spends recorded in draft_data (species/beginnings/etc.) move the CG
       // point budget — keep the Review page's numbers honest.

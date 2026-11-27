@@ -5,6 +5,8 @@
 // Single definition lives with the shared guided-flow component; both CG and
 // the character sheet mount (Task 6) import it from here.
 export type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
+import type { GlimpseMemory } from '@/magic/components/glimpse/glimpseTypes';
+export type { GlimpseMemory };
 
 // Single definition lives in the magic module (#2898) — every technique
 // surface imports the same shape rather than re-declaring it.
@@ -1174,6 +1176,8 @@ export interface DraftData {
   // The Glimpse guided flow (#2427)
   glimpse_story?: string;
   glimpse_tag_ids?: number[];
+  // How much of the Glimpse is remembered (#5292); absent reads as remembered
+  glimpse_memory?: GlimpseMemory;
   // Magic fields - the weighted resonances that anchor the latent GIFT thread at CG
   // finalization (#1620, #5123). A partial spread may be saved; the stage reads complete
   // only when every creation point is placed.
