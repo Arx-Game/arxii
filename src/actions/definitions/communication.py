@@ -46,7 +46,7 @@ if TYPE_CHECKING:
 
     from flows.object_states.base_state import BaseState
     from world.gm.models import GMPrompt
-    from world.magic.types.kindling import PendingClaim
+    from world.magic.types.kindling import PendingClaim, PendingReach
     from world.magic.types.reflection import PendingReflection
     from world.magic.types.soul_tether import PendingSineating
     from world.scenes.models import Interaction, Persona, Scene
@@ -720,6 +720,11 @@ class PoseAction(Action):
     It is checked before the pose posts and collected once it has, and the claimer alone is told
     what they gained, in the claiming verb of each resonance's affinity.
 
+    A reach (#5308) names the resonance the pose reaches for: ``reach_resonance_id``, any
+    resonance, held or not. It is checked before the pose posts and written against the pose
+    once it has; an endorsement of the pose pays that resonance. Only the poser sets it, and
+    only as they pose.
+
     An optional reflection (#5124) rides with the pose: ``reflect_choice`` (``EMBRACE`` or
     ``DISOWN``, or ``ABSOLVE``, ``CONDEMN`` or ``SUCCUMB`` for a burden) with one of
     ``reflect_grant_id`` (a kindled or succumbed-to-the-Mire deed), ``reflect_resonance_id``
@@ -755,7 +760,7 @@ class PoseAction(Action):
             return place_error
         if not text:
             return ActionResult(success=False, message="Pose what?")
-        pending, sineating, claim, attachment_error = _pending_pose_attachment(actor, kwargs)
+        pending, sineating, claim, reach, attachment_error = _pending_pose_attachment(actor, kwargs)
         if attachment_error is not None:
             return attachment_error
         sdm = context.scene_data if context else SceneDataManager()
@@ -773,6 +778,7 @@ class PoseAction(Action):
             # replayed request never gets here.
             _carry_attachments(actor, pending, sineating, interaction, told, sineated)
             claimed.extend(_collect_pose_claim(actor, claim))
+            _record_pose_reach(interaction, reach)
             first_pose.append(True)
 
         client_request_id = kwargs.get("client_request_id")
@@ -903,20 +909,62 @@ def _carry_attachments(  # noqa: PLR0913 - the actor, both attachments, the row,
 def _pending_pose_attachment(
     actor: ObjectDB, kwargs: dict[str, Any]
 ) -> tuple[
-    PendingReflection | None, PendingSineating | None, PendingClaim | None, ActionResult | None
+    PendingReflection | None,
+    PendingSineating | None,
+    PendingClaim | None,
+    PendingReach | None,
+    ActionResult | None,
 ]:
-    """The checked reflection or Sineating, and the claim (#5181), a pose carries, or the
-    refusal that stops the pose."""
+    """The checked reflection or Sineating, the claim (#5181) and the reach (#5308), a pose
+    carries, or the refusal that stops the pose."""
     reflection, refusal = _pending_pose_reflection(actor, kwargs)
     if refusal is not None:
-        return None, None, None, refusal
+        return None, None, None, None, refusal
     sineating, refusal = _pending_pose_sineating(actor, kwargs, reflection)
     if refusal is not None:
-        return None, None, None, refusal
+        return None, None, None, None, refusal
     claim, refusal = _pending_pose_claim(actor, kwargs)
     if refusal is not None:
-        return None, None, None, refusal
-    return reflection, sineating, claim, None
+        return None, None, None, None, refusal
+    reach, refusal = _pending_pose_reach(actor, kwargs)
+    if refusal is not None:
+        return None, None, None, None, refusal
+    return reflection, sineating, claim, reach, None
+
+
+def _record_pose_reach(interaction: Interaction | None, reach: PendingReach | None) -> None:
+    """Write the reach a posted pose carried (#5308). A pose in an ephemeral scene leaves no
+    row to reach from, so nothing is written."""
+    from world.magic.services.reach import record_pending_reach  # noqa: PLC0415
+
+    if reach is not None and interaction is not None:
+        record_pending_reach(interaction, reach)
+
+
+def _pending_pose_reach(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[PendingReach | None, ActionResult | None]:
+    """The checked reach a pose asked for, or the refusal that stops the pose (#5308).
+
+    A replayed ``client_request_id`` asks for no check: what the first send did stands.
+    """
+    from world.magic.exceptions import ReachError  # noqa: PLC0415
+    from world.magic.services.reach import pending_reach_from  # noqa: PLC0415
+    from world.scenes.interaction_services import pose_already_submitted  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    if kwargs.get("reach_resonance_id") is None:
+        return None, None
+    sheet = actor.character_sheet
+    request_id = kwargs.get("client_request_id")
+    if sheet is not None and request_id is not None:
+        persona = active_persona_for_sheet(sheet)
+        if persona is not None and pose_already_submitted(persona, request_id):
+            return None, None
+    try:
+        return pending_reach_from(kwargs), None
+    except ReachError as exc:
+        return None, ActionResult(success=False, message=exc.user_message)
 
 
 def _pending_pose_claim(

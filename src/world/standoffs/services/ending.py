@@ -157,10 +157,13 @@ def _credit_line(sheet: CharacterSheet, terms: StandoffTerms, *, deed: bool) -> 
 
 def _tell_actor(sheet: CharacterSheet, grant: ResonanceGrant) -> None:
     """Tell the actor alone which resonance the ending grew and by how much, on commit."""
+    from world.magic.services.resonance_checks import gain_bonus_clause  # noqa: PLC0415
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
     line = LINE_ENDING_EARNED.format(amount=grant.amount, resonance=grant.resonance.name)
+    if clause := gain_bonus_clause(grant.resonance.affinity, grant.bonus_percent):
+        line += f" {clause}"
 
     def _send() -> None:
         send_narrative_message(

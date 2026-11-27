@@ -54,6 +54,17 @@ class ClaimFieldsMixin(serializers.Serializer):
     )
 
 
+class ReachFieldsMixin(serializers.Serializer):
+    """The optional reach a pose carries (#5308).
+
+    ``reach_resonance_id`` is the resonance the pose reaches for, held or not. An endorsement of
+    the pose pays it. Omitted or null means the pose reaches for nothing. Whether the id is a
+    resonance is checked by the service before the pose posts.
+    """
+
+    reach_resonance_id = serializers.IntegerField(required=False, allow_null=True)
+
+
 class ReflectionOptionSerializer(serializers.Serializer):
     """One entry of the "Reflecting on" row."""
 

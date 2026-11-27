@@ -2406,6 +2406,102 @@ def _probe_sineating_config() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_resonance_bonus_check() -> ProbeResult:
+    """The resonance gain config names a bonus check type (#5308).
+
+    Consumer: `world/magic/services/resonance_checks.py _roll_bonus_check()`, read by every
+    earned gain, pull and kindled cast. With `ResonanceGainConfig.bonus_check_type` unset it
+    rolls nothing: every gain pays its plain amount and every pull is worth 100 percent.
+    """
+    from world.magic.services.gain import get_resonance_gain_config  # noqa: PLC0415
+
+    if get_resonance_gain_config().bonus_check_type_id is None:
+        return ProbeResult(
+            present=False,
+            missing=("the bonus check type",),
+            detail="The resonance gain configuration has no bonus check type.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_resonance_check_awards() -> ProbeResult:
+    """Every outcome tier has a resonance check award (#5308).
+
+    Consumer: `world/magic/services/resonance_checks.py _award_for()`. A roll that lands on a
+    tier with no `ResonanceCheckAward` row adds nothing to a gain and leaves a pull worth 100
+    percent, so the probe lists each `CheckOutcome` with no row, the same tier query the
+    Sineating probe uses.
+    """
+    from world.magic.models import ResonanceCheckAward  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    missing = tuple(
+        CheckOutcome.objects.exclude(pk__in=ResonanceCheckAward.objects.values("outcome_tier_id"))
+        .order_by("success_level")
+        .values_list("name", flat=True)
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No resonance check award for outcome(s): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_affinity_skills() -> ProbeResult:
+    """Every affinity has an active skill linked to it (#5308).
+
+    Consumer: `world/magic/services/resonance_checks.py affinity_skill_terms()`, which reads
+    `Affinity.skill` through `active_affinity_skill()`: a skill that is missing or switched off
+    adds no term to that affinity's bonus check.
+    """
+    from world.magic.models import Affinity  # noqa: PLC0415
+    from world.magic.services.resonance_checks import active_affinity_skill  # noqa: PLC0415
+
+    missing = tuple(
+        affinity.name
+        for affinity in Affinity.objects.select_related("skill").order_by("name")
+        if active_affinity_skill(affinity) is None
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No active skill is linked to affinity(ies): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_resonance_gain_source_stats() -> ProbeResult:
+    """Every kind of gain whose act rolls no stat of its own has a source stat (#5308).
+
+    Consumer: `world/magic/services/resonance_checks.py _source_stat()`, read when
+    `roll_gain_bonus` is given no act stat. Those are the sources in
+    `GAIN_BONUS_ROLLED_SOURCES`, whose acts may roll no stat, and the kindled deed, the one
+    caller-rolled source whose deeds can have no check. A source with no
+    `ResonanceGainSourceStat` row rolls the bonus check type's own stat instead.
+    """
+    from world.magic.constants import (  # noqa: PLC0415
+        GAIN_BONUS_ROLLED_SOURCES,
+        GainSource,
+    )
+    from world.magic.models import ResonanceGainSourceStat  # noqa: PLC0415
+
+    needed = GAIN_BONUS_ROLLED_SOURCES | {GainSource.KINDLED_DEED}
+    have = set(ResonanceGainSourceStat.objects.values_list("source", flat=True))
+    missing = tuple(
+        GainSource(source).label for source in GainSource.values if source in needed - have
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No bonus check stat is set for: {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_affinity_conversion_pairs() -> ProbeResult:
     """Every ordered pair of distinct affinities has an authored conversion (#4751).
 
@@ -4307,6 +4403,61 @@ def _declarations() -> tuple[ContentDependency, ...]:
             admin_model="SoulTetherConfig",
         ),
         ContentDependency(
+            key="resonance-bonus-check",
+            label="The resonance bonus check type",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/magic/services/resonance_checks.py _roll_bonus_check(), "
+                "ResonanceGainConfig.bonus_check_type"
+            ),
+            consequence=(
+                "Players' earned resonance pays its plain amount and every thread pull is "
+                "worth full strength: a trained villain, hero or mirror gains and pulls no "
+                "better than an untrained one, until staff set the check type."
+            ),
+            probe=CustomProbe(fn=_probe_resonance_bonus_check),
+            admin_model="ResonanceGainConfig",
+        ),
+        ContentDependency(
+            key="resonance-check-awards",
+            label="A resonance check award for every outcome tier",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/resonance_checks.py _award_for()",
+            consequence=(
+                "A bonus check that lands on an outcome tier with no award adds nothing to "
+                "the player's gain and leaves their pull at full strength, so a good or bad "
+                "roll at that tier changes nothing."
+            ),
+            probe=CustomProbe(fn=_probe_resonance_check_awards),
+            admin_model="ResonanceCheckAward",
+        ),
+        ContentDependency(
+            key="affinity-skills",
+            label="An active skill linked to every affinity",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/resonance_checks.py affinity_skill_terms()",
+            consequence=(
+                "The skill linked to each affinity adds nothing to the bonus check for an "
+                "affinity with no active skill linked, so training the skill does not make "
+                "that affinity's gains or pulls any stronger."
+            ),
+            probe=CustomProbe(fn=_probe_affinity_skills),
+            admin_model="Affinity",
+        ),
+        ContentDependency(
+            key="resonance-gain-source-stats",
+            label="A bonus check stat for each kind of gain with no roll of its own",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/resonance_checks.py _source_stat()",
+            consequence=(
+                "A gain that comes from no roll of the player's (an endorsement, a mission "
+                "reward, a kindled deed with no check) rolls the bonus check type's own stat "
+                "instead of the stat staff meant for that kind of gain."
+            ),
+            probe=CustomProbe(fn=_probe_resonance_gain_source_stats),
+            admin_model="ResonanceGainSourceStat",
+        ),
+        ContentDependency(
             key="affinity-conversion-pairs",
             label="A conversion rate for every pair of affinities",
             tier=DependencyTier.REQUIRED,
@@ -4655,7 +4806,8 @@ def _declarations() -> tuple[ContentDependency, ...]:
             consumer="world/checks/services.py perform_check() with magic skill extra_traits",
             consequence=(
                 "A magical roll on that check type counts the Magic skill twice when the "
-                "magic skill settings add it too."
+                "magic skill settings add it too. The same holds for the bonus resonance "
+                "check (it adds the affinity's skill) and the settling rite's check."
             ),
             probe=CustomProbe(fn=_probe_check_types_weight_no_magic_skill),
             admin_model="CheckType",

@@ -20,6 +20,7 @@ from django.db import models
 from core.managers import ArxSharedMemoryManager
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from world.checks.models import OutcomeTierAward
+from world.traits.constants import TraitType
 
 _RESONANCE_FK = "arxii.Resonance"
 
@@ -182,6 +183,23 @@ class DriftCorrectionConfig(SharedMemoryModel):
 
     def __str__(self) -> str:
         return "Drift correction config"
+
+    def clean(self) -> None:
+        """The rite's check weighs no skill: the roll adds the skill of the affinity it turns
+        toward itself, so a weighted skill would count twice (#5308)."""
+        super().clean()
+        if self.check_type_id is None:
+            return
+        if any(ctt.trait.trait_type == TraitType.SKILL for ctt in self.check_type.traits.all()):
+            raise ValidationError(
+                {
+                    "check_type": (
+                        "The rite's check must weigh no skill: the roll adds the skill of the "
+                        "affinity it turns toward itself, so a skill on the check type would "
+                        "count twice."
+                    )
+                }
+            )
 
 
 class DriftCorrectionOutcomeShare(OutcomeTierAward):

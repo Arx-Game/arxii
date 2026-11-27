@@ -542,6 +542,11 @@ export interface Interaction {
   pose_kind: 'standard' | 'entry' | 'departure';
   endorsee_sheet_id: number | null;
   endorsable_resonances: { id: number; name: string }[];
+  /**
+   * The resonance the poser reached for (#5308). Absent on a live frame, which goes out before
+   * the reach is written; the ids-only `interaction_changed` frame that follows refetches the row.
+   */
+  reached_resonance?: { id: number; name: string } | null;
   pose_endorsers: EndorserBadge[];
   my_pose_endorsement: { id: number; resonance_id: number; settled: boolean } | null;
   entry_endorsers: EndorserBadge[];

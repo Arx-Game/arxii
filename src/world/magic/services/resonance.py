@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import dataclasses
 from decimal import Decimal
 import logging
 import math
@@ -14,6 +15,8 @@ from world.magic.constants import (
     ACCELERATED_GAIN_SOURCES,
     AFFINITY_PRIMAL,
     AFFINITY_RATE_EXEMPT_SOURCES,
+    GAIN_BONUS_CALLER_ROLLED_SOURCES,
+    GAIN_BONUS_EXEMPT_SOURCES,
     EffectKind,
     GainSource,
     TargetKind,
@@ -37,6 +40,12 @@ from world.magic.models import (
 )
 from world.magic.services.kindled_math import scale_by_kindled_boost, stronger_marks
 from world.magic.services.pull_effects import get_pull_effects_for_thread
+from world.magic.services.resonance_checks import (
+    FULL_WORTH_PERCENT,
+    act_stat,
+    roll_gain_bonus,
+    roll_spend_worth,
+)
 from world.magic.services.thread_rows import payer_level_read
 from world.magic.services.threads import (
     cap_exceeded_error,
@@ -62,6 +71,7 @@ from world.magic.types import (
     ThreadPayerPreview,
 )
 from world.magic.types.pull import pull_payer
+from world.magic.types.resonance_checks import NO_GAIN_BONUS, GainBonus
 from world.progression.services.dev_cost import dp_cost_for_step
 
 if TYPE_CHECKING:
@@ -95,6 +105,7 @@ if TYPE_CHECKING:
     from world.missions.models import MissionDeedRewardLine
     from world.projects.models import Project
     from world.relationships.models import CharacterRelationship, RelationshipCapstone
+    from world.traits.models import Trait
     from world.worship.models import WorshipRitePerformance
 
 logger = logging.getLogger(__name__)
@@ -130,6 +141,8 @@ def grant_resonance(  # noqa: PLR0913
     reflection: Reflection | None = None,
     deed_label: str | None = None,
     ledger_out: list[ResonanceGrant] | None = None,
+    act_stat: Trait | None = None,
+    gain_bonus: GainBonus | None = None,
 ) -> CharacterResonance:
     """Atomically grant resonance AND write the ResonanceGrant ledger row.
 
@@ -140,8 +153,12 @@ def grant_resonance(  # noqa: PLR0913
     it is written; authored/system sources (including DISTINCTION itself)
     are never accelerated. After that, unless ``source`` is in
     ``AFFINITY_RATE_EXEMPT_SOURCES``, ``amount`` is scaled by the earn rate of the
-    resonance's own affinity (#5231), to at least 1. The ``ResonanceGrant`` row records the
-    scaled amount.
+    resonance's own affinity (#5231), to at least 1. Last comes the bonus resonance check
+    (#5308): the amount grows by the percent the check's result is worth, and the row records
+    the outcome and the percent. Sources split three ways (``GAIN_BONUS_*_SOURCES``): an exempt
+    source never rolls, a rolled source rolls here (once for this call), and a caller-rolled
+    source pays several resonances from one act, so its caller rolls once per affinity and
+    passes the result as ``gain_bonus``. The ``ResonanceGrant`` row records the scaled amount.
 
     Args:
         character_sheet: The character receiving resonance.
@@ -170,6 +187,12 @@ def grant_resonance(  # noqa: PLR0913
             grant (#5124); None for every other source.
         ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
             for a caller that needs the ledger row as well as the updated resonance.
+        act_stat: The stat of the roll the act itself made, which replaces the bonus check's
+            stat for a rolled source. None rolls the stat staff set for the source.
+        gain_bonus: A bonus check result the caller already rolled for this affinity. Required
+            for a caller-rolled source once the bonus check is configured, optional for a
+            rolled source (a caller paying several resonances rolls once per affinity), and
+            refused for an exempt source.
 
     Returns:
         The updated CharacterResonance instance.
@@ -215,6 +238,13 @@ def grant_resonance(  # noqa: PLR0913
         # scaled down to nothing, so its ledger row always exists.
         scaled = amount * resonance.affinity.earn_rate_percent // 100
         amount = max(scaled, 1)
+
+    # The bonus resonance check grows the amount last, so the earn rates it multiplies are
+    # already in (#5308). Resolved before any write, so a refused call leaves nothing behind.
+    gain_bonus = _resolve_gain_bonus(
+        character_sheet, resonance, source, act_stat=act_stat, gain_bonus=gain_bonus
+    )
+    amount += amount * gain_bonus.percent // 100
 
     # Peek, don't read: character_sheet.cached_resonances would force a query
     # when cold (the common case for a grant -- unlike Task 2's interaction
@@ -263,6 +293,8 @@ def grant_resonance(  # noqa: PLR0913
         deed_label=deed_label,
         source_settling_rite=settling_rite,
         source_reflection=reflection,
+        bonus_outcome=gain_bonus.outcome,
+        bonus_percent=gain_bonus.percent,
     )
     ledger = [] if ledger_out is None else ledger_out
     ledger.append(grant)
@@ -326,6 +358,43 @@ def grant_resonance(  # noqa: PLR0913
             )
 
     return cr
+
+
+def _resolve_gain_bonus(
+    character_sheet: CharacterSheet,
+    resonance: ResonanceModel,
+    source: str,
+    *,
+    act_stat: Trait | None,
+    gain_bonus: GainBonus | None,
+) -> GainBonus:
+    """The bonus check result a gain of ``source`` grows by (#5308).
+
+    An exempt source takes none and refuses one. A caller-rolled source takes the one its
+    caller rolled; with none, it pays its plain amount while the bonus check is off (so a
+    caller not yet rolling keeps working) and refuses once the check is configured, because
+    a gain nobody rolled for would silently skip it. A rolled source takes a passed result
+    or rolls one for the resonance's affinity.
+
+    Raises:
+        ValueError: A bonus was passed for an exempt source, or a caller-rolled source was
+            granted with the bonus check on and no result.
+    """
+    if source in GAIN_BONUS_EXEMPT_SOURCES:
+        if gain_bonus is not None:
+            msg = f"{source} source takes no bonus check; gain_bonus= must not be passed."
+            raise ValueError(msg)
+        return NO_GAIN_BONUS
+    if gain_bonus is not None:
+        return gain_bonus
+    if source in GAIN_BONUS_CALLER_ROLLED_SOURCES:
+        from world.magic.services.gain import get_resonance_gain_config  # noqa: PLC0415
+
+        if get_resonance_gain_config().bonus_check_type_id is None:
+            return NO_GAIN_BONUS
+        msg = f"{source} source requires gain_bonus= kwarg: its caller rolls the bonus check."
+        raise ValueError(msg)
+    return roll_gain_bonus(character_sheet, resonance.affinity, source=source, stat=act_stat)
 
 
 @transaction.atomic
@@ -431,6 +500,8 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         # #5181: a claimed share and an Anima ritual's resonance name no typed row either.
         GainSource.KINDLED_CLAIM,
         GainSource.ANIMA_RITUAL,
+        # #5308: the harvest of waiting trickles names no typed row either.
+        GainSource.TRICKLE_HARVEST,
     ):
         # No typed source FK — the grant is attributed by discriminator only.
         return
@@ -1319,6 +1390,66 @@ def resolve_pull_effects(  # noqa: PLR0913  — thread × effect_tier resolver; 
     return resolved
 
 
+def _pull_worth_by_affinity(
+    character_sheet: CharacterSheet,
+    threads: list[Thread],
+    action_context: PullActionContext,
+    payers: Mapping[int, ResonanceModel] | None,
+    worth_by_affinity: Mapping[int, int] | None,
+) -> dict[int, int]:
+    """The worth in percent of each affinity paying for this pull (#5308).
+
+    One check per distinct paying affinity, rolled with the stat of the action's own roll
+    (``action_context.check_type``). An affinity the caller already rolled for, such as a
+    cast that also scales its kindled power by the same check, is taken from
+    ``worth_by_affinity`` and never rolled again.
+    """
+    worth = dict(worth_by_affinity or {})
+    stat = None
+    stat_read = False
+    for thread in threads:
+        affinity = pull_payer(thread, payers).affinity
+        if affinity.pk in worth:
+            continue
+        if not stat_read:
+            check_type = action_context.check_type
+            stat = act_stat(check_type) if check_type is not None else None
+            stat_read = True
+        worth[affinity.pk] = roll_spend_worth(character_sheet, affinity, stat=stat)
+    return worth
+
+
+def _scaled_by_worth(
+    resolved: list[ResolvedPullEffect],
+    payers: Mapping[int, ResonanceModel] | None,
+    worth: Mapping[int, int],
+) -> list[ResolvedPullEffect]:
+    """``resolved`` with each effect's magnitude scaled by its payer affinity's worth (#5308).
+
+    The thread's scaled value and, for a capability grant, its frozen curved value are both
+    multiplied; an inactive row stays 0 and an effect worth 100 percent is returned as is.
+    """
+    scaled: list[ResolvedPullEffect] = []
+    for effect in resolved:
+        percent = worth[pull_payer(effect.source_thread, payers).affinity.pk]
+        if percent == FULL_WORTH_PERCENT:
+            scaled.append(effect)
+            continue
+        scaled.append(
+            dataclasses.replace(
+                effect,
+                scaled_value=_worth_of(effect.scaled_value, percent),
+                capability_grant_value=_worth_of(effect.capability_grant_value, percent),
+            )
+        )
+    return scaled
+
+
+def _worth_of(value: int | None, percent: int) -> int | None:
+    """``value`` at ``percent`` of its worth, None staying None."""
+    return None if value is None else value * percent // FULL_WORTH_PERCENT
+
+
 def _fold_distinction_pull_bonus(
     resolved: list[ResolvedPullEffect],
     *,
@@ -1883,6 +2014,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
     burn_valuation: BurnValuation | None = None,
     burned_for: str = "",
     payers: Mapping[int, ResonanceModel] | None = None,
+    worth_by_affinity: Mapping[int, int] | None = None,
 ) -> ResonancePullResult:
     """Atomic pull commit (Spec A §5.4 + §7.4).
 
@@ -1918,6 +2050,10 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         payers: Thread id -> the resonance paying for that thread (#5123); a thread not
             named is paid by its leading resonance. A combat pull records each payer on
             its ``CombatPullThread`` row.
+        worth_by_affinity: Affinity id -> the worth in percent a caller already rolled for
+            it (#5308), so one cast never rolls an affinity twice; every other paying
+            affinity rolls its own check here. Every effect a thread bought is scaled by its
+            payer affinity's worth before it is persisted or returned.
         burn_valuation: What the burn is worth, valued at declaration; a combat pull
             stores it so the action reads it at resolution without re-valuing.
         burned_for: The declared action a combat burn strains (``PullBurnAction``);
@@ -1983,9 +2119,15 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         payers=payers,
         kindled=kindled,
     )
-    resolved = _fold_distinction_pull_bonus(
+    # The distinction's flat bonus belongs to the pull as a whole, not to one thread's payer,
+    # so the worth scales the thread effects only (#5308).
+    with_bonus = _fold_distinction_pull_bonus(
         resolved, character_sheet=character_sheet, threads=threads, payers=payers
     )
+    worth = _pull_worth_by_affinity(
+        character_sheet, threads, action_context, payers, worth_by_affinity
+    )
+    resolved = [*_scaled_by_worth(resolved, payers, worth), *with_bonus[len(resolved) :]]
 
     applicable = [e for e in resolved if not e.inactive]
     # A thread paid by a resonance it holds no row for is an ordinary pull with no perks
@@ -2052,6 +2194,7 @@ def spend_resonance_for_pull(  # noqa: PLR0913, C901
         anima_spent=anima_total,
         resolved_effects=resolved,
         resonance_burned=burn,
+        worth_by_affinity=worth,
     )
 
 

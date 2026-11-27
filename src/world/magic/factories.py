@@ -2386,6 +2386,16 @@ class PoseEndorsementFactory(factory.django.DjangoModelFactory):
     resonance = factory.SubFactory(ResonanceFactory)
 
 
+class PoseResonanceReachFactory(factory.django.DjangoModelFactory):
+    """The resonance a pose reached for (#5308)."""
+
+    class Meta:
+        model = "arxii.PoseResonanceReach"
+
+    interaction = factory.SubFactory("world.scenes.factories.InteractionFactory")
+    resonance = factory.SubFactory(ResonanceFactory)
+
+
 class SceneEntryEndorsementFactory(factory.django.DjangoModelFactory):
     class Meta:
         model = "arxii.SceneEntryEndorsement"
@@ -5342,6 +5352,41 @@ class AnimaRitualResonanceAwardFactory(factory.django.DjangoModelFactory):
 
     outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
     amount = 10
+
+
+class ResonanceCheckAwardFactory(factory.django.DjangoModelFactory):
+    """What the bonus resonance check is worth at one roll result (#5308)."""
+
+    class Meta:
+        model = "arxii.ResonanceCheckAward"
+
+    outcome_tier = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
+    gain_bonus_percent = 0
+    spend_worth_percent = 100
+
+
+class ResonanceGainSourceStatFactory(factory.django.DjangoModelFactory):
+    """The stat a kind of gain rolls when the act rolled none (#5308)."""
+
+    class Meta:
+        model = "arxii.ResonanceGainSourceStat"
+
+    source = "POSE_ENDORSEMENT"
+    stat = factory.SubFactory("world.traits.factories.StatTraitFactory")
+
+
+class TrickleAccrualFactory(factory.django.DjangoModelFactory):
+    """One waiting resonance trickle. Defaults to a room residence's; pass
+    ``source="OUTFIT_TRICKLE", room_profile=None, outfit_item_facet=...`` for a worn piece's."""
+
+    class Meta:
+        model = "arxii.TrickleAccrual"
+
+    character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
+    resonance = factory.SubFactory(ResonanceFactory)
+    amount = 1
+    source = "ROOM_RESIDENCE"
+    room_profile = factory.SubFactory("evennia_extensions.factories.RoomProfileFactory")
 
 
 class RallyKindlingStrengthFactory(factory.django.DjangoModelFactory):

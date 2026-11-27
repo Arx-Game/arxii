@@ -24,10 +24,28 @@ from commands.exceptions import CommandError
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models import ResonanceGrant
 
 _HISTORY_SUBVERB = "history"
 _HISTORY_LIMIT = 10
 _NO_IDENTITY = "You have no active character to check resonance with."
+
+
+def _grant_note(grant: ResonanceGrant) -> str:
+    """The parenthesis after a history line: the source, and what the bonus check added (#5308).
+
+    "Kindled deed, +50% from Villainy" when the bonus check grew the gain, naming the
+    affinity's skill while it is active and leaving the name off otherwise. A grant with no
+    bonus reads as its source alone.
+    """
+    from world.magic.services.resonance_checks import active_affinity_skill  # noqa: PLC0415
+
+    source = grant.get_source_display()
+    if grant.bonus_percent <= 0:
+        return source
+    skill = active_affinity_skill(grant.resonance.affinity)
+    named = f" from {skill.name}" if skill is not None else ""
+    return f"{source}, +{grant.bonus_percent}%{named}"
 
 
 class CmdResonance(ArxCommand):
@@ -120,7 +138,7 @@ class CmdResonance(ArxCommand):
         lines = [header]
         lines.extend(
             f"  {grant.granted_at:%Y-%m-%d %H:%M} — {grant.resonance.name} "
-            f"+{grant.amount} ({grant.get_source_display()})"
+            f"+{grant.amount} ({_grant_note(grant)})"
             for grant in grants
         )
         self.caller.msg("\n".join(lines))

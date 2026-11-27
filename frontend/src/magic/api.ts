@@ -18,6 +18,7 @@ import { getRituals } from '@/rituals/api';
 import type { components } from '@/generated/api';
 import type { SineatingOption } from '@/magic/sineating';
 import type {
+  CatalogResonance,
   KindledReading,
   ManifestChoice,
   ReflectionOption,
@@ -1373,6 +1374,14 @@ export function setManifestChoice(
 // ---------------------------------------------------------------------------
 
 const KINDLED_RESONANCES_URL = '/api/magic/kindled-resonances/';
+const RESONANCE_CATALOG_URL = '/api/magic/resonances/';
+
+/** GET /api/magic/resonances/ (#5308): every resonance, unpaginated, whoever holds it. */
+export async function getResonanceCatalog(): Promise<CatalogResonance[]> {
+  const res = await apiFetch(RESONANCE_CATALOG_URL);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load resonances');
+  return (await res.json()) as CatalogResonance[];
+}
 
 /**
  * GET /api/magic/kindled-resonances/?character_sheet=<id> (#5124): each resonance the

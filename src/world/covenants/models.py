@@ -1548,7 +1548,7 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         The four magic skill pickers refuse a style's skill; this refuses the other way round, so a
         skill a magical roll already adds never becomes a style's too.
         """
-        from world.magic.models import ResonanceEnvironmentConfig  # noqa: PLC0415
+        from world.magic.models import Affinity, ResonanceEnvironmentConfig  # noqa: PLC0415
 
         super().clean()
         skill = self.skill
@@ -1559,12 +1559,14 @@ class CombatStyle(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             or skill.override_techniques.exists()
             or skill.magic_activity_rows.exists()
             or ResonanceEnvironmentConfig.objects.filter(harvest_skill=skill).exists()
+            or Affinity.objects.filter(skill=skill).exists()
         ):
             raise ValidationError(
                 {
                     "skill": (
-                        "A casting style, technique, magical activity or the harvest roll "
-                        "already adds this skill. Give the style a skill of its own."
+                        "A casting style, technique, magical activity, an affinity or the "
+                        "harvest roll already adds this skill. Give the style a skill of "
+                        "its own."
                     )
                 }
             )

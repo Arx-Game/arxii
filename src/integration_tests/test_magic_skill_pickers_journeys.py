@@ -41,13 +41,21 @@ from world.covenants.factories import CombatStyleFactory
 from world.covenants.models import CombatStyle
 from world.magic.constants import GiftKind, MagicActivity
 from world.magic.factories import (
+    AffinityFactory,
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
     GiftFactory,
     TechniqueFactory,
     TechniqueStyleFactory,
 )
-from world.magic.models import ResonanceEnvironmentConfig, Technique, TechniqueStyle
+from world.magic.models import (
+    DriftCorrectionConfig,
+    ResonanceEnvironmentConfig,
+    ResonanceGainConfig,
+    RitualCheckConfig,
+    Technique,
+    TechniqueStyle,
+)
 from world.magic.models.magic_activity import MagicActivitySkill
 from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, ensure_technique_cast_content
 from world.magic.services.resonance_environment import get_resonance_environment_config
@@ -56,7 +64,7 @@ from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
 from world.skills.factories import SkillFactory
 from world.skills.models import Skill
-from world.traits.factories import CheckSystemSetupFactory
+from world.traits.factories import CheckSystemSetupFactory, StatTraitFactory
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
@@ -291,6 +299,79 @@ class StaffSetAMagicSkillInAdmin(JourneyCase):
         except ValidationError as exc:
             return exc.message_dict
         return {}
+
+
+class AnAffinitySkillIsNoOtherRollsSkill(JourneyCase):
+    """Staff gave Wrath a skill of its own; no other magical roll may add that skill (#5308).
+
+    The affinity's bonus check adds its skill, so a picker, a ritual or a combat style that
+    added the same skill would count it twice. Each is refused with its reason, the
+    affinity refuses a skill any of them already adds, and the two check types that roll
+    beside an affinity's skill may weight no skill themselves.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.wrath_skill = _magic_skill("Wrath")
+        self.wrath = AffinityFactory(name="Wrath", skill=self.wrath_skill)
+
+    @staticmethod
+    def validation_errors(row) -> dict[str, list[str]]:
+        try:
+            row.full_clean()
+        except ValidationError as exc:
+            return exc.message_dict
+        return {}
+
+    def test_every_other_roll_refuses_an_affinity_skill(self) -> None:
+        rows = (
+            MagicActivitySkill(activity=MagicActivity.CEREMONY, skill=self.wrath_skill),
+            TechniqueStyle(name="Fury", skill=self.wrath_skill),
+            Technique(gift=GiftFactory(), name="Fury Edge", skill=self.wrath_skill),
+            ResonanceEnvironmentConfig(harvest_skill=self.wrath_skill),
+        )
+        fields = ("skill", "skill", "skill", "harvest_skill")
+        for row, field in zip(rows, fields, strict=True):
+            with self.subTest(model=type(row).__name__):
+                errors = self.validation_errors(row)
+                self.assertIn("an affinity's skill", " ".join(errors[field]))
+        ritual = RitualCheckConfig(skill=self.wrath_skill)
+        self.assertIn("already adds this skill", " ".join(self.validation_errors(ritual)["skill"]))
+        style = CombatStyle(name="Veil", defense_style="barrier", skill=self.wrath_skill)
+        self.assertIn("already adds this skill", " ".join(self.validation_errors(style)["skill"]))
+
+    def test_an_affinity_refuses_a_skill_another_roll_already_adds(self) -> None:
+        taken_by = {
+            "a casting style": TechniqueStyleFactory(skill=_magic_skill("Weave")),
+            "a technique": TechniqueFactory(skill=_magic_skill("Edge")),
+            "a combat style": CombatStyleFactory(skill=_magic_skill("Duel")),
+            "a magical activity": MagicActivitySkill.objects.create(
+                activity=MagicActivity.RITUAL_WORKING, skill=_magic_skill("Rite")
+            ),
+        }
+        for who, row in taken_by.items():
+            with self.subTest(who=who):
+                affinity = AffinityFactory(name=f"Spite of {who}")
+                affinity.skill = row.skill
+                errors = self.validation_errors(affinity)
+                self.assertIn("already adds this skill", " ".join(errors["skill"]))
+        free = AffinityFactory(name="Calm")
+        free.skill = _magic_skill("Serenity")
+        self.assertEqual(self.validation_errors(free), {})
+
+    def test_the_bonus_check_and_the_settling_rite_weigh_no_skill(self) -> None:
+        checks = {
+            "bonus_check_type": lambda ct: ResonanceGainConfig(bonus_check_type=ct),
+            "check_type": lambda ct: DriftCorrectionConfig(check_type=ct),
+        }
+        for field, config_for in checks.items():
+            with self.subTest(field=field):
+                check_type = CheckTypeFactory(name=f"Check for {field}")
+                CheckTypeTraitFactory(check_type=check_type, trait=StatTraitFactory(name=field))
+                self.assertEqual(self.validation_errors(config_for(check_type)), {})
+                CheckTypeTraitFactory(check_type=check_type, trait=self.wrath_skill)
+                errors = self.validation_errors(config_for(check_type))
+                self.assertIn("weigh no skill", " ".join(errors[field]))
 
 
 class ACastCountsItsMagicSkillOnce(JourneyCase):

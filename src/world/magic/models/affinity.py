@@ -7,6 +7,7 @@ Both are proper domain models replacing the old ModifierTarget-based pattern.
 
 from decimal import Decimal
 
+from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
 from django.utils.functional import cached_property
@@ -17,6 +18,11 @@ from core.testing import register_test_cache_flusher
 from world.contributors.models import CreditedContent
 from world.magic.constants import AFFINITY_ABYSSAL, AFFINITY_CELESTIAL, AFFINITY_PRIMAL
 from world.magic.exceptions import AffinityNotConfigured
+from world.magic.skill_choices import (
+    MAGIC_SKILL_CHOICES,
+    MAGIC_SKILL_ERROR_MESSAGES,
+    MAGIC_SKILL_HELP,
+)
 
 
 class AffinityManager(NaturalKeyManager):
@@ -162,6 +168,30 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "eases that much, and zero does nothing."
         ),
     )
+    skill = models.OneToOneField(
+        "arxii.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="affinity",
+        limit_choices_to=MAGIC_SKILL_CHOICES,
+        error_messages=MAGIC_SKILL_ERROR_MESSAGES,
+        help_text=(
+            "The affinity's own skill, such as Villainy, Heroism or Reflection. Every "
+            "resonance a character earns or spends in this affinity adds it to its bonus "
+            "check. One affinity per skill. "
+            f"{MAGIC_SKILL_HELP}"
+        ),
+    )
+    spend_worth_floor_percent = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "The least a pull or a kindled cast of this resonance is worth, as a percentage, "
+            "whatever the bonus check rolls. 0 sets no floor. An Abyssal floor keeps its "
+            "magic strong even on a poor roll."
+        ),
+    )
     objects = AffinityManager()
 
     class NaturalKeyConfig:
@@ -173,6 +203,44 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    def clean(self) -> None:
+        """An affinity's skill is no other magical roll's skill (#5308).
+
+        The four magic skill pickers refuse an affinity's skill; this refuses the other way
+        round, so a skill a magical roll already adds never becomes an affinity's too. The
+        bonus check would otherwise count one skill twice.
+        """
+        # Deferred: these models import this module.
+        from world.covenants.models import CombatStyle  # noqa: PLC0415
+        from world.magic.models.magic_activity import MagicActivitySkill  # noqa: PLC0415
+        from world.magic.models.resonance_environment import (  # noqa: PLC0415
+            ResonanceEnvironmentConfig,
+        )
+        from world.magic.models.ritual_check_config import RitualCheckConfig  # noqa: PLC0415
+        from world.magic.models.techniques import Technique, TechniqueStyle  # noqa: PLC0415
+
+        super().clean()
+        if self.skill_id is None:
+            return
+        skill_id = self.skill_id
+        if (
+            TechniqueStyle.objects.filter(skill_id=skill_id).exists()
+            or Technique.objects.filter(skill_id=skill_id).exists()
+            or MagicActivitySkill.objects.filter(skill_id=skill_id).exists()
+            or ResonanceEnvironmentConfig.objects.filter(harvest_skill_id=skill_id).exists()
+            or RitualCheckConfig.objects.filter(skill_id=skill_id).exists()
+            or CombatStyle.objects.filter(skill_id=skill_id).exists()
+        ):
+            raise ValidationError(
+                {
+                    "skill": (
+                        "A casting style, technique, magical activity, ritual, combat style or "
+                        "the harvest roll already adds this skill. Give the affinity a skill "
+                        "of its own."
+                    )
+                }
+            )
 
 
 class ResonanceManager(NaturalKeyManager):

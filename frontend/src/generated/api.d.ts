@@ -37964,10 +37964,19 @@ export interface components {
         subject_name: string;
         subject_persona_id: number;
       } | null;
-      /** @description List of resonances claimed by the endorsee (pose author). */
+      /**
+       * @description The resonances an endorsement of this pose can pay.
+       *
+       *     A pose that reached for a resonance (#5308) is endorsed for that one alone. Otherwise
+       *     the endorser picks from the resonances claimed by the endorsee (pose author).
+       */
       readonly endorsable_resonances: {
         [key: string]: unknown;
       }[];
+      /** @description The resonance the poser said this pose reaches for (#5308), or None. */
+      readonly reached_resonance: {
+        [key: string]: unknown;
+      } | null;
       /** @description List of peers who endorsed this pose, with persona info. */
       readonly pose_endorsers: {
         [key: string]: unknown;
@@ -38199,10 +38208,19 @@ export interface components {
         subject_name: string;
         subject_persona_id: number;
       } | null;
-      /** @description List of resonances claimed by the endorsee (pose author). */
+      /**
+       * @description The resonances an endorsement of this pose can pay.
+       *
+       *     A pose that reached for a resonance (#5308) is endorsed for that one alone. Otherwise
+       *     the endorser picks from the resonances claimed by the endorsee (pose author).
+       */
       readonly endorsable_resonances: {
         [key: string]: unknown;
       }[];
+      /** @description The resonance the poser said this pose reaches for (#5308), or None. */
+      readonly reached_resonance: {
+        [key: string]: unknown;
+      } | null;
       /** @description List of peers who endorsed this pose, with persona info. */
       readonly pose_endorsers: {
         [key: string]: unknown;
@@ -38765,6 +38783,12 @@ export interface components {
        *     character's amounts in ``context["unclaimed"]`` (resonance id to amount).
        */
       readonly unclaimed: number;
+      /**
+       * @description What the character's days have piled up in this resonance for the next anima ritual
+       *     to harvest (#5308). The view puts the amounts in ``context["trickle"]`` (resonance id
+       *     to amount).
+       */
+      readonly waiting_trickle: number;
     };
     /** @description One visible node in a family tree payload. */
     KinspersonNode: {
@@ -49585,7 +49609,9 @@ export interface components {
     /**
      * @description Serializer for PoseEndorsement create + read (Spec C Task 23).
      *
-     *     Write: accepts ``interaction`` + ``resonance`` PKs from the request body.
+     *     Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
+     *     optional when the pose's author reached for one (#5308), which is then the resonance
+     *     endorsed; the action asks "Which resonance?" for a pose that did not.
      *     The ``endorser_sheet`` is resolved from the requesting account in the
      *     view (``PoseEndorsementViewSet.perform_create``) and injected via
      *     ``serializer.save(endorser_sheet=sheet)``.
@@ -49601,7 +49627,7 @@ export interface components {
       readonly endorsee_sheet: number;
       /** @description The interaction being endorsed. */
       interaction: number;
-      resonance: number;
+      resonance?: number;
       /** @description Endorsee's persona at endorsement time — masquerade audit. */
       readonly persona_snapshot: number | null;
       /** Format: date-time */
@@ -49614,7 +49640,9 @@ export interface components {
     /**
      * @description Serializer for PoseEndorsement create + read (Spec C Task 23).
      *
-     *     Write: accepts ``interaction`` + ``resonance`` PKs from the request body.
+     *     Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
+     *     optional when the pose's author reached for one (#5308), which is then the resonance
+     *     endorsed; the action asks "Which resonance?" for a pose that did not.
      *     The ``endorser_sheet`` is resolved from the requesting account in the
      *     view (``PoseEndorsementViewSet.perform_create``) and injected via
      *     ``serializer.save(endorser_sheet=sheet)``.
@@ -49625,7 +49653,7 @@ export interface components {
     PoseEndorsementRequest: {
       /** @description The interaction being endorsed. */
       interaction: number;
-      resonance: number;
+      resonance?: number;
     };
     /**
      * @description * `standard` - Standard
@@ -50828,13 +50856,21 @@ export interface components {
        */
       readonly color_hex: string;
     };
-    /** @description Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25). */
+    /**
+     * @description Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
+     *
+     *     ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
+     *     no bonus check) say what the bonus check added to ``amount`` (#5308).
+     */
     ResonanceGrant: {
       readonly id: number;
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
       readonly resonance: number;
       readonly amount: number;
+      /** @description How much the bonus check added to this gain, as a percentage of the amount before it. 0 when none. The amount above already includes it. */
+      readonly bonus_percent: number;
+      readonly bonus_outcome: string | null;
       /**
        * @description Discriminator. Identifies which source_* FK is populated.
        *
@@ -50870,6 +50906,7 @@ export interface components {
        *     * `SINEATER_FALL` - Sineater fell
        *     * `KINDLED_CLAIM` - Kindled deed claimed
        *     * `ANIMA_RITUAL` - Anima ritual
+       *     * `TRICKLE_HARVEST` - Trickle harvest
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
@@ -50912,6 +50949,7 @@ export interface components {
      *     * `SINEATER_FALL` - Sineater fell
      *     * `KINDLED_CLAIM` - Kindled deed claimed
      *     * `ANIMA_RITUAL` - Anima ritual
+     *     * `TRICKLE_HARVEST` - Trickle harvest
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -50946,7 +50984,8 @@ export interface components {
       | 'SUCCUMB_BONUS'
       | 'SINEATER_FALL'
       | 'KINDLED_CLAIM'
-      | 'ANIMA_RITUAL';
+      | 'ANIMA_RITUAL'
+      | 'TRICKLE_HARVEST';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -78000,6 +78039,7 @@ export interface operations {
          *     * `SINEATER_FALL` - Sineater fell
          *     * `KINDLED_CLAIM` - Kindled deed claimed
          *     * `ANIMA_RITUAL` - Anima ritual
+         *     * `TRICKLE_HARVEST` - Trickle harvest
          */
         source?:
           | 'ANIMA_RITUAL'
@@ -78033,6 +78073,7 @@ export interface operations {
           | 'STYLE_PRESENTATION'
           | 'SUCCUMBED'
           | 'SUCCUMB_BONUS'
+          | 'TRICKLE_HARVEST'
           | 'WORSHIP_RITE';
       };
       header?: never;

@@ -44,6 +44,7 @@ if TYPE_CHECKING:
     from world.ceremonies.models import Ceremony
     from world.ceremonies.services import ItemReading
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
     from world.checks.types import ModifierContribution
     from world.game_clock.models import GameWeek
     from world.items.models import ItemInstance
@@ -71,6 +72,9 @@ class RiteOutcome:
     items_uncounted: int = 0
     #: Base favor of the award that paid owed favor first (#4349), so "+0" says where it went.
     favor_owed_paid: int = 0
+    #: The percent the bonus resonance check added to ``resonance_granted`` (#5308); 0 when it
+    #: added nothing.
+    resonance_bonus_percent: int = 0
 
 
 def rite_ap_cost(rite: WorshipRite) -> int:
@@ -165,6 +169,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
     scene: Scene | None = None,
     ceremony: Ceremony | None = None,
     award: WorshipRiteTierAward | None = None,
+    check_type: CheckType | None = None,
 ) -> RiteOutcome:
     """Pay a rite's tier award for ``outcome``: the audit row, the resonance
     grant (ledger source WORSHIP_RITE) and the weekly-capped favor bump.
@@ -174,11 +179,13 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
     officiant's Rites roll and the ``award`` row it already resolved so a
     content gap surfaces before the ceremony's honors are written). Raises
     ``RiteAwardMissing`` for an unseeded (tier, outcome) pair rather than
-    paying 0.
+    paying 0. ``check_type`` is the check the performer rolled: its stat is the one the bonus
+    resonance check borrows (#5308); None falls back to the stat staff set for the source.
     """
     from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.magic.services.resonance_checks import act_stat  # noqa: PLC0415
     from world.worship.consecration_services import (  # noqa: PLC0415
         grow_consecration,
         sites_of,
@@ -210,6 +217,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
             resonance_granted=resonance_amount,
             favor_granted=favor_amount,
         )
+        resonance_bonus_percent = 0
         if resonance_amount > 0:
             ledger: list = []
             grant_resonance(
@@ -219,10 +227,12 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
                 source=GainSource.WORSHIP_RITE,
                 worship_rite_performance=performance,
                 ledger_out=ledger,
+                act_stat=act_stat(check_type) if check_type is not None else None,
             )
             # What the ledger recorded: the award scaled by the earn rate of the resonance's
             # affinity (#5231).
             resonance_amount = ledger[-1].amount
+            resonance_bonus_percent = ledger[-1].bonus_percent
             if resonance_amount != performance.resonance_granted:
                 performance.resonance_granted = resonance_amount
                 performance.save(update_fields=["resonance_granted"])
@@ -248,6 +258,7 @@ def apply_rite_award(  # noqa: PLR0913 - the settlement's inputs are keyword-onl
         multiplier_percent=percent,
         consecration_bonus_percent=site_bonus,
         favor_owed_paid=owed_paid,
+        resonance_bonus_percent=resonance_bonus_percent,
     )
 
 
@@ -491,7 +502,9 @@ def perform_worship_rite(  # noqa: PLR0913 - the rite's context is keyword-only 
         if not pay_award:
             rite_outcome = record_unpaid_performance(character_sheet, rite, outcome, scene=scene)
         else:
-            rite_outcome = apply_rite_award(character_sheet, rite, outcome, scene=scene)
+            rite_outcome = apply_rite_award(
+                character_sheet, rite, outcome, scene=scene, check_type=result.check_type
+            )
         if not given:
             return rite_outcome
         uncounted = sum(1 for g in gifts.gifts if g.reading.effective_points > 0 and not g.counted)

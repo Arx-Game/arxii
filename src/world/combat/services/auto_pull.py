@@ -104,6 +104,7 @@ def _commit(
 ) -> bool:
     from actions.errors import ActionDispatchError  # noqa: PLC0415
     from world.combat.pull_helpers import commit_combat_pull  # noqa: PLC0415
+    from world.magic.services.resonance_checks import worth_clause  # noqa: PLC0415
     from world.magic.types.pull import CastPullDeclaration  # noqa: PLC0415
 
     declaration = CastPullDeclaration(
@@ -112,7 +113,7 @@ def _commit(
     )
     character = participant.character_sheet.character
     try:
-        commit_combat_pull(
+        result = commit_combat_pull(
             declaration,
             participant,
             participant.encounter,
@@ -123,7 +124,9 @@ def _commit(
     except ActionDispatchError as refusal:
         _tell(character, refusal.user_message)
         return False
-    _tell(character, PULLED_LINE.format(count=len(threads), s="" if len(threads) == 1 else "s"))
+    line = PULLED_LINE.format(count=len(threads), s="" if len(threads) == 1 else "s")
+    worth = worth_clause(result.worth_by_affinity)
+    _tell(character, f"{line} {worth}" if worth else line)
     return True
 
 

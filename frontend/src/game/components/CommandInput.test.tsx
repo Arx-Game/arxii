@@ -221,6 +221,10 @@ const getKindledResonancesMock = vi.fn((): Promise<unknown> =>
   Promise.resolve({ results: [], impulses: [] })
 );
 vi.mock('@/magic/api', () => ({
+  getResonanceCatalog: () =>
+    Promise.resolve([
+      { id: 31, name: 'Cruelty', affinity: 1, affinity_name: 'Abyssal', description: '' },
+    ]),
   getReflectionOptions: () => getReflectionOptionsMock(),
   getSineatingOptions: () => getSineatingOptionsMock(),
   getKindledResonances: () => getKindledResonancesMock(),
@@ -2648,6 +2652,7 @@ describe('the "Claim" row on a pose (#5181)', () => {
     strength_name: 'Blazing',
     reasons: [],
     unclaimed,
+    waiting_trickle: 0,
     claim_verb: 'gloat',
   });
 
@@ -2700,6 +2705,30 @@ describe('the "Claim" row on a pose (#5181)', () => {
     );
     await waitFor(() =>
       expect(screen.getByTestId('claim-toggle')).toHaveAttribute('aria-pressed', 'false')
+    );
+  });
+
+  it('sends the resonance a scene pose reaches for, and clears it when the pose lands', async () => {
+    submitPoseMock.mockImplementation(() => Promise.resolve({ id: 1 }));
+    render(
+      <CommandInput
+        character="Alice"
+        characterSheetId={7}
+        composerMode={pose}
+        sceneId="5"
+        personaId={9}
+      />
+    );
+    fireEvent.click(await screen.findByTestId('reach-toggle'));
+    fireEvent.change(screen.getByTestId('reach-select'), { target: { value: '31' } });
+    write('Mara smiles, slowly.');
+
+    expect(submitPoseMock).toHaveBeenCalledWith(
+      expect.objectContaining({ reach_resonance_id: 31 })
+    );
+    await poseLands();
+    await waitFor(() =>
+      expect(screen.getByTestId('reach-toggle')).toHaveAttribute('aria-pressed', 'false')
     );
   });
 

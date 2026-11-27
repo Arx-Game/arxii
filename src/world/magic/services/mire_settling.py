@@ -34,6 +34,7 @@ from world.magic.models.affinity import Resonance
 from world.magic.models.soul_tether import MireHolding
 from world.magic.services.mire import release_mire
 from world.magic.services.resonance import grant_resonance
+from world.magic.services.resonance_checks import gain_bonus_clause
 from world.magic.services.soul_tether import (
     _increment_stat_safe,
     ensure_sineater_thread,
@@ -47,6 +48,7 @@ from world.relationships.services import move_gauges
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.magic.models import ResonanceGrant
     from world.magic.models.reflection import Reflection, SettlingRite
 
 _NO_RESONANCE_LINE = "You hold no resonance for your side of the bond to channel, so you earn none."
@@ -85,16 +87,24 @@ def _gauge_steps(points: int, share: Decimal) -> int:
 
 def _grant(
     sheet: CharacterSheet, resonance: Resonance | None, amount: int, source: GainSource
-) -> int:
+) -> ResonanceGrant | None:
     """Grant ``amount`` of ``resonance`` under ``source``; nothing to grant, or no resonance,
-    grants nothing. Returns the amount the ledger row recorded: ``amount`` scaled by the
-    resonance's own affinity's earn rate for a source that is scaled (#5231), so a line that
-    says "grows by N" says what grew."""
+    grants nothing (None). Returns the ledger row: its amount is ``amount`` scaled by the
+    resonance's own affinity's earn rate for a source that is scaled (#5231) and grown by the
+    bonus resonance check (#5308), so a line built by ``_grows`` says what grew."""
     if resonance is None or amount <= 0:
-        return 0
+        return None
     ledger: list = []
     grant_resonance(sheet, resonance, amount, source=source, ledger_out=ledger)
-    return ledger[-1].amount
+    return ledger[-1]
+
+
+def _grows(grant: ResonanceGrant) -> str:
+    """The sentence telling a player what a grant added: "Your Ruin grows by 13.", followed by
+    what the bonus check added when it added something (#5308)."""
+    sentence = f"Your {grant.resonance.name} grows by {grant.amount}."
+    clause = gain_bonus_clause(grant.resonance.affinity, grant.bonus_percent)
+    return f"{sentence} {clause}" if clause else sentence
 
 
 def _locked(tether: CharacterRelationship) -> CharacterRelationship:
@@ -156,8 +166,8 @@ def _purify(sheet: CharacterSheet, reflection: Reflection, share: Decimal) -> Bu
     line = f"You {verb} {on}: {cleared} of it clears."
     if resonance is None:
         line = f"{line} {_NO_RESONANCE_LINE}"
-    elif (earned := _grant(sheet, resonance, reward, GainSource.MIRE_PURIFIED)) > 0:
-        line = f"{line} Your {resonance.name} grows by {earned}."
+    elif (earned := _grant(sheet, resonance, reward, GainSource.MIRE_PURIFIED)) is not None:
+        line = f"{line} {_grows(earned)}"
     return BurdenOutcome(line)
 
 
@@ -217,12 +227,11 @@ def _succumb(
     _increment_stat_safe(sinner, "sineater.succumbed_amount", total)
     notices: tuple[RiteNotice, ...] = ()
     sinner_resonance = sinner_thread_resonance(tether)
-    if (earned := _grant(sinner, sinner_resonance, bonus, GainSource.SUCCUMB_BONUS)) > 0:
+    if (earned := _grant(sinner, sinner_resonance, bonus, GainSource.SUCCUMB_BONUS)) is not None:
         notices = (
             RiteNotice(
                 sinner,
-                f"{_name(sheet)} has succumbed to what they carried for you. "
-                f"Your {sinner_resonance.name} grows by {earned}.",
+                f"{_name(sheet)} has succumbed to what they carried for you. {_grows(earned)}",
             ),
         )
     becomes = "become" if len(taken_by) > 1 else "becomes"
@@ -263,13 +272,13 @@ def apply_fall(sheet: CharacterSheet, last: CharacterRelationship) -> FallOutcom
             payout += payout * cfg.fall_breaker_bonus_percent // 100
         resonance = sinner_thread_resonance(tether)
         earned = _grant(tether.target, resonance, payout, GainSource.SINEATER_FALL)
-        if earned <= 0:
+        if earned is None:
             continue
         _increment_stat_safe(tether.target, "sineater.broken", 1)
         notices.append(
             RiteNotice(
                 tether.target,
-                f"{_name(sheet)} has fallen to the Abyss. Your {resonance.name} grows by {earned}.",
+                f"{_name(sheet)} has fallen to the Abyss. {_grows(earned)}",
             )
         )
     return FallOutcome(_FALL_LINE, tuple(notices))

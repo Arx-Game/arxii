@@ -27,6 +27,11 @@ REST_ONLY: dict[str, str] = {
     "scene": "the push names it as scene_id",
     "place": "the push names it as place_id",
     "attributed_companion": "the push names it as attributed_companion_id and _name",
+    "reached_resonance": (
+        "the push goes out before the reach row exists; an ids-only interaction_changed "
+        "frame follows and each client refetches the pose, which also corrects "
+        "endorsable_resonances on the live frame"
+    ),
 }
 
 # Push keys the REST feed spells differently, each with why.

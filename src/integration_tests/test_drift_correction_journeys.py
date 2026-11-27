@@ -78,6 +78,7 @@ from world.scenes.factories import SceneFactory, SceneOwnerParticipationFactory
 from world.scenes.interaction_services import get_active_scene, invalidate_active_scene_cache
 from world.scenes.models import Scene
 from world.seeds.game_content.magic import _seed_affinity_interactions, seed_canonical_affinities
+from world.skills.factories import MagicSkillFactory
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.services import ensure_canonical_check_outcome
 
@@ -343,6 +344,60 @@ class DisowningWhatUnsettlesHer(DriftJourneyCase):
         self.assertEqual(self.waiting(self.ysmay), 0)
         self.assertEqual(SettlingRite.objects.get().share, Decimal("0.00"))
         self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 10)
+
+
+class TheRitesRollCarriesTheSkillOfWhereItTurns(DriftJourneyCase):
+    """Staff gave Celestial a skill, Heroism; Ysmay (Celestial) performs the rite (#5308).
+
+    The roll adds the skill of the affinity the conversion turns toward: here Celestial, the
+    affinity of the Dawnlight her offering is tied to. The check is captured, so what the
+    roll carried is read from its own call and nothing of ours is patched.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.heroism = MagicSkillFactory(name="Heroism")
+        self.celestial.skill = self.heroism
+        self.celestial.save()
+        Affinity.objects.clear_cache()
+
+    def rite_roll(self, offering: str):
+        """Perform the rite on Success; the one call the rite's own check made."""
+        with force_check_outcome(self.outcomes["Success"]) as capture:
+            self.telnet(self.ysmay, f"aura settle {offering}")
+        (call,) = capture.calls
+        return call
+
+    def test_a_rite_that_turns_ruin_toward_dawnlight_adds_heroism_once(self) -> None:
+        self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        self.deed(self.ysmay)
+        self.reflect(self.ysmay, "Ruin", "disown")
+
+        call = self.rite_roll("Dawn-gold")
+
+        self.assertEqual([term.trait for term in call.extra_traits], [self.heroism])
+        self.assertEqual(SettlingRite.objects.count(), 1)
+
+    def test_a_rite_that_only_embraces_adds_no_skill(self) -> None:
+        self.carry(self.ysmay, self.ruin, "Ruin-iron Ring")
+        self.reflect(self.ysmay, "Ruin", "embrace")
+
+        call = self.rite_roll("Ring")
+
+        self.assertEqual(call.extra_traits, ())
+        self.assertEqual(SettlingRite.objects.count(), 1)
+
+    def test_an_inactive_skill_is_not_added(self) -> None:
+        self.heroism.is_active = False
+        self.heroism.save()
+        self.carry(self.ysmay, self.dawnlight, "Dawn-gold Thread")
+        self.deed(self.ysmay)
+        self.reflect(self.ysmay, "Ruin", "disown")
+
+        call = self.rite_roll("Dawn-gold")
+
+        self.assertEqual(call.extra_traits, ())
+        self.assertEqual(SettlingRite.objects.count(), 1)
 
 
 class WhenTheRiteRefuses(DriftJourneyCase):

@@ -1246,6 +1246,7 @@ def _charge_social_pull(
             involved_traits=involved_traits,
             target=target,
             excluded_kinds=frozenset({TargetKind.GIFT}),
+            check_type=check_type,
         ),
         # Defense-in-depth: beseech_bonus=0 ensures no emergency draw fires
         # even if the declaration somehow carried a bonus.
@@ -1611,6 +1612,7 @@ def _award_kindled_deeds_for_action(
         action_request.technique,
         main.check_result.outcome,
         action_name=action_obj.name if action_obj is not None else action_request.action_key,
+        check_type=main.check_result.check_type,
     )
 
 

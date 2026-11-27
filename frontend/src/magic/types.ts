@@ -74,6 +74,9 @@ export interface TetherBond {
 // ---------------------------------------------------------------------------
 
 export type ResonanceBalance = components['schemas']['_ResonanceBalance'];
+
+/** One row of the resonance catalog (`GET /api/magic/resonances/`): every resonance, held or not. */
+export type CatalogResonance = components['schemas']['Resonance'];
 export type NearXPLockProspect = components['schemas']['_NearXPLockProspect'];
 export type ThreadHubSummary = components['schemas']['ThreadHubSummary'];
 

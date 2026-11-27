@@ -58,7 +58,6 @@ def maybe_create_entry_flourish_offer(
 ) -> PendingEntryFlourishOffer | None:
     """Create/refresh the entrant's pending flourish offer, or None if not applicable."""
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
-    from world.magic.models import CharacterResonance  # noqa: PLC0415
     from world.magic.models.endorsement import EntryFlourishRecord  # noqa: PLC0415
 
     sheet = CharacterSheet.objects.filter(character=character).first()
@@ -69,8 +68,6 @@ def maybe_create_entry_flourish_offer(
         and EntryFlourishRecord.objects.filter(character_sheet=sheet, scene=scene).exists()
     ):
         return None  # already flourished this scene
-    if not CharacterResonance.objects.filter(character_sheet=sheet).exists():
-        return None  # nothing claimed to broadcast
     offer, _ = PendingEntryFlourishOffer.objects.update_or_create(
         character_sheet=sheet, defaults={"scene": scene}
     )
@@ -90,26 +87,18 @@ class EntryFlourishResult:
 def resolve_entry_flourish_offer(
     offer: PendingEntryFlourishOffer, *, resonance: Resonance
 ) -> EntryFlourishResult:
-    """Two-phase resolve: staleness check outside the txn; locked grant inside.
+    """Resolve a pending flourish offer with the resonance the entrant declares.
 
-    Phase 1 (outside transaction): validate resonance is claimed by the sheet.
-    If unclaimed → delete offer + EntryFlourishOfferStaleError.
+    The resonance may be one the character does not hold yet (#5308): the grant earns it.
 
-    Phase 2 (inside transaction.atomic with select_for_update): re-fetch offer,
-    call create_entry_flourish, delete locked offer row, return EntryFlourishResult.
+    Inside transaction.atomic with select_for_update: re-fetch offer, call
+    create_entry_flourish, delete locked offer row, return EntryFlourishResult.
     """
-    from world.magic.exceptions import (  # noqa: PLC0415
-        EntryFlourishOfferNotFoundError,
-        EntryFlourishOfferStaleError,
-    )
-    from world.magic.models import CharacterResonance  # noqa: PLC0415
+    from world.magic.exceptions import EntryFlourishOfferNotFoundError  # noqa: PLC0415
     from world.magic.services.gain import create_entry_flourish  # noqa: PLC0415
 
     sheet = offer.character_sheet
     scene = offer.scene
-    if not CharacterResonance.objects.filter(character_sheet=sheet, resonance=resonance).exists():
-        offer.delete()
-        raise EntryFlourishOfferStaleError
 
     with transaction.atomic():
         locked = PendingEntryFlourishOffer.objects.select_for_update().filter(pk=offer.pk).first()

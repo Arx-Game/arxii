@@ -556,11 +556,6 @@ class EntryFlourishOfferNotFoundError(EntryFlourishOfferError):
     SAFE_MESSAGES = frozenset({user_message})
 
 
-class EntryFlourishOfferStaleError(EntryFlourishOfferError):
-    user_message = "That resonance is no longer available for your flourish."
-    SAFE_MESSAGES = frozenset({user_message})
-
-
 # =============================================================================
 # Trait crossing exceptions (#1989)
 # =============================================================================
@@ -1031,6 +1026,17 @@ class ClaimError(MagicError):
     """A claim of set-aside kindled resonance cannot be made (#5181); the raise site says why."""
 
     user_message = "You cannot claim that."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message
+
+
+class ReachError(MagicError):
+    """A pose's reach for a resonance cannot be made (#5308); the raise site says why."""
+
+    user_message = "You cannot reach for that."
 
     def __init__(self, user_message: str | None = None) -> None:
         super().__init__(user_message)

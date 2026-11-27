@@ -35,10 +35,12 @@ from world.magic.factories import (
     CharacterAnimaFactory,
     CharacterAuraFactory,
     CharacterResonanceFactory,
+    ResonanceCheckAwardFactory,
     ResonanceFactory,
     RitualCheckConfigFactory,
     RitualFactory,
     SoulfrayConfigFactory,
+    TrickleAccrualFactory,
     ensure_conversion_pairs,
 )
 from world.magic.models import (
@@ -48,14 +50,19 @@ from world.magic.models import (
     CharacterAnima,
     CharacterResonance,
     ResonanceGrant,
+    TrickleAccrual,
 )
 from world.magic.models.soulfray import AnimaRitualBudgetAward
+from world.magic.services.gain import get_resonance_gain_config, waiting_trickles
+from world.magic.services.ritual_bond import harvest_trickles
+from world.magic.types.resonance_checks import NO_GAIN_BONUS
 from world.roster.factories import RosterFactory
 from world.roster.models.choices import RosterType
 from world.scenes.action_constants import ActionRequestStatus
 from world.scenes.action_models import SceneActionRequest
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.interaction_services import invalidate_active_scene_cache
+from world.skills.factories import MagicSkillFactory
 from world.traits.factories import ensure_level_ladder
 from world.traits.services import ensure_canonical_check_outcome
 
@@ -149,8 +156,10 @@ class _RitualWithAPartner(JourneyCase):
     def ask(self) -> str:
         return self.telnet(self.mara, "ritual anima Tobin")
 
-    def agree(self):
-        with force_check_outcome(self.success) as capture:
+    def agree(self, *bonus_results):
+        """Tobin accepts; the ritual's own roll lands on Success and each later roll (the
+        bonus checks) on the next of ``bonus_results``."""
+        with force_check_outcome(self.success, *bonus_results) as capture:
             told = self.telnet(self.tobin, "accept")
         self.capture = capture
         return told
@@ -402,6 +411,71 @@ class _AnAskedPartner(_RitualWithAPartner):
         return ResonanceGrant.objects.filter(
             source=GainSource.ANIMA_RITUAL, resonance=self.resonance
         ).count()
+
+
+class TheRitualHarvestsWhatHerDaysPiledUp(_RitualWithAPartner):
+    """Mara's days piled up Ruin and Hollow; her ritual with Tobin turns them into resonance,
+    each affinity's bonus check rolled once and shared by every grant of that affinity (#5308)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        villainy = MagicSkillFactory(name="Villainy")
+        self.affinity.skill = villainy
+        self.affinity.save()
+        Affinity.objects.clear_cache()
+        cfg = get_resonance_gain_config()
+        self.bonus_check = CheckTypeFactory()
+        cfg.bonus_check_type = self.bonus_check
+        cfg.save()
+        ResonanceCheckAwardFactory(outcome_tier=self.success, gain_bonus_percent=50)
+        sheet = self.mara.sheet_data
+        TrickleAccrualFactory(character_sheet=sheet, resonance=self.resonance, amount=10)
+        TrickleAccrualFactory(character_sheet=sheet, resonance=self.resonance, amount=4)
+        TrickleAccrualFactory(character_sheet=sheet, resonance=self.primal_resonance, amount=4)
+
+    def test_the_ritual_harvests_every_waiting_trickle_grown_by_its_affinitys_check(self) -> None:
+        self.ask()
+        # The ritual's own roll takes the first queued result and the two bonus checks the next
+        # two, all Success. It must roll once for each affinity: the Primal pick's part and its
+        # waiting trickle share one roll, as do the Abyssal ones.
+        self.agree(self.success, self.success)
+        bonus_rolls = [c for c in self.capture.calls if c.check_type == self.bonus_check]
+        self.assertEqual(len(bonus_rolls), 2)
+
+        # Hollow: the ritual's 3 grows to 4 and the 4 waiting grows to 6. Ruin: 14 waiting
+        # grows to 21. Each is told with its check named: Villainy for the Abyssal one, the
+        # affinity itself for the Primal one, which has no skill.
+        self.assertTold(
+            self.mara,
+            "Your ritual feeds on Tobin. You recover 6 anima. Your Hollow grows by 4. "
+            "Your Primal check added 50 percent. "
+            "21 Ruin waiting from your days arrived. Your Villainy check added 50 percent. "
+            "6 Hollow waiting from your days arrived. Your Primal check added 50 percent.",
+        )
+        self.assertEqual(self.balance(), 4 + 6)
+        self.assertEqual(self.balance(self.resonance), 21)
+        harvests = ResonanceGrant.objects.filter(source=GainSource.TRICKLE_HARVEST)
+        self.assertEqual(harvests.count(), 2)
+        self.assertEqual({grant.bonus_percent for grant in harvests}, {50})
+        self.assertFalse(TrickleAccrual.objects.filter(harvested_at__isnull=True).exists())
+        # Tobin's answer is still owed the base amount, grown by the result stored for it.
+        performance = AnimaRitualPerformance.objects.get()
+        self.assertEqual(performance.outward_amount_pending, 3)
+        self.assertEqual(performance.outward_bonus_percent, 50)
+        self.telnet(self.tobin, "ritual endorse Mara")
+        self.assertEqual(self.balance(self.resonance), 21 + 4)
+
+    def test_a_second_ritual_harvests_nothing_already_harvested(self) -> None:
+        self.ask()
+        self.agree()
+        before = ResonanceGrant.objects.filter(source=GainSource.TRICKLE_HARVEST).count()
+
+        self.assertEqual(waiting_trickles(self.mara.sheet_data), {})
+        harvest_trickles(self.mara.sheet_data, lambda _res: NO_GAIN_BONUS, ritual=self.ritual)
+
+        self.assertEqual(
+            ResonanceGrant.objects.filter(source=GainSource.TRICKLE_HARVEST).count(), before
+        )
 
 
 class TobinEndorses(_AnAskedPartner):

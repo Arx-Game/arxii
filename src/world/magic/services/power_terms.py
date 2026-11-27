@@ -17,6 +17,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from world.magic.services.kindled_math import scale_by_kindled_boost
+from world.magic.services.resonance_checks import FULL_WORTH_PERCENT
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -89,6 +90,10 @@ class PowerTermContext:
     #: The one resonance this cast is worked in (#5231), resolved once by ``use_technique``
     #: through ``cast_resonance_for``. ``None`` = a cast with no resonance (no Gift).
     cast_resonance: Resonance | None = None
+    #: What the cast resonance's affinity check made a kindled cast worth, in percent (#5308),
+    #: rolled once by ``use_technique``. 100 = full strength: a preview, and every cast that
+    #: neither pulls nor is kindled, never rolls.
+    resonance_worth_percent: int = 100
 
 
 PowerTermProvider = Callable[[PowerTermContext], int]
@@ -736,7 +741,8 @@ def kindled_cast_power_term(ctx: PowerTermContext) -> int:
     Adds ``kindled_cast_strength`` of the cast's resonance, whether or not the cast pulls a
     thread: kindling's other benefits (giving in, Dig deep) stack with a pull the same way, so
     stacking is the rule and staff tune ``cast_power``. 0 for a cast with no resonance or one
-    that is not kindled.
+    that is not kindled. The strength is scaled by the worth the cast's affinity check gave it
+    (#5308).
     """
     from world.combat.round_context import CombatRoundContext  # noqa: PLC0415
     from world.magic.services.kindling import kindled_strength_now  # noqa: PLC0415
@@ -745,10 +751,11 @@ def kindled_cast_power_term(ctx: PowerTermContext) -> int:
         return 0
     # In a fight the cast's own round context is the resolution: no second lookup of it.
     resolution = ctx.situation_ctx if isinstance(ctx.situation_ctx, CombatRoundContext) else None
-    return kindled_cast_strength(
+    strength = kindled_cast_strength(
         ctx.cast_resonance,
         kindled_strength_now(ctx.sheet, ctx.cast_resonance, resolution=resolution),
     )
+    return strength * ctx.resonance_worth_percent // FULL_WORTH_PERCENT
 
 
 _PROVIDERS: list[PowerTermProvider] = [

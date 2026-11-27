@@ -24407,6 +24407,7 @@ paths:
           - STYLE_PRESENTATION
           - SUCCUMBED
           - SUCCUMB_BONUS
+          - TRICKLE_HARVEST
           - WORSHIP_RITE
         description: |-
           Discriminator. Identifies which source_* FK is populated.
@@ -24443,6 +24444,7 @@ paths:
           * `SINEATER_FALL` - Sineater fell
           * `KINDLED_CLAIM` - Kindled deed claimed
           * `ANIMA_RITUAL` - Anima ritual
+          * `TRICKLE_HARVEST` - Trickle harvest
       tags:
       - magic
       security:
@@ -66423,7 +66425,18 @@ components:
           items:
             type: object
             additionalProperties: {}
-          description: List of resonances claimed by the endorsee (pose author).
+          description: |-
+            The resonances an endorsement of this pose can pay.
+
+            A pose that reached for a resonance (#5308) is endorsed for that one alone. Otherwise
+            the endorser picks from the resonances claimed by the endorsee (pose author).
+          readOnly: true
+        reached_resonance:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: The resonance the poser said this pose reaches for (#5308),
+            or None.
           readOnly: true
         pose_endorsers:
           type: array
@@ -66486,6 +66499,7 @@ components:
       - persona
       - place_name
       - pose_endorsers
+      - reached_resonance
       - reaction_windows
       - reactions
       - receiver_persona_ids
@@ -66817,7 +66831,18 @@ components:
           items:
             type: object
             additionalProperties: {}
-          description: List of resonances claimed by the endorsee (pose author).
+          description: |-
+            The resonances an endorsement of this pose can pay.
+
+            A pose that reached for a resonance (#5308) is endorsed for that one alone. Otherwise
+            the endorser picks from the resonances claimed by the endorsee (pose author).
+          readOnly: true
+        reached_resonance:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: The resonance the poser said this pose reaches for (#5308),
+            or None.
           readOnly: true
         pose_endorsers:
           type: array
@@ -66875,6 +66900,7 @@ components:
       - persona
       - place_name
       - pose_endorsers
+      - reached_resonance
       - reaction_windows
       - reactions
       - receiver_persona_ids
@@ -68150,6 +68176,13 @@ components:
             claimed (#5181). Kindled or not: it waits however long it takes. The view puts the
             character's amounts in ``context["unclaimed"]`` (resonance id to amount).
           readOnly: true
+        waiting_trickle:
+          type: integer
+          description: |-
+            What the character's days have piled up in this resonance for the next anima ritual
+            to harvest (#5308). The view puts the amounts in ``context["trickle"]`` (resonance id
+            to amount).
+          readOnly: true
       required:
       - affinity_name
       - claim_verb
@@ -68159,6 +68192,7 @@ components:
       - reasons
       - strength_name
       - unclaimed
+      - waiting_trickle
     KinspersonNode:
       type: object
       description: One visible node in a family tree payload.
@@ -87778,7 +87812,9 @@ components:
       description: |-
         Serializer for PoseEndorsement create + read (Spec C Task 23).
 
-        Write: accepts ``interaction`` + ``resonance`` PKs from the request body.
+        Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
+        optional when the pose's author reached for one (#5308), which is then the resonance
+        endorsed; the action asks "Which resonance?" for a pose that did not.
         The ``endorser_sheet`` is resolved from the requesting account in the
         view (``PoseEndorsementViewSet.perform_create``) and injected via
         ``serializer.save(endorser_sheet=sheet)``.
@@ -87829,14 +87865,15 @@ components:
       - id
       - interaction
       - persona_snapshot
-      - resonance
       - settled_at
     PoseEndorsementRequest:
       type: object
       description: |-
         Serializer for PoseEndorsement create + read (Spec C Task 23).
 
-        Write: accepts ``interaction`` + ``resonance`` PKs from the request body.
+        Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
+        optional when the pose's author reached for one (#5308), which is then the resonance
+        endorsed; the action asks "Which resonance?" for a pose that did not.
         The ``endorser_sheet`` is resolved from the requesting account in the
         view (``PoseEndorsementViewSet.perform_create``) and injected via
         ``serializer.save(endorser_sheet=sheet)``.
@@ -87851,7 +87888,6 @@ components:
           type: integer
       required:
       - interaction
-      - resonance
     PoseKindEnum:
       enum:
       - standard
@@ -90524,8 +90560,11 @@ components:
       - name
     ResonanceGrant:
       type: object
-      description: Read-only serializer for ResonanceGrant audit ledger rows (Spec
-        C Task 25).
+      description: |-
+        Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
+
+        ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
+        no bonus check) say what the bonus check added to ``amount`` (#5308).
       properties:
         id:
           type: integer
@@ -90540,6 +90579,16 @@ components:
         amount:
           type: integer
           readOnly: true
+        bonus_percent:
+          type: integer
+          readOnly: true
+          description: How much the bonus check added to this gain, as a percentage
+            of the amount before it. 0 when none. The amount above already includes
+            it.
+        bonus_outcome:
+          type: string
+          readOnly: true
+          nullable: true
         source:
           allOf:
           - $ref: '#/components/schemas/ResonanceGrantSourceEnum'
@@ -90579,6 +90628,7 @@ components:
             * `SINEATER_FALL` - Sineater fell
             * `KINDLED_CLAIM` - Kindled deed claimed
             * `ANIMA_RITUAL` - Anima ritual
+            * `TRICKLE_HARVEST` - Trickle harvest
         granted_at:
           type: string
           format: date-time
@@ -90601,6 +90651,8 @@ components:
           nullable: true
       required:
       - amount
+      - bonus_outcome
+      - bonus_percent
       - character_sheet
       - granted_at
       - id
@@ -90644,6 +90696,7 @@ components:
       - SINEATER_FALL
       - KINDLED_CLAIM
       - ANIMA_RITUAL
+      - TRICKLE_HARVEST
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -90678,6 +90731,7 @@ components:
         * `SINEATER_FALL` - Sineater fell
         * `KINDLED_CLAIM` - Kindled deed claimed
         * `ANIMA_RITUAL` - Anima ritual
+        * `TRICKLE_HARVEST` - Trickle harvest
     ResonanceLine:
       type: object
       properties:

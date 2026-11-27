@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 from commands.command import ArxCommand
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from world.magic.services.impulses import Impulse
     from world.magic.types.kindling import KindledResonance
 
@@ -19,16 +21,23 @@ NO_SHEET = "You have no character sheet."
 NO_RESONANCES = "You hold no resonances."
 
 
-def kindled_lines(rows: list[KindledResonance]) -> list[str]:
-    """One block per resonance: name and affinity, its state, then why it is kindled."""
+def kindled_lines(
+    rows: list[KindledResonance], waiting: Mapping[int, int] | None = None
+) -> list[str]:
+    """One block per resonance: name and affinity, its state, then why it is kindled. A
+    resonance whose days have piled up a trickle (``waiting``, resonance id to amount) says
+    how much waits for the next anima ritual (#5308), as the web panel does."""
     lines: list[str] = []
     for row in rows:
         head = f"|w{row.resonance.name}|n ({row.resonance.affinity.name})"
         if row.tier is None:
             lines.append(f"{head} - Not kindled")
-            continue
-        lines.append(f"{head} - Kindled, {row.tier.name.lower()}")
-        lines.extend(f"  {reason}" for reason in row.reasons)
+        else:
+            lines.append(f"{head} - Kindled, {row.tier.name.lower()}")
+            lines.extend(f"  {reason}" for reason in row.reasons)
+        trickle = waiting.get(row.resonance.pk, 0) if waiting else 0
+        if trickle > 0:
+            lines.append(f"  {trickle} waiting for your anima ritual")
     return lines
 
 
@@ -60,6 +69,7 @@ class CmdKindledResonances(ArxCommand):
     action = None
 
     def func(self) -> None:
+        from world.magic.services.gain import waiting_trickles  # noqa: PLC0415
         from world.magic.services.impulses import (  # noqa: PLC0415
             safe_refresh_impulses_for_character,
         )
@@ -75,7 +85,7 @@ class CmdKindledResonances(ArxCommand):
         if not rows and not impulses:
             self.msg(NO_RESONANCES)
             return
-        lines = kindled_lines(rows) if rows else [NO_RESONANCES]
+        lines = kindled_lines(rows, waiting_trickles(sheet)) if rows else [NO_RESONANCES]
         if impulses:
             lines = [*lines, "", *impulse_lines(impulses)]
         self.msg("\n".join(lines))

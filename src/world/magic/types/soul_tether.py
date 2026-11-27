@@ -96,12 +96,22 @@ class SineatingOffer:
 
 
 @dataclass(frozen=True, slots=True)
+class EarnedPart:
+    """What one Sineating grant recorded: the resonance, its amount, and the percent the bonus
+    resonance check added to it (0 when it added nothing, #5308)."""
+
+    resonance: Resonance
+    amount: int
+    bonus_percent: int
+
+
+@dataclass(frozen=True, slots=True)
 class SineatingResult:
     """What a Sineating did, or a declined plea (#5177).
 
     ``resonance`` is the one the Sinner's corruption moved in: the resonance on her tether thread
     in which she had the most of her own to shed. ``sinner_resonance_earned`` is her total
-    earning and ``sinner_earned_parts`` what each grant recorded, one pair per resonance on
+    earning and ``sinner_earned_parts`` what each grant recorded, one part per resonance on
     her thread that was paid (#5231). ``sineater_resonance`` is the resonance of the Sineater's own
     thread, None when they hold no resonance for it to channel, in which case they earned
     nothing. ``cut_by_ceiling`` is True when the Sineater could take on only part of the
@@ -121,9 +131,10 @@ class SineatingResult:
     cut_by_ceiling: bool = False
     outcome_name: str = ""
     sinner_resonance_earned: int = 0
-    sinner_earned_parts: tuple[tuple[Resonance, int], ...] = ()
+    sinner_earned_parts: tuple[EarnedPart, ...] = ()
     sineater_resonance: Resonance | None = None
     sineater_resonance_earned: int = 0
+    sineater_bonus_percent: int = 0
 
 
 @dataclass(frozen=True, slots=True)

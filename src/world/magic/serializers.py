@@ -10,7 +10,7 @@ Affinities and Resonances are proper domain models in the magic app.
 from collections import defaultdict
 from collections.abc import Iterable
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from drf_spectacular.utils import extend_schema_field
 from evennia.accounts.models import AccountDB
@@ -2054,7 +2054,9 @@ class RitualPerformRequestSerializer(serializers.Serializer):
 class PoseEndorsementSerializer(serializers.ModelSerializer):
     """Serializer for PoseEndorsement create + read (Spec C Task 23).
 
-    Write: accepts ``interaction`` + ``resonance`` PKs from the request body.
+    Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
+    optional when the pose's author reached for one (#5308), which is then the resonance
+    endorsed; the action asks "Which resonance?" for a pose that did not.
     The ``endorser_sheet`` is resolved from the requesting account in the
     view (``PoseEndorsementViewSet.perform_create``) and injected via
     ``serializer.save(endorser_sheet=sheet)``.
@@ -2084,6 +2086,7 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
             "settled_at",
             "granted_amount",
         ]
+        extra_kwargs: ClassVar[dict[str, dict[str, bool]]] = {"resonance": {"required": False}}
 
     def create(self, validated_data: dict) -> PoseEndorsement:
         """Delegate to ``PoseEndorseAction`` (telnet + web converge on action.run())."""
@@ -2093,7 +2096,7 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
         result = PoseEndorseAction().run(
             actor=endorser_sheet.character,
             interaction=validated_data["interaction"],
-            resonance=validated_data["resonance"],
+            resonance=validated_data.get("resonance"),
             confirm=True,
         )
         if not result.success:
@@ -2213,7 +2216,15 @@ class StylePresentationEndorsementSerializer(serializers.ModelSerializer):
 
 
 class ResonanceGrantSerializer(serializers.ModelSerializer):
-    """Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25)."""
+    """Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
+
+    ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
+    no bonus check) say what the bonus check added to ``amount`` (#5308).
+    """
+
+    bonus_outcome = serializers.CharField(
+        source="bonus_outcome.name", read_only=True, allow_null=True, default=None
+    )
 
     class Meta:
         model = ResonanceGrant
@@ -2222,6 +2233,8 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
             "character_sheet",
             "resonance",
             "amount",
+            "bonus_percent",
+            "bonus_outcome",
             "source",
             "granted_at",
             "source_room_profile",
