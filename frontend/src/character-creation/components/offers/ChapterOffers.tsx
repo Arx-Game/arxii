@@ -320,6 +320,146 @@ function cardLineIds(about: string, lines: CardLines): string {
     .join(' ');
 }
 
+/** Which optional lines this card shows, for its layout and its marks. */
+function cardLines(
+  offer: VisibleOffer,
+  layout: 'list' | 'grid',
+  withTerms: boolean,
+  marks: { secret: boolean; cover: boolean }
+): CardLines {
+  return {
+    distinction:
+      layout === 'grid' && Boolean(offer.distinction_name) && offer.distinction_name !== offer.name,
+    effects: withTerms ? offer.effects.length > 0 : Boolean(offer.effect_line),
+    locked: offer.is_locked,
+    secret: marks.secret,
+    cover: marks.cover,
+  };
+}
+
+/** A card's mechanics line: the effects with their terms where the block has terms, the
+ * offer's own written line where it has not. */
+function CardEffects({
+  id,
+  offer,
+  withTerms,
+  defined,
+  popover,
+}: {
+  id: string;
+  offer: VisibleOffer;
+  withTerms: boolean;
+  defined: (name: string) => boolean;
+  popover: TermPopoverState;
+}) {
+  if (withTerms) return <EffectTerms id={id} offer={offer} defined={defined} popover={popover} />;
+  if (!offer.effect_line) return null;
+  return (
+    <span className="fx" id={id}>
+      {offer.effect_line}
+    </span>
+  );
+}
+
+/** The lines under a card's name. Each carries the id the pick button's description names
+ * (`cardLineIds`), so what is listed there is rendered here. */
+function CardText({
+  about,
+  offer,
+  lines,
+  layout,
+  showOpener,
+  effects,
+  wordSecret,
+  wordCover,
+}: {
+  about: string;
+  offer: VisibleOffer;
+  lines: CardLines;
+  layout: 'list' | 'grid';
+  showOpener: boolean;
+  effects: ReactNode;
+  wordSecret?: string;
+  wordCover?: string;
+}) {
+  return (
+    <>
+      {lines.distinction && (
+        <span className="g" id={`${about}-distinction`}>
+          {offer.distinction_name}
+        </span>
+      )}
+      <span className="g" id={`${about}-line`}>
+        {cardLine(offer, layout)}
+        {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
+      </span>
+      {effects}
+      {lines.locked && (
+        <span className="locked" id={`${about}-locked`}>
+          {offer.lock_reason}
+        </span>
+      )}
+      {lines.secret && (
+        <span className="secret" id={`${about}-secret`}>
+          {wordSecret ?? 'Secret: select a cover story below'}
+        </span>
+      )}
+      {lines.cover && (
+        <span className="secret" id={`${about}-cover`}>
+          {wordCover ?? 'Cover story'}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** A ranked card's ranks as pips (#4829), in the card's top right on a career-point grid.
+ * A pip at or under the held rank is on; one past the points this card could still take
+ * is off; a click sets that rank (the first pip of an unpicked card picks it; the held
+ * rank's own pip clears it). */
+function RankPips({
+  offer,
+  rank,
+  reach,
+  saving,
+  onRank,
+}: {
+  offer: VisibleOffer;
+  rank: number;
+  /** The highest rank the block's remaining points allow this card. */
+  reach: number;
+  saving: boolean;
+  onRank: (rank: number) => void;
+}) {
+  const pips = Array.from({ length: offer.max_rank }, (_, i) => i + 1);
+  return (
+    <span
+      className="pips"
+      role="group"
+      aria-label={`${offer.name}, rank ${rank} of ${offer.max_rank}`}
+    >
+      {pips.map((pip) => {
+        const on = pip <= rank;
+        const off = pip > reach;
+        return (
+          <button
+            key={pip}
+            type="button"
+            className={cn('pip', on && 'on', off && 'off')}
+            aria-pressed={on}
+            aria-label={`${offer.name}, rank ${pip}`}
+            disabled={(offer.is_locked || saving || off) && !on}
+            onClick={(e) => {
+              e.stopPropagation();
+              onRank(pip === rank ? 0 : pip);
+            }}
+          />
+        );
+      })}
+    </span>
+  );
+}
+
 /** The price line: per-rank (plus a spent/refund total once picked) for a
  * ranked offer, a refund, or the flat cost for an unranked one. */
 function PriceLine({
@@ -591,19 +731,10 @@ export function ChapterOffers({
     const ranked = offer.max_rank > 1;
     const waiting = full && !selected;
     const busy = offer.is_locked || saving || waiting;
-    // Pips (#4829): on a career-point grid the rank is the pips in the card's top
-    // right. A pip at or under the held rank is on; one past the points this card could
-    // still take is off; a click sets that rank (the first pip of an unpicked card picks
-    // it; the held rank's own pip clears it).
-    const pips =
-      pointsPicks && ranked && !offer.held
-        ? Array.from({ length: offer.max_rank }, (_, i) => i + 1)
-        : null;
+    // On a career-point grid a ranked card's rank is its pips (`RankPips`, #4829).
+    const pips = pointsPicks && ranked && !offer.held;
     const reach = pointsLeft === null ? offer.max_rank : rank + pointsLeft;
-    const showsDistinction =
-      layout === 'grid' && offer.distinction_name && offer.distinction_name !== offer.name;
     const isCover = coverOfferId !== null && coverOfferId === offer.offer_id;
-    const isSecret = secretOfferIds.includes(offer.offer_id);
     const toggle = () => {
       if (interceptPick?.(offer, selected)) return;
       applyRank(offer, selected ? 0 : 1);
@@ -611,13 +742,11 @@ export function ChapterOffers({
     // An unranked card nobody holds is picked by its name (`PickName`).
     const pickable = !ranked && !offer.held;
     const about = `${blockId}-${offer.offer_id}`;
-    const lines: CardLines = {
-      distinction: Boolean(showsDistinction),
-      effects: terms ? offer.effects.length > 0 : Boolean(offer.effect_line),
-      locked: offer.is_locked,
-      secret: isSecret,
+    const withTerms = Boolean(terms);
+    const lines = cardLines(offer, layout, withTerms, {
+      secret: secretOfferIds.includes(offer.offer_id),
       cover: isCover,
-    };
+    });
     const body = (
       <>
         <span className={exclusive ? 'dot' : 'dot sq'} />
@@ -645,44 +774,24 @@ export function ChapterOffers({
               />
             )}
           </b>
-          {showsDistinction && (
-            <span className="g" id={`${about}-distinction`}>
-              {offer.distinction_name}
-            </span>
-          )}
-          <span className="g" id={`${about}-line`}>
-            {cardLine(offer, layout)}
-            {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
-          </span>
-          {terms ? (
-            <EffectTerms
-              id={`${about}-fx`}
-              offer={offer}
-              defined={termDefined}
-              popover={termPopover}
-            />
-          ) : (
-            offer.effect_line && (
-              <span className="fx" id={`${about}-fx`}>
-                {offer.effect_line}
-              </span>
-            )
-          )}
-          {offer.is_locked && (
-            <span className="locked" id={`${about}-locked`}>
-              {offer.lock_reason}
-            </span>
-          )}
-          {isSecret && (
-            <span className="secret" id={`${about}-secret`}>
-              {wordSecret ?? 'Secret: select a cover story below'}
-            </span>
-          )}
-          {isCover && (
-            <span className="secret" id={`${about}-cover`}>
-              {wordCover ?? 'Cover story'}
-            </span>
-          )}
+          <CardText
+            about={about}
+            offer={offer}
+            lines={lines}
+            layout={layout}
+            showOpener={showOpener}
+            effects={
+              <CardEffects
+                id={`${about}-fx`}
+                offer={offer}
+                withTerms={withTerms}
+                defined={termDefined}
+                popover={termPopover}
+              />
+            }
+            wordSecret={wordSecret}
+            wordCover={wordCover}
+          />
         </span>
         <span className="price" id={`${about}-price`}>
           {offer.held && <span className="locked">{wordHeld ?? 'held'}</span>}
@@ -693,30 +802,13 @@ export function ChapterOffers({
           )}
         </span>
         {pips && (
-          <span
-            className="pips"
-            role="group"
-            aria-label={`${offer.name}, rank ${rank} of ${offer.max_rank}`}
-          >
-            {pips.map((pip) => {
-              const on = pip <= rank;
-              const off = pip > reach;
-              return (
-                <button
-                  key={pip}
-                  type="button"
-                  className={cn('pip', on && 'on', off && 'off')}
-                  aria-pressed={on}
-                  aria-label={`${offer.name}, rank ${pip}`}
-                  disabled={(offer.is_locked || saving || off) && !on}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    applyRank(offer, pip === rank ? 0 : pip);
-                  }}
-                />
-              );
-            })}
-          </span>
+          <RankPips
+            offer={offer}
+            rank={rank}
+            reach={reach}
+            saving={saving}
+            onRank={(next) => applyRank(offer, next)}
+          />
         )}
       </>
     );
