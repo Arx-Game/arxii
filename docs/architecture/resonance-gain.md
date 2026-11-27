@@ -1243,12 +1243,13 @@ persisting the declared worth on `CombatPull` would have needed a column the spe
 
 A pose can name a resonance it reaches for (`PoseResonanceReach`, one per pose). An endorsement of a
 reached pose pays that resonance and the endorsee need not have claimed it, so the endorser only
-confirms. A deed in a Celestial or Abyssal resonance the character does not hold earns it: the grant
-creates her row (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`). Only a
-row on a deed situation counts for her (`DEED_SITUATIONS`): the target bears a feeling she laid on them (`TARGET_IN_STATE_THEY_CAUSED`), she aids someone in trouble (`SOMEONE_IN_TROUBLE`), or she takes a mission option carrying the theme (`MISSION_THEME`).
-A row on any other situation is a circumstance and kindles the resonance only for a character who holds it,
-and so does every row on a Primal resonance, because a Primal resonance is what the character herself feels
-and the other two come from what she makes someone else feel (owner ruling, 2026-11-27). The entry flourish accepts any unheld resonance, Primal included, and so
+confirms. A deed she chose in a Celestial or Abyssal resonance the character does not hold earns it: the
+grant creates her row (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`).
+Only a row on `CHOSEN_DEED_SITUATIONS` counts for her, which today is `MISSION_THEME`: taking a mission option
+that carries the theme is a declared choice. Every other row, a state she caused in her target included,
+kindles the resonance only for a character who holds it, and so does every row on a Primal resonance. The
+owner ruled on 2026-11-27 that gaining a resonance needs a measure of intent: a paladin who makes a vampire
+feel hunted while protecting people earns nothing Abyssal unless he set out to terrorize it. The entry flourish accepts any unheld resonance, Primal included, and so
 does a reach, so a character who wants a new Primal resonance has those two ways to earn her first of it.
 
 The anima ritual's outward part can wait for the partner's answer. It stores the base amount on

@@ -1541,12 +1541,12 @@ declaring a residence, tagging a room's aura, and reaching both without a manual
   legacy `OUTFIT_TRICKLE` grants.
 - **A pose can reach.** `pending_reach_from` before the pose posts, `record_pending_reach` after
   (`services/reach.py`); an unheld resonance is a valid reach, and an unheld Celestial or Abyssal
-  resonance is a valid kindled deed (`kindled_resonances(include_named_unheld=True)`, set only by
-  `award_kindled_deeds`; the panel and casts never set it). For a character who does not hold the resonance,
-  only a row on `DEED_SITUATIONS` counts (a feeling she laid on her target, aiding someone in trouble, a
-  mission option's theme). Every other row is a circumstance and feeds holders only, and so does every row on
-  a Primal resonance: Primal is what she feels, the other two are what she makes someone else feel (owner
-  ruling, 2026-11-27). Do not widen the unheld set to Primal or to a circumstance situation.
+  resonance is a valid kindled deed only when she chose the deed (`kindled_resonances(include_named_unheld=True)`,
+  set only by `award_kindled_deeds`; the panel and casts never set it). "Chose" means a row on
+  `CHOSEN_DEED_SITUATIONS`, today a mission option's theme. Every other row feeds holders only, including a
+  state she caused in her target, and so does every row on a Primal resonance. The owner ruled on 2026-11-27
+  that gaining a resonance needs intent, and the game cannot read intent from a state. Do not add a situation
+  to `CHOSEN_DEED_SITUATIONS` unless the act is itself a declared choice of the deed.
 - **Authoring left to staff:** the three skills and the affinity link, `ResonanceCheckAward` rows,
   `bonus_check_type` and its difficulty, per-source stats, the Abyssal floor and any skill accents. With no
   `bonus_check_type` nothing changes.

@@ -2546,8 +2546,9 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   `kindled_resonances(sheet, *, resolution=None, mission=None, act=None, include_named_unheld=False)
   -> list[KindledResonance]` and `kindled_for(sheet, resonance, ...)` evaluate every held resonance (or the
   one named, whether or not she holds it); `include_named_unheld=True` (only `award_kindled_deeds`) also
-  evaluates each Celestial or Abyssal resonance an active deed situation (`DEED_SITUATIONS`) names that she
-  does not hold (#5308); a Primal resonance is evaluated only when she holds it. One `_Evaluation` reads who is present once and each distinct
+  evaluates each Celestial or Abyssal resonance that an active row on a deed she chose
+  (`CHOSEN_DEED_SITUATIONS`) names and she does not hold (#5308); every other resonance is evaluated only
+  when she holds it. One `_Evaluation` reads who is present once and each distinct
   (situation, params) pair once, so cost follows the authored rows, not the resonances held. The
   strongest situation sets the tier; each `KindledResonance` carries `tier`, `reasons` (player
   words, no numbers), `situations` and, for an act, `fed_tier` and `fed_reasons` (authored rows
@@ -4974,19 +4975,20 @@ and its set-aside share by the same percent, once per affinity, and the actor re
 Your Villainy check added P percent. M more is waiting to be claimed." (the middle sentence only when the
 percent is above 0 and the affinity has a skill).
 
-**A deed earns a Celestial or Abyssal resonance the character does not hold.**
+**A deed she chose earns a Celestial or Abyssal resonance the character does not hold.**
 `kindled_resonances(..., include_named_unheld=True)` (set only by `award_kindled_deeds`) appends each Celestial
-or Abyssal resonance that an active deed row names directly and the character does not hold, evaluated by
-those deed rows alone. A deed row is a `KindlingSituation` on one of `DEED_SITUATIONS`
-(`services/kindling.py`): the target bears a feeling she laid on them (`TARGET_IN_STATE_THEY_CAUSED`), she aids someone in trouble (`SOMEONE_IN_TROUBLE`), or she takes a mission option carrying the theme (`MISSION_THEME`).
-Every other situation is a circumstance: its row kindles the resonance for a character who holds it and pays
-nobody else, and a situation for a whole affinity feeds held resonances only. A Primal resonance is never
-appended. The owner ruled on 2026-11-27: "primal is always a situation you're in, celestial or abyssal is
-something you're doing to someone else", and "Celestial resonance coming from the gratitude of people you
-help in specific ways, while Abyssal resonance comes from the emotions of those you make suffer in specific
-ways. Primal, on the other hand, is what your character is feeling". A character who wants a Primal
-resonance she does not hold reaches for it in a pose that another player endorses, or declares it in an
-entrance flourish. The grant creates her `CharacterResonance` row and runs the aura recompute and the pledge
+or Abyssal resonance that an active chosen-deed row names directly and the character does not hold, evaluated
+by those rows alone. A chosen-deed row is a `KindlingSituation` on one of `CHOSEN_DEED_SITUATIONS`
+(`services/kindling.py`), which today is `MISSION_THEME`: she takes a mission option that carries the theme,
+and choosing the option is her intent. Every other row, including "the target is in a state she caused" and
+"someone in trouble", kindles the resonance only for a character who holds it, and so does a situation for a
+whole affinity. A Primal resonance is never appended. The owner ruled on 2026-11-27: "primal is always a
+situation you're in, celestial or abyssal is something you're doing to someone else", and "there needs to
+be a measure of *intent* to gaining that resonance. Like a paladin hunting a vampire to protect people from it
+would probably make the vampire feel hunted, but unless he's trying to *deliberately* make the vampire feel
+terrorized, he could not gain abyssal resonance from it". The game cannot read intent from a state, so intent
+is a choice the player declares. The other two declared ways into a resonance she does not hold are a pose
+that reaches for it and is endorsed, and the entrance flourish. The grant creates her `CharacterResonance` row and runs the aura recompute and the pledge
 and threshold hooks as for a held one. The "Your resonances" panel, telnet `resonances` and casts still read
 held resonances only. `create_entry_flourish` no longer refuses an unheld resonance, `maybe_create_entry_flourish_offer`
 opens an offer for a character who holds none, and `EntryFlourishOfferStaleError` is gone; the flourish rolls with
