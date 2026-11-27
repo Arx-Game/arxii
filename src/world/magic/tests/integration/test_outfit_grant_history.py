@@ -1,9 +1,10 @@
 """An item that has fed its wearer outfit resonance keeps that history (#4461).
 
-``ResonanceGrant.outfit_item_facet`` is required non-null on every OUTFIT_TRICKLE
-grant (``res_grant_outfit_trickle_shape``). Giving the item up or removing the facet
-used to delete the ItemFacet and ask Postgres to SET NULL the grant's FK, which the
-check constraint rejects. The history now survives: a given-up item is soft-destroyed
+``outfit_item_facet`` is required non-null on every OUTFIT_TRICKLE ``ResonanceGrant``
+(``res_grant_outfit_trickle_shape``) and on every ``TrickleAccrual`` an outfit fed (#5308),
+which is what a worn piece writes each day now. Giving the item up or removing the facet
+used to delete the ItemFacet and ask Postgres to SET NULL the FK, which the check
+constraint rejects. The history now survives: a given-up item is soft-destroyed
 and a removed facet is stamped ``removed_at``, never deleted.
 
 Tagged ``postgres``: the reproduction was written against, and is meant to run on, the
@@ -23,8 +24,8 @@ from world.ceremonies.services import give_up_item, read_item
 from world.items.models import ItemFacet, ItemInstance
 from world.items.services.cleanup import purge_expired_soft_deleted_items
 from world.items.services.facets import attach_facet_to_item, remove_facet_from_item
-from world.magic.constants import GainSource
-from world.magic.models import ResonanceGrant
+from world.magic.constants import GainSource, TrickleSource
+from world.magic.models import ResonanceGrant, TrickleAccrual
 from world.magic.services.gain import outfit_daily_trickle_for_character
 from world.magic.tests.integration.test_outfit_resonance_trickle_pipeline import (
     _build_sheet_with_equipped_facet_item,
@@ -46,7 +47,7 @@ class OutfitGrantHistorySurvivesTests(TestCase):
         )
         self.item = self.item_facet.item_instance
         self.assertEqual(outfit_daily_trickle_for_character(self.sheet), 1)
-        self.grant = ResonanceGrant.objects.get(source=GainSource.OUTFIT_TRICKLE)
+        self.grant = TrickleAccrual.objects.get(source=TrickleSource.OUTFIT_TRICKLE)
 
     def _assert_history_intact(self) -> None:
         self.grant.refresh_from_db()
@@ -79,11 +80,11 @@ class OutfitGrantHistorySurvivesTests(TestCase):
 
     def test_a_removed_facet_stops_granting(self) -> None:
         remove_facet_from_item(item_facet=self.item_facet)
-        before = ResonanceGrant.objects.count()
+        before = TrickleAccrual.objects.count()
 
         self.assertEqual(outfit_daily_trickle_for_character(self.sheet), 0)
 
-        self.assertEqual(ResonanceGrant.objects.count(), before)
+        self.assertEqual(TrickleAccrual.objects.count(), before)
 
     def test_a_removed_facet_stops_counting_against_capacity_and_can_be_reattached(self) -> None:
         template = self.item.template
@@ -121,7 +122,7 @@ class OutfitGrantHistorySurvivesTests(TestCase):
         self.assertTrue(ItemInstance.objects.filter(pk=self.item.pk).exists())
         self._assert_history_intact()
 
-    def test_merging_facets_hands_a_dropped_rows_grants_to_the_surviving_row(self) -> None:
+    def test_merging_facets_hands_a_dropped_rows_trickles_to_the_surviving_row(self) -> None:
         from world.items.factories import ItemFacetFactory
         from world.magic.factories import FacetFactory
         from world.magic.services.facets import merge_facets
@@ -135,11 +136,20 @@ class OutfitGrantHistorySurvivesTests(TestCase):
             source=GainSource.OUTFIT_TRICKLE,
             outfit_item_facet=loser_row,
         )
+        accrual = TrickleAccrual.objects.create(
+            character_sheet=self.sheet,
+            resonance=self.resonance,
+            amount=5,
+            source=TrickleSource.OUTFIT_TRICKLE,
+            outfit_item_facet=loser_row,
+        )
 
         merge_facets(self.facet, [loser])
 
         grant.refresh_from_db()
+        accrual.refresh_from_db()
         self.assertEqual(grant.outfit_item_facet_id, self.item_facet.pk)
+        self.assertEqual(accrual.outfit_item_facet_id, self.item_facet.pk)
         self.assertFalse(ItemFacet.objects.filter(pk=loser_row.pk).exists())
 
     def test_the_staff_merge_action_keeps_the_grant_history(self) -> None:

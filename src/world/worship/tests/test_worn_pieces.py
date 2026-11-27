@@ -29,9 +29,9 @@ from world.items.factories import (
 from world.items.services.equip import unequip_item
 from world.items.services.facets import remove_facet_from_item
 from world.items.services.meaning import item_meaning
-from world.magic.constants import GainSource
-from world.magic.factories import FacetFactory, ResonanceFactory
-from world.magic.models import ResonanceGrant
+from world.magic.constants import GainSource, TrickleSource
+from world.magic.factories import FacetFactory, ResonanceFactory, TrickleAccrualFactory
+from world.magic.models import ResonanceGrant, TrickleAccrual
 from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 from world.traits.factories import CheckOutcomeFactory
 from world.worship.constants import BeingResonanceTier
@@ -62,8 +62,22 @@ _REGIONS = (
 )
 
 
-def _stamp_grant(sheet, item_facet, resonance, amount: int) -> ResonanceGrant:
-    """A trickle grant the item's facet fed ``sheet``: the record the signal reads."""
+def _stamp_grant(sheet, item_facet, resonance, amount: int) -> TrickleAccrual:
+    """A trickle the item's facet fed ``sheet``: the record the signal reads. It counts
+    whether or not an anima ritual has harvested it yet (#5308)."""
+    return TrickleAccrualFactory(
+        character_sheet=sheet,
+        resonance=resonance,
+        amount=amount,
+        source=TrickleSource.OUTFIT_TRICKLE,
+        room_profile=None,
+        outfit_item_facet=item_facet,
+    )
+
+
+def _stamp_legacy_grant(sheet, item_facet, resonance, amount: int) -> ResonanceGrant:
+    """An OUTFIT_TRICKLE ledger grant written before trickles waited for the anima ritual;
+    the signal still counts it."""
     return ResonanceGrant.objects.create(
         character_sheet=sheet,
         resonance=resonance,
@@ -275,11 +289,21 @@ class ResonanceFedTests(WornPiecesTestBase):
         item = self.made_piece(self.kestrel)
         row = item.item_facets.get()
         _stamp_grant(CharacterSheetFactory(primary_persona=False), row, self.favored, 100)
-        grant = _stamp_grant(self.sheet, row, self.favored, 100)
-        grant.granted_at = item.held_since - timedelta(days=1)
-        grant.save(update_fields=["granted_at"])
+        accrual = _stamp_grant(self.sheet, row, self.favored, 100)
+        accrual.accrued_at = item.held_since - timedelta(days=1)
+        accrual.save(update_fields=["accrued_at"])
 
         self.assertNotIn(MeaningSignalKind.RESONANCE_FED, self._kinds(item))
+
+    def test_a_harvested_trickle_and_an_old_ledger_grant_both_still_count(self) -> None:
+        item = self.made_piece(self.kestrel)
+        row = item.item_facets.get()
+        harvested = _stamp_grant(self.sheet, row, self.associated, 10)
+        harvested.harvested_at = timezone.now()
+        harvested.save(update_fields=["harvested_at"])
+        _stamp_legacy_grant(self.sheet, row, self.associated, 10)
+
+        self.assertEqual(self._kinds(item)[MeaningSignalKind.RESONANCE_FED], 2)
 
     def test_a_removed_facets_grants_do_not_count(self) -> None:
         item = self.made_piece(self.kestrel)

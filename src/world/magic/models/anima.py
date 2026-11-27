@@ -165,6 +165,26 @@ class AnimaRitualPerformance(SharedMemoryModel):
         related_name="+",
         help_text="The outward resonance this performance reached for, held for the grant.",
     )
+    outward_bonus_outcome = models.ForeignKey(
+        "arxii.CheckOutcome",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The result of the bonus check rolled for the outward resonance when the ritual "
+            "was performed, held with the pending amount so the grant adds it without a "
+            "second roll (#5308)."
+        ),
+    )
+    outward_bonus_percent = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "How much that bonus check adds to the pending outward amount, as a percentage. "
+            "The pending amount itself is the amount before it."
+        ),
+    )
     performer_persona = models.ForeignKey(
         "arxii.Persona",
         on_delete=models.SET_NULL,

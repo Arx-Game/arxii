@@ -227,6 +227,7 @@
   - primum <- magic.PlacePrimum
   - primum_call_ups <- magic.PrimumCallUp
   - primum_sightings <- magic.PrimumSighting
+  - trickle_accruals <- magic.TrickleAccrual
   - income_streams <- currency.OrgIncomeStream
   - dream_reflection <- dreams.DreamReflection
   - reflection_of <- dreams.DreamReflection
@@ -1868,6 +1869,7 @@
   - technique_progress <- magic.TechniqueProgress
   - technique_progress_weekly <- magic.TechniqueProgressWeekly
   - threads <- magic.Thread
+  - trickle_accruals <- magic.TrickleAccrual
   - known_ultimates <- magic.KnownUltimate
   - thread_weaving_unlocks <- magic.CharacterThreadWeavingUnlock
   - duels_won <- combat.CombatEncounter
@@ -5240,6 +5242,7 @@
   - facet -> magic.Facet [FK]
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
+  - trickle_accruals <- magic.TrickleAccrual
 
 ### ItemInstance
 **Foreign Keys:**
@@ -6075,6 +6078,7 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - skill -> skills.Skill [OneToOne] (nullable)
 **Pointed to by:**
   - modifier_target <- mechanics.ModifierTarget
   - resonances <- magic.Resonance
@@ -6110,6 +6114,7 @@
   - scene -> scenes.Scene [FK] (nullable)
   - outcome -> traits.CheckOutcome [FK] (nullable)
   - outward_resonance -> magic.Resonance [FK] (nullable)
+  - outward_bonus_outcome -> traits.CheckOutcome [FK] (nullable)
   - performer_persona -> scenes.Persona [FK] (nullable)
 
 ### AnimaRitualResonanceAward
@@ -6715,6 +6720,11 @@
 **Pointed to by:**
   - resonance_grants <- magic.ResonanceGrant
 
+### PoseResonanceReach
+**Foreign Keys:**
+  - interaction -> scenes.Interaction [FK]
+  - resonance -> magic.Resonance [FK]
+
 ### PresentationEndorsement
 **Foreign Keys:**
   - endorser_sheet -> character_sheets.CharacterSheet [FK]
@@ -6795,6 +6805,7 @@
   - dramatic_moment_types <- magic.DramaticMomentType
   - drift_conversion_caps <- magic.DriftConversionCap
   - poseendorsement_set <- magic.PoseEndorsement
+  - pose_reaches <- magic.PoseResonanceReach
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - stylepresentationendorsement_set <- magic.StylePresentationEndorsement
   - entry_flourish_records <- magic.EntryFlourishRecord
@@ -6822,6 +6833,7 @@
   - pull_effects <- magic.ThreadPullEffect
   - threads <- magic.Thread
   - thread_rows <- magic.ThreadResonance
+  - trickle_accruals <- magic.TrickleAccrual
   - combo_slots <- combat.ComboSlot
   - alternate_self_grants <- forms.AlternateSelf
   - tied_item_templates <- items.ItemTemplate
@@ -6839,6 +6851,10 @@
   - affinity_interaction -> magic.AffinityInteraction [FK]
   - condition_template -> conditions.ConditionTemplate [FK]
 
+### ResonanceCheckAward
+**Foreign Keys:**
+  - outcome_tier -> traits.CheckOutcome [OneToOne]
+
 ### ResonanceConversion
 **Foreign Keys:**
   - source_resonance -> magic.Resonance [FK]
@@ -6853,7 +6869,12 @@
 
 ### ResonanceGainConfig
 **Foreign Keys:**
+  - bonus_check_type -> checks.CheckType [FK] (nullable)
   - updated_by -> evennia.AccountDB [FK] (nullable)
+
+### ResonanceGainSourceStat
+**Foreign Keys:**
+  - stat -> traits.Trait [FK]
 
 ### ResonanceGrant
 **Foreign Keys:**
@@ -6875,6 +6896,7 @@
   - source_kindling_situation -> magic.KindlingSituation [FK] (nullable)
   - source_settling_rite -> magic.SettlingRite [FK] (nullable)
   - source_reflection -> magic.Reflection [FK] (nullable)
+  - bonus_outcome -> traits.CheckOutcome [FK] (nullable)
 **Pointed to by:**
   - drift_conversion_caps <- magic.DriftConversionCap
   - reflections <- magic.Reflection
@@ -7471,6 +7493,13 @@
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
 
+### TrickleAccrual
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - resonance -> magic.Resonance [FK]
+  - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
+  - outfit_item_facet -> items.ItemFacet [FK] (nullable)
+
 ### Service Functions
 - `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' - Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).`
 - `activity_skill_terms(activity: 'MagicActivity') -> 'tuple[ExtraTraitTerm, ...]' - The skill terms staff mapped to ``activity``; empty when none are mapped.`
@@ -7495,7 +7524,7 @@
 - `get_soulfray_warning(character: 'ObjectDB') -> 'SoulfrayWarning | None' - Return the current Soulfray stage warning for the safety checkpoint.`
 - `get_thread_survivability_tuning(vital_target: 'str') -> "'ThreadSurvivabilityTuning | None'" - Return the tuning row for a target, or None if unseeded (baseline 0).`
 - `gift_thread_resistance(character: 'ObjectDB', damage_type: 'DamageType') -> 'int' - Total damage-type-specific resistance from gift threads (#1580).`
-- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, deed_label: 'str | None' = None, ledger_out: 'list[ResonanceGrant] | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
+- `grant_resonance(character_sheet: 'CharacterSheet', resonance: 'ResonanceModel', amount: 'int', *, source: 'str', pose_endorsement: 'PoseEndorsement | None' = None, scene_entry_endorsement: 'SceneEntryEndorsement | None' = None, room_profile: 'RoomProfile | None' = None, staff_account: 'AccountDB | None' = None, outfit_item_facet: 'ItemFacet | None' = None, sanctum_details: 'SanctumDetails | None' = None, project: 'Project | None' = None, entry_flourish: 'EntryFlourishRecord | None' = None, dramatic_moment: 'DramaticMomentTag | None' = None, style_presentation_endorsement: 'StylePresentationEndorsement | None' = None, mission_deed_reward_line: 'MissionDeedRewardLine | None' = None, source_character_distinction: 'CharacterDistinction | None' = None, worship_rite_performance: 'WorshipRitePerformance | None' = None, kindling_situation: 'KindlingSituation | None' = None, settling_rite: 'SettlingRite | None' = None, reflection: 'Reflection | None' = None, deed_label: 'str | None' = None, ledger_out: 'list[ResonanceGrant] | None' = None, act_stat: 'Trait | None' = None, gain_bonus: 'GainBonus | None' = None) -> 'CharacterResonance' - Atomically grant resonance AND write the ResonanceGrant ledger row.`
 - `has_pending_alterations(character: 'CharacterSheet') -> 'bool' - Check if this character has any unresolved Mage Scar that holds back advancement.`
 - `imbue_ready_threads(character_sheet: 'CharacterSheet') -> 'list[Thread]' - Return threads that any resonance the character holds can imbue (#5123).`
 - `involved_trait_ids(check_type: 'CheckType', extra_traits: 'Sequence[ExtraTraitTerm]') -> 'tuple[int, ...]' - Trait ids a roll involves: the check type's traits, then the terms', once each.`
@@ -7511,7 +7540,7 @@
 - `seed_thread_survivability_tuning() -> 'None' - Idempotently author the default ThreadSurvivabilityTuning rows (#1175).`
 - `select_mishap_pool(control_deficit: 'int') -> 'ConsequencePool | None' - Select a control mishap consequence pool based on deficit magnitude.`
 - `spend_resonance_for_imbuing(character_sheet: 'CharacterSheet', thread: 'Thread', resonance: 'ResonanceModel', amount: 'int', **_ritual_dispatch_kwargs: 'object') -> 'ThreadImbueResult' - Deduct ``resonance`` balance, add it to the thread's row, and advance the thread level.`
-- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None, burn: 'int' = 0, burn_resonance: 'ResonanceModel | None' = None, burn_valuation: 'BurnValuation | None' = None, burned_for: 'str' = '', payers: 'Mapping[int, ResonanceModel] | None' = None) -> 'ResonancePullResult' - Atomic pull commit (Spec A §5.4 + §7.4).`
+- `spend_resonance_for_pull(character_sheet: 'CharacterSheet', tier: 'int', threads: 'list[Thread]', action_context: 'PullActionContext', beseech_bonus_thread_id: 'int | None' = None, beseech_bonus: 'int' = 0, anima_cost_override: 'int | None' = None, burn: 'int' = 0, burn_resonance: 'ResonanceModel | None' = None, burn_valuation: 'BurnValuation | None' = None, burned_for: 'str' = '', payers: 'Mapping[int, ResonanceModel] | None' = None, worth_by_affinity: 'Mapping[int, int] | None' = None) -> 'ResonancePullResult' - Atomic pull commit (Spec A §5.4 + §7.4).`
 - `staff_clear_alteration(*, pending: 'PendingAlteration', staff_account: 'AccountDB | None', notes: 'str' = '') -> 'None' - Clear a PendingAlteration without resolving it. Staff escape hatch.`
 - `strain_to_intensity(*, strain_commitment: 'int', config: 'StrainCurve') -> 'int' - Convert committed anima into a diminishing-return power bonus.`
 - `survivability_baseline(character: 'ObjectDB', vital_target: 'str') -> 'int' - Universal soft-capped survivability baseline from thread investment (#1175),`
@@ -9728,6 +9757,7 @@
   - action_consequence_outcomes <- checks.ConsequenceOutcome
   - dramatic_moment_tags <- magic.DramaticMomentTag
   - endorsements <- magic.PoseEndorsement
+  - resonance_reaches <- magic.PoseResonanceReach
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
   - reflections <- magic.Reflection
   - combat_round_actions <- combat.CombatRoundAction
@@ -10402,6 +10432,7 @@
   - character_changes <- traits.CharacterTraitChange
   - classes_requiring_trait <- classes.CharacterClass
   - legend_spreads <- societies.LegendSpread
+  - affinity <- magic.Affinity
   - technique_styles <- magic.TechniqueStyle
   - override_techniques <- magic.Technique
   - maturation_spends <- progression.MaturationSpend
@@ -12089,6 +12120,7 @@
   - arxii_kindleddeedaward <- magic.KindledDeedAward
   - arxii_animaritualresonanceaward <- magic.AnimaRitualResonanceAward
   - arxii_rallykindlingstrength <- magic.RallyKindlingStrength
+  - arxii_resonancecheckaward <- magic.ResonanceCheckAward
   - arxii_sanctumhomecominggainaward <- magic.SanctumHomecomingGainAward
   - arxii_sanctumpurgingretentionaward <- magic.SanctumPurgingRetentionAward
   - arxii_sanctumdissolutionrecoveryaward <- magic.SanctumDissolutionRecoveryAward
@@ -12136,6 +12168,7 @@
   - character_changes <- traits.CharacterTraitChange
   - classes_requiring_trait <- classes.CharacterClass
   - legend_spreads <- societies.LegendSpread
+  - affinity <- magic.Affinity
   - technique_styles <- magic.TechniqueStyle
   - override_techniques <- magic.Technique
   - maturation_spends <- progression.MaturationSpend

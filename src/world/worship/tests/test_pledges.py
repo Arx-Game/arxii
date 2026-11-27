@@ -36,8 +36,8 @@ from world.items.factories import (
 )
 from world.items.models import ItemInstance
 from world.magic.constants import GainSource, TargetKind
-from world.magic.factories import CharacterResonanceFactory, FacetFactory
-from world.magic.models import Thread
+from world.magic.factories import CharacterResonanceFactory, FacetFactory, RitualFactory
+from world.magic.models import ResonanceGrant, Thread
 from world.magic.services.gain import (
     outfit_trickle_tick,
     residence_trickle_tick,
@@ -45,6 +45,8 @@ from world.magic.services.gain import (
     tag_room_resonance,
 )
 from world.magic.services.resonance import grant_resonance
+from world.magic.services.ritual_bond import harvest_trickles
+from world.magic.types.resonance_checks import NO_GAIN_BONUS
 from world.pacts.constants import CharacterPactCommitmentKind
 from world.pacts.factories import (
     CharacterPactFactory,
@@ -413,8 +415,14 @@ class DeedTests(PledgeTestBase):
         favor_before = self._favor()
 
         summary = residence_trickle_tick()
+        harvest_trickles(self.sheet, lambda _res: NO_GAIN_BONUS, ritual=RitualFactory())
 
         self.assertEqual(summary.residence_grants_issued, 1)
+        self.assertTrue(
+            ResonanceGrant.objects.filter(
+                character_sheet=self.sheet, source=GainSource.TRICKLE_HARVEST
+            ).exists()
+        )
         self.assertEqual(PledgeCredit.objects.count(), credits_before)
         self.assertEqual(self._favor(), favor_before)
 
@@ -441,8 +449,14 @@ class DeedTests(PledgeTestBase):
         favor_before = self._favor()
 
         grants_issued = outfit_trickle_tick()
+        harvest_trickles(self.sheet, lambda _res: NO_GAIN_BONUS, ritual=RitualFactory())
 
         self.assertEqual(grants_issued, 1)
+        self.assertTrue(
+            ResonanceGrant.objects.filter(
+                character_sheet=self.sheet, source=GainSource.TRICKLE_HARVEST
+            ).exists()
+        )
         self.assertEqual(PledgeCredit.objects.count(), credits_before)
         self.assertEqual(self._favor(), favor_before)
 

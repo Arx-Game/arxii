@@ -5,7 +5,7 @@ from django.db import migrations, models
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0483_poseendorsement_endorser_persona_and_more"),
+        ("arxii", "0484_affinity_skill_affinity_spend_worth_floor_percent_and_more"),
     ]
 
     operations = [

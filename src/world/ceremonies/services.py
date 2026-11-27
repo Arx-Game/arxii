@@ -674,7 +674,7 @@ def finish_ceremony(*, ceremony: Ceremony, sincere: bool | None = None) -> Cerem
                 f"Officiated a {ceremony.ceremony_type.name.lower()} PLACEHOLDER",
             )
     officiant_bump = _pay_officiant_favor(officiant_sheet, ceremony.being, rites_outcome)
-    _pay_rite_award(ceremony, officiant_sheet, rites_outcome, rite_award)
+    _pay_rite_award(ceremony, officiant_sheet, rites_outcome, rite_award, check_type)
 
     _run_type_specific_finish(ceremony, honorees)
 
@@ -730,14 +730,17 @@ def _resolve_rite_award(ceremony: Ceremony, rites_outcome):
         raise CeremonyError(exc.user_message) from exc
 
 
-def _pay_rite_award(ceremony: Ceremony, officiant_sheet, rites_outcome, rite_award) -> None:
+def _pay_rite_award(
+    ceremony: Ceremony, officiant_sheet, rites_outcome, rite_award, check_type
+) -> None:
     """A RITE ceremony pays its tier 3 award off the officiant's Rites roll (#3777).
 
     The same ``apply_rite_award`` a solo rite uses, so the performance row, the
     resonance ledger source and the weekly favor cap are one path. Participants
     earn their own resonance through dramatic-moment tags, not here. ``rite_award``
     was resolved by ``_resolve_rite_award`` before the honors; None means nothing
-    to pay.
+    to pay. ``check_type`` is the officiant's Rites roll, whose stat the bonus resonance check
+    borrows (#5308).
     """
     if rite_award is None:
         return
@@ -750,6 +753,7 @@ def _pay_rite_award(ceremony: Ceremony, officiant_sheet, rites_outcome, rite_awa
         scene=ceremony.scene,
         ceremony=ceremony,
         award=rite_award,
+        check_type=check_type,
     )
 
 

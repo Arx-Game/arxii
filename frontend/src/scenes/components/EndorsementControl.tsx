@@ -93,6 +93,8 @@ function isControlHidden(
 interface AffordanceProps {
   kind: EndorsementKind;
   resonances: { id: number; name: string }[];
+  /** The resonance the pose reached for (#5308); endorsing it needs no pick. */
+  reached: { id: number; name: string } | null;
   myEndorsement: { id: number; resonance_id: number; settled: boolean } | null;
   isImmutableEndorsedByMe: boolean;
   isPending: boolean;
@@ -108,6 +110,7 @@ interface AffordanceProps {
 function EndorsementAffordance({
   kind,
   resonances,
+  reached,
   myEndorsement,
   isImmutableEndorsedByMe,
   isPending,
@@ -141,6 +144,20 @@ function EndorsementAffordance({
       >
         Endorsed ✓
       </span>
+    );
+  }
+
+  if (reached != null) {
+    return (
+      <button
+        type="button"
+        disabled={isPending}
+        onClick={() => onPick(reached.id)}
+        data-testid="endorse-reached"
+        className="rounded-full border border-muted-foreground/30 px-2 py-0.5 text-xs transition-colors hover:border-amber-500/60 disabled:opacity-50"
+      >
+        Endorse their {reached.name}
+      </button>
     );
   }
 
@@ -231,10 +248,17 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
     (kind === 'entry' && interaction.entry_endorsed_by_me) ||
     (kind === 'style' && createStyle.isSuccess);
 
+  const reached = kind === 'pose' ? (interaction.reached_resonance ?? null) : null;
+
   // ----- Handlers ---------------------------------------------------------
   function handlePickResonance(resonanceId: number) {
     if (kind === 'pose') {
-      createPose.mutate({ interaction: interaction.id, resonance: resonanceId });
+      // A reached pose is endorsed for its reach, which the server reads; nothing is sent.
+      createPose.mutate(
+        reached != null
+          ? { interaction: interaction.id }
+          : { interaction: interaction.id, resonance: resonanceId }
+      );
       return;
     }
     // endorsee_sheet_id is guaranteed non-null here by the guard above.
@@ -255,6 +279,7 @@ export function EndorsementControl({ interaction, sceneId, kind }: EndorsementCo
       <EndorsementAffordance
         kind={kind}
         resonances={interaction.endorsable_resonances}
+        reached={reached}
         myEndorsement={myEndorsement}
         isImmutableEndorsedByMe={isImmutableEndorsedByMe}
         isPending={activeMutation.isPending}

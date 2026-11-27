@@ -56,6 +56,7 @@ class PullForTheRoundAction(Action):
             resolve_pull_from_kwargs,
         )
         from world.magic.exceptions import MagicError  # noqa: PLC0415
+        from world.magic.services.resonance_checks import worth_clause  # noqa: PLC0415
         from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
         participant = _active_combat_participant(actor, {RoundStatus.DECLARING})
@@ -73,7 +74,7 @@ class PullForTheRoundAction(Action):
             # A burn strains the action it was declared with; a pull on its own has none.
             return ActionResult(success=False, message=NO_BURN_ALONE)
         try:
-            commit_combat_pull(
+            result = commit_combat_pull(
                 declaration,
                 participant,
                 participant.encounter,
@@ -83,6 +84,6 @@ class PullForTheRoundAction(Action):
         except ActionDispatchError as refusal:
             return ActionResult(success=False, message=refusal.user_message)
         count = len(declaration.threads)
-        return ActionResult(
-            success=True, message=PULLED.format(count=count, s="" if count == 1 else "s")
-        )
+        message = PULLED.format(count=count, s="" if count == 1 else "s")
+        worth = worth_clause(result.worth_by_affinity)
+        return ActionResult(success=True, message=f"{message} {worth}" if worth else message)

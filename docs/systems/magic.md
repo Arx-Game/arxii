@@ -656,12 +656,14 @@ fatigue." / "It will ease your fatigue." / blank, `ritual_partner_effect`) befor
 
 *The partner's answer.* A player partner endorses or withholds the outward part. After a success,
 `apply_ritual_bond` stores the part on the performance (`AnimaRitualPerformance.endorsement=PENDING`,
-`outward_amount_pending`, `outward_resonance`) and the partner is asked; after a failed roll the held
+`outward_amount_pending`, `outward_resonance`, and since #5308 `outward_bonus_outcome` and
+`outward_bonus_percent`, the bonus check the ritual already rolled for that affinity) and the partner is asked; after a failed roll the held
 amount is `AnimaConfig.failed_endorsement_percent` (default 50) of the outward part of the Success
 tier's award, and 0 stores nothing and asks nothing. `answer_anima_ritual(partner_sheet, performance,
 endorse=)` (`services/anima_ritual_endorsement.py`) locks the row and reads its state from the
 database, so a double answer or a non-partner grants nothing; Endorse grants the held part once to the
-performer if she still holds the outward resonance and tells her "<partner> felt it. Your <outward>
+performer if she still holds the outward resonance (grown once by the stored bonus result, with no second
+roll, #5308) and tells her "<partner> felt it. Your <outward>
 grows by N."; Withhold grants nothing ("<partner> did not feel it."). The partner reads back the
 scene-entry endorsement wording: "You endorse <performer>'s ritual for <outward>." or "You do not
 endorse <performer>'s ritual for <outward>." A pending answer lapses when its
@@ -2541,9 +2543,12 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   trouble wants an aiding act; a mission theme wants the option taken to carry it; a feeling is fed
   by any act).
 - **Reading it** (`services/kindling.py`, `types/kindling.py`).
-  `kindled_resonances(sheet, *, resolution=None, mission=None, act=None) -> list[KindledResonance]`
-  and `kindled_for(sheet, resonance, ...)` evaluate every held resonance (or the one named, whether
-  or not she holds it). One `_Evaluation` reads who is present once and each distinct
+  `kindled_resonances(sheet, *, resolution=None, mission=None, act=None, include_named_unheld=False)
+  -> list[KindledResonance]` and `kindled_for(sheet, resonance, ...)` evaluate every held resonance (or the
+  one named, whether or not she holds it); `include_named_unheld=True` (only `award_kindled_deeds`) also
+  evaluates each Celestial or Abyssal resonance that an active row on a deed she chose
+  (`CHOSEN_DEED_SITUATIONS`) names and she does not hold (#5308); every other resonance is evaluated only
+  when she holds it. One `_Evaluation` reads who is present once and each distinct
   (situation, params) pair once, so cost follows the authored rows, not the resonances held. The
   strongest situation sets the tier; each `KindledResonance` carries `tier`, `reasons` (player
   words, no numbers), `situations` and, for an act, `fed_tier` and `fed_reasons` (authored rows
@@ -2554,8 +2559,8 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
   Names in reasons go through the persona display map, so an undiscovered mask stays a mask.
 - **Panel.** `GET /api/magic/kindled-resonances/?character_sheet=<id>` (owner or staff) lists each
   held resonance as `{id, name, affinity_name, kindled, strength_name, reasons}` plus, since #5181,
-  `unclaimed` (what a kindled deed set aside there, kindled or not) and `claim_verb` (the affinity's);
-  telnet `resonances`. See the "Your resonances" row in the table below.
+  `unclaimed` (what a kindled deed set aside there, kindled or not), `claim_verb` (the affinity's) and, since
+  #5308, `waiting_trickle` (what her days piled up there for the next anima ritual); telnet `resonances`. See the "Your resonances" row in the table below.
 - **Two ways to use it.** Drawing strength: a kindled payer reads the thread higher (below under the
   pull section); the character gives up no control. Giving in: Fury for any kindled resonance (the
   Fury section above). Dig deep and Rally name a resonance (table below). Emotion and control are
@@ -3446,7 +3451,8 @@ window opened on it) is described in `docs/systems/scenes.md`'s "The entrance" (
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
 Poll-able offer created on a successful Entrance social action; the entrant picks one
-claimed resonance to broadcast. Resolves through `create_entry_flourish` (actor self-grant
+resonance to broadcast (any resonance since #5308, held or not: a flourish in a new resonance earns it,
+and the offer opens even for a character who holds none). Resolves through `create_entry_flourish` (actor self-grant
 via the `ResonanceGrant` ledger), scoped to the active scene and idempotent per scene.
 The #904 reaction-window framework was evaluated and rejected here — it is peer-only
 (`react_to_window` hard-blocks self-reaction); entry flourish (actor self-grant) and
@@ -3460,10 +3466,9 @@ moment.
 
 **Services:**
 - `maybe_create_entry_flourish_offer(character, scene) -> PendingEntryFlourishOffer | None`
-  — called on Entrance action success; skips if already flourished this scene or no
-  claimed resonances.
+  — called on Entrance action success; skips if already flourished this scene.
 - `resolve_entry_flourish_offer(offer_id, *, resonance_id) -> EntryFlourishResult` —
-  two-phase staleness + ownership check then atomic grant + offer deletion.
+  atomic grant + offer deletion. The resonance need not be held: the grant earns it (#5308).
 - `create_entry_flourish(sheet, resonance, *, scene, amount=None) -> EntryFlourishRecord`
   — creates the record and fires `grant_resonance(source=ENTRY_FLOURISH)`; skips
   gracefully on a duplicate `(sheet, scene)`.
@@ -3480,7 +3485,8 @@ moment.
 **Config:** `ResonanceGainConfig.entry_flourish_grant` (default 10) — per-flourish amount.
 
 **Exceptions:** `EntryFlourishOfferError`, `EntryFlourishOfferNotFoundError`,
-`EntryFlourishOfferStaleError` (all in `exceptions.py`; carry `user_message`).
+(all in `exceptions.py`; carry `user_message`). `EntryFlourishOfferStaleError` was removed in #5308: no
+resonance is stale for a flourish now.
 
 ### Ritual Liturgy (models/liturgy.py — #1352)
 
@@ -4512,7 +4518,7 @@ look shipped.
 
 | Model | Purpose |
 |-------|---------|
-| `AnimaRitualPerformance` | Historical record of ritual performances; `target_character` names the partner of a ritual with a partner (#5181) |
+| `AnimaRitualPerformance` | Historical record of ritual performances; `target_character` names the partner of a ritual with a partner (#5181); `outward_bonus_outcome` and `outward_bonus_percent` hold the bonus check result for the pending outward amount (#5308) |
 | `AnimaRitualResonanceAward` | Resonance an Anima ritual with a partner earns per roll outcome (`OutcomeTierAward`, #5181) |
 | `Reincarnation` | Tracks character reincarnation events |
 
@@ -4825,12 +4831,14 @@ Resonance Gain" in `docs/systems/INDEX.md`). Current values:
 - `ROOM_RESIDENCE` — room residence trickle. Live end-to-end via a declare→tag→tick loop
   (#2036): `SetPrimaryHomeAction` declares `CharacterSheet.current_residence`,
   `tag_room_resonance`/`untag_room_resonance` tag the room's aura, `residence_trickle_tick()`
-  grants daily for the tagged∩claimed intersection; `StartingArea.grants_residence_tenancy`
+  writes a `TrickleAccrual` row daily for the tagged∩claimed intersection (since #5308 it grants
+  nothing itself, so this `GainSource` is legacy: only ledger rows from before that change carry it); `StartingArea.grants_residence_tenancy`
   auto-grants a CG starting tenancy so the gate is reachable with zero manual player step. A
   Sanctum's Ritual of Homecoming writes the same `LocationValueModifier` row shape onto its own
   room, so a resident Sanctum owner trickles from Homecoming growth as an intentional emergent
   synergy — see `world/magic/CLAUDE.md` "Residence declaration + room aura tagging" for detail.
-- `OUTFIT_TRICKLE` — outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`). `outfit_item_facet` is PROTECT and a removed facet is soft-removed (`ItemFacet.removed_at`), so the grant history survives a sacrificed item or a stripped facet (#4461).
+- `OUTFIT_TRICKLE`: outfit presentation trickle (see `docs/architecture/items-fashion-mantles.md`). Since #5308 the daily tick writes `TrickleAccrual` rows instead, so this `GainSource` is legacy and only older ledger rows carry it. `outfit_item_facet` is PROTECT and a removed facet is soft-removed (`ItemFacet.removed_at`), so the history survives a sacrificed item or a stripped facet (#4461).
+- `TRICKLE_HARVEST`: what an anima ritual with a partner turned the waiting `TrickleAccrual` rows into (#5308): one grant per resonance, grown by the ritual's bonus check for that resonance's affinity. Discriminator-only (no typed source FK), accelerated and earn-rate scaled like the trickles it replaces, caller-rolled, not a deed, and earns no pledge favor.
 - `STAFF_GRANT` — manual staff grant.
 - `SANCTUM_WEAVING` / `SANCTUM_OWNER_BONUS` / `SANCTUM_DISSOLUTION_RECOVERY` —
   Sanctum income and dissolution recovery (Plan 4).
@@ -4884,7 +4892,7 @@ query pipeline):
 ADR-0041) partition every `GainSource` member (a total-classification test enforces this):
 perception/presence-driven sources a character actively performs to be seen (`POSE_ENDORSEMENT`,
 `SCENE_ENTRY`, `ENTRY_FLOURISH`, `DRAMATIC_MOMENT`, `STYLE_PRESENTATION`, `OUTFIT_TRICKLE`,
-`ROOM_RESIDENCE`) are scaled up by `distinction_earn_rate_for` (a character's summed
+`ROOM_RESIDENCE`, and since #5308 `TRICKLE_HARVEST`) are scaled up by `distinction_earn_rate_for` (a character's summed
 `DistinctionResonanceGrant.earn_rate_bonus_per_rank`) in `grant_resonance` before the amount is
 written; authored/system sources (`STAFF_GRANT`, `MISSION_REWARD`, `MISSION_REPORT`,
 `STAKE_REWARD`, `PROJECT_CONTRIBUTION`, the three `SANCTUM_*` sources, `KINDLED_CLAIM`, `ANIMA_RITUAL`
@@ -4901,6 +4909,165 @@ final state per grant, exclusion conflicts logged and skipped, and the whole che
 failure-isolated (`logger.exception`) so the resonance grant itself always stands.
 `DISTINCTION`-source seeds never trigger it (feedback-loop guard). Details:
 `docs/systems/distinctions.md` "Reverse direction".
+
+### Affinity skills and the bonus resonance check (#5308, ADR-5308) [BUILT & WIRED]
+
+Three Magic skills belong to the three affinities: Villainy to Abyssal, Heroism to Celestial and
+Reflection to Primal. (The Primal skill Reflection is not the Reflection pose or the Reflection creation
+step.) Every earned resonance gain rolls one bonus check with the skill of the affinity being earned, and
+every pull and kindled cast rolls one with the skill of the affinity being spent. Anyone can earn any
+affinity; a trained character earns more and gets more from spending it. Nothing is seeded: until staff set
+`ResonanceGainConfig.bonus_check_type`, every gain pays its plain amount and every pull is worth 100 percent.
+The Required content page lists four tuning gaps (`resonance-bonus-check`, `resonance-check-awards`,
+`affinity-skills`, `resonance-gain-source-stats`) while the check type, an award per outcome tier, an active
+skill per affinity or a stat per source with no roll of its own is unset.
+
+| Model or field | Purpose |
+|---|---|
+| `Affinity.skill` | One-to-one to a Magic `Skill` (`related_name="affinity"`, `limit_choices_to=MAGIC_SKILL_CHOICES`). Added to the bonus check of every gain or spend in that affinity. `Affinity.clean` refuses a skill a casting style, technique, magical activity, ritual, combat style or the harvest roll already adds; `MAGIC_PICKER_SKILL_CHOICES` and `RitualCheckConfig.clean` refuse an affinity's skill from the other side, so no roll counts one skill twice. Named in no code (ADR-4450): reached only through this field. |
+| `Affinity.spend_worth_floor_percent` | The least a pull or kindled cast of that affinity is worth, whatever the check rolls (0 sets no floor). |
+| `ResonanceGainConfig.bonus_check_type`, `bonus_difficulty_level` | The check and its difficulty level. `clean()` requires a check type weighing exactly one stat, so the act's stat can stand in for it. Blank turns the whole mechanism off. |
+| `ResonanceCheckAward` (`models/resonance_check.py`) | Staff table, an `OutcomeTierAward`: `gain_bonus_percent` (default 0) grows a gain and `spend_worth_percent` (default 100) sets a pull's worth, per roll result. A result with no row adds 0 and is worth 100. |
+| `ResonanceGainSourceStat` | One row per `GainSource` (unique): the stat the bonus check rolls for a source whose act made no roll of its own. A source with no row rolls the check type's own stat. |
+| `ResonanceGrant.bonus_outcome`, `bonus_percent` | What the check was and what it added to this gain; the recorded `amount` already includes it. The ledger serializer serves `bonus_percent` and `bonus_outcome` (the tier's name), `resonance history` prints "+15 (Kindled deed, +50% from Villainy)" when `bonus_percent` is above 0, and the admin list shows `bonus_percent`. |
+| `TrickleAccrual` (`models/trickle.py`) | One day's waiting trickle (see "Trickles wait for the anima ritual" below). |
+| `PoseResonanceReach` (`models/endorsement.py`) | The resonance a pose reaches for; one per pose (see "Reaching" below). |
+| `AnimaRitualPerformance.outward_bonus_outcome`, `outward_bonus_percent` | The bonus check result held with the pending outward amount. |
+
+**The roll** (`services/resonance_checks.py`). `act_stat(check_type)` returns the heaviest STAT trait an
+act's own check weighs (ties to the lowest trait row). `roll_gain_bonus(sheet, affinity, *, source,
+stat=None) -> GainBonus` rolls `bonus_check_type` through `perform_check` with `stat_override` (the passed
+stat, else the source's `ResonanceGainSourceStat`, else none) and `extra_traits=(ExtraTraitTerm(affinity.skill,
+1),)` and no effort level, so it develops nothing, then reads `ResonanceCheckAward.gain_bonus_percent` for the
+outcome. `roll_spend_worth(sheet, affinity, *, stat=None) -> int` rolls the same check and returns the
+award's `spend_worth_percent` (100 with no row) held up to the affinity's floor; with no check type it
+returns 100 with no floor. `GainBonus(outcome, percent)` and `NO_GAIN_BONUS` live in
+`types/resonance_checks.py`. `worth_clause(worth_by_affinity)` builds the plain sentence "Your Villainy
+check made it worth 130 percent." for every affinity whose worth was not 100, and "" when none changed.
+Modifiers on the skill (an accent, a distinction) count even at zero training.
+
+**Three source sets** (`constants.py`; a total-classification test in `test_deed_classification.py`
+guards that every `GainSource` is in exactly one):
+- `GAIN_BONUS_EXEMPT_SOURCES` never roll: `STAFF_GRANT`, `SANCTUM_DISSOLUTION_RECOVERY`, `DISTINCTION`,
+  `FALL_CONVERSION`, `DRIFT_CORRECTION`, `CORRUPTION_CLEANSING`, `CHARACTER_CREATION`, `EMBRACED_DEED`,
+  `SUCCUMBED`, `KINDLED_CLAIM` (its share grew at the deed, so a claim writes `bonus_percent` 0 and rolls
+  nothing) and the two legacy trickle sources. `grant_resonance` raises `ValueError` if one is given a
+  `gain_bonus`.
+- `GAIN_BONUS_CALLER_ROLLED_SOURCES` (`KINDLED_DEED`, `ANIMA_RITUAL`, `TRICKLE_HARVEST`) pay several
+  resonances from one act, so the caller rolls once per affinity and passes each result as `gain_bonus=`.
+  With the check configured and no result passed, `grant_resonance` raises `ValueError`; with it off, the
+  gain pays plain.
+- `GAIN_BONUS_ROLLED_SOURCES` (every other earned source, including `COMPROMISE`, `WORSHIP_RITE`,
+  `SINEATING` and the three Mire payouts) are rolled inside `grant_resonance` for the resonance's affinity.
+  A caller may still pass a result it rolled for an affinity, which is how a caller paying several
+  resonances rolls once.
+
+**In `grant_resonance`** the order is the distinction accelerator, the affinity earn rate, then the bonus:
+`amount += amount * percent // 100`, so a gain never shrinks and a gain of 1 stays 1 under a small percent.
+It takes `act_stat: Trait | None` (the stat of the act's own roll) and `gain_bonus: GainBonus | None`.
+Callers that rolled pass their stat: kindled deeds (`award_kindled_deeds(act_check_type=)`, threaded from
+reactions, scene actions, scene casts and missions through `award_scene_act(check_type=)`), worship rites
+(`apply_rite_award(check_type=)`), Sineating (its own check type; the Sinner's parts roll once per affinity
+they span) and the anima ritual (`RitualCheckConfig.stat`). A source with no roll behind it (a weekly pose
+endorsement, a scene entry, a mission reward line, a project contribution, a combo discovery, a dramatic
+moment, a style presentation) uses its `ResonanceGainSourceStat` stat. A kindled deed grows its instant grant
+and its set-aside share by the same percent, once per affinity, and the actor reads "You earned N Cruelty.
+Your Villainy check added P percent. M more is waiting to be claimed." (the middle sentence only when the
+percent is above 0 and the affinity has a skill).
+
+**A deed she chose earns a Celestial or Abyssal resonance the character does not hold.**
+`kindled_resonances(..., include_named_unheld=True)` (set only by `award_kindled_deeds`) appends each Celestial
+or Abyssal resonance that an active chosen-deed row names directly and the character does not hold, evaluated
+by those rows alone. A chosen-deed row is a `KindlingSituation` on one of `CHOSEN_DEED_SITUATIONS`
+(`services/kindling.py`), which today is `MISSION_THEME`: she takes a mission option that carries the theme,
+and choosing the option is her intent. Every other row, including "the target is in a state she caused" and
+"someone in trouble", kindles the resonance only for a character who holds it, and so does a situation for a
+whole affinity. A Primal resonance is never appended. The owner ruled on 2026-11-27: "primal is always a
+situation you're in, celestial or abyssal is something you're doing to someone else", and "there needs to
+be a measure of *intent* to gaining that resonance. Like a paladin hunting a vampire to protect people from it
+would probably make the vampire feel hunted, but unless he's trying to *deliberately* make the vampire feel
+terrorized, he could not gain abyssal resonance from it". The game cannot read intent from a state, so intent
+is a choice the player declares. The other two declared ways into a resonance she does not hold are a pose
+that reaches for it and is endorsed, and the entrance flourish. The grant creates her `CharacterResonance` row and runs the aura recompute and the pledge
+and threshold hooks as for a held one. The "Your resonances" panel, telnet `resonances` and casts still read
+held resonances only. `create_entry_flourish` no longer refuses an unheld resonance, `maybe_create_entry_flourish_offer`
+opens an offer for a character who holds none, and `EntryFlourishOfferStaleError` is gone; the flourish rolls with
+the stat staff set for `ENTRY_FLOURISH`. The web dialog lists every resonance, held ones first.
+
+**Reaching** (`services/reach.py`, `models/endorsement.py`). A poser may name the resonance a pose reaches
+for, held or not. `pending_reach_from(params)` reads `reach_resonance_id` and checks it before the pose posts
+(`ReachError` for an unknown id), and `record_pending_reach(interaction, pending)` writes the
+`PoseResonanceReach` after it posts, on first acceptance only, and tells the room the pose changed.
+`resolve_reach_name(name)` resolves a telnet name without regard to case. Web: `reach_resonance_id` on the
+pose body (`ReachFieldsMixin` on `PoseSubmitSerializer`); the interaction payload carries
+`reached_resonance: {id, name} | null` and `endorsable_resonances` lists only that resonance for a reached
+pose. Telnet: `pose/reach <resonance>=<text>`, which combines only with a bare claim as `pose/claim/reach`
+(`commands/reach.py`). `create_pose_endorsement(endorser, interaction, resonance=None)` pays the reached
+resonance when the pose has one (`Interaction.cached_resonance_reach`) and skips the "endorsee has not
+claimed it" refusal, since the author named it; for a pose that reached for nothing it needs a resonance the
+endorsee claimed and otherwise answers "Which resonance? This pose did not reach for one." The endorse
+action, `endorse pose <char> [#N] [confirm]` and `PoseEndorsementSerializer` take no resonance for a reached
+pose. The weekly settlement grants the reached resonance as `POSE_ENDORSEMENT`, which rolls its bonus check
+at settlement.
+
+**Trickles wait for the anima ritual.** `residence_trickle_tick()` and `outfit_daily_trickle_for_character()`
+write `TrickleAccrual` rows (`character_sheet`, `resonance`, `amount`, `source` from `TrickleSource`,
+exactly one of `room_profile` and `outfit_item_facet`, `accrued_at`, `harvested_at`) with the same amounts and
+matching rules as before and change no balance. `waiting_trickles(sheet) -> dict[int, int]` sums the rows with
+no `harvested_at`; it is the only reading of them, and feeds `waiting_trickle` on each row of
+`GET /api/magic/kindled-resonances/` and a "N waiting for your anima ritual" line in telnet `resonances`. A
+facet merge hands a dropped duplicate's accruals to the keeper. `harvest_trickles(sheet, bonus_for, *, ritual)`
+(`services/ritual_bond.py`) runs from `apply_ritual_bond` on every ritual, success or failure: it locks the
+sheet's waiting rows, sums them per resonance, writes one `TRICKLE_HARVEST` grant per resonance grown by the
+bonus result for that resonance's affinity, stamps `harvested_at` on every row it covered and returns
+`HarvestedTrickle(resonance, amount, bonus_percent)` entries, which `performer_ritual_line` names ("13 Ruin
+waiting from your days arrived. Your Villainy check added 30 percent."). `gain_bonus_clause(affinity, percent)`
+(`services/resonance_checks.py`) is the one phrasing of "Your Villainy check added 30 percent." (the affinity's
+name when it has no active skill, empty at 0 percent) and is appended to every
+told line that names a rolled gain: the kindled deed line, the ritual's Primal and outward sentences
+(`RitualBond.primal_bonus_percent`, `outward_bonus_percent`) and harvest sentence, the partner-endorsement settle
+line, the Sineating lines for both parties (`EarnedPart`, `SineatingResult.sineater_bonus_percent`), the Mire
+purify, succumb-bonus and fall notices, a worship rite's action message (`RiteOutcome.resonance_bonus_percent`) and
+a standoff ending's earned line. A rolled source whose acknowledgement names no amount (an entry flourish, a pose
+endorsement's weekly settlement, a dramatic-moment tag the GM reads, project, mission and stake rewards, combo
+discovery, sanctum absorption and the Compromise grant) shows its check only in the ledger (`resonance history`).
+The ritual rolls one check per affinity across its Primal part, its outward part and the harvest, with its own stat, so two resonances of one
+affinity share one result. The outward part that waits for the partner's answer is stored as the base amount
+beside its result, and `_settle` grants it grown by that result with no second roll. `item_meaning` reads
+accruals whether or not harvested, plus legacy `OUTFIT_TRICKLE` grants.
+
+**Spending.** `spend_resonance_for_pull(..., worth_by_affinity=None)` rolls `roll_spend_worth` once for each
+distinct paying affinity (stat from `PullActionContext.check_type`, new in #5308, the check the action rolls)
+unless the caller already rolled that affinity, and scales every resolved effect's `scaled_value` and, for a
+capability grant, its `capability_grant_value` by its payer's worth before the pull is persisted. The
+distinction's folded flat bonus belongs to the pull as a whole and is not scaled; a burn is not scaled.
+`ResonancePullResult.worth_by_affinity` returns the worths. `use_technique` rolls the cast resonance's
+affinity once (`_cast_resonance_worth`), only when a pulled thread is paid by that affinity or the resonance is
+kindled now, and puts the result on `PowerTermContext.resonance_worth_percent`, which
+`kindled_cast_power_term` multiplies, and into the pull's `worth_by_affinity`, so a non-combat cast never rolls
+an affinity twice. Previews (`preview_resonance_pull`, `cast_resonance_options`) show worth 100 and never roll.
+`commit_combat_pull` now returns the `ResonancePullResult`; a pull declared on its own
+(`actions/definitions/round_pull.py`) and the automatic defensive pull (`combat/services/auto_pull.py`) append
+`worth_clause(result.worth_by_affinity)` to their "pulled" line. `TechniqueUseResult.worth_by_affinity` carries
+the cast's own worth (one affinity, empty when nothing rolled), and the telnet standalone cast
+(`actions/definitions/cast.py`) appends `worth_clause(...)` of it to the actor's "Your technique resolves." line,
+and the web standalone cast carries the same sentence as `technique_result.worth_line` (blank when every worth is
+100), which the cast card shows to the caster only, so the one roll that scaled the cast's pull and its
+kindled power is told to the caster alone. Three paths roll the
+worth and tell no one, because the only line the actor reads there is a scene-wide or round-wide pose or the
+declaration's acknowledgement carries no outcome: a social action's pull (`_charge_social_pull` in
+`scenes/action_services.py`, whose outcome line is the scene's), a combat cast's pull committed at declaration
+(`CastTechniqueAction._commit_combat_pull`, `CombatRoundContext` and the clash path in `actions/player_interface.py`),
+and the combat resolution of a cast's kindled term (round narration). A combat pull commits at declaration and the
+cast resolves in a later step, so a combat cast with a pull rolls the pull's worth at declaration and its
+kindled cast term at resolution: two rolls for one affinity, a deliberate deviation from the spec (ADR-5308).
+
+**The settling rite.** `perform_settling_rite` settles `_conversion_target` before it rolls and adds the skill
+of the affinity the conversion turns toward as an extra trait term; a rite with nowhere to turn adds none.
+Its own grants stay exempt and take no second roll.
+
+**Journeys and properties:** `integration_tests/test_affinity_skill_journeys.py` and
+`integration_tests/fuzz/test_affinity_skill_properties.py`.
 
 ### Aura Drift (#1737)
 
@@ -4948,7 +5115,7 @@ contributions, combo discoveries, worship rites, kindled deeds, `KINDLED_CLAIM` 
 deed a claiming pose or journal entry collected), `ANIMA_RITUAL` (what an Anima ritual with a partner
 earned, the Primal part at once and the outward part on the partner's endorsement; both #5181, #5280) and `SUCCUMBED` (a Sineater
 chose to succumb to the Mire, and the player may reflect on it and atone). Passive trickles
-(room residence, outfit), staff grants, sanctum sources, distinction seeds, compromise, both
+(room residence, outfit, and since #5308 their `TRICKLE_HARVEST` by an anima ritual), staff grants, sanctum sources, distinction seeds, compromise, both
 conversions (`FALL_CONVERSION`, `DRIFT_CORRECTION`) and the payouts of settling the Mire
 (`MIRE_PURIFIED`, `SUCCUMB_BONUS`, `SINEATER_FALL`) are not deeds. Casting never counts. A new
 `GainSource` member must be placed in one set.

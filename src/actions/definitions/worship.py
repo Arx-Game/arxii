@@ -74,6 +74,7 @@ class PerformWorshipRiteAction(Action):
     ) -> ActionResult:
         from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
+        from world.magic.services.resonance_checks import gain_bonus_clause  # noqa: PLC0415
         from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
         from world.worship.exceptions import WorshipRiteError  # noqa: PLC0415
         from world.worship.live_services import route_live_answer  # noqa: PLC0415
@@ -109,6 +110,10 @@ class PerformWorshipRiteAction(Action):
         ]
         if outcome.resonance_granted:
             parts.append(f"+{outcome.resonance_granted} {rite.resonance.resonance.name} resonance.")
+            if clause := gain_bonus_clause(
+                rite.resonance.resonance.affinity, outcome.resonance_bonus_percent
+            ):
+                parts.append(clause)
         parts.extend(_rite_favor_sentences(outcome, rite.being.name))
         parts.extend(_gift_sentences(outcome))
         return ActionResult(

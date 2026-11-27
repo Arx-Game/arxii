@@ -302,6 +302,9 @@ def _move_item_facets(loser: Facet, winner: Facet, result: FacetMerge) -> None:
         for grant in row.resonance_grants.all():
             grant.outfit_item_facet = keeper
             grant.save(update_fields=["outfit_item_facet"])
+        for accrual in row.trickle_accruals.all():
+            accrual.outfit_item_facet = keeper
+            accrual.save(update_fields=["outfit_item_facet"])
         row.delete()
         result.dropped += 1
 

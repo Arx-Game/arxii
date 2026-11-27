@@ -106,3 +106,13 @@ class PendingClaim:
     """
 
     resonance_ids: tuple[int, ...] = ()
+
+
+@dataclass(frozen=True)
+class PendingReach:
+    """A checked reach a pose carries, waiting for the pose to post (#5308).
+
+    ``resonance_id`` is the resonance the pose reaches for. Any resonance is valid, held or not.
+    """
+
+    resonance_id: int

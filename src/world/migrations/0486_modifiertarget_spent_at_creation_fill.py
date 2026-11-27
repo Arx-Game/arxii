@@ -42,7 +42,7 @@ def unmark_spent_at_creation(apps, schema_editor):
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0484_modifiertarget_spent_at_creation"),
+        ("arxii", "0485_modifiertarget_spent_at_creation"),
     ]
 
     operations = [

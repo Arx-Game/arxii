@@ -1391,6 +1391,61 @@ describe('ActionPanel', () => {
     expect(screen.queryByTestId('cast-focus-lines')).not.toBeInTheDocument();
   });
 
+  it('shows the worth sentence a cast carries, and nothing when there is none (#5308)', async () => {
+    const worth = 'Your Villainy check made it worth 130 percent.';
+    const payload = (worth_line: string) => ({
+      id: 1,
+      status: 'resolved' as const,
+      result: {
+        action_key: 'cast',
+        power_ledger: { entries: [], total: 1 },
+        action_resolution: { current_phase: 'complete', main_result: null, gate_results: [] },
+        technique_result: {
+          confirmed: true,
+          anima_spent: 0,
+          soulfray_stage: null,
+          mishap_label: null,
+          worth_line,
+        },
+      },
+      action_interaction: 42,
+    });
+    vi.mocked(castTechnique).mockResolvedValue(payload(worth));
+    const user = userEvent.setup();
+
+    await openCastDialogWithEmberTouch(user);
+    await user.click(await screen.findByRole('button', { name: /cast ember touch/i }));
+
+    expect(await screen.findByTestId('cast-worth-line')).toHaveTextContent(worth);
+  });
+
+  it('shows no worth line when every worth was 100 percent (#5308)', async () => {
+    vi.mocked(castTechnique).mockResolvedValue({
+      id: 1,
+      status: 'resolved',
+      result: {
+        action_key: 'cast',
+        power_ledger: { entries: [], total: 1 },
+        action_resolution: { current_phase: 'complete', main_result: null, gate_results: [] },
+        technique_result: {
+          confirmed: true,
+          anima_spent: 0,
+          soulfray_stage: null,
+          mishap_label: null,
+          worth_line: '',
+        },
+      },
+      action_interaction: 42,
+    });
+    const user = userEvent.setup();
+
+    await openCastDialogWithEmberTouch(user);
+    await user.click(await screen.findByRole('button', { name: /cast ember touch/i }));
+
+    await screen.findByTestId('cast-ledger-result');
+    expect(screen.queryByTestId('cast-worth-line')).not.toBeInTheDocument();
+  });
+
   it('fires a "Combat has begun" toast with a Join Combat action when the cast seeds an encounter', async () => {
     vi.mocked(castTechnique).mockResolvedValue({
       id: 3,

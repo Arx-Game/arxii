@@ -120,6 +120,45 @@ class PoseEndorsement(RelatedCacheClearingMixin, EndorsementBase):
         return f"PoseEndorsement({self.endorser_sheet_id}->{self.endorsee_sheet_id})"
 
 
+class PoseResonanceReach(RelatedCacheClearingMixin, SharedMemoryModel):
+    """The resonance a pose reached for, named by its author when they posed (#5308).
+
+    A pose carries at most one. An endorsement of a reached pose gives that resonance, so
+    the endorser no longer picks one, and the endorsee need not have claimed it. Written
+    once with the pose, never changed.
+
+    The ``interaction`` FK uses ``db_constraint=False`` for the same reason as
+    ``PoseEndorsement``: ``Interaction`` is partitioned by timestamp.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
+
+    interaction = models.ForeignKey(
+        "arxii.Interaction",
+        on_delete=models.CASCADE,
+        related_name="resonance_reaches",
+        db_constraint=False,
+        help_text="The pose that reached for this resonance.",
+    )
+    resonance = models.ForeignKey(
+        RESONANCE_FK,
+        on_delete=models.PROTECT,
+        related_name="pose_reaches",
+        help_text="The resonance the pose reached for.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction"],
+                name="unique_pose_resonance_reach_per_pose",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"PoseResonanceReach({self.interaction_id}->{self.resonance_id})"
+
+
 class SceneEntryEndorsement(EndorsementBase):
     """Scene-entry endorsement — immediate flat grant (Spec C §2.3).
 

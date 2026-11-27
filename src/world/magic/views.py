@@ -1974,6 +1974,7 @@ class ResonanceGrantViewSet(
     queryset = ResonanceGrant.objects.select_related(
         "character_sheet",
         "resonance",
+        "bonus_outcome",
     ).order_by("-granted_at")
 
     def get_queryset(self):  # type: ignore[override]

@@ -14,15 +14,15 @@ class ResidenceTrickleTickTests(TestCase):
         summary = residence_trickle_tick()
         self.assertEqual(summary.residence_grants_issued, 0)
 
-    def test_matching_resonance_grants_trickle(self) -> None:
-        """Sheet with residence + matching aura tags gets trickle."""
+    def test_matching_resonance_accrues_trickle(self) -> None:
+        """Sheet with residence + matching aura tags gets a waiting trickle, not a balance."""
         from evennia_extensions.factories import RoomProfileFactory
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.factories import (
             CharacterResonanceFactory,
             ResonanceFactory,
         )
-        from world.magic.models import CharacterResonance
+        from world.magic.models import CharacterResonance, ResonanceGrant, TrickleAccrual
         from world.magic.services.gain import (
             get_resonance_gain_config,
             residence_trickle_tick,
@@ -44,8 +44,13 @@ class ResidenceTrickleTickTests(TestCase):
         summary = residence_trickle_tick()
 
         self.assertEqual(summary.residence_grants_issued, 1)
+        accrual = TrickleAccrual.objects.get(character_sheet=sheet, resonance=r_matched)
+        self.assertEqual(accrual.amount, cfg.residence_daily_trickle_per_resonance)
+        self.assertEqual(accrual.room_profile, rp)
+        self.assertIsNone(accrual.harvested_at)
         cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=r_matched)
-        self.assertEqual(cr.balance, cfg.residence_daily_trickle_per_resonance)
+        self.assertEqual(cr.balance, 0)
+        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=sheet).exists())
 
     def test_non_matching_skipped(self) -> None:
         """Tagged resonance != claimed resonance → 0 grants."""
@@ -280,14 +285,14 @@ class OutfitDailyTrickleTests(TestCase):
         )
         return sheet, resonance, facet, item_facet, thread
 
-    def test_grants_resonance_when_thread_matches(self) -> None:
-        """Equipped item bearing a facet + Thread on that facet → grant issued.
+    def test_accrues_trickle_when_thread_matches(self) -> None:
+        """Equipped item bearing a facet + Thread on that facet → a waiting trickle row.
 
         Config default base=1, item_quality=2.0, attach_quality=3.0, thread_level=20 (rung 2)
         → amount = 1 × 2 × 3 × 2 = 12.
         """
-        from world.magic.constants import GainSource
-        from world.magic.models import CharacterResonance, ResonanceGrant
+        from world.magic.constants import TrickleSource
+        from world.magic.models import CharacterResonance, ResonanceGrant, TrickleAccrual
         from world.magic.services.gain import outfit_daily_trickle_for_character
 
         sheet, resonance, _facet, item_facet, _thread = self._build_sheet_with_equipped_facet_item()
@@ -295,17 +300,20 @@ class OutfitDailyTrickleTests(TestCase):
         grants_issued = outfit_daily_trickle_for_character(sheet)
 
         self.assertEqual(grants_issued, 1)
-        grant = ResonanceGrant.objects.get(character_sheet=sheet, source=GainSource.OUTFIT_TRICKLE)
-        self.assertEqual(grant.outfit_item_facet, item_facet)
-        self.assertEqual(grant.amount, 12)  # 1 × 2.0 × 3.0 × 2 = 12
-
-        cr = CharacterResonance.objects.get(character_sheet=sheet, resonance=resonance)
-        self.assertEqual(cr.balance, 12)
+        accrual = TrickleAccrual.objects.get(
+            character_sheet=sheet, source=TrickleSource.OUTFIT_TRICKLE
+        )
+        self.assertEqual(accrual.outfit_item_facet, item_facet)
+        self.assertEqual(accrual.amount, 12)  # 1 × 2.0 × 3.0 × 2 = 12
+        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=sheet).exists())
+        self.assertFalse(
+            CharacterResonance.objects.filter(character_sheet=sheet, resonance=resonance).exists()
+        )
 
     def test_seeded_rung_factor_matches_the_old_rung_multiplier(self) -> None:
         """Pinned from the old rule (max(1, rung)): rungs 0, 1, 11 and 26 give 1, 1, 11, 26."""
-        from world.magic.constants import GainSource
-        from world.magic.models import ResonanceGrant
+        from world.magic.constants import TrickleSource
+        from world.magic.models import TrickleAccrual
         from world.magic.services.gain import outfit_daily_trickle_for_character
 
         for thread_level, expected in ((5, 1), (10, 1), (115, 11), (265, 26)):
@@ -315,17 +323,17 @@ class OutfitDailyTrickleTests(TestCase):
                 thread_level=thread_level,
             )
             outfit_daily_trickle_for_character(sheet)
-            grant = ResonanceGrant.objects.get(
-                character_sheet=sheet, source=GainSource.OUTFIT_TRICKLE
+            accrual = TrickleAccrual.objects.get(
+                character_sheet=sheet, source=TrickleSource.OUTFIT_TRICKLE
             )
-            self.assertEqual(grant.amount, expected, f"thread level {thread_level}")
+            self.assertEqual(accrual.amount, expected, f"thread level {thread_level}")
 
     def test_a_retuned_lane_row_changes_the_trickle(self) -> None:
         """Staff retune a rung's factor in the OUTFIT_TRICKLE lane's row."""
         from world.checks.constants import ModifierLane
         from world.checks.modifier_models import ModifierLevelBaseline
-        from world.magic.constants import GainSource
-        from world.magic.models import ResonanceGrant
+        from world.magic.constants import TrickleSource
+        from world.magic.models import TrickleAccrual
         from world.magic.services.gain import outfit_daily_trickle_for_character
 
         row = ModifierLevelBaseline.objects.get(lane=ModifierLane.OUTFIT_TRICKLE, level=2)
@@ -335,8 +343,10 @@ class OutfitDailyTrickleTests(TestCase):
             item_quality_multiplier="1.00", attachment_quality_multiplier="1.00", thread_level=20
         )
         outfit_daily_trickle_for_character(sheet)
-        grant = ResonanceGrant.objects.get(character_sheet=sheet, source=GainSource.OUTFIT_TRICKLE)
-        self.assertEqual(grant.amount, 5)
+        accrual = TrickleAccrual.objects.get(
+            character_sheet=sheet, source=TrickleSource.OUTFIT_TRICKLE
+        )
+        self.assertEqual(accrual.amount, 5)
 
     def test_no_thread_means_no_grant(self) -> None:
         """Equipped item with facet but no Thread on that facet → no grants."""
@@ -347,7 +357,7 @@ class OutfitDailyTrickleTests(TestCase):
             ItemInstanceFactory,
         )
         from world.magic.factories import FacetFactory
-        from world.magic.models import ResonanceGrant
+        from world.magic.models import TrickleAccrual
         from world.magic.services.gain import outfit_daily_trickle_for_character
 
         sheet = CharacterSheetFactory()
@@ -360,14 +370,14 @@ class OutfitDailyTrickleTests(TestCase):
         grants_issued = outfit_daily_trickle_for_character(sheet)
 
         self.assertEqual(grants_issued, 0)
-        self.assertFalse(ResonanceGrant.objects.exists())
+        self.assertFalse(TrickleAccrual.objects.exists())
 
     def test_no_items_worn_means_no_grant(self) -> None:
         """Sheet has Thread on facet but no items equipped → no grants."""
         from world.character_sheets.factories import CharacterSheetFactory
         from world.magic.constants import TargetKind
         from world.magic.factories import FacetFactory, ResonanceFactory
-        from world.magic.models import ResonanceGrant, Thread
+        from world.magic.models import Thread, TrickleAccrual
         from world.magic.services.gain import outfit_daily_trickle_for_character
 
         sheet = CharacterSheetFactory()
@@ -385,7 +395,7 @@ class OutfitDailyTrickleTests(TestCase):
         grants_issued = outfit_daily_trickle_for_character(sheet)
 
         self.assertEqual(grants_issued, 0)
-        self.assertFalse(ResonanceGrant.objects.exists())
+        self.assertFalse(TrickleAccrual.objects.exists())
 
     def test_resonance_daily_tick_counts_outfit_grants(self) -> None:
         """resonance_daily_tick() surfaces outfit grants in summary.outfit_grants_issued."""

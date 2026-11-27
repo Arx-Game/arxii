@@ -87,27 +87,45 @@ class RitualEarningParts:
 
 
 @dataclass(frozen=True)
+class HarvestedTrickle:
+    """One resonance's waiting trickle an anima ritual harvested (#5308).
+
+    ``amount`` is what the ledger recorded after the earn rate and the bonus check, and
+    ``bonus_percent`` is the percent that check added (0 when it added nothing or was off).
+    """
+
+    resonance: Resonance
+    amount: int
+    bonus_percent: int
+
+
+@dataclass(frozen=True)
 class RitualBond:
     """What an Anima ritual with a partner did beyond restoring anima (#5181, #5280).
 
     ``primal_resonance`` and ``outward_resonance`` are the ritual's two picks (None for a pick
     it has none of). ``primal_granted`` is what the ledger recorded for the Primal pick, after
-    the earn rate of its own affinity. ``outward_granted`` is the same for the outward pick, set
+    the earn rate of its own affinity and the bonus check, which added ``primal_bonus_percent``.
+    ``outward_granted`` is the same for the outward pick, set
     only when a story NPC partner took part and the roll succeeded: a player character partner's
     part is held, not granted, so ``outward_pending`` carries the stored amount and
     ``endorsement`` is ``pending``. ``partner_fatigue_setting`` is the sign of the outward
     affinity's ``ritual_partner_fatigue`` (1 takes, -1 eases, 0 does nothing); ``fatigue_change``
-    is the fatigue the partner actually gained (positive) or lost (negative).
+    is the fatigue the partner actually gained (positive) or lost (negative). ``harvested`` is
+    the waiting trickles the ritual turned into resonance, one entry per resonance (#5308).
     """
 
     primal_resonance: Resonance | None = None
     primal_granted: int = 0
+    primal_bonus_percent: int = 0
     outward_resonance: Resonance | None = None
     outward_granted: int = 0
+    outward_bonus_percent: int = 0
     outward_pending: int = 0
     endorsement: str = AnimaRitualEndorsement.NOT_ASKED
     partner_fatigue_setting: int = 0
     fatigue_change: int = 0
+    harvested: tuple[HarvestedTrickle, ...] = ()
 
 
 @dataclass(frozen=True)

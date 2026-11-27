@@ -35,6 +35,7 @@ from django.db import transaction
 from django.db.models import Max, QuerySet
 
 from world.checks.services import difficulty_points, perform_check_with_modifiers
+from world.checks.types import ExtraTraitTerm
 from world.items.services.materials import consume_materials
 from world.magic.constants import GainSource, ReflectionChoice
 from world.magic.exceptions import (
@@ -66,6 +67,7 @@ from world.magic.services.drift import (
 from world.magic.services.mire_settling import apply_burden, apply_fall
 from world.magic.services.reflection import SUCCUMBED_WHAT_RELATED, deed_what
 from world.magic.services.resonance import grant_resonance
+from world.magic.services.resonance_checks import affinity_skill_terms
 from world.magic.services.ritual_components import (
     resolve_ritual_components,
     target_resonance_meaning_bar,
@@ -640,6 +642,17 @@ def _apply_fall(
     return list(outcome.notices)
 
 
+def _target_skill_terms(
+    target: Resonance | None, reflections: Iterable[Reflection]
+) -> tuple[ExtraTraitTerm, ...]:
+    """The skill of the affinity a conversion turns toward, as the one extra term the rite's
+    roll carries (#5308); none when nothing converts (no reflection disowns a deed or the
+    unsettling resonance), when it turns nowhere, the affinity has no skill, or the skill is
+    inactive."""
+    converts = any(r.tether_id is None and r.choice == ReflectionChoice.DISOWN for r in reflections)
+    return affinity_skill_terms(target.affinity) if converts and target is not None else ()
+
+
 @transaction.atomic
 def perform_settling_rite(
     sheet: CharacterSheet, *, components: list[ItemInstance]
@@ -685,11 +698,21 @@ def perform_settling_rite(
         config, sheet, components, rite_resonances(sheet, reflections)
     )
     bonus = focus_bonus(sheet, offered_for)
+    # Where the rite turns is read-only, so it is settled before the roll: the roll adds the
+    # skill of the affinity the conversion turns toward (#5308). A rite that converts nothing
+    # (an embrace-only rite) or has nowhere to turn (no main affinity) adds no skill.
+    target = _conversion_target(
+        sheet,
+        offered_for,
+        main_affinity_rows(sheet),
+        open_caps(sheet) if disowns_unsettling(reflections) else None,
+    )
     check = perform_check_with_modifiers(
         sheet.character,
         config.check_type,
         difficulty_points(config.check_difficulty_level),
         extra_modifiers=bonus,
+        extra_traits=_target_skill_terms(target, reflections),
     )
     outcome = check.outcome
     # Safety net: rite_is_ready already refused a table with a missing tier.
@@ -705,12 +728,6 @@ def perform_settling_rite(
     )
     consume_materials(allocations)
 
-    target = _conversion_target(
-        sheet,
-        offered_for,
-        main_affinity_rows(sheet),
-        open_caps(sheet) if disowns_unsettling(reflections) else None,
-    )
     effects, notices = _apply_reflections(
         sheet, reflections, rite, share, target, config.disown_deed_percent
     )

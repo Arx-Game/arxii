@@ -25,6 +25,7 @@ const rows: KindledResonance[] = [
     strength_name: 'Blazing',
     reasons: ['The overseer who branded you is here.'],
     unclaimed: 0,
+    waiting_trickle: 0,
     claim_verb: 'relish',
   },
   {
@@ -35,6 +36,7 @@ const rows: KindledResonance[] = [
     strength_name: null,
     reasons: [],
     unclaimed: 5,
+    waiting_trickle: 9,
     claim_verb: '',
   },
 ];
@@ -103,6 +105,16 @@ describe('KindledResonancesPanel', () => {
 
     expect(await screen.findByTestId('kindled-resonance-waiting-2')).toHaveTextContent('5 waiting');
     expect(screen.queryByTestId('kindled-resonance-waiting-1')).not.toBeInTheDocument();
+  });
+
+  it("says how much the character's days have piled up for the anima ritual, only above zero", async () => {
+    vi.mocked(api.getKindledResonances).mockResolvedValue({ results: rows, impulses: [] });
+    renderWithProviders(<KindledResonancesPanel characterSheetId={7} />);
+
+    expect(await screen.findByTestId('kindled-resonance-trickle-2')).toHaveTextContent(
+      '9 waiting for your anima ritual'
+    );
+    expect(screen.queryByTestId('kindled-resonance-trickle-1')).not.toBeInTheDocument();
   });
 
   it('renders nothing for a character with no resonance', async () => {

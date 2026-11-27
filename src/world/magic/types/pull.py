@@ -10,6 +10,7 @@ from django.utils.functional import cached_property
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.checks.models import CheckType
     from world.combat.models import CombatEncounter, CombatParticipant
     from world.conditions.models import CapabilityType, DamageType
     from world.forms.models import CharacterForm
@@ -51,6 +52,10 @@ class PullActionContext:
     # #1919: kinds excluded from the always-in-action shortcut (social pulls
     # exclude GIFT — no gift technique is the anchor of a social action).
     excluded_kinds: frozenset[str] | None = None
+    # #5308: the check the action rolls. Its heaviest stat is swapped into the worth check a
+    # pull rolls (``act_stat``); None when the action rolls no one check (a pull declared on
+    # its own), and the worth check then uses its own stat.
+    check_type: CheckType | None = None
 
     @cached_property
     def involved_technique_closure(self) -> frozenset[int]:
@@ -121,6 +126,9 @@ class ResonancePullResult:
     anima_spent: int
     resolved_effects: list[ResolvedPullEffect]
     resonance_burned: int = 0
+    # #5308: the worth in percent each paying affinity's check gave this pull, keyed by
+    # affinity id. Every pull effect a thread bought was scaled by its payer's worth.
+    worth_by_affinity: Mapping[int, int] = field(default_factory=dict)
 
 
 def pull_payer(thread: Thread, payers: Mapping[int, Resonance] | None) -> Resonance:

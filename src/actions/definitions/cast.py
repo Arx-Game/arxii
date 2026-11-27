@@ -29,6 +29,7 @@ if TYPE_CHECKING:
 
     from actions.types import ActionContext
     from world.magic.types.pull import CastPullDeclaration
+    from world.scenes.types import CastResult
 
 
 # The keys a combat cast's declaration reads from its kwargs (#5231). The declaration and the
@@ -64,6 +65,25 @@ def _combat_declaration_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
         if value is not None and value is not False and value not in (0, {}):
             declared[key] = value
     return declared
+
+
+def _resolved_message(cast: CastResult) -> str:
+    """The actor's own line for a cast that resolved now.
+
+    Adds what her resonance check made the cast's pull and kindled power worth (#5308), and
+    that an embattled ally's fight drew her in. The scene's outcome pose is read by everyone
+    and carries neither.
+    """
+    from world.magic.services.resonance_checks import worth_clause  # noqa: PLC0415
+
+    message = "Your technique resolves."
+    technique_result = cast.result.technique_result if cast.result is not None else None
+    worth = worth_clause(technique_result.worth_by_affinity) if technique_result else ""
+    if worth:
+        message = f"{message} {worth}"
+    if cast.combat_seated:
+        message = f"{message}\nYour cast reaches an embattled ally — you are drawn into the fight."
+    return message
 
 
 @dataclass
@@ -212,11 +232,7 @@ class CastTechniqueAction(Action):
                 ),
             )
 
-        message = "Your technique resolves."
-        if cast.combat_seated:
-            message = (
-                f"{message}\nYour cast reaches an embattled ally — you are drawn into the fight."
-            )
+        message = _resolved_message(cast)
         return ActionResult(success=True, message=message)
 
     def round_declaration(

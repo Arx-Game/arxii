@@ -15,6 +15,7 @@ import { EntryFlourishOfferGate } from '../components/EntryFlourishOfferGate';
 import type {
   PaginatedPendingEntryFlourishOfferList,
   PendingEntryFlourishOffer,
+  CatalogResonance,
   CharacterResonance,
   EntryFlourishResult,
 } from '../types';
@@ -27,6 +28,7 @@ vi.mock('../api', () => ({
   getPendingEntryFlourishOffers: vi.fn(),
   respondToEntryFlourish: vi.fn(),
   getCharacterResonances: vi.fn(),
+  getResonanceCatalog: vi.fn(),
 }));
 
 import * as api from '../api';
@@ -81,6 +83,24 @@ const RESONANCES: CharacterResonance[] = [
   },
 ];
 
+/** Every resonance in the game: the two held ones, listed here after an unheld one. */
+function catalogEntry(id: number, name: string): CatalogResonance {
+  return {
+    id,
+    name,
+    affinity: 1,
+    affinity_name: 'Primal',
+    description: '',
+    codex_entry_id: null,
+    color_hex: '#8C8C8C',
+  };
+}
+const CATALOG: CatalogResonance[] = [
+  catalogEntry(6, 'Cruelty'),
+  catalogEntry(7, 'Ember'),
+  catalogEntry(8, 'Tide'),
+];
+
 const RESULT: EntryFlourishResult = {
   resonance_id: 7,
   resonance_name: 'Ember',
@@ -117,6 +137,7 @@ function renderGate(
 ) {
   vi.mocked(api.getPendingEntryFlourishOffers).mockResolvedValue(paginatedOffers(offers));
   vi.mocked(api.getCharacterResonances).mockResolvedValue(resonances);
+  vi.mocked(api.getResonanceCatalog).mockResolvedValue(CATALOG);
   const { wrapper, client } = createWrapperWithClient();
   const view = render(<EntryFlourishOfferGate characterSheetId={4} />, { wrapper });
   return { ...view, client };
@@ -131,12 +152,28 @@ describe('EntryFlourishOfferDialog (via EntryFlourishOfferGate)', () => {
     vi.clearAllMocks();
   });
 
-  it('auto-opens and renders the claimed resonances as selectable chips', async () => {
+  it('auto-opens and lists every resonance as a chip, the held ones first', async () => {
     renderGate([OFFER]);
 
     await screen.findByRole('dialog');
     expect(screen.getByTestId('resonance-chip-7')).toHaveTextContent('Ember');
     expect(screen.getByTestId('resonance-chip-8')).toHaveTextContent('Tide');
+    const chips = screen.getAllByTestId(/^resonance-chip-/).map((chip) => chip.textContent);
+    expect(chips).toEqual(['Ember', 'Tide', 'Cruelty']);
+  });
+
+  it('a character who holds none can still declare any resonance', async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.respondToEntryFlourish).mockResolvedValue(RESULT);
+    renderGate([OFFER], []);
+
+    await screen.findByRole('dialog');
+    await user.click(await screen.findByTestId('resonance-chip-6'));
+    await user.click(screen.getByTestId('entry-flourish-confirm'));
+
+    await waitFor(() => {
+      expect(api.respondToEntryFlourish).toHaveBeenCalledWith({ offer_id: 9, resonance_id: 6 });
+    });
   });
 
   it('Declare button is disabled until a resonance is selected', async () => {
@@ -186,14 +223,6 @@ describe('EntryFlourishOfferDialog (via EntryFlourishOfferGate)', () => {
     expect(error).toHaveAttribute('role', 'alert');
     expect(error).toHaveTextContent(SERVER_MESSAGE);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
-  });
-
-  it('renders an empty-state message when the character has no resonances', async () => {
-    renderGate([OFFER], []);
-
-    await screen.findByRole('dialog');
-    expect(screen.getByTestId('entry-flourish-empty')).toBeInTheDocument();
-    expect(screen.queryByTestId('entry-flourish-resonance-picker')).not.toBeInTheDocument();
   });
 
   it('renders nothing when there is no offer for this character sheet', async () => {

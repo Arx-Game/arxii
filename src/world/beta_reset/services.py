@@ -157,6 +157,7 @@ from world.magic.models import (
     ResonanceGrant,
     Thread,
     ThreadLevelUnlock,
+    TrickleAccrual,
 )
 from world.npc_services.models import NPCStanding
 from world.progression.models import CharacterXPTransaction, ClassLevelAdvancement
@@ -338,6 +339,13 @@ SCOPE_TABLE: list[ScopeEntry] = [
     # --- Already-adequate receipts (#3055 spec's own phrase): wholesale, no CG variant ---
     ScopeEntry(CharacterXPTransaction, None, "XP ledger — inherently play-time."),
     ScopeEntry(ResonanceGrant, None, "Resonance-gain ledger — inherently play-time."),
+    ScopeEntry(
+        TrickleAccrual,
+        None,
+        "Waiting resonance trickles (#5308): the daily residence and worn-piece ticks pile "
+        "them up until an anima ritual harvests them, so they are play state like the "
+        "grants that harvesting writes.",
+    ),
     ScopeEntry(ClassLevelAdvancement, None, "Class-level advancement ledger — play-time."),
     # --- Achievements earned + Discovery slots (explicit spec scope) ---
     ScopeEntry(CharacterAchievement, None, "Per-character earned-achievement records."),

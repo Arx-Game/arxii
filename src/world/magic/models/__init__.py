@@ -33,6 +33,8 @@ Submodules (see Scope 6 §4.4):
 - ritual_pool: RitualAnimaContribution (#3001)
 - reincarnation: Reincarnation
 - grant: ResonanceGrant
+- resonance_check: ResonanceCheckAward, ResonanceGainSourceStat (#5308)
+- trickle: TrickleAccrual (#5308)
 - kindling: KindlingSituation, KindledStrengthTier, KindlingConfig, KindledDeedAward,
   AnimaRitualResonanceAward (#5181), RallyKindlingStrength, Kindling (#5124)
 - reflection: Reflection, SettlingRite (#5124)
@@ -116,6 +118,7 @@ from world.magic.models.drift import (
 from world.magic.models.endorsement import (
     EntryFlourishRecord,
     PoseEndorsement,
+    PoseResonanceReach,
     PresentationEndorsement,
     SceneEntryEndorsement,
     StylePresentationEndorsement,
@@ -206,6 +209,7 @@ from world.magic.models.progression_milestone import MagicProgressionMilestone
 from world.magic.models.reflection import Reflection, SettlingRite
 from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.relationship_bond_pull_tuning import RelationshipBondPullTuning
+from world.magic.models.resonance_check import ResonanceCheckAward, ResonanceGainSourceStat
 from world.magic.models.resonance_environment import AffinityInteraction, ResonanceEnvironmentConfig
 from world.magic.models.ritual_check_config import RitualCheckConfig
 from world.magic.models.ritual_pool import RitualAnimaContribution
@@ -302,6 +306,7 @@ from world.magic.models.threads import (
 )
 from world.magic.models.touchstone_config import TouchstoneCastConfig
 from world.magic.models.training_outcome import TrainingOutcomeAward
+from world.magic.models.trickle import TrickleAccrual
 from world.magic.models.ultimates import KnownUltimate
 from world.magic.models.weaving import (
     CharacterThreadWeavingUnlock,
@@ -470,6 +475,7 @@ __all__ = [
     "PortalAnchorKind",
     # endorsement (Spec C §2.2)
     "PoseEndorsement",
+    "PoseResonanceReach",
     # endorsement (Outfits Phase C §2.2 — #514)
     "PresentationEndorsement",
     # reincarnation
@@ -484,11 +490,14 @@ __all__ = [
     "RelationshipBondPullTuning",
     # renown award config abstract base (#953)
     "Resonance",
+    # bonus resonance check awards (#5308)
+    "ResonanceCheckAward",
     # resonance-environment config
     "ResonanceConversion",
     "ResonanceEnvironmentConfig",
     # gain config (Spec C §2.1)
     "ResonanceGainConfig",
+    "ResonanceGainSourceStat",
     # gain ledger (Spec C §2.4)
     "ResonanceGrant",
     "ResonanceManager",
@@ -591,5 +600,7 @@ __all__ = [
     "TraditionTeachingConfig",
     # training outcome awards (#2727)
     "TrainingOutcomeAward",
+    # waiting resonance trickles (#5308)
+    "TrickleAccrual",
     "aura_shares_prefetch",
 ]

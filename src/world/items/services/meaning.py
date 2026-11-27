@@ -270,20 +270,34 @@ def _resonance_fed(
     it up, in resonances ``being`` lists. One point per ``resonance_fed_per_point`` fed in
     each resonance, doubled where the being favors it, up to ``resonance_fed_max_points``.
 
-    Only grants to this holder's sheet on or after ``held_since`` count (a previous
+    Only trickles to this holder's sheet on or after ``held_since`` count (a previous
     holder's stay on the item and score nothing), and only through facets still on the
-    item: a removed facet (``removed_at``) is history, not meaning (#4461).
+    item: a removed facet (``removed_at``) is history, not meaning (#4461). What a facet fed
+    is read from its ``TrickleAccrual`` rows whether or not an anima ritual has harvested them
+    (#5308), plus the ``OUTFIT_TRICKLE`` ledger grants written before trickles waited.
     """
     from django.db.models import Sum  # noqa: PLC0415
 
-    from world.magic.constants import GainSource  # noqa: PLC0415
-    from world.magic.models import ResonanceGrant  # noqa: PLC0415
+    from world.magic.constants import GainSource, TrickleSource  # noqa: PLC0415
+    from world.magic.models import ResonanceGrant, TrickleAccrual  # noqa: PLC0415
     from world.worship.constants import BeingResonanceTier  # noqa: PLC0415
 
     tiers = dict(being.resonances.values_list("resonance_id", "tier"))
     if not tiers:
         return None
-    fed = (
+    accrued = (
+        TrickleAccrual.objects.filter(
+            source=TrickleSource.OUTFIT_TRICKLE,
+            character_sheet=holder,
+            resonance_id__in=tiers,
+            outfit_item_facet__item_instance=item,
+            outfit_item_facet__removed_at__isnull=True,
+            accrued_at__gte=item.held_since,
+        )
+        .values("resonance_id", "resonance__name")
+        .annotate(total=Sum("amount"))
+    )
+    legacy = (
         ResonanceGrant.objects.filter(
             source=GainSource.OUTFIT_TRICKLE,
             character_sheet=holder,
@@ -295,15 +309,20 @@ def _resonance_fed(
         .values("resonance_id", "resonance__name")
         .annotate(total=Sum("amount"))
     )
+    totals: dict[int, int] = {}
+    names: dict[int, str] = {}
+    for row in (*accrued, *legacy):
+        totals[row["resonance_id"]] = totals.get(row["resonance_id"], 0) + row["total"]
+        names[row["resonance_id"]] = row["resonance__name"]
     per_point = max(config.resonance_fed_per_point, 1)
     points = 0
     parts: list[str] = []
-    for row in fed:
-        favored = tiers[row["resonance_id"]] == BeingResonanceTier.FAVORED
-        earned = (row["total"] // per_point) * (2 if favored else 1)
+    for resonance_id, total in totals.items():
+        favored = tiers[resonance_id] == BeingResonanceTier.FAVORED
+        earned = (total // per_point) * (2 if favored else 1)
         if earned > 0:
             points += earned
-            parts.append(f"{row['total']} {row['resonance__name']}{', favored' if favored else ''}")
+            parts.append(f"{total} {names[resonance_id]}{', favored' if favored else ''}")
     points = min(points, config.resonance_fed_max_points)
     if points <= 0:
         return None

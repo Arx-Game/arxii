@@ -45,10 +45,12 @@ from world.scenes.reaction_services import (
 from world.scenes.reaction_toggle_services import toggle_interaction_reaction
 from world.scenes.tests.test_reaction_windows import _binary_kind
 
-# Measured at 10 for an ordinary pose: receivers, targets, entry endorsers, resonances,
+# Measured at 11 for an ordinary pose: receivers, targets, entry endorsers, resonances,
 # pose endorsers, reactions, windows, tags, the alternate self the writer's face wears (one
-# read for the one face a push shows, #4889), action rows. A new query here is a regression.
-QUERY_BOUND = 10
+# read for the one face a push shows, #4889), action rows, the pose's resonance reach (#5308:
+# a push can land on a pose whose reach is not cached yet, so the one-row lookup is paid).
+# A new query here is a regression.
+QUERY_BOUND = 11
 
 FEED_FIELDS = (
     "visibility",

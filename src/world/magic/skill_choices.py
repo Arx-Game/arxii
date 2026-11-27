@@ -15,9 +15,11 @@ active flag; a picker keeps an inactive Magic skill valid, because staff deactiv
 skill means it adds nothing, not that every row pointing at it must change.
 
 A combat style's own skill (``CombatStyle.skill``) is a Magic skill too, trained from a
-Tradition's creation pool and added by the style itself (#4844 decision 16). The four
-pickers never offer it, so ``MAGIC_PICKER_SKILL_CHOICES`` adds that exclusion;
-``CombatStyle.skill`` keeps the plain ``MAGIC_SKILL_CHOICES``.
+Tradition's creation pool and added by the style itself (#4844 decision 16). So is an
+affinity's own skill (``Affinity.skill``, #5308), which every earned gain and every pull
+adds to its bonus check. The four pickers never offer either, so
+``MAGIC_PICKER_SKILL_CHOICES`` adds both exclusions; ``CombatStyle.skill`` and
+``Affinity.skill`` keep the plain ``MAGIC_SKILL_CHOICES``.
 
 A cross-table rule like this cannot be a database check constraint.
 """
@@ -40,16 +42,20 @@ MAGIC_SKILL_ERROR_MESSAGES = {
 
 MAGIC_SKILL_HELP = "Magic-category skills only."
 
-#: What the four magic skill pickers offer and accept: a Magic skill that is no combat
-#: style's own skill (#4921).
-MAGIC_PICKER_SKILL_CHOICES = MAGIC_SKILL_CHOICES & Q(combat_style__isnull=True)
+#: What the four magic skill pickers offer and accept: a Magic skill that is neither a
+#: combat style's own skill (#4921) nor an affinity's own skill (#5308).
+MAGIC_PICKER_SKILL_CHOICES = (
+    MAGIC_SKILL_CHOICES & Q(combat_style__isnull=True) & Q(affinity__isnull=True)
+)
 
 MAGIC_PICKER_SKILL_ERROR_MESSAGES = {
     "invalid": (
-        "Choose a skill in the Magic category that is not a combat style's skill. A "
-        "magical roll adds only skills made for magic, so it never counts a skill a "
-        "character picks elsewhere."
+        "Choose a skill in the Magic category that is not a combat style's skill or an "
+        "affinity's skill. A magical roll adds only skills made for magic, so it never "
+        "counts a skill a character picks elsewhere."
     ),
 }
 
-MAGIC_PICKER_SKILL_HELP = "Magic-category skills only, never a combat style's skill."
+MAGIC_PICKER_SKILL_HELP = (
+    "Magic-category skills only, never a combat style's or an affinity's skill."
+)

@@ -106,6 +106,8 @@ export const magicKeys = {
   manifestChoices: (characterSheetId: number) =>
     [...magicKeys.all, 'manifest-choices', characterSheetId] as const,
 
+  resonanceCatalog: () => [...magicKeys.all, 'resonance-catalog'] as const,
+
   kindledResonances: (characterSheetId: number) =>
     [...magicKeys.all, 'kindled-resonances', characterSheetId] as const,
 
@@ -1169,6 +1171,15 @@ export function useSetManifestChoice(characterSheetId: number) {
 // ---------------------------------------------------------------------------
 // Your resonances (#5124)
 // ---------------------------------------------------------------------------
+
+/** Every resonance in the game, held or not (#5308): a pose reaches for, and a flourish declares, any of them. */
+export function useResonanceCatalog() {
+  return useQuery({
+    queryKey: magicKeys.resonanceCatalog(),
+    queryFn: api.getResonanceCatalog,
+    staleTime: 300_000,
+  });
+}
 
 /** How often the panel re-reads what is kindled; it changes as a scene or a fight moves. */
 const KINDLED_RESONANCES_REFETCH_MS = 30_000;

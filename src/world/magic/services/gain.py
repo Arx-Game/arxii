@@ -148,6 +148,7 @@ def get_resonance_gain_config() -> ResonanceGainConfig:
 ROOM_RESONANCE_TAG_SOURCE = "tag_room_resonance"
 _ERR_ALT_ENDORSE = "Cannot endorse an alt character"
 _ERR_RESONANCE_UNCLAIMED = "Endorsee has not claimed this resonance"
+_ERR_NO_RESONANCE = "Which resonance? This pose did not reach for one."
 
 
 @transaction.atomic
@@ -254,19 +255,49 @@ def resonance_grant_history_for_sheet(
     ledger and the telnet ``resonance history`` command. Optionally narrowed to one
     claimed resonance.
     """
-    qs = ResonanceGrant.objects.filter(character_sheet=sheet).select_related("resonance")
+    qs = ResonanceGrant.objects.filter(character_sheet=sheet).select_related(
+        "resonance__affinity__skill"
+    )
     if resonance is not None:
         qs = qs.filter(resonance=resonance)
     return list(qs.order_by("-granted_at")[:limit])
+
+
+def _endorsed_resonance(
+    endorsee_sheet: CharacterSheet, interaction: Interaction, chosen: Resonance | None
+) -> Resonance:
+    """The resonance an endorsement of ``interaction`` pays (#5308).
+
+    The one the pose reached for when its author named one; otherwise ``chosen``, which the
+    endorsee must have claimed.
+
+    Raises:
+        EndorsementValidationError: no resonance was reached for or chosen, or the one chosen
+            is not claimed.
+    """
+    reach = interaction.cached_resonance_reach
+    if reach is not None:
+        return reach.resonance
+    if chosen is None:
+        raise EndorsementValidationError(_ERR_NO_RESONANCE)
+    if not CharacterResonance.objects.filter(
+        character_sheet=endorsee_sheet, resonance=chosen
+    ).exists():
+        raise EndorsementValidationError(_ERR_RESONANCE_UNCLAIMED)
+    return chosen
 
 
 @transaction.atomic
 def create_pose_endorsement(  # noqa: C901
     endorser_sheet: CharacterSheet,
     interaction: Interaction,
-    resonance: Resonance,
+    resonance: Resonance | None = None,
 ) -> PoseEndorsement:
     """Validate and persist a pose endorsement (Spec C §2.2 + §7).
+
+    A pose whose author reached for a resonance (#5308) is endorsed for that resonance:
+    ``resonance`` is then ignored and precondition 7 does not apply, since the author named
+    it. A pose that reached for nothing needs ``resonance``, claimed by the endorsee.
 
     Preconditions (raises EndorsementValidationError on failure):
     1. Interaction author (persona field) has a character sheet
@@ -275,7 +306,7 @@ def create_pose_endorsement(  # noqa: C901
     4. WHISPER: endorser must be the direct recipient (InteractionReceiver row)
     5. VERY_PRIVATE: endorser must have SceneParticipation (allowed by participants)
     6. Endorser was present (scene participation OR interaction receiver)
-    7. Endorsee has claimed this resonance
+    7. Endorsee has claimed this resonance (unless the pose reached for it)
     8. No duplicate (endorser × interaction already endorsed)
     """
     if endorser_sheet.is_protagonism_locked:
@@ -325,11 +356,7 @@ def create_pose_endorsement(  # noqa: C901
         msg = "Endorser was not present for this interaction"
         raise EndorsementValidationError(msg)
 
-    if not CharacterResonance.objects.filter(
-        character_sheet=endorsee_sheet, resonance=resonance
-    ).exists():
-        msg = _ERR_RESONANCE_UNCLAIMED
-        raise EndorsementValidationError(msg)
+    resonance = _endorsed_resonance(endorsee_sheet, interaction, resonance)
 
     existing = PoseEndorsement.objects.filter(
         endorser_sheet=endorser_sheet, interaction=interaction
@@ -847,8 +874,10 @@ def create_entry_flourish(
     Called after the Entrance social action resolves successfully. The resonance
     was declared by the player as their flourish's expression.
 
-    Validates the character has claimed the resonance, then creates the
-    EntryFlourishRecord and fires grant_resonance atomically.
+    Creates the EntryFlourishRecord and fires grant_resonance atomically. The resonance need
+    not be one the character holds yet: a flourish in a new resonance earns it (#5308), and
+    the grant creates the character's row. The entrance made no roll that reaches this far,
+    so the bonus resonance check uses the stat staff set for ENTRY_FLOURISH.
 
     Args:
         character_sheet: The character performing the flourish.
@@ -858,9 +887,6 @@ def create_entry_flourish(
 
     Returns:
         The created EntryFlourishRecord.
-
-    Raises:
-        EndorsementValidationError: If the character hasn't claimed this resonance.
     """
     from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.models.endorsement import EntryFlourishRecord  # noqa: PLC0415
@@ -872,12 +898,6 @@ def create_entry_flourish(
         ).first()
         if existing is not None:
             return existing  # already flourished this scene — skip gracefully
-
-    if not CharacterResonance.objects.filter(
-        character_sheet=character_sheet, resonance=resonance
-    ).exists():
-        msg = "Character has not claimed this resonance"
-        raise EndorsementValidationError(msg)
 
     cfg = get_resonance_gain_config()
     granted = amount if amount is not None else cfg.entry_flourish_grant
@@ -1233,14 +1253,16 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
     """Daily residence-trickle tick (Spec C §5.3).
 
     Iterates sheets with a declared residence; for each matching
-    (residence-tagged ∩ sheet-claimed) resonance, fires a single
-    grant_resonance call worth cfg.residence_daily_trickle_per_resonance.
+    (residence-tagged ∩ sheet-claimed) resonance, writes one ``TrickleAccrual`` row worth
+    cfg.residence_daily_trickle_per_resonance. The trickle pays nothing on its own: it waits
+    until an anima ritual harvests it (#5308), so a tick changes no balance.
 
-    Per-character grants are wrapped in nested atomic blocks so a single
+    Per-character accruals are wrapped in nested atomic blocks so a single
     failure doesn't poison the whole tick. Non-residence sheets are skipped.
+    ``residence_grants_issued`` on the summary counts the accrual rows written.
     """
-    from world.magic.constants import GainSource  # noqa: PLC0415
-    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.magic.constants import TrickleSource  # noqa: PLC0415
+    from world.magic.models import TrickleAccrual  # noqa: PLC0415
 
     cfg = get_resonance_gain_config()
     grants_issued = 0
@@ -1260,11 +1282,11 @@ def residence_trickle_tick() -> ResonanceDailyTickSummary:
         for resonance in matched:
             try:
                 with transaction.atomic():
-                    grant_resonance(
-                        sheet,
-                        resonance,
-                        cfg.residence_daily_trickle_per_resonance,
-                        source=GainSource.ROOM_RESIDENCE,
+                    TrickleAccrual.objects.create(
+                        character_sheet=sheet,
+                        resonance=resonance,
+                        amount=cfg.residence_daily_trickle_per_resonance,
+                        source=TrickleSource.ROOM_RESIDENCE,
                         room_profile=rp,
                     )
                     grants_issued += 1
@@ -1290,18 +1312,20 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
     For each equipped item:
       For each ItemFacet on the item:
         If the wearer has a Thread on that Facet:
-          grant_resonance(
-            sheet,
-            thread.resonance,
+          TrickleAccrual(
+            character_sheet=sheet,
+            resonance=thread.resonance,
             amount=trickle_for(item, item_facet, thread),
-            source=GainSource.OUTFIT_TRICKLE,
+            source=TrickleSource.OUTFIT_TRICKLE,
             outfit_item_facet=item_facet,
           )
 
-    Returns: count of grants issued for this sheet.
+    The trickle waits for the next anima ritual to harvest it (#5308); nothing is granted here.
+
+    Returns: count of accrual rows written for this sheet.
     """
-    from world.magic.constants import GainSource  # noqa: PLC0415
-    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.magic.constants import TrickleSource  # noqa: PLC0415
+    from world.magic.models import TrickleAccrual  # noqa: PLC0415
     from world.magic.services.threads import thread_rung  # noqa: PLC0415
 
     config = get_resonance_gain_config()
@@ -1327,16 +1351,33 @@ def outfit_daily_trickle_for_character(sheet: CharacterSheet) -> int:
         if amount <= 0:
             continue
 
-        grant_resonance(
-            sheet,
-            thread.resonance,
+        TrickleAccrual.objects.create(
+            character_sheet=sheet,
+            resonance=thread.resonance,
             amount=amount,
-            source=GainSource.OUTFIT_TRICKLE,
+            source=TrickleSource.OUTFIT_TRICKLE,
             outfit_item_facet=item_facet,
         )
         grants_issued += 1
 
     return grants_issued
+
+
+def waiting_trickles(sheet: CharacterSheet) -> dict[int, int]:
+    """Resonance id to what ``sheet``'s days have piled up there and no anima ritual has
+    harvested yet (#5308). The sum of the unharvested ``TrickleAccrual`` rows; the rows are
+    the only store, so nothing here can drift from what a ritual will harvest.
+    """
+    from django.db.models import Sum  # noqa: PLC0415
+
+    from world.magic.models import TrickleAccrual  # noqa: PLC0415
+
+    rows = (
+        TrickleAccrual.objects.filter(character_sheet=sheet, harvested_at__isnull=True)
+        .values_list("resonance_id")
+        .annotate(total=Sum("amount"))
+    )
+    return dict(rows)
 
 
 def outfit_trickle_tick() -> int:
