@@ -290,14 +290,32 @@ def _parent_title_ids(
 
 
 @dataclass
-class _RealmGraph:
-    """The in-memory Title/Area graph one realm's ladder is read off — built
-    once by ``_realm_graph`` and shared by every row."""
+class _TitleTopology:
+    """The title and seat relationships shared by counts and full ladder rows."""
 
     titles_by_pk: dict[int, Title]
     parent_title_by_title: dict[int, int | None]
-    children_by_parent_title: dict[int, list[Title]]
     family_top_by_seat: dict[int, int]
+
+    def is_top(self, t: Title) -> bool:
+        """Whether ``t`` is the highest-tier title sharing its seat (its
+        own chain's top), not an internal chain member.
+
+        A title with no seat shares it with nothing, so it is its own top,
+        which is what ``chain_top_id`` reports for it too. ``seat_domain`` is
+        nullable and goes null when the seat's domain is deleted; reading such
+        a title as a chain member looked up the top of seat ``None`` and took
+        down the whole realm list (#4237)."""
+        if t.seat_domain_id is None:
+            return True
+        return self.family_top_by_seat.get(t.seat_domain_id) == t.pk
+
+
+@dataclass
+class _RealmGraph(_TitleTopology):
+    """The realm's topology and the extra data required for full ladder rows."""
+
+    children_by_parent_title: dict[int, list[Title]]
     barony_by_seat: dict[int, Title]
     own_area_by_title: dict[int, int | None]
     depth_by_area: dict[int, int]
@@ -318,19 +336,6 @@ class _RealmGraph:
             self.population_by_area.get(pk, 0)
             for pk in _subtree_area_ids(area_id, self.children_by_area)
         )
-
-    def is_top(self, t: Title) -> bool:
-        """Whether ``t`` is the highest-tier title sharing its seat (its
-        own chain's top), not an internal chain member.
-
-        A title with no seat shares it with nothing, so it is its own top,
-        which is what ``chain_top_id`` reports for it too. ``seat_domain`` is
-        nullable and goes null when the seat's domain is deleted; reading such
-        a title as a chain member looked up the top of seat ``None`` and took
-        down the whole realm list (#4237)."""
-        if t.seat_domain_id is None:
-            return True
-        return self.family_top_by_seat.get(t.seat_domain_id) == t.pk
 
     def liege_title(self, title_pk: int) -> Title | None:
         """Nearest ancestor rung (via ``parent_title_id``) with a house set."""
@@ -353,6 +358,22 @@ class _RealmGraph:
         return False
 
 
+def _title_topology(
+    titles: list[Title],
+    own_area_by_title: dict[int, int | None],
+    parent_by_area: dict[int, int | None],
+) -> _TitleTopology:
+    by_seat: dict[int, list[Title]] = defaultdict(list)
+    for title in titles:
+        if title.seat_domain_id is not None:
+            by_seat[title.seat_domain_id].append(title)
+    return _TitleTopology(
+        titles_by_pk={title.pk: title for title in titles},
+        parent_title_by_title=_parent_title_ids(titles, own_area_by_title, parent_by_area),
+        family_top_by_seat={seat_id: _family_top(group).pk for seat_id, group in by_seat.items()},
+    )
+
+
 def _realm_graph(realm_id: int) -> _RealmGraph | None:
     """One Title query, one Area query, everything else walked in memory.
     ``None`` when the realm has no titles at all."""
@@ -373,19 +394,13 @@ def _realm_graph(realm_id: int) -> _RealmGraph | None:
 
     parent_by_area, level_by_area, children_by_area, depth_by_area = _area_maps(realm_id)
     own_area_by_title = _own_rung_areas(titles, parent_by_area, level_by_area)
-    parent_title_by_title = _parent_title_ids(titles, own_area_by_title, parent_by_area)
+    topology = _title_topology(titles, own_area_by_title, parent_by_area)
 
     children_by_parent_title: dict[int, list[Title]] = defaultdict(list)
     for t in titles:
-        parent_id = parent_title_by_title.get(t.pk)
+        parent_id = topology.parent_title_by_title.get(t.pk)
         if parent_id is not None:
             children_by_parent_title[parent_id].append(t)
-
-    by_seat: dict[int, list[Title]] = defaultdict(list)
-    for t in titles:
-        if t.seat_domain_id is not None:
-            by_seat[t.seat_domain_id].append(t)
-    family_top_by_seat = {seat_id: _family_top(group).pk for seat_id, group in by_seat.items()}
 
     barony_by_seat: dict[int, Title] = {
         t.seat_domain_id: t for t in titles if t.tier == TitleTier.BARONY and t.seat_domain_id
@@ -400,10 +415,10 @@ def _realm_graph(realm_id: int) -> _RealmGraph | None:
 
     return _RealmGraph(
         population_by_area=population_by_area,
-        titles_by_pk={t.pk: t for t in titles},
-        parent_title_by_title=parent_title_by_title,
+        titles_by_pk=topology.titles_by_pk,
+        parent_title_by_title=topology.parent_title_by_title,
         children_by_parent_title=dict(children_by_parent_title),
-        family_top_by_seat=family_top_by_seat,
+        family_top_by_seat=topology.family_top_by_seat,
         barony_by_seat=barony_by_seat,
         own_area_by_title=own_area_by_title,
         depth_by_area=depth_by_area,
@@ -472,7 +487,7 @@ def _vassals_for(t: Title, graph: _RealmGraph) -> int:
     return len(not_on_chain)
 
 
-def _unclaimed_tier_hit(t: Title, graph: _RealmGraph, *, top: bool) -> str | None:
+def _unclaimed_tier_hit(t: Title, graph: _TitleTopology, *, top: bool) -> str | None:
     """The tier this (unclaimed) title counts toward in ``unclaimed_by_tier``,
     or ``None`` if it doesn't count at all. See the module docstring."""
     if t.house_id is not None:
@@ -484,6 +499,35 @@ def _unclaimed_tier_hit(t: Title, graph: _RealmGraph, *, top: bool) -> str | Non
         if parent_id is not None and graph.is_top(graph.titles_by_pk[parent_id]):
             return TitleTier.BARONY
     return None
+
+
+def unclaimed_counts_by_realm(realm_ids: list[int]) -> dict[int, dict[str, int]]:
+    """Count unclaimed rungs across a page of realms with two bulk queries."""
+    titles_by_realm: dict[int, list[Title]] = defaultdict(list)
+    for title in Title.objects.filter(realm_id__in=realm_ids):
+        titles_by_realm[title.realm_id].append(title)
+
+    parents_by_realm: dict[int, dict[int, int | None]] = defaultdict(dict)
+    levels_by_realm: dict[int, dict[int, int]] = defaultdict(dict)
+    areas = Area.objects.filter(realm_id__in=titles_by_realm).values_list(
+        "realm_id", "pk", "parent_id", "level"
+    )
+    for realm_id, pk, parent_id, level in areas:
+        parents_by_realm[realm_id][pk] = parent_id
+        levels_by_realm[realm_id][pk] = level
+
+    result: dict[int, dict[str, int]] = {}
+    for realm_id, titles in titles_by_realm.items():
+        parents = parents_by_realm[realm_id]
+        own_areas = _own_rung_areas(titles, parents, levels_by_realm[realm_id])
+        topology = _title_topology(titles, own_areas, parents)
+        counts: dict[str, int] = defaultdict(int)
+        for title in titles:
+            hit = _unclaimed_tier_hit(title, topology, top=topology.is_top(title))
+            if hit is not None:
+                counts[hit] += 1
+        result[realm_id] = dict(counts)
+    return result
 
 
 def _row_for(t: Title, graph: _RealmGraph) -> LadderRow:
