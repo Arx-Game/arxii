@@ -23,7 +23,7 @@ from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import RoomProfileFactory
 from integration_tests.harness import JourneyCase
-from integration_tests.test_traditions_teach_journeys import (
+from integration_tests.tradition_teaching_helpers import (
     author_the_three_skills,
     tradition_teaching,
 )
@@ -802,6 +802,9 @@ class TheTrainersTradition(_AcademyCourseCase):
         )
         self.assertEqual(self.holdings(), before)
         self.assertEqual(get_or_create_treasury(self.academy).balance, 0)
+        # A course she cannot take draws no harder line: that line is for a course she can.
+        self.assertNotIn("Sessions are harder", self.menu())
+        self.assertIsNone(self.web_offers()["Course: Villainy"]["price"]["outsider_line"])
 
     def test_enrolling_is_refused_when_the_trainer_teaches_no_tradition(self) -> None:
         self.role.teaches_tradition = None
@@ -843,4 +846,7 @@ class TheTrainersTradition(_AcademyCourseCase):
 
         self.assertNotIn("closed", told)
         self.assertEqual(self.enrollments(), 1)
+        # The Villainy course on this same trainer is closed (the role names no Tradition), so
+        # its row draws no harder line either: the line is for a course she can take.
         self.assertNotIn("Sessions are harder", self.menu())
+        self.assertIsNone(self.web_offers()["Course: Villainy"]["price"]["outsider_line"])

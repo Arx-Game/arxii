@@ -976,7 +976,8 @@ The Required content dashboard has these rows (`required_content.py`; all TUNING
 |-----|-------|----------|
 | `schooling-magic-skill-floors` | Schooling ranks 1 and above that give no training points: no granted distinction, no `magic_training_points` effect, or one worth 0 or less at the rank, read through `schooling_training_points()` (key kept so the dashboard row is stable) | `schooling_training_points()` |
 | `magic-skill-courses` | Active Magic skills with no `SKILL_COURSE` offer on an active role that has a `faction_affiliation` (an inactive role's offers are never shown). Its consequence now reads that without a course characters raise those skills only through a mentor whose Tradition teaches them and who holds a rating, unless a distinction lets them teach themselves | `run_skill_course_offer()` |
-| `affinity-skills-taught` | Heroism and Villainy (the skills of the Celestial and Abyssal affinities, when linked) that no Tradition ticks on `taught_skills` (#5326) | `tradition_teaches()` |
+| `affinity-skills-taught` | Heroism and Villainy (the skills of the Celestial and Abyssal affinities, when linked) that no Tradition creation can reach ticks on `taught_skills`: a tick counts only when the Tradition is active and on some Beginning's slate (`traditions_offered_in_creation()`) and the skill is active (#5326) | `tradition_teaches()` |
+| `governed-skills-taught` | Governed skills (an affinity's skill, a fighting style's skill) that no active Tradition teaches: a style with no active Tradition in `taught_by`, an unticked Heroism or Villainy, an affinity skill whose affinity is not one of the three names; with no active Tradition at all every governed skill, Reflection included (#5326) | `TeachingContext.teaches()` |
 | `courses-taught-by-their-tradition` | `SKILL_COURSE` offers on an active role whose Tradition does not teach the course's skill, each row `offer: role, skill`; it also finds a course whose Tradition's ticks staff later removed (#5326) | `_refuse_closed_course()` |
 | `path-suggestions-name-magic-skills` | `PathSkillSuggestion` rows naming a Magic skill (CG cannot take them) | `PathSkillSuggestionViewSet` |
 
@@ -1016,10 +1017,11 @@ Villainy.
 | Surface | Location | Purpose |
 |---------|----------|---------|
 | `Tradition.taught_skills` | `world/magic/models/gifts.py` | M2M to `Skill`, blank, reverse name `teaching_traditions`, `limit_choices_to` the Celestial and Abyssal affinities' skills (the admin chooser lists Heroism and Villainy and never Reflection; Django applies the limit in the admin form only, not in model validation). `TraditionAdmin` lists it in `filter_horizontal`. A deleted skill or Tradition takes its ticks with it |
-| `tradition_teaches(tradition, skill)`, `is_tradition_governed(skill)` | `world/magic/services/tradition_teaching.py` | The one-question forms, each with its own queries, for a caller that asks once (the admin's `clean`, a menu line). A specialization is judged on its parent skill |
+| `tradition_teaches(tradition, skill)`, `is_tradition_governed(skill)` | `world/magic/services/tradition_teaching.py` | The one-question forms, for a caller that asks once (the admin's `clean`, the enrollment check). Each builds the catalog context and asks `TeachingContext.teaches`, so they cannot differ from the batch answer. A specialization is judged on its parent skill. A skill that is both an affinity's skill and a fighting style's follows the affinity's list (the admin refuses to author one) |
+| `traditions_offered_in_creation()` | same file | The active Traditions some Beginning lists. The Tradition endpoint (`TraditionViewSet.get_queryset`) and the `affinity-skills-taught` row both read it |
 | `taught_affinity_skill_filter(tradition_id)`, `taught_affinity_skill_names_by_tradition(ids)` | same file | The query form creation narrows its list with, and the names the Tradition list shows ("Reflection, Villainy"); two queries for the whole list |
-| `TeachingContext`, `build_teaching_context(sheet_ids, *, lever_sheet_ids=None)` | same file; `world/magic/types/tradition_teaching.py` | A frozen snapshot a caller builds once and passes down, never stores: the governed and universal skill ids, the skills each Tradition teaches, the active Tradition of every sheet, and the sheets whose self-teaching lever is positive. A fixed number of queries covers a whole weekly run. `sheet_ids` must hold every student and mentor asked about (asking about another sheet raises `KeyError`); `lever_sheet_ids` limits which sheets get the lever read (one modifier walk each, ADR-0278) and defaults to all of them |
-| `training_verdict(context, sheet, skill, mentor_sheet, *, mentor_name=None) -> TrainingVerdict` | same file | `TrainingVerdict.refusal` is the full line the player reads, or `None`. A skill outside the Magic category is never refused here. `mentor_name` is how the refusal names the mentor (the persona the player chose; it defaults to the mentor's primary persona's name). It never reads whether the student is an outsider, and never a mentor's own lever |
+| `TeachingContext`, `build_teaching_context(sheet_ids, *, lever_sheet_ids=None, player_sheet_ids=None)`, `build_outsider_context(sheet_ids)` | same file; `world/magic/types/tradition_teaching.py` | A frozen snapshot a caller builds once and passes down, never stores: the governed and universal skill ids, the skills each Tradition teaches, the active Tradition of every sheet, the account that plays each sheet asked about, and the sheets whose self-teaching lever is positive. A fixed number of queries covers a whole weekly run. `sheet_ids` must hold every student and mentor asked about (asking about another sheet raises `KeyError`); `lever_sheet_ids` limits which sheets get the lever read (one modifier walk each, ADR-0278) and `player_sheet_ids` which sheets get their player read (two queries in all, `roster.services.npc_lending.current_player_ids`); both default to every sheet, and asking `training_verdict` about a sheet whose lever or player was not read raises `KeyError`, never "no lever". `build_outsider_context` reads neither, for callers that never ask the verdict (menus, courses, probes) |
+| `training_verdict(context, sheet, skill, mentor) -> TrainingVerdict` | same file | `TrainingVerdict.refusal` is the full line the player reads, or `None`. A skill outside the Magic category is never refused here. `mentor` is the persona the player named, and the refusal names that persona and never the character behind it. It never reads whether the student is an outsider, and never a mentor's own lever |
 | `is_outsider(context, sheet, skill)` | same file | True when the skill is governed and the student's active Tradition (none counts as not teaching) does not teach it. Courses read it |
 | `active_tradition_row(sheet)` | `world/magic/services/tradition_membership.py` | The student's one active `CharacterTradition` row (made public by #5326; its other inline copies are unchanged) |
 | `self_teaching_granted(sheet)` | `world/mechanics/levers.py` | The exception, below |
@@ -1028,9 +1030,14 @@ Villainy.
 (`training add`), the web action (`manage_training`) and the weekly run:
 
 - "{Skill} needs a teacher. Choose a mentor whose Tradition teaches it." (no mentor on a Magic skill)
-- "{Mentor}'s Tradition does not teach {Skill}. Choose a mentor whose Tradition does."
-- "{Mentor} belongs to no Tradition. Choose a mentor whose Tradition teaches {Skill}."
-- "{Mentor} has no rating in {Skill}. Choose a mentor who has one."
+- "{Mentor} cannot teach you {Skill}. Choose a mentor whose Tradition teaches it and who has trained in it."
+  (one line for all three reasons, no Tradition, a Tradition that does not teach it, no rating, so naming a
+  persona, a mask included, tells the asker nothing about the character behind it; `{Mentor}` is the persona
+  she typed or picked, never the name behind it)
+- "You cannot name another of your own characters as your mentor. Choose a mentor another player plays."
+  (a mentor one account also plays, read by `current_player_ids`; a character nobody plays, an NPC a GM runs,
+  stays allowed). Naming her own persona counts as naming no mentor, so the teacher line applies unless she
+  holds the lever.
 
 **The exception.** A distinction staff author is the only way to teach herself a magical skill: an ordinary
 `DistinctionEffect` on the `self_teaching` target of the `self_teaching` modifier category
@@ -1077,7 +1084,9 @@ A student whose own Tradition does not teach the course's governed skill is an o
 difficulty `other_tradition_course_difficulty`, read live at each session; the roll is at
 `difficulty_points(level) + added_difficulty - ease`. A student keeps any fit ease her Gift earns. With the
 extra difficulty at 0 (the default) nothing is added and no context is built. A student with no active
-Tradition is an outsider on a governed skill only; for Occult and its kind nobody is.
+Tradition is an outsider on a governed skill only; for Occult and its kind nobody is. The trainer menu draws
+the harder line only for a course the student can take: a course the enrollment check would refuse as closed
+(the trainer's own Tradition does not teach the skill) draws none.
 
 **Cases that are not special.** The self-taught and teachers-gone Traditions get no special case: both are real
 Tradition rows, so a member of the self-taught Tradition who holds a rating can mentor in a skill that
@@ -1085,6 +1094,13 @@ Tradition teaches, Reflection included, because every Tradition teaches it. A se
 same list any Tradition's draft gets, with a pool of zero because a self-taught state opens no schooling
 stance (`SCHOOLING_MAX_RANK_BY_STATE`). Joining, leaving or switching Tradition never changes a rating or any
 point of development.
+
+**Known and accepted.** The weekly skip notice repeats each week while the stale row stands, because the row is
+left in place so she can fix it. With `other_tradition_course_difficulty` at 0 the harder line is hidden and
+nothing is added. A creation draft saved before #5326 with points on a skill its Tradition does not teach fails
+the Gift stage ("Magic skills only") until the player changes Tradition or style or saves the Gift stage's
+allocation anew, because `reconcile_magic_training` runs when the Tradition or style changes and never when the
+Gift stage is validated (validation is a read; it never writes the draft).
 
 #### Academy skill courses
 

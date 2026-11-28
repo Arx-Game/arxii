@@ -1144,8 +1144,12 @@ no magical skill is self-study: the Traditions' teachers decide.
 - Academy: a course in a governed skill is refused when staff author it on a role whose Tradition does not teach
   it and again at enrollment; an outsider's session adds `TraditionTeachingConfig.other_tradition_course_difficulty`
   and the trainer menu says so in `outsider_line`; a course already paid for keeps running.
-- Two Required content TUNING rows (`affinity-skills-taught`, `courses-taught-by-their-tradition`) and a corrected
-  consequence on `magic-skill-courses`.
+- Three Required content TUNING rows (`affinity-skills-taught`, counting only Traditions creation can reach;
+  `governed-skills-taught`; `courses-taught-by-their-tradition`) and a corrected consequence on
+  `magic-skill-courses`.
+- Review fixes: one rule source (`tradition_teaches` reads the same `TeachingContext` the batch does), a character
+  is never her own mentor nor another character her player plays (`current_player_ids`), and a refused mentor
+  gets one line that reveals nothing about the persona.
 - Journeys: `integration_tests/test_traditions_teach_journeys.py`, plus rows in
   `test_earning_your_keep_journeys.py`, `test_tradition_training_journeys.py` and
   `test_academy_skill_course_journeys.py`; one property per rule in

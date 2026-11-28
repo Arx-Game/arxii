@@ -108,6 +108,7 @@ describe('NPCInteractionDialog price line (#4457)', () => {
 
     const course = await screen.findByRole('button', { name: /Course: Occult/ });
     expect(course).toHaveTextContent(`Course: Occult${ENROLL_LINE}${TAUGHT}${FIT}`);
+    // The muted colour is the only rendered difference between the Tradition line and the fit line, so the class is what is asserted.
     expect(screen.getByText(TAUGHT)).toHaveClass('text-muted-foreground');
     expect(screen.getByText(FIT)).not.toHaveClass('text-muted-foreground');
   });
@@ -169,6 +170,7 @@ describe('NPCInteractionDialog price line (#4457)', () => {
     expect(course).toHaveTextContent(
       `Villainy course${ENROLL_LINE}Taught in the manner of The Cinder Court${FIT}${OUTSIDER}`
     );
+    // The caution colour is the only rendered difference between this line and the fit line, so the class is what is asserted.
     expect(screen.getByText(OUTSIDER)).toHaveClass('text-amber-700');
     expect(screen.getByText(FIT)).not.toHaveClass('text-amber-700');
   });

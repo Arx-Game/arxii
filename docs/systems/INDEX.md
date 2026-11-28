@@ -101,19 +101,20 @@
   Abyssal affinities' skills: Heroism and Villainy; Reflection is taught by every Tradition with no tick; a
   fighting style's skill is taught by the Traditions in `CombatStyle.taught_by`) and the rule module
   `world/magic/services/tradition_teaching.py` (`tradition_teaches`, `is_tradition_governed`, `is_outsider`,
-  `TeachingContext`, `build_teaching_context`, `training_verdict` -> `TrainingVerdict.refusal`,
+  `TeachingContext`, `build_teaching_context`, `build_outsider_context`, `traditions_offered_in_creation`,
+  `training_verdict` -> `TrainingVerdict.refusal`,
   `taught_affinity_skill_filter`, `taught_affinity_skill_names_by_tradition`; value types in
   `world/magic/types/tradition_teaching.py`) answer every question for creation, weekly training and
   courses. `create_training_allocation` / `update_training_allocation` refuse a Magic skill with no teacher, a
-  mentor whose Tradition does not teach it, a mentor with no Tradition and a mentor with no rating;
+  mentor who cannot teach it (one line for every reason) and another of her own characters as mentor;
   `process_weekly_training` asks again for every standing allocation and skips a stale one with one narrative
   line and no AP spent. A course in a governed skill is refused at authoring (`SkillCourseOfferDetails.clean`) and at
   enrollment (`_refuse_closed_course`); an outsider's session adds
   `TraditionTeachingConfig.other_tradition_course_difficulty` (`CourseTerms`). Creation offers a draft only the
   affinity skills its Tradition teaches (`training_skills`, `reconcile_magic_training`,
   `TraditionSerializer.taught_skill_names`). The one exception is the `self_teaching` lever a staff-authored
-  distinction effect can grant (`world.mechanics.levers.self_teaching_granted`). Two Required content TUNING
-  rows (`affinity-skills-taught`, `courses-taught-by-their-tradition`). Details: [magic.md](magic.md) "Which
+  distinction effect can grant (`world.mechanics.levers.self_teaching_granted`). Three Required content TUNING
+  rows (`affinity-skills-taught`, `governed-skills-taught`, `courses-taught-by-their-tradition`). Details: [magic.md](magic.md) "Which
   Traditions teach which skills".
 
 - **Drift correction (#4733, slice 4 of #4672):** a deed (`DEED_GAIN_SOURCES` /

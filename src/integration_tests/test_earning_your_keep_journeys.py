@@ -17,9 +17,10 @@ from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
-from integration_tests.test_traditions_teach_journeys import (
+from integration_tests.tradition_teaching_helpers import (
+    MENTOR_CANNOT_TEACH_LINE,
+    OWN_CHARACTER_LINE,
     TEACHER_LINE,
-    WRONG_TRADITION_LINE,
     author_the_three_skills,
     hold_rating,
     tradition_teaching,
@@ -67,7 +68,11 @@ from world.progression.models import (
 from world.progression.models.path_intent import PathIntent
 from world.room_features.models import RoomFeatureInstance
 from world.room_features.seeds import ensure_notice_board_kind, ensure_town_crier_kind
-from world.roster.factories import RosterApplicationFactory
+from world.roster.factories import (
+    RosterApplicationFactory,
+    RosterEntryFactory,
+    RosterTenureFactory,
+)
 from world.roster.models import RosterTenure
 from world.roster.models.choices import ApplicationStatus
 from world.scenes.models import Interaction, Persona
@@ -726,7 +731,8 @@ class TrainingAMagicSkill(JourneyCase):
     the skill and hold a rating in it: every Tradition teaches Reflection and the ordinary Magic
     skills, a Tradition teaches Heroism or Villainy only when staff ticked it, and a fighting
     style's skill is taught by the Traditions that style names. Each refusal names the next
-    step and saves nothing.
+    step and saves nothing. A mentor who cannot teach is refused with one line whatever the
+    reason, and her own characters never count as her mentor.
     """
 
     def setUp(self) -> None:
@@ -738,6 +744,7 @@ class TrainingAMagicSkill(JourneyCase):
         skills = author_the_three_skills()
         self.villainy, self.reflection = skills["Villainy"], skills["Reflection"]
         self.occult = MagicSkillFactory(name="Occult")
+        self.sabotage = SpecializationFactory(parent_skill=self.villainy, name="Sabotage")
         self.footwork = MagicSkillFactory(name="Duelist's Footwork")
         self.dawn = tradition_teaching("Dawn Vigil", skills["Heroism"])
         self.ashen = tradition_teaching("Ashen Court", self.villainy)
@@ -772,22 +779,23 @@ class TrainingAMagicSkill(JourneyCase):
                 TEACHER_LINE.format(skill=skill.name),
                 self.telnet(self.ysmay, f"training add skill={skill.pk} ap=5"),
             )
-        for mentor, reply in (
-            (self.hobb, WRONG_TRADITION_LINE.format(mentor="Hobb", skill="Villainy")),
-            (self.mira, "Mira has no rating in Villainy. Choose a mentor who has one."),
-            (
-                self.drifter,
-                "Drifter belongs to no Tradition. Choose a mentor whose Tradition teaches "
-                "Villainy.",
-            ),
-        ):
-            self.assertIn(
-                reply,
-                self.telnet(
-                    self.ysmay,
-                    f"training add skill={self.villainy.pk} ap=5 mentor={self.persona_of(mentor)}",
-                ),
-            )
+        # A specialization is judged on its parent skill, so it is never trained alone either.
+        self.assertIn(
+            TEACHER_LINE.format(skill="Villainy"),
+            self.telnet(self.ysmay, f"training add spec={self.sabotage.pk} ap=5"),
+        )
+        # The Dawn Vigil's Hobb, Mira with no rating and the Drifter with no Tradition are each
+        # refused with the one line, which says nothing about which reason it was.
+        for mentor in (self.hobb, self.mira, self.drifter):
+            name = mentor.db_key
+            for target in (f"skill={self.villainy.pk}", f"spec={self.sabotage.pk}"):
+                self.assertIn(
+                    MENTOR_CANNOT_TEACH_LINE.format(mentor=name, skill="Villainy"),
+                    self.telnet(
+                        self.ysmay,
+                        f"training add {target} ap=5 mentor={self.persona_of(mentor)}",
+                    ),
+                )
         self.assertEqual(self.allocations(), 0)
 
         self.assertIn(
@@ -835,6 +843,95 @@ class TrainingAMagicSkill(JourneyCase):
         )
         self.assertTrue(accepted.detail.success, accepted.detail.message)
         self.assertEqual(self.allocations(), 1)
+
+    def an_alt_of_ysmay(self):
+        """A second character on Ysmay's own account, who teaches Villainy and holds a rating."""
+        alt = CharacterFactory(db_key="Ysmay's Shadow", location=self.lantern)
+        CharacterSheetFactory(character=alt)
+        entry = RosterEntryFactory(character_sheet__character=alt)
+        RosterTenureFactory(
+            roster_entry=entry, end_date=None, player_data=tenure_of(self.ysmay).player_data
+        )
+        CharacterTraditionFactory(character=alt.sheet_data, tradition=self.ashen)
+        hold_rating(alt.sheet_data, self.villainy, 11)
+        return alt
+
+    def test_her_own_characters_are_never_her_mentor(self) -> None:
+        alt = self.an_alt_of_ysmay()
+        add = f"training add skill={self.villainy.pk} ap=5 mentor="
+
+        # Another character one account plays is refused with its own line.
+        self.assertIn(OWN_CHARACTER_LINE, self.telnet(self.ysmay, add + str(self.persona_of(alt))))
+        # Naming herself counts as naming nobody.
+        self.assertIn(
+            TEACHER_LINE.format(skill="Villainy"),
+            self.telnet(self.ysmay, add + str(self.persona_of(self.ysmay))),
+        )
+        self.assertEqual(self.allocations(), 0)
+        # A character another player plays is allowed.
+        self.assertIn(
+            "Training allocation set for Villainy.",
+            self.telnet(self.ysmay, add + str(self.persona_of(self.corvin))),
+        )
+
+    def test_a_standing_allocation_the_rule_no_longer_allows_cannot_have_only_its_ap_changed(
+        self,
+    ) -> None:
+        self.telnet(
+            self.ysmay,
+            f"training add skill={self.villainy.pk} ap=5 mentor={self.persona_of(self.corvin)}",
+        )
+        row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data)
+        # Staff take Villainy off the Ashen Court's list after she set the allocation up.
+        self.ashen.taught_skills.remove(self.villainy)
+
+        told = self.telnet(self.ysmay, f"training update id={row.pk} ap=3")
+
+        self.assertIn(
+            MENTOR_CANNOT_TEACH_LINE.format(mentor="Corvin", skill="Villainy"),
+            told,
+        )
+        row.refresh_from_db()
+        self.assertEqual(row.ap_amount, 5)
+        self.assertEqual(row.mentor_id, self.persona_of(self.corvin))
+
+    def test_the_rest_endpoint_refuses_a_create_and_an_update_with_the_line(self) -> None:
+        client = self.api(self.account_of(self.ysmay))
+        url = "/api/skills/training-allocations/"
+
+        refused = client.post(url, {"skill_id": self.villainy.pk, "ap_amount": 5}, format="json")
+
+        self.assertEqual(refused.status_code, 400, refused.content)
+        # The refusal is raised as a bare ValidationError message, so the body is a list of
+        # sentences and not a mapping with a "detail" key; the frontend reads it that way.
+        self.assertEqual(refused.json(), [TEACHER_LINE.format(skill="Villainy")])
+        self.assertEqual(self.allocations(), 0)
+
+        created = client.post(
+            url,
+            {
+                "skill_id": self.villainy.pk,
+                "ap_amount": 5,
+                "mentor_persona_id": self.persona_of(self.corvin),
+            },
+            format="json",
+        )
+        self.assertEqual(created.status_code, 201, created.content)
+        row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data)
+
+        no_mentor = client.patch(f"{url}{row.pk}/", {"mentor_persona_id": None}, format="json")
+        wrong_mentor = client.patch(
+            f"{url}{row.pk}/", {"mentor_persona_id": self.persona_of(self.hobb)}, format="json"
+        )
+
+        self.assertEqual(no_mentor.status_code, 400, no_mentor.content)
+        self.assertEqual(no_mentor.json(), [TEACHER_LINE.format(skill="Villainy")])
+        self.assertEqual(wrong_mentor.status_code, 400, wrong_mentor.content)
+        self.assertEqual(
+            wrong_mentor.json(), [MENTOR_CANNOT_TEACH_LINE.format(mentor="Hobb", skill="Villainy")]
+        )
+        row.refresh_from_db()
+        self.assertEqual(row.mentor_id, self.persona_of(self.corvin))
 
 
 class LearningAGift(JourneyCase):

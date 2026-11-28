@@ -14,7 +14,7 @@ carries the self-teaching lever. Two journeys live here:
 The other rows of the feature live where the rest of their story is told:
 ``test_earning_your_keep_journeys`` (the training command), ``test_tradition_training_journeys``
 (character creation) and ``test_academy_skill_course_journeys`` (Academy courses). Those
-files import the three helpers below.
+files import the helpers in ``integration_tests.tradition_teaching_helpers``.
 
 The numbers are hand-worked from the skills docs: weekly training pays ``5 x AP x path level``
 development points, plus a mentor's bonus of ``AP x (mentor rating / student rating) x
@@ -30,10 +30,16 @@ from django.urls import reverse
 
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
-from integration_tests.test_refused_admin_saves_journeys import _filled
+from integration_tests.tradition_teaching_helpers import (
+    MENTOR_CANNOT_TEACH_LINE,
+    TEACHER_LINE,
+    author_the_three_skills,
+    filled,
+    hold_rating,
+    tradition_teaching,
+)
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_creation.factories import CharacterDraftFactory
-from world.character_creation.sheet_writers import set_skill_values
 from world.character_sheets.models import CharacterSheet
 from world.distinctions.factories import DistinctionFactory
 from world.distinctions.models import DistinctionEffect
@@ -41,15 +47,12 @@ from world.distinctions.services import grant_distinction
 from world.distinctions.types import DistinctionOrigin
 from world.magic.factories import (
     CharacterTraditionFactory,
-    TraditionFactory,
-    ensure_conversion_pairs,
 )
-from world.magic.models import Affinity, Tradition
+from world.magic.models import Tradition
 from world.mechanics.constants import SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME
 from world.mechanics.test_helpers import grant_lever, lever_target
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
-from world.skills.factories import MagicSkillFactory
 from world.skills.models import Skill, TrainingAllocation
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory
@@ -58,49 +61,8 @@ from world.traits.models import (
     PointConversionRange,
     ResultChart,
     Trait,
-    TraitChangeSource,
     TraitType,
 )
-
-TEACHER_LINE = "{skill} needs a teacher. Choose a mentor whose Tradition teaches it."
-WRONG_TRADITION_LINE = (
-    "{mentor}'s Tradition does not teach {skill}. Choose a mentor whose Tradition does."
-)
-
-
-def author_the_three_skills() -> dict[str, Skill]:
-    """Staff link one Magic skill to each affinity: Heroism, Reflection and Villainy.
-
-    Returns the skills by name. Reflection is the Primal affinity's skill, so every Tradition
-    teaches it; Heroism (Celestial) and Villainy (Abyssal) are taught only when ticked.
-    """
-    celestial, primal, abyssal = ensure_conversion_pairs()
-    skills: dict[str, Skill] = {}
-    for affinity, name in ((celestial, "Heroism"), (primal, "Reflection"), (abyssal, "Villainy")):
-        skill = MagicSkillFactory(name=name)
-        affinity.skill = skill
-        affinity.save()
-        skills[name] = skill
-    Affinity.objects.clear_cache()
-    return skills
-
-
-def tradition_teaching(name: str, *ticked: Skill) -> Tradition:
-    """A Tradition whose teachers teach the ticked affinity skills (and Reflection, unticked)."""
-    tradition = TraditionFactory(name=name)
-    tradition.taught_skills.add(*ticked)
-    return tradition
-
-
-def hold_rating(sheet: CharacterSheet, skill: Skill, rating: int) -> None:
-    """The character leaves creation holding ``skill`` at ``rating``, as a mentor must."""
-    set_skill_values(
-        sheet,
-        {skill: rating},
-        {},
-        source=TraitChangeSource.CHARACTER_CREATION,
-        enforce_caps=False,
-    )
 
 
 def rating_of(sheet: CharacterSheet, skill: Skill) -> int:
@@ -203,7 +165,7 @@ class TheWeeklyRunAndTheTraditionRule(_TeachingCase):
             self.notices(self.ysmay),
             [
                 "Your weekly training in Villainy did not run, and no action points were "
-                "spent. " + WRONG_TRADITION_LINE.format(mentor="Hobb", skill="Villainy")
+                "spent. " + MENTOR_CANNOT_TEACH_LINE.format(mentor="Hobb", skill="Villainy")
             ],
         )
         # The row stays, so she can choose another mentor and have it run next week.
@@ -291,11 +253,11 @@ class StaffChoosingWhatATraditionTeaches(_TeachingCase):
         url = reverse("admin:arxii_tradition_change", args=[tradition.pk])
         page = self.client.get(url)
         self.assertEqual(page.status_code, 200)
-        data = _filled(page.context["adminform"].form)
+        data = filled(page.context["adminform"].form)
         for inline in page.context["inline_admin_formsets"]:
-            data.update(_filled(inline.formset.management_form))
+            data.update(filled(inline.formset.management_form))
             for form in inline.formset.forms:
-                data.update(_filled(form))
+                data.update(filled(form))
         data["taught_skills"] = [str(skill.pk) for skill in skills]
         return self.client.post(url, data)
 
@@ -311,7 +273,7 @@ class StaffChoosingWhatATraditionTeaches(_TeachingCase):
         mentor = self.persona_of(self.hobb)
         line = f"training add skill={self.villainy.pk} ap=2 mentor={mentor}"
         self.assertIn(
-            WRONG_TRADITION_LINE.format(mentor="Hobb", skill="Villainy"),
+            MENTOR_CANNOT_TEACH_LINE.format(mentor="Hobb", skill="Villainy"),
             self.telnet(self.ysmay, line),
         )
         self.assertEqual(self.creation_list(self.ashen), ["Reflection"])

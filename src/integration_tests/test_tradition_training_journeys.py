@@ -21,7 +21,7 @@ from evennia.objects.models import ObjectDB
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
-from integration_tests.test_traditions_teach_journeys import (
+from integration_tests.tradition_teaching_helpers import (
     author_the_three_skills,
     tradition_teaching,
 )
@@ -570,7 +570,9 @@ class TraditionsTeachCGJourney(_StanceDrafts, FinalizationTestMixin, JourneyCase
         self.assertEqual([skill["name"] for skill in magic["skills"]], ["Reflection"])
         self.assertEqual((magic["total"], magic["required_spend"]), (0, 0))
         # A self-taught Tradition opens no schooling stance, so nothing adds to the pool.
-        self.assertEqual(self._sync(draft, 2).status_code, 400)
+        refused = self._sync(draft, 2)
+        self.assertEqual(refused.status_code, 400, refused.content)
+        self.assertIn("is not offered to you here", refused.json()["detail"])
 
     def test_a_draft_with_no_tradition_is_offered_none_of_the_affinity_skills(self) -> None:
         draft = self._create_base_draft()

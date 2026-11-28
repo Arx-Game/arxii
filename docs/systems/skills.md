@@ -339,7 +339,9 @@ distinction effect on the `self_teaching` lever lets the character teach herself
 skills; Heroism and Villainy only when staff ticked them on `Tradition.taught_skills`; a fighting style's skill
 only the Traditions in `CombatStyle.taught_by`. `world.magic.services.tradition_teaching.training_verdict` holds
 the rule and each refusal names the next step ("Villainy needs a teacher. Choose a mentor whose Tradition
-teaches it."); `skills.services._training_refusal` asks it for one allocation. A skill outside the Magic
+teaches it."; a mentor who cannot teach, for any reason, gets the one line "{Mentor} cannot teach you
+Villainy. Choose a mentor whose Tradition teaches it and who has trained in it."; another of her own
+characters is refused as a mentor); `skills.services._training_refusal` asks it for one allocation. A skill outside the Magic
 category is never refused. A mentor of another Tradition costs nothing extra: `calculate_training_development`
 is unchanged. Full account: [magic.md](magic.md), "Which Traditions teach which skills".
 
