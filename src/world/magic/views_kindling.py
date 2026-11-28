@@ -89,7 +89,7 @@ class KindledResonanceViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         qs = CharacterSheet.objects.all()
         if self.request.user.is_staff:
             return qs
-        own = RosterEntry.objects.for_account(self.request.user).values_list(
+        own = RosterEntry.objects.playable_by(self.request.user).values_list(
             "character_sheet_id", flat=True
         )
         return qs.filter(pk__in=list(own))
@@ -147,8 +147,9 @@ class RecordedActViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
 
     ``GET /api/magic/recorded-acts/?character_sheet=<id>`` lists only unmarked acts inside the
     pointable window (``KindlingConfig.recorded_act_days``), each with the resonances situations
-    suggested for it, strongest first. The owner reads their own characters', staff anyone's;
-    another player's character is an empty page. Nothing here writes: an act is written by
+    suggested for it, strongest first. A player reads the acts of the characters they play now
+    (a borrower of a lent NPC, never the holder who lent it away), staff anyone's; another
+    player's character is an empty page. Nothing here writes: an act is written by
     ``award_kindled_deeds`` and marked by a pose or journal entry.
     """
 
@@ -161,7 +162,7 @@ class RecordedActViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     def get_queryset(self):
         qs = pointable_acts_queryset()
         if not self.request.user.is_staff:
-            own = RosterEntry.objects.for_account(self.request.user).values_list(
+            own = RosterEntry.objects.playable_by(self.request.user).values_list(
                 "character_sheet_id", flat=True
             )
             qs = qs.filter(character_sheet_id__in=list(own))

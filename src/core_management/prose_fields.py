@@ -43,7 +43,7 @@ PROSE_FIELD_NAMES = frozenset(
         "spent_narration",
         "authored_ic_framing",
         "cast_narration",
-        # #5181: the verb in a claiming line ("You gloat. Your Ruin grows by 6.").
+        # #5181: the verb in a mark's private line ("You gloat. Your Ruin grows by 6.").
         "claim_verb",
         "custom_description",
         "default_description_template",

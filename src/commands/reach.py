@@ -5,10 +5,10 @@
 
 ``pose/reach`` poses ``<text>`` and records that the pose reaches for the resonance named before
 the ``=``, held or not. An endorsement of the pose pays that resonance. With ``:<number>`` it
-marks the act of that number in the ``acts`` list instead: the pose points at what the
-character did, and the mark pays at once. It stands alone, because ``=`` already belongs to the
-other attachments. No game logic lives here: the service resolves the name and the pose action
-checks the reach or the mark before the pose posts and writes it after.
+marks the act with that id (the number the ``acts`` list prints) instead: the pose points at
+what the character did, and the mark pays at once. It stands alone, because ``=`` already
+belongs to the other attachments. No game logic lives here: the service resolves the name and
+the pose action checks the reach or the mark before the pose posts and writes it after.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ NO_SUCH_ACT = "You have no act number {number}. Use 'acts' to see the acts you c
 def reach_kwargs_and_rest(args: str, sheet: CharacterSheet | None) -> tuple[dict[str, Any], str]:
     """Split ``<resonance>[:<number>]=<rest>`` into the pose action's kwargs and the rest.
 
-    A number names an act in the ``acts`` list (newest first), so the kwargs carry
+    The number is an act's own id, as the ``acts`` list prints it, so the kwargs carry
     ``reach_act_id`` beside ``reach_resonance_id`` and the pose marks that act. A line with no
     ``=`` or no resonance name, a name that matches no resonance, or a number with no act is the
     command's own error, and nothing is posted.
@@ -52,13 +52,12 @@ def reach_kwargs_and_rest(args: str, sheet: CharacterSheet | None) -> tuple[dict
 
 
 def _act_id_for(sheet: CharacterSheet | None, number_text: str) -> int:
-    """The id of the act at ``number_text`` in ``sheet``'s ``acts`` list."""
-    from world.magic.services.marking import pointable_acts  # noqa: PLC0415
+    """``number_text`` as the id of one of ``sheet``'s acts a mark can still point at."""
+    from world.magic.services.marking import pointable_acts_queryset  # noqa: PLC0415
 
     if not number_text.isdigit() or sheet is None:
         raise CommandError(REACH_USAGE)
     number = int(number_text)
-    acts = pointable_acts(sheet)
-    if not 1 <= number <= len(acts):
+    if not pointable_acts_queryset().filter(character_sheet=sheet, pk=number).exists():
         raise CommandError(NO_SUCH_ACT.format(number=number))
-    return acts[number - 1].pk
+    return number

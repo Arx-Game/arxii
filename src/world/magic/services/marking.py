@@ -75,7 +75,7 @@ _WEEK_SPENT = (
 )
 _EPHEMERAL = (
     "This scene is ephemeral and stores nothing, so a mark here pays nothing. "
-    "Mark the act later from a journal entry."
+    "Mark the act later, in a pose in another scene or from a journal entry."
 )
 _POSE_HAS_MARK = (
     "This pose already marks an act, and a pose marks only one. Mark the next act in "
@@ -175,12 +175,20 @@ def pointable_acts_queryset() -> QuerySet[RecordedAct]:
 
 
 def pointable_acts(sheet: CharacterSheet) -> list[RecordedAct]:
-    """``sheet``'s pointable acts, newest first.
-
-    The list a mark points into: telnet ``acts`` numbers it from 1, and ``pose/reach
-    <resonance>:<number>=`` names an act by that number.
-    """
+    """``sheet``'s pointable acts, newest first."""
     return list(pointable_acts_queryset().filter(character_sheet=sheet))
+
+
+def pointable_acts_page(sheet: CharacterSheet, limit: int) -> tuple[list[RecordedAct], int]:
+    """The newest ``limit`` of ``sheet``'s pointable acts, and how many older ones are left out.
+
+    Telnet ``acts`` prints each act's own id, and ``pose/reach <resonance>:<id>=`` marks the act
+    with that id. An id never shifts when a newer act lands, as a place in the list would.
+    """
+    queryset = pointable_acts_queryset().filter(character_sheet=sheet)
+    shown = list(queryset[:limit])
+    older = queryset.count() - len(shown) if len(shown) == limit else 0
+    return shown, older
 
 
 def weekly_percent_paid(sheet: CharacterSheet) -> WeeklyStanding:
@@ -375,6 +383,7 @@ __all__ = [
     "mark_base_amount",
     "pending_mark_from",
     "pointable_acts",
+    "pointable_acts_page",
     "pointable_acts_queryset",
     "record_pending_mark",
     "weekly_percent_paid",

@@ -30,8 +30,14 @@ from decimal import Decimal
 from django.utils import timezone
 from hypothesis import given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
+from rest_framework.test import APIClient
 
 from actions.constants import ActionCategory
+from actions.definitions.journals import CreateJournalEntryAction
+from commands.acts import SHOWN_ACTS, act_lines
+from commands.exceptions import CommandError
+from commands.reach import reach_kwargs_and_rest
+from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
@@ -40,6 +46,7 @@ from world.checks.types import ExtraTraitTerm
 from world.fatigue.services import get_fatigue_capacity, get_or_create_fatigue_pool
 from world.fatigue.tests import setup_stat
 from world.journals.factories import JournalEntryFactory
+from world.journals.models import JournalEntry, WeeklyJournalXP
 from world.magic.constants import GainSource
 from world.magic.exceptions import MarkError
 from world.magic.factories import (
@@ -65,13 +72,20 @@ from world.magic.models import (
     WeeklyMarkReturn,
 )
 from world.magic.services.gain import get_resonance_gain_config
+from world.magic.services.kindling import award_scene_act
 from world.magic.services.marking import (
     pending_mark_from,
+    pointable_acts_page,
     record_pending_mark,
     weekly_percent_paid,
 )
+from world.magic.services.pose_marks import PoseViewer, act_marks_payload
 from world.magic.types.marking import MarkResult, PendingMark
-from world.scenes.factories import InteractionFactory
+from world.roster.constants import NPCLoanStatus
+from world.roster.factories import NPCLoanFactory
+from world.roster.models import RosterTenure
+from world.scenes.factories import InteractionFactory, PersonaDiscoveryFactory, PersonaFactory
+from world.scenes.models import Interaction
 from world.skills.factories import MagicSkillFactory
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import StatTraitFactory
@@ -639,3 +653,280 @@ class WeeklyTableCutsRepeatMarks(_World, HypothesisTestCase):
                     self.mark(sheet, act, key)
             else:
                 self.assertEqual(self.mark(sheet, act, key).grant.amount, allowed(sum(paid[:-1])))
+
+
+class AJournalEntrySurvivesARefusedMark(_World, HypothesisTestCase):
+    """A journal entry whose mark is refused late stays written, and says why."""
+
+    @settings(max_examples=12, deadline=None)
+    @given(percent=st.sampled_from((0, 100)), key=st.sampled_from(KEYS))
+    def test_a_refused_mark_keeps_the_entry_the_counters_and_the_act(
+        self, percent: int, key: str
+    ) -> None:
+        """Maintainer: "they point to an act and if it doesn't make sense, well, we could
+        nullify it and chide them." A refused mark must not cost her the entry she wrote.
+
+        Given a week whose table pays her marks at ``percent``, a journal entry that points at
+        an act: at 100 percent the entry is written and the mark pays; at 0 percent the week
+        refuses the mark, and the entry is still written and still counted (the weekly post
+        counter holds the same number in the cache and in the database), the act stays
+        unmarked and pointable, and the writer reads the refusal beside the entry, in the
+        entry's message and in ``mark_line``, with ``mark_recorded`` false.
+        """
+        self.configure(weekly=(percent, percent, percent, percent))
+        sheet = self.character()
+        act = self.act(sheet, "Success")
+
+        result = CreateJournalEntryAction().execute(
+            actor=sheet.character,
+            title="The night at the Lantern",
+            body="I said what I meant.",
+            is_public=False,
+            reach_act_id=act.pk,
+            reach_resonance_id=self.resonances[key].pk,
+        )
+
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(JournalEntry.objects.filter(author=sheet).count(), 1)
+        self.assertEqual(result.data["mark_recorded"], percent > 0)
+        self.assertEqual(self.is_unmarked(act), percent == 0)
+        self.assertEqual(
+            ResonanceGrant.objects.filter(
+                character_sheet=sheet, source=GainSource.MARKED_ACT
+            ).count(),
+            1 if percent > 0 else 0,
+        )
+        if percent == 0:
+            self.assertIn("stays on your list", result.data["mark_line"])
+            self.assertIn(result.data["mark_line"], result.message)
+        tracker = WeeklyJournalXP.objects.get(character_sheet=sheet)
+        stored = WeeklyJournalXP.objects.filter(character_sheet=sheet).values_list(
+            "posts_this_week", flat=True
+        )
+        self.assertEqual(list(stored), [1])
+        self.assertEqual(tracker.posts_this_week, 1)
+
+
+class AnEphemeralSceneLineIsTrueEverywhere(_World, HypothesisTestCase):
+    """A mark in a scene that stores nothing pays nothing, and says where marking still works."""
+
+    @settings(max_examples=6, deadline=None)
+    @given(key=st.sampled_from(KEYS))
+    def test_the_line_names_only_ways_to_mark_that_every_player_has(self, key: str) -> None:
+        """Maintainer: marks need a writing to carry them, and a scene that stores nothing has
+        none.
+
+        Given a pose that carries no stored row, marking pays nothing, consumes no act and
+        reads that the act can be marked in a pose in another scene or from a journal entry,
+        which a telnet player can do too (the line never sends anyone to a journal entry
+        alone).
+        """
+        self.configure()
+        sheet = self.character()
+        act = self.act(sheet, "Success")
+        pending = pending_mark_from(
+            sheet, {"reach_act_id": act.pk, "reach_resonance_id": self.resonances[key].pk}
+        )
+
+        result = record_pending_mark(sheet, pending)
+
+        self.assertFalse(result.paid)
+        self.assertTrue(self.is_unmarked(act))
+        self.assertIn("pays nothing", result.line)
+        self.assertIn("in a pose in another scene or from a journal entry", result.line)
+
+
+class ActNumbersNeverShift(_World, HypothesisTestCase):
+    """The number a telnet player types is the act's own id, so a new act cannot redirect it."""
+
+    @settings(max_examples=15, deadline=None)
+    @given(
+        count=st.integers(1, SHOWN_ACTS + 6),
+        newer=st.integers(0, 3),
+        pick=st.integers(0, SHOWN_ACTS - 1),
+        key=st.sampled_from(KEYS),
+    )
+    def test_the_listed_id_marks_the_listed_act_whatever_lands_after_listing(
+        self, count: int, newer: int, pick: int, key: str
+    ) -> None:
+        """Maintainer: "they point to an act".
+
+        Given any number of acts, the list shows the newest twenty, each behind its own id,
+        and says how many older acts it leaves out. Whatever the player types after the colon
+        marks the act that carried that id when the list was read, however many newer acts land
+        between listing and posing; an id that is not one of her unmarked acts is refused.
+        """
+        self.configure()
+        sheet = self.character()
+        acts = [self.act(sheet, "Success", label=f"Did thing {n}") for n in range(count)]
+        listed, older = pointable_acts_page(sheet, SHOWN_ACTS)
+        text = "\n".join(act_lines(listed, older))
+
+        newest = acts[::-1][:SHOWN_ACTS]
+        self.assertEqual([act.pk for act in listed], [act.pk for act in newest])
+        for act in newest:
+            self.assertIn(f"  {act.pk}. {act.label} (", text)
+        self.assertEqual(older, max(count - SHOWN_ACTS, 0))
+        self.assertEqual("older" in text, count > SHOWN_ACTS)
+
+        chosen = listed[pick % len(listed)]
+        for _ in range(newer):
+            self.act(sheet, "Success")
+        kwargs, rest = reach_kwargs_and_rest(
+            f"{self.resonances[key].name}:{chosen.pk}=waves", sheet
+        )
+        self.assertEqual(kwargs["reach_act_id"], chosen.pk)
+        self.assertEqual(rest, "waves")
+        stranger = self.act(self.character(), "Success")
+        with self.assertRaises(CommandError):
+            reach_kwargs_and_rest(f"{self.resonances[key].name}:{stranger.pk}=waves", sheet)
+
+
+class APoseNamesTheTargetAsEachReaderKnowsThem(_World, HypothesisTestCase):
+    """The act on a marked pose names its target through each reader's own eyes."""
+
+    TARGET_NAMES = ("Hale", "Maud", "Corvin", "Isolde")
+    ACTIONS = ("Struck", "Calmed", "Frightened")
+
+    @settings(max_examples=12, deadline=None)
+    @given(
+        target_name=st.sampled_from(TARGET_NAMES),
+        action=st.sampled_from(ACTIONS),
+        masked=st.booleans(),
+    )
+    def test_a_mask_the_reader_has_not_seen_through_stays_a_mask(
+        self, target_name: str, action: str, masked: bool
+    ) -> None:
+        """Maintainer: no payload links a mask to the real character (#4889, #5290).
+
+        Given an act aimed at a character who wears an Owl Mask that the actor has seen
+        through, recorded by the game from the scene action, and a pose that marks it:
+
+        - the actor reads the label with the name she knows (the real one);
+        - a reader who has seen through the mask reads the real name beside the mask;
+        - a stranger reads the mask's description and never the real name;
+        - staff read the real name;
+        - the live frame (no viewer) reads the act's phrase with no target at all, masked or
+          not.
+
+        A target who wears no mask is read by everyone under her own name.
+        """
+        self.configure()
+        actor = self.character()
+        target = CharacterSheetFactory()
+        real = target.primary_persona
+        real.name = target_name
+        real.save(update_fields=["name"])
+        discoverer = self.character()
+        if masked:
+            mask = PersonaFactory(character_sheet=target, name="Owl Mask", is_fake_name=True)
+            target.active_persona = mask
+            target.save(update_fields=["active_persona"])
+            for seen_by in (actor, discoverer):
+                PersonaDiscoveryFactory(persona=mask, linked_to=real, discovered_by=seen_by)
+        stranger = self.character()
+
+        award_scene_act(actor, target, None, self.outcomes["Success"], action_name=action)
+        act = RecordedAct.objects.get(character_sheet=actor)
+        pending = pending_mark_from(
+            actor, {"reach_act_id": act.pk, "reach_resonance_id": self.resonances["mercy"].pk}
+        )
+        pose = InteractionFactory(persona=actor.primary_persona)
+        record_pending_mark(actor, pending, interaction=pose)
+
+        def read(viewer_sheet: CharacterSheet | None, *, staff: bool = False) -> str:
+            viewer = PoseViewer(
+                account=AccountFactory(),
+                sheet_ids=frozenset({viewer_sheet.pk}) if viewer_sheet else frozenset(),
+                is_staff=staff,
+                sheet=viewer_sheet,
+            )
+            (mark,) = act_marks_payload(pose, viewer)
+            return mark["act_label"]
+
+        (live,) = act_marks_payload(pose, None)
+        self.assertEqual(live["act_label"], action)
+        if masked:
+            self.assertEqual(read(actor), f"{action} Owl Mask ({target_name})")
+            self.assertEqual(read(discoverer), f"{action} Owl Mask ({target_name})")
+            self.assertEqual(read(None, staff=True), f"{action} Owl Mask ({target_name})")
+            seen_by_stranger = read(stranger)
+            self.assertNotIn(target_name, seen_by_stranger)
+            self.assertTrue(seen_by_stranger.startswith(f"{action} "))
+            self.assertIn("Owl Mask", seen_by_stranger)
+        else:
+            for text in (read(actor), read(discoverer), read(stranger), read(None, staff=True)):
+                self.assertEqual(text, f"{action} {target_name}")
+
+
+class ARecordedActsListFollowsWhoPlaysNow(_World, HypothesisTestCase):
+    """A lent NPC's acts are read by the borrower, not by the holder who lent it away."""
+
+    @settings(max_examples=8, deadline=None)
+    @given(lent=st.booleans())
+    def test_the_list_belongs_to_the_account_that_plays_the_character_now(self, lent: bool) -> None:
+        """Maintainer: a borrower plays a lent NPC and a holder who lent it away does not (the
+        loan-aware rule the rest of the game uses).
+
+        Given a character with an act waiting, held by one account and, when ``lent``, lent
+        to another: the account that plays it now reads the act through the recorded-acts
+        list, and the other account reads an empty page.
+        """
+        self.configure()
+        sheet = self.character()
+        act = self.act(sheet, "Success")
+        holder = RosterTenure.objects.get(
+            roster_entry=sheet.roster_entry, end_date__isnull=True
+        ).player_data.account
+        other = AccountFactory()
+        if lent:
+            NPCLoanFactory(
+                roster_entry=sheet.roster_entry,
+                borrower=other,
+                offered_by=holder,
+                status=NPCLoanStatus.ACTIVE,
+            )
+        player, bystander = (other, holder) if lent else (holder, other)
+
+        def listed(account) -> list[int]:
+            client = APIClient()
+            client.force_authenticate(account)
+            response = client.get(f"/api/magic/recorded-acts/?character_sheet={sheet.pk}")
+            self.assertEqual(response.status_code, 200, response.content)
+            return [row["id"] for row in response.json()["results"]]
+
+        self.assertEqual(listed(player), [act.pk])
+        self.assertEqual(listed(bystander), [])
+
+
+class AnUndoneMarkNamesOnlyTheRoleThatUndidIt(_World, HypothesisTestCase):
+    """A pose shows who undid a mark as a role, even when the undoing account is gone."""
+
+    @settings(max_examples=9, deadline=None)
+    @given(undoer=st.sampled_from(("staff", "gm", "deleted")))
+    def test_the_role_is_staff_or_gm_and_a_deleted_account_reads_as_gm(self, undoer: str) -> None:
+        """Maintainer: a player never reads an account name.
+
+        Given a mark undone by a staff account, by a non-staff scene GM, or by an account that
+        has since been deleted (its link on the grant is then empty), the pose's mark says
+        ``staff`` only for the staff account and ``gm`` otherwise, and reading it never fails.
+        """
+        self.configure()
+        sheet = self.character()
+        act = self.act(sheet, "Success")
+        pose = InteractionFactory(persona=sheet.primary_persona)
+        pending = pending_mark_from(
+            sheet, {"reach_act_id": act.pk, "reach_resonance_id": self.resonances["mercy"].pk}
+        )
+        grant = record_pending_mark(sheet, pending, interaction=pose).grant
+        grant.nullified_at = timezone.now()
+        grant.nullified_by = (
+            None if undoer == "deleted" else AccountFactory(is_staff=undoer == "staff")
+        )
+        grant.save(update_fields=["nullified_at", "nullified_by"])
+        pose = Interaction.objects.get(pk=pose.pk)
+
+        (mark,) = act_marks_payload(pose, None)
+
+        self.assertTrue(mark["undone"])
+        self.assertEqual(mark["undone_by"], "staff" if undoer == "staff" else "gm")
