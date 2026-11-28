@@ -288,8 +288,9 @@ function getComposerBanner(draft: Draft, isStrandedDraft: boolean): ComposerBann
  * carried no mark.
  */
 function markLineOf(payload: ActionResultPayload): string {
-  if (payload.data?.mark_recorded === undefined) return '';
-  if (typeof payload.data.mark_line === 'string') return payload.data.mark_line;
+  const data = payload.data;
+  if (!data || data.mark_recorded === undefined) return '';
+  if (typeof data.mark_line === 'string') return data.mark_line;
   const lines = (payload.message ?? '').split('\n').filter((line) => line.trim() !== '');
   return lines[lines.length - 1] ?? '';
 }

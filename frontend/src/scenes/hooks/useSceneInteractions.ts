@@ -52,6 +52,8 @@ export function wsPayloadToInteraction(
     endorsee_sheet_id: payload.endorsee_sheet_id ?? null,
     endorsable_resonances: payload.endorsable_resonances ?? [],
     pose_endorsers: payload.pose_endorsers ?? [],
+    act_marks: payload.act_marks ?? [],
+    pending_picks: payload.pending_picks ?? [],
     my_pose_endorsement: null,
     entry_endorsers: payload.entry_endorsers ?? [],
     entry_endorsed_by_me: false,

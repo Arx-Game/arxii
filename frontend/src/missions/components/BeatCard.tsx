@@ -155,8 +155,8 @@ export function OptionLabel({ option }: { option: BeatOption }) {
           className="block text-xs text-muted-foreground"
           data-testid="option-feeds"
         >
-          Your {feed.resonance_name} is kindled
-          {feed.reason ? `: ${feed.reason}` : ''}
+          Pays you {feed.resonance_name} at once
+          {feed.reason ? `: ${feed.reason}` : '.'}
         </span>
       ))}
     </span>

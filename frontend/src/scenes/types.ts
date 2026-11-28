@@ -490,6 +490,39 @@ export interface NarratedEvent {
   subject_persona_id?: number;
 }
 
+/**
+ * A resonance a pose marked by pointing at an act her character took (#5327). `undone` is set
+ * once staff or the scene's GM undid the reward; `can_undo` is true only for staff and the
+ * scene's GM on a mark that is not undone.
+ *
+ * LOCAL TYPE until the feed row's `act_marks` reaches the generated schema. `undone_by` is not
+ * in the contract yet; without it an undone chip says the reward was undone and not by whom.
+ */
+export interface ActMark {
+  grant_id: number;
+  resonance_id: number;
+  resonance_name: string;
+  act_label: string;
+  undone: boolean;
+  can_undo: boolean;
+  undone_by?: 'gm' | 'staff';
+}
+
+/**
+ * A pick on a pose that named no resonance, waiting for the poser to accept it (#5327). Sent
+ * only to the endorser (`mine`), the poser, the scene's GM and staff (`can_answer`).
+ *
+ * LOCAL TYPE until the feed row's `pending_picks` reaches the generated schema.
+ */
+export interface PendingPick {
+  endorsement_id: number;
+  resonance_id: number;
+  resonance_name: string;
+  endorser_name: string;
+  mine: boolean;
+  can_answer: boolean;
+}
+
 export interface Interaction {
   id: number;
   /**
@@ -553,6 +586,10 @@ export interface Interaction {
    * the reach is written; the ids-only `interaction_changed` frame that follows refetches the row.
    */
   reached_resonance?: { id: number; name: string } | null;
+  /** Resonances this pose marked, with the act each points at (#5327); absent reads as none. */
+  act_marks?: ActMark[];
+  /** Picks waiting for the poser's answer, for the people who may see them (#5327). */
+  pending_picks?: PendingPick[];
   pose_endorsers: EndorserBadge[];
   my_pose_endorsement: { id: number; resonance_id: number; settled: boolean } | null;
   entry_endorsers: EndorserBadge[];

@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { NominateButton } from '@/components/NominateButton';
 import { PersonaMenu, type PersonaMenuProps } from './PersonaMenu';
 import { ActionResult } from './ActionResult';
+import { ActMarkChips } from './ActMarkChips';
 import { ActorLine } from './ActorLine';
 import { NarratedEventTag } from './NarratedEventTag';
 import { ReactionStrip } from './ReactionStrip';
@@ -564,6 +565,9 @@ export function PoseUnit({
       </div>
 
       <CompanionTell interaction={interaction} />
+
+      {/* The resonances this pose marked, with the act each points at (#5327) */}
+      <ActMarkChips interaction={interaction} sceneId={sceneId} interactive={!readOnly} />
 
       {/* Expandable outcome detail panel */}
       {expanded && actionInteractionIds.length > 0 && (

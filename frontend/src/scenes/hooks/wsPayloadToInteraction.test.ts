@@ -34,10 +34,42 @@ describe('wsPayloadToInteraction (#3858)', () => {
     expect(row.endorsable_resonances).toEqual([{ id: 4, name: 'Ember' }]);
   });
 
+  it('carries the marks and waiting picks a frame holds (#5327)', () => {
+    const actMarks = [
+      {
+        grant_id: 4,
+        resonance_id: 2,
+        resonance_name: 'Cruelty',
+        act_label: 'Intimidated Hale',
+        undone: false,
+        can_undo: true,
+      },
+    ];
+    const pendingPicks = [
+      {
+        endorsement_id: 9,
+        resonance_id: 3,
+        resonance_name: 'Mercy',
+        endorser_name: 'Ilsa',
+        mine: false,
+        can_answer: true,
+      },
+    ];
+    const row = wsPayloadToInteraction({
+      ...payload,
+      act_marks: actMarks,
+      pending_picks: pendingPicks,
+    });
+    expect(row.act_marks).toEqual(actMarks);
+    expect(row.pending_picks).toEqual(pendingPicks);
+  });
+
   it('falls back for a payload without feed fields', () => {
     const row = wsPayloadToInteraction(payload);
     expect(row.pose_kind).toBe('standard');
     expect(row.endorsable_resonances).toEqual([]);
+    expect(row.act_marks).toEqual([]);
+    expect(row.pending_picks).toEqual([]);
     expect(row.entry_endorsed_by_me).toBe(false);
   });
 

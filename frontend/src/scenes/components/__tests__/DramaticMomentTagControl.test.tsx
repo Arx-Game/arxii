@@ -40,6 +40,17 @@ vi.mock('../../queries', async (importOriginal) => {
   };
 });
 
+// The tag dialog's resonance picker lists every resonance in the game (#5327).
+vi.mock('@/magic/api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/magic/api')>()),
+  getResonanceCatalog: () =>
+    Promise.resolve([
+      { id: 10, name: 'Valor', affinity: 1, affinity_name: 'Celestial', description: '' },
+      { id: 20, name: 'Fury', affinity: 2, affinity_name: 'Primal', description: '' },
+      { id: 30, name: 'Grief', affinity: 2, affinity_name: 'Primal', description: '' },
+    ]),
+}));
+
 // Stub PoseUnitDetailPanel — not under test here
 vi.mock('../PoseUnitDetailPanel', () => ({
   PoseUnitDetailPanel: ({ actionInteractionIds }: { actionInteractionIds: number[] }) => (
@@ -238,7 +249,7 @@ describe('PoseUnit — GM dramatic-moment tag control', () => {
     });
 
     // Open the Select dropdown and pick "Grand Entrance" (id=1)
-    await user.click(screen.getByRole('combobox'));
+    await user.click(screen.getByTestId('moment-type-select'));
     await user.click(await screen.findByRole('option', { name: 'Grand Entrance' }));
 
     // Submit the form
@@ -249,6 +260,38 @@ describe('PoseUnit — GM dramatic-moment tag control', () => {
       expect(mockPostDramaticMomentTag).toHaveBeenCalledWith({
         moment_type: 1,
         interaction: 42,
+      });
+    });
+  });
+
+  it("shows the moment type's own resonance, and sends the one the GM picks instead", async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    const interaction = makeInteraction({ id: 42 });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={interaction} sceneId="5" canGm={true} />
+      </Wrapper>
+    );
+
+    await user.click(screen.getByTestId('tag-moment-button'));
+    await user.click(await screen.findByTestId('moment-type-select'));
+    await user.click(await screen.findByRole('option', { name: 'Grand Entrance' }));
+
+    // Grand Entrance's own resonance (id 10, Valor) shows until the GM picks another.
+    await waitFor(() => {
+      expect(screen.getByTestId('moment-resonance-select')).toHaveTextContent('Valor');
+    });
+
+    await user.click(screen.getByTestId('moment-resonance-select'));
+    await user.click(await screen.findByRole('option', { name: 'Grief' }));
+    await user.click(screen.getByTestId('tag-moment-submit'));
+
+    await waitFor(() => {
+      expect(mockPostDramaticMomentTag).toHaveBeenCalledWith({
+        moment_type: 1,
+        interaction: 42,
+        resonance: 30,
       });
     });
   });
