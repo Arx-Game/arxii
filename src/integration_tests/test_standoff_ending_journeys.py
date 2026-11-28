@@ -295,6 +295,10 @@ class TheEndingIsRecordedForTheKindlingPath(StandoffEndingBase):
         suggestion = act.suggestions.get()
         self.assertEqual((suggestion.resonance, suggestion.strength), (self.mercy_resonance, faint))
         self.assertNotTold(self.ysmay, "You earned")
+        # Her player reads the ending as an act, with Mercy suggested beside it.
+        listed = self.telnet(self.ysmay, "acts")
+        self.assertIn(f"{act.pk}. Spare Them (journey): Roadside Toughs (", listed)
+        self.assertIn(f"{self.mercy_resonance.name}: ", listed)
 
 
 class AnotherCharactersPressIsSuggestedForTheEnding(StandoffEndingBase):
@@ -330,9 +334,14 @@ class AnotherCharactersPressIsSuggestedForTheEnding(StandoffEndingBase):
         act = RecordedAct.objects.get(character_sheet=self.sheet)
         return [row.resonance.name for row in act.suggestions.all()]
 
+    def listing(self) -> str:
+        """What her player reads when she types ``acts``."""
+        return self.telnet(self.ysmay, "acts")
+
     def test_an_ending_with_the_band_not_awed_suggests_nothing_and_pays_nothing(self) -> None:
         self.say(self.success)
         self.assertEqual(self.suggested(), [])
+        self.assertIn("No resonance suggested.", self.listing())
         self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
         self.assertNotTold(self.ysmay, "You earned")
 
@@ -348,6 +357,7 @@ class AnotherCharactersPressIsSuggestedForTheEnding(StandoffEndingBase):
         self.assertNotTold(self.ysmay, "You earned")
         self.say(self.success)
         self.assertEqual(self.suggested(), [self.mercy_resonance.name])
+        self.assertIn(f"{self.mercy_resonance.name}: ", self.listing())
         self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
         self.assertEqual(self.earned(), 0)
         self.assertNotTold(self.ysmay, "You earned")

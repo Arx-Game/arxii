@@ -88,6 +88,7 @@ from world.scenes.factories import (
     SceneParticipationFactory,
 )
 from world.scenes.interaction_services import invalidate_active_scene_cache
+from world.scenes.models import Interaction
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import TraitCategory
 from world.traits.services import ensure_canonical_check_outcome
@@ -912,6 +913,7 @@ class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
             undone = self.client(self.marek).post(f"{GRANTS}{self.grant.pk}/undo/")
 
         self.assertEqual(undone.status_code, status.HTTP_200_OK, undone.content)
+        self.assertEqual(set(undone.json()), {"id", "nullified_at"})
         self.assertEqual(undone.json()["id"], self.grant.pk)
         self.assertEqual(self.balance(self.daven, self.cruelty), 0)
         # The role is named, never the account.
@@ -1069,6 +1071,10 @@ class AMissionOptionThatNamesItsResonancePaysItAtOnce(_Gate):
         self.take(1, self.success)
 
         self.assertIn("Pays you Mercy at once: This option is about sparing them.", beat)
+        # The line never shows an amount, and the roll paid her with no pose written.
+        (line,) = [row for row in beat.splitlines() if "Pays you Mercy" in row]
+        self.assertFalse(any(char.isdigit() for char in line), line)
+        self.assertFalse(Interaction.objects.exists())
         self.assertTold(self.mira, "You earned 10 Mercy.")
         self.assertNotTold(self.tomas, "You earned")
         row = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.mercy)

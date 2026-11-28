@@ -342,6 +342,10 @@ class AStrikeIsRecordedNotPaid(_StrikeField):
         self.assertEqual((suggestion.resonance, suggestion.strength), (self.wrath, self.faint))
         self.assertFalse(ResonanceGrant.objects.exists())
         self.assertNotTold(self.hobb, "You earned")
+        # Her player reads the act and what the situation suggested for it.
+        listed = self.telnet(self.hobb, "acts")
+        self.assertIn(f"{act.pk}. Struck Bandit (", listed)
+        self.assertIn("Wrath: You carry ", listed)
 
 
 class AnOutcomeNoActOfHersWasAimedAt(_StrikeField):
@@ -522,6 +526,9 @@ class AnActForAnAllyInTroubleIsRecordedNotPaid(_KindledField):
         self.assertEqual(act.outcome, self.success)
         self.assertEqual({row.resonance for row in act.suggestions.all()}, {self.mercy})
         self.assert_nothing_paid()
+        listed = self.telnet(self.tomas, "acts")
+        self.assertIn(f"{act.pk}. Covered Mira (", listed)
+        self.assertIn("Mercy of Tomas", listed)
 
     def test_a_rally_is_recorded_with_a_resonance_kindled_by_a_feeling_he_carries(self) -> None:
         SocialManeuverConfigFactory(
@@ -537,6 +544,9 @@ class AnActForAnAllyInTroubleIsRecordedNotPaid(_KindledField):
         self.assertEqual(act.outcome, self.success)
         self.assertIn(self.fury, {row.resonance for row in act.suggestions.all()})
         self.assert_nothing_paid()
+        listed = self.telnet(self.tomas, "acts")
+        self.assertIn(f"{act.pk}. Rallied Mira (", listed)
+        self.assertIn("Fury", listed)
 
     def test_a_reaction_that_answers_for_an_ally_in_trouble_is_recorded(self) -> None:
         """Through the shared reaction spine (Succor, Interpose, Cover, catching a faller).
@@ -594,7 +604,9 @@ class AnActForAnAllyInTroubleIsRecordedNotPaid(_KindledField):
                 outcome_fn=lambda _result: None,
             )
 
-        self.assertEqual(
-            {row.resonance for row in self.tomas_act().suggestions.all()}, {self.mercy}
-        )
+        act = self.tomas_act()
+        self.assertEqual({row.resonance for row in act.suggestions.all()}, {self.mercy})
         self.assert_nothing_paid()
+        listed = self.telnet(self.tomas, "acts")
+        self.assertIn(f"{act.pk}. Interpose Mira (", listed)
+        self.assertIn("Mercy of Tomas", listed)

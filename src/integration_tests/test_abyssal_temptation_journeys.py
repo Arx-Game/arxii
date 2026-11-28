@@ -89,7 +89,6 @@ from world.magic.models import (
     Affinity,
     CharacterResonance,
     KindledDeedAward,
-    RecordedAct,
     ResonanceGrant,
 )
 from world.magic.services.corruption import get_corruption_config
@@ -288,12 +287,9 @@ class _AnAbyssalCasterInAScene(JourneyCase):
             ).values_list("amount", flat=True)
         )
 
-    def suggested_by_each_act(self) -> list[list[str]]:
-        """The resonances each act of hers suggests, oldest act first."""
-        return [
-            [row.resonance.name for row in act.suggestions.all()]
-            for act in RecordedAct.objects.filter(character_sheet=self.sheet).order_by("pk")
-        ]
+    def acts_listing(self) -> str:
+        """What her player reads when she types ``acts``: each act and what it suggests."""
+        return self.telnet(self.ysmay, "acts")
 
     @staticmethod
     def line(ledger: dict, label: str) -> int:
@@ -317,7 +313,10 @@ class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
         # Pays nothing: the cast is written down for her player to mark, with Praedari
         # suggested (#5327).
         self.assertEqual(self.earned(self.praedari), 0)
-        self.assertEqual(self.suggested_by_each_act(), [["Praedari"]])
+        listed = self.acts_listing()
+        self.assertEqual(listed.count(f"{self.technique.name} on Ysmay ("), 1)
+        self.assertIn("Praedari", listed)
+        self.assertNotIn("Warmth", listed)
         # Warns, lightly: ceil(20 * 10 / 100) = 2.
         self.assertEqual(self.corruption(self.praedari) - praedari_before, 2)
 
@@ -333,7 +332,10 @@ class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
         self.assertEqual(self.corruption(self.warmth), warmth_corruption_before)
         # The act decides what is suggested, not the resonance the cast was worked in: the same
         # kindled Praedari is suggested again, and nothing is paid in Praedari or in Warmth.
-        self.assertEqual(self.suggested_by_each_act(), [["Praedari"], ["Praedari"]])
+        listed = self.acts_listing()
+        self.assertEqual(listed.count(f"{self.technique.name} on Ysmay ("), 2)
+        self.assertEqual(listed.count("Praedari"), 2)
+        self.assertNotIn("Warmth", listed)
         self.assertEqual(self.earned(self.praedari), 0)
         self.assertEqual(self.earned(self.warmth), 0)
 
