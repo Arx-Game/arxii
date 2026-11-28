@@ -73,7 +73,7 @@ if TYPE_CHECKING:
 
     from world.areas.positioning.models import Rampart
     from world.character_sheets.models import CharacterSheet
-    from world.checks.models import Consequence
+    from world.checks.models import CheckType, Consequence
     from world.checks.types import ModifierContribution
     from world.combat.models import (
         Clash,
@@ -167,12 +167,13 @@ def _contribution_pull_bonuses(
     return bonus(EffectKind.INTENSITY_BUMP), [line] if flat else []
 
 
-def _award_clash_contribution(
+def _award_clash_contribution(  # noqa: PLR0913 - the clash, who, the roll's outcome and check
     clash: Clash,
     character_sheet: CharacterSheet,
     participant: CombatParticipant | None,
     outcome: CheckOutcome,
     technique: Technique,
+    check_type: CheckType | None = None,
 ) -> None:
     """Earn what a clash contribution feeds (#5124), scaled by its roll.
 
@@ -206,6 +207,8 @@ def _award_clash_contribution(
                 if freeing
                 else act_label(technique.name)
             ),
+            category=technique.action_category,
+            check_type=check_type,
         ),
         outcome=outcome,
         resolution=CombatRoundContext(participant) if participant is not None else None,
@@ -445,7 +448,9 @@ def commit_to_clash(  # noqa: PLR0913, PLR0915
         msg = "commit_to_clash: CheckResult has no outcome — check pipeline returned empty result."
         raise ValueError(msg)
     check_outcome: CheckOutcome = check_result.outcome
-    _award_clash_contribution(clash, character_sheet, participant, check_outcome, technique)
+    _award_clash_contribution(
+        clash, character_sheet, participant, check_outcome, technique, check_result.check_type
+    )
 
     # 7. Convert outcome to progress delta (power-scaled formula).
     progress_delta = outcome_to_delta(

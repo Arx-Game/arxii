@@ -760,7 +760,8 @@ def resolve_option(  # noqa: PLR0913
         roll_report.invocation = invoked
         roll_report.check_result = result
 
-    # #5124: acting on a kindling situation earns that resonance, scaled by the roll. An
+    # #5124, #5327: an option whose theme names a resonance pays it at once, in full, scaled by
+    # the roll; any other option is written down as a recorded act she can mark later. An
     # auto-succeeding approach rolls nothing and earns at the plainest success. The grant and
     # the routing are one unit: a routing failure leaves nothing earned to earn again.
     from world.magic.services.kindling import (  # noqa: PLC0415

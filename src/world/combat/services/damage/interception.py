@@ -923,6 +923,7 @@ def _try_technique_interpose(
         target_name=protected_name,
         outcome=check_result.outcome,
         aids=True,
+        check_type=check_result.check_type,
     )
 
     # Debit on fire (any non-fizzle resolution) - anima, not fatigue. A consented

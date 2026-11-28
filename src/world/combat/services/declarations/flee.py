@@ -197,6 +197,7 @@ def _resolve_flee(
         kind=KindlingActKind.OTHER,
         what="Fled",
         outcome=pending.check_result.outcome,
+        check_type=pending.check_result.check_type,
     )
     escaped = success_level >= FLEE_PARTIAL_SUCCESS_LEVEL
     consequence_applies = success_level <= FLEE_PARTIAL_SUCCESS_LEVEL

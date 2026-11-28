@@ -171,6 +171,7 @@ def _resolve_joust_pass(
         what="Jousted",
         outcome=check_a.outcome,
         target=other.character_sheet,
+        check_type=check_a.check_type,
     )
     award_rolled(
         other,
@@ -179,6 +180,7 @@ def _resolve_joust_pass(
         what="Jousted",
         outcome=check_b.outcome,
         target=participant.character_sheet,
+        check_type=check_b.check_type,
     )
 
     if gap == 0:

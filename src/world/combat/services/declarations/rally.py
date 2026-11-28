@@ -262,6 +262,7 @@ def _resolve_tuned_rally(
         kind=KindlingActKind.SOCIAL,
         what="Rallied",
         outcome=rally_result.outcome,
+        check_type=rally_result.check_type,
     )
     # Read before this Rally writes anything: a resonance she kindles does not surge itself.
     named = action.rally_resonance if ally is not None else None
