@@ -27,6 +27,11 @@ export default defineConfig({
     headless: true,
     screenshot: process.env.CI ? 'on' : 'off',
     trace: process.env.CI ? 'on' : 'off',
+    // `just shot --spec` sets this to the newest cached Chromium when the devcontainer
+    // firewall refuses the download of the build this Playwright version expects (#5327).
+    launchOptions: process.env.E2E_CHROMIUM_EXECUTABLE
+      ? { executablePath: process.env.E2E_CHROMIUM_EXECUTABLE }
+      : undefined,
   },
   // No webServer block — the Django/Evennia server must be started manually
   // via `just start`. This prevents Playwright from trying to spin up a
