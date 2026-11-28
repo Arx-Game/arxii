@@ -64,7 +64,7 @@ from world.distinctions.types import (
     build_distinction_entry,
     feature_of,
 )
-from world.magic.constants import GLIMPSE_AXIS_ORDER, GlimpseMemory
+from world.magic.constants import GLIMPSE_AXIS_ORDER, GLIMPSE_CARD_AXES, GlimpseMemory
 from world.societies.models import Organization, OrganizationType
 
 if TYPE_CHECKING:
@@ -451,11 +451,16 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
     ``_context``) already carries every piece of draft state an opener check needs.
     """
     chapter = OfferChapter(offer.chapter)
-    if chapter == OfferChapter.GLIMPSE and offer.glimpse_memory:
-        # The card that marks a blackout or no memory (#5292): opened by the state.
-        return offer.glimpse_memory == ctx["glimpse_memory"]
+    if chapter == OfferChapter.GLIMPSE:
+        if offer.glimpse_memory:
+            # The card that marks a blackout or no memory (#5292): opened by the state.
+            return offer.glimpse_memory == ctx["glimpse_memory"]
+        # An answer's card, and only an answer of a part that gives one: a line left
+        # under a Witness or Choosing answer from before #5292 gives nothing, as in play.
+        return (
+            offer.glimpse_tag_id in ctx["tag_ids"] and offer.glimpse_tag.axis in GLIMPSE_CARD_AXES
+        )
     membership = {
-        OfferChapter.GLIMPSE: (offer.glimpse_tag_id, "tag_ids"),
         OfferChapter.LINEAGE: (offer.origin_choice_id, "choice_ids"),
         OfferChapter.BACKGROUNDS: (offer.beat_id, "open_beat_ids"),
     }
@@ -1111,22 +1116,14 @@ def glimpse_cards(draft: CharacterDraft) -> list[GlimpseCard]:
     reporting a chapter's bundled lines. Read from the lines the draft's answers and
     memory state open right now, which are the ones ``reconcile_offer_picks`` holds.
     """
-    lines = [
-        offer
-        for offer in visible_offers(draft).values()
-        if offer.chapter == OfferChapter.GLIMPSE and offer.arrives_as == OfferArrival.BUNDLED
-    ]
-    effects = _effects_by_distinction({offer.distinction_id for offer in lines})
     cards = [
         GlimpseCard(
-            offer_id=offer.id,
             distinction_id=offer.distinction_id,
             name=offer.name or offer.distinction.name,
-            source=opener_label(offer),
             axis=offer.glimpse_tag.axis if offer.glimpse_tag_id is not None else "",
-            effect_line=effect_line(effects.get(offer.distinction_id, [])),
         )
-        for offer in lines
+        for offer in visible_offers(draft).values()
+        if offer.chapter == OfferChapter.GLIMPSE and offer.arrives_as == OfferArrival.BUNDLED
     ]
     axis_order = {axis: index for index, axis in enumerate(GLIMPSE_AXIS_ORDER)}
     # The card that marks a memory state names no part and reads last.

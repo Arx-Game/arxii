@@ -270,6 +270,34 @@ class BaseDistinctionOfferFormSet(BaseInlineFormSet):
             # The same words the model's constraint uses, so every surface says one thing.
             already_placed = "This card is already placed on the Identity stage."
             raise forms.ValidationError(already_placed)
+        self._clean_glimpse_rows()
+
+    def _clean_glimpse_rows(self) -> None:
+        """A Glimpse card's rules across the rows of this page (#5292).
+
+        ``DistinctionOffer.clean`` checks a row against the card's saved lines. Rows
+        added together, or under a card not saved yet, are new to it, so the page
+        checks them against each other: the Glimpse's card is on no other stage, it
+        comes with an answer or marks a memory state, and its answers are of one part.
+        """
+        rows = [
+            form.cleaned_data
+            for form in self.forms
+            if form.cleaned_data and not form.cleaned_data.get("DELETE")
+        ]
+        glimpse = [row for row in rows if row.get("chapter") == OfferChapter.GLIMPSE]
+        if not glimpse:
+            return
+        if len(glimpse) != len(rows):
+            elsewhere = "A card the Glimpse gives is offered on no other stage."
+            raise forms.ValidationError(elsewhere)
+        answers = [row["glimpse_tag"] for row in glimpse if row.get("glimpse_tag")]
+        if answers and len(answers) != len(glimpse):
+            both = "A card comes with a Glimpse answer or marks a memory state, never both."
+            raise forms.ValidationError(both)
+        if len({answer.axis for answer in answers}) > 1:
+            two_parts = "A Glimpse card sits under answers of one part."
+            raise forms.ValidationError(two_parts)
 
 
 DistinctionOfferFormSet = inlineformset_factory(

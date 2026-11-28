@@ -264,7 +264,7 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
 
     The shares come later: the settled self and the seeded resonance (``_seed_resonances``).
     """
-    from world.magic.constants import GLIMPSE_AXIS_CONFIG, GlimpseTagAxis  # noqa: PLC0415
+    from world.magic.constants import GlimpseTagAxis  # noqa: PLC0415
     from world.magic.models import CharacterAura, GlimpseTag  # noqa: PLC0415
     from world.magic.services.glimpse import (  # noqa: PLC0415
         keep_stand_alone,
@@ -287,19 +287,12 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
         aura.glimpse_memory = memory
         aura.save()
     if picks.glimpse_tag_ids:
-        by_id = {
-            tag.pk: tag
-            for tag in GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True)
-        }
-        # In the order the picks came in, so "the first" below is the caller's first.
-        tags = [by_id[pk] for pk in picks.glimpse_tag_ids if pk in by_id]
+        tags = list(GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True))
         for axis in GlimpseTagAxis:
-            # A list that reached here unchecked (a GM's draft, a fixture) never fails
-            # the finalize: a tag that stands alone is kept alone (#5193), and an axis
-            # that takes one answer keeps the first (#5292).
+            # A draft's list is narrowed by ``asked_glimpse_tags`` to one answer for each
+            # axis that takes one (#5292). On an axis set to take several, a tag that
+            # stands alone is kept alone here and never fails the finalize (#5193).
             axis_tags = keep_stand_alone([tag for tag in tags if tag.axis == axis])
-            if not GLIMPSE_AXIS_CONFIG[axis].multi:
-                axis_tags = axis_tags[:1]
             if axis_tags:
                 set_glimpse_tags(aura, axis_tags, axis=axis)
     # An unchanged Glimpse (a blank one, at CG) writes no version; the state is still

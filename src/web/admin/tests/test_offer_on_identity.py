@@ -60,6 +60,28 @@ class OfferOnIdentityActionTest(TestCase):
         logged = LogEntry.objects.filter(user=self.author, action_flag=CHANGE)
         self.assertEqual(sorted(entry.object_repr for entry in logged), ["Indolent", "Tireless"])
 
+    def test_a_card_the_glimpse_gives_is_not_placed(self):
+        """#5292: no other stage offers a Glimpse card, and the action says so."""
+        from world.magic.factories import GlimpseTagFactory
+
+        DistinctionOfferFactory(
+            distinction=self.proud, chapter=OfferChapter.GLIMPSE, glimpse_tag=GlimpseTagFactory()
+        )
+        self.client.force_login(self.author)
+        response = self._run(self.proud, self.indolent)
+        self.assertEqual(
+            self._said(response),
+            [
+                "Now offered on the Identity stage: Indolent.",
+                "Given by the Glimpse, so not placed: Proud.",
+            ],
+        )
+        self.assertFalse(
+            DistinctionOffer.objects.filter(
+                distinction=self.proud, chapter=OfferChapter.IDENTITY
+            ).exists()
+        )
+
     def test_a_card_already_placed_switched_off_or_inactive_is_left_alone_and_named(self):
         """A line staff switched off stays off: running the action again is no way round it."""
         DistinctionOfferFactory(distinction=self.tireless, chapter=OfferChapter.IDENTITY)

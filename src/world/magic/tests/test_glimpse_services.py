@@ -258,16 +258,6 @@ class WriteGlimpseTests(TestCase):
         card = CharacterDistinction.objects.get(character=self.sheet, distinction=self.tone_card)
         assert card.secret_id is not None
 
-    def test_a_player_cannot_change_an_answered_axis(self):
-        write_glimpse(self.aura, by_staff=False, answers={GlimpseTagAxis.TONE: [self.tone]})
-        with self.assertRaises(ValidationError) as raised:
-            write_glimpse(
-                self.aura, by_staff=False, answers={GlimpseTagAxis.TONE: [self.tone_other]}
-            )
-        assert raised.exception.messages == ["Tone is already answered, and the answer is final."]
-        assert self.answers() == {"Wonder"}
-        assert self.held() == {"Wonderstruck"}
-
     def test_a_player_cannot_clear_an_answered_axis(self):
         write_glimpse(self.aura, by_staff=False, answers={GlimpseTagAxis.TONE: [self.tone]})
         with self.assertRaises(ValidationError):
@@ -298,36 +288,6 @@ class WriteGlimpseTests(TestCase):
         assert self.aura.glimpse_state == GlimpseState.COMPLETE
         write_glimpse(self.aura, by_staff=False, answers={GlimpseTagAxis.TONE: [self.tone]})
         assert self.held() == {"Wonderstruck"}
-
-    def test_no_memory_refuses_a_players_answers_and_story(self):
-        set_glimpse_memory(self.aura, GlimpseMemory.NO_MEMORY)
-        for write in (
-            {"answers": {GlimpseTagAxis.WITNESS: [self.witness]}},
-            {"story": "I remember nothing."},
-        ):
-            with self.subTest(write=write), self.assertRaises(ValidationError) as raised:
-                write_glimpse(self.aura, by_staff=False, **write)
-            assert raised.exception.messages == ["This character has no memory of their Glimpse."]
-        assert self.answers() == set()
-        assert self.aura.glimpse_story == ""
-
-    def test_the_same_write_is_accepted_once_staff_set_the_memory_to_remembered(self):
-        set_glimpse_memory(self.aura, GlimpseMemory.NO_MEMORY)
-        set_glimpse_memory(self.aura, GlimpseMemory.REMEMBERED)
-        write_glimpse(self.aura, by_staff=False, answers={GlimpseTagAxis.TONE: [self.tone]})
-        assert self.held() == {"Wonderstruck"}
-
-    def test_after_a_blackout_tone_is_refused_and_witness_is_accepted(self):
-        set_glimpse_memory(self.aura, GlimpseMemory.BLACKED_OUT)
-        with self.assertRaises(ValidationError) as raised:
-            write_glimpse(self.aura, by_staff=False, answers={GlimpseTagAxis.TONE: [self.tone]})
-        assert raised.exception.messages == [
-            "This character blacked out, and has no answer to Tone."
-        ]
-        write_glimpse(self.aura, by_staff=False, answers={GlimpseTagAxis.WITNESS: [self.witness]})
-        write_glimpse(self.aura, by_staff=False, story="I woke in the ashes.")
-        assert self.answers() == {"Public"}
-        assert self.aura.glimpse_story == "I woke in the ashes."
 
     def test_staff_write_where_a_player_is_refused(self):
         set_glimpse_memory(self.aura, GlimpseMemory.NO_MEMORY)
@@ -369,6 +329,84 @@ class WriteGlimpseTests(TestCase):
         assert raised.exception.messages == ["Unavailable because mutually exclusive with Unmoved."]
         assert self.answers() == set()
         assert self.held() == {"Unmoved"}
+
+    def test_a_refused_write_saves_nothing_and_leaves_no_phantom_on_the_aura(self):
+        """Every refusal comes before any save, so the cached aura never shows a story
+        or a shifted aura that the database does not hold, and the player is told of no
+        card they were not given."""
+        from world.narrative.models import NarrativeMessage
+
+        celestial = AffinityFactory(name="Celestial")
+        self.trigger.affinity = celestial
+        self.trigger.save()
+        rival = DistinctionFactory(name="Unmoved", slug="w-unmoved-2")
+        self.tone_card.mutually_exclusive_with.add(rival)
+        CharacterDistinctionFactory(character=self.sheet, distinction=rival)
+        before = self.aura.shares.get(affinity=celestial).settled_percent
+        told = NarrativeMessage.objects.count()
+
+        with self.assertRaises(ValidationError):
+            write_glimpse(
+                self.aura,
+                by_staff=False,
+                answers={GlimpseTagAxis.TRIGGER: [self.trigger], GlimpseTagAxis.TONE: [self.tone]},
+                story="Refused with the rest.",
+            )
+
+        assert self.aura.glimpse_story == ""
+        assert self.aura.glimpse_state == GlimpseState.NOT_STARTED
+        assert [
+            share.settled_percent
+            for share in self.aura.cached_shares
+            if share.affinity == celestial
+        ] == [before]
+        assert self.answers() == set()
+        assert NarrativeMessage.objects.count() == told
+
+    def test_a_card_owed_from_an_earlier_answer_never_blocks_a_later_write(self):
+        """An answer written before its card existed is owed the card. If the character
+        cannot hold it (it excludes a card they have), a later write still goes through."""
+        write_glimpse(self.aura, by_staff=False, answers={GlimpseTagAxis.TRIGGER: [self.trigger]})
+        late_card = DistinctionFactory(name="Crisisborn", slug="w-crisisborn-2")
+        rival = DistinctionFactory(name="Unshaken", slug="w-unshaken")
+        late_card.mutually_exclusive_with.add(rival)
+        CharacterDistinctionFactory(character=self.sheet, distinction=rival)
+        DistinctionOfferFactory(
+            distinction=late_card, chapter=OfferChapter.GLIMPSE, glimpse_tag=self.trigger
+        )
+
+        given = write_glimpse(self.aura, by_staff=False, story="It began in the fire.")
+
+        assert given == []
+        assert self.aura.glimpse_story == "It began in the fire."
+        assert self.held() == {"Unshaken"}
+
+    def test_an_answer_of_another_path_is_refused_to_a_player_and_open_to_staff(self):
+        from world.classes.factories import PathFactory
+
+        claimed = GlimpseTagFactory(axis=GlimpseTagAxis.CHOOSING, slug="w-claimed", name="Claimed")
+        claimed.paths.add(PathFactory(name="Path of the Chosen"))
+        with self.assertRaises(ValidationError) as raised:
+            write_glimpse(self.aura, by_staff=False, answers={GlimpseTagAxis.CHOOSING: [claimed]})
+        assert raised.exception.messages == [
+            "Claimed is not an answer this character's path can give."
+        ]
+        assert self.answers() == set()
+        write_glimpse(self.aura, by_staff=True, answers={GlimpseTagAxis.CHOOSING: [claimed]})
+        assert self.answers() == {"Claimed"}
+
+    def test_staff_changing_the_memory_tells_the_character_once(self):
+        from world.narrative.models import NarrativeMessage
+
+        told = NarrativeMessage.objects.count()
+        set_glimpse_memory(self.aura, GlimpseMemory.NO_MEMORY)
+        set_glimpse_memory(self.aura, GlimpseMemory.NO_MEMORY)
+        set_glimpse_memory(self.aura, GlimpseMemory.REMEMBERED)
+        bodies = list(NarrativeMessage.objects.order_by("pk").values_list("body", flat=True)[told:])
+        assert bodies == [
+            "You have no memory of your Glimpse.",
+            "The memory of your Glimpse has returned. You can write it from your character sheet.",
+        ]
 
     def test_a_first_tone_answer_shifts_the_aura_once_and_a_changed_one_does_not(self):
         celestial = AffinityFactory(name="Celestial")

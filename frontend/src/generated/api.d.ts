@@ -36978,12 +36978,9 @@ export interface components {
     };
     /** @description A ``world.character_creation.types.GlimpseCard`` (#5292). */
     GlimpseCard: {
-      offer_id: number;
       distinction_id: number;
       name: string;
-      source: string;
       axis: string;
-      effect_line: string;
     };
     /** @description Input for CharacterAuraViewSet.link/unlink_glimpse_distinction (#2427). */
     GlimpseDistinctionLinkRequest: {

@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.db.models import Case, IntegerField, QuerySet, Value, When
 from django.forms import BaseModelFormSet, Media
@@ -166,13 +167,21 @@ def _create_schooling_offer(
     request: HttpRequest, line: SchoolingLine, contributor: ContentContributor
 ) -> None:
     """Create and credit the offer for a newly granting schooling line."""
-    offer = DistinctionOffer.objects.create(
+    offer = DistinctionOffer(
         schooling_line=line,
         chapter=OfferChapter.TRADITION_STEP,
         distinction=line.grants,
         name=line.name,
         player_line=line.player_line,
     )
+    try:
+        # The model's own rules, which a bare create skips: a card the Glimpse gives
+        # is offered on no other stage (#5292).
+        offer.clean()
+    except ValidationError as exc:
+        messages.error(request, f"No offer was made for '{line.name}': {'; '.join(exc.messages)}")
+        return
+    offer.save()
     messages.info(request, f"Created the tradition-step offer for '{line.name}'.")
     stamp_written(offer, contributor)
 

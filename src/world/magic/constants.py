@@ -974,9 +974,6 @@ GLIMPSE_MEMORY_HELD_CHOICES = [
     (value, label) for value, label in GlimpseMemory.choices if value != GlimpseMemory.LATER
 ]
 
-#: The memory states in which a draft is asked no part of the Glimpse (#5292).
-GLIMPSE_MEMORY_UNASKED = (GlimpseMemory.NO_MEMORY, GlimpseMemory.LATER)
-
 
 @dataclass(frozen=True)
 class GlimpseAxisRule:
@@ -1034,11 +1031,6 @@ GLIMPSE_AXIS_ORDER = (
 #: The axes whose answers may carry a Glimpse card (#5292).
 GLIMPSE_CARD_AXES = frozenset(axis for axis, rule in GLIMPSE_AXIS_CONFIG.items() if rule.gives_card)
 
-#: The axes a blackout takes (#5292).
-GLIMPSE_BLACKOUT_AXES = frozenset(
-    axis for axis, rule in GLIMPSE_AXIS_CONFIG.items() if rule.lost_in_blackout
-)
-
 
 def glimpse_axes_asked(memory: str) -> frozenset[GlimpseTagAxis]:
     """The axes a character in this memory state has an answer to (#5292).
@@ -1047,10 +1039,12 @@ def glimpse_axes_asked(memory: str) -> frozenset[GlimpseTagAxis]:
     after one, none with no memory or a Glimpse left for later. Read by character
     creation (which answers of a draft count) and by play (which axes a player may write).
     """
-    if memory in GLIMPSE_MEMORY_UNASKED:
+    if memory in (GlimpseMemory.NO_MEMORY, GlimpseMemory.LATER):
         return frozenset()
     if memory == GlimpseMemory.BLACKED_OUT:
-        return frozenset(GlimpseTagAxis) - GLIMPSE_BLACKOUT_AXES
+        return frozenset(
+            axis for axis, rule in GLIMPSE_AXIS_CONFIG.items() if not rule.lost_in_blackout
+        )
     return frozenset(GlimpseTagAxis)
 
 

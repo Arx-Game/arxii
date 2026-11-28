@@ -354,67 +354,7 @@ test.describe('character creation: the CG points move with a card click (#5141)'
     await page.screenshot({ path: shot('7-refused-save-total-back.png'), fullPage: true });
   });
 
-  /**
-   * The Gift stage prints the same figure in its rail ("CG points"), and its Glimpse
-   * block offers cards of its own. A card clicked there moves that line at once too.
-   */
-  test("the Gift stage's CG points line moves with a card clicked there", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 1100 });
-    const draft = await mockCg(page, CRADLE);
-    const GLIMPSE_OFFER = {
-      ...offer(301, 31, 'Sees too much', 'You notice what people would rather you did not.', 5),
-      chapter: 'glimpse',
-      opener_key: 'tag:1',
-    };
-    (draft as unknown as { current_stage: number }).current_stage = 6;
-    (draft.draft_data as Record<string, unknown>) = {
-      life_loaded_for: BEGINNING.id,
-      distinctions: [],
-      glimpse_tag_ids: [1],
-    };
-    const server = await slowServer(page, draft, {
-      offers: { glimpse: [GLIMPSE_OFFER] },
-      glimpseTags: [
-        {
-          id: 1,
-          axis: 'TONE',
-          name: 'Dread',
-          slug: 'dread',
-          description: 'It came on like cold water.',
-          example: '',
-          sort_order: 1,
-          offers: [
-            {
-              offer_id: 301,
-              distinction_id: 31,
-              name: 'Sees too much',
-              player_line: GLIMPSE_OFFER.player_line,
-              cost_per_rank: 5,
-              max_rank: 1,
-            },
-          ],
-        },
-      ],
-    });
-    const errors: string[] = [];
-    page.on('pageerror', (error) => errors.push(error.message));
-
-    await page.goto('/characters/create');
-    const card = page.getByRole('button', { name: /^Sees too much/ });
-    await expect(card).toBeVisible({ timeout: 15000 });
-    const line = page.locator('.record-rail .row', { hasText: 'CG points' }).locator('dd');
-    await expect(line).toHaveText('0 of 100 spent');
-
-    await card.click();
-    await expect(line).toHaveText('5 of 100 spent', { timeout: 1000 });
-    expect(server.saveAnswers).toBe(0);
-    await page.waitForTimeout(500);
-    await page.screenshot({ path: shot('8-gift-line-moved-before-the-save-answers.png') });
-    // It stands when the save has answered and the draft fetch has not.
-    await expect.poll(() => server.saveAnswers, { timeout: SAVE_MS + 3000 }).toBe(1);
-    await page.waitForTimeout(1000);
-    expect(server.draftAnswersAfterSave).toBe(0);
-    await expect(line).toHaveText('5 of 100 spent');
-    expect(errors).toEqual([]);
-  });
+  // The case that clicked a priced card under a Glimpse answer on the Gift stage is gone
+  // with the cards it clicked (#5292): a Glimpse answer now gives its card free, and the
+  // Gift stage's CG points line never moves because of the Glimpse.
 });

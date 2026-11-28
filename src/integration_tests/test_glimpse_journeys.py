@@ -161,8 +161,8 @@ class TheGlimpseInCharacterCreation(GlimpseJourneyBase):
         listed = self.client.get(f"{url}offers/?chapter=glimpse")
         self.assertEqual(listed.data["offers"], [])
         self.assertEqual(
-            [(card["name"], card["source"]) for card in listed.data["glimpse_cards"]],
-            [("Crisisborn", "Crisis"), ("Bereft", "Loss"), ("Glimpse Mystery", "Blacked out")],
+            [(card["name"], card["axis"]) for card in listed.data["glimpse_cards"]],
+            [("Crisisborn", "TRIGGER"), ("Bereft", "CONSEQUENCE"), ("Glimpse Mystery", "")],
         )
 
         # Unticking brings the earlier answers and their cards back.

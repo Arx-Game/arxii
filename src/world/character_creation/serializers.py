@@ -1376,12 +1376,9 @@ class BeatPoolEntrySerializer(serializers.Serializer):
 class GlimpseCardSerializer(serializers.Serializer):
     """A ``world.character_creation.types.GlimpseCard`` (#5292)."""
 
-    offer_id = serializers.IntegerField()
     distinction_id = serializers.IntegerField()
     name = serializers.CharField()
-    source = serializers.CharField()
     axis = serializers.CharField(allow_blank=True)
-    effect_line = serializers.CharField(allow_blank=True)
 
 
 class OffersResponseSerializer(serializers.Serializer):

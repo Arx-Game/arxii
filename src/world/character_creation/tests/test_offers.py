@@ -68,10 +68,9 @@ class OffersForTests(TestCase):
         draft = self._draft(glimpse_tag_ids=[self.mark.id])
         assert offers_for(draft, OfferChapter.GLIMPSE) == []
         (card,) = glimpse_cards(draft)
-        assert (card.offer_id, card.name, card.source, card.axis) == (
-            self.scar_offer.id,
+        assert (card.distinction_id, card.name, card.axis) == (
+            self.scar.id,
             "Magical Scar",
-            "Mark",
             "TONE",
         )
         assert reconcile_offer_picks(draft) == ["Magical Scar"]
@@ -109,7 +108,7 @@ class OffersForTests(TestCase):
             )
         draft = self._draft(glimpse_tag_ids=[self.mark.id], glimpse_memory=GlimpseMemory.NO_MEMORY)
         (card,) = glimpse_cards(draft)
-        assert (card.name, card.source, card.axis) == ("Glimpse Mystery", "No memory", "")
+        assert (card.name, card.axis) == ("Glimpse Mystery", "")
         reconcile_offer_picks(draft)
         (entry,) = draft.draft_data["distinctions"]
         assert entry["distinction_name"] == "Glimpse Mystery"
@@ -160,6 +159,38 @@ class OffersForTests(TestCase):
         )
         assert draft_glimpse_memory(draft) == GlimpseMemory.NO_MEMORY
         assert [card.name for card in glimpse_cards(draft)] == ["Glimpse Mystery"]
+
+    def test_a_line_under_an_answer_of_a_part_that_gives_no_card_gives_nothing(self):
+        """A line left under a Witness answer from before #5292 (the model refuses a new
+        one) gives no card in character creation, as it gives none in play."""
+        public = GlimpseTagFactory(name="Public", axis=GlimpseTagAxis.WITNESS)
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Known Face"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=public,
+        )
+        draft = self._draft(glimpse_tag_ids=[public.id])
+        assert glimpse_cards(draft) == []
+        assert reconcile_offer_picks(draft) == []
+
+    def test_an_answer_of_another_path_does_not_count(self):
+        """An answer restricted to a path the draft is not on opens nothing, however it
+        came to be in the draft's list."""
+        from world.classes.factories import PathFactory
+
+        chosen = PathFactory(name="Path of the Chosen")
+        claimed = GlimpseTagFactory(name="Claimed", axis=GlimpseTagAxis.TRIGGER)
+        claimed.paths.add(chosen)
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Claimed by It"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=claimed,
+        )
+        draft = self._draft(glimpse_tag_ids=[claimed.id])
+        assert glimpse_cards(draft) == []
+        draft.selected_path = chosen
+        draft.save(update_fields=["selected_path"])
+        assert [card.name for card in glimpse_cards(draft)] == ["Claimed by It"]
 
     def test_a_route_closed_card_is_not_given_by_the_glimpse(self):
         route = OriginTemplateFactory(beginning=self.beginning)

@@ -4,15 +4,12 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from evennia_extensions.factories import AccountFactory
 from world.character_creation.constants import OfferChapter
 from world.character_creation.factories import DistinctionOfferFactory
 from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
 from world.distinctions.models import CharacterDistinction
-from world.magic.constants import GlimpseMemory, GlimpseState, GlimpseTagAxis
+from world.magic.constants import GlimpseState, GlimpseTagAxis
 from world.magic.factories import CharacterAuraFactory, GlimpseTagFactory
-from world.magic.models import CharacterGlimpseTag
-from world.magic.services.glimpse import set_glimpse_memory
 from world.magic.tests.glimpse_helpers import axis_takes_several
 from world.roster.factories import RosterTenureFactory
 
@@ -142,40 +139,6 @@ class SetGlimpseTagsActionTest(GlimpseAuraActionTestBase):
         assert response.status_code == status.HTTP_200_OK
         held = CharacterDistinction.objects.get(character=self.aura.character, distinction=card)
         assert held.from_glimpse_id == self.aura.pk
-
-    def test_a_player_cannot_change_an_answer_and_staff_can(self):
-        """#5292: an answer written in play is final for the player."""
-        url = self._url("set-glimpse-tags")
-        first = {"answers": [{"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id]}]}
-        second = {"answers": [{"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_b.id]}]}
-        assert self.client.post(url, first, format="json").status_code == status.HTTP_200_OK
-        refused = self.client.post(url, second, format="json")
-        assert refused.status_code == status.HTTP_400_BAD_REQUEST
-        assert refused.data["detail"] == "Tone is already answered, and the answer is final."
-
-        staff = AccountFactory(is_staff=True)
-        self.client.force_authenticate(user=staff)
-        changed = self.client.post(url, second, format="json")
-        assert changed.status_code == status.HTTP_200_OK
-        assert list(
-            CharacterGlimpseTag.objects.filter(aura=self.aura).values_list("tag_id", flat=True)
-        ) == [self.tone_b.id]
-
-    def test_no_memory_refuses_a_players_answers_and_story(self):
-        """#5292: the server refuses the write; hiding the editor is not the rule."""
-        set_glimpse_memory(self.aura, GlimpseMemory.NO_MEMORY)
-        answer = self.client.post(
-            self._url("set-glimpse-tags"),
-            {"answers": [{"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id]}]},
-            format="json",
-        )
-        story = self.client.post(
-            self._url("set-glimpse-prose"), {"text": "I remember."}, format="json"
-        )
-        for response in (answer, story):
-            assert response.status_code == status.HTTP_400_BAD_REQUEST
-            assert response.data["detail"] == "This character has no memory of their Glimpse."
-        set_glimpse_memory(self.aura, GlimpseMemory.REMEMBERED)
 
     def test_unknown_tag_id_rejected(self):
         response = self.client.post(

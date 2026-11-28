@@ -1051,7 +1051,7 @@ function invalidateGlimpseSheet(qc: ReturnType<typeof useQueryClient>, character
   qc.invalidateQueries({ queryKey: ['character-sheets', characterSheetId] }).catch(() => {});
 }
 
-/** Replace one axis's glimpse tag picks. */
+/** Write the answers to one or more parts of the Glimpse in one request (#5292). */
 export function useSetGlimpseTags(auraId: number, characterSheetId: number) {
   const qc = useQueryClient();
   return useMutation({

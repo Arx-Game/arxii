@@ -2033,7 +2033,11 @@ def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - d
     from evennia.objects.models import ObjectDB  # noqa: PLC0415
     from evennia.utils import create  # noqa: PLC0415
 
-    from world.character_creation.models import CharacterDraft  # noqa: PLC0415
+    from world.character_creation.models import (  # noqa: PLC0415
+        CGExplanation,
+        CharacterDraft,
+        DistinctionOffer,
+    )
     from world.character_creation.offers import reconcile_offer_picks  # noqa: PLC0415
     from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
     from world.distinctions.services import grant_distinction  # noqa: PLC0415
@@ -2058,6 +2062,9 @@ def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - d
         if beginning.no_glimpse_memory:
             beginning.no_glimpse_memory = False
             beginning.save()
+        # The spec writes Tone's explanation and a card under Grief through the admin.
+        CGExplanation.objects.filter(key="glimpse_axis_tone_explanation").delete()
+        DistinctionOffer.objects.filter(distinction__name="Spare Card").delete()
         reconcile_offer_picks(draft)
 
         room = ObjectDB.objects.filter(

@@ -64295,25 +64295,16 @@ components:
       type: object
       description: A ``world.character_creation.types.GlimpseCard`` (#5292).
       properties:
-        offer_id:
-          type: integer
         distinction_id:
           type: integer
         name:
           type: string
-        source:
-          type: string
         axis:
-          type: string
-        effect_line:
           type: string
       required:
       - axis
       - distinction_id
-      - effect_line
       - name
-      - offer_id
-      - source
     GlimpseDistinctionLinkRequest:
       type: object
       description: Input for CharacterAuraViewSet.link/unlink_glimpse_distinction

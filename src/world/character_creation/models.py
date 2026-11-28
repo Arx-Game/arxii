@@ -3144,11 +3144,13 @@ class DistinctionOffer(
             raise ValidationError(
                 {"arrives_as": "A card on the Identity stage is always a choice."}
             )
-        if self.is_active and self.distinction_id is not None:
+        if self.is_active:
             self._clean_glimpse_card()
 
     def _other_active_lines(self) -> models.QuerySet[DistinctionOffer]:
-        """This card's other active lines, in any chapter."""
+        """This card's other active lines, in any chapter (none for a card not saved yet)."""
+        if self.distinction_id is None:
+            return DistinctionOffer.objects.none()
         return DistinctionOffer.objects.filter(
             distinction_id=self.distinction_id, is_active=True
         ).exclude(pk=self.pk)
@@ -3172,17 +3174,20 @@ class DistinctionOffer(
             raise ValidationError(
                 {"distinction": "Another stage offers this card, so the Glimpse cannot give it."}
             )
-        if self.glimpse_tag_id is None:
-            if others.filter(glimpse_tag__isnull=False).exists():
-                raise ValidationError(
-                    {"distinction": "A Glimpse answer gives this card, so it cannot mark a memory."}
-                )
+        if self.glimpse_memory:
+            self._clean_memory_line(others)
             return
-        axis = GlimpseTagAxis(self.glimpse_tag.axis)
+        # The relation, not the id: on the answer's own "add" page the row hangs off an
+        # answer that is not saved yet, and its part is still known.
+        answer = self.glimpse_tag if self._opener_is_set("glimpse_tag") else None
+        if answer is None:
+            return
+        axis = GlimpseTagAxis(answer.axis)
         if not GLIMPSE_AXIS_CONFIG[axis].gives_card:
             raise ValidationError({"glimpse_tag": f"An answer to {axis.label} gives no card."})
         if (
-            DistinctionOffer.objects.filter(glimpse_tag_id=self.glimpse_tag_id, is_active=True)
+            answer.pk is not None
+            and DistinctionOffer.objects.filter(glimpse_tag_id=answer.pk, is_active=True)
             .exclude(pk=self.pk)
             .exists()
         ):
@@ -3194,6 +3199,25 @@ class DistinctionOffer(
         if others.exclude(glimpse_tag__axis=axis).filter(glimpse_tag__isnull=False).exists():
             raise ValidationError(
                 {"distinction": "An answer to another part of the Glimpse already gives this card."}
+            )
+
+    def _clean_memory_line(self, others: models.QuerySet[DistinctionOffer]) -> None:
+        """The card that marks a memory state: no answer's card, and one for each state."""
+        if others.filter(glimpse_tag__isnull=False).exists():
+            raise ValidationError(
+                {"distinction": "A Glimpse answer gives this card, so it cannot mark a memory."}
+            )
+        if (
+            DistinctionOffer.objects.filter(
+                chapter=OfferChapter.GLIMPSE,
+                glimpse_memory=self.glimpse_memory,
+                is_active=True,
+            )
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            raise ValidationError(
+                {"glimpse_memory": "This memory state already has the card that marks it."}
             )
 
 

@@ -14,7 +14,7 @@ differ only in which offers they hand it.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from django import forms
 from django.contrib.admin.models import CHANGE, LogEntry
@@ -114,6 +114,8 @@ class IdentityPlacement:
     switched_off: list[Distinction]
     #: Cards that are not active; a player could not take one, so it is not placed.
     inactive: list[Distinction]
+    #: Cards the Glimpse gives (#5292): no other stage offers one, so it is not placed.
+    glimpse: list[Distinction] = field(default_factory=list)
 
 
 def offer_on_identity(
@@ -136,7 +138,13 @@ def offer_on_identity(
     already: list[Distinction] = []
     switched_off: list[Distinction] = []
     inactive: list[Distinction] = []
+    glimpse: list[Distinction] = []
     with transaction.atomic():
+        glimpse_ids = set(
+            DistinctionOffer.objects.filter(
+                chapter=OfferChapter.GLIMPSE, is_active=True, distinction__in=cards
+            ).values_list("distinction_id", flat=True)
+        )
         placed = dict(
             DistinctionOffer.objects.filter(
                 chapter=OfferChapter.IDENTITY, distinction__in=cards
@@ -156,6 +164,11 @@ def offer_on_identity(
             if not card.is_active:
                 inactive.append(card)
                 continue
+            if card.pk in glimpse_ids:
+                # The model's own rule (``DistinctionOffer.clean``), which a bare
+                # ``create`` does not run.
+                glimpse.append(card)
+                continue
             offer = DistinctionOffer.objects.create(
                 distinction=card,
                 chapter=OfferChapter.IDENTITY,
@@ -172,4 +185,4 @@ def offer_on_identity(
                 CHANGE,
                 change_message="Offered on the Identity stage (#5255)",
             )
-    return IdentityPlacement(created, already, switched_off, inactive)
+    return IdentityPlacement(created, already, switched_off, inactive, glimpse)

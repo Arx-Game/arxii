@@ -52,12 +52,17 @@ def asked_glimpse_tags(draft: CharacterDraft) -> list[GlimpseTag]:
     (``GLIMPSE_AXIS_CONFIG``, none today) keeps them all.
     """
     from world.magic.models import GlimpseTag  # noqa: PLC0415
+    from world.magic.services.glimpse import tags_closed_to_path  # noqa: PLC0415
 
     axes = glimpse_axes_asked(draft_glimpse_memory(draft))
     tag_ids = draft.draft_data.get(GLIMPSE_TAG_IDS_KEY) or []
     if not axes or not tag_ids:
         return []
     by_id = {tag.pk: tag for tag in GlimpseTag.objects.filter(pk__in=tag_ids, is_active=True)}
+    # An answer another path's alone is not this draft's to give (the page never offers
+    # it; a list sent some other way, or kept from before a change of path, may hold it).
+    for tag in tags_closed_to_path(list(by_id.values()), draft.selected_path_id):
+        del by_id[tag.pk]
     asked: list[GlimpseTag] = []
     answered: set[str] = set()
     for tag_id in tag_ids:

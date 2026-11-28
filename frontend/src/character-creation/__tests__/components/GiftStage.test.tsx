@@ -633,14 +633,7 @@ describe('GiftStage (folio)', () => {
           ]
         : [],
     });
-    const given = (axis: string, name: string, source: string) => ({
-      offer_id: 1,
-      distinction_id: 1,
-      name,
-      source,
-      axis,
-      effect_line: '',
-    });
+    const given = (axis: string, name: string) => ({ distinction_id: 1, name, axis });
     const noCards = (): OffersResponse => ({ offers: [], terms: [], glimpse_cards: [] });
 
     function railRows(draftData: CharacterDraft['draft_data']) {
@@ -665,7 +658,7 @@ describe('GiftStage (folio)', () => {
     });
 
     it('reads the card each answered part gave, with no price, and names the parts that gave none', () => {
-      glimpseOffers = { ...noCards(), glimpse_cards: [given('TRIGGER', 'Crisisborn', 'Crisis')] };
+      glimpseOffers = { ...noCards(), glimpse_cards: [given('TRIGGER', 'Crisisborn')] };
       const rows = railRows({ glimpse_tag_ids: [1, 3, 4] });
 
       expect(rows['Trigger']).toBe('Crisisborn');
@@ -679,10 +672,7 @@ describe('GiftStage (folio)', () => {
     it('after a blackout the two parts it took read "not asked" and the marking card is held', () => {
       glimpseOffers = {
         ...noCards(),
-        glimpse_cards: [
-          given('TRIGGER', 'Crisisborn', 'Crisis'),
-          given('', 'Glimpse Mystery', 'Blacked out'),
-        ],
+        glimpse_cards: [given('TRIGGER', 'Crisisborn'), given('', 'Glimpse Mystery')],
       };
       const rows = railRows({ glimpse_tag_ids: [1, 2], glimpse_memory: 'blacked_out' });
 
@@ -695,7 +685,7 @@ describe('GiftStage (folio)', () => {
     it('with no memory no part is asked and the marking card is held', () => {
       glimpseOffers = {
         ...noCards(),
-        glimpse_cards: [given('', 'Glimpse Mystery', 'No memory')],
+        glimpse_cards: [given('', 'Glimpse Mystery')],
       };
       const rows = railRows({ glimpse_tag_ids: [1], glimpse_memory: 'no_memory' });
 

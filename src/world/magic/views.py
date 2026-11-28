@@ -752,8 +752,15 @@ class CharacterAuraViewSet(viewsets.ModelViewSet):
     ) -> Response:
         """One Glimpse write for either action, answered with the aura or the refusal."""
         try:
+            by_staff = bool(request.user.is_staff)
             glimpse_services.write_glimpse(
-                aura, by_staff=bool(request.user.is_staff), answers=answers, story=story
+                aura,
+                by_staff=by_staff,
+                answers=answers,
+                story=story,
+                # A staff edit of the story is recorded as theirs, as the staff sheet
+                # editor records it; a player's own write names nobody.
+                edited_by=request.user if by_staff else None,
             )
         except DjangoValidationError as exc:
             return Response(

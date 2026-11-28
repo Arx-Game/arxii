@@ -54,15 +54,9 @@ class OffersEndpointTests(TestCase):
     def test_the_glimpse_chapter_lists_no_choice_and_reports_the_cards_it_gave(self):
         """#5292: a Glimpse card comes free with its answer, so the chapter has nothing
         to pick; the cards the draft's answers gave are reported for the stage's panel."""
-        from world.distinctions.factories import DistinctionEffectFactory
-        from world.mechanics.factories import ModifierTargetFactory
-
         wonder = GlimpseTagFactory(name="Wonder")
         struck = DistinctionFactory(name="Wonderstruck", cost_per_rank=20)
-        DistinctionEffectFactory(
-            distinction=struck, target=ModifierTargetFactory(name="anima"), value_per_rank=1
-        )
-        line = DistinctionOfferFactory(
+        DistinctionOfferFactory(
             distinction=struck, chapter=OfferChapter.GLIMPSE, glimpse_tag=wonder
         )
         self.draft.draft_data = {"glimpse_tag_ids": [wonder.id]}
@@ -73,14 +67,7 @@ class OffersEndpointTests(TestCase):
         assert resp.status_code == status.HTTP_200_OK
         assert resp.data["offers"] == []
         assert resp.data["glimpse_cards"] == [
-            {
-                "offer_id": line.id,
-                "distinction_id": struck.id,
-                "name": "Wonderstruck",
-                "source": "Wonder",
-                "axis": "TONE",
-                "effect_line": "+Anima",
-            }
+            {"distinction_id": struck.id, "name": "Wonderstruck", "axis": "TONE"}
         ]
 
     def test_saving_a_glimpse_answer_holds_its_card_free_in_the_same_response(self):

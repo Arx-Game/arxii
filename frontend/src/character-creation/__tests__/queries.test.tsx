@@ -301,6 +301,49 @@ describe('Character Creation Query Hooks', () => {
       expect(queryClient.getQueryState(offersKey)?.isInvalidated).toBe(true);
     });
 
+    it('a change of beginning refreshes the held cards and the offers too (#5292)', async () => {
+      // A beginning can have no memory of the Glimpse: the answers' cards go and the
+      // marking card comes, on a stage the Glimpse is not on.
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      });
+      const marker: DraftDistinctionEntry = {
+        distinction_id: 40,
+        distinction_name: 'Glimpse Mystery',
+        distinction_slug: 'glimpse-mystery',
+        category_slug: 'glimpse',
+        rank: 1,
+        cost: 0,
+        notes: '',
+        offer_ids: [12],
+        sources: ['No memory'],
+        arrivals: ['bundled'],
+      };
+      const answered = {
+        ...mockDraftWithArea,
+        draft_data: { ...mockDraftWithArea.draft_data, distinctions: [marker] },
+      };
+      queryClient.setQueryData(characterCreationKeys.draft(), mockDraftWithArea);
+      queryClient.setQueryData(distinctionKeys.draftDistinctions(mockDraftWithArea.id), []);
+      const offersKey = characterCreationKeys.draftOffers(mockDraftWithArea.id, 'glimpse');
+      queryClient.setQueryData(offersKey, { offers: [] });
+      vi.mocked(api.updateDraft).mockResolvedValue(answered);
+      const { result } = renderHook(() => useUpdateDraft(), {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      });
+
+      result.current.mutate({ draftId: mockDraftWithArea.id, data: { selected_beginnings_id: 3 } });
+
+      await waitFor(() => {
+        expect(
+          queryClient.getQueryData(distinctionKeys.draftDistinctions(mockDraftWithArea.id))
+        ).toEqual([marker]);
+      });
+      expect(queryClient.getQueryState(offersKey)?.isInvalidated).toBe(true);
+    });
+
     it('a save that leaves the Glimpse alone does not refetch the offers (#5292)', async () => {
       // A stat click saves the draft too; it must not ask for every chapter's offers.
       const queryClient = new QueryClient({

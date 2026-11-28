@@ -290,6 +290,42 @@ class GlimpseOfferRuleTests(TestCase):
             self.line(mystery, glimpse_tag=self.wonder)
         )
 
+    def test_a_memory_state_has_one_card(self):
+        DistinctionOfferFactory(
+            chapter=OfferChapter.GLIMPSE, glimpse_memory=GlimpseMemory.NO_MEMORY
+        )
+        assert "This memory state already has the card that marks it." in self.refusal(
+            self.line(glimpse_memory=GlimpseMemory.NO_MEMORY)
+        )
+        self.line(glimpse_memory=GlimpseMemory.BLACKED_OUT).full_clean()
+
+    def test_the_rules_hold_for_a_row_under_an_answer_or_a_card_not_saved_yet(self):
+        """The "add" pages validate a row before its parent is saved: the answer's part
+        is still known from the unsaved answer, and a new card has no other line."""
+        from world.distinctions.models import Distinction
+        from world.magic.models import GlimpseTag
+
+        unsaved_witness = GlimpseTag(name="Rumoured", slug="rumoured", axis=GlimpseTagAxis.WITNESS)
+        row = DistinctionOffer(
+            distinction=DistinctionFactory(),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=unsaved_witness,
+        )
+        with self.assertRaises(ValidationError) as raised:
+            row.clean()
+        assert "An answer to Witness & Secrecy gives no card." in " ".join(
+            raised.exception.messages
+        )
+
+        new_card = Distinction(name="Not Saved Yet", slug="not-saved-yet")
+        under_public = DistinctionOffer(chapter=OfferChapter.GLIMPSE, glimpse_tag=self.public)
+        under_public.distinction = new_card
+        with self.assertRaises(ValidationError) as raised:
+            under_public.clean()
+        assert "An answer to Witness & Secrecy gives no card." in " ".join(
+            raised.exception.messages
+        )
+
     def test_an_answers_card_cannot_also_mark_a_memory_state(self):
         card = DistinctionFactory(name="Stormcalled")
         DistinctionOfferFactory(
