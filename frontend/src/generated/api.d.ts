@@ -24157,6 +24157,80 @@ export interface paths {
     patch: operations['skills_training_allocations_partial_update'];
     trace?: never;
   };
+  '/api/skills/training-allocations/{id}/accept-mentoring/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description The mentor agrees to teach: the training counts as mentored from now. */
+    post: operations['skills_training_allocations_accept_mentoring_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/skills/training-allocations/{id}/decline-mentoring/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description The mentor declines: the mentor is cleared from the allocation. */
+    post: operations['skills_training_allocations_decline_mentoring_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/skills/training-allocations/{id}/stop-mentoring/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description The mentor stops teaching: the mentor and the agreement are cleared. */
+    post: operations['skills_training_allocations_stop_mentoring_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/skills/training-allocations/mentoring/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Every request waiting on the requester's answer and every student she teaches.
+     *
+     *     The list belongs to the account: it holds the allocations of every character the
+     *     account may answer for, a game master's held NPC included (#5326). It is scoped by the
+     *     requester, never by a selected character.
+     */
+    get: operations['skills_training_allocations_mentoring_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/social-providers/': {
     parameters: {
       query?: never;
@@ -39357,6 +39431,18 @@ export interface components {
       readonly id: number;
       /** @description Display name for this persona */
       name: string;
+    };
+    /** @description Every request waiting on the account's answer and every student it teaches (#5326). */
+    MentoringList: {
+      readonly requests: components['schemas']['MentoringRow'][];
+      readonly students: components['schemas']['MentoringRow'][];
+    };
+    /** @description One request waiting on the account's answer, or one student it teaches (#5326). */
+    MentoringRow: {
+      readonly allocation_id: number;
+      readonly student_name: string;
+      readonly mentor_name: string;
+      readonly skill_name: string;
     };
     MenuEntry: {
       key: string;
@@ -55752,6 +55838,13 @@ export interface components {
       readonly skill: components['schemas']['SkillList'];
       readonly specialization: components['schemas']['Specialization'];
       readonly mentor: components['schemas']['MentorPersona'];
+      /**
+       * Format: date-time
+       * @description When the named mentor agreed to teach. Empty while a named mentor has not agreed, and the training counts as having no mentor until she does (#5326).
+       */
+      readonly mentor_accepted_at: string | null;
+      /** @description Whether a mentor was named and has not agreed, so the training counts as unmentored. */
+      readonly mentor_waiting: boolean;
       /** @description Action points allocated per week (minimum 1) */
       ap_amount: number;
       /** @description Return AP left in the character's weekly training budget. */
@@ -62815,8 +62908,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -90144,6 +90236,85 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['TrainingAllocation'];
+        };
+      };
+    };
+  };
+  skills_training_allocations_accept_mentoring_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  skills_training_allocations_decline_mentoring_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  skills_training_allocations_stop_mentoring_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  skills_training_allocations_mentoring_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['MentoringList'];
         };
       };
     };

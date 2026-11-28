@@ -6398,8 +6398,7 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
         required: true
       tags:
       - character-creation
@@ -38581,6 +38580,78 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/skills/training-allocations/{id}/accept-mentoring/:
+    post:
+      operationId: skills_training_allocations_accept_mentoring_create
+      description: 'The mentor agrees to teach: the training counts as mentored from
+        now.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/skills/training-allocations/{id}/decline-mentoring/:
+    post:
+      operationId: skills_training_allocations_decline_mentoring_create
+      description: 'The mentor declines: the mentor is cleared from the allocation.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/skills/training-allocations/{id}/stop-mentoring/:
+    post:
+      operationId: skills_training_allocations_stop_mentoring_create
+      description: 'The mentor stops teaching: the mentor and the agreement are cleared.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/skills/training-allocations/mentoring/:
+    get:
+      operationId: skills_training_allocations_mentoring_retrieve
+      description: |-
+        Every request waiting on the requester's answer and every student she teaches.
+
+        The list belongs to the account: it holds the allocations of every character the
+        account may answer for, a game master's held NPC included (#5326). It is scoped by the
+        requester, never by a selected character.
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MentoringList'
+          description: ''
   /api/social-providers/:
     get:
       operationId: social_providers_retrieve
@@ -69422,6 +69493,46 @@ components:
       required:
       - id
       - name
+    MentoringList:
+      type: object
+      description: Every request waiting on the account's answer and every student
+        it teaches (#5326).
+      properties:
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/MentoringRow'
+          readOnly: true
+        students:
+          type: array
+          items:
+            $ref: '#/components/schemas/MentoringRow'
+          readOnly: true
+      required:
+      - requests
+      - students
+    MentoringRow:
+      type: object
+      description: One request waiting on the account's answer, or one student it
+        teaches (#5326).
+      properties:
+        allocation_id:
+          type: integer
+          readOnly: true
+        student_name:
+          type: string
+          readOnly: true
+        mentor_name:
+          type: string
+          readOnly: true
+        skill_name:
+          type: string
+          readOnly: true
+      required:
+      - allocation_id
+      - mentor_name
+      - skill_name
+      - student_name
     MenuEntry:
       type: object
       properties:
@@ -101047,6 +101158,19 @@ components:
           allOf:
           - $ref: '#/components/schemas/MentorPersona'
           readOnly: true
+        mentor_accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the named mentor agreed to teach. Empty while a named
+            mentor has not agreed, and the training counts as having no mentor until
+            she does (#5326).
+        mentor_waiting:
+          type: boolean
+          description: Whether a mentor was named and has not agreed, so the training
+            counts as unmentored.
+          readOnly: true
         ap_amount:
           type: integer
           maximum: 2147483647
@@ -101060,6 +101184,8 @@ components:
       - ap_amount
       - id
       - mentor
+      - mentor_accepted_at
+      - mentor_waiting
       - remaining_weekly_budget
       - skill
       - specialization
