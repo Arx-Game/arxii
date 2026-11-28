@@ -1013,6 +1013,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
             account=user,
             sheet_ids=frozenset(self.context.get("character_sheet_ids", ())),
             is_staff=bool(self.context.get("is_staff", user.is_staff)),
+            sheet=self.context.get("viewer_sheet"),
         )
 
     def get_act_marks(self, obj: Interaction) -> list[ActMarkPayload]:

@@ -39,8 +39,19 @@ class RecordedAct(RelatedCacheClearingMixin, SharedMemoryModel):
     label = models.CharField(
         max_length=200,
         help_text=(
-            "What she did, as the game words it from the action and its target. A deed "
-            "grant records the same label."
+            "What she did, as the game words it from the action and its target, with the "
+            "target named as she knows them. Only she reads it: her own list, her private "
+            "lines and the deed label of the grant a mark pays."
+        ),
+    )
+    act_phrase = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text=(
+            "The label without the target's name ('Struck', 'Pyromancy on'), filled when the "
+            "act was aimed at a person with a sheet. A pose's reader sees the phrase and the "
+            "target named as that reader knows them, so a mask the reader has not seen through "
+            "stays a mask. Blank when the label names no such person."
         ),
     )
     outcome = models.ForeignKey(

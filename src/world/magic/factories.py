@@ -5495,13 +5495,15 @@ def author_compulsion_condition(check_type: object, *, penalty: int = -3) -> obj
 
 class RecordedActFactory(factory.django.DjangoModelFactory):
     """An unmarked act a player character took (#5327). Pass ``marked_grant=<ResonanceGrant>``
-    for a marked one."""
+    for a marked one. An act aimed at a person with a sheet passes ``target_sheet``, an
+    ``act_phrase`` ("Struck") and a ``label`` that ends in the name the actor knows them by."""
 
     class Meta:
         model = "arxii.RecordedAct"
 
     character_sheet = factory.SubFactory(_CHARACTER_SHEET_FACTORY)
     label = factory.Sequence(lambda n: f"Did something {n}")
+    act_phrase = ""
     outcome = factory.SubFactory("world.traits.factories.CheckOutcomeFactory")
     check_type = None
     target_sheet = None

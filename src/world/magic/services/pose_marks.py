@@ -19,7 +19,8 @@ from world.scenes.types import ActMarkPayload, PendingPickPayload
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
-    from world.magic.models import PoseEndorsement
+    from world.character_sheets.models import CharacterSheet
+    from world.magic.models import PoseEndorsement, RecordedAct
     from world.scenes.models import Interaction
 
 
@@ -28,12 +29,14 @@ class PoseViewer:
     """Who is reading a pose: the account, the sheets its characters have, and whether it is staff.
 
     ``sheet_ids`` are the character sheets the account plays, which is how the endorser and the
-    poser are recognized.
+    poser are recognized. ``sheet`` is the one character doing the looking, whose eyes decide
+    which masks are seen through (None plays nobody).
     """
 
     account: AccountDB
     sheet_ids: frozenset[int]
     is_staff: bool
+    sheet: CharacterSheet | None = None
 
 
 def _scene_gm(interaction: Interaction, viewer: PoseViewer | None) -> bool:
@@ -43,10 +46,35 @@ def _scene_gm(interaction: Interaction, viewer: PoseViewer | None) -> bool:
     return interaction.scene.is_gm(viewer.account)
 
 
-def act_marks_payload(interaction: Interaction, viewer: PoseViewer | None) -> list[ActMarkPayload]:
-    """The marks this pose carries: the resonance, the act's label and whether it was undone.
+def _act_text(act: RecordedAct, viewer: PoseViewer | None) -> str:
+    """The act as ``viewer`` reads it on a pose: the phrase and the target as the viewer knows them.
 
-    ``can_undo`` is true only for staff and the scene's GM, on a mark nobody has undone.
+    The label names the target as the ACTOR knows them, so only the actor's own account reads
+    it. Everyone else reads the act's phrase and the target's name through their own eyes, so a
+    mask they have not seen through stays a mask (staff see through every mask). The live frame
+    has no viewer and carries the phrase alone; the refetch fills the name in. An act aimed at
+    no one, or at a target with no sheet, has no phrase and shows its label.
+    """
+    from world.magic.services.kindling import shown_names  # noqa: PLC0415
+
+    if not act.act_phrase:
+        return act.label
+    if viewer is None:
+        return act.act_phrase
+    if act.character_sheet_id in viewer.sheet_ids:
+        return act.label
+    target_id = act.target_sheet_id
+    if target_id is None:
+        return act.act_phrase
+    name = shown_names(viewer.sheet, [target_id], is_staff=viewer.is_staff).get(target_id)
+    return f"{act.act_phrase} {name}" if name else act.act_phrase
+
+
+def act_marks_payload(interaction: Interaction, viewer: PoseViewer | None) -> list[ActMarkPayload]:
+    """The marks this pose carries: the resonance, the act and whether it was undone.
+
+    ``act_label`` is the act as the viewer reads it (``_act_text``). ``can_undo`` is true only
+    for staff and the scene's GM, on a mark nobody has undone.
     """
     marks = interaction.cached_act_marks
     if not marks:
@@ -61,13 +89,15 @@ def act_marks_payload(interaction: Interaction, viewer: PoseViewer | None) -> li
         undone_by = None
         if undone:
             # Staff, else the scene's GM: the role, never the account.
-            undone_by = "staff" if grant.nullified_by.is_staff else "gm"
+            # A deleted account leaves no one to read, so it is the GM's role.
+            by = grant.nullified_by
+            undone_by = "staff" if by is not None and by.is_staff else "gm"
         rows.append(
             ActMarkPayload(
                 grant_id=grant.pk,
                 resonance_id=grant.resonance_id,
                 resonance_name=grant.resonance.name,
-                act_label=act.label,
+                act_label=_act_text(act, viewer),
                 undone=undone,
                 undone_by=undone_by,
                 can_undo=can_undo_any and not undone,

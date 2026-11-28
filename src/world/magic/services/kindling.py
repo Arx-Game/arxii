@@ -156,12 +156,15 @@ def _allies_present(ctx: SituationContext, presence: _Presence | None) -> frozen
     return presence.everyone - presence.opponents - {ctx.holder.pk}
 
 
-def shown_names(viewer: CharacterSheet, sheet_ids: Iterable[int]) -> dict[int, str]:
+def shown_names(
+    viewer: CharacterSheet | None, sheet_ids: Iterable[int], *, is_staff: bool = False
+) -> dict[int, str]:
     """The name ``viewer`` knows each sheet's character by, keyed by sheet id.
 
     The face each sheet presents (its active persona, else its primary) read through the
-    viewer's eyes, so a mask the viewer has not seen through keeps its mask. A sheet with no
-    persona is absent from the map.
+    viewer's eyes, so a mask the viewer has not seen through keeps its mask. A viewer of None
+    plays nobody, and staff see through every mask. A sheet with no persona is absent from
+    the map.
     """
     from world.scenes.persona_display import build_persona_display_map  # noqa: PLC0415
     from world.scenes.services import personas_for_sheets  # noqa: PLC0415
@@ -169,7 +172,7 @@ def shown_names(viewer: CharacterSheet, sheet_ids: Iterable[int]) -> dict[int, s
     personas = personas_for_sheets(sheet_ids)
     if not personas:
         return {}
-    display = build_persona_display_map(personas.values(), viewer_sheet=viewer)
+    display = build_persona_display_map(personas.values(), viewer_sheet=viewer, is_staff=is_staff)
     return {sheet_id: display[persona.pk][0] for sheet_id, persona in personas.items()}
 
 
@@ -1278,6 +1281,24 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
     return grants
 
 
+def _act_phrase(
+    sheet: CharacterSheet, target: CharacterSheet | None, label: str, fallback: str
+) -> str:
+    """``label`` without the name of ``target``, or "" when it names no such person.
+
+    The label was built with the target's name as ``sheet`` knows them (``act_label``), so it
+    ends in that name. A reader of the pose shows the phrase and the target named as that
+    reader knows them (``pose_marks``). An act aimed at no one, or at a target with no sheet (a
+    game-run monster, whose name is no secret), has no phrase and shows its label as it is.
+    """
+    name = sheet_name(sheet, target)
+    if not name or not label.endswith(name):
+        return ""
+    # A label that was only the name (an act with no action name) falls back to the act's kind,
+    # so the phrase is never empty for a targeted act and the name never leaks through the label.
+    return label[: -len(name)].strip() or fallback
+
+
 def _record_act(
     sheet: CharacterSheet,
     act: KindlingAct,
@@ -1301,13 +1322,13 @@ def _record_act(
         (entry for entry in entries if entry.fed_tier is not None),
         key=lambda entry: -entry.fed_tier.rank,
     )
-    label = act.label or (
-        KindlingActKind(act.kind).label if act.kind in KindlingActKind.values else act.kind
-    )
+    kind_label = KindlingActKind(act.kind).label if act.kind in KindlingActKind.values else act.kind
+    label = act.label or kind_label
     with transaction.atomic():
         recorded = RecordedAct.objects.create(
             character_sheet=sheet,
             label=label[:200],
+            act_phrase=_act_phrase(sheet, act.target, label, kind_label)[:200],
             outcome=outcome,
             check_type=check_type,
             target_sheet=act.target,
@@ -1318,7 +1339,7 @@ def _record_act(
                 act=recorded,
                 resonance=entry.resonance,
                 strength=entry.fed_tier,
-                reason=entry.fed_reasons[0] if entry.fed_reasons else "",
+                reason=(entry.fed_reasons[0] if entry.fed_reasons else "")[:300],
             )
             for entry in suggested
         )
