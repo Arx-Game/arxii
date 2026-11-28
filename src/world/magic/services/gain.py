@@ -1309,7 +1309,9 @@ def _tell_tagged_player(
         who = "The scene's GM"
     else:
         who = "Someone"
-    line = f"{who} tagged your pose as a {moment_type.label}. It paid you {grant.resonance.name}."
+    # The label is staff-written and may open with an article ("A Flourish of Steel"), so the
+    # sentence puts no article in front of it.
+    line = f"{who} tagged your pose: {moment_type.label}. It paid you {grant.resonance.name}."
     tell_player(character_sheet, line, ooc_note="A dramatic moment tag")
 
 
