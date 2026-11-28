@@ -105,9 +105,26 @@ class RecordedAct(SharedMemoryModel):
 
     class Meta:
         indexes = [
-            models.Index(fields=["character_sheet", "created_at"], name="recorded_act_sheet_idx"),
+            # The pointable list reads a sheet's unmarked acts newest first, so the index
+            # covers only those.
+            models.Index(
+                fields=["character_sheet", "created_at"],
+                name="recorded_act_sheet_idx",
+                condition=Q(marked_grant__isnull=True),
+            ),
         ]
         constraints = [
+            # One mark per pose and per journal entry: a writing carries one mark.
+            models.UniqueConstraint(
+                fields=["marked_interaction"],
+                condition=Q(marked_interaction__isnull=False),
+                name="recorded_act_one_mark_per_interaction",
+            ),
+            models.UniqueConstraint(
+                fields=["marked_journal_entry"],
+                condition=Q(marked_journal_entry__isnull=False),
+                name="recorded_act_one_mark_per_journal_entry",
+            ),
             models.CheckConstraint(
                 name="recorded_act_marked_one_way",
                 check=(
@@ -144,7 +161,8 @@ class RecordedActSuggestion(SharedMemoryModel):
     )
     strength = models.ForeignKey(
         "arxii.KindledStrengthTier",
-        on_delete=models.CASCADE,
+        # PROTECT: deleting a strength tier must not quietly downgrade the acts waiting.
+        on_delete=models.PROTECT,
         related_name="+",
         help_text="The strength the situation reached for this act.",
     )
