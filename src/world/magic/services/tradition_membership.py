@@ -35,7 +35,7 @@ logger = logging.getLogger(__name__)
 _TRADITIONLESS_DRAWBACK_TAG = "traditionless-drawback"
 
 
-def _active_tradition_row(sheet: CharacterSheet) -> CharacterTradition | None:
+def active_tradition_row(sheet: CharacterSheet) -> CharacterTradition | None:
     """Return the character's active (``left_at IS NULL``) CharacterTradition row, or None."""
     from world.magic.models import CharacterTradition  # noqa: PLC0415
 
@@ -170,7 +170,7 @@ def join_tradition(
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
-    active = _active_tradition_row(sheet)
+    active = active_tradition_row(sheet)
     if active is not None and active.tradition_id == tradition.pk:
         raise AlreadyInTraditionError
 
@@ -218,7 +218,7 @@ def leave_tradition(sheet: CharacterSheet) -> CharacterTradition:
     symmetric with the join wiring; that call was left to a later task/design pass
     rather than assumed here (see intent-provenance note in the Task 8 report).
     """
-    active = _active_tradition_row(sheet)
+    active = active_tradition_row(sheet)
     if active is None:
         raise NoActiveTraditionError
 

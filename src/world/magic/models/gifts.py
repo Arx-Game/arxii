@@ -6,13 +6,19 @@ Traditions represent schools of practice or philosophy.
 
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models import Q
 from django.utils.functional import cached_property
 
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
 from world.items.constants import GearArchetype
-from world.magic.constants import AcquisitionOrigin, GiftKind
+from world.magic.constants import (
+    AFFINITY_ABYSSAL,
+    AFFINITY_CELESTIAL,
+    AcquisitionOrigin,
+    GiftKind,
+)
 from world.magic.models.affinity import Resonance
 
 # Lazy model reference (Django app_label.ModelName), extracted to satisfy S1192.
@@ -351,6 +357,18 @@ class Tradition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "A student whose Gift resonance belongs to an affinity checked here gets "
             "extra magical training and finds this Tradition's courses easier. None "
             "checked: affinity never helps."
+        ),
+    )
+
+    taught_skills = models.ManyToManyField(
+        "arxii.Skill",
+        blank=True,
+        related_name="teaching_traditions",
+        limit_choices_to=Q(affinity__name__in=(AFFINITY_CELESTIAL, AFFINITY_ABYSSAL)),
+        help_text=(
+            "The affinity skills this Tradition's teachers teach. Choose Heroism for a "
+            "clearly Good Tradition and Villainy for a clearly Evil one; a neutral Tradition "
+            "may choose both. Reflection is taught by every Tradition and is not listed here."
         ),
     )
 

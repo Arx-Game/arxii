@@ -1,11 +1,13 @@
-"""The five IC levers a distinction may pull (#4394): one reader each, nowhere else.
+"""The IC levers a distinction may pull: one reader each, nowhere else.
 
-A lever is a ``ModifierCategory`` whose targets are read at exactly one seam: income at the
-allowance and asset-collection payouts, reputation gain where a society's or an organization's
-regard rises, relationship gain where affection shifts, comfort where a residence's comfort is
-read for one character, fatigue cost where an action's fatigue is charged. Every reader goes
-through ``get_modifier_total`` (ADR-0278: one walk, never a second), so a distinction effect,
-an achievement reward or a condition on the lever's target all count, and the sheet's modifier
+Five levers scale something (#4394): income at the allowance and asset-collection payouts,
+reputation gain where a society's or an organization's regard rises, relationship gain where
+affection shifts, comfort where a residence's comfort is read for one character, fatigue cost
+where an action's fatigue is charged. Two more are yes or no: sight through a mask (#4396,
+read where an identification is contested) and teaching herself magic (#5326, read where
+weekly training is allocated, ``self_teaching_granted`` below). Every reader goes through
+``get_modifier_total`` (ADR-0278: one walk, never a second), so a distinction effect, an
+achievement reward or a condition on the lever's target all count, and the sheet's modifier
 breakdown names them.
 
 The rows themselves are content (``ModifierCategory``/``ModifierTarget`` are content-repo
@@ -17,6 +19,8 @@ dev or E2E database.
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+
+from world.mechanics.constants import SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -31,6 +35,16 @@ def lever_total(sheet: CharacterSheet, category_name: str, target_name: str) -> 
     if target is None:
         return 0
     return get_modifier_total(sheet, target)
+
+
+def self_teaching_granted(sheet: CharacterSheet) -> bool:
+    """Whether the character may teach herself magical skills (#5326).
+
+    Yes or no: any positive total on the self-teaching target grants it, so a value of 1 and a
+    value of 5 are the same, and so are one source and two. A target staff have not authored
+    reads as 0, so nobody is granted it.
+    """
+    return lever_total(sheet, SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME) > 0
 
 
 def scale_by_percent(base: int, percent: int, *, floor: int = 0) -> int:

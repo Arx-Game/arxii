@@ -20,6 +20,10 @@ _CATEGORY_DESCRIPTIONS = {
         "Sight through a mask: a positive total on a kind's target sees who is behind a "
         "disguise of that kind without the identification check."
     ),
+    "self_teaching": (
+        "Teaching herself magic: a positive total lets the character allocate weekly "
+        "training on a Magic skill with no mentor. Yes or no; a larger value adds nothing."
+    ),
 }
 
 

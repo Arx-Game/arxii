@@ -45,7 +45,7 @@ from world.character_creation.constants import (
     TieKind,
     schooling_max_rank,
 )
-from world.character_creation.magic_training import reconcile_combat_style
+from world.character_creation.magic_training import reconcile_magic_training
 from world.character_creation.models import (
     AGE_MAX,
     AGE_MIN,
@@ -502,6 +502,19 @@ def favored_affinity_names_by_tradition(tradition_ids: Iterable[int]) -> dict[in
     return names
 
 
+def taught_skill_names_by_tradition(tradition_ids: Iterable[int]) -> dict[int, list[str]]:
+    """The affinity skills each Tradition teaches, by name (#5326); two queries for the list.
+
+    Reflection, which every Tradition teaches, then the skills staff ticked on it. Built per
+    request in ``TraditionViewSet.get_serializer_context`` (key ``"taught_skill_names"``).
+    """
+    from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+        taught_affinity_skill_names_by_tradition,
+    )
+
+    return taught_affinity_skill_names_by_tradition(tradition_ids)
+
+
 class TraditionSerializer(serializers.ModelSerializer):
     """Serializer for Tradition records available during CG."""
 
@@ -513,6 +526,7 @@ class TraditionSerializer(serializers.ModelSerializer):
     schooling = serializers.SerializerMethodField()
     favored_gift_names = serializers.SerializerMethodField()
     favored_affinity_names = serializers.SerializerMethodField()
+    taught_skill_names = serializers.SerializerMethodField()
     not_yet_implemented = serializers.SerializerMethodField()
 
     class Meta:
@@ -531,6 +545,7 @@ class TraditionSerializer(serializers.ModelSerializer):
             "schooling",
             "favored_gift_names",
             "favored_affinity_names",
+            "taught_skill_names",
             "not_yet_implemented",
         ]
         read_only_fields = fields
@@ -627,6 +642,13 @@ class TraditionSerializer(serializers.ModelSerializer):
         names = self.context.get("favored_affinity_names")
         if names is None:
             names = favored_affinity_names_by_tradition([obj.pk])
+        return names.get(obj.pk, [])
+
+    def get_taught_skill_names(self, obj) -> list[str]:
+        """The affinity skills this Tradition's teachers teach (#5326): Reflection and its ticks."""
+        names = self.context.get("taught_skill_names")
+        if names is None:
+            names = taught_skill_names_by_tradition([obj.pk])
         return names.get(obj.pk, [])
 
 
@@ -2161,7 +2183,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if restyled:
             # A style the Tradition does not teach is cleared, and another style's
             # skill drops out of the training allocation (#4921).
-            reconcile_combat_style(instance)
+            reconcile_magic_training(instance)
         return instance
 
     @staticmethod

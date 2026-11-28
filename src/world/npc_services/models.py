@@ -204,8 +204,9 @@ class NPCRole(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "shared (Path × Gift) pool techniques, no tradition signatures. "
             "A skill course this role offers is taught in this Tradition's manner, so a "
             "student whose Major Gift, or whose Gift resonance's affinity, it favors "
-            "finds the course sessions easier. Blank: this role's courses are neutral "
-            "for every student."
+            "finds the course sessions easier. A role with no Tradition cannot offer a "
+            "course in Reflection, Heroism, Villainy or a fighting style's skill, and its "
+            "other courses are neutral for every student."
         ),
     )
     is_active = models.BooleanField(
