@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
     from world.magic.types.drift import DriftReading
     from world.magic.types.threads import ThreadResonanceOption
-    from world.scenes.models import Scene
+    from world.scenes.models import Interaction, Scene
 from world.conditions.models import (
     CapabilityType,
     ConditionTemplate,
@@ -4108,30 +4108,8 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs: dict) -> dict:
         interaction = attrs.get("interaction")
-        request = self.context.get("request")
         if interaction is not None:
-            if request is not None and not request.user.is_staff:
-                from world.scenes.models import Interaction  # noqa: PLC0415
-
-                if (
-                    not Interaction.objects.readable_by(request.user)
-                    .filter(pk=interaction.pk)
-                    .exists()
-                ):
-                    raise serializers.ValidationError({"interaction": _ERR_TAG_POSE_UNAVAILABLE})
-            if attrs.get("scene") is not None and attrs["scene"].pk != interaction.scene_id:
-                raise serializers.ValidationError({"scene": _ERR_TAG_SCENE_MISMATCH})
-            attrs["scene"] = interaction.scene
-            persona = interaction.persona
-            sheet = persona.character_sheet if persona is not None else None
-            if attrs.get("character_sheet") is None:
-                if sheet is None:
-                    raise serializers.ValidationError(
-                        {"character_sheet": "Pose has no character sheet; supply character_sheet."}
-                    )
-                attrs["character_sheet"] = sheet
-            elif sheet is None or attrs["character_sheet"].pk != sheet.pk:
-                self._require_in_scene(attrs["character_sheet"], attrs["scene"])
+            self._settle_pose_anchor(attrs, interaction)
         if attrs.get("character_sheet") is None:
             raise serializers.ValidationError(
                 {"character_sheet": "Provide interaction or character_sheet."}
@@ -4139,6 +4117,34 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
         if interaction is None:
             self._require_in_scene(attrs["character_sheet"], attrs.get("scene"))
         return attrs
+
+    def _require_readable_pose(self, interaction: "Interaction") -> None:
+        """Refuse a pose the requester cannot read (staff may tag any)."""
+        from world.scenes.models import Interaction  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None or request.user.is_staff:
+            return
+        if not Interaction.objects.readable_by(request.user).filter(pk=interaction.pk).exists():
+            raise serializers.ValidationError({"interaction": _ERR_TAG_POSE_UNAVAILABLE})
+
+    def _settle_pose_anchor(self, attrs: dict, interaction: "Interaction") -> None:
+        """Take the scene and, when none was named, the poser from the pose being tagged."""
+        self._require_readable_pose(interaction)
+        if attrs.get("scene") is not None and attrs["scene"].pk != interaction.scene_id:
+            raise serializers.ValidationError({"scene": _ERR_TAG_SCENE_MISMATCH})
+        attrs["scene"] = interaction.scene
+        persona = interaction.persona
+        sheet = persona.character_sheet if persona is not None else None
+        if attrs.get("character_sheet") is not None:
+            if sheet is None or attrs["character_sheet"].pk != sheet.pk:
+                self._require_in_scene(attrs["character_sheet"], attrs["scene"])
+            return
+        if sheet is None:
+            raise serializers.ValidationError(
+                {"character_sheet": "Pose has no character sheet; supply character_sheet."}
+            )
+        attrs["character_sheet"] = sheet
 
     def _require_in_scene(self, sheet: CharacterSheet, scene: "Scene | None") -> None:
         """Refuse a character who is not part of the scene being tagged in (staff may tag any)."""
