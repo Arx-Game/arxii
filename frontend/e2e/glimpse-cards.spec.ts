@@ -575,6 +575,8 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await expect(editor.getByText('Consequence: what did it leave behind?')).toBeVisible();
     await expect(editor.getByText('The Reflection: what did you see in yourself?')).toHaveCount(0);
     await expect(editor.getByText('Tone: how did it feel?')).toHaveCount(0);
+    // The Choosing's one answer is another path's, so this character is not asked it.
+    await expect(editor.getByText('The Choosing: how did it claim you?')).toHaveCount(0);
     await shot(page, info, 'sheet-blacked-out-editor.png');
     const blackedOut = await write();
     expect(blackedOut.status()).toBe(400);

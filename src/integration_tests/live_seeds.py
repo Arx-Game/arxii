@@ -2064,6 +2064,7 @@ def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - d
     from world.magic.factories import CharacterAuraFactory  # noqa: PLC0415
     from world.magic.models import CharacterAura, CharacterGlimpseTag, GlimpseTag  # noqa: PLC0415
     from world.magic.services.glimpse import refresh_glimpse_state  # noqa: PLC0415
+    from world.progression.models import CharacterPathHistory  # noqa: PLC0415
 
     account = AccountDB.objects.get(username=username)
     staff_password = secrets.token_urlsafe(18)
@@ -2107,6 +2108,9 @@ def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - d
             refresh_glimpse_state(aura)
             CharacterDistinction.objects.filter(character=sheet).delete()
             sheet.__dict__.pop("cached_distinctions", None)
+            # A character out of creation is on a path, and the sheet's editor offers the
+            # answers that path can give: the draft's own, so not The Choosing's.
+            CharacterPathHistory.objects.get_or_create(character=sheet, path=draft.selected_path)
             if memory == GlimpseMemory.NO_MEMORY:
                 grant_distinction(sheet, mystery, origin=DistinctionOrigin.CHARACTER_CREATION)
             entries[name] = entry
