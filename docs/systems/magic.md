@@ -2678,7 +2678,7 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
     (`ResonanceGrantUndoViewSet`, `CanUndoResonanceGrant`, scoped queryset, no list). `ResonanceGrantFilterSet`
     gains `nullified`, `nullified_after` and `nullified_before`; the grant serializer serves `nullified_at`.
     Every reader of `ResonanceGrant` that counts what a character earned skips a grant with `nullified_at` set
-    (the reflectable deeds, `validate_reflection` and the weekly table do); a new reader does the same.
+    (the reflectable deeds, `validate_reflection`, the weekly table and the Compulsion read `earned_in_scene` do); a new reader does the same.
   - **Readers and telnet.** PLACEHOLDER, filled by a later task of #5327: the recorded-acts list endpoint,
     the marks and waiting picks on the pose feed and live frame, the telnet `acts` list,
     `pose/reach <resonance>:<n>=<text>`, `endorse accept` and `endorse decline`, and the undone rows in

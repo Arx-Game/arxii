@@ -2680,8 +2680,8 @@ and marks"; flow and diagrams: `docs/architecture/resonance-gain.md` §14.
   be refused).
 - **Rules a change here must not break:**
   - **Every reader of a `ResonanceGrant` that counts what a character earned skips a grant with
-    `nullified_at` set.** The reflectable deeds, `validate_reflection` and `weekly_percent_paid` do, and so
-    must the Compulsion read `earned_in_scene` (`services/impulses.py`) and any new reader; the ledger
+    `nullified_at` set.** The reflectable deeds, `validate_reflection`, `weekly_percent_paid` and the
+    Compulsion read `earned_in_scene` (`services/impulses.py`) do, and so must any new reader; the ledger
     views show the undo instead of hiding the row.
   - **A player never sees an account name.** An undone line names the role ("Staff", "The scene's GM"),
     a fatigue line names a character by the name its reader knows (`shown_names`), and a tag line names the
