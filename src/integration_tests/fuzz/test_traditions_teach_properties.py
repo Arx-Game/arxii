@@ -18,18 +18,22 @@ The second half of the file (``_TrainingWorld`` and after) holds the rules of we
 Academy courses: who may train a Magic skill with whom, what an outsider's course session rolls
 at, and what the weekly run does with an allocation the rule no longer allows. They call
 ``create_training_allocation``, ``process_weekly_training``, ``join_tradition`` and the course
-handler's own session functions. The one thing a property patches is the session's check roll
-(``perform_check_with_modifiers``), only to read the difficulty it was asked to roll at.
+handler's own session functions. A course session's check roll is forced to a Failure with
+``force_check_outcome`` (the Academy journeys do the same), which also records the difficulty the
+roll was asked to roll at.
 """
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from datetime import timedelta
 
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from hypothesis import given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 
+from evennia_extensions.models import PlayerData
+from web.admin.tuning import required_content as rc
 from world.action_points.models import ActionPointPool
 from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
@@ -47,12 +51,15 @@ from world.character_creation.validators import (
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.services import difficulty_points
+from world.checks.test_helpers import force_check_outcome
 from world.classes.factories import CharacterClassLevelFactory
 from world.covenants.factories import CombatStyleFactory
+from world.currency.services import mint_favor_token
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.game_clock.week_services import get_current_game_week
 from world.magic.constants import AFFINITY_ABYSSAL, AFFINITY_CELESTIAL, AFFINITY_PRIMAL
 from world.magic.factories import (
+    AffinityFactory,
     CharacterGiftFactory,
     CharacterTraditionFactory,
     GiftFactory,
@@ -69,6 +76,7 @@ from world.magic.services.tradition_teaching import (
     is_tradition_governed,
     taught_affinity_skill_names_by_tradition,
     tradition_teaches,
+    traditions_offered_in_creation,
 )
 from world.mechanics.constants import (
     INCOME_CATEGORY_NAME,
@@ -82,7 +90,6 @@ from world.narrative.models import NarrativeMessageDelivery
 from world.npc_services.constants import OfferKind
 from world.npc_services.effects import (
     _CourseRefusedError,
-    _refuse_closed_course,
     _run_course_session,
     _take_course_session,
 )
@@ -93,24 +100,32 @@ from world.npc_services.factories import (
     SkillCourseOfferDetailsFactory,
 )
 from world.npc_services.models import SkillCourseOfferDetails
-from world.npc_services.services import OUTSIDER_LINE, _offer_price_payload
+from world.npc_services.services import _offer_price_payload
 from world.progression.models.rewards import DevelopmentPoints
-from world.roster.factories import RosterEntryFactory
+from world.roster.constants import NPCLoanStatus
+from world.roster.factories import (
+    NPCLoanFactory,
+    PlayerDataFactory,
+    RosterEntryFactory,
+    RosterTenureFactory,
+)
+from world.roster.services.npc_lending import current_player_ids, current_player_of
+from world.scenes.factories import PersonaFactory
 from world.skills.factories import (
     MagicSkillFactory,
     SkillFactory,
     SkillPointBudgetFactory,
     SpecializationFactory,
 )
-from world.skills.models import Skill, TrainingAllocation
+from world.skills.models import Skill, SkillPointBudget, TrainingAllocation
 from world.skills.services import (
     calculate_training_development,
     create_training_allocation,
     process_weekly_training,
 )
 from world.societies.factories import OrganizationFactory
-from world.traits.factories import ensure_level_ladder
-from world.traits.models import CharacterTraitValue
+from world.traits.factories import CheckSystemSetupFactory, ensure_level_ladder
+from world.traits.models import CharacterTraitValue, CheckOutcome
 
 # The two skills a Tradition may tick, by the affinity each belongs to.
 TICKABLE = ("heroism", "villainy")
@@ -313,7 +328,7 @@ class CreationOffersWhatTheTraditionTeaches(_World, HypothesisTestCase):
         draft = self.draft(tradition, rank=rank)
         pool = draft.magic_training_pool
         offered = sorted(self.offered(draft))
-        maximum = 30  # SkillPointBudgetFactory.max_skill_value
+        maximum = SkillPointBudget.get_active_budget().max_skill_value
 
         self.assertLessEqual(pool.required_spend, pool.total)
         self.assertLessEqual(pool.required_spend, len(offered) * maximum)
@@ -390,6 +405,8 @@ class _TrainingWorld(_World):
     def setUpTestData(cls) -> None:
         super().setUpTestData()
         ensure_level_ladder()
+        CheckSystemSetupFactory.create()
+        cls.failure = CheckOutcome.objects.get(name="Failure")
         cls.mundane = SkillFactory(name="Archery")
         cls.week = get_current_game_week()
         # The lever's rows are authored once, so an example only grants effects on them.
@@ -449,7 +466,12 @@ class _TrainingWorld(_World):
         return TrainingAllocation.objects.filter(character=student).count()
 
     def course(
-        self, trainer_tradition: Tradition | None, skill: Skill, *, saved: bool = False
+        self,
+        trainer_tradition: Tradition | None,
+        skill: Skill,
+        *,
+        saved: bool = False,
+        coin_cost: int = 1000,
     ) -> SkillCourseOfferDetails:
         """A course in ``skill`` on a trainer role of ``trainer_tradition``.
 
@@ -462,12 +484,12 @@ class _TrainingWorld(_World):
             role=role, kind=OfferKind.SKILL_COURSE, ap_cost=0, label=f"Course: {skill.name}"
         )
         factory = SkillCourseOfferDetailsFactory if saved else SkillCourseOfferDetailsFactory.build
-        return factory(offer=offer, skill=skill, check_difficulty_level=1)
+        return factory(offer=offer, skill=skill, check_difficulty_level=1, coin_cost=coin_cost)
 
     def saved_course(
-        self, trainer_tradition: Tradition | None, skill: Skill
+        self, trainer_tradition: Tradition | None, skill: Skill, *, coin_cost: int = 1000
     ) -> SkillCourseOfferDetails:
-        return self.course(trainer_tradition, skill, saved=True)
+        return self.course(trainer_tradition, skill, saved=True, coin_cost=coin_cost)
 
     def set_extra_difficulty(self, points: int, gift_ease: int = 0) -> None:
         """The config rows are idmapper singletons: every example sets what it needs first."""
@@ -480,14 +502,11 @@ class _TrainingWorld(_World):
     def rolled_difficulty(self, course, student: CharacterSheet) -> int:
         """The difficulty one session of ``course`` rolls at for ``student``."""
         enrollment = SkillCourseEnrollmentFactory(character_sheet=student, course=course)
-        result = MagicMock(outcome=None, outcome_name="Failure")
-        with patch(
-            "world.checks.services.perform_check_with_modifiers", return_value=result
-        ) as check:
+        with force_check_outcome(self.failure) as capture:
             _run_course_session(
                 course.offer, course, student, enrollment, rating=0, week_pk=self.week.pk
             )
-        return check.call_args.kwargs["target_difficulty"]
+        return capture.target_difficulty
 
 
 class CoursesAreAuthoredOnlyOnATeachingRole(_TrainingWorld, HypothesisTestCase):
@@ -549,8 +568,9 @@ class AMentorMustTeachAndHoldARating(_TrainingWorld, HypothesisTestCase):
         0 to 3 in the skill) and any student (in a Tradition that teaches nothing the mentor's
         does not, or in none): the allocation is saved exactly when the mentor's active
         Tradition teaches the skill and the rating is above 0. Otherwise it raises, saves
-        nothing, and the refusal names the mentor and a next step. The student's own Tradition
-        changes nothing.
+        nothing, and the refusal is the one line that names the persona asked for and a next
+        step, whichever of the three reasons applied. The student's own Tradition changes
+        nothing.
         """
         skill = self.skill(key)
         mentor_tradition = (
@@ -568,8 +588,11 @@ class AMentorMustTeachAndHoldARating(_TrainingWorld, HypothesisTestCase):
         else:
             with self.assertRaises(ValueError) as caught:
                 self.allocate(student, skill, mentor)
-            self.assertIn(mentor.primary_persona.name, str(caught.exception))
-            self.assertIn("Choose", str(caught.exception))
+            self.assertEqual(
+                str(caught.exception),
+                f"{mentor.primary_persona.name} cannot teach you {skill.name}. Choose a mentor "
+                "whose Tradition teaches it and who has trained in it.",
+            )
             self.assertEqual(self.stored(student), 0)
 
     @settings(max_examples=25, deadline=None)
@@ -579,23 +602,36 @@ class AMentorMustTeachAndHoldARating(_TrainingWorld, HypothesisTestCase):
     ) -> None:
         """Maintainer: "she could probably learn it from a teacher of another tradition".
 
-        Given a course in a governed skill on a trainer role and a student who belongs to a
-        different Tradition (or to none): enrolling is closed exactly when the trainer's
-        Tradition does not teach the skill, whoever the student is, and when it is closed the
-        student reads that the course is closed and what to look for.
+        Given a free course in a governed skill on a trainer role and a student who belongs
+        to a different Tradition (or to none), holding a Golden Hare and the action points:
+        taking the course opens an enrollment exactly when the trainer's Tradition teaches
+        the skill, whoever the student is. When it does not, she reads that the course is
+        closed and what to look for, no enrollment opens and her Hare is not spent.
         """
         skill = self.skill(key)
         trainer_tradition = self.teaching_tradition(ticked, style_taught)
-        course = self.saved_course(trainer_tradition, skill)
-        self.character(self.tradition(set()) if student_tradition else None)
+        course = self.saved_course(trainer_tradition, skill, coin_cost=0)
+        student = self.character(
+            self.tradition(set()) if student_tradition else None, rating=12, skill=skill
+        )
+        academy = OrganizationFactory()
+        hare = mint_favor_token(academy, student, provenance_note="a deed for the Academy")
+        pool = ActionPointPool.get_or_create_for_character(student.character)
+        pool.current = 100
+        pool.save()
 
-        if expected_teaches(key, ticked, style_taught):
-            _refuse_closed_course(course.offer, course)
-        else:
-            with self.assertRaises(_CourseRefusedError) as caught:
-                _refuse_closed_course(course.offer, course)
-            self.assertIn("this course is closed", caught.exception.reason)
-            self.assertIn("Look for a trainer", caught.exception.reason)
+        with force_check_outcome(self.failure):
+            if expected_teaches(key, ticked, style_taught):
+                _take_course_session(course.offer, course, student, academy)
+                self.assertEqual(course.enrollments.count(), 1)
+            else:
+                with self.assertRaises(_CourseRefusedError) as caught:
+                    _take_course_session(course.offer, course, student, academy)
+                self.assertIn("this course is closed", caught.exception.reason)
+                self.assertIn("Look for a trainer", caught.exception.reason)
+                self.assertEqual(course.enrollments.count(), 0)
+                hare.refresh_from_db()
+                self.assertIsNone(hare.redeemed_at)
 
 
 class AnOutsiderPaysTheExtraDifficultyOnly(_TrainingWorld, HypothesisTestCase):
@@ -658,24 +694,33 @@ class AnOutsiderPaysTheExtraDifficultyOnly(_TrainingWorld, HypothesisTestCase):
         student_style_taught=flags,
         student_in_tradition=flags,
         extra=st.integers(0, 6),
+        trainer_ticked=ticks,
+        trainer_style_taught=flags,
     )
-    def test_the_menu_says_sessions_are_harder_exactly_for_an_outsider(
+    def test_the_menu_says_sessions_are_harder_exactly_for_an_outsider(  # noqa: PLR0913 - one Hypothesis draw per argument
         self,
         key: str,
         student_ticked: set[str],
         student_style_taught: bool,
         student_in_tradition: bool,
         extra: int,
+        trainer_ticked: set[str],
+        trainer_style_taught: bool,
     ) -> None:
         """Maintainer: "just that it might be harder" (the line the student reads).
 
-        Given a governed skill's course, any student and staff's extra points: the offer
-        carries the caution line exactly when the student's own Tradition does not teach the
-        skill and staff set more than 0 extra points, and carries no line otherwise.
+        Given a governed skill's course on any trainer role (one whose Tradition may or may
+        not teach the skill), any student and staff's extra points: the offer carries the
+        caution line exactly when the course can be taken (the trainer's Tradition teaches
+        the skill), the student's own Tradition does not teach it and staff set more than 0
+        extra points, and carries no line otherwise. A course enrollment would refuse as
+        closed draws no harder line: the line is for a course she can take.
+
+        Implementer call (not the maintainer's words): with the extra difficulty at 0 the
+        harder line is hidden, because nothing is harder, so no line is drawn.
         """
         self.set_extra_difficulty(extra)
-        trainer = self.tradition(set(TICKABLE))
-        self.style.taught_by.add(trainer)
+        trainer = self.teaching_tradition(trainer_ticked, trainer_style_taught)
         course = self.saved_course(trainer, self.skill(key))
         student_tradition = (
             self.teaching_tradition(student_ticked, student_style_taught)
@@ -686,10 +731,16 @@ class AnOutsiderPaysTheExtraDifficultyOnly(_TrainingWorld, HypothesisTestCase):
         outsider = not (
             student_in_tradition and expected_teaches(key, student_ticked, student_style_taught)
         )
+        open_course = expected_teaches(key, trainer_ticked, trainer_style_taught)
 
         payload = _offer_price_payload(course.offer, student, {}, None)
 
-        self.assertEqual(payload["outsider_line"], OUTSIDER_LINE if outsider and extra else None)
+        self.assertEqual(
+            payload["outsider_line"],
+            "Your Tradition does not teach this. Sessions are harder for you."
+            if outsider and extra and open_course
+            else None,
+        )
 
     @settings(max_examples=25, deadline=None)
     @given(
@@ -891,8 +942,7 @@ class ChangingTraditionTakesNothingAway(_TrainingWorld, HypothesisTestCase):
             self.stop_teaching(trainer, key)
 
         self.assertEqual(self.snapshot(student), before)
-        result = MagicMock(outcome=None, outcome_name="Failure")
-        with patch("world.checks.services.perform_check_with_modifiers", return_value=result):
+        with force_check_outcome(self.failure):
             _take_course_session(course.offer, course, student, OrganizationFactory())
         enrollment.refresh_from_db()
         self.assertEqual(enrollment.last_session_week_id, self.week.pk)
@@ -938,7 +988,9 @@ class TheWeeklyRunSkipsWhatIsNoLongerAllowed(_TrainingWorld, HypothesisTestCase)
         allocation is paid (the skill rises and 3 AP are spent) exactly when the rule allows
         it, with a mentor who teaches it and holds a rating, or no mentor and the lever. When
         it is not allowed the rating, the development and the AP are unchanged, the allocation
-        row stays, and she is sent one line naming the skill and the refusal.
+        row stays, and she is sent one line naming the skill and the same refusal the
+        allocation would have been given: the teacher line with no mentor, the one mentor
+        line with a mentor.
         """
         skill = self.skill(key)
         student = self.character()
@@ -987,3 +1039,665 @@ class TheWeeklyRunSkipsWhatIsNoLongerAllowed(_TrainingWorld, HypothesisTestCase)
             body = told.get().message.body
             self.assertIn(skill.name, body)
             self.assertIn("no action points were spent", body)
+            refusal = (
+                f"{mentor.primary_persona.name} cannot teach you {skill.name}. Choose a mentor "
+                "whose Tradition teaches it and who has trained in it."
+                if mentored
+                else f"{skill.name} needs a teacher. Choose a mentor whose Tradition teaches it."
+            )
+            self.assertIn(refusal, body)
+
+
+# ---------------------------------------------------------------------------------------
+# One rule, one source; what the Required content rows count; who may mentor
+# ---------------------------------------------------------------------------------------
+
+tick_sets = st.frozensets(st.sampled_from(TICKABLE))
+ALL_THREE = (*TICKABLE, "reflection")
+
+
+class _Restoring:
+    """Flip a catalog row for one example and put it back, because the idmapper keeps it."""
+
+    def __init__(self, skills: dict[str, Skill], active: dict[str, bool]) -> None:
+        self.skills = skills
+        self.active = active
+
+    def __enter__(self) -> None:
+        for key, flag in self.active.items():
+            self.skills[key].is_active = flag
+            self.skills[key].save()
+
+    def __exit__(self, *exc: object) -> None:
+        for key in self.active:
+            self.skills[key].is_active = True
+            self.skills[key].save()
+
+
+class OneQuestionAndTheBatchGiveOneAnswer(_World, HypothesisTestCase):
+    @settings(max_examples=30, deadline=None)
+    @given(ticked=ticks, style_taught=flags, also_a_style_taught=flags)
+    def test_the_single_question_equals_the_batch_answer_for_every_tradition_and_skill(
+        self, ticked: set[str], style_taught: bool, also_a_style_taught: bool
+    ) -> None:
+        """Implementer call: the rule has one source, so the admin's check, the enrollment
+        check and the weekly verdict can never disagree about who teaches a skill.
+
+        Given any Tradition and any ticks, a fighting style that names it as a teacher or
+        not, and a second style whose skill is also Heroism (a row the admin refuses to
+        author, built here without its checks) that names the Tradition or not: asking one
+        question gives the batched context's answer for every skill. Both equal the design:
+        Heroism and Villainy are taught exactly when ticked, Heroism included when a style
+        also names it as its skill (the affinity's own list decides), Reflection by every
+        Tradition, a style's skill when the Tradition is one of its teachers, an ordinary
+        Magic skill by every Tradition. A specialization is judged on its parent skill.
+        """
+        tradition = self.tradition(ticked)
+        if style_taught:
+            self.style.taught_by.add(tradition)
+        both = CombatStyleFactory(skill=self.skills["heroism"])
+        if also_a_style_taught:
+            both.taught_by.add(tradition)
+        context = build_teaching_context([])
+        design = {
+            self.skills["heroism"]: "heroism" in ticked,
+            self.skills["villainy"]: "villainy" in ticked,
+            self.skills["reflection"]: True,
+            self.style.skill: style_taught,
+        }
+
+        for skill, teaches in design.items():
+            self.assertEqual(tradition_teaches(tradition, skill), teaches)
+            self.assertEqual(context.teaches(tradition.pk, skill.pk), teaches)
+            self.assertTrue(is_tradition_governed(skill))
+            self.assertIn(skill.pk, context.governed_skill_ids)
+        specialization = SpecializationFactory(parent_skill=self.skills["heroism"])
+        self.assertEqual(tradition_teaches(tradition, specialization), "heroism" in ticked)
+        for skill in self.ordinary:
+            self.assertTrue(tradition_teaches(tradition, skill))
+            self.assertTrue(context.teaches(tradition.pk, skill.pk))
+            self.assertFalse(is_tradition_governed(skill))
+            self.assertNotIn(skill.pk, context.governed_skill_ids)
+
+
+class TheAffinitySkillsRowCountsOnlyWhatCreationCanOffer(_World, HypothesisTestCase):
+    @settings(max_examples=30, deadline=None)
+    @given(
+        configs=st.lists(st.tuples(tick_sets, flags, flags), max_size=3),
+        heroism_active=flags,
+        villainy_active=flags,
+    )
+    def test_the_row_lists_exactly_the_skills_no_creation_pick_can_reach(
+        self,
+        configs: list[tuple[frozenset[str], bool, bool]],
+        heroism_active: bool,
+        villainy_active: bool,
+    ) -> None:
+        """Maintainer: "restrict those to Traditions that are clearly Good/Evil" (the row that
+        says whether any Tradition can teach them).
+
+        Given any Traditions, each ticking any of Heroism and Villainy, each active or not and
+        on some Beginning's slate or not, and each skill active or not: the Required content
+        row `affinity-skills-taught` lists a skill exactly when no Tradition that is active
+        and on a slate ticks it or the skill is inactive. The Traditions the Tradition
+        endpoint can serve are exactly the active, listed ones; and a skill the row does not
+        list is offered by creation to a draft of one of them, and a skill it lists to none.
+        """
+        created = []
+        for ticked, active, listed in configs:
+            tradition = self.tradition(set(ticked))
+            tradition.is_active = active
+            tradition.save()
+            if listed:
+                BeginningTraditionFactory(tradition=tradition)
+            created.append((tradition, ticked, active and listed))
+        flags_by_key = {"heroism": heroism_active, "villainy": villainy_active}
+        reachable = {tradition.pk for tradition, _, reached in created if reached}
+        expected = {
+            self.skills[key].name
+            for key in TICKABLE
+            if not (
+                flags_by_key[key]
+                and any(key in ticked for _, ticked, reached in created if reached)
+            )
+        }
+
+        with _Restoring(self.skills, flags_by_key):
+            result = rc._probe_affinity_skills_are_taught()
+            offered_to_any = {
+                pk
+                for tradition in traditions_offered_in_creation()
+                for pk in self.offered(self.draft(tradition))
+            }
+
+        self.assertEqual(set(result.missing), expected)
+        self.assertEqual(result.present, not expected)
+        self.assertEqual({t.pk for t in traditions_offered_in_creation()}, reachable)
+        for key in TICKABLE:
+            self.assertEqual(
+                self.skills[key].pk in offered_to_any, self.skills[key].name not in expected
+            )
+
+
+class TheCourseRowFindsExactlyTheCoursesEnrollmentRefuses(_TrainingWorld, HypothesisTestCase):
+    @settings(max_examples=25, deadline=None)
+    @given(
+        draws=st.lists(
+            st.tuples(skill_keys, flags, tick_sets, flags, flags), min_size=1, max_size=4
+        )
+    )
+    def test_the_row_lists_each_refused_course_on_an_active_role_and_no_other(
+        self, draws: list[tuple[str, bool, frozenset[str], bool, bool]]
+    ) -> None:
+        """Maintainer: "restrict those to Traditions that are clearly Good/Evil, while
+        neutral-ish ones *might* teach all" (the row that finds a course nobody can take).
+
+        Given any courses (any skill, a role with a Tradition or without, any ticks, a style
+        that lists the role's Tradition or not) on active or inactive roles, and a student
+        holding a Golden Hare: the Required content row `courses-taught-by-their-tradition`
+        lists, as "offer: role, skill", exactly the courses on an active role whose skill a
+        Tradition's list governs and whose role has no Tradition teaching it. Taking each such
+        course is refused as closed (inactive roles included: enrollment never checks the
+        flag), and none of the others is listed.
+        """
+        student = self.character(rating=12, skill=self.ordinary[0])
+        academy = OrganizationFactory()
+        mint_favor_token(academy, student, provenance_note="a deed for the Academy")
+        pool = ActionPointPool.get_or_create_for_character(student.character)
+        pool.current = 100
+        pool.save()
+        expected = []
+        closed_courses = []
+        for key, has_tradition, ticked, style_taught, active in draws:
+            tradition = (
+                self.teaching_tradition(set(ticked), style_taught) if has_tradition else None
+            )
+            course = self.saved_course(tradition, self.skill(key), coin_cost=0)
+            role = course.offer.role
+            role.is_active = active
+            role.save()
+            closed = key in GOVERNED_KEYS and not (
+                has_tradition and expected_teaches(key, set(ticked), style_taught)
+            )
+            if closed:
+                closed_courses.append(course)
+            if closed and active:
+                expected.append(f"{course.offer.label}: {role.name}, {course.skill.name}")
+
+        result = rc._probe_courses_taught_by_their_tradition()
+
+        self.assertCountEqual(result.missing, expected)
+        self.assertEqual(result.present, not expected)
+        with force_check_outcome(self.failure):
+            for course in closed_courses:
+                skill_course = self.skill_of(course)
+                with self.assertRaises(_CourseRefusedError) as caught:
+                    _take_course_session(course.offer, course, student, academy)
+                self.assertIn("this course is closed", caught.exception.reason)
+                self.assertIn(skill_course.name, caught.exception.reason)
+
+    def skill_of(self, course: SkillCourseOfferDetails) -> Skill:
+        return course.skill
+
+
+class TheGovernedSkillsRowFindsASkillNobodyTeaches(_World, HypothesisTestCase):
+    @settings(max_examples=30, deadline=None)
+    @given(
+        a_ticked=tick_sets,
+        a_active=flags,
+        style_in_a=flags,
+        odd_affinity=flags,
+    )
+    def test_the_row_lists_each_governed_skill_no_active_tradition_teaches(
+        self, a_ticked: frozenset[str], a_active: bool, style_in_a: bool, odd_affinity: bool
+    ) -> None:
+        """Maintainer: "I never intended for fighting styles to be self-study" (the row that
+        finds a skill nobody could teach).
+
+        Given one Tradition, active or not, with any ticks and the fighting style's teachers
+        listing it or not, a second, inactive Tradition that teaches everything, and an
+        affinity whose name is not one of the three (its skill can be ticked by no one):
+        the Required content row `governed-skills-taught` lists exactly the governed skills
+        that no active Tradition teaches. A fighting style with no active Tradition in
+        `taught_by` is listed, an unticked Heroism or Villainy is listed, and with no active
+        Tradition at all every governed skill is listed, Reflection too.
+        """
+        tradition = self.tradition(set(a_ticked))
+        tradition.is_active = a_active
+        tradition.save()
+        if style_in_a:
+            self.style.taught_by.add(tradition)
+        elsewhere = self.tradition(set(TICKABLE))
+        elsewhere.is_active = False
+        elsewhere.save()
+        self.style.taught_by.add(elsewhere)
+        odd = self.ordinary[0]
+        if odd_affinity:
+            AffinityFactory(name="Cinder", skill=odd)
+        everything = {
+            *(self.skills[key].name for key in ALL_THREE),
+            self.style.skill.name,
+            *([odd.name] if odd_affinity else []),
+        }
+        if a_active:
+            expected = {self.skills[key].name for key in TICKABLE if key not in a_ticked}
+            if not style_in_a:
+                expected.add(self.style.skill.name)
+            if odd_affinity:
+                expected.add(odd.name)
+        else:
+            expected = everything
+
+        result = rc._probe_governed_skills_are_taught()
+
+        self.assertEqual(set(result.missing), expected)
+        self.assertEqual(result.present, not expected)
+
+
+class TheCreationCardAndListAgreeOnWhatIsTaught(_World, HypothesisTestCase):
+    @settings(max_examples=30, deadline=None)
+    @given(
+        ticked=ticks,
+        reflection_active=flags,
+        heroism_active=flags,
+        villainy_active=flags,
+        heroism_unlinked=flags,
+    )
+    def test_the_card_names_exactly_the_affinity_skills_the_list_offers(
+        self,
+        ticked: set[str],
+        reflection_active: bool,
+        heroism_active: bool,
+        villainy_active: bool,
+        heroism_unlinked: bool,
+    ) -> None:
+        """Agreed inference: in creation she is offered only the skills her own Tradition
+        teaches, and the card that says so names the same skills.
+
+        Given any Tradition and any ticks, each of the three affinity skills active or not,
+        and Heroism still an affinity's skill or not: the skills the Tradition entry names as
+        taught are exactly the affinity skills the draft's training list offers, and they are
+        Reflection and the ticked skills that are active and still an affinity's.
+        """
+        active = {
+            "reflection": reflection_active,
+            "heroism": heroism_active,
+            "villainy": villainy_active,
+        }
+        tradition = self.tradition(ticked)
+        celestial = Affinity.objects.get(name=AFFINITY_CELESTIAL)
+        try:
+            with _Restoring(self.skills, active):
+                if heroism_unlinked:
+                    celestial.skill = None
+                    celestial.save()
+                names = taught_affinity_skill_names_by_tradition([tradition.pk])[tradition.pk]
+                offered = self.offered(self.draft(tradition))
+                linked = set(
+                    Affinity.objects.filter(skill__isnull=False).values_list("skill_id", flat=True)
+                )
+        finally:
+            celestial.skill = self.skills["heroism"]
+            celestial.save()
+            Affinity.objects.clear_cache()
+
+        listed = {skill.name for skill in self.skills.values() if skill.pk in offered & linked}
+        taught = {
+            self.skills[key].name
+            for key in ("reflection", *ticked)
+            if active[key] and not (key == "heroism" and heroism_unlinked)
+        }
+        self.assertEqual(set(names), listed)
+        self.assertEqual(set(names), taught)
+
+
+class ASpecializationIsJudgedOnItsParentSkill(_TrainingWorld, HypothesisTestCase):
+    @settings(max_examples=40, deadline=None)
+    @given(
+        key=skill_keys,
+        ticked=ticks,
+        style_taught=flags,
+        mentor_has_tradition=flags,
+        rating=st.integers(0, 3),
+    )
+    def test_a_mentor_for_a_specialization_must_teach_and_rate_its_parent(
+        self,
+        key: str,
+        ticked: set[str],
+        style_taught: bool,
+        mentor_has_tradition: bool,
+        rating: int,
+    ) -> None:
+        """Maintainer: "I never meant for *any* magical skill to be self-study." (a
+        specialization is a Magic skill's own training, so it follows its parent).
+
+        Given a specialization of any Magic skill (Heroism, Villainy, Reflection, a fighting
+        style's skill or an ordinary one) and any mentor with a rating in the parent skill
+        from 0 to 3: the allocation is saved exactly when the mentor's Tradition teaches the
+        parent skill and the rating is above 0. Otherwise it raises the one mentor line
+        naming the parent skill and saves nothing.
+        """
+        parent = self.skill(key)
+        specialization = SpecializationFactory(parent_skill=parent)
+        tradition = self.teaching_tradition(ticked, style_taught) if mentor_has_tradition else None
+        mentor = self.character(tradition, rating=rating, skill=parent)
+        student = self.character()
+        accepted = (
+            mentor_has_tradition and expected_teaches(key, ticked, style_taught) and rating > 0
+        )
+
+        if accepted:
+            self.allocate(student, specialization, mentor)
+            self.assertEqual(self.stored(student), 1)
+        else:
+            with self.assertRaises(ValueError) as caught:
+                self.allocate(student, specialization, mentor)
+            self.assertEqual(
+                str(caught.exception),
+                f"{mentor.primary_persona.name} cannot teach you {parent.name}. Choose a mentor "
+                "whose Tradition teaches it and who has trained in it.",
+            )
+            self.assertEqual(self.stored(student), 0)
+
+
+class TheWeeklyRunJudgesASpecializationOnItsParent(_TrainingWorld, HypothesisTestCase):
+    @settings(max_examples=30, deadline=None)
+    @given(
+        key=skill_keys,
+        ticked=ticks,
+        style_taught=flags,
+        mentored=flags,
+        mentor_has_tradition=flags,
+        rating=st.integers(0, 3),
+        lever=flags,
+    )
+    def test_a_standing_specialization_allocation_runs_only_when_its_parent_is_allowed(  # noqa: PLR0913 - one Hypothesis draw per argument
+        self,
+        key: str,
+        ticked: set[str],
+        style_taught: bool,
+        mentored: bool,
+        mentor_has_tradition: bool,
+        rating: int,
+        lever: bool,
+    ) -> None:
+        """Implementer call 11 (the weekly run skips what is no longer allowed), for a
+        specialization.
+
+        Given a standing allocation of 3 AP on a specialization of any Magic skill, with or
+        without a mentor and the self-teaching lever: after the weekly run it is paid (a
+        specialization rating exists and 3 AP are spent) exactly when its parent skill would
+        be allowed. Otherwise nothing is paid, no AP are spent, the row stays and she is sent
+        one line naming the parent skill.
+        """
+        parent = self.skill(key)
+        specialization = SpecializationFactory(parent_skill=parent)
+        student = self.character()
+        RosterEntryFactory(character_sheet=student)
+        CharacterClassLevelFactory(character=student, level=1)
+        CharacterTraitValue.objects.create(character=student, trait=parent, value=10)
+        mentor = None
+        if mentored:
+            tradition = (
+                self.teaching_tradition(ticked, style_taught) if mentor_has_tradition else None
+            )
+            mentor = self.character(tradition, rating=rating, skill=parent)
+        if lever:
+            grant_lever(student, SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME, 1)
+        TrainingAllocation.objects.create(
+            character=student,
+            specialization=specialization,
+            mentor=None if mentor is None else mentor.primary_persona,
+            ap_amount=3,
+        )
+        pool = ActionPointPool.get_or_create_for_character(student.character)
+        pool.current = 100
+        pool.save()
+        allowed = (
+            mentor_has_tradition and expected_teaches(key, ticked, style_taught) and rating > 0
+            if mentored
+            else lever
+        )
+
+        process_weekly_training()
+
+        pool.refresh_from_db()
+        told = NarrativeMessageDelivery.objects.filter(recipient_character_sheet=student)
+        self.assertEqual(self.stored(student), 1)
+        if allowed:
+            self.assertEqual(pool.current, 97)
+            self.assertEqual(told.count(), 0)
+        else:
+            self.assertEqual(pool.current, 100)
+            self.assertEqual(told.count(), 1)
+            self.assertIn(parent.name, told.get().message.body)
+
+
+class ACharacterIsNeverHerOwnMentor(_TrainingWorld, HypothesisTestCase):
+    def played(self, sheet: CharacterSheet, player_data: PlayerData) -> CharacterSheet:
+        """Seat ``player_data``'s account as the current player of ``sheet``."""
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=sheet), player_data=player_data
+        )
+        return sheet
+
+    @settings(max_examples=30, deadline=None)
+    @given(
+        key=skill_keys,
+        who=st.sampled_from(("herself", "her own alt", "another player's character")),
+        lever=flags,
+    )
+    def test_her_own_character_never_counts_as_a_mentor(
+        self, key: str, who: str, lever: bool
+    ) -> None:
+        """Owner rule (a player never benefits from pairing her own characters): a character
+        does not mentor herself, and neither does another character her player plays.
+
+        Given any Magic skill, a mentor who teaches it with a rating of 2, and the student
+        with or without the self-teaching lever: naming her own persona counts as naming no
+        mentor (saved exactly when the lever is positive, else the teacher line); naming
+        another character one account plays is refused with "You cannot name another of your
+        own characters as your mentor. Choose a mentor another player plays." whatever the
+        lever; naming a character another player plays is saved. A character nobody plays
+        (an NPC a GM runs) is not an own character and is allowed (the other properties here
+        name such mentors throughout).
+        """
+        skill = self.skill(key)
+        teaching = self.teaching_tradition(set(TICKABLE), True)
+        player = PlayerDataFactory()
+        student = self.played(self.character(teaching, rating=2, skill=skill), player)
+        if lever:
+            grant_lever(student, SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME, 1)
+        if who == "herself":
+            mentor = student
+        else:
+            other = player if who == "her own alt" else PlayerDataFactory()
+            mentor = self.played(self.character(teaching, rating=2, skill=skill), other)
+        allowed = lever if who == "herself" else who == "another player's character"
+
+        if allowed:
+            self.allocate(student, skill, mentor)
+            self.assertEqual(self.stored(student), 1)
+        else:
+            with self.assertRaises(ValueError) as caught:
+                self.allocate(student, skill, mentor)
+            line = (
+                f"{skill.name} needs a teacher. Choose a mentor whose Tradition teaches it."
+                if who == "herself"
+                else "You cannot name another of your own characters as your mentor. "
+                "Choose a mentor another player plays."
+            )
+            self.assertEqual(str(caught.exception), line)
+            self.assertEqual(self.stored(student), 0)
+
+    @settings(max_examples=20, deadline=None)
+    @given(key=governed_keys, who=st.sampled_from(("her own alt", "another player's character")))
+    def test_the_weekly_run_skips_a_standing_allocation_naming_her_own_alt(
+        self, key: str, who: str
+    ) -> None:
+        """Owner rule (a player never benefits from pairing her own characters), for a
+        standing allocation.
+
+        Given a standing allocation of 3 AP naming a mentor who teaches the skill with a
+        rating of 2, saved before the rule: after the weekly run it is paid when the mentor
+        is another player's character, and when the mentor is another of her own it is
+        skipped, no AP are spent, and she is sent the one own-character line.
+        """
+        skill = self.skill(key)
+        teaching = self.teaching_tradition(set(TICKABLE), True)
+        player = PlayerDataFactory()
+        student = self.played(self.character(), player)
+        CharacterClassLevelFactory(character=student, level=1)
+        CharacterTraitValue.objects.create(character=student, trait=skill, value=10)
+        other = player if who == "her own alt" else PlayerDataFactory()
+        mentor = self.played(self.character(teaching, rating=2, skill=skill), other)
+        TrainingAllocation.objects.create(
+            character=student, skill=skill, mentor=mentor.primary_persona, ap_amount=3
+        )
+        pool = ActionPointPool.get_or_create_for_character(student.character)
+        pool.current = 100
+        pool.save()
+
+        process_weekly_training()
+
+        pool.refresh_from_db()
+        told = NarrativeMessageDelivery.objects.filter(recipient_character_sheet=student)
+        if who == "her own alt":
+            self.assertEqual(pool.current, 100)
+            self.assertEqual(told.count(), 1)
+            self.assertIn(
+                "You cannot name another of your own characters as your mentor. "
+                "Choose a mentor another player plays.",
+                told.get().message.body,
+            )
+        else:
+            self.assertEqual(pool.current, 97)
+            self.assertEqual(told.count(), 0)
+
+
+class ARefusedMentorRevealsNothingAboutThePersona(_TrainingWorld, HypothesisTestCase):
+    @settings(max_examples=30, deadline=None)
+    @given(
+        key=st.sampled_from(("heroism", "villainy", "style")),
+        reason=st.sampled_from(("no tradition", "tradition does not teach", "no rating")),
+    )
+    def test_every_reason_a_mentor_cannot_teach_gets_the_same_line_naming_only_the_persona(
+        self, key: str, reason: str
+    ) -> None:
+        """Implementer call (privacy): naming a persona must not tell the asker about the
+        character behind it.
+
+        Given a mentor behind a second persona (a mask) who cannot teach the skill for any
+        one of three reasons (no active Tradition, a Tradition that does not teach it, no
+        rating in it), and the student naming the mask: the refusal is the one line
+        "{mask} cannot teach you {skill}. Choose a mentor whose Tradition teaches it and who
+        has trained in it." for each reason, and the name behind the mask is not in it.
+        """
+        skill = self.skill(key)
+        if reason == "no tradition":
+            tradition = None
+        elif reason == "tradition does not teach":
+            tradition = self.teaching_tradition(set(), False)
+        else:
+            tradition = self.teaching_tradition(set(TICKABLE), True)
+        mentor = self.character(tradition, rating=0 if reason == "no rating" else 2, skill=skill)
+        mask = PersonaFactory(character_sheet=mentor, name="The Veiled Widow")
+        student = self.character()
+
+        with self.assertRaises(ValueError) as caught:
+            create_training_allocation(student.character, 1, skill=skill, mentor=mask)
+
+        self.assertEqual(
+            str(caught.exception),
+            f"The Veiled Widow cannot teach you {skill.name}. Choose a mentor whose Tradition "
+            "teaches it and who has trained in it.",
+        )
+        self.assertNotIn(mentor.primary_persona.name, str(caught.exception))
+        self.assertEqual(self.stored(student), 0)
+
+
+class AnEditToASavedCourseIsRefusedOnceItsTraditionStoppedTeaching(
+    _TrainingWorld, HypothesisTestCase
+):
+    @settings(max_examples=20, deadline=None)
+    @given(key=st.sampled_from(("heroism", "villainy", "style")), untick=flags)
+    def test_changing_any_field_of_a_saved_course_is_refused_on_the_skill_field(
+        self, key: str, untick: bool
+    ) -> None:
+        """Maintainer: "restrict those to Traditions that are clearly Good/Evil, while
+        neutral-ish ones *might* teach all" (a course that cannot be taught cannot be saved,
+        even by an edit to something else).
+
+        Given a course saved while its role's Tradition taught the skill, and staff then
+        removing the tick (or the style listing) or not: changing only its coin cost and
+        cleaning it is refused on the Skill field, naming the skill, exactly when the
+        Tradition no longer teaches it.
+        """
+        tradition = self.teaching_tradition(set(TICKABLE), True)
+        course = self.saved_course(tradition, self.skill(key))
+        if untick:
+            self.stop_teaching(tradition, key)
+        course.coin_cost = 2500
+
+        if untick:
+            with self.assertRaises(ValidationError) as caught:
+                course.full_clean(exclude=["check_type"])
+            self.assertIn("skill", caught.exception.message_dict)
+            self.assertIn(course.skill.name, caught.exception.message_dict["skill"][0])
+        else:
+            course.full_clean(exclude=["check_type"])
+
+
+class ThePlayersOfManyCharactersAreTheOnesTheRuleNames(HypothesisTestCase):
+    @settings(max_examples=25, deadline=None)
+    @given(
+        specs=st.lists(
+            st.tuples(st.sampled_from(("never", "held", "ended", "held_after_ended")), flags),
+            min_size=1,
+            max_size=4,
+        )
+    )
+    def test_the_bulk_reading_equals_the_one_at_a_time_reading_and_the_rule(
+        self, specs: list[tuple[str, bool]]
+    ) -> None:
+        """Owner rule (a player never benefits from pairing her own characters): the player
+        of a character is the borrower of its active loan, else the account holding its
+        current tenure, else nobody.
+
+        Given characters that were never played, are held, were held and ended, or were held
+        again after an earlier tenure ended, each lent out on an active loan or not: the bulk
+        reading of every character's player gives, for each, the account the rule names
+        (the borrower when lent, else the current holder, else none), which is also what
+        `current_player_of` answers for it.
+        """
+        sheets = []
+        expected: dict[int, int | None] = {}
+        for state, lent in specs:
+            sheet = CharacterSheetFactory()
+            sheets.append(sheet)
+            holder = PlayerDataFactory()
+            expected[sheet.pk] = None
+            if state != "never" or lent:
+                entry = RosterEntryFactory(character_sheet=sheet)
+            if state in ("ended", "held_after_ended"):
+                earlier = PlayerDataFactory()
+                RosterTenureFactory(
+                    roster_entry=entry,
+                    player_data=earlier,
+                    start_date=timezone.now() - timedelta(days=9),
+                    end_date=timezone.now() - timedelta(days=5),
+                )
+            if state in ("held", "held_after_ended"):
+                RosterTenureFactory(roster_entry=entry, player_data=holder)
+                expected[sheet.pk] = holder.account_id
+            if lent:
+                borrower = PlayerDataFactory().account
+                NPCLoanFactory(roster_entry=entry, borrower=borrower, status=NPCLoanStatus.ACTIVE)
+                expected[sheet.pk] = borrower.pk
+
+        bulk = current_player_ids([sheet.pk for sheet in sheets])
+
+        self.assertEqual(bulk, expected)
+        for sheet in sheets:
+            account = current_player_of(sheet)
+            self.assertEqual(None if account is None else account.pk, expected[sheet.pk])
