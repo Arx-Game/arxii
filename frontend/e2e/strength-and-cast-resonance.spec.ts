@@ -710,8 +710,21 @@ test.describe('what gives a character strength', () => {
     expect(await corruption(seed.usual_row_id)).toBe(usualBefore);
     await staff.close();
 
-    // The "You earned N Praedari." line is a private narrative message, not part of the result
-    // card. It is listed under Messages in the Growth section of her character sheet.
+    // A cast pays nothing (#5327): it is written down as an act her player may point a mark at,
+    // with the kindled resonance suggested, and no "You earned" line reaches her messages.
+    const acts = await page.request.get(
+      `/api/magic/recorded-acts/?character_sheet=${seed.caster_id}`
+    );
+    expect(acts.ok()).toBe(true);
+    const recorded = (
+      (await acts.json()) as {
+        results: { label: string; suggestions: { resonance_name: string }[] }[];
+      }
+    ).results.filter((act) => act.label.startsWith(seed.technique_name));
+    expect(recorded, 'the two casts are each written down as an act').toHaveLength(2);
+    for (const act of recorded) {
+      expect(act.suggestions.map((row) => row.resonance_name)).toContain(seed.kindled_name);
+    }
     const mine = await page.request.get('/api/roster/entries/mine/');
     expect(mine.ok()).toBe(true);
     const entry = ((await mine.json()) as { id: number; name: string }[]).find(
@@ -720,11 +733,7 @@ test.describe('what gives a character strength', () => {
     expect(entry, `${STRENGTH_CASTER} is one of the account's characters`).toBeTruthy();
     await page.goto(`/characters/${entry!.id}`);
     await page.getByRole('button', { name: 'Growth', exact: true }).click();
-    const earned = page
-      .locator('#messages')
-      .getByText(new RegExp(`You earned \\d+ ${seed.kindled_name}\\.`));
-    await expect(earned.first()).toBeVisible({ timeout: 20000 });
-    await shot(page.locator('#messages'), 'built-earned-message.png');
+    await expect(page.locator('#messages').getByText(/You earned/)).toHaveCount(0);
 
     // B4: the two results differ plainly on the page.
     expect(abyssalText).not.toEqual(primalText);
