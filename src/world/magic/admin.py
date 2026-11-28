@@ -1053,7 +1053,7 @@ class DistinctionOfferInline(admin.TabularInline):
         """How a Glimpse card arrives: stated, never chosen (#5292)."""
         # A new row has not been saved yet; the model sets bundled when it is.
         arrival = OfferArrival(obj.arrives_as) if obj.pk else OfferArrival.BUNDLED
-        return f"{arrival.label}, free with this answer"
+        return arrival.label
 
     @admin.display(description="")
     def builder_link(self, obj: DistinctionOffer) -> str:

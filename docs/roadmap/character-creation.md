@@ -24,6 +24,11 @@ sheet editor and can open the same editor with every part open. A card held by a
 only showed after a reload before this; a draft save that changes the Glimpse now refreshes
 the held cards and the offers.
 
+The live pass also found that the character sheet kept the list of cards it first loaded:
+a card gained or removed in play (a Glimpse answer's, a GM's award) did not show until the
+server let go of the sheet. The sheet now reloads the list after any card is saved or
+deleted (`CharacterSheet.cached_distinctions`).
+
 Migration `glimpse_lines_cleared` deletes the 26 priced pairings under Glimpse answers (a
 deliberate discard under ADR-0237; the owner ruled they were not theirs) and sets any other
 Glimpse line to arrive bundled; `glimpse_memory` adds `DistinctionOffer.glimpse_memory`,

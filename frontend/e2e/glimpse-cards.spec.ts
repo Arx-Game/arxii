@@ -468,7 +468,7 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
 
     // A Witness & Secrecy answer gives no card.
     await admin.goto(`/admin/arxii/glimpsetag/${seed.witness_tag_id}/change/`);
-    await expect(admin.getByText('The card it gives')).toBeVisible();
+    await expect(admin.getByRole('heading', { name: /the card it gives/i }).first()).toBeVisible();
     await expect(admin.locator('[name="distinction_offers-0-arrives_as"]')).toHaveCount(0);
     await admin.locator('#id_distinction_offers-0-distinction').evaluate((el, id) => {
       const select = el as HTMLSelectElement;
@@ -487,7 +487,7 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     }, seed.spare_card_id);
     await admin.locator('input[name="_continue"]').click();
     await expect(admin.locator('.errornote')).toHaveCount(0);
-    await expect(admin.getByText('Bundled, free with this answer')).toBeVisible();
+    await expect(admin.getByText('Bundled free with its opener').first()).toBeVisible();
     await shot(admin, info, 'admin-answer-gives-one-card.png');
 
     // The card is now the Glimpse's: the Identity stage cannot offer it.
