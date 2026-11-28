@@ -12,6 +12,7 @@ from world.scenes.models import Persona
 from world.skills.mentoring import mentor_is_waiting
 from world.skills.models import TrainingAllocation
 from world.skills.serializers import SkillListSerializer, SpecializationSerializer
+from world.skills.services import mentor_needed_line
 
 _XOR_TARGET_MESSAGE = "Provide exactly one of skill_id or specialization_id."
 
@@ -32,6 +33,7 @@ class TrainingAllocationSerializer(serializers.ModelSerializer):
     mentor = MentorPersonaSerializer(read_only=True)
     remaining_weekly_budget = serializers.SerializerMethodField()
     mentor_waiting = serializers.SerializerMethodField()
+    mentor_needed_line = serializers.SerializerMethodField()
 
     class Meta:
         model = TrainingAllocation
@@ -42,6 +44,7 @@ class TrainingAllocationSerializer(serializers.ModelSerializer):
             "mentor",
             "mentor_accepted_at",
             "mentor_waiting",
+            "mentor_needed_line",
             "ap_amount",
             "remaining_weekly_budget",
         ]
@@ -50,6 +53,14 @@ class TrainingAllocationSerializer(serializers.ModelSerializer):
     def get_mentor_waiting(self, obj: TrainingAllocation) -> bool:
         """Whether a mentor was named and has not agreed, so the training counts as unmentored."""
         return mentor_is_waiting(obj)
+
+    def get_mentor_needed_line(self, obj: TrainingAllocation) -> str | None:
+        """The teacher line when the weekly run would skip this row for want of a mentor.
+
+        Reads the ``teaching_context`` the view built once for the page of allocations
+        (``training_teaching_context``), so no row costs a query of its own.
+        """
+        return mentor_needed_line(self.context["teaching_context"], obj)
 
     def get_remaining_weekly_budget(self, obj: TrainingAllocation) -> int:
         """Return AP left in the character's weekly training budget."""

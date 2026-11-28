@@ -29,6 +29,8 @@ Names are invented.
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 
 from evennia_extensions.factories import AccountFactory
@@ -59,6 +61,7 @@ from world.narrative.models import NarrativeMessageDelivery
 from world.roster.factories import RosterFactory
 from world.roster.models import RosterTenure
 from world.roster.models.choices import RosterType
+from world.skills.factories import MagicSkillFactory
 from world.skills.models import Skill, TrainingAllocation
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory
@@ -522,6 +525,64 @@ class AMentorAnswersOverTheWeb(_TeachingCase):
         self.row.refresh_from_db()
         self.assertIsNone(self.row.mentor_id)
         self.assertEqual(self.notices(self.ysmay), ["Hobb declined to teach you Villainy."])
+
+    def test_the_row_says_it_needs_a_mentor_once_the_mentor_declines_and_not_once_one_is_named(
+        self,
+    ) -> None:
+        client = self.api(self.account_of(self.ysmay))
+        line = "Villainy needs a teacher. Choose a mentor whose Tradition teaches it."
+
+        def listed() -> dict:
+            return client.get(self.url).json()["allocations"][0]
+
+        # A waiting mentor has her own flag; the row does not claim a teacher is missing.
+        self.assertTrue(listed()["mentor_waiting"])
+        self.assertIsNone(listed()["mentor_needed_line"])
+
+        self.hobb_client.post(f"{self.url}{self.row.pk}/decline-mentoring/")
+
+        row = listed()
+        self.assertIsNone(row["mentor"])
+        self.assertFalse(row["mentor_waiting"])
+        self.assertEqual(row["mentor_needed_line"], line)
+
+        named = client.patch(
+            f"{self.url}{self.row.pk}/",
+            {"mentor_persona_id": self.persona_of(self.hobb)},
+            format="json",
+        )
+
+        self.assertEqual(named.status_code, 200, named.content)
+        self.assertIsNone(named.json()["mentor_needed_line"])
+        self.assertIsNone(listed()["mentor_needed_line"])
+
+    def test_the_list_costs_the_same_number_of_queries_for_two_rows_and_for_five(self) -> None:
+        client = self.api(self.account_of(self.ysmay))
+        extra = [MagicSkillFactory(name=f"Rite {number}") for number in range(4)]
+
+        def queries() -> int:
+            with CaptureQueriesContext(connection) as captured:
+                response = client.get(self.url)
+            self.assertEqual(response.status_code, 200, response.content)
+            return len(captured)
+
+        TrainingAllocation.objects.create(
+            character=self.ysmay.sheet_data, skill=extra[0], ap_amount=1
+        )
+        # The first request of a session also writes the session row.
+        client.get(self.url)
+        two_rows = queries()
+        for skill in extra[1:]:
+            TrainingAllocation.objects.create(
+                character=self.ysmay.sheet_data, skill=skill, ap_amount=1
+            )
+        # The shared skill rows keep the specializations a request prefetched, so measure the
+        # steady state of both sizes.
+        client.get(self.url)
+        five_rows = queries()
+
+        self.assertEqual(len(client.get(self.url).json()["allocations"]), 5)
+        self.assertEqual(five_rows, two_rows)
 
     def test_staff_may_answer_for_any_mentor(self) -> None:
         staff = AccountFactory(is_staff=True)

@@ -870,8 +870,8 @@ def _allocation_parent_skill(allocation: TrainingAllocation) -> Skill:
     return allocation.skill or allocation.specialization.parent_skill  # type: ignore[union-attr]
 
 
-def _weekly_teaching_context(allocations: list[TrainingAllocation]) -> TeachingContext:
-    """One teaching context for every allocation the weekly run loaded (#5326).
+def training_teaching_context(allocations: list[TrainingAllocation]) -> TeachingContext:
+    """One teaching context for every allocation the weekly run, or a page of them, loaded (#5326).
 
     It holds every student and every mentor. A mentor who has not agreed counts as no mentor,
     so the self-teaching lever is read for a student with an allocation on a Magic skill that
@@ -909,6 +909,20 @@ def _weekly_refusal(teaching: TeachingContext, allocation: TrainingAllocation) -
         mentor_agreed=mentor_has_agreed(allocation),
     )
     return verdict.refusal
+
+
+def mentor_needed_line(teaching: TeachingContext, allocation: TrainingAllocation) -> str | None:
+    """The line saying this allocation needs a mentor, or None (#5326).
+
+    Set exactly when the weekly run would skip the allocation for want of a mentor: it has no
+    mentor (her own persona counts as none), the skill, or a specialization's parent, is a Magic
+    skill, and she does not hold the self-teaching lever. It is the weekly run's own verdict, so
+    the two cannot disagree. A mentor who is waiting or agreed is never this case (the waiting
+    mentor has her own line). ``teaching`` is ``training_teaching_context`` for the page.
+    """
+    if mentor_is_waiting(allocation) or mentor_has_agreed(allocation):
+        return None
+    return _weekly_refusal(teaching, allocation)
 
 
 def _skip_refused_allocation(allocation: TrainingAllocation, refusal: str) -> None:
@@ -965,7 +979,7 @@ def process_weekly_training() -> None:
     # Batch-fetch path levels for all involved characters (1 query).
     character_pks = {a.character_id for a in allocations}
     path_levels = _bulk_path_levels(character_pks)
-    teaching = _weekly_teaching_context(allocations)
+    teaching = training_teaching_context(allocations)
 
     for allocation in allocations:
         character = allocation.character

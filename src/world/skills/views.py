@@ -37,6 +37,7 @@ from world.skills.serializers.training import (
     MentoringListSerializer,
     TrainingAllocationSerializer,
 )
+from world.skills.services import training_teaching_context
 
 _NO_PUPPET_MESSAGE = "You must be playing a character to manage training."
 
@@ -207,9 +208,10 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
     def list(self, request, *args, **kwargs):
         """Return all allocations for the active character plus remaining budget."""
         puppet = self._active_puppet(request)
-        allocations = (
+        allocations = list(
             TrainingAllocation.objects.filter(character_id=puppet.pk)
             .select_related(
+                "character",
                 "skill",
                 "specialization__parent_skill",
                 "mentor__character_sheet__character",
@@ -227,7 +229,11 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         serializer = TrainingAllocationSerializer(
             allocations,
             many=True,
-            context={"request": request, "remaining_weekly_budget": remaining},
+            context={
+                "request": request,
+                "remaining_weekly_budget": remaining,
+                "teaching_context": training_teaching_context(allocations),
+            },
         )
         return Response({"allocations": serializer.data, "remaining_weekly_budget": remaining})
 
@@ -249,7 +255,10 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         allocation = TrainingAllocation.objects.get(pk=result.detail.data["allocation_id"])
         read_serializer = TrainingAllocationSerializer(
             allocation,
-            context={"request": request},
+            context={
+                "request": request,
+                "teaching_context": training_teaching_context([allocation]),
+            },
         )
         return Response(read_serializer.data, status=status.HTTP_201_CREATED)
 
@@ -279,7 +288,10 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         allocation = TrainingAllocation.objects.get(pk=pk)
         read_serializer = TrainingAllocationSerializer(
             allocation,
-            context={"request": request},
+            context={
+                "request": request,
+                "teaching_context": training_teaching_context([allocation]),
+            },
         )
         return Response(read_serializer.data)
 

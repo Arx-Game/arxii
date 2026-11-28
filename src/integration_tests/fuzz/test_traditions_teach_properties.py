@@ -126,10 +126,12 @@ from world.skills.mentoring import (
     stop_mentoring,
 )
 from world.skills.models import Skill, SkillPointBudget, TrainingAllocation
+from world.skills.serializers.training import TrainingAllocationSerializer
 from world.skills.services import (
     calculate_training_development,
     create_training_allocation,
     process_weekly_training,
+    training_teaching_context,
     update_training_allocation,
 )
 from world.societies.factories import OrganizationFactory
@@ -2118,3 +2120,69 @@ class DecliningAndStoppingClearTheMentor(_MentoringWorld, HypothesisTestCase):
         self.assertEqual(self.stored(student), 1)
         self.assertIsNone(allocation.mentor_id)
         self.assertIsNone(allocation.mentor_accepted_at)
+
+
+class TheRowSaysWhatTheWeeklyRunWillDo(_MentoringWorld, HypothesisTestCase):
+    @settings(max_examples=40, deadline=None)
+    @given(
+        kind=st.sampled_from(("governed", "ungoverned magic", "specialization", "not magic")),
+        mentor_state=st.sampled_from(("none", "herself", "waiting", "agreed")),
+        lever=flags,
+    )
+    def test_the_row_carries_the_teacher_line_exactly_when_the_week_skips_it_for_want_of_a_mentor(
+        self, kind: str, mentor_state: str, lever: bool
+    ) -> None:
+        """Maintainer (2026-11-28): "The mentor must agree". Implementer call: the training row
+        must not promise training the weekly run will skip.
+
+        Given a standing allocation of 3 AP on a Magic skill a Tradition governs, a Magic skill no
+        list governs, a specialization of one, or a skill outside the Magic category, with no
+        mentor, her own persona, a mentor who has not agreed, or a mentor who agreed, and a student
+        with or without the self-teaching lever: the row's `mentor_needed_line` is set exactly when
+        the weekly run then skips the allocation for want of a mentor (spends no action points and
+        sends the teacher line), and its text is the literal "<Skill> needs a teacher. Choose a
+        mentor whose Tradition teaches it." naming the skill (a specialization's parent). A mentor
+        who is waiting or agreed, and a skill outside the Magic category, never carry it.
+        """
+        if kind == "governed":
+            skill = self.skills["villainy"]
+        elif kind == "ungoverned magic":
+            skill = self.ordinary[0]
+        elif kind == "specialization":
+            skill = SpecializationFactory(parent_skill=self.ordinary[1])
+        else:
+            skill = self.mundane
+        parent = skill.parent_skill if kind == "specialization" else skill
+        student = self.character()
+        RosterEntryFactory(character_sheet=student)
+        CharacterClassLevelFactory(character=student, level=1)
+        CharacterTraitValue.objects.create(character=student, trait=parent, value=10)
+        if lever:
+            grant_lever(student, SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME, 1)
+        if mentor_state == "herself":
+            mentor = student
+        elif mentor_state in ("waiting", "agreed"):
+            mentor = self.character(
+                self.teaching_tradition(set(TICKABLE), True), rating=2, skill=parent
+            )
+        else:
+            mentor = None
+        allocation = self.standing(student, skill, mentor, agreed=mentor_state == "agreed")
+        pool = ActionPointPool.get_or_create_for_character(student.character)
+        pool.current = 100
+        pool.save()
+        teacher_line = f"{parent.name} needs a teacher. Choose a mentor whose Tradition teaches it."
+        needed = kind != "not magic" and mentor_state in ("none", "herself") and not lever
+
+        shown = TrainingAllocationSerializer(
+            allocation,
+            context={"teaching_context": training_teaching_context([allocation])},
+        ).data["mentor_needed_line"]
+        process_weekly_training()
+
+        pool.refresh_from_db()
+        skipped_for_want_of_a_mentor = pool.current == 100 and any(
+            line.endswith(teacher_line) for line in self.told(student)
+        )
+        self.assertEqual(shown, teacher_line if needed else None)
+        self.assertEqual(skipped_for_want_of_a_mentor, needed)
