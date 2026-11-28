@@ -25,6 +25,7 @@ function makeMark(overrides: Partial<ActMark> = {}): ActMark {
     resonance_name: 'Mercy',
     act_label: 'Frightened the child',
     undone: false,
+    undone_by: null,
     can_undo: false,
     ...overrides,
   };
@@ -96,6 +97,13 @@ describe('ActMarkChips', () => {
       "Reward undone by the scene's GM"
     );
     expect(screen.queryByRole('button', { name: 'Undo reward' })).toBeNull();
+  });
+
+  it('says only that the reward was undone when no one is named', () => {
+    render(
+      <ActMarkChips interaction={makeInteraction([makeMark({ undone: true })])} sceneId="1" />
+    );
+    expect(screen.getByTestId('act-mark-undone')).toHaveTextContent(/^Reward undone$/);
   });
 
   it('says staff undid the reward when staff did', () => {

@@ -1,6 +1,6 @@
 /**
  * ReachRow (#5308, #5327): the optional "Reaching for" row of a pose and of a journal entry.
- * Switching it on offers every resonance, held or not, and shows the chosen one's description.
+ * Switching it on offers every resonance, in her aura or not, and shows the chosen one's description.
  * Under it, "Pointing at" lists the acts her character took and has not marked, each with its
  * age and the resonance the situation suggested (or "No resonance suggested."). Pointing at an
  * act makes the writing a mark that pays when it is posted; on a pose, "Nothing" leaves a bare

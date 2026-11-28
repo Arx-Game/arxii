@@ -233,6 +233,27 @@ describe('EndorsementControl — kind="pose"', () => {
     expect(mockChangePoseEndorsement).toHaveBeenCalledWith({ id: 7, resonance: 43 });
   });
 
+  it('treats an endorsement row that waits as a waiting pick even before the picks arrive', () => {
+    render(
+      <EndorsementControl
+        interaction={makeInteraction({
+          my_pose_endorsement: {
+            id: 7,
+            resonance_id: 43,
+            settled: false,
+            awaiting_acceptance: true,
+          },
+        })}
+        sceneId="1"
+        kind="pose"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('pose-pick-waiting')).toHaveTextContent('Mercy · waiting for Alice');
+    expect(screen.getByTestId('pose-pick-withdraw')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /retract/i })).toBeNull();
+  });
+
   it('shows the poser who proposed what, with Accept and Decline and no Endorse menu', async () => {
     const user = userEvent.setup();
     // persona.id === 7 is the viewer's own persona: the poser reading her own pose.
@@ -296,6 +317,7 @@ describe('EndorsementControl — kind="pose"', () => {
       resonance_name: 'Cruelty',
       act_label: 'Intimidated Hale',
       undone: false,
+      undone_by: null,
       can_undo: false,
     };
     const { rerender } = render(

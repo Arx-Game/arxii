@@ -241,6 +241,15 @@ async function poseLands(): Promise<void> {
   await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue(''));
 }
 
+// The composer reads the scene detail (`is_ephemeral` for the "Reaching for" row), so a scene
+// answers with a body by default: a query that resolves to nothing logs an error. No `participants`,
+// so the mention list falls back to the room, as it does with no scene read. A test that needs
+// another scene sets its own body.
+beforeEach(() => {
+  fetchSceneMock.mockReset();
+  fetchSceneMock.mockResolvedValue({ id: 1, is_ephemeral: false });
+});
+
 describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
@@ -2673,7 +2682,6 @@ describe('the "Reaching for" row on a pose (#5308, #5327)', () => {
     executeActionMock.mockClear();
     dispatchMock.mockClear();
     toastErrorMock.mockClear();
-    fetchSceneMock.mockReset();
     getSineatingOptionsMock.mockResolvedValue([]);
     getRecordedActsMock.mockResolvedValue([intimidation, quietAct]);
     mockRoomCharacters = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];

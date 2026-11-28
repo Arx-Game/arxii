@@ -11,7 +11,7 @@
  *                 which badge list / retract affordance is shown.
  *
  * A pose's Endorse menu (#5327) lists every resonance in the game under its affinity, from
- * the resonance catalog, whatever the poser's aura holds. A pick on a pose that named no
+ * the resonance catalog, whether or not it is in the poser's aura. A pick on a pose that named no
  * resonance waits for the poser: the endorser sees a dashed chip "<Resonance> · waiting for
  * <Name>" with Change (the same menu again) and Withdraw; the poser, the scene's GM and staff
  * see "<Name> proposed <Resonance>" with Accept and Decline. A pose that named its own
@@ -199,12 +199,21 @@ function PoseEndorsementControl({
 
   const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
   const picks = interaction.pending_picks ?? [];
-  const minePick = picks.find((pick) => pick.mine) ?? null;
+  const myEndorsement = isSelfPose ? null : interaction.my_pose_endorsement;
+  // My own waiting pick, from `pending_picks` or, failing that, from my endorsement row, which
+  // says it waits (`awaiting_acceptance`). Either way it is never an endorsed badge or a Retract.
+  const minePick: { endorsement_id: number; resonance_name: string } | null =
+    picks.find((pick) => pick.mine) ??
+    (myEndorsement?.awaiting_acceptance
+      ? {
+          endorsement_id: myEndorsement.id,
+          resonance_name: resonanceNames.get(myEndorsement.resonance_id) ?? '',
+        }
+      : null);
   const answerable = picks.filter((pick) => pick.can_answer && !pick.mine);
   // A pose whose mark paid cannot also be endorsed: it pays once.
   const hasLiveMark = (interaction.act_marks ?? []).some((mark) => !mark.undone);
   const reached = interaction.reached_resonance ?? null;
-  const myEndorsement = isSelfPose ? null : interaction.my_pose_endorsement;
   const canEndorse = !isSelfPose && !hasLiveMark && (reached != null || groups.length > 0);
   const endorsers = isSelfPose ? [] : interaction.pose_endorsers;
 

@@ -492,7 +492,7 @@ to `submit-pose`, an out-of-scene one dispatches the registry `pose` action) and
 
 The optional "Reaching for" row of a pose and of a journal entry: in the `CommandInput` footer (pose
 mode) and in `JournalEntryFields` (the desk and the composer dialog). The "Reaching for" pill opens a
-select of every resonance from `useResonanceCatalog()` (`GET /api/magic/resonances/`, held or not), and
+select of every resonance from `useResonanceCatalog()` (`GET /api/magic/resonances/`, in her aura or not; rows carry `affinity_name` and `description`), and
 the chosen resonance's own `description` shows under it as help text. Once a resonance is chosen,
 "Pointing at" lists her recent acts (`useRecordedActs(characterSheetId)`, `GET
 /api/magic/recorded-acts/?character_sheet=<id>`, rows `{ id, label, created_at, suggestions[] }`,

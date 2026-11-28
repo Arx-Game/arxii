@@ -2,7 +2,7 @@
  * Reaching and marking (#5308, #5327): what the "Reaching for" row of a pose or a journal entry
  * holds and what it sends.
  *
- * A pose can say which resonance it reaches for, held or not. Alone that is a reach: an
+ * A pose can say which resonance it reaches for, in her aura or not. Alone that is a reach: an
  * endorsement of the pose then pays that resonance. Pointing at one of the writer's recorded
  * acts as well makes it a mark, which pays when it is posted. The row's state is a `ReachDraft`:
  * whether the row is open, which resonance is chosen and which act (null is "Nothing: another

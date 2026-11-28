@@ -1173,7 +1173,7 @@ export function useSetManifestChoice(characterSheetId: number) {
 // Your resonances (#5124)
 // ---------------------------------------------------------------------------
 
-/** Every resonance in the game, held or not (#5308): a pose reaches for, and a flourish declares, any of them. */
+/** Every resonance in the game, in her aura or not (#5308): a pose reaches for, and a flourish declares, any of them. */
 export function useResonanceCatalog() {
   return useQuery({
     queryKey: magicKeys.resonanceCatalog(),

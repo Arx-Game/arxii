@@ -283,16 +283,12 @@ function getComposerBanner(draft: Draft, isStrandedDraft: boolean): ComposerBann
 }
 
 /**
- * The mark's line in a pose action's result (#5327): `data.mark_line` when the action sends it,
- * else the last line of the message, which is where the action puts it. Empty when the pose
- * carried no mark.
+ * The mark's line in a pose action's result (#5327): `data.mark_line`, empty when the pose
+ * carried no mark. The same line also ends the result's message, after any reflection's line.
  */
 function markLineOf(payload: ActionResultPayload): string {
-  const data = payload.data;
-  if (!data || data.mark_recorded === undefined) return '';
-  if (typeof data.mark_line === 'string') return data.mark_line;
-  const lines = (payload.message ?? '').split('\n').filter((line) => line.trim() !== '');
-  return lines[lines.length - 1] ?? '';
+  const line = payload.data?.mark_line;
+  return typeof line === 'string' ? line : '';
 }
 
 export function CommandInput({

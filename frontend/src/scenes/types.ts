@@ -141,9 +141,8 @@ export interface SceneRoundState {
 
 export interface SceneDetail extends SceneListItem {
   /**
-   * True when the scene stores nothing (#5327), so a mark made there pays nothing. LOCAL
-   * TYPE until the scene detail serializer's `is_ephemeral` reaches the generated schema;
-   * absent reads as stored.
+   * True when the scene stores nothing (#5327), so a mark made there pays nothing
+   * (`SceneDetail.is_ephemeral` in the generated schema); absent reads as stored.
    */
   is_ephemeral?: boolean;
   is_active: boolean;
@@ -492,36 +491,18 @@ export interface NarratedEvent {
 
 /**
  * A resonance a pose marked by pointing at an act her character took (#5327). `undone` is set
- * once staff or the scene's GM undid the reward; `can_undo` is true only for staff and the
- * scene's GM on a mark that is not undone.
- *
- * LOCAL TYPE until the feed row's `act_marks` reaches the generated schema. `undone_by` is not
- * in the contract yet; without it an undone chip says the reward was undone and not by whom.
+ * once staff or the scene's GM undid the reward, and `undone_by` says which; `can_undo` is true
+ * only for staff and the scene's GM on a mark that is not undone, and only on a refetched row
+ * (a live frame never carries it).
  */
-export interface ActMark {
-  grant_id: number;
-  resonance_id: number;
-  resonance_name: string;
-  act_label: string;
-  undone: boolean;
-  can_undo: boolean;
-  undone_by?: 'gm' | 'staff';
-}
+export type ActMark = components['schemas']['InteractionList']['act_marks'][number];
 
 /**
  * A pick on a pose that named no resonance, waiting for the poser to accept it (#5327). Sent
- * only to the endorser (`mine`), the poser, the scene's GM and staff (`can_answer`).
- *
- * LOCAL TYPE until the feed row's `pending_picks` reaches the generated schema.
+ * only to the endorser (`mine`), the poser, the scene's GM and staff (`can_answer`), and only
+ * on a refetched row (a live frame always carries none).
  */
-export interface PendingPick {
-  endorsement_id: number;
-  resonance_id: number;
-  resonance_name: string;
-  endorser_name: string;
-  mine: boolean;
-  can_answer: boolean;
-}
+export type PendingPick = components['schemas']['InteractionList']['pending_picks'][number];
 
 export interface Interaction {
   id: number;
@@ -591,7 +572,13 @@ export interface Interaction {
   /** Picks waiting for the poser's answer, for the people who may see them (#5327). */
   pending_picks?: PendingPick[];
   pose_endorsers: EndorserBadge[];
-  my_pose_endorsement: { id: number; resonance_id: number; settled: boolean } | null;
+  my_pose_endorsement: {
+    id: number;
+    resonance_id: number;
+    settled: boolean;
+    /** True while the pick waits for the poser to accept it (#5327); the row is then not an endorsement yet. */
+    awaiting_acceptance?: boolean;
+  } | null;
   entry_endorsers: EndorserBadge[];
   entry_endorsed_by_me: boolean;
   /** True when this interaction's persona is muted by the viewer — content is blanked (#2087). */
