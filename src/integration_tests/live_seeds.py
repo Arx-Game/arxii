@@ -1937,6 +1937,8 @@ class TraditionTeachingSeed:
     evil_course_id: int
     #: A Villainy course on a role whose Tradition does not teach it (authored before the rule).
     lantern_course_id: int
+    #: A Villainy course on a role that names no Tradition (authored before the rule).
+    bare_course_id: int
     trainer_name: str
     entry_id: int
     character_id: int
@@ -1965,6 +1967,10 @@ class TraditionTeachingSeed:
     student_taught: str
     student_of_vey: str
     student_of_ilsa: str
+    #: A student of the Cinder Court, played by its own account in the Cinder Hall.
+    cinder_username: str
+    cinder_password: str
+    cinder_character_name: str
     wren_allocation_id: int
     aldric_allocation_id: int
     taught_allocation_id: int
@@ -1985,6 +1991,7 @@ TEACHING_STAFF = "teaching_staff"
 TEACHING_COURSE = "Villainy course"
 TEACHING_OWN_ALT = "Mira Alder"
 TEACHING_MENTOR_ACCOUNT = "teaching_mentor"
+TEACHING_CINDER_ACCOUNT = "teaching_cinder"
 TEACHING_GM_ACCOUNT = "teaching_gm"
 TEACHING_GM_CHARACTER = "Nessa Pryor"
 #: Two NPCs the game master account holds: one has no Occult rating, one is declined.
@@ -2217,11 +2224,15 @@ def _teaching_trainer(skills: dict[str, object], good: object, evil: object) -> 
     ).first() or create.create_object("typeclasses.rooms.Room", key=TEACHING_ROOM)
 
     courses: dict[str, object] = {}
-    for key, tradition in (("evil", evil), ("lantern", good)):
+    for key, tradition in (("evil", evil), ("lantern", good), ("bare", None)):
         role, _ = NPCRole.objects.update_or_create(
-            name=f"Academy master of {tradition.name}",
+            name="Academy master" if tradition is None else f"Academy master of {tradition.name}",
             defaults={
-                "description": f"A master who teaches in the manner of {tradition.name}.",
+                "description": (
+                    "A master who teaches no Tradition's manner."
+                    if tradition is None
+                    else f"A master who teaches in the manner of {tradition.name}."
+                ),
                 "teaches_tradition": tradition,
             },
         )
@@ -2259,14 +2270,19 @@ def _teaching_character(
     pronoun: str = "them",
     player: AccountDB | None = None,
     npc: bool = False,
+    room: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - a factory character's location
 ) -> object:
     """The roster entry of the character *name*, made once, with her object pronoun set.
 
     With *player* the account holds her open tenure (and, unless *npc*, plays her: the
     account is her puppeting account and she carries the playable lock). With *npc* she
-    stands on the NPC shelf, as a character a game master holds does. Safe to run twice: an
-    entry found by name is kept, and a tenure held by another account is handed to *player*.
+    stands on the NPC shelf, as a character a game master holds does. With *room* a character
+    a player plays stands in it. Safe to run twice: an entry found by name is kept (one held
+    by a player is preferred over a plain one of the same name), a tenure held by another
+    account is handed to *player*, and the account is set again on a character it plays.
     """
+    from django.db.models import Exists, OuterRef  # noqa: PLC0415
+
     from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
     from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
@@ -2278,7 +2294,13 @@ def _teaching_character(
     from world.roster.models.choices import RosterType  # noqa: PLC0415
     from world.roster.seeds import ensure_rosters  # noqa: PLC0415
 
-    entry = RosterEntry.objects.filter(character_sheet__character__db_key=name).first()
+    held = RosterTenure.objects.filter(roster_entry=OuterRef("pk"), end_date__isnull=True)
+    entry = (
+        RosterEntry.objects.filter(character_sheet__character__db_key=name)
+        .annotate(is_held=Exists(held))
+        .order_by("-is_held", "pk")
+        .first()
+    )
     if entry is None:
         character = CharacterFactory(db_key=name)
         entry = RosterEntryFactory(character_sheet=CharacterSheetFactory(character=character))
@@ -2296,13 +2318,18 @@ def _teaching_character(
                 roster_entry=entry, player_data=player_data, player_number=1, end_date=None
             )
             if not npc:
-                character = sheet.character
-                character.db_account = player
-                character.save()
-                player.at_post_create_character(character)
+                player.at_post_create_character(sheet.character)
         elif tenure.player_data_id != player_data.pk:
             tenure.player_data = player_data
             tenure.save(update_fields=["player_data"])
+        if not npc:
+            # A character that was played in the game has its account cleared when the
+            # player disconnects; the Messages list reads that column, so it is set again.
+            character = sheet.character
+            character.db_account = player
+            if room is not None:
+                character.location = room
+            character.save()
     return entry
 
 
@@ -2379,14 +2406,19 @@ def _teaching_request(
             "mentor_accepted_at": timezone.now() if agreed else None,
         },
     )
+    # A same-named character an earlier run of this seed left behind asks nobody now.
+    TrainingAllocation.objects.filter(
+        character__character__db_key=student.character.db_key, skill=skill
+    ).exclude(character=student).delete()
     return allocation.pk
 
 
 def _teaching_trainee(account: AccountDB, room: object, good: object) -> object:
     """Wren Alder: played by *account* in the Cinder Hall, of the Good Tradition, 6 AP to spend.
 
-    *account* also plays Mira Alder, whom Wren may not name as a mentor. Returns Wren's roster
-    entry, her selected character. Her weekly training starts empty on every run.
+    *account* also plays Mira Alder, whom Wren may not name as a mentor, and Tamsin Reeve.
+    Returns Wren's roster entry, her selected character. Her weekly training starts empty on
+    every run.
     """
     from evennia_extensions.models import PlayerData  # noqa: PLC0415
     from world.action_points.models import ActionPointConfig, ActionPointPool  # noqa: PLC0415
@@ -2402,7 +2434,15 @@ def _teaching_trainee(account: AccountDB, room: object, good: object) -> object:
     sheet.pronoun_possessive = "her"
     sheet.save(update_fields=["pronoun_subject", "pronoun_object", "pronoun_possessive"])
     # Her player's other character, for the mentor she may not name.
-    _played_character(account, TEACHING_OWN_ALT, room)
+    alt = _played_character(account, TEACHING_OWN_ALT, room)
+    # And Tamsin Reeve, who asked Aldric Voss: the narrative lines she is sent (a mentor's
+    # answer) land in this account's Messages, so the page shows them.
+    _teaching_character(TEACHING_STUDENT_OF_ALDRIC, pronoun="her", player=account, room=room)
+    # The Messages list reads each character's account, which the game clears when the player
+    # disconnects, so a second run sets it again on the characters this account plays.
+    for played in (sheet.character, alt.roster_entry.character_sheet.character):
+        played.db_account = account
+        played.save()
     set_selected_entry(PlayerData.objects.get(account=account), entry)
     CharacterTradition.objects.get_or_create(character=sheet, tradition=good, left_at=None)
     ActionPointConfig.objects.update_or_create(
@@ -2608,9 +2648,12 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
     request, Tamsin Reeve's request to Aldric Voss, and Marek Tolle, whom Drusa already
     teaches. A game master account plays Nessa Pryor and holds two NPCs: Magister Vey (no
     Occult rating, asked by Odalys Fenn) and Warden Ilsa Tarn (asked by Bram Sorrel).
-    Ysolde Marsh (Cinder Court, no Villainy rating) has no player. Safe to run twice: rows
-    are found by name, the three accounts' passwords are reset, and every request above is
-    put back to the state it is described in.
+    Ysolde Marsh (Cinder Court, no Villainy rating) has no player. Tamsin Reeve is played by
+    the test account, so a mentor's answer to her lands in the account's Messages. Marek Tolle
+    has his own account and stands in the Cinder Hall, a student of the teaching Tradition. A
+    third Villainy course sits on an Academy master whose role names no Tradition. Safe to
+    run twice: rows are found by name, the accounts' passwords are reset, and every request
+    above is put back to the state it is described in.
     """
     from django.db import transaction  # noqa: PLC0415
     from evennia.accounts.models import AccountDB  # noqa: PLC0415
@@ -2656,6 +2699,17 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
         )
         entry = _teaching_trainee(account, trainer["room"], good)
         wren = entry.character_sheet
+        # Marek Tolle (Cinder Court) is played by his own account in the Cinder Hall, so the
+        # trainer's menu can be read as a student of the teaching Tradition.
+        cinder_account, cinder_password = _teaching_player_account(TEACHING_CINDER_ACCOUNT)
+        marek = _teaching_character(
+            TEACHING_STUDENT_TAUGHT,
+            pronoun="him",
+            player=cinder_account,
+            room=trainer["room"],
+        )
+        _teaching_mentor(TEACHING_STUDENT_TAUGHT, evil, None)
+        set_selected_entry(PlayerData.objects.get(account=cinder_account), marek)
         students = {
             name: _teaching_character(name, pronoun=pronoun).character_sheet
             for name, pronoun in (
@@ -2695,6 +2749,7 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
         evil_role_id=trainer["evil_role"].pk,
         evil_course_id=trainer["evil"].pk,
         lantern_course_id=trainer["lantern"].pk,
+        bare_course_id=trainer["bare"].pk,
         trainer_name=TEACHING_TRAINER,
         entry_id=entry.pk,
         character_id=entry.character_sheet.character_id,
@@ -2719,6 +2774,9 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
         student_taught=TEACHING_STUDENT_TAUGHT,
         student_of_vey=TEACHING_STUDENT_OF_VEY,
         student_of_ilsa=TEACHING_STUDENT_OF_ILSA,
+        cinder_username=cinder_account.username,
+        cinder_password=cinder_password,
+        cinder_character_name=TEACHING_STUDENT_TAUGHT,
         wren_allocation_id=wren_allocation,
         aldric_allocation_id=aldric_allocation,
         taught_allocation_id=taught_allocation,

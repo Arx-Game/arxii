@@ -47,6 +47,7 @@ interface Seed {
   evil_role_id: number;
   evil_course_id: number;
   lantern_course_id: number;
+  bare_course_id: number;
   trainer_name: string;
   entry_id: number;
   character_id: number;
@@ -71,6 +72,9 @@ interface Seed {
   student_taught: string;
   student_of_vey: string;
   student_of_ilsa: string;
+  cinder_username: string;
+  cinder_password: string;
+  cinder_character_name: string;
   wren_allocation_id: number;
   aldric_allocation_id: number;
   taught_allocation_id: number;
@@ -163,7 +167,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await expect(page.locator('#id_taught_skills_from option')).toHaveText(['Villainy']);
     await expect(page.locator('option', { hasText: 'Reflection' })).toHaveCount(0);
     await page.locator('.field-taught_skills').scrollIntoViewIfNeeded();
-    await shot(testInfo, '01-tradition-taught-skills.png', page);
+    await shot(testInfo, '01-tradition-taught-skills.png', page, { fullPage: true });
 
     // Screen 2: the teaching settings page with the new number.
     await page.goto(`/admin/arxii/traditionteachingconfig/${seed.config_id}/change/`);
@@ -171,14 +175,30 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await shot(testInfo, '02-teaching-config-difficulty.png', page, { fullPage: true });
 
     // Screen 3: the modifier target, then the distinction's effect on it in the builder.
+    // The Add page as staff meet it, with the three values typed in and nothing saved.
+    await page.goto('/admin/arxii/modifiertarget/add/');
+    await page.locator('#id_name').fill('self_teaching');
+    const category = await page
+      .locator('#id_category option', { hasText: 'self_teaching' })
+      .first()
+      .getAttribute('value');
+    if (category) await page.locator('#id_category').selectOption(category);
+    await page
+      .locator('#id_description')
+      .fill(
+        'Teaching herself magic: a positive total lets the character allocate weekly ' +
+          'training on a Magic skill with no mentor. Yes or no; a larger value adds nothing.'
+      );
+    await shot(testInfo, '03a-modifier-target-add-form.png', page, { fullPage: true });
+    // The row staff saved, as the game reads it.
     await page.goto(`/admin/arxii/modifiertarget/${seed.modifier_target_id}/change/`);
     await expect(page.locator('#id_name')).toHaveValue('self_teaching');
-    await shot(testInfo, '03a-modifier-target-self-teaching.png', page, { fullPage: true });
+    await shot(testInfo, '03b-modifier-target-saved.png', page, { fullPage: true });
     await page.goto(`/admin/_distinction_builder/${seed.distinction_id}/`);
     await expect(page.getByRole('heading', { name: 'Distinction Builder' })).toBeVisible();
     await expect(page.locator('#effects-body')).toContainText(/self_teaching/);
     await page.locator('#effects-module').scrollIntoViewIfNeeded();
-    await shot(testInfo, '03b-distinction-builder-effect.png', page, { fullPage: true });
+    await shot(testInfo, '03c-distinction-builder-effect.png', page, { fullPage: true });
 
     // Screen 4: the trainer role's page, naming the Tradition it teaches.
     await page.goto(`/admin/arxii/npcrole/${seed.evil_role_id}/change/`);
@@ -209,6 +229,19 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
       page.getByText(`${seed.good_tradition_name} does not teach Villainy.`)
     ).toBeVisible();
     await shot(testInfo, '05c-course-offer-refused.png', page, { fullPage: true });
+
+    // Screen 5, third frame: a Villainy course on a role that names no Tradition.
+    await page.goto(`/admin/arxii/skillcourseofferdetails/${seed.bare_course_id}/change/`);
+    await expect(page.locator('div.readonly', { hasText: 'Academy master' }).first()).toBeVisible();
+    await page.locator('input[name="_continue"]').click();
+    await expect(page.locator('.errornote')).toBeVisible();
+    await expect(
+      page.getByText(
+        'This role names no Tradition, so it cannot offer a course in Villainy. ' +
+          'Set Teaches tradition on the role first.'
+      )
+    ).toBeVisible();
+    await shot(testInfo, '05d-course-offer-refused-no-tradition.png', page, { fullPage: true });
 
     await page.context().close();
   });
@@ -315,6 +348,12 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await expect(occultRow.getByTestId('training-mentor-line')).toHaveText(
       `Mentor: ${seed.mentor_unrated} · waiting for ${seed.mentor_unrated} to agree`
     );
+    // The form is empty again: no skill, no typed mentor name, no result list left open.
+    await expect(skill).toHaveValue('');
+    await expect(card.getByTestId('training-mentor-search')).toHaveValue('');
+    await expect(card.getByRole('button', { name: seed.mentor_unrated, exact: true })).toHaveCount(
+      0
+    );
     await card.scrollIntoViewIfNeeded();
     await shot(testInfo, '07d-training-asked-toast.png', page);
 
@@ -366,6 +405,14 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await shot(testInfo, '07f-mentor-accept-refused.png', page);
     await expect(toasts).toHaveCount(0, { timeout: 20000 });
 
+    // He declines instead: the request leaves his list, and Tamsin reads a line (07n).
+    await aldricRequest.getByRole('button', { name: 'Decline' }).click();
+    await toastShown(page, `You decline to teach ${seed.student_of_aldric} Villainy.`);
+    await expect(aldricRequest).toHaveCount(0);
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07g-mentor-declined.png', page);
+    await expect(toasts).toHaveCount(0, { timeout: 20000 });
+
     // Drusa Kell qualifies: the answer is the success sentence and the row moves to Teaching.
     await wrenRequest.getByRole('button', { name: 'Accept' }).click();
     await toastShown(page, `You agree to teach ${seed.character_name} Villainy.`);
@@ -377,7 +424,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     ).toBeVisible();
     await expect(taughtRow).toBeVisible();
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07g-mentor-accepted.png', page);
+    await shot(testInfo, '07h-mentor-accepted.png', page);
 
     await page.context().close();
   });
@@ -403,14 +450,14 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await expect(ilsaRequest).toBeVisible();
     await expect(card.getByTestId('mentoring-request-row')).toHaveCount(2);
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07h-gm-card-two-npcs.png', card);
+    await shot(testInfo, '07i-gm-card-two-npcs.png', card);
 
     // Magister Vey holds no Occult rating: refused by her name, the row stays.
     await veyRequest.getByRole('button', { name: 'Accept' }).click();
     await toastShown(page, `${seed.npc_cannot_teach} has no rating in Occult.`);
     await expect(veyRequest).toBeVisible();
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07i-gm-npc-accept-refused.png', page);
+    await shot(testInfo, '07j-gm-npc-accept-refused.png', page);
     await expect(toasts).toHaveCount(0, { timeout: 20000 });
 
     // Warden Ilsa Tarn's request is declined: the row is gone.
@@ -419,12 +466,12 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await expect(ilsaRequest).toHaveCount(0);
     await expect(veyRequest).toBeVisible();
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07j-gm-npc-declined.png', page);
+    await shot(testInfo, '07k-gm-npc-declined.png', page);
 
     await page.context().close();
   });
 
-  test('screen 7, student again: her row reads the mentor as agreed once Drusa Kell accepted', async ({
+  test('screen 7, student again: her row reads the mentor as agreed, and she is sent the two private lines', async ({
     browser,
   }, testInfo) => {
     test.setTimeout(120_000);
@@ -439,7 +486,64 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     );
     await expect(card.getByText('waiting for')).toHaveCount(0);
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07k-training-card-mentor-agreed.png', card);
+    await shot(testInfo, '07l-training-card-mentor-agreed.png', card);
+
+    // The private lines the game sent her account: Wren's own, and Tamsin Reeve's, whom the
+    // same account plays and whose request Aldric Voss declined.
+    const agreed = page
+      .locator('#messages div.rounded-md.p-3.transition-colors', {
+        hasText: `${seed.mentor_rated} agreed to teach you Villainy.`,
+      })
+      .first();
+    await expect(agreed).toBeVisible({ timeout: 30000 });
+    await shot(testInfo, '07m-wren-private-line-agreed.png', agreed);
+    const declined = page
+      .locator('#messages div.rounded-md.p-3.transition-colors', {
+        hasText: `${seed.mentor_good} declined to teach you Villainy.`,
+      })
+      .first();
+    await expect(declined).toBeVisible();
+    await shot(testInfo, '07n-private-line-declined.png', declined);
+
+    await page.context().close();
+  });
+
+  test('screen 7, mentor stops: Drusa Kell presses Stop and Wren reads that she stopped', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    const seed = readSeed();
+    const mentor = await signedInPage(browser, seed.mentor_username, seed.mentor_password);
+    await openGrowth(mentor, seed.mentor_entry_id);
+    const mentoring = mentor.getByTestId('mentoring-card');
+    await expect(mentoring).toBeVisible({ timeout: 30000 });
+    const wrenTeaching = mentoring.getByTestId('mentoring-student-row').filter({
+      hasText: `${seed.mentor_rated} teaches ${seed.character_name} Villainy`,
+    });
+    await expect(wrenTeaching).toBeVisible();
+    await wrenTeaching.getByRole('button', { name: 'Stop' }).click();
+    await toastShown(mentor, `You stop teaching ${seed.character_name} Villainy.`);
+    await expect(wrenTeaching).toHaveCount(0);
+    await mentoring.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07o-mentor-stops-teaching.png', mentor);
+    await mentor.context().close();
+
+    const page = await signedInPage(browser, ACCOUNT, PASSWORD);
+    await openGrowth(page, seed.entry_id);
+    const card = page.getByTestId('training-card');
+    await expect(card).toBeVisible({ timeout: 30000 });
+    const villainyRow = card.getByTestId('training-allocation-row').filter({ hasText: 'Villainy' });
+    await expect(villainyRow.getByText('Self-study')).toBeVisible();
+    await expect(villainyRow.getByTestId('training-mentor-line')).toHaveCount(0);
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07p-training-card-after-stop.png', card);
+    const stopped = page
+      .locator('#messages div.rounded-md.p-3.transition-colors', {
+        hasText: `${seed.mentor_rated} stopped teaching you Villainy.`,
+      })
+      .first();
+    await expect(stopped).toBeVisible({ timeout: 30000 });
+    await shot(testInfo, '07q-wren-private-line-stopped.png', stopped);
 
     await page.context().close();
   });
@@ -472,9 +576,64 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await expect(
       dialog.getByText('Your Tradition does not teach this. Sessions are harder for you.')
     ).toBeVisible();
-    await shot(testInfo, '08-trainer-menu-caution.png', dialog);
+    await shot(testInfo, '08a-trainer-menu-lantern-student.png', dialog);
 
     // Close without enrolling: the course is not taken.
+    await page.keyboard.press('Escape');
+    await page.context().close();
+  });
+
+  test('screen 8, Cinder Court student: the menu adds nothing, and the course is refused once the Tradition stops teaching Villainy', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.cinder_username, seed.cinder_password);
+    await page.goto('/game');
+    await page
+      .locator(
+        `button[title="Connect as ${seed.cinder_character_name}"], ` +
+          `button[title="Switch to ${seed.cinder_character_name}"], ` +
+          `button[title="${seed.cinder_character_name}"]`
+      )
+      .first()
+      .click();
+    const people = page.getByTestId('npc-givers-block');
+    await expect(people).toContainText(seed.trainer_name, { timeout: 45000 });
+    await people.getByTestId(`talk-${seed.evil_role_id}`).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: seed.trainer_name })).toBeVisible();
+    const offer = dialog.getByRole('button', { name: /Villainy course/ });
+    await expect(offer).toBeVisible();
+    await expect(
+      dialog.getByText(`Taught in the manner of ${seed.evil_tradition_name}`)
+    ).toBeVisible();
+    await expect(dialog.getByText('Your Tradition does not teach this.')).toHaveCount(0);
+    await shot(testInfo, '08b-trainer-menu-cinder-student.png', dialog);
+
+    // Staff take Villainy off the Cinder Court's list in the admin, as the demo's last frame
+    // describes. The list is put back whatever happens next.
+    const staff = await signedInPage(browser, seed.staff_username, seed.staff_password);
+    const tradition = `/admin/arxii/tradition/${seed.evil_tradition_id}/change/`;
+    try {
+      await staff.goto(tradition);
+      await staff.locator('#id_taught_skills_to').selectOption({ label: 'Villainy' });
+      await staff.locator('#id_taught_skills_remove, #id_taught_skills_remove_link').click();
+      await staff.locator('input[name="_continue"]').click();
+      await expect(staff.locator('.messagelist .success')).toBeVisible();
+
+      await offer.click();
+      await toastShown(page, 'no longer teaches Villainy');
+      await shot(testInfo, '08c-trainer-menu-course-closed.png', page);
+    } finally {
+      await staff.goto(tradition);
+      await staff.locator('#id_taught_skills_from').selectOption({ label: 'Villainy' });
+      await staff.locator('#id_taught_skills_add, #id_taught_skills_add_link').click();
+      await staff.locator('input[name="_continue"]').click();
+      await expect(staff.locator('.messagelist .success')).toBeVisible();
+      await staff.context().close();
+    }
+
     await page.keyboard.press('Escape');
     await page.context().close();
   });
