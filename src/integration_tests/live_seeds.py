@@ -2088,6 +2088,7 @@ def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - d
             aura.save()
             refresh_glimpse_state(aura)
             CharacterDistinction.objects.filter(character=sheet).delete()
+            sheet.__dict__.pop("cached_distinctions", None)
             if memory == GlimpseMemory.NO_MEMORY:
                 grant_distinction(sheet, mystery, origin=DistinctionOrigin.CHARACTER_CREATION)
             entries[name] = entry

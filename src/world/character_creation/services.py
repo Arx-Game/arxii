@@ -21,6 +21,7 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
+from evennia_extensions.cached_property import pop_cached_rows
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import (
     ACTOR_SHEET_QUESTIONS,
@@ -2103,6 +2104,8 @@ def _create_distinctions(
         if char_dist.notes and char_dist.distinction.asks_figure_name:
             asset_names.setdefault(char_dist.distinction_id, char_dist.notes)
     created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
+    # A bulk create skips ``CharacterDistinction.save``, so the sheet's list is dropped here.
+    pop_cached_rows(type(character.sheet_data), character.pk, "cached_distinctions")
     _create_distinction_modifiers_bulk(
         character.sheet_data, created_distinctions, asset_names=asset_names
     )
