@@ -32,9 +32,14 @@ from world.magic.factories import (
 )
 from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.narrative.constants import GemitReach
-from world.narrative.models import Gemit
+from world.narrative.models import Gemit, NarrativeMessageDelivery
 from world.scenes.constants import PersonaType
-from world.scenes.factories import PersonaFactory, SceneFactory, SceneGMParticipationFactory
+from world.scenes.factories import (
+    PersonaFactory,
+    SceneFactory,
+    SceneGMParticipationFactory,
+    SceneParticipationFactory,
+)
 from world.scenes.models import Interaction
 from world.societies.constants import RenownRisk
 from world.societies.factories import OrganizationFactory, SocietyFactory
@@ -437,6 +442,9 @@ class SuggestingADramaticMoment(JourneyCase):
             location=RoomProfileFactory(objectdb=self.lantern), is_active=True
         )
         SceneGMParticipationFactory(scene=self.scene, account=self.hobb_account)
+        # A tag names a character who is part of the scene (#5327): her player joined it.
+        for player in (self.ysmay, self.caddoc, self.bram):
+            SceneParticipationFactory(scene=self.scene, account=self.account_of(player))
         self.steel = ResonanceFactory(name="Steel")
         CharacterResonanceFactory(character_sheet=self.ysmay.sheet_data, resonance=self.steel)
         CharacterResonanceFactory(character_sheet=self.caddoc.sheet_data, resonance=self.steel)
@@ -620,8 +628,13 @@ class SuggestingADramaticMoment(JourneyCase):
         self.assertIn(
             "You tagged Ysmay with 'A Flourish of Steel'. 15 Ember and renown awarded.", tagged
         )
-        self.assertTold(
-            self.ysmay, "A GM tagged your pose as a A Flourish of Steel. It paid you Ember."
+        self.assertIn(
+            "The scene's GM tagged your pose as a A Flourish of Steel. It paid you Ember.",
+            "\n".join(
+                NarrativeMessageDelivery.objects.filter(
+                    recipient_character_sheet=self.ysmay.sheet_data
+                ).values_list("message__body", flat=True)
+            ),
         )
         self.assertIn(
             "No resonance named 'Nothing'.",

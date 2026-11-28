@@ -32,6 +32,7 @@ from world.magic.factories import (
 from world.magic.models import Affinity, AffinityInteraction, Reflection, ResonanceGrant
 from world.magic.services.reflection import reflectable_for
 from world.magic.services.resonance import grant_resonance
+from world.narrative.models import NarrativeMessageDelivery
 from world.scenes.models import Interaction
 
 SUBMIT_POSE = "/api/interactions/submit-pose/"
@@ -410,9 +411,13 @@ class AMarkedDeed(_Reflecting):
             undone = staff.post(f"/api/magic/resonance-grants/{self.marked.pk}/undo/")
 
         self.assertEqual(undone.status_code, status.HTTP_200_OK, undone.content)
-        self.assertTold(
-            self.mira,
+        self.assertIn(
             "Staff undid your Wonder reward for Intimidated Hale. Your Wonder falls by 6.",
+            "\n".join(
+                NarrativeMessageDelivery.objects.filter(
+                    recipient_character_sheet=self.sheet
+                ).values_list("message__body", flat=True)
+            ),
         )
         listed = self.telnet(self.mira, "reflect")
         self.assertNotIn("Intimidated Hale", listed)

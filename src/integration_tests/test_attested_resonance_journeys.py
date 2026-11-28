@@ -26,6 +26,7 @@ other than social is needed, which is built directly.
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from rest_framework import status
@@ -36,11 +37,12 @@ from integration_tests.harness import JourneyCase
 from integration_tests.test_earning_kindled_deeds_journeys import _Gate
 from world.fatigue.services import get_fatigue_capacity, get_or_create_fatigue_pool
 from world.fatigue.tests import setup_stat
-from world.gm.constants import GMLevel
-from world.gm.factories import GMProfileFactory
+from world.gm.constants import GMLevel, GMPromptStatus
+from world.gm.factories import GMProfileFactory, GMPromptFactory
 from world.journals.models import JournalEntry
 from world.magic.constants import GainSource
 from world.magic.factories import (
+    CharacterResonanceFactory,
     DramaticMomentTypeFactory,
     KindledDeedAwardFactory,
     KindledStrengthTierFactory,
@@ -58,8 +60,10 @@ from world.magic.models import (
     RecordedAct,
     ResonanceGrant,
 )
+from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.magic.services.gain import get_resonance_gain_config, settle_weekly_pot
 from world.magic.services.kindling import award_scene_act
+from world.narrative.models import NarrativeMessageDelivery
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import (
     SceneFactory,
@@ -140,6 +144,15 @@ class _Attested(JourneyCase):
 
     def client(self, character):
         return self.api(self.account_of(character))
+
+    def notices(self, character) -> str:
+        """Every private line the game sent ``character``'s player as a narrative message,
+        oldest first, read from the delivery rows so an offline player's lines count too."""
+        return "\n".join(
+            NarrativeMessageDelivery.objects.filter(recipient_character_sheet=character.sheet_data)
+            .order_by("pk")
+            .values_list("message__body", flat=True)
+        )
 
     def take_act(self, actor, target, what: str) -> RecordedAct:
         """``actor`` takes an act the way a roll records it: a scene action, a Success, aimed at
@@ -246,7 +259,7 @@ class ListingAndMarkingActsByTelnet(_Attested):
         self.assertIn("You gloat. Your Cruelty grows by 10.", told)
         self.assertEqual(self.balance(self.daven, self.cruelty), 10)
         # Hale reads who marked what on him, and the target is the one who is wearier.
-        self.assertTold(self.hale, ONE_PLAYER_TIRED)
+        self.assertIn(ONE_PLAYER_TIRED, self.notices(self.hale))
         self.assertEqual(self.fatigue_of(self.hale), 6)
         self.assertLess(self.fatigue_of(self.hale), capacity)
         # Ilsa reads the pose and none of it.
@@ -309,7 +322,7 @@ class MarkingByTheWebAndAJournalEntry(_Attested):
         self.assertEqual(posed["mark_line"], "You gloat. Your Cruelty grows by 10.")
         self.assertTrue(posed["mark_recorded"])
         self.assertEqual(self.balance(self.daven, self.cruelty), 10)
-        self.assertTold(self.hale, ONE_PLAYER_TIRED)
+        self.assertIn(ONE_PLAYER_TIRED, self.notices(self.hale))
         # The live frame is one frame for the whole room: it carries no mark and no waiting pick,
         # and each browser is told the pose changed so it refetches its own view.
         for watcher in (self.hale, self.ilsa, self.marek):
@@ -322,9 +335,46 @@ class MarkingByTheWebAndAJournalEntry(_Attested):
         # Ilsa's refetch shows the chip: the resonance and the act, and no amount.
         chip = self.pose_row(self.ilsa, posed["id"])["act_marks"]
         self.assertEqual([(c["resonance_name"], c["undone"]) for c in chip], [("Cruelty", False)])
-        self.assertIn("Intimidated", chip[0]["act_label"])
+        self.assertEqual(chip[0]["act_label"], "Intimidated Hale")
         self.assertNotIn("amount", chip[0])
         self.assertFalse(chip[0]["can_undo"])
+
+    def test_the_chip_names_the_target_as_each_reader_knows_them_and_a_mask_stays_a_mask(
+        self,
+    ) -> None:
+        # Daven took the act while Hale wore his own face, so he knows the target as Hale.
+        act = self.take_act(self.daven, self.hale, "Intimidated")
+        self.assertEqual(act.label, "Intimidated Hale")
+        # By the time the pose is read Hale wears the Owl Mask, which Ilsa has not seen through.
+        self.assertIn("You don a mask: 'Owl Mask'", self.telnet(self.hale, "persona mask Owl Mask"))
+        posed = self.web_pose(
+            self.daven,
+            "leans over the masked man.",
+            reach_act_id=act.pk,
+            reach_resonance_id=self.cruelty.pk,
+        )
+
+        daven_reads = self.pose_row(self.daven, posed["id"])["act_marks"][0]["act_label"]
+        ilsa_reads = self.pose_row(self.ilsa, posed["id"])["act_marks"][0]["act_label"]
+
+        # The actor reads the name she knows; everyone else reads the mask, never "Hale".
+        self.assertEqual(daven_reads, "Intimidated Hale")
+        self.assertEqual(ilsa_reads, "Intimidated Owl Mask")
+        self.assertNotIn("Hale", json.dumps(self.pose_row(self.ilsa, posed["id"]), default=str))
+
+    def test_a_target_with_no_sheet_keeps_its_name_for_every_reader(self) -> None:
+        act = self.take_act(self.daven, None, "Frightened the grave-wight")
+
+        posed = self.web_pose(
+            self.daven,
+            "snarls at the grave-wight.",
+            reach_act_id=act.pk,
+            reach_resonance_id=self.cruelty.pk,
+        )
+
+        for reader in (self.daven, self.ilsa, self.marek):
+            chip = self.pose_row(reader, posed["id"])["act_marks"][0]
+            self.assertEqual(chip["act_label"], "Frightened the grave-wight", reader.key)
 
     def test_a_journal_entry_pays_the_same_mark_and_carries_the_tiredness_of_a_celestial(
         self,
@@ -350,6 +400,7 @@ class MarkingByTheWebAndAJournalEntry(_Attested):
             response.json()["mark_line"],
             "You inspire. Your Mercy grows by 10, and you are wearier.",
         )
+        self.assertTrue(response.json()["mark_recorded"])
         self.assertEqual(self.balance(self.wren, self.mercy), 10)
         self.assertEqual(self.fatigue_of(self.wren), 5)
 
@@ -375,6 +426,7 @@ class MarkingByTheWebAndAJournalEntry(_Attested):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         self.assertTrue(JournalEntry.objects.filter(title="Too late").exists())
         self.assertIn("so this one would pay nothing", response.json()["mark_line"])
+        self.assertFalse(response.json()["mark_recorded"])
         self.assertEqual(self.balance(self.wren, self.mercy), 0)
         self.assertIn("Tended the stranger", self.telnet(self.wren, "acts"))
 
@@ -394,9 +446,9 @@ class WhoPaysTheFatigueOfAGain(_Attested):
             told,
         )
         self.assertEqual(self.balance(self.daven, self.cruelty), 5)
-        self.assertTold(
-            self.hale,
+        self.assertIn(
             f"{ONE_PLAYER_TIRED} You had little left to give, so it took only part.",
+            self.notices(self.hale),
         )
 
     def test_a_target_with_nothing_left_refuses_the_gain_and_the_act_stays_on_the_list(
@@ -415,7 +467,7 @@ class WhoPaysTheFatigueOfAGain(_Attested):
         self.assertEqual(self.balance(self.daven, self.cruelty), 0)
         # The pose still posted, Hale is not wearier and told nothing, and the act is listed.
         self.assertTold(self.ilsa, "leans over Hale again.")
-        self.assertNotTold(self.hale, "marked Cruelty")
+        self.assertNotIn("marked Cruelty", self.notices(self.hale))
         self.assertIn("Intimidated Hale", self.telnet(self.daven, "acts"))
 
     def test_a_game_run_opponent_pays_in_full_and_tires_no_one(self) -> None:
@@ -502,10 +554,10 @@ class AWitnessProposesAndThePoserDecides(_Attested):
         self.assertIn(
             "You endorse Brannoc's pose #1 with Grief. It pays only if Brannoc accepts.", picked
         )
-        self.assertTold(
-            self.brannoc,
+        self.assertIn(
             "Ilsa proposed Grief on your pose #1. "
             "Use endorse accept Ilsa #1 or endorse decline Ilsa #1.",
+            self.notices(self.brannoc),
         )
 
         changed = self.telnet(self.ilsa, "endorse pose Brannoc #1 resonance=mercy")
@@ -515,7 +567,7 @@ class AWitnessProposesAndThePoserDecides(_Attested):
             changed,
         )
         # Changing the pick does not message the poser again.
-        self.assertEqual(self.said(self.brannoc).count("proposed"), 1)
+        self.assertEqual(self.notices(self.brannoc).count("proposed"), 1)
         self.assertEqual(PoseEndorsement.objects.get().resonance, self.mercy)
 
         # While it waits, the weekly settlement pays nothing and leaves the pick unsettled.
@@ -542,11 +594,58 @@ class AWitnessProposesAndThePoserDecides(_Attested):
         self.assertFalse(PoseEndorsement.objects.exists())
 
         self.telnet(self.ilsa, "endorse pose Brannoc #1 resonance=mercy")
-        self.telnet(self.ilsa, "endorse withdraw Brannoc #1")
+        withdrawn = self.telnet(self.ilsa, "endorse withdraw Brannoc #1")
 
+        self.assertIn("You withdraw your Mercy endorsement of Brannoc's pose #1.", withdrawn)
         self.assertFalse(PoseEndorsement.objects.exists())
+        # With nothing left to withdraw the command says so and changes nothing.
+        again = self.telnet(self.ilsa, "endorse withdraw Brannoc #1")
+        self.assertIn("You have no endorsement waiting on that pose of Brannoc.", again)
         settle_weekly_pot(self.ilsa.sheet_data)
         self.assertEqual(self.balance(self.brannoc, self.mercy), 0)
+
+    def test_a_witness_cannot_answer_her_own_pick_and_a_stranger_cannot_withdraw_it(self) -> None:
+        self.telnet(self.ilsa, "endorse pose Brannoc #1 resonance=grief")
+        pick = PoseEndorsement.objects.get()
+
+        # Only the witness's own player may withdraw over the web: another player's pick is a 404.
+        hale_delete = self.client(self.hale).delete(f"{POSE_ENDORSEMENTS}{pick.pk}/")
+        self.assertEqual(hale_delete.status_code, status.HTTP_404_NOT_FOUND)
+        # She cannot accept the resonance she proposed herself.
+        own = self.client(self.ilsa).post(f"{POSE_ENDORSEMENTS}{pick.pk}/accept/")
+        self.assertIn(own.status_code, (status.HTTP_400_BAD_REQUEST, status.HTTP_404_NOT_FOUND))
+        pick.refresh_from_db()
+        self.assertTrue(pick.awaiting_acceptance)
+
+    def test_a_pick_the_poser_cannot_pay_for_this_week_stays_unsettled_and_pays_the_next(
+        self,
+    ) -> None:
+        self.telnet(self.ilsa, "endorse pose Brannoc #1 resonance=mercy")
+        self.telnet(self.brannoc, "endorse accept Ilsa #1")
+        # Mercy is Celestial, so Brannoc pays for it, and she has nothing left this week.
+        self.leave_room_for(self.brannoc, 0)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            settle_weekly_pot(self.ilsa.sheet_data)
+
+        self.assertIsNone(PoseEndorsement.objects.get().settled_at)
+        self.assertEqual(self.balance(self.brannoc, self.mercy), 0)
+        self.assertIn(
+            "You were too worn to pay for this, so your Mercy does not grow from that "
+            "endorsement. It will be tried again at next week's settlement.",
+            self.notices(self.brannoc),
+        )
+
+        # Next week she has recovered, and the same endorsement pays.
+        pool = get_or_create_fatigue_pool(self.brannoc.sheet_data)
+        pool.set_current(ActionCategory.SOCIAL, 0)
+        pool.save()
+        settle_weekly_pot(self.ilsa.sheet_data)
+
+        self.assertIsNotNone(PoseEndorsement.objects.get().settled_at)
+        pot = get_resonance_gain_config().weekly_pot_per_character
+        self.assertEqual(self.balance(self.brannoc, self.mercy), pot)
+        self.assertEqual(self.fatigue_of(self.brannoc), 5)
 
     def test_over_the_web_each_viewer_reads_only_the_picks_that_are_theirs_to_see(self) -> None:
         pose = self.pose_row_id()
@@ -664,12 +763,12 @@ class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
         self.assertEqual(undone.json()["id"], self.grant.pk)
         self.assertEqual(self.balance(self.daven, self.cruelty), 0)
         # The role is named, never the account.
-        self.assertTold(
-            self.daven,
+        self.assertIn(
             "The scene's GM undid your Cruelty reward for Frightened the child. "
             "Your Cruelty falls by 10.",
+            self.notices(self.daven),
         )
-        self.assertNotTold(self.daven, "Marek undid")
+        self.assertNotIn("Marek", self.notices(self.daven))
         # The chip stays, struck through, naming the role; nobody can undo it twice.
         chip = self.pose_row(self.ilsa, self.posed["id"])["act_marks"][0]
         self.assertEqual((chip["undone"], chip["undone_by"], chip["can_undo"]), (True, "gm", False))
@@ -695,20 +794,99 @@ class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
 
 
 class AGMsTagNamesAResonanceOutsideHerAura(_Attested):
-    """Marek tags Daven's pose and names Grief, which is not in Daven's aura."""
+    """Marek, the scene's GM, tags Daven's pose and names Grief, which is not in Daven's aura.
+    Only the scene's GM and staff name a resonance outside the aura: a co-owner's named
+    resonance counts only when the character already has it. Nobody tags her own character."""
+
+    def defiant_stand(self, resonance=None):
+        return DramaticMomentTypeFactory(
+            label="Defiant stand", resonance=resonance, resonance_amount=10, per_scene_cap=1
+        )
+
+    def test_a_co_owner_who_is_not_the_gm_names_a_resonance_outside_her_aura_and_gets_the_default(
+        self,
+    ) -> None:
+        self.defiant_stand(self.fury)
+        CharacterResonanceFactory(character_sheet=self.daven.sheet_data, resonance=self.fury)
+
+        tagged = self.telnet(self.ilsa, "moment tag Daven=Defiant stand resonance=Grief")
+
+        # Her named Grief is ignored, so the tag never says whether Daven has it; the type's own
+        # Fury, which she holds, pays, and her player is told by whom, as a role.
+        self.assertIn("You tagged Daven with 'Defiant stand'. 10 Fury and renown awarded.", tagged)
+        self.assertEqual(
+            (self.balance(self.daven, self.fury), self.balance(self.daven, self.grief)), (10, 0)
+        )
+        self.assertIn(
+            "Someone tagged your pose as a Defiant stand. It paid you Fury.",
+            self.notices(self.daven),
+        )
+        self.assertNotIn("Ilsa", self.notices(self.daven))
+
+    def test_nobody_tags_her_own_character_and_no_tag_is_written(self) -> None:
+        self.defiant_stand(self.fury)
+
+        refused = self.telnet(self.marek, "moment tag Marek=Defiant stand")
+
+        self.assertIn("You cannot tag a moment for your own character.", refused)
+        self.assertFalse(DramaticMomentTag.objects.exists())
+
+    def test_a_character_who_is_not_part_of_the_scene_is_refused(self) -> None:
+        self.defiant_stand(self.fury)
+        elsewhere = self.make_room("The Cellar")
+        self.make_player("Wolf", room=elsewhere)
+
+        refused = self.telnet(self.marek, "moment tag Wolf=Defiant stand")
+
+        self.assertIn("That character is not part of this scene.", refused)
+        self.assertFalse(DramaticMomentTag.objects.exists())
+
+    def test_a_gm_confirming_a_suggestion_for_her_own_character_is_refused(self) -> None:
+        moment = self.defiant_stand(self.fury)
+        suggestion = GMPromptFactory(
+            moment_type=moment, character_sheet=self.marek.sheet_data, scene=self.scene
+        )
+
+        refused = self.telnet(self.marek, f"moment confirm {suggestion.pk}")
+
+        self.assertIn("You cannot tag a moment for your own character.", refused)
+        suggestion.refresh_from_db()
+        self.assertEqual(suggestion.status, GMPromptStatus.PENDING)
+        self.assertFalse(DramaticMomentTag.objects.exists())
+
+    def test_a_tag_a_worn_payer_cannot_pay_is_refused_before_it_is_written(self) -> None:
+        self.defiant_stand(self.fury)
+        CharacterResonanceFactory(character_sheet=self.daven.sheet_data, resonance=self.fury)
+        self.leave_room_for(self.daven, 0)
+
+        refused = self.telnet(self.marek, "moment tag Daven=Defiant stand")
+
+        self.assertIn(
+            "Daven is too worn for this tag to pay. Tag another pose, or wait until Daven has "
+            "recovered.",
+            refused,
+        )
+        # Nothing was written, so the scene's cap on this moment is unspent.
+        self.assertFalse(DramaticMomentTag.objects.exists())
+        pool = get_or_create_fatigue_pool(self.daven.sheet_data)
+        pool.set_current(ActionCategory.SOCIAL, 0)
+        pool.save()
+        paid = self.telnet(self.marek, "moment tag Daven=Defiant stand")
+        self.assertIn("You tagged Daven with 'Defiant stand'. 10 Fury and renown awarded.", paid)
 
     def test_the_tag_pays_it_and_the_tagged_player_is_told_which_resonance_it_paid(self) -> None:
-        DramaticMomentTypeFactory(
-            label="Defiant stand", resonance=None, resonance_amount=10, per_scene_cap=1
-        )
+        self.defiant_stand()
         self.assertEqual(self.balance(self.daven, self.grief), 0)
 
         tagged = self.telnet(self.marek, "moment tag Daven=Defiant stand resonance=Grief")
 
         self.assertIn("You tagged Daven with 'Defiant stand'. 10 Grief and renown awarded.", tagged)
         self.assertEqual(self.balance(self.daven, self.grief), 10)
-        self.assertTold(self.daven, "A GM tagged your pose as a Defiant stand. It paid you Grief.")
-        self.assertNotTold(self.daven, "Marek")
+        self.assertIn(
+            "The scene's GM tagged your pose as a Defiant stand. It paid you Grief.",
+            self.notices(self.daven),
+        )
+        self.assertNotIn("Marek", self.notices(self.daven))
 
 
 class AMissionOptionThatNamesItsResonancePaysItAtOnce(_Gate):

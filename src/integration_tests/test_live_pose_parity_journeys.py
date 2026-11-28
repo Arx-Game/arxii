@@ -10,6 +10,7 @@ from rest_framework import status
 
 from integration_tests.harness import JourneyCase
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+from world.narrative.models import NarrativeMessageDelivery
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 SUBMIT_POSE = "/api/interactions/submit-pose/"
@@ -42,6 +43,14 @@ class ALivePoseIsEndorsedInAnOpenScene(JourneyCase):
         return [
             kwargs[name][1] for _args, kwargs in self.mailbox(character).calls if name in kwargs
         ]
+
+    def notices(self, character) -> str:
+        """Every private line the game sent ``character``'s player, from the delivery rows."""
+        return "\n".join(
+            NarrativeMessageDelivery.objects.filter(
+                recipient_character_sheet=character.sheet_data
+            ).values_list("message__body", flat=True)
+        )
 
     def _changed_ids(self, character) -> list[int]:
         return [frame["interaction_id"] for frame in self._frames(character, "interaction_changed")]
@@ -90,7 +99,7 @@ class ALivePoseIsEndorsedInAnOpenScene(JourneyCase):
             self.assertEqual(
                 self._frames(character, "interaction_changed")[0]["scene_id"], self.scene.pk
             )
-        self.assertTold(self.ysmay, PROPOSED)
+        self.assertIn(PROPOSED, self.notices(self.ysmay))
 
         # Hobb's refetch of the pose shows his own pick, waiting; the room does not count it.
         refetched = self.hobb_web.get(f"/api/interactions/{pose_id}/")
