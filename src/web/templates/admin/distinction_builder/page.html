@@ -348,7 +348,7 @@ reason; a page extending `base_site.html` directly does not get it for free.
     if (derived) { derived.hidden = !isTraditionStep; }
     // A Glimpse card always comes free with its answer or memory state (#5292), so
     // how it arrives is stated, not chosen. The server sets it whatever is posted.
-    var isGlimpse = wanted.indexOf("glimpse_tag") !== -1;
+    var isGlimpse = wanted.includes("glimpse_tag");
     var chosen = row.querySelector(".db-arrival-chosen");
     var fixed = row.querySelector(".db-arrival-fixed");
     if (chosen) { chosen.hidden = isGlimpse; }

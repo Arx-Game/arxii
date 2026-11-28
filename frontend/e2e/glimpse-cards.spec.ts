@@ -84,6 +84,38 @@ const held = (draft: Draft) =>
 const railRow = (page: Page, label: string): Locator =>
   page.locator('.record-rail .row').filter({ has: page.locator('dt', { hasText: label }) });
 
+/** The Glimpse's rows of the side panel and the CG points row, as the page reads now. */
+const panel = async (page: Page): Promise<Record<string, string>> =>
+  Object.fromEntries(
+    await page
+      .locator('.record-rail .row')
+      .evaluateAll((rows) =>
+        rows
+          .map((row) => [
+            row.querySelector('dt')?.textContent?.trim() ?? '',
+            row.querySelector('dd')?.textContent?.trim() ?? '',
+          ])
+          .filter(([label]) =>
+            [
+              'Trigger',
+              'The Reflection',
+              'Tone',
+              'Consequence',
+              'Glimpse Mystery',
+              'CG points',
+            ].includes(label)
+          )
+      )
+  );
+
+/**
+ * Writes one reading into the run's log. The evidence answer on a PR quotes what a run
+ * saw, and a passing assertion alone does not say what the value was.
+ */
+const seen = (label: string, value: unknown) => {
+  console.log(`[seen] ${label}: ${JSON.stringify(value)}`);
+};
+
 const answer = (page: Page, name: string): Locator =>
   page.locator('.part button.stance').filter({ has: page.locator('b', { hasText: name }) });
 
@@ -168,6 +200,8 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await expect(answer(page, 'Grief').locator('.bonus')).toHaveCount(0);
     await expect(answer(page, 'Public').locator('.bonus')).toHaveCount(0);
     await shot(page, info, 'stage-before-any-answer-1440.png');
+    seen('before any answer, panel', await panel(page));
+    seen('before any answer, CG points left on the server', points);
 
     // Picking the answer takes the card: the side panel names it, with no reload.
     await answer(page, 'Wonder').click();
@@ -176,18 +210,44 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     expect((await savedDraft(page, seed)).cg_points_remaining).toBe(points);
     await expect(railRow(page, 'CG points').locator('dd')).toHaveText(pointsText);
     await expect(page.locator('.part .price')).toHaveCount(0);
+    seen('Wonder picked, panel', await panel(page));
+    seen('Wonder picked, cards the draft holds', held(await savedDraft(page, seed)));
 
     // A second answer in the part replaces the first and swaps the card.
     await answer(page, 'Defiance').click();
     await expect(answer(page, 'Wonder')).toHaveAttribute('aria-pressed', 'false');
     await expect(railRow(page, 'Tone').locator('dd')).toHaveText('Unbowed');
     await expect.poll(async () => held(await savedDraft(page, seed))).toEqual({ Unbowed: 0 });
+    expect((await savedDraft(page, seed)).cg_points_remaining).toBe(points);
+    seen('Defiance picked in its place, panel', await panel(page));
+    seen('Defiance picked in its place, cards the draft holds', held(await savedDraft(page, seed)));
+    seen(
+      'Defiance picked, CG points left on the server',
+      (await savedDraft(page, seed)).cg_points_remaining
+    );
+
+    // Dropping the answer drops its card.
+    await answer(page, 'Defiance').click();
+    await expect(answer(page, 'Defiance')).toHaveAttribute('aria-pressed', 'false');
+    await expect(railRow(page, 'Tone').locator('dd')).toHaveText('not yet chosen');
+    await expect.poll(async () => held(await savedDraft(page, seed))).toEqual({});
+    expect((await savedDraft(page, seed)).cg_points_remaining).toBe(points);
+    seen('Defiance dropped, panel', await panel(page));
+    seen(
+      'Defiance dropped, CG points left on the server',
+      (await savedDraft(page, seed)).cg_points_remaining
+    );
 
     // An answer with no card gives nothing, and nothing stands in for the card.
     await answer(page, 'Grief').click();
     await expect(railRow(page, 'Tone').locator('dd')).toHaveText('no card');
     await expect.poll(async () => held(await savedDraft(page, seed))).toEqual({});
     await shot(page, info, 'panel-answer-with-no-card.png', page.locator('.record-rail'));
+    seen('Grief picked (no card), panel', await panel(page));
+    seen(
+      'Grief picked, blocks drawn on the answer',
+      await answer(page, 'Grief').locator('.bonus, .price').count()
+    );
 
     // The server refuses two answers in one part, in a part that gives a card and one
     // that gives none.
@@ -220,6 +280,7 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
       .toEqual({ Crisisborn: 0, Glimmering: 0, Wonderstruck: 0, Bereft: 0 });
     expect((await savedDraft(page, seed)).cg_points_remaining).toBe(points);
     await shot(page, info, 'stage-four-answers-1440.png');
+    seen('four parts answered, panel', await panel(page));
 
     // A blackout takes The Reflection and Tone together and is marked by a card.
     await page.locator('.blackout button.stance').click();
@@ -234,6 +295,8 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
       .toEqual({ Crisisborn: 0, Bereft: 0, 'Glimpse Mystery': 0 });
     expect((await savedDraft(page, seed)).cg_points_remaining).toBe(points);
     await shot(page, info, 'stage-blackout-1440.png');
+    seen('blackout ticked, panel', await panel(page));
+    seen('blackout ticked, cards the draft holds', held(await savedDraft(page, seed)));
 
     // Unticking brings the earlier answers and their cards back.
     await page.locator('.blackout button.stance').click();
@@ -251,6 +314,9 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
       .poll(async () => held(await savedDraft(page, seed)))
       .toEqual({ 'Glimpse Mystery': 0 });
     await shot(page, info, 'stage-no-memory-1440.png');
+    seen('no memory, parts drawn', await page.locator('fieldset.part').count());
+    seen('no memory, panel', await panel(page));
+    seen('no memory, cards the draft holds', held(await savedDraft(page, seed)));
     await expect(page.locator('.glimpse-aside')).toContainText(
       'The character holds the Glimpse Mystery card'
     );
@@ -272,6 +338,15 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await expect.poll(async () => held(await savedDraft(page, seed))).toEqual({});
     expect((await savedDraft(page, seed)).cg_points_remaining).toBe(points);
     await shot(page, info, 'stage-later-1440.png');
+    seen('later, parts drawn', await page.locator('fieldset.part').count());
+    seen('later, panel', await panel(page));
+    seen('later, cards the draft holds', held(await savedDraft(page, seed)));
+    await page.reload();
+    await expect(way(page, 'Create Glimpse Post-CG')).toHaveAttribute('aria-pressed', 'true', {
+      timeout: 20000,
+    });
+    await expect(page.locator('fieldset.part')).toHaveCount(0);
+    seen('later, after a reload, panel', await panel(page));
 
     // Back to the first way: the answers were kept, and so the cards return.
     await way(page, 'Create Glimpse in CG').click();
@@ -283,6 +358,7 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     // A reload shows the same, and the page does not scroll sideways on a phone.
     await page.reload();
     await expect(railRow(page, 'Tone').locator('dd')).toHaveText('Wonderstruck');
+    seen('back to the first way, after a reload, panel', await panel(page));
     await page.setViewportSize({ width: 390, height: 844 });
     await expect(answer(page, 'Wonder')).toBeVisible();
     const sideways = await page.evaluate(
@@ -322,6 +398,13 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     const trigger = page.locator('fieldset.part', { has: page.locator('#glimpse-axis-trigger') });
     await expect(trigger.locator('.lead-in')).toHaveText('The Circumstances Around Your Glimpse:');
     await shot(page, info, 'stage-explanation-under-tone.png', tone);
+    seen("Tone's explanation on the stage", await tone.locator('p.explain').innerText());
+    seen("Tone's lead-in lines", await tone.locator('.lead-in').count());
+    seen("Trigger's lead-in", await trigger.locator('.lead-in').innerText());
+    seen(
+      "the Glimpse's paragraph, its last sentence",
+      (await page.locator('p.explain').first().innerText()).split('. ').pop()
+    );
 
     // The Choosing has one answer, open to another path only: this draft is not asked it.
     await expect(page.locator('#glimpse-axis-choosing')).toHaveCount(0);
@@ -379,6 +462,13 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await expect(page.getByText('Nothing of the Glimpse is asked.')).toBeVisible();
     // The draft's own choice is still "remembered" with four answers; the beginning wins.
     await expect(railRow(page, 'Glimpse Mystery').locator('dd')).toHaveText('held');
+    seen(
+      'beginning with no memory, the three ways drawn',
+      await page.getByTestId('glimpse-ways').count()
+    );
+    seen('beginning with no memory, parts drawn', await page.locator('fieldset.part').count());
+    seen('beginning with no memory, the line', await page.locator('.glimpse-aside').innerText());
+    seen('beginning with no memory, panel', await panel(page));
     const kick = await page.request.patch(`/api/character-creation/drafts/${seed.draft_id}/`, {
       data: { draft_data: { glimpse_memory: 'remembered' } },
       headers: { 'X-CSRFToken': await csrfToken(page) },
@@ -545,11 +635,13 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     const refused = await write();
     expect(refused.status()).toBe(400);
     expect(await refused.text()).toContain('This character has no memory of their Glimpse.');
+    seen('no memory, a Tone answer', [refused.status(), await refused.text()]);
     const story = await page.request.post(
       `/api/magic/character-auras/${before.magic.aura.id}/set-glimpse-prose/`,
       { data: { text: 'I remember.' }, headers: { 'X-CSRFToken': await csrfToken(page) } }
     );
     expect(story.status()).toBe(400);
+    seen('no memory, the story', [story.status(), await story.text()]);
 
     // Staff flip the switch in the staff sheet editor.
     const staffContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
@@ -580,6 +672,26 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await shot(page, info, 'sheet-blacked-out-editor.png');
     const blackedOut = await write();
     expect(blackedOut.status()).toBe(400);
+    seen('blacked out, a Tone answer', [blackedOut.status(), await blackedOut.text()]);
+    const publicAnswer = (
+      (await (await page.request.get('/api/character-creation/glimpse-tags/')).json()) as {
+        id: number;
+        name: string;
+      }[]
+    ).find((tag) => tag.name === 'Public')!;
+    const witnessed = await page.request.post(
+      `/api/magic/character-auras/${before.magic.aura.id}/set-glimpse-tags/`,
+      {
+        data: { answers: [{ axis: 'WITNESS', tag_ids: [publicAnswer.id] }] },
+        headers: { 'X-CSRFToken': await csrfToken(page) },
+      }
+    );
+    expect(witnessed.status(), await witnessed.text()).toBe(200);
+    seen('blacked out, a Witness & Secrecy answer', witnessed.status());
+    seen(
+      'blacked out, the sheet cards after it',
+      (await sheet()).distinctions.map((d) => d.name).sort()
+    );
 
     await memory.selectOption('remembered');
     await expect.poll(async () => (await sheet()).magic.aura.glimpse_memory).toBe('remembered');
@@ -588,6 +700,8 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     // The same request is now accepted and gives the card; the marking card stays.
     const accepted = await write();
     expect(accepted.status(), await accepted.text()).toBe(200);
+    seen('remembered, the same Tone answer', accepted.status());
+    seen('remembered, the sheet cards', (await sheet()).distinctions.map((d) => d.name).sort());
     expect((await sheet()).distinctions.map((d) => d.name).sort()).toEqual([
       'Glimpse Mystery',
       'Wonderstruck',
@@ -653,6 +767,53 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     ]);
 
     // Take the line off again, so a second run starts from the same place.
+    await admin.locator('#id_distinction_offers-0-DELETE').check();
+    await admin.locator('input[name="_save"]').click();
+    await expect(admin.locator('.errornote')).toHaveCount(0);
+
+    // The table paste: a second card under an answer that has one is refused, and a
+    // card pasted under an answer with none is created and arrives bundled.
+    const paste = async (text: string) => {
+      await admin.goto('/admin/_distinction_builder/paste/');
+      await admin.locator('#id_text').fill(text);
+      await admin.locator('input[name="action"][value="check"]').click();
+      return admin.locator('table.tuning-table tbody tr');
+    };
+    const second = await paste('Second Card | Glimpse | 0 | 1 | | | | glimpse:Wonder |');
+    await expect(second).toContainText('Wonder already gives Wonderstruck');
+    await expect(admin.locator('input[name="action"][value="create"]')).toHaveCount(0);
+    seen('pasted under Wonder, which has a card', await second.innerText());
+    await shot(admin, info, 'admin-paste-second-card-refused.png', admin.locator('#content'));
+
+    const pasted = await paste('Pasted Card | Glimpse | 0 | 1 | | | | glimpse:Grief |');
+    await expect(pasted).toContainText('create');
+    seen('pasted under Grief, which has none', await pasted.innerText());
+    await admin.locator('input[name="action"][value="create"]').click();
+    await expect(admin.locator('.errornote')).toHaveCount(0);
+    await admin.goto(`/admin/arxii/glimpsetag/${seed.tone_tag_id}/change/`);
+    await expect(admin.locator('#id_distinction_offers-0-name')).toHaveValue('Pasted Card');
+    await expect(admin.getByText('Bundled free with its opener').first()).toBeVisible();
+    const pastedLine = (
+      (await (await admin.request.get('/api/character-creation/glimpse-tags/')).json()) as {
+        id: number;
+        offers: { name: string; arrives_as?: string }[];
+      }[]
+    ).find((tag) => tag.id === seed.tone_tag_id)!.offers;
+    seen('the line the paste made under Grief', pastedLine);
+    await shot(admin, info, 'admin-pasted-card-arrives-bundled.png');
+
+    // A card the Glimpse gives is not placed on the Identity stage.
+    await admin.goto('/admin/arxii/distinction/?q=Wonderstruck');
+    await admin.locator('input[name="_selected_action"]').first().check();
+    await admin.locator('select[name="action"]').selectOption('offer_on_identity');
+    await admin.locator('button[name="index"]').first().click();
+    const told = admin.locator('ul.messagelist li');
+    await expect(told).toContainText('Given by the Glimpse, so not placed: Wonderstruck');
+    seen('Offer on the Identity stage, for Wonderstruck', await told.allInnerTexts());
+    await shot(admin, info, 'admin-identity-action-leaves-a-glimpse-card.png');
+
+    // Take the pasted line off again.
+    await admin.goto(`/admin/arxii/glimpsetag/${seed.tone_tag_id}/change/`);
     await admin.locator('#id_distinction_offers-0-DELETE').check();
     await admin.locator('input[name="_save"]').click();
     await expect(admin.locator('.errornote')).toHaveCount(0);

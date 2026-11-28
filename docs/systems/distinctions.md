@@ -191,7 +191,8 @@ it also mints the default Secret, grants the codex and links the Glimpse, as CG 
 
 ### Exclusion checks
 
-`_check_exclusions` (private to `services.py`) is a service-layer port of
+`check_distinction_exclusions` (`services.py`; public since #5292, which also calls it before
+a Glimpse write saves anything) is a service-layer port of
 `DraftDistinctionViewSet._check_mutual_exclusions`/`_check_variant_exclusions` — the same
 `mutually_exclusive_with` (symmetrical M2M) and variant-sibling rules the CG draft view enforces,
 run against a character's **currently-held** distinctions instead of a draft. It raises

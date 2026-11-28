@@ -23,7 +23,7 @@ are the only other writers — no in-play caller re-implements the create/rank-u
   existing row's `origin`; that reverses a ratified #2037 design decision (see the docstring in
   `services.py` and "Post-CG acquisition" in `docs/systems/distinctions.md`).
   `DistinctionOrigin.GAMEPLAY` is vestigial — kept for schema stability, no writer assigns it.
-- Exclusion checks (`_check_exclusions`, a service-layer port of `DraftDistinctionViewSet`'s
+- Exclusion checks (`check_distinction_exclusions`, a service-layer port of `DraftDistinctionViewSet`'s
   mutual/variant checks) raise `DistinctionExclusionError`, not a DRF `ValidationError` — this
   seam has non-HTTP callers. **Every in-play caller except the GM action/telnet path catches it
   and skips just that grant** (logs, continues) rather than failing the surrounding operation —

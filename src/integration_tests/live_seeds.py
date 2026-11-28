@@ -1294,6 +1294,23 @@ def _canonical_affinities() -> tuple[object, object, object]:
     return ensure_canonical_affinities()
 
 
+#: What ``_strength_spec_draft`` writes into a new draft: the keys a second account's
+#: copy takes, leaving out whatever a spec has since picked on the first.
+_STRENGTH_SPEC_DRAFT_KEYS = frozenset(
+    {
+        "first_name",
+        "description",
+        "stats",
+        "tarot_card_name",
+        "tarot_reversed",
+        "selected_gift_id",
+        "selected_technique_ids",
+        "anima_check_stat_id",
+        "anima_check_skill_id",
+    }
+)
+
+
 def _strength_spec_draft(account: AccountDB) -> int:
     """The account's creation draft at the Gift stage, tradition, gift and techniques chosen.
 
@@ -1343,6 +1360,39 @@ def _strength_spec_draft(account: AccountDB) -> int:
         }
         draft.save()
         return draft.pk
+
+    # The realm, beginning, path, gift and the rest are made once for the database. A
+    # second account's draft (the Glimpse spec's, #5292) is a copy of the first's as it
+    # was made, so two specs can each have a Gift-stage draft of their own.
+    first = (
+        CharacterDraft.objects.filter(selected_area__name="Strength Area")
+        .exclude(account=account)
+        .order_by("pk")
+        .first()
+    )
+    if first is not None:
+        return CharacterDraft.objects.create(
+            account=account,
+            selected_area=first.selected_area,
+            selected_beginnings=first.selected_beginnings,
+            selected_origin_template=first.selected_origin_template,
+            selected_species=first.selected_species,
+            selected_gender=first.selected_gender,
+            selected_path=first.selected_path,
+            selected_tradition=first.selected_tradition,
+            age=first.age,
+            birthday_month=first.birthday_month,
+            birthday_day=first.birthday_day,
+            height_band=first.height_band,
+            height_inches=first.height_inches,
+            build=first.build,
+            current_stage=Stage.GIFT,
+            draft_data={
+                key: value
+                for key, value in first.draft_data.items()
+                if key in _STRENGTH_SPEC_DRAFT_KEYS
+            },
+        ).pk
 
     ensure_rosters()
     seed_pool_and_cap_lanes()
@@ -2084,6 +2134,9 @@ def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - d
         # The spec writes Tone's explanation and a card under Grief through the admin.
         CGExplanation.objects.filter(key="glimpse_axis_tone_explanation").delete()
         DistinctionOffer.objects.filter(distinction__name="Spare Card").delete()
+        # The spec pastes "Pasted Card" under Grief; a pasted row whose card exists is
+        # skipped, so the card of an earlier run is removed with its line.
+        Distinction.objects.filter(name="Pasted Card").delete()
         reconcile_offer_picks(draft)
 
         room = ObjectDB.objects.filter(

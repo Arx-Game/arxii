@@ -460,6 +460,12 @@ def parse_table(text: str) -> list[RowSpec]:
             rows.append(row)
             continue
         rows.append(_parse_row(line_no, line.split("|")))
+    _check_rows_against_each_other(rows)
+    return rows
+
+
+def _check_rows_against_each_other(rows: list[RowSpec]) -> None:
+    """Fail a row that repeats another row's slug or gives a Glimpse answer a second card."""
     seen: set[str] = set()
     for row in rows:
         if row.slug and row.slug in seen and row.status == STATUS_CREATE:
@@ -475,7 +481,6 @@ def parse_table(text: str) -> list[RowSpec]:
             if spec.opener_value in answered:
                 row.fail(f"{spec.label!r} is given a card twice in this table")
             answered.add(spec.opener_value)
-    return rows
 
 
 def table_digest(rows: list[RowSpec]) -> str:
