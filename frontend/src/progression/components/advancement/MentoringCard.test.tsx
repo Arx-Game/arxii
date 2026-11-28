@@ -74,14 +74,14 @@ describe('MentoringCard', () => {
     const { mutate } = setupMocks({ requests: [request], students: [] });
     mutate.mockImplementation(
       (_vars: unknown, opts: { onSuccess: (result: { detail: string }) => void }) =>
-        opts.onSuccess({ detail: 'You agreed to teach Wren Alder Villainy.' })
+        opts.onSuccess({ detail: 'You agree to teach Wren Alder Villainy.' })
     );
     renderWithProviders(<MentoringCard />);
 
     await userEvent.click(screen.getByTestId('mentoring-accept-11'));
 
     expect(mutate).toHaveBeenCalledWith({ allocationId: 11, answer: 'accept' }, expect.anything());
-    expect(toast.success).toHaveBeenCalledWith('You agreed to teach Wren Alder Villainy.');
+    expect(toast.success).toHaveBeenCalledWith('You agree to teach Wren Alder Villainy.');
   });
 
   it("a refused Accept shows the server's sentence and keeps the row", async () => {
