@@ -1920,3 +1920,196 @@ def seed_strength_fight_spec(*, username: str) -> StrengthFightSeed:  # noqa: PL
         staff_username=STRENGTH_FIGHT_STAFF,
         staff_password=staff_password,
     )
+
+
+GLIMPSE_SPEC_STAFF = "glimpse_staff"
+GLIMPSE_SPEC_ROOM = "The Glimpse Spec Hall"
+GLIMPSE_SPEC_LATER = "Maren Vosk"
+GLIMPSE_SPEC_AMNESIAC = "Oriel Thane"
+GLIMPSE_SPEC_MYSTERY = "Glimpse Mystery"
+
+#: (axis, answer, description, card, the card's modifier target) for the live spec. An
+#: answer with no card name gives none: Grief in Tone, and the Witness answers.
+_GLIMPSE_SPEC_ANSWERS = (
+    ("TRIGGER", "Crisis", "Magic woke when you needed more than you had.", "Crisisborn", "resolve"),
+    ("TRIGGER", "Spontaneous", "It came from nowhere, on an ordinary day.", "Unbidden", "instinct"),
+    ("REFLECTION", "Radiant", "You saw yourself shining.", "Glimmering", "presence"),
+    ("REFLECTION", "Shadowed", "You saw what you hide.", "Veiled", "guile"),
+    ("TONE", "Wonder", "Awe at the impossible.", "Wonderstruck", "anima"),
+    ("TONE", "Defiance", "You refused what was happening.", "Unbowed", "willpower"),
+    ("TONE", "Grief", "It came with a loss.", "", ""),
+    ("CONSEQUENCE", "Loss", "Something was taken.", "Bereft", "composure"),
+    ("CONSEQUENCE", "Mark", "It left a sign on you.", "Marked by It", "endurance"),
+    ("WITNESS", "Public", "Many people saw.", "", ""),
+    ("WITNESS", "Unwitnessed", "No one else saw.", "", ""),
+)
+
+
+@dataclass(frozen=True)
+class GlimpseSpecSeed:
+    """What `frontend/e2e/glimpse-cards.spec.ts` reads back (#5292)."""
+
+    draft_id: int
+    beginning_id: int
+    #: The Tone answer the admin step opens, and a card with no line to offer under it.
+    tone_tag_id: int
+    spare_card_id: int
+    witness_tag_id: int
+    #: Roster entry ids of the two characters the account plays: one whose Glimpse was
+    #: left for after creation, one with no memory of it.
+    later_entry_id: int
+    later_sheet_id: int
+    amnesiac_entry_id: int
+    amnesiac_sheet_id: int
+    staff_username: str
+    staff_password: str
+
+
+def _glimpse_spec_catalogue() -> None:
+    """The answers, their cards and the card that marks a lost Glimpse, made once."""
+    from world.character_creation.constants import OfferChapter  # noqa: PLC0415
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+    from world.distinctions.factories import (  # noqa: PLC0415
+        DistinctionCategoryFactory,
+        DistinctionEffectFactory,
+        DistinctionFactory,
+    )
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.magic.constants import GLIMPSE_MEMORY_MARKED  # noqa: PLC0415
+    from world.magic.models import GlimpseTag  # noqa: PLC0415
+    from world.mechanics.factories import ModifierTargetFactory  # noqa: PLC0415
+
+    category = DistinctionCategoryFactory(name="Glimpse", slug="glimpse")
+    for order, (axis, name, description, card_name, target) in enumerate(_GLIMPSE_SPEC_ANSWERS):
+        tag, _ = GlimpseTag.objects.get_or_create(
+            slug=f"spec-{name.lower()}",
+            defaults={"axis": axis, "name": name, "description": description, "sort_order": order},
+        )
+        if not card_name or DistinctionOffer.objects.filter(glimpse_tag=tag).exists():
+            continue
+        card = Distinction.objects.filter(name=card_name).first() or DistinctionFactory(
+            name=card_name,
+            slug=f"spec-{card_name.lower().replace(' ', '-')}",
+            category=category,
+            cost_per_rank=20,
+            description=f"What {name.lower()} left in you.",
+        )
+        DistinctionEffectFactory(
+            distinction=card, target=ModifierTargetFactory(name=target), value_per_rank=1
+        )
+        DistinctionOffer.objects.create(
+            distinction=card, chapter=OfferChapter.GLIMPSE, glimpse_tag=tag
+        )
+    mystery = Distinction.objects.filter(name=GLIMPSE_SPEC_MYSTERY).first() or DistinctionFactory(
+        name=GLIMPSE_SPEC_MYSTERY,
+        slug="spec-glimpse-mystery",
+        category=category,
+        cost_per_rank=0,
+        description="Your Glimpse is a mystery.",
+    )
+    for state in GLIMPSE_MEMORY_MARKED:
+        DistinctionOffer.objects.get_or_create(
+            distinction=mystery, chapter=OfferChapter.GLIMPSE, glimpse_memory=state
+        )
+    if not Distinction.objects.filter(name="Spare Card").exists():
+        DistinctionFactory(name="Spare Card", slug="spec-spare-card", category=category)
+
+
+def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - draft and two sheets
+    """A Gift-stage draft with a Glimpse to answer, and two characters to finish one on (#5292).
+
+    The catalogue holds two answers each for Trigger, The Reflection and Consequence and
+    three for Tone, every one with a card except Grief, plus two Witness & Secrecy answers
+    that give none; "Glimpse Mystery" marks a blackout and no memory. *username*'s draft is
+    at the Gift stage with nothing of the Glimpse chosen, on a beginning that remembers its
+    Glimpse. The account also plays Maren Vosk, whose Glimpse was left for after creation
+    (nothing written, no card), and Oriel Thane, who has no memory of theirs and holds the
+    marking card. A staff account opens the admin and the staff sheet editor. Run again, it
+    puts the draft and both characters back as they started.
+    """
+    from allauth.account.models import EmailAddress  # noqa: PLC0415
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+    from evennia.utils import create  # noqa: PLC0415
+
+    from world.character_creation.models import CharacterDraft  # noqa: PLC0415
+    from world.character_creation.offers import reconcile_offer_picks  # noqa: PLC0415
+    from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
+    from world.distinctions.services import grant_distinction  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+    from world.magic.constants import GlimpseMemory  # noqa: PLC0415
+    from world.magic.factories import CharacterAuraFactory  # noqa: PLC0415
+    from world.magic.models import CharacterAura, CharacterGlimpseTag, GlimpseTag  # noqa: PLC0415
+    from world.magic.services.glimpse import refresh_glimpse_state  # noqa: PLC0415
+
+    account = AccountDB.objects.get(username=username)
+    staff_password = secrets.token_urlsafe(18)
+    with transaction.atomic():
+        _glimpse_spec_catalogue()
+        draft = CharacterDraft.objects.get(pk=_strength_spec_draft(account))
+        draft.draft_data = {
+            key: value
+            for key, value in draft.draft_data.items()
+            if key not in ("glimpse_tag_ids", "glimpse_memory", "glimpse_story", "distinctions")
+        }
+        draft.save()
+        beginning = draft.selected_beginnings
+        if beginning.no_glimpse_memory:
+            beginning.no_glimpse_memory = False
+            beginning.save()
+        reconcile_offer_picks(draft)
+
+        room = ObjectDB.objects.filter(
+            db_key=GLIMPSE_SPEC_ROOM, db_typeclass_path="typeclasses.rooms.Room"
+        ).first() or create.create_object("typeclasses.rooms.Room", key=GLIMPSE_SPEC_ROOM)
+        mystery = Distinction.objects.get(name=GLIMPSE_SPEC_MYSTERY)
+        entries = {}
+        for name, memory in (
+            (GLIMPSE_SPEC_LATER, GlimpseMemory.REMEMBERED),
+            (GLIMPSE_SPEC_AMNESIAC, GlimpseMemory.NO_MEMORY),
+        ):
+            entry = _played_character(account, name, room).roster_entry
+            sheet = entry.character_sheet
+            aura = CharacterAura.objects.filter(character=sheet).first() or CharacterAuraFactory(
+                character=sheet
+            )
+            CharacterGlimpseTag.objects.filter(aura=aura).delete()
+            aura.__dict__.pop("cached_glimpse_tags", None)
+            aura.glimpse_story = ""
+            aura.glimpse_memory = memory
+            aura.save()
+            refresh_glimpse_state(aura)
+            CharacterDistinction.objects.filter(character=sheet).delete()
+            if memory == GlimpseMemory.NO_MEMORY:
+                grant_distinction(sheet, mystery, origin=DistinctionOrigin.CHARACTER_CREATION)
+            entries[name] = entry
+
+        staff = AccountDB.objects.filter(username=GLIMPSE_SPEC_STAFF).first()
+        if staff is None:
+            staff = create.create_account(
+                GLIMPSE_SPEC_STAFF, "glimpse_staff@example.com", staff_password
+            )
+        staff.set_password(staff_password)
+        staff.is_staff = True
+        staff.is_superuser = True
+        staff.save()
+        EmailAddress.objects.update_or_create(
+            user=staff,
+            email="glimpse_staff@example.com",
+            defaults={"primary": True, "verified": True},
+        )
+
+    return GlimpseSpecSeed(
+        draft_id=draft.pk,
+        beginning_id=beginning.pk,
+        tone_tag_id=GlimpseTag.objects.get(slug="spec-grief").pk,
+        spare_card_id=Distinction.objects.get(name="Spare Card").pk,
+        witness_tag_id=GlimpseTag.objects.get(slug="spec-public").pk,
+        later_entry_id=entries[GLIMPSE_SPEC_LATER].pk,
+        later_sheet_id=entries[GLIMPSE_SPEC_LATER].character_sheet.pk,
+        amnesiac_entry_id=entries[GLIMPSE_SPEC_AMNESIAC].pk,
+        amnesiac_sheet_id=entries[GLIMPSE_SPEC_AMNESIAC].character_sheet.pk,
+        staff_username=GLIMPSE_SPEC_STAFF,
+        staff_password=staff_password,
+    )
