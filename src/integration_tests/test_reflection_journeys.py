@@ -208,8 +208,9 @@ class ReflectingInAPose(_Reflecting):
 
         self.assertTrue(result.detail.success, result.detail)
         self.assertEqual(Reflection.objects.get().grant, self.deed)
-        # The recorded line is a success the client shows as one.
-        self.assertEqual(result.detail.data, {"reflection_recorded": True})
+        # The recorded line is a success the client shows as one; the pose carried no mark, so
+        # the mark's own line is empty.
+        self.assertEqual(result.detail.data, {"reflection_recorded": True, "mark_line": ""})
 
     def test_a_reflection_that_fails_after_the_pose_posts_is_flagged_as_an_error(self) -> None:
         with (
@@ -228,7 +229,7 @@ class ReflectingInAPose(_Reflecting):
         # carries the flag that lets the client show it as the error it is.
         self.assertTrue(result.detail.success, result.detail)
         self.assertIn("not recorded", result.detail.message)
-        self.assertEqual(result.detail.data, {"reflection_recorded": False})
+        self.assertEqual(result.detail.data, {"reflection_recorded": False, "mark_line": ""})
         self.assertFalse(Reflection.objects.exists())
 
 
