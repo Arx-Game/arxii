@@ -84,7 +84,7 @@ function TeachesWell({ tradition, copy }: { tradition: Tradition; copy?: CGExpla
 /** "A", "A and B", "A, B and C": the names a Tradition teaches, read as a sentence part. */
 function joinNames(names: string[]): string {
   if (names.length <= 2) return names.join(' and ');
-  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
 }
 
 /** The affinity skills a Tradition's teachers teach (#5326). Nothing when the list is empty. */
