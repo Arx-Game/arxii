@@ -90,6 +90,7 @@ describe('DigDeep', () => {
         strength_name: 'Blazing',
         reasons: [],
         unclaimed: 0,
+        waiting_trickle: 0,
         claim_verb: '',
       },
       {
@@ -100,6 +101,7 @@ describe('DigDeep', () => {
         strength_name: null,
         reasons: [],
         unclaimed: 0,
+        waiting_trickle: 0,
         claim_verb: '',
       },
     ];

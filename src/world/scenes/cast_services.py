@@ -609,6 +609,7 @@ def _resolve_and_pose_cast(  # noqa: PLR0913 - one cohesive cast resolution
             target_persona.character_sheet if target_persona is not None else None,
             technique,
             result.action_resolution.main_result.check_result.outcome,
+            check_type=result.action_resolution.main_result.check_result.check_type,
         )
 
     # Apply technique-authored conditions to resolved targets.

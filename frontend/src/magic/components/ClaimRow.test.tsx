@@ -28,6 +28,7 @@ const ruin: KindledResonance = {
   strength_name: 'Blazing',
   reasons: [],
   unclaimed: 5,
+  waiting_trickle: 0,
   claim_verb: 'gloat',
 };
 const mercy: KindledResonance = {
@@ -38,6 +39,7 @@ const mercy: KindledResonance = {
   strength_name: null,
   reasons: [],
   unclaimed: 3,
+  waiting_trickle: 0,
   claim_verb: 'inspire',
 };
 const quiet: KindledResonance = { ...ruin, id: 3, name: 'Wonder', unclaimed: 0 };

@@ -24,9 +24,9 @@ sheet editor and can open the same editor with every part open. A card held by a
 only showed after a reload before this; a draft save that changes the Glimpse now refreshes
 the held cards and the offers.
 
-Migration `0484` deletes the 26 priced pairings under Glimpse answers (a deliberate discard
-under ADR-0237; the owner ruled they were not theirs) and sets any other Glimpse line to
-arrive bundled; `0485` adds `DistinctionOffer.glimpse_memory`,
+Migration `glimpse_lines_cleared` deletes the 26 priced pairings under Glimpse answers (a
+deliberate discard under ADR-0237; the owner ruled they were not theirs) and sets any other
+Glimpse line to arrive bundled; `glimpse_memory` adds `DistinctionOffer.glimpse_memory`,
 `CharacterAura.glimpse_memory` and `Beginnings.no_glimpse_memory`. See ADR-5292.
 
 **Owed on production, all the owner's:** the rewritten answers; the Glimpse cards and

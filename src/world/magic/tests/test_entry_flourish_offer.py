@@ -37,9 +37,9 @@ class MaybeCreateOfferTest(TestCase):
         EntryFlourishRecordFactory(character_sheet=self.sheet, scene=self.scene, granted_amount=10)
         self.assertIsNone(maybe_create_entry_flourish_offer(self._character(), self.scene))
 
-    def test_no_offer_when_no_claimed_resonances(self):
+    def test_offer_opens_even_with_no_claimed_resonances(self):
         bare = CharacterSheetFactory()
-        self.assertIsNone(maybe_create_entry_flourish_offer(bare.character, self.scene))
+        self.assertIsNotNone(maybe_create_entry_flourish_offer(bare.character, self.scene))
 
 
 class PendingEntryFlourishOfferModelTest(TestCase):
@@ -76,16 +76,18 @@ class ResolveOfferTest(TestCase):
             ).exists()
         )
 
-    def test_resolve_unclaimed_resonance_is_stale(self):
+    def test_resolve_unheld_resonance_earns_it(self):
         from world.magic.entry_flourish import resolve_entry_flourish_offer
-        from world.magic.exceptions import EntryFlourishOfferStaleError
+        from world.magic.models import CharacterResonance
 
         other = ResonanceFactory()
         offer = PendingEntryFlourishOffer.objects.create(
             character_sheet=self.sheet, scene=self.scene
         )
-        with self.assertRaises(EntryFlourishOfferStaleError):
-            resolve_entry_flourish_offer(offer, resonance=other)
+        resolve_entry_flourish_offer(offer, resonance=other)
+        self.assertTrue(
+            CharacterResonance.objects.filter(character_sheet=self.sheet, resonance=other).exists()
+        )
         self.assertFalse(PendingEntryFlourishOffer.objects.filter(pk=offer.pk).exists())
 
 

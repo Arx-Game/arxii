@@ -532,11 +532,14 @@ signals and ease; the other players in the room see nothing. `invoke_favor` snap
 counted pieces onto the `FavorInvocation` (`worn_ease`, `InvocationPiece`,
 `InvocationPieceSignal`), which the staff **Favor invocation** admin page renders as the GM's
 invocation detail. Resonance fed (`MeaningSignalKind.RESONANCE_FED`) is a signal of
-`item_meaning` when a being is given: `OUTFIT_TRICKLE` grants to the holder's sheet on or
-after `held_since`, through facets still on the item, in resonances the being lists (1 point
-per `resonance_fed_per_point`, doubled for a favored resonance, at most
-`resonance_fed_max_points`), counted only alongside another signal besides carried. It also
-reads at a sacrifice and a ceremony offering (`read_item(..., being=)`).
+`item_meaning` when a being is given: the `OUTFIT_TRICKLE` `TrickleAccrual` rows of the
+holder's sheet on or after `held_since`, through facets still on the item, in resonances the
+being lists (1 point per `resonance_fed_per_point`, doubled for a favored resonance, at most
+`resonance_fed_max_points`), counted only alongside another signal besides carried. The reader
+counts an accrual whether or not an anima ritual has harvested it yet (#5308), and adds the
+`OUTFIT_TRICKLE` ledger grants written before trickles waited, so a worn piece's history does
+not shrink on deploy. It also reads at a sacrifice and a ceremony offering
+(`read_item(..., being=)`).
 
 **Keepsakes and a Relic ease the call** (`worship/worn_services._carried_pieces`, #4530,
 slice 4 of #4462) [BUILT & WIRED]
@@ -622,8 +625,10 @@ pledge progress (Ruling 9).
   With an open pledge whose being holds the grant's resonance as FAVORED or ASSOCIATED: base
   = amount x the percent, rounded down, at least 1, held to what is left of the week's cap.
   WORSHIP_RITE grants are skipped (the rite pays favor itself). So are the passive sources in
-  `PASSIVE_DEED_SOURCES` (`worship/constants.py`): the residence and outfit trickles, distinction
-  grants and staff grants. Favor comes only from a character's actions (ruling 2026-10-16).
+  `PASSIVE_DEED_SOURCES` (`worship/constants.py`): the residence and outfit trickles, the anima
+  ritual's harvest of them (`TRICKLE_HARVEST`, #5308: it collects days already lived, so it earns
+  no pledge favor), distinction grants and staff grants. Favor comes only from a character's
+  actions (ruling 2026-10-16).
   Since #4341 it credits the open pledge's being and then each being she holds an active pact
   with (`_deed_beings`), all under the one weekly cap; `deed_favor_used_this_week` adds the pact
   credits' base (`pacts.services.pact_deed_favor_this_week`) so each deed counts once.

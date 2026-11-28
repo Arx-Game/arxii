@@ -48,7 +48,11 @@ if TYPE_CHECKING:
     from world.covenants.perks.context import SituationContext
     from world.magic.types.burn import ResonanceBurnResult
     from world.magic.types.magic_skills import CastCheck
-    from world.magic.types.pull import CastPullDeclaration, PullActionContext
+    from world.magic.types.pull import (
+        CastPullDeclaration,
+        PullActionContext,
+        ResonancePullResult,
+    )
 
 
 _BURN_NOT_A_PAYER = "The burn must come from a resonance you are paying with."
@@ -261,6 +265,7 @@ def pull_action_context(
             participant.character_sheet, cast_involved_trait_ids(cast_check)
         ),
         target=target,
+        check_type=cast_check.check_type if cast_check is not None else None,
     )
 
 
@@ -362,8 +367,11 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
     cast_check: CastCheck | None = None,
     burned_for: str = "",
     action_context: PullActionContext | None = None,
-) -> None:
+) -> ResonancePullResult:
     """Commit *cast_pull* as a ``CombatPull`` row for the current round.
+
+    Returns the ``ResonancePullResult``; ``worth_by_affinity`` on it is what each paying
+    affinity's check made the pull worth (#5308), for a caller that tells the player.
 
     ``action_context`` overrides the action the threads are matched against: a pull
     declared on its own (``pull_alone_context``) or an automatic defensive pull
@@ -457,7 +465,7 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
         cast_pull, sheet=sheet, technique_id=technique_id, participant=participant
     )
     try:
-        spend_resonance_for_pull(
+        result = spend_resonance_for_pull(
             character_sheet=sheet,
             tier=cast_pull.tier,
             threads=list(cast_pull.threads),
@@ -485,6 +493,7 @@ def commit_combat_pull(  # noqa: PLR0913 - one declaration plus the cast it belo
         from world.magic.services.burn import announce_burn  # noqa: PLC0415
 
         announce_burn(sheet.character, burn_result)
+    return result
 
 
 def _pull_committed_this_round(participant: CombatParticipant, encounter: CombatEncounter) -> bool:

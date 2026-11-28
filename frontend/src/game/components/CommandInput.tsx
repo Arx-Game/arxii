@@ -30,6 +30,7 @@ import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { addFeedNote } from '@/store/gameSlice';
 import { ClaimRow } from '@/magic/components/ClaimRow';
+import { ReachRow } from '@/magic/components/ReachRow';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
 import { SineatingRow } from '@/magic/components/SineatingRow';
 import {
@@ -39,6 +40,7 @@ import {
   useWaitingClaims,
 } from '@/magic/queries';
 import { claimFields, NO_CLAIM, type ClaimDraft } from '@/magic/claiming';
+import { NO_REACH, reachFields, type ReachDraft } from '@/magic/reach';
 import { SettleAuraDialog } from '@/magic/components/SettleAuraDialog';
 import { useSettleAuraRequests } from '@/magic/settleAuraRequest';
 import {
@@ -337,6 +339,8 @@ export function CommandInput({
   const [claim, setClaim] = useState<ClaimDraft>(NO_CLAIM);
   const waitingClaims = useWaitingClaims(characterSheetId ?? null);
   const refreshClaims = useRefreshClaims();
+  // #5308 — the resonance this pose reaches for, if any. Cleared once the pose lands.
+  const [reach, setReach] = useState<ReachDraft>(NO_REACH);
   const changeReflection = useCallback((next: ReflectionDraft) => {
     setReflection(next);
     if (next.option !== null || next.choice !== null) setSineating(NO_SINEATING);
@@ -407,6 +411,8 @@ export function CommandInput({
   );
   // The `client_request_id` of a socket-sent pose that carries a claim, until its ack.
   const claimedSendRef = useRef<string | null>(null);
+  // The `client_request_id` of a socket-sent pose that carries a reach, until its ack.
+  const reachedSendRef = useRef<string | null>(null);
   const submittingRef = useRef(false);
   const { send, sendConsole, executeAction } = useGameSocket();
   const isCommandsMode = composerMode?.command === COMMANDS_MODE;
@@ -605,6 +611,10 @@ export function CommandInput({
           if (reflectionLine) {
             showReflectionLine(reflectionLine, payload.data?.reflection_recorded !== false);
           }
+        }
+        if (reachedSendRef.current === pending.clientRequestId) {
+          reachedSendRef.current = null;
+          setReach(NO_REACH);
         }
         if (claimedSendRef.current === pending.clientRequestId) {
           claimedSendRef.current = null;
@@ -1062,6 +1072,7 @@ export function CommandInput({
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       const claimRequest = claimFields(claim, waitingClaims);
+      const reachRequest = reachFields(reach);
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
@@ -1086,8 +1097,10 @@ export function CommandInput({
         ...reflectionFields(reflection),
         ...sineatingFields(sineating),
         ...claimRequest,
+        ...reachRequest,
       })
         .then((response) => {
+          if (reachRequest.reach_resonance_id !== undefined) setReach(NO_REACH);
           if (claimRequest.claim) {
             showClaimLines(response?.claim_lines ?? []);
             setClaim(NO_CLAIM);
@@ -1166,11 +1179,18 @@ export function CommandInput({
       // `tt`: the registry `pose` action takes the reflection, and the draft and the pick clear
       // together on the matching ack (`handleActionResult`).
       const claimRequest = claimFields(claim, waitingClaims);
-      if (isPose && (isReflecting(reflection) || claimRequest.claim)) {
+      const reachRequest = reachFields(reach);
+      if (
+        isPose &&
+        (isReflecting(reflection) ||
+          claimRequest.claim ||
+          reachRequest.reach_resonance_id !== undefined)
+      ) {
         const clientRequestId = beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
         if (isReflecting(reflection)) reflectedSendRef.current = clientRequestId;
         if (claimRequest.claim) claimedSendRef.current = clientRequestId;
+        if (reachRequest.reach_resonance_id !== undefined) reachedSendRef.current = clientRequestId;
         // The typed "@Name" targets travel by name, as on the scene pose, and stay in the text.
         const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
         executeAction(character, 'pose', {
@@ -1179,6 +1199,7 @@ export function CommandInput({
           ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
           ...reflectionFields(reflection),
           ...claimRequest,
+          ...reachRequest,
         });
         submittingRef.current = false;
         return true;
@@ -1254,6 +1275,7 @@ export function CommandInput({
     showSineatingLine,
     claim,
     waitingClaims,
+    reach,
     showClaimLines,
     refreshClaims,
   ]);
@@ -1596,6 +1618,7 @@ export function CommandInput({
                 onChange={setClaim}
                 className="m-2"
               />
+              <ReachRow value={reach} onChange={setReach} className="m-2" />
             </>
           )
         }

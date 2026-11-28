@@ -412,7 +412,8 @@ export async function reactToInteraction(body: {
   }
 }
 
-export async function createPoseEndorsement(body: { interaction: number; resonance: number }) {
+/** `resonance` is left out for a pose that reached for one (#5308): the reach is what is endorsed. */
+export async function createPoseEndorsement(body: { interaction: number; resonance?: number }) {
   const res = await apiFetch('/api/magic/pose-endorsements/', {
     method: 'POST',
     body: JSON.stringify(body),

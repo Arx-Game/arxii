@@ -61,12 +61,14 @@ class CreateEntryFlourishServiceTest(TestCase):
         cr = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
         self.assertEqual(cr.balance, 25)
 
-    def test_character_must_have_claimed_resonance(self):
-        from world.magic.exceptions import EndorsementValidationError
-
+    def test_an_unheld_resonance_is_earned(self):
         other_resonance = ResonanceFactory()
-        with self.assertRaises(EndorsementValidationError):
-            create_entry_flourish(self.sheet, other_resonance, scene=None)
+        create_entry_flourish(self.sheet, other_resonance, scene=None)
+        self.assertTrue(
+            CharacterResonance.objects.filter(
+                character_sheet=self.sheet, resonance=other_resonance
+            ).exists()
+        )
 
     def test_skips_grant_gracefully_on_duplicate_scene(self):
         from world.scenes.factories import SceneFactory

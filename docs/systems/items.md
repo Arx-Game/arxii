@@ -359,7 +359,7 @@ never reads a price, a fee or a material cost**, so a bought item with no histor
 | Designed by you (#4512) | 1 | holder is `designer_character_sheet`, which is stamped only when that character wrote the name or description |
 | Made for (#4512) | 1 + the holder's claimed tier toward the dedicator, at most `made_for_max_points`; nothing when the holder bought it from the dedicator | the dedication; the holder must be the dedicatee |
 | Made from (#4512) | the source's recorded points, at most `made_from_max_points` | `ItemLineage`; counts for the crafter and the dedicatee |
-| Resonance fed (#4520) | the resonance the item's attached facets fed the holder (`OUTFIT_TRICKLE` grants to the holder's sheet on or after `held_since`) in resonances the given being lists: 1 per `resonance_fed_per_point`, doubled for a favored resonance, at most `resonance_fed_max_points`; counts only alongside another signal besides carried, and only when `item_meaning` is given a `being` | `ResonanceGrant.outfit_item_facet`; `BeingResonance` |
+| Resonance fed (#4520) | the resonance the item's attached facets fed the holder (`OUTFIT_TRICKLE` `TrickleAccrual` rows to the holder's sheet on or after `held_since`, harvested or still waiting, plus the `OUTFIT_TRICKLE` ledger grants written before #5308) in resonances the given being lists: 1 per `resonance_fed_per_point`, doubled for a favored resonance, at most `resonance_fed_max_points`; counts only alongside another signal besides carried, and only when `item_meaning` is given a `being` | `TrickleAccrual.outfit_item_facet`, `ResonanceGrant.outfit_item_facet`; `BeingResonance` |
 | Shown (#4512) | per settled, successful `FashionShowing` of the item (statement item, or in the statement outfit) in the last `shown_window_weeks` game weeks: 1 per `shown_engagements_per_point` engagements, at most `shown_max_points` in all | `FashionShowing`; no carry gate (earned in a scene) |
 | Trophy (#4530) | 1 + the legend of the best active deed over `trophy_legend_per_point`, at most `trophy_max_points`; the deed must be credited to one of the holder's personas | `ItemInstance.legend_deeds`; no carry gate (earned by risk) |
 | Keepsake (#4530) | 1 + the subject's scale, at most `keepsake_max_points`: a tie by its claimed tier, a deed by its legend over `keepsake_deed_legend_per_point`, a being, organization, person or place a flat 1; a keepsake of a deed the item is also a trophy of adds a flat 1 on top of the trophy. Counts only for the keeper, and only `keepsake_wait_days` after it was declared. **The player's words are never read.** | `Keepsake` |
@@ -1281,8 +1281,10 @@ here (imported by `crafting/quality.py`).
 
 `remove_facet_from_item` stamps `ItemFacet.removed_at` and keeps the row; it never deletes
 it. `ResonanceGrant.outfit_item_facet` (`res_grant_outfit_trickle_shape` requires it on every
-`OUTFIT_TRICKLE` grant) is `on_delete=PROTECT`, so a facet that fed a wearer resonance cannot
-be deleted and the grant history stays linked. A removed facet stops granting, stops counting
+`OUTFIT_TRICKLE` grant) and `TrickleAccrual.outfit_item_facet` (#5308: the daily worn-piece tick
+now writes accruals, and `trickle_accrual_source_shape` requires it on every `OUTFIT_TRICKLE` row)
+are `on_delete=PROTECT`, so a facet that fed a wearer resonance cannot be deleted and the trickle
+history stays linked. A removed facet stops granting, stops counting
 against `facet_capacity` and disappears from the item; the uniqueness of
 `(item_instance, facet)` holds among attached rows only, so the same facet can be attached
 again. Every reader of "what is on this item" goes through `ItemFacet.attached()` or
@@ -1290,7 +1292,7 @@ again. Every reader of "what is on this item" goes through `ItemFacet.attached()
 handler (`iter_item_facets`, `item_facets_for`), facet capacity, the item-facet API, the
 `craft removefacet` command and the favored-facet check on sacrifice all do. Facet merge
 (`magic.services.facets.merge_facets`) moves removed rows as they are and hands a dropped
-duplicate's grants to the surviving row before deleting it.
+duplicate's grants and trickle accruals to the surviving row before deleting it.
 
 ### Telnet + Action layer (#1866, gem cut added #3006 Task 3)
 

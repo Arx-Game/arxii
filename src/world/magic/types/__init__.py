@@ -36,6 +36,7 @@ from world.magic.types.kindling import (
     KindlingAct,
     KindlingEvidence,
     PendingClaim,
+    PendingReach,
     WaitingResonance,
 )
 from world.magic.types.magic_skills import CastCheck
@@ -51,6 +52,7 @@ from world.magic.types.ritual import (
     AnimaRegenTickSummary,
     AnimaRitualCategory,
     AnimaRitualChoices,
+    HarvestedTrickle,
     RitualBond,
     RitualEarningParts,
     RitualOutcome,
@@ -94,6 +96,7 @@ __all__ = [
     "AuraPercentages",
     "CastCheck",
     "ClaimedResonance",
+    "HarvestedTrickle",
     "KindledResonance",
     "KindlingAct",
     "KindlingEvidence",
@@ -102,6 +105,7 @@ __all__ = [
     "PendingAlterationResult",
     "PendingAlterationTierReduction",
     "PendingClaim",
+    "PendingReach",
     "PullActionContext",
     "PullPreviewResult",
     "QualifyingComponent",

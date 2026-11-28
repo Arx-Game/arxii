@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from actions.models import ConsequencePool
     from actions.types import WeightedConsequence
     from world.checks.models import Consequence
@@ -190,3 +192,7 @@ class TechniqueUseResult:
     #: was settled (no roll). Its ``lines`` are what telnet printed; the web cast result
     #: carries the same sentences.
     focus: FocusOutcome | None = None
+    #: #5308: what the cast resonance's affinity check made the cast's pull and kindled power
+    #: worth, as affinity id to percent. Empty when no check rolled for this cast; a caller
+    #: that tells the caster reads it through ``worth_clause``.
+    worth_by_affinity: Mapping[int, int] = field(default_factory=dict)

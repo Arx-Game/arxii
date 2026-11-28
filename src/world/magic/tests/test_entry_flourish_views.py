@@ -5,7 +5,7 @@ Covers:
     2. Detail retrieval of a foreign account's offer is a 404 (queryset-scoped)
     3. Respond happy path — 200 with result, offer row deleted, grant written
     4. Respond rejects a non-owned offer (400, row survives)
-    5. Respond rejects an unclaimed resonance_id (400)
+    5. Respond accepts an unheld resonance_id (200)
     6. Unauthenticated requests rejected (401/403)
 """
 
@@ -142,8 +142,8 @@ class EntryFlourishRespondViewTests(APITestCase):
         self.assertEqual(response.status_code, 404, response.content)
         self.assertTrue(PendingEntryFlourishOffer.objects.filter(pk=other_offer.pk).exists())
 
-    def test_respond_rejects_unclaimed_resonance(self) -> None:
-        """A resonance_id not claimed by the sheet raises 400."""
+    def test_respond_accepts_unheld_resonance(self) -> None:
+        """A resonance the sheet does not hold yet is earned by the flourish (#5308)."""
         tenure, offer, _ = _make_tenure_with_offer()
         unclaimed = ResonanceFactory()
         account = tenure.player_data.account
@@ -153,7 +153,7 @@ class EntryFlourishRespondViewTests(APITestCase):
             {"offer_id": offer.pk, "resonance_id": unclaimed.pk},
             format="json",
         )
-        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.status_code, 200, response.content)
 
     def test_respond_nonexistent_offer_returns_404(self) -> None:
         """A non-existent offer_id returns 404."""

@@ -221,6 +221,7 @@ def _award_reaction_deed(
             label=act_label(challenge_name, sheet_name(helper, aided)),
         ),
         outcome=result.check_result.outcome,
+        act_check_type=result.check_result.check_type,
     )
 
 

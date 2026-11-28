@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
     from world.combat.models import CombatRoundAction
     from world.gm.models import GMPromptNarration
-    from world.magic.models import PoseEndorsement
+    from world.magic.models import PoseEndorsement, PoseResonanceReach
     from world.magic.models.dramatic_moment import DramaticMomentTag
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
@@ -1300,6 +1300,20 @@ class Interaction(SharedMemoryModel):
                 "resonance",
             )
         )
+
+    @PrunedCachedProperty
+    def cached_resonance_reaches(self) -> list[PoseResonanceReach]:
+        """The resonance this pose reached for (#5308), a list of at most one row.
+
+        Fed by the interaction feed's ``Prefetch`` (``to_attr`` "cached_resonance_reaches"),
+        and a live query on first read otherwise. A list so it works as a ``to_attr`` target.
+        """
+        return list(self.resonance_reaches.select_related("resonance"))
+
+    @property
+    def cached_resonance_reach(self) -> PoseResonanceReach | None:
+        """The one reach this pose carries, or None when it named no resonance (#5308)."""
+        return next(iter(self.cached_resonance_reaches), None)
 
     @PrunedCachedProperty
     def cached_reaction_windows(self) -> list[ReactionWindow]:

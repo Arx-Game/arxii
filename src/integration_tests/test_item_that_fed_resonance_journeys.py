@@ -26,9 +26,9 @@ from world.items.factories import (
     wire_enchanting_crafting,
 )
 from world.items.models import ItemFacet, ItemInstance
-from world.magic.constants import GainSource, TargetKind
+from world.magic.constants import TargetKind, TrickleSource
 from world.magic.factories import CharacterResonanceFactory, FacetFactory, ResonanceFactory
-from world.magic.models import CharacterResonance, ResonanceGrant, Thread
+from world.magic.models import Thread, TrickleAccrual
 from world.magic.services.gain import outfit_daily_trickle_for_character
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
 from world.traits.factories import CharacterTraitValueFactory, CheckOutcomeFactory
@@ -100,18 +100,15 @@ class AScarfThatHasFedItsWearer(JourneyCase):
             developed_points=0,
         )
         self.assertEqual(outfit_daily_trickle_for_character(sheet), 1)
-        self.earned = CharacterResonance.objects.get(
-            character_sheet=sheet, resonance=self.resonance
-        ).balance
+        self.earned = TrickleAccrual.objects.get(
+            character_sheet=sheet, resonance=self.resonance, source=TrickleSource.OUTFIT_TRICKLE
+        ).amount
         self.assertGreater(self.earned, 0)
 
     def _grant_still_points_at_the_facet(self) -> None:
-        grant = ResonanceGrant.objects.get(source=GainSource.OUTFIT_TRICKLE)
-        self.assertEqual(grant.outfit_item_facet_id, self.scarf_facet.pk)
-        balance = CharacterResonance.objects.get(
-            character_sheet=self.ysmay.sheet_data, resonance=self.resonance
-        ).balance
-        self.assertEqual(balance, self.earned)
+        accrual = TrickleAccrual.objects.get(source=TrickleSource.OUTFIT_TRICKLE)
+        self.assertEqual(accrual.outfit_item_facet_id, self.scarf_facet.pk)
+        self.assertEqual(accrual.amount, self.earned)
 
     def test_sacrificing_the_scarf_at_the_shrine(self) -> None:
         self.telnet(self.ysmay, "sacrifice silk scarf")

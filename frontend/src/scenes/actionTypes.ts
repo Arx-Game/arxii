@@ -426,6 +426,11 @@ export interface TechniqueResultData {
    * telnet prints; empty when she was settled.
    */
   focus_lines?: string[];
+  /**
+   * What the caster's affinity check made the cast worth (#5308), the sentence telnet prints,
+   * for example "Your Villainy check made it worth 130 percent."; empty when nothing changed.
+   */
+  worth_line?: string;
 }
 
 export interface SubstanceCallUpData {

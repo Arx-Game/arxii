@@ -59,13 +59,15 @@ def clear_glimpse_lines(apps, schema_editor):
     lines = DistinctionOffer.objects.filter(chapter=GLIMPSE_CHAPTER)
     for axis, tag_slug, card_slug in DISCARDED:
         lines.filter(
-            glimpse_tag__axis=axis, glimpse_tag__slug=tag_slug, distinction__slug=card_slug
+            glimpse_tag__axis=axis,
+            glimpse_tag__slug=tag_slug,
+            distinction__slug=card_slug,
         ).delete()
     DistinctionOffer.objects.filter(chapter=GLIMPSE_CHAPTER).update(arrives_as="bundled")
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0483_poseendorsement_endorser_persona_and_more")]
+    dependencies = [("arxii", "0484_affinity_skill_affinity_spend_worth_floor_percent_and_more")]
 
     operations = [
         migrations.RunPython(clear_glimpse_lines, migrations.RunPython.noop),

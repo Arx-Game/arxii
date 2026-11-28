@@ -22,6 +22,7 @@ from world.magic.factories import (
     KindlingSituationFactory,
     ResonanceFactory,
     ThreadFactory,
+    TrickleAccrualFactory,
 )
 from world.magic.models import KindledStrengthTier
 from world.mechanics.factories import PropertyFactory
@@ -74,6 +75,7 @@ class SeeingWhatIsKindled(JourneyCase):
                 # #5181: what a kindled deed set aside, and the affinity's claiming verb.
                 "claim_verb": "",
                 "unclaimed": 0,
+                "waiting_trickle": 0,
             },
         )
         self.assertFalse(rows["Wonder"]["kindled"])
@@ -81,6 +83,9 @@ class SeeingWhatIsKindled(JourneyCase):
         self.assertEqual(rows["Wonder"]["reasons"], [])
 
     def test_telnet_resonances_prints_the_same_list(self) -> None:
+        # #5308: what her days piled up waits for her anima ritual, on both surfaces.
+        TrickleAccrualFactory(character_sheet=self.sheet, resonance=self.wonder, amount=3)
+        TrickleAccrualFactory(character_sheet=self.sheet, resonance=self.wonder, amount=4)
         told = self.telnet(self.mira, "resonances")
         self.assertEqual(
             told.splitlines(),
@@ -88,8 +93,13 @@ class SeeingWhatIsKindled(JourneyCase):
                 "|wFury|n (Primal) - Kindled, blazing",
                 "  You carry Rage",
                 "|wWonder|n (Primal) - Not kindled",
+                "  7 waiting for your anima ritual",
             ],
         )
+        response = self.api(self.account_of(self.mira)).get(URL, {"character_sheet": self.sheet.pk})
+        rows = {row["name"]: row for row in response.json()["results"]}
+        self.assertEqual(rows["Wonder"]["waiting_trickle"], 7)
+        self.assertEqual(rows["Fury"]["waiting_trickle"], 0)
 
     def test_the_api_shows_her_resonances_to_her_and_no_one_else(self) -> None:
         other = self.make_player("Hobb", room=self.room)

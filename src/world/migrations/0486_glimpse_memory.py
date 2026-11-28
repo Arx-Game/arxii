@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0484_glimpse_lines_cleared"),
-    ]
+    dependencies = [("arxii", "0485_glimpse_lines_cleared")]
 
     operations = [
         migrations.RemoveConstraint(

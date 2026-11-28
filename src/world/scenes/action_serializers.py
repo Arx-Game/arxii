@@ -855,6 +855,18 @@ class TechniqueResultSerializer(serializers.Serializer):
     # #5123: the sentences an unsettled caster is told about her focus on this cast, the
     # same ones telnet prints (empty when she was settled).
     focus_lines = serializers.SerializerMethodField()
+    # #5308: the sentence telling the caster what their affinity check made the cast worth, the
+    # same one telnet prints (empty when every worth is 100).
+    worth_line = serializers.SerializerMethodField()
+
+    @extend_schema_field(serializers.CharField())
+    def get_worth_line(self, obj: object) -> str:
+        from world.magic.services.resonance_checks import worth_clause  # noqa: PLC0415
+        from world.magic.types import TechniqueUseResult  # noqa: PLC0415
+
+        if not isinstance(obj, TechniqueUseResult):
+            return ""
+        return worth_clause(obj.worth_by_affinity)
 
     @extend_schema_field(serializers.ListField(child=serializers.CharField()))
     def get_focus_lines(self, obj: object) -> list[str]:
