@@ -78,10 +78,32 @@ def pose_gain_payer(
     return gain_fatigue_payer(gainer, resonance, target)
 
 
+def send_player_line(sheet: CharacterSheet, line: str, *, ooc_note: str = "") -> None:
+    """Send ``sheet``'s player one private line now, as a SYSTEM narrative message.
+
+    It goes through ``send_narrative_message``, so a player who is offline reads it at login,
+    as the line a payer reads already does. A bare ``character.msg`` reaches only a connected
+    session. A caller already inside a commit callback uses this; any other uses ``tell_player``.
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    send_narrative_message(
+        recipients=[sheet],
+        body=line,
+        category=NarrativeCategory.SYSTEM,
+        ooc_note=ooc_note,
+    )
+
+
+def tell_player(sheet: CharacterSheet, line: str, *, ooc_note: str = "") -> None:
+    """Send ``sheet``'s player one private line once the surrounding transaction commits."""
+    transaction.on_commit(lambda: send_player_line(sheet, line, ooc_note=ooc_note))
+
+
 def tell_gainer(gainer: CharacterSheet, line: str) -> None:
-    """Send ``gainer``'s character one private line once the surrounding transaction commits."""
-    character = gainer.character
-    transaction.on_commit(lambda: character.msg(line))
+    """Tell ``gainer``'s player that a gain with no act shrank or was refused."""
+    tell_player(gainer, line, ooc_note="Resonance gain fatigue")
 
 
 def charge_gain_fatigue(  # noqa: PLR0913 - one gain's payer, pool, size and who is told
@@ -132,21 +154,25 @@ def charge_gain_fatigue(  # noqa: PLR0913 - one gain's payer, pool, size and who
 
 
 def gain_without_act_refusal_line(
-    charge: GainFatigueCharge, gainer: CharacterSheet, resonance: Resonance, *, what: str
+    charge: GainFatigueCharge,
+    gainer: CharacterSheet,
+    resonance: Resonance,
+    *,
+    what: str,
+    next_step: str = "",
 ) -> str:
-    """What ``gainer`` reads when a gain from ``what`` (an endorsement, a GM's tag) was not paid
-    because its payer is worn, and what to do next: "Hale is too worn to pay for this, so your
-    Cruelty does not grow from that endorsement. Try again once Hale has recovered, or mark an
-    act." """
+    """What ``gainer`` reads when a gain from ``what`` (an endorsement) was not paid because its
+    payer is worn, and what happens next: "Hale is too worn to pay for this, so your Cruelty
+    does not grow from that endorsement. It will be tried again at next week's settlement."
+    ``next_step`` is that last sentence; left empty it advises a retry once the payer has
+    recovered, or marking an act."""
     who = payer_name(charge, gainer)
     if _payer_is_gainer(charge, gainer):
         lead, again = "You were too worn to pay for this", "you have"
     else:
         lead, again = f"{who} is too worn to pay for this", f"{who} has"
-    return (
-        f"{lead}, so your {resonance.name} does not grow from {what}. "
-        f"Try again once {again} recovered, or mark an act."
-    )
+    follow = next_step or f"Try again once {again} recovered, or mark an act."
+    return f"{lead}, so your {resonance.name} does not grow from {what}. {follow}"
 
 
 def gain_without_act_shrunk_line(
@@ -249,7 +275,9 @@ __all__ = [
     "pose_gain_payer",
     "pose_gain_target",
     "refusal_line",
+    "send_player_line",
     "shrink_reason",
     "stay_small_sentence",
     "tell_gainer",
+    "tell_player",
 ]

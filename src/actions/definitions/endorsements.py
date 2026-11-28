@@ -145,8 +145,8 @@ class PoseEndorseAction(Action):
         from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
         from world.magic.models import PoseEndorsement  # noqa: PLC0415
         from world.magic.services.gain import (  # noqa: PLC0415
-            account_for_sheet,
             change_pose_endorsement,
+            player_of_sheet,
         )
 
         existing = PoseEndorsement.objects.filter(
@@ -168,7 +168,7 @@ class PoseEndorseAction(Action):
                 ),
                 data={"endorsement": existing},
             )
-        account = account_for_sheet(sheet)
+        account = player_of_sheet(sheet)
         try:
             changed = change_pose_endorsement(existing, resonance, account)
         except EndorsementValidationError as exc:
@@ -212,8 +212,8 @@ class AnswerPoseProposalAction(Action):
         from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
         from world.magic.services.gain import (  # noqa: PLC0415
             accept_pose_proposal,
-            account_for_sheet,
             decline_pose_proposal,
+            player_of_sheet,
         )
         from world.magic.services.kindling import shown_names  # noqa: PLC0415
 
@@ -221,7 +221,7 @@ class AnswerPoseProposalAction(Action):
         if endorsement is None:
             return ActionResult(success=False, message="Which proposal? (endorse accept <char> #N)")
         sheet = actor.sheet_data
-        account = account_for_sheet(sheet)
+        account = player_of_sheet(sheet)
         if account is None:
             return ActionResult(success=False, message="You need a player to answer a proposal.")
         resonance = endorsement.resonance
@@ -250,6 +250,58 @@ class AnswerPoseProposalAction(Action):
         return ActionResult(
             success=True,
             message=f"You decline {witness}'s {resonance.name} on {pose}. It pays nothing.",
+        )
+
+
+@dataclass
+class WithdrawPoseEndorsementAction(Action):
+    """Take back an endorsement of one's own pose pick before the weekly settlement pays it
+    (#5327). Telnet reaches this through ``endorse withdraw``; the web uses DELETE on the
+    endorsement.
+
+    kwargs:
+        endorsement: PoseEndorsement -- the endorsement to take back
+        pose_number: int | None -- the pose's number as ``poses`` lists it, for the reply line
+    """
+
+    key: str = "withdraw_pose_endorsement"
+    name: str = "Withdraw Pose Endorsement"
+    icon: str = "undo"
+    category: str = "magic"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self,
+        actor: ObjectDB,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from world.magic.exceptions import EndorsementValidationError  # noqa: PLC0415
+        from world.magic.services.gain import (  # noqa: PLC0415
+            player_of_sheet,
+            withdraw_pose_endorsement,
+        )
+
+        endorsement = kwargs.get("endorsement")
+        if endorsement is None:
+            return ActionResult(
+                success=False, message="Which endorsement? (endorse withdraw <char> [#N])"
+            )
+        account = player_of_sheet(actor.sheet_data)
+        if account is None:
+            return ActionResult(success=False, message="You need a player to withdraw a pick.")
+        interaction = endorsement.interaction
+        who = interaction.persona.name if interaction.persona else "the poser"
+        number = kwargs.get("pose_number")
+        pose = f"{who}'s pose" if number is None else f"{who}'s pose #{number}"
+        resonance = endorsement.resonance
+        try:
+            withdraw_pose_endorsement(endorsement, account)
+        except EndorsementValidationError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"You withdraw your {resonance.name} endorsement of {pose}.",
         )
 
 

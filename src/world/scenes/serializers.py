@@ -352,6 +352,7 @@ class SceneListSerializer(serializers.ModelSerializer):
     )
     is_owner = serializers.SerializerMethodField()
     viewer_can_gm = serializers.SerializerMethodField()
+    viewer_can_name_tag_resonance = serializers.SerializerMethodField()
     running_beat = serializers.SerializerMethodField()
 
     class Meta:
@@ -366,6 +367,7 @@ class SceneListSerializer(serializers.ModelSerializer):
             "participants",
             "is_owner",
             "viewer_can_gm",
+            "viewer_can_name_tag_resonance",
             "running_beat",
         ]
 
@@ -458,6 +460,20 @@ class SceneListSerializer(serializers.ModelSerializer):
             return False
         user = request.user
         return bool(user.is_staff or obj.is_gm(user) or obj.is_owner(user))
+
+    def get_viewer_can_name_tag_resonance(self, obj: Scene) -> bool:
+        """Whether the viewer may choose the resonance a dramatic-moment tag pays (#5327).
+
+        The scene's GM and staff only, by ``is_scene_gm_or_staff``: a scene owner who is not
+        the GM still sees ``viewer_can_gm`` and may tag, but with the moment type's resonance
+        or one the character already has, so the tag dialog offers her no picker.
+        """
+        from world.scenes.services import is_scene_gm_or_staff  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if not (request and request.user and request.user.is_authenticated):
+            return False
+        return is_scene_gm_or_staff(request.user, obj)
 
     def get_running_beat(self, obj: Scene) -> dict[str, object] | None:
         """The Beat this scene is currently running (#3425), GM/staff viewers only.

@@ -93,6 +93,35 @@ def active_persona_for_sheet(sheet: CharacterSheet) -> Persona:
     return sheet.primary_persona
 
 
+def is_scene_gm_or_staff(account: AccountDB | None, scene: Scene | None) -> bool:
+    """Whether ``account`` is staff or the GM of ``scene`` (#5327).
+
+    The one answer to "may this account act with a GM's authority in this scene" for what a
+    GM's word pays out: choosing the resonance a dramatic-moment tag pays, undoing a reward and
+    answering a waiting pick. ``Scene.is_gm`` decides and a scene owner never counts: every
+    player present when a scene starts is one of its owners. A missing scene is staff-only.
+    """
+    if account is None or not account.is_authenticated:
+        return False
+    if account.is_staff:
+        return True
+    return scene is not None and scene.is_gm(account)
+
+
+def sheet_is_in_scene(sheet: CharacterSheet, scene: Scene) -> bool:
+    """Whether ``sheet`` is part of ``scene``: she posed in it, or her player joined it."""
+    from world.roster.services.npc_lending import current_player_of  # noqa: PLC0415
+    from world.scenes.models import Interaction, SceneParticipation  # noqa: PLC0415
+
+    if Interaction.objects.filter(scene=scene, persona__character_sheet=sheet).exists():
+        return True
+    player = current_player_of(sheet)
+    return (
+        player is not None
+        and SceneParticipation.objects.filter(scene=scene, account=player).exists()
+    )
+
+
 def persona_names_for_sheets(sheet_ids: Iterable[int]) -> dict[int, str]:
     """Batched ``active_persona_for_sheet`` name lookup, ONE round trip (two queries).
 

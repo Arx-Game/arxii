@@ -18,6 +18,7 @@ from world.magic.models import (
     Thread,
     ThreadWeavingTeachingOffer,
 )
+from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.magic.models.sessions import RitualSession
 
 
@@ -279,3 +280,26 @@ class AnimaRitualEndorsementFilterSet(django_filters.FilterSet):
     class Meta:
         model = AnimaRitualPerformance
         fields = ["scene"]
+
+
+class DramaticMomentTagFilter(django_filters.FilterSet):
+    """Filter for the dramatic-moment tag list (#5327).
+
+    ``scene`` narrows to one scene. ``character_sheet`` narrows to one character's tags and is
+    staff's alone: a scene's GM or owner who could filter by sheet id would learn which real
+    character stands behind a persona, so for anyone else it matches nothing.
+    """
+
+    character_sheet = django_filters.NumberFilter(method="filter_character_sheet")
+
+    class Meta:
+        model = DramaticMomentTag
+        fields = ["character_sheet", "scene"]
+
+    def filter_character_sheet(
+        self, queryset: QuerySet[DramaticMomentTag], name: str, value: int
+    ) -> QuerySet[DramaticMomentTag]:
+        """Staff narrow by character; everyone else gets no rows."""
+        if self.request is not None and self.request.user.is_staff:
+            return queryset.filter(character_sheet_id=value)
+        return queryset.none()

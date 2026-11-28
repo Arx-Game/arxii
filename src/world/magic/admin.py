@@ -2434,10 +2434,11 @@ class PoseEndorsementAdmin(admin.ModelAdmin):
         "endorser_sheet",
         "endorsee_sheet",
         "resonance",
+        "awaiting_acceptance",
         "created_at",
         "settled_at",
     )
-    list_filter = ("settled_at",)
+    list_filter = ("awaiting_acceptance", "settled_at")
     readonly_fields = tuple(f.name for f in PoseEndorsement._meta.fields)  # noqa: SLF001
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002

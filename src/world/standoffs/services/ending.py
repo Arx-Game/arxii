@@ -217,6 +217,9 @@ def pay_standoff_ending(
                 tagged_by=account,
                 scene=encounter.scene,
                 archetypes=archetypes,
+                # The game pays the ending, not a person's tag: no fatigue, and no refusal
+                # for a character the account plays (#5327).
+                by_system=True,
             )
     except DramaticMomentCapExceeded:
         # The moment type's per-scene cap is spent: this scene already paid it to her.

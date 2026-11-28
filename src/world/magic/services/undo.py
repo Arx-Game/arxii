@@ -1,9 +1,10 @@
 """Undoing a resonance reward (#5327).
 
-Staff undo any grant. The scene's GM (``Scene.is_gm``, never an owner) undoes a mark, a pose
-endorsement or a dramatic-moment tag in a scene they GM, when they can read the pose that
-carries it. The ledger row stays, stamped ``nullified_at`` and ``nullified_by``, so history is
-kept and the act it paid for can never be marked again.
+Staff undo any grant. The scene's GM (``Scene.is_gm``, never an owner) undoes the six
+scene-bound rewards (``REWARD_SCENE_PATHS``: a mark, a pose endorsement, a dramatic-moment tag,
+an entrance endorsement, an outfit endorsement and an entry flourish) in a scene they GM, when
+they can read the pose that carries it. The ledger row stays, stamped ``nullified_at`` and
+``nullified_by``, so history is kept and the act it paid for can never be marked again.
 
 What ``grant_resonance`` did, and what undo does about each part:
 
@@ -19,18 +20,23 @@ What ``grant_resonance`` did, and what undo does about each part:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, NamedTuple
 
+from django.core.exceptions import ObjectDoesNotExist
 from django.db import transaction
+from django.db.models import Q
 from django.utils import timezone
 
 from world.magic.constants import GainSource
 from world.magic.exceptions import ResonanceUndoError
-from world.magic.models import CharacterResonance, RecordedAct, Reflection, ResonanceGrant
+from world.magic.models import CharacterResonance, Reflection, ResonanceGrant
+from world.magic.services.gain_fatigue import send_player_line
 from world.scenes.interaction_services import notify_interaction_changed
 from world.scenes.models import Interaction
+from world.scenes.services import is_scene_gm_or_staff
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
     from evennia.accounts.models import AccountDB
 
     from world.scenes.models import Scene
@@ -39,27 +45,100 @@ _NOT_ALLOWED = "Only staff or the GM of the scene it happened in can undo that r
 _ALREADY_UNDONE = "That reward was already undone."
 
 
+class RewardScenePath(NamedTuple):
+    """Where one kind of reward keeps the scene it happened in and the pose that carries it.
+
+    Both are paths from a ``ResonanceGrant`` through its typed source row, written as ORM lookups
+    (``source_pose_endorsement__interaction``) so one table serves the Python walk below and
+    the undo endpoint's queryset. ``pose`` is None for a reward no pose carries.
+    """
+
+    source: str
+    scene: str
+    pose: str | None
+
+
+#: Every reward a scene's GM may undo, and nothing else: the six scene-bound sources. Any other
+#: source (a staff grant, a residence trickle, a mission reward, ...) has no scene, so only staff
+#: undo it. A mark carried by a journal entry has a null pose and scene, so only staff undo it.
+REWARD_SCENE_PATHS: tuple[RewardScenePath, ...] = (
+    RewardScenePath(
+        GainSource.MARKED_ACT,
+        "marked_act__marked_interaction__scene",
+        "marked_act__marked_interaction",
+    ),
+    RewardScenePath(
+        GainSource.POSE_ENDORSEMENT,
+        "source_pose_endorsement__interaction__scene",
+        "source_pose_endorsement__interaction",
+    ),
+    RewardScenePath(
+        GainSource.DRAMATIC_MOMENT,
+        "source_dramatic_moment__scene",
+        "source_dramatic_moment__interaction",
+    ),
+    RewardScenePath(
+        GainSource.SCENE_ENTRY,
+        "source_scene_entry_endorsement__scene",
+        "source_scene_entry_endorsement__entry_interaction",
+    ),
+    RewardScenePath(
+        GainSource.STYLE_PRESENTATION,
+        "source_style_presentation_endorsement__scene",
+        None,
+    ),
+    RewardScenePath(
+        GainSource.ENTRY_FLOURISH,
+        "source_entry_flourish__scene",
+        None,
+    ),
+)
+
+
+def _follow(grant: ResonanceGrant, path: str) -> Any:
+    """Walk ``path`` (ORM-style ``a__b__c``) from ``grant``; None when a link is missing."""
+    node: Any = grant
+    for step in path.split("__"):
+        try:
+            node = getattr(node, step)
+        except ObjectDoesNotExist:
+            return None
+        if node is None:
+            return None
+    return node
+
+
 def _reward_scene(grant: ResonanceGrant) -> tuple[Scene | None, Interaction | None]:
     """The scene a reward happened in and the pose that carries it, when it has either.
 
-    Only a mark, a pose endorsement and a dramatic-moment tag belong to a scene a GM runs.
-    Every other source (and a mark carried by a journal entry) has none, so only staff undo it.
+    Read through ``REWARD_SCENE_PATHS``, the same table ``undoable_in_scenes`` filters by.
     """
-    if grant.source == GainSource.MARKED_ACT:
-        act = (
-            RecordedAct.objects.filter(marked_grant=grant)
-            .select_related("marked_interaction__scene")
-            .first()
-        )
-        interaction = act.marked_interaction if act is not None else None
-        return (interaction.scene if interaction is not None else None), interaction
-    if grant.source == GainSource.POSE_ENDORSEMENT and grant.source_pose_endorsement is not None:
-        interaction = grant.source_pose_endorsement.interaction
-        return interaction.scene, interaction
-    if grant.source == GainSource.DRAMATIC_MOMENT and grant.source_dramatic_moment is not None:
-        tag = grant.source_dramatic_moment
-        return tag.scene, tag.interaction
+    for entry in REWARD_SCENE_PATHS:
+        if entry.source != grant.source:
+            continue
+        scene = _follow(grant, entry.scene)
+        pose = _follow(grant, entry.pose) if entry.pose is not None else None
+        return scene, pose
     return None, None
+
+
+def undoable_in_scenes(scene_ids: QuerySet | list[int], readable_poses: QuerySet) -> Q:
+    """The filter that keeps the grants a GM of ``scene_ids`` may undo (#5327).
+
+    One branch per entry of ``REWARD_SCENE_PATHS``: the reward belongs to one of the scenes and,
+    when a pose carries it, the GM can read that pose (``readable_poses``). A reward in a scene
+    whose pose she cannot read is outside the filter, so the endpoint answers 404 for it and
+    never reveals it exists.
+    """
+    combined = Q()
+    for entry in REWARD_SCENE_PATHS:
+        branch = Q(**{f"{entry.scene}__in": scene_ids})
+        if entry.pose is not None:
+            branch &= Q(**{f"{entry.pose}__isnull": True}) | Q(
+                **{f"{entry.pose}__in": readable_poses}
+            )
+        combined |= branch
+    return combined
 
 
 def may_undo_grant(by: AccountDB, grant: ResonanceGrant) -> bool:
@@ -74,7 +153,7 @@ def may_undo_grant(by: AccountDB, grant: ResonanceGrant) -> bool:
     if by.is_staff:
         return True
     scene, interaction = _reward_scene(grant)
-    if scene is None or not scene.is_gm(by):
+    if scene is None or not is_scene_gm_or_staff(by, scene):
         return False
     if interaction is None:
         return True
@@ -164,9 +243,16 @@ def undo_resonance_grant(grant: ResonanceGrant, by: AccountDB) -> ResonanceGrant
         notify_interaction_changed(carrier)
 
     line = _undone_line(row, by, balance_fell=balance_fell, lifetime_fell=lifetime_fell)
-    character = row.character_sheet.character
-    transaction.on_commit(lambda: character.msg(line))
+    transaction.on_commit(
+        lambda: send_player_line(row.character_sheet, line, ooc_note="A reward undone")
+    )
     return row
 
 
-__all__ = ["may_undo_grant", "undo_resonance_grant"]
+__all__ = [
+    "REWARD_SCENE_PATHS",
+    "RewardScenePath",
+    "may_undo_grant",
+    "undo_resonance_grant",
+    "undoable_in_scenes",
+]

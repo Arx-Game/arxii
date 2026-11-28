@@ -35,14 +35,18 @@ from world.magic.exceptions import EndorsementValidationError, ResonanceUndoErro
 from world.magic.factories import (
     CharacterResonanceFactory,
     DramaticMomentTypeFactory,
+    PoseEndorsementFactory,
     PoseResonanceReachFactory,
     RecordedActFactory,
     ResonanceFactory,
+    SceneEntryEndorsementFactory,
+    StylePresentationEndorsementFactory,
     ensure_conversion_pairs,
 )
 from world.magic.models import (
     Affinity,
     CharacterResonance,
+    DramaticMomentTag,
     PoseEndorsement,
     Reflection,
     Resonance,
@@ -53,6 +57,7 @@ from world.magic.services.gain import (
     account_for_sheet,
     change_pose_endorsement,
     create_dramatic_moment_tag,
+    create_entry_flourish,
     create_pose_endorsement,
     decline_pose_proposal,
     get_resonance_gain_config,
@@ -64,7 +69,9 @@ from world.magic.services.marking import weekly_percent_paid
 from world.magic.services.reflection import record_reflection, reflectable_for
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.undo import may_undo_grant, undo_resonance_grant
-from world.roster.factories import RosterTenureFactory
+from world.narrative.models import NarrativeMessageDelivery
+from world.roster.constants import NPCLoanStatus
+from world.roster.factories import NPCLoanFactory, RosterTenureFactory
 from world.scenes.constants import InteractionVisibility
 from world.scenes.factories import (
     InteractionFactory,
@@ -509,14 +516,19 @@ class GainsWithNoActTireTheirPayer(_Table, HypothesisTestCase):
             key=key, pot=pot, cost=cost, gainer=poser, targets=targets, before=before
         )
 
-        settle_weekly_pot(endorser)
+        with self.captureOnCommitCallbacks(execute=True):
+            settle_weekly_pot(endorser)
 
         endorsement.refresh_from_db()
-        self.assertIsNotNone(endorsement.settled_at)
+        # A payer with nothing left refuses it, and the endorsement stays unsettled: the
+        # endorser cannot make the same endorsement twice, so next week's settlement tries it
+        # again. Any other result settles it.
+        refused = payer is not None and paid == 0
+        self.assertEqual(endorsement.settled_at is None, refused)
         grants = self.grants_of(poser)
         self.assertEqual(sum(g.amount for g in grants), paid)
         self.assertEqual(len(grants), 1 if paid else 0)
-        self.assertEqual(endorsement.granted_amount, paid)
+        self.assertEqual(endorsement.granted_amount, None if refused else paid)
         for sheet in everyone:
             pool = get_or_create_fatigue_pool(sheet)
             pool.refresh_from_db()
@@ -527,6 +539,25 @@ class GainsWithNoActTireTheirPayer(_Table, HypothesisTestCase):
         if payer is not None and charged:
             capacity = get_fatigue_capacity(payer, ActionCategory.SOCIAL)
             self.assertLess(self.social(payer), capacity)
+        if refused:
+            # Her player is told, even offline, that it will be tried again.
+            told = NarrativeMessageDelivery.objects.filter(recipient_character_sheet=poser)
+            self.assertIn("next week's settlement", " ".join(d.message.body for d in told))
+            self.assertEqual(self.tried_again_after_rest(endorsement, payer, pot, cost), True)
+
+    def tried_again_after_rest(
+        self, endorsement: PoseEndorsement, payer: CharacterSheet, pot: int, cost: int
+    ) -> bool:
+        """Rest the payer and settle again: the endorsement settles exactly when the rested payer
+        can pay at least 1, from the rules alone (room = capacity - 1, the Exhausted limit)."""
+        pool = get_or_create_fatigue_pool(payer)
+        pool.set_current(ActionCategory.SOCIAL, 0)
+        pool.save()
+        room = max(0, get_fatigue_capacity(payer, ActionCategory.SOCIAL) - 1)
+        can_pay = room >= cost or pot * room // cost > 0
+        settle_weekly_pot(endorsement.endorser_sheet)
+        endorsement.refresh_from_db()
+        return (endorsement.settled_at is not None) == can_pay
 
     @settings(max_examples=12, deadline=None)
     @given(
@@ -552,17 +583,40 @@ class GainsWithNoActTireTheirPayer(_Table, HypothesisTestCase):
             key=key, pot=pot, cost=cost, gainer=poser, targets=targets, before=before
         )
 
-        tag = create_dramatic_moment_tag(
-            character_sheet=poser,
-            moment_type=moment,
-            tagged_by=self.staff,
-            scene=scene,
-            interaction=pose,
-            # The identity-mapped row, whose affinity carries the cost set above.
-            resonance=Resonance.objects.get(pk=self.resonances[key].pk),
-        )
+        refused = payer is not None and paid == 0
 
-        # The tag and its renown stand either way; only the resonance depends on the payer.
+        def make_tag() -> DramaticMomentTag:
+            return create_dramatic_moment_tag(
+                character_sheet=poser,
+                moment_type=moment,
+                tagged_by=self.staff,
+                scene=scene,
+                interaction=pose,
+                # The identity-mapped row, whose affinity carries the cost set above.
+                resonance=Resonance.objects.get(pk=self.resonances[key].pk),
+            )
+
+        if refused:
+            # A payer with nothing left refuses the tag before any row exists: no tag, no
+            # renown, no grant, no fatigue, and the scene's cap for this type is not spent.
+            with self.assertRaises(EndorsementValidationError):
+                make_tag()
+            self.assertFalse(DramaticMomentTag.objects.exists())
+            self.assertEqual(self.grants_of(poser), [])
+            for sheet in everyone:
+                self.assertEqual(self.social(sheet), before[sheet.pk])
+            # Once the payer has rested, the same tag is not blocked by the refused one.
+            pool = get_or_create_fatigue_pool(payer)
+            pool.set_current(ActionCategory.SOCIAL, 0)
+            pool.save()
+            before = {sheet.pk: self.social(sheet) for sheet in everyone}
+            payer, paid, charged = self.expected(
+                key=key, pot=pot, cost=cost, gainer=poser, targets=targets, before=before
+            )
+            if paid == 0:
+                return
+        tag = make_tag()
+
         self.assertIsNotNone(tag.pk)
         grants = self.grants_of(poser)
         self.assertEqual(sum(g.amount for g in grants), paid)
@@ -573,6 +627,42 @@ class GainsWithNoActTireTheirPayer(_Table, HypothesisTestCase):
                 pool.get_current(ActionCategory.SOCIAL),
                 before[sheet.pk] + (charged if payer is not None and sheet.pk == payer.pk else 0),
             )
+
+    @settings(max_examples=12, deadline=None)
+    @given(
+        key=st.sampled_from(RESONANCE_KEYS),
+        cost=st.integers(1, 12),
+        pot=st.integers(1, 60),
+        worn=st.tuples(st.integers(0, 60), st.integers(0, 60), st.integers(0, 60)),
+    )
+    def test_an_outcome_the_game_pays_charges_no_fatigue_and_pays_in_full(
+        self, key: str, cost: int, pot: int, worn: tuple[int, int, int]
+    ) -> None:
+        """A standoff's ending is a system outcome, not a person's tag: nobody pays fatigue for
+        it, even a payer with nothing left, and it is not refused for a character her own
+        account plays (the account that tags is the account that plays her)."""
+        poser, _endorser, targets, pose, scene = self.setup_gain(key, cost, pot, worn, 1)
+        poser_account = account_for_sheet(poser)
+        moment = DramaticMomentTypeFactory(
+            resonance=Resonance.objects.get(pk=self.resonances[key].pk), resonance_amount=pot
+        )
+        CharacterResonanceFactory(character_sheet=poser, resonance=moment.resonance)
+        everyone = [poser, *targets]
+        before = {sheet.pk: self.social(sheet) for sheet in everyone}
+
+        create_dramatic_moment_tag(
+            character_sheet=poser,
+            moment_type=moment,
+            tagged_by=poser_account,
+            scene=scene,
+            interaction=pose,
+            by_system=True,
+        )
+
+        paid = self.grants_of(poser)
+        self.assertEqual(sum(g.amount for g in paid), pot)
+        for sheet in everyone:
+            self.assertEqual(self.social(sheet), before[sheet.pk])
 
 
 class OnlyStaffAndTheSceneGMUndo(_Table, HypothesisTestCase):
@@ -616,14 +706,494 @@ class OnlyStaffAndTheSceneGMUndo(_Table, HypothesisTestCase):
         grant.refresh_from_db()
         self.assertIsNone(grant.nullified_at)
 
-        # The endpoint agrees: nothing for a co-owner, the GM only for a pose she can read.
+        # The endpoint agrees: nothing for a co-owner, the GM only for a pose she can read. A
+        # grant that is not hers to undo is a 404, a pose she cannot read included, so the
+        # answer never says the reward exists.
         client = APIClient()
         url = f"/api/magic/resonance-grants/{grant.pk}/undo/"
         for outsider in (owner, guest, stranger, poser_account):
             client.force_authenticate(user=outsider)
-            self.assertIn(client.post(url).status_code, (403, 404))
+            self.assertEqual(client.post(url).status_code, 404)
         client.force_authenticate(user=gm)
         status_for_gm = client.post(url).status_code
-        self.assertEqual(status_for_gm, 200 if readable else 403)
+        self.assertEqual(status_for_gm, 200 if readable else 404)
         grant.refresh_from_db()
         self.assertEqual(grant.nullified_by, gm if readable else None)
+
+
+TAGGERS = ("gm", "owner", "staff", "bystander", "self")
+
+
+class OnlyTheSceneGMAndStaffNameATagsResonance(_Table, HypothesisTestCase):
+    """A dramatic-moment tag lets only the scene's GM and staff name any resonance, and nobody
+    tags a character she plays.
+
+    An accepted default, not the maintainer's own words: every player present when a scene
+    starts is one of its owners, so a tag that let an owner name any resonance would let any
+    player pay any resonance to any character, herself included. An owner who is not the GM
+    keeps what she could do before: the moment type's own resonance, or one the character
+    already has.
+    """
+
+    def tag_scene(self, tagger: str, poser_account: AccountDB) -> Scene:
+        """A scene the poser's player joined: as one of its owners when she is the one tagging
+        (every player present at the start is), else as a plain participant."""
+        if tagger != "self":
+            return self.scene_with(poser_account)
+        scene = SceneFactory()
+        SceneOwnerParticipationFactory(scene=scene, account=poser_account)
+        return scene
+
+    def tagger_account(
+        self, tagger: str, scene: Scene, poser_account: AccountDB, tag: int
+    ) -> AccountDB:
+        """The account that tags, in the role ``tagger`` names."""
+        if tagger == "self":
+            return poser_account
+        if tagger == "staff":
+            return self.staff
+        account = AccountFactory(username=f"tagger_{tagger}_{tag}")
+        if tagger == "gm":
+            SceneGMParticipationFactory(scene=scene, account=account)
+        elif tagger == "owner":
+            SceneOwnerParticipationFactory(scene=scene, account=account)
+        return account
+
+    def expected_resonance(self, tagger: str, named: str, type_key: str, *, in_aura: bool) -> str:
+        """What a tag pays, from the rule alone: a GM or staff member's choice always, an
+        owner's choice only when the character already has it, else the type's own."""
+        if tagger in ("gm", "staff") or in_aura or named == type_key:
+            return named
+        return type_key
+
+    @settings(max_examples=40, deadline=None)
+    @given(
+        tagger=st.sampled_from(TAGGERS),
+        named=st.sampled_from(RESONANCE_KEYS),
+        type_key=st.sampled_from(RESONANCE_KEYS),
+        in_aura=st.booleans(),
+    )
+    def test_the_service_lets_only_gm_and_staff_name_any_resonance(
+        self, tagger: str, named: str, type_key: str, in_aura: bool
+    ) -> None:
+        self.no_bonus_check()
+        poser, poser_account = self.player()
+        scene = self.tag_scene(tagger, poser_account)
+        by = self.tagger_account(tagger, scene, poser_account, poser.pk)
+        CharacterResonanceFactory(character_sheet=poser, resonance=self.resonances[type_key])
+        if in_aura and named != type_key:
+            CharacterResonanceFactory(character_sheet=poser, resonance=self.resonances[named])
+        moment = DramaticMomentTypeFactory(resonance=self.resonances[type_key])
+        pose = self.pose(scene, poser)
+        call = {
+            "character_sheet": poser,
+            "moment_type": moment,
+            "tagged_by": by,
+            "scene": scene,
+            "interaction": pose,
+            "resonance": Resonance.objects.get(pk=self.resonances[named].pk),
+        }
+
+        if tagger == "self":
+            with self.assertRaises(EndorsementValidationError):
+                create_dramatic_moment_tag(**call)
+            self.assertFalse(DramaticMomentTag.objects.exists())
+            self.assertEqual(self.grants_of(poser), [])
+            return
+
+        create_dramatic_moment_tag(**call)
+
+        grants = self.grants_of(poser)
+        self.assertEqual(len(grants), 1)
+        self.assertEqual(
+            grants[0].resonance,
+            self.resonances[self.expected_resonance(tagger, named, type_key, in_aura=in_aura)],
+        )
+
+    @settings(max_examples=25, deadline=None)
+    @given(
+        tagger=st.sampled_from(TAGGERS),
+        named=st.sampled_from(RESONANCE_KEYS),
+        type_key=st.sampled_from(RESONANCE_KEYS),
+        in_aura=st.booleans(),
+    )
+    def test_the_endpoint_refuses_a_stranger_and_herself_and_never_names_the_character(
+        self, tagger: str, named: str, type_key: str, in_aura: bool
+    ) -> None:
+        self.no_bonus_check()
+        poser, poser_account = self.player()
+        scene = self.tag_scene(tagger, poser_account)
+        by = self.tagger_account(tagger, scene, poser_account, poser.pk)
+        CharacterResonanceFactory(character_sheet=poser, resonance=self.resonances[type_key])
+        if in_aura and named != type_key:
+            CharacterResonanceFactory(character_sheet=poser, resonance=self.resonances[named])
+        moment = DramaticMomentTypeFactory(resonance=self.resonances[type_key])
+        pose = self.pose(scene, poser)
+        client = APIClient()
+        client.force_authenticate(user=by)
+        body = {
+            "moment_type": moment.pk,
+            "interaction": pose.pk,
+            "resonance": self.resonances[named].pk,
+        }
+
+        response = client.post("/api/magic/dramatic-moment-tags/", body, format="json")
+
+        if tagger == "bystander":
+            self.assertEqual(response.status_code, 403)
+            self.assertFalse(DramaticMomentTag.objects.exists())
+            return
+        if tagger == "self":
+            # Her own account is a participant, so the permission passes and the service
+            # refuses a tag on a character she plays.
+            self.assertEqual(response.status_code, 400)
+            self.assertFalse(DramaticMomentTag.objects.exists())
+            return
+        self.assertEqual(response.status_code, 201)
+        # Only staff read who stands behind the pose or which account tagged it.
+        for field in ("character_sheet", "tagged_by"):
+            self.assertEqual(field in response.json(), tagger == "staff")
+        grants = self.grants_of(poser)
+        self.assertEqual(
+            [g.resonance for g in grants],
+            [self.resonances[self.expected_resonance(tagger, named, type_key, in_aura=in_aura)]],
+        )
+
+    @settings(max_examples=15, deadline=None)
+    @given(visibility=st.sampled_from(VISIBILITIES))
+    def test_a_stranger_learns_nothing_from_ids_and_a_pose_fixes_its_scene(
+        self, visibility: str
+    ) -> None:
+        self.no_bonus_check()
+        poser, poser_account = self.player()
+        outsider_sheet, outsider_account = self.player()
+        scene = self.scene_with(poser_account)
+        other_scene = self.scene_with(poser_account)
+        gm = AccountFactory(username=f"tag_scene_gm_{poser.pk}")
+        stranger = AccountFactory(username=f"tag_stranger_{poser.pk}")
+        SceneGMParticipationFactory(scene=scene, account=gm)
+        SceneGMParticipationFactory(scene=other_scene, account=gm)
+        moment = DramaticMomentTypeFactory(resonance=self.resonances["primal 1"])
+        CharacterResonanceFactory(character_sheet=poser, resonance=self.resonances["primal 1"])
+        pose = self.pose(scene, poser, visibility)
+        url = "/api/magic/dramatic-moment-tags/"
+        client = APIClient()
+
+        # A stranger gets the same refusal for ids that exist and ids that do not.
+        client.force_authenticate(user=stranger)
+        real = client.post(url, {"moment_type": moment.pk, "interaction": pose.pk}, format="json")
+        absent = client.post(url, {"moment_type": 0, "interaction": 0}, format="json")
+        self.assertEqual((real.status_code, absent.status_code), (403, 403))
+        self.assertEqual(real.json(), absent.json())
+
+        # The GM of both scenes cannot tag a pose into the other, nor a character outside it.
+        client.force_authenticate(user=gm)
+        wrong_scene = {"moment_type": moment.pk, "interaction": pose.pk, "scene": other_scene.pk}
+        wrong_sheet = {
+            "moment_type": moment.pk,
+            "interaction": pose.pk,
+            "character_sheet": outsider_sheet.pk,
+        }
+        # The outsider's player never joined the scene, so she is not part of it.
+        self.assertEqual(client.post(url, wrong_scene, format="json").status_code, 400)
+        self.assertEqual(client.post(url, wrong_sheet, format="json").status_code, 400)
+        self.assertFalse(DramaticMomentTag.objects.exists())
+
+        # A pose the GM cannot read is not hers to tag.
+        readable = visibility != InteractionVisibility.VERY_PRIVATE
+        ok = client.post(url, {"moment_type": moment.pk, "interaction": pose.pk}, format="json")
+        self.assertEqual(ok.status_code, 201 if readable else 400)
+        self.assertEqual(DramaticMomentTag.objects.count(), 1 if readable else 0)
+
+        # The list holds the tags of scenes the requester GMs or owns, and nobody else's.
+        self.assertEqual(
+            len(client.get(url).json()["results"]),
+            1 if readable else 0,
+        )
+        for outside in (stranger, outsider_account):
+            client.force_authenticate(user=outside)
+            self.assertEqual(client.get(url).json()["results"], [])
+        # Filtering by character is staff's alone.
+        client.force_authenticate(user=gm)
+        self.assertEqual(client.get(url, {"character_sheet": poser.pk}).json()["results"], [])
+        client.force_authenticate(user=self.staff)
+        staff_rows = client.get(url, {"character_sheet": poser.pk}).json()["results"]
+        self.assertEqual(len(staff_rows), 1 if readable else 0)
+
+
+class AWaitingPickIsAnsweredByTheRightPeople(_Table, HypothesisTestCase):
+    """The poser, her scene's GM and staff answer a waiting pick, nobody answers her own, and a
+    lent NPC is answered by its borrower, not by the player who lent it away.
+
+    An accepted default, not the maintainer's own words: a GM who proposed a resonance
+    cannot also accept it, and a GM who cannot read the pose cannot answer a pick on it.
+    """
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        key=st.sampled_from(RESONANCE_KEYS),
+        visibility=st.sampled_from(VISIBILITIES),
+        accept=st.booleans(),
+    )
+    def test_the_endorser_never_answers_and_a_gm_answers_only_a_pose_she_can_read(
+        self, key: str, visibility: str, accept: bool
+    ) -> None:
+        self.no_bonus_check()
+        poser, poser_account = self.player()
+        endorser, endorser_account = self.player()
+        gm = AccountFactory(username=f"answer_gm_{poser.pk}")
+        scene = self.scene_with(poser_account)
+        SceneGMParticipationFactory(scene=scene, account=gm)
+        # The endorser is also a GM of the scene: a GM who proposed it cannot accept it.
+        SceneGMParticipationFactory(scene=scene, account=endorser_account)
+        pose = self.pose(scene, poser, visibility)
+        readable = visibility != InteractionVisibility.VERY_PRIVATE
+        proposal = create_pose_endorsement(endorser, pose, self.resonances[key])
+        answer = accept_pose_proposal if accept else decline_pose_proposal
+
+        with self.assertRaises(EndorsementValidationError):
+            answer(proposal, endorser_account)
+        if not readable:
+            with self.assertRaises(EndorsementValidationError):
+                answer(proposal, gm)
+            self.assertTrue(PoseEndorsement.objects.get(pk=proposal.pk).awaiting_acceptance)
+            return
+
+        answer(proposal, gm)
+
+        self.assertEqual(
+            PoseEndorsement.objects.filter(pk=proposal.pk, awaiting_acceptance=False).exists(),
+            accept,
+        )
+        self.assertEqual(PoseEndorsement.objects.filter(pk=proposal.pk).exists(), accept)
+
+    @settings(max_examples=12, deadline=None)
+    @given(key=st.sampled_from(RESONANCE_KEYS), accept=st.booleans())
+    def test_a_lent_npcs_borrower_answers_and_its_holder_does_not(
+        self, key: str, accept: bool
+    ) -> None:
+        self.no_bonus_check()
+        endorser, endorser_account = self.player()
+        npc, holder = self.player()
+        borrower = AccountFactory(username=f"borrower_{npc.pk}")
+        NPCLoanFactory(
+            roster_entry=npc.roster_entry,
+            borrower=borrower,
+            offered_by=holder,
+            status=NPCLoanStatus.ACTIVE,
+        )
+        scene = self.scene_with(endorser_account, borrower)
+        # The borrower is the one who posed it, so her account is the pose's writer.
+        pose = InteractionFactory(scene=scene, persona=npc.primary_persona, writer_account=borrower)
+        proposal = create_pose_endorsement(endorser, pose, self.resonances[key])
+        answer = accept_pose_proposal if accept else decline_pose_proposal
+        url = f"/api/magic/pose-endorsements/{proposal.pk}/{'accept' if accept else 'decline'}/"
+        client = APIClient()
+
+        # The holder lent it away, so it is not hers to answer, and the route does not find it.
+        with self.assertRaises(EndorsementValidationError):
+            answer(proposal, holder)
+        client.force_authenticate(user=holder)
+        self.assertEqual(client.post(url).status_code, 404)
+        self.assertTrue(PoseEndorsement.objects.get(pk=proposal.pk).awaiting_acceptance)
+
+        client.force_authenticate(user=borrower)
+        self.assertEqual(client.post(url).status_code, 200 if accept else 204)
+        self.assertEqual(PoseEndorsement.objects.filter(pk=proposal.pk).exists(), accept)
+
+    @settings(max_examples=12, deadline=None)
+    @given(key=st.sampled_from(RESONANCE_KEYS), settled=st.booleans())
+    def test_only_the_endorser_deletes_and_every_other_answer_is_a_404(
+        self, key: str, settled: bool
+    ) -> None:
+        self.no_bonus_check()
+        poser, poser_account = self.player()
+        endorser, endorser_account = self.player()
+        _witness, witness_account = self.player()
+        scene = self.scene_with(poser_account, endorser_account, witness_account)
+        pose = self.pose(scene, poser)
+        endorsement = PoseEndorsementFactory(
+            endorser_sheet=endorser,
+            endorsee_sheet=poser,
+            interaction=pose,
+            resonance=self.resonances[key],
+            awaiting_acceptance=True,
+        )
+        if settled:
+            endorsement.settled_at = endorsement.created_at
+            endorsement.save(update_fields=["settled_at"])
+        url = f"/api/magic/pose-endorsements/{endorsement.pk}/"
+        client = APIClient()
+
+        # Another player's waiting pick answers exactly as a missing one does.
+        for other in (witness_account, poser_account):
+            client.force_authenticate(user=other)
+            self.assertEqual(client.delete(url).status_code, 404)
+            self.assertEqual(client.delete("/api/magic/pose-endorsements/0/").status_code, 404)
+        self.assertTrue(PoseEndorsement.objects.filter(pk=endorsement.pk).exists())
+
+        client.force_authenticate(user=endorser_account)
+        self.assertEqual(client.delete(url).status_code, 404 if settled else 204)
+        self.assertEqual(PoseEndorsement.objects.filter(pk=endorsement.pk).exists(), settled)
+
+
+SIX_REWARDS = ("mark", "pose endorsement", "tag", "entry endorsement", "style", "flourish")
+
+
+class AGMUndoesEverySceneBoundReward(_Table, HypothesisTestCase):
+    """The scene's GM undoes each of the six rewards that belong to a scene, and the answer
+    shows her nothing of whom it paid.
+
+    An accepted default, not the maintainer's own words: the rewards a mark, a pose endorsement,
+    a tag, an entrance endorsement, an outfit endorsement and an entry flourish pay all happen
+    in a scene, so the GM of that scene may undo them; every other source is staff's.
+    """
+
+    def reward(self, kind: str, poser: CharacterSheet, scene: Scene, pose: Interaction, key: str):
+        """One reward of ``kind``, written the way play writes it, and the grant it paid."""
+        resonance = self.resonances[key]
+        other, _account = self.player()
+        if kind == "mark":
+            grant = self.marked_grant(poser, key, 9)
+            RecordedActFactory(character_sheet=poser, marked_grant=grant, marked_interaction=pose)
+            return grant
+        if kind == "tag":
+            tag = create_dramatic_moment_tag(
+                character_sheet=poser,
+                moment_type=DramaticMomentTypeFactory(resonance=resonance),
+                tagged_by=self.staff,
+                scene=scene,
+                interaction=pose,
+                resonance=resonance,
+            )
+            return ResonanceGrant.objects.get(source_dramatic_moment=tag)
+        if kind == "flourish":
+            record = create_entry_flourish(poser, resonance, scene=scene)
+            return ResonanceGrant.objects.get(source_entry_flourish=record)
+        kwargs: dict[str, object]
+        if kind == "pose endorsement":
+            source = GainSource.POSE_ENDORSEMENT
+            kwargs = {
+                "pose_endorsement": PoseEndorsementFactory(
+                    endorser_sheet=other,
+                    endorsee_sheet=poser,
+                    interaction=pose,
+                    resonance=resonance,
+                )
+            }
+        elif kind == "entry endorsement":
+            source = GainSource.SCENE_ENTRY
+            kwargs = {
+                "scene_entry_endorsement": SceneEntryEndorsementFactory(
+                    endorser_sheet=other,
+                    endorsee_sheet=poser,
+                    scene=scene,
+                    entry_interaction=pose,
+                    entry_interaction_timestamp=pose.timestamp,
+                    resonance=resonance,
+                )
+            }
+        else:
+            source = GainSource.STYLE_PRESENTATION
+            kwargs = {
+                "style_presentation_endorsement": StylePresentationEndorsementFactory(
+                    endorser_sheet=other, endorsee_sheet=poser, scene=scene, resonance=resonance
+                )
+            }
+        ledger: list[ResonanceGrant] = []
+        grant_resonance(poser, resonance, 9, source=source, ledger_out=ledger, **kwargs)
+        return ledger[-1]
+
+    @settings(max_examples=24, deadline=None)
+    @given(
+        kind=st.sampled_from(SIX_REWARDS),
+        key=st.sampled_from(RESONANCE_KEYS),
+        visibility=st.sampled_from(VISIBILITIES),
+    )
+    def test_the_gm_staff_and_nobody_else_undo_each_one(
+        self, kind: str, key: str, visibility: str
+    ) -> None:
+        self.no_bonus_check()
+        poser, poser_account = self.player()
+        scene = self.scene_with(poser_account)
+        gm = AccountFactory(username=f"six_gm_{poser.pk}")
+        owner = AccountFactory(username=f"six_owner_{poser.pk}")
+        SceneGMParticipationFactory(scene=scene, account=gm)
+        SceneOwnerParticipationFactory(scene=scene, account=owner)
+        pose = self.pose(scene, poser, visibility)
+        grant = self.reward(kind, poser, scene, pose, key)
+        url = f"/api/magic/resonance-grants/{grant.pk}/undo/"
+        client = APIClient()
+
+        # A reward no pose carries is the GM's whatever the pose's privacy; one a pose carries
+        # needs a pose she can read, and without one the route answers 404.
+        carried = kind in ("mark", "pose endorsement", "tag", "entry endorsement")
+        gm_may = not (carried and visibility == InteractionVisibility.VERY_PRIVATE)
+        for outsider in (owner, poser_account):
+            client.force_authenticate(user=outsider)
+            self.assertEqual(client.post(url).status_code, 404)
+
+        client.force_authenticate(user=gm)
+        response = client.post(url)
+
+        self.assertEqual(response.status_code, 200 if gm_may else 404)
+        grant.refresh_from_db()
+        if gm_may:
+            # Nothing but the id and when: not the amount, the sheet or the staff account.
+            self.assertEqual(set(response.json()), {"id", "nullified_at"})
+            self.assertEqual(grant.nullified_by, gm)
+        else:
+            self.assertIsNone(grant.nullified_at)
+            client.force_authenticate(user=self.staff)
+            self.assertEqual(client.post(url).status_code, 200)
+
+
+class PrivateLinesReachAPlayerWhoIsOffline(_Table, HypothesisTestCase):
+    """The lines the proposal, the tag and the undo send are stored for a player who is not
+    connected, so she reads them at her next login.
+
+    An accepted default, not the maintainer's own words: a bare message to a character reaches
+    only a connected session, and these lines carry what happened to her resonance.
+    """
+
+    def lines_for(self, sheet: CharacterSheet) -> str:
+        deliveries = NarrativeMessageDelivery.objects.filter(recipient_character_sheet=sheet)
+        return " ".join(d.message.body for d in deliveries)
+
+    @settings(max_examples=10, deadline=None)
+    @given(key=st.sampled_from(RESONANCE_KEYS), other=st.sampled_from(RESONANCE_KEYS))
+    def test_a_proposal_a_tag_and_an_undo_are_each_stored_for_the_player(
+        self, key: str, other: str
+    ) -> None:
+        self.no_bonus_check()
+        poser, poser_account = self.player()
+        endorser, endorser_account = self.player()
+        scene = self.scene_with(poser_account, endorser_account)
+        pose = self.pose(scene, poser)
+
+        # Her witness proposes a resonance on her pose.
+        with self.captureOnCommitCallbacks(execute=True):
+            create_pose_endorsement(endorser, pose, self.resonances[key])
+        self.assertIn(f"proposed {self.resonances[key].name} on your pose", self.lines_for(poser))
+
+        # A GM tags the pose and names a resonance.
+        gm = AccountFactory(username=f"offline_gm_{poser.pk}")
+        SceneGMParticipationFactory(scene=scene, account=gm)
+        moment = DramaticMomentTypeFactory(resonance=self.resonances[other])
+        with self.captureOnCommitCallbacks(execute=True):
+            tag = create_dramatic_moment_tag(
+                character_sheet=poser,
+                moment_type=moment,
+                tagged_by=gm,
+                scene=scene,
+                interaction=pose,
+                resonance=Resonance.objects.get(pk=self.resonances[other].pk),
+            )
+        self.assertIn(f"It paid you {self.resonances[other].name}", self.lines_for(poser))
+        self.assertIn("The scene's GM tagged your pose", self.lines_for(poser))
+
+        # Staff undo the tag's reward.
+        grant = ResonanceGrant.objects.get(source_dramatic_moment=tag)
+        with self.captureOnCommitCallbacks(execute=True):
+            undo_resonance_grant(grant, self.staff)
+        self.assertIn("Staff undid your", self.lines_for(poser))

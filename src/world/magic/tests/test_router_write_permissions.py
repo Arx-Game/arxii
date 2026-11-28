@@ -40,7 +40,12 @@ PLAYER_WRITABLE: dict[str, str] = {
     ),
     "PoseEndorsementViewSet": (
         "perform_create goes through create_pose_endorsement, which checks the endorser; "
-        "destroy refuses a settled endorsement. The web EndorsementControl writes it."
+        "destroy reads only the endorsements the requester's own characters made (the "
+        "queryset, by the loan-aware playable_by rule) and goes through "
+        "withdraw_pose_endorsement, which refuses a settled one. The web EndorsementControl "
+        "writes it. Its change, accept and decline routes are @action routes, which this "
+        "walk does not read: each reads a queryset scoped to the endorser, the poser, or the "
+        "scene's GM who can read the pose, and the services re-check who may answer."
     ),
     "SceneEntryEndorsementViewSet": (
         "perform_create goes through create_scene_entry_endorsement, which checks the "
@@ -51,8 +56,10 @@ PLAYER_WRITABLE: dict[str, str] = {
         "endorser."
     ),
     "DramaticMomentTagViewSet": (
-        "perform_create refuses anyone but the scene's GM, owner or staff "
-        "(IsSceneGMOrOwnerOrStaff) and tags through create_dramatic_moment_tag."
+        "create refuses anyone but the scene's GM, owner or staff (IsSceneGMOrOwnerOrStaff) "
+        "before it validates the body, and tags through create_dramatic_moment_tag, which "
+        "refuses a tag on a character the tagger plays, lets only the scene's GM or staff name "
+        "a resonance the character lacks, and charges the payer's fatigue."
     ),
     "PreparedCrossingTextViewSet": (
         "Staff or the character's table GM (CanPrepareCharacterText on the row, "
