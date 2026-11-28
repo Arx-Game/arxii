@@ -32,6 +32,7 @@ import uuid
 
 from django.contrib.auth import get_user_model
 from django.urls import reverse
+from evennia.utils.idmapper.models import flush_cache
 from rest_framework import status
 
 from actions.constants import ActionCategory, ActionTargetType
@@ -74,6 +75,8 @@ from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.magic.services.gain import get_resonance_gain_config, settle_weekly_pot
 from world.magic.services.kindling import award_scene_act
 from world.narrative.models import NarrativeMessageDelivery
+from world.roster.constants import NPCLoanStatus
+from world.roster.factories import NPCLoanFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -82,13 +85,14 @@ from world.scenes.constants import (
 )
 from world.scenes.factories import (
     InteractionFactory,
+    PersonaDiscoveryFactory,
     SceneFactory,
     SceneGMParticipationFactory,
     SceneOwnerParticipationFactory,
     SceneParticipationFactory,
 )
 from world.scenes.interaction_services import invalidate_active_scene_cache
-from world.scenes.models import Interaction
+from world.scenes.models import Interaction, Persona
 from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import TraitCategory
 from world.traits.services import ensure_canonical_check_outcome
@@ -297,10 +301,29 @@ class ListingAndMarkingActsByTelnet(_Attested):
         told = self.mark_by_telnet(self.daven, "cruelty", act, "snarls at the grave-wight.")
 
         self.assertIn(
-            "This scene is ephemeral and stores nothing, so a mark here pays nothing.", told
+            "This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the "
+            "act later, in a pose in another scene or from a journal entry.",
+            told,
         )
         self.assertEqual(self.balance(self.daven, self.cruelty), 0)
         self.assertIn("Frightened the grave-wight", self.telnet(self.daven, "acts"))
+
+    def test_a_lent_characters_acts_are_read_by_the_borrower_and_not_by_the_holder(self) -> None:
+        act = self.take_act(self.daven, None, "Frightened the grave-wight")
+        holder, borrower = self.account_of(self.daven), AccountFactory()
+        NPCLoanFactory(
+            roster_entry=self.daven.sheet_data.roster_entry,
+            borrower=borrower,
+            offered_by=holder,
+            status=NPCLoanStatus.ACTIVE,
+        )
+        url = f"{RECORDED_ACTS}?character_sheet={self.daven.sheet_data.pk}"
+
+        borrowed = self.api(borrower).get(url)
+        held = self.api(holder).get(url)
+
+        self.assertEqual([row["id"] for row in borrowed.json()["results"]], [act.pk])
+        self.assertEqual(held.json()["results"], [])
 
     def test_the_recorded_acts_list_shows_the_player_her_own_acts_with_suggestions_only(
         self,
@@ -419,10 +442,23 @@ class MarkingByTheWebAndAJournalEntry(_Attested):
         daven_reads = self.pose_row(self.daven, posed["id"])["act_marks"][0]["act_label"]
         ilsa_reads = self.pose_row(self.ilsa, posed["id"])["act_marks"][0]["act_label"]
 
-        # The actor reads the name she knows; everyone else reads the mask, never "Hale".
+        # The actor reads the name she knows; a reader who has not seen through the mask reads
+        # the mask, never "Hale".
         self.assertEqual(daven_reads, "Intimidated Hale")
         self.assertEqual(ilsa_reads, "Intimidated Owl Mask")
         self.assertNotIn("Hale", json.dumps(self.pose_row(self.ilsa, posed["id"]), default=str))
+        # A reader who has seen through it, and staff, read the real name beside the mask.
+        mask = Persona.objects.get(character_sheet=self.hale.sheet_data, name="Owl Mask")
+        PersonaDiscoveryFactory(
+            persona=mask,
+            linked_to=self.hale.sheet_data.primary_persona,
+            discovered_by=self.wren.sheet_data,
+        )
+        wren_reads = self.pose_row(self.wren, posed["id"])["act_marks"][0]["act_label"]
+        staff = self.api(AccountFactory(is_staff=True))
+        staff_reads = staff.get(f"/api/interactions/{posed['id']}/").json()["act_marks"][0]
+        self.assertEqual(wren_reads, "Intimidated Owl Mask (Hale)")
+        self.assertEqual(staff_reads["act_label"], "Intimidated Owl Mask (Hale)")
 
     def test_a_target_with_no_sheet_keeps_its_name_for_every_reader(self) -> None:
         act = self.take_act(self.daven, None, "Frightened the grave-wight")
@@ -930,6 +966,37 @@ class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
         self.assertEqual(again.status_code, status.HTTP_400_BAD_REQUEST, again.content)
         # The act cannot be marked again.
         self.assertNotIn("Frightened the child", self.telnet(self.daven, "acts"))
+
+    def test_a_staff_undo_reads_as_staff_and_a_gm_whose_account_is_gone_still_reads_as_gm(
+        self,
+    ) -> None:
+        staff_chip = self.undo_as(AccountFactory(is_staff=True))
+        self.assertEqual((staff_chip["undone"], staff_chip["undone_by"]), (True, "staff"))
+
+        # A second reward, undone by a GM whose account is deleted afterwards.
+        act = self.take_act(self.daven, None, "Frightened the grave-wight")
+        posed = self.web_pose(
+            self.daven,
+            "snarls at the grave-wight.",
+            reach_act_id=act.pk,
+            reach_resonance_id=self.cruelty.pk,
+        )
+        grant = ResonanceGrant.objects.get(marked_act=act)
+        gm = AccountFactory()
+        SceneGMParticipationFactory(scene=self.scene, account=gm)
+        undone = self.api(gm).post(f"{GRANTS}{grant.pk}/undo/")
+        self.assertEqual(undone.status_code, status.HTTP_200_OK, undone.content)
+        gm.delete()
+        flush_cache()
+
+        chip = self.pose_row(self.ilsa, posed["id"])["act_marks"][0]
+        self.assertEqual((chip["undone"], chip["undone_by"]), (True, "gm"))
+
+    def undo_as(self, account) -> dict:
+        """Undo the setUp mark as ``account`` and read the chip as Ilsa now reads it."""
+        undone = self.api(account).post(f"{GRANTS}{self.grant.pk}/undo/")
+        self.assertEqual(undone.status_code, status.HTTP_200_OK, undone.content)
+        return self.pose_row(self.ilsa, self.posed["id"])["act_marks"][0]
 
     def test_a_scene_co_owner_who_is_not_the_gm_is_refused_and_nothing_changes(self) -> None:
         refused = self.client(self.ilsa).post(f"{GRANTS}{self.grant.pk}/undo/")

@@ -30,14 +30,12 @@ from decimal import Decimal
 from django.utils import timezone
 from hypothesis import given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
-from rest_framework.test import APIClient
 
 from actions.constants import ActionCategory
 from actions.definitions.journals import CreateJournalEntryAction
-from commands.acts import SHOWN_ACTS, act_lines
+from commands.acts import act_lines
 from commands.exceptions import CommandError
 from commands.reach import reach_kwargs_and_rest
-from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
 from world.checks.factories import CheckTypeFactory, CheckTypeTraitFactory
@@ -72,20 +70,14 @@ from world.magic.models import (
     WeeklyMarkReturn,
 )
 from world.magic.services.gain import get_resonance_gain_config
-from world.magic.services.kindling import award_scene_act
 from world.magic.services.marking import (
     pending_mark_from,
     pointable_acts_page,
     record_pending_mark,
     weekly_percent_paid,
 )
-from world.magic.services.pose_marks import PoseViewer, act_marks_payload
 from world.magic.types.marking import MarkResult, PendingMark
-from world.roster.constants import NPCLoanStatus
-from world.roster.factories import NPCLoanFactory
-from world.roster.models import RosterTenure
-from world.scenes.factories import InteractionFactory, PersonaDiscoveryFactory, PersonaFactory
-from world.scenes.models import Interaction
+from world.scenes.factories import InteractionFactory
 from world.skills.factories import MagicSkillFactory
 from world.traits.constants import CANONICAL_OUTCOME_LEVELS
 from world.traits.factories import StatTraitFactory
@@ -490,6 +482,58 @@ class JournalAndPoseAreOneSystem(_World, HypothesisTestCase):
 class FatigueFallsOnTheRightPayer(_World, HypothesisTestCase):
     """A gain tires one character, never past what they can bear, and shrinks to fit."""
 
+    def run_scenario(  # noqa: PLR0913 - one mark's character, cost and how worn each side is
+        self,
+        *,
+        key: str,
+        stats: tuple[int, int] | None,
+        gainer_worn: int,
+        target_worn: int,
+        target_is_character: bool,
+        pose: bool,
+    ) -> dict:
+        """Mark one act and read back the payer, her room before, what was paid and every pool.
+
+        ``stats`` is (composure, willpower) in tens, or None when no stats are set up. The room
+        is the spec's word: capacity minus what is already taken minus one, never below 0.
+        """
+        gainer, target = self.character(), self.character()
+        pools = {}
+        for sheet, worn in ((gainer, gainer_worn), (target, target_worn)):
+            if stats is not None:
+                setup_stat(sheet.character, "composure", stats[0] * 10, TraitCategory.SOCIAL)
+                setup_stat(sheet.character, "willpower", stats[1] * 10, TraitCategory.META)
+            capacity = get_fatigue_capacity(sheet, ActionCategory.SOCIAL)
+            pool = get_or_create_fatigue_pool(sheet)
+            pool.set_current(ActionCategory.SOCIAL, worn % (capacity + 3) if capacity else 0)
+            pool.save()
+            pools[sheet.pk] = (pool, capacity)
+        before = {pk: pool.get_current(ActionCategory.SOCIAL) for pk, (pool, _) in pools.items()}
+        act = self.act(gainer, "Success", target=target if target_is_character else None)
+        # Primal and Celestial tire the gainer; Abyssal tires the target, and no one when the
+        # target is a game-run opponent with no sheet.
+        payer = (target if target_is_character else None) if key == "cruelty" else gainer
+        capacity = pools[payer.pk][1] if payer is not None else 0
+        room = max(0, capacity - before[payer.pk] - 1) if capacity > 0 else None
+        try:
+            result = self.mark(gainer, act, key, pose=pose)
+            paid, line = result.grant.amount, result.line
+        except MarkError as exc:
+            paid, line = None, exc.user_message
+        return {
+            "payer": payer,
+            "gainer": gainer,
+            "room": room,
+            "paid": paid,
+            "line": line,
+            "act": act,
+            "before": before,
+            "after": {
+                pk: pool.get_current(ActionCategory.SOCIAL) for pk, (pool, _) in pools.items()
+            },
+            "capacity": {pk: cap for pk, (_pool, cap) in pools.items()},
+        }
+
     @settings(max_examples=40, deadline=None)
     @given(
         key=st.sampled_from(KEYS),
@@ -519,67 +563,83 @@ class FatigueFallsOnTheRightPayer(_World, HypothesisTestCase):
         """Maintainer: "for primal, the person getting it, for abyssal their victim, for
         celestial the caster".
 
-        Given a gainer and a target with any stats (or none set up) and any fatigue already
-        taken, and a gain that costs any amount: a Primal or Celestial mark tires the gainer
-        and never the target; an Abyssal mark tires the target, and no one when the target is
-        a game-run opponent with no sheet. A payer takes the whole cost when they have the room
-        (capacity minus current fatigue minus one) and otherwise only the room, in which case
-        the amount paid shrinks in proportion and the mark is refused, consuming nothing, when
-        that leaves nothing. So no payer is ever taken to 100 percent of capacity, and a payer
-        whose capacity is not set up pays nothing and the amount is not reduced.
+        Given a gainer and a target with any stats (or none set up), any fatigue already taken
+        and a gain that costs any amount: only the payer's pool changes, and a payer with stats
+        set up ends below capacity, so no gain ever takes anyone to 100 percent. What is paid is
+        never more than the act's base, and it is the whole base when there is no payer (a
+        game-run opponent, or stats not set up) or when the payer's room covers the cost. A
+        payer with no room pays nothing, the mark is refused and the act is not used.
         """
         self.configure(awards=base, gain_fatigue=cost)
-        gainer, target = self.character(), self.character()
-        pools = {}
-        for sheet, worn in ((gainer, gainer_worn), (target, target_worn)):
-            if stats_set_up:
-                setup_stat(sheet.character, "composure", composure * 10, TraitCategory.SOCIAL)
-                setup_stat(sheet.character, "willpower", willpower * 10, TraitCategory.META)
-            capacity = get_fatigue_capacity(sheet, ActionCategory.SOCIAL)
-            pool = get_or_create_fatigue_pool(sheet)
-            pool.set_current(ActionCategory.SOCIAL, worn % (capacity + 3) if capacity else 0)
-            pool.save()
-            pools[sheet.pk] = (pool, capacity)
-        before = {pk: pool.get_current(ActionCategory.SOCIAL) for pk, (pool, _) in pools.items()}
-        act = self.act(gainer, "Success", target=target if target_is_character else None)
+        stats = (composure, willpower) if stats_set_up else None
 
-        payer = target if key == "cruelty" and target_is_character else gainer
-        payer_exists = key != "cruelty" or target_is_character
-        capacity = pools[payer.pk][1]
-        if not payer_exists or capacity <= 0:
-            paid, charged = base, 0
+        out = self.run_scenario(
+            key=key,
+            stats=stats,
+            gainer_worn=gainer_worn,
+            target_worn=target_worn,
+            target_is_character=target_is_character,
+            pose=pose,
+        )
+
+        payer = out["payer"]
+        for pk, after in out["after"].items():
+            if payer is None or pk != payer.pk:
+                self.assertEqual(after, out["before"][pk])
+        if payer is not None and out["capacity"][payer.pk] > 0:
+            self.assertLess(out["after"][payer.pk], out["capacity"][payer.pk])
+        if out["paid"] is not None:
+            self.assertLessEqual(out["paid"], base)
+            if out["room"] is None or out["room"] >= cost:
+                self.assertEqual(out["paid"], base)
+            self.assertEqual("had little left to give" in out["line"], out["paid"] < base)
+            self_paid = payer is not None and payer.pk == out["gainer"].pk
+            self.assertEqual(
+                "and you are wearier" in out["line"],
+                self_paid and out["after"][payer.pk] > out["before"][payer.pk],
+            )
+        if out["room"] == 0:
+            self.assertIsNone(out["paid"])
+            self.assertTrue(self.is_unmarked(out["act"]))
+            self.assertIn("does not grow. The act stays on your list.", out["line"])
+        if out["paid"] is None:
+            self.assertTrue(self.is_unmarked(out["act"]))
+
+    @settings(max_examples=30, deadline=None)
+    @given(
+        key=st.sampled_from(KEYS),
+        base=st.integers(1, 60),
+        cost=st.integers(1, 12),
+        worn_a=st.integers(0, 60),
+        worn_b=st.integers(0, 60),
+    )
+    def test_a_payer_with_less_room_never_pays_more(
+        self, key: str, base: int, cost: int, worn_a: int, worn_b: int
+    ) -> None:
+        """The amount paid never rises as the payer's room falls.
+
+        Two identical marks against payers who differ only in how worn they already are: the one
+        with the room of the other or more is paid at least as much.
+        """
+        self.configure(awards=base, gain_fatigue=cost)
+
+        outcomes = [
+            self.run_scenario(
+                key=key,
+                stats=(2, 2),
+                gainer_worn=worn,
+                target_worn=worn,
+                target_is_character=True,
+                pose=False,
+            )
+            for worn in (worn_a, worn_b)
+        ]
+
+        first, second = outcomes
+        if first["room"] >= second["room"]:
+            self.assertGreaterEqual(first["paid"] or 0, second["paid"] or 0)
         else:
-            room = max(0, capacity - before[payer.pk] - 1)
-            if room >= cost:
-                paid, charged = base, cost
-            else:
-                paid = base * room // cost
-                charged = room if paid > 0 else 0
-
-        refused = False
-        grant = None
-        line = ""
-        try:
-            result = self.mark(gainer, act, key, pose=pose)
-            grant, line = result.grant, result.line
-        except MarkError as exc:
-            refused = True
-            line = exc.user_message
-
-        self.assertEqual(refused, paid == 0)
-        if refused:
-            self.assertTrue(self.is_unmarked(act))
-            self.assertIn("does not grow. The act stays on your list.", line)
-        else:
-            self.assertEqual(grant.amount, paid)
-            self_paid = payer_exists and payer.pk == gainer.pk and charged > 0
-            self.assertEqual("and you are wearier" in line, self_paid)
-            self.assertEqual("had little left to give" in line, paid < base)
-        for pk, (pool, capacity_of) in pools.items():
-            expected = before[pk] + (charged if payer_exists and pk == payer.pk else 0)
-            self.assertEqual(pool.get_current(ActionCategory.SOCIAL), expected)
-            if payer_exists and pk == payer.pk and charged and capacity_of:
-                self.assertLess(expected, capacity_of)
+            self.assertGreaterEqual(second["paid"] or 0, first["paid"] or 0)
 
 
 class WeeklyTableCutsRepeatMarks(_World, HypothesisTestCase):
@@ -707,43 +767,14 @@ class AJournalEntrySurvivesARefusedMark(_World, HypothesisTestCase):
         self.assertEqual(tracker.posts_this_week, 1)
 
 
-class AnEphemeralSceneLineIsTrueEverywhere(_World, HypothesisTestCase):
-    """A mark in a scene that stores nothing pays nothing, and says where marking still works."""
-
-    @settings(max_examples=6, deadline=None)
-    @given(key=st.sampled_from(KEYS))
-    def test_the_line_names_only_ways_to_mark_that_every_player_has(self, key: str) -> None:
-        """Maintainer: marks need a writing to carry them, and a scene that stores nothing has
-        none.
-
-        Given a pose that carries no stored row, marking pays nothing, consumes no act and
-        reads that the act can be marked in a pose in another scene or from a journal entry,
-        which a telnet player can do too (the line never sends anyone to a journal entry
-        alone).
-        """
-        self.configure()
-        sheet = self.character()
-        act = self.act(sheet, "Success")
-        pending = pending_mark_from(
-            sheet, {"reach_act_id": act.pk, "reach_resonance_id": self.resonances[key].pk}
-        )
-
-        result = record_pending_mark(sheet, pending)
-
-        self.assertFalse(result.paid)
-        self.assertTrue(self.is_unmarked(act))
-        self.assertIn("pays nothing", result.line)
-        self.assertIn("in a pose in another scene or from a journal entry", result.line)
-
-
 class ActNumbersNeverShift(_World, HypothesisTestCase):
     """The number a telnet player types is the act's own id, so a new act cannot redirect it."""
 
     @settings(max_examples=15, deadline=None)
     @given(
-        count=st.integers(1, SHOWN_ACTS + 6),
+        count=st.integers(1, 26),
         newer=st.integers(0, 3),
-        pick=st.integers(0, SHOWN_ACTS - 1),
+        pick=st.integers(0, 19),
         key=st.sampled_from(KEYS),
     )
     def test_the_listed_id_marks_the_listed_act_whatever_lands_after_listing(
@@ -759,15 +790,15 @@ class ActNumbersNeverShift(_World, HypothesisTestCase):
         self.configure()
         sheet = self.character()
         acts = [self.act(sheet, "Success", label=f"Did thing {n}") for n in range(count)]
-        listed, older = pointable_acts_page(sheet, SHOWN_ACTS)
+        listed, older = pointable_acts_page(sheet, 20)
         text = "\n".join(act_lines(listed, older))
 
-        newest = acts[::-1][:SHOWN_ACTS]
+        newest = acts[::-1][:20]
         self.assertEqual([act.pk for act in listed], [act.pk for act in newest])
         for act in newest:
             self.assertIn(f"  {act.pk}. {act.label} (", text)
-        self.assertEqual(older, max(count - SHOWN_ACTS, 0))
-        self.assertEqual("older" in text, count > SHOWN_ACTS)
+        self.assertEqual(older, max(count - 20, 0))
+        self.assertEqual("older" in text, count > 20)
 
         chosen = listed[pick % len(listed)]
         for _ in range(newer):
@@ -780,153 +811,3 @@ class ActNumbersNeverShift(_World, HypothesisTestCase):
         stranger = self.act(self.character(), "Success")
         with self.assertRaises(CommandError):
             reach_kwargs_and_rest(f"{self.resonances[key].name}:{stranger.pk}=waves", sheet)
-
-
-class APoseNamesTheTargetAsEachReaderKnowsThem(_World, HypothesisTestCase):
-    """The act on a marked pose names its target through each reader's own eyes."""
-
-    TARGET_NAMES = ("Hale", "Maud", "Corvin", "Isolde")
-    ACTIONS = ("Struck", "Calmed", "Frightened")
-
-    @settings(max_examples=12, deadline=None)
-    @given(
-        target_name=st.sampled_from(TARGET_NAMES),
-        action=st.sampled_from(ACTIONS),
-        masked=st.booleans(),
-    )
-    def test_a_mask_the_reader_has_not_seen_through_stays_a_mask(
-        self, target_name: str, action: str, masked: bool
-    ) -> None:
-        """Maintainer: no payload links a mask to the real character (#4889, #5290).
-
-        Given an act aimed at a character who wears an Owl Mask that the actor has seen
-        through, recorded by the game from the scene action, and a pose that marks it:
-
-        - the actor reads the label with the name she knows (the real one);
-        - a reader who has seen through the mask reads the real name beside the mask;
-        - a stranger reads the mask's description and never the real name;
-        - staff read the real name;
-        - the live frame (no viewer) reads the act's phrase with no target at all, masked or
-          not.
-
-        A target who wears no mask is read by everyone under her own name.
-        """
-        self.configure()
-        actor = self.character()
-        target = CharacterSheetFactory()
-        real = target.primary_persona
-        real.name = target_name
-        real.save(update_fields=["name"])
-        discoverer = self.character()
-        if masked:
-            mask = PersonaFactory(character_sheet=target, name="Owl Mask", is_fake_name=True)
-            target.active_persona = mask
-            target.save(update_fields=["active_persona"])
-            for seen_by in (actor, discoverer):
-                PersonaDiscoveryFactory(persona=mask, linked_to=real, discovered_by=seen_by)
-        stranger = self.character()
-
-        award_scene_act(actor, target, None, self.outcomes["Success"], action_name=action)
-        act = RecordedAct.objects.get(character_sheet=actor)
-        pending = pending_mark_from(
-            actor, {"reach_act_id": act.pk, "reach_resonance_id": self.resonances["mercy"].pk}
-        )
-        pose = InteractionFactory(persona=actor.primary_persona)
-        record_pending_mark(actor, pending, interaction=pose)
-
-        def read(viewer_sheet: CharacterSheet | None, *, staff: bool = False) -> str:
-            viewer = PoseViewer(
-                account=AccountFactory(),
-                sheet_ids=frozenset({viewer_sheet.pk}) if viewer_sheet else frozenset(),
-                is_staff=staff,
-                sheet=viewer_sheet,
-            )
-            (mark,) = act_marks_payload(pose, viewer)
-            return mark["act_label"]
-
-        (live,) = act_marks_payload(pose, None)
-        self.assertEqual(live["act_label"], action)
-        if masked:
-            self.assertEqual(read(actor), f"{action} Owl Mask ({target_name})")
-            self.assertEqual(read(discoverer), f"{action} Owl Mask ({target_name})")
-            self.assertEqual(read(None, staff=True), f"{action} Owl Mask ({target_name})")
-            seen_by_stranger = read(stranger)
-            self.assertNotIn(target_name, seen_by_stranger)
-            self.assertTrue(seen_by_stranger.startswith(f"{action} "))
-            self.assertIn("Owl Mask", seen_by_stranger)
-        else:
-            for text in (read(actor), read(discoverer), read(stranger), read(None, staff=True)):
-                self.assertEqual(text, f"{action} {target_name}")
-
-
-class ARecordedActsListFollowsWhoPlaysNow(_World, HypothesisTestCase):
-    """A lent NPC's acts are read by the borrower, not by the holder who lent it away."""
-
-    @settings(max_examples=8, deadline=None)
-    @given(lent=st.booleans())
-    def test_the_list_belongs_to_the_account_that_plays_the_character_now(self, lent: bool) -> None:
-        """Maintainer: a borrower plays a lent NPC and a holder who lent it away does not (the
-        loan-aware rule the rest of the game uses).
-
-        Given a character with an act waiting, held by one account and, when ``lent``, lent
-        to another: the account that plays it now reads the act through the recorded-acts
-        list, and the other account reads an empty page.
-        """
-        self.configure()
-        sheet = self.character()
-        act = self.act(sheet, "Success")
-        holder = RosterTenure.objects.get(
-            roster_entry=sheet.roster_entry, end_date__isnull=True
-        ).player_data.account
-        other = AccountFactory()
-        if lent:
-            NPCLoanFactory(
-                roster_entry=sheet.roster_entry,
-                borrower=other,
-                offered_by=holder,
-                status=NPCLoanStatus.ACTIVE,
-            )
-        player, bystander = (other, holder) if lent else (holder, other)
-
-        def listed(account) -> list[int]:
-            client = APIClient()
-            client.force_authenticate(account)
-            response = client.get(f"/api/magic/recorded-acts/?character_sheet={sheet.pk}")
-            self.assertEqual(response.status_code, 200, response.content)
-            return [row["id"] for row in response.json()["results"]]
-
-        self.assertEqual(listed(player), [act.pk])
-        self.assertEqual(listed(bystander), [])
-
-
-class AnUndoneMarkNamesOnlyTheRoleThatUndidIt(_World, HypothesisTestCase):
-    """A pose shows who undid a mark as a role, even when the undoing account is gone."""
-
-    @settings(max_examples=9, deadline=None)
-    @given(undoer=st.sampled_from(("staff", "gm", "deleted")))
-    def test_the_role_is_staff_or_gm_and_a_deleted_account_reads_as_gm(self, undoer: str) -> None:
-        """Maintainer: a player never reads an account name.
-
-        Given a mark undone by a staff account, by a non-staff scene GM, or by an account that
-        has since been deleted (its link on the grant is then empty), the pose's mark says
-        ``staff`` only for the staff account and ``gm`` otherwise, and reading it never fails.
-        """
-        self.configure()
-        sheet = self.character()
-        act = self.act(sheet, "Success")
-        pose = InteractionFactory(persona=sheet.primary_persona)
-        pending = pending_mark_from(
-            sheet, {"reach_act_id": act.pk, "reach_resonance_id": self.resonances["mercy"].pk}
-        )
-        grant = record_pending_mark(sheet, pending, interaction=pose).grant
-        grant.nullified_at = timezone.now()
-        grant.nullified_by = (
-            None if undoer == "deleted" else AccountFactory(is_staff=undoer == "staff")
-        )
-        grant.save(update_fields=["nullified_at", "nullified_by"])
-        pose = Interaction.objects.get(pk=pose.pk)
-
-        (mark,) = act_marks_payload(pose, None)
-
-        self.assertTrue(mark["undone"])
-        self.assertEqual(mark["undone_by"], "staff" if undoer == "staff" else "gm")

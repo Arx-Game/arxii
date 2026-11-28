@@ -331,32 +331,6 @@ class AnActLeavesARecordOfWhatSituationsSuggest(_EarningWorld, HypothesisTestCas
         self.assertEqual(grants, [])
         self.assertFalse(RecordedAct.objects.filter(character_sheet=sheet).exists())
 
-    @settings(max_examples=10, deadline=None)
-    @given(name=st.sampled_from(("a wolf", "the Warden", "a sentry")))
-    def test_an_act_aimed_at_no_character_keeps_its_label_whole_and_has_no_phrase(
-        self, name: str
-    ) -> None:
-        """Maintainer: no payload links a mask to the real character (#4889).
-
-        An act aimed at something with no character sheet (a game-run monster) names no one
-        behind a mask, so its name is no secret: the record keeps the whole label and no phrase
-        to rebuild it from, and every reader of the marked pose then reads that label.
-        """
-        sheet = self.character()
-        self.configure()
-        self.deed_award(5)
-
-        award_kindled_deeds(
-            sheet,
-            act=KindlingAct(kind=KindlingActKind.ATTACK, label=f"Struck {name}"),
-            outcome=self.outcomes["Success"],
-        )
-
-        recorded = RecordedAct.objects.get(character_sheet=sheet)
-        self.assertEqual(recorded.label, f"Struck {name}")
-        self.assertEqual(recorded.act_phrase, "")
-        self.assertIsNone(recorded.target_sheet)
-
     @settings(max_examples=30, deadline=None)
     @given(days=st.integers(1, 365), age=st.integers(0, 800), marked=st.booleans())
     def test_an_unmarked_act_past_the_window_is_pruned_and_a_marked_one_stays(
