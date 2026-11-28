@@ -73,7 +73,11 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
       onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
         if (entry.reflection_line) toast.success(entry.reflection_line);
-        if (entry.mark_line) toast.success(entry.mark_line);
+        // A refused mark leaves the entry posted; its line says why and is shown as the error it is.
+        if (entry.mark_line) {
+          if (entry.mark_recorded === false) toast.error(entry.mark_line);
+          else toast.success(entry.mark_line);
+        }
         refreshRecordedActs();
         setValue(EMPTY_ENTRY_FIELDS);
         onPosted();

@@ -310,7 +310,7 @@ describe('EndorsementControl — kind="pose"', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('withholds the menu once a mark on the pose paid, and gives it back when it is undone', () => {
+  it('withholds the menu once the pose carries a mark, undone or not', () => {
     const mark = {
       grant_id: 4,
       resonance_id: 44,
@@ -332,12 +332,15 @@ describe('EndorsementControl — kind="pose"', () => {
 
     rerender(
       <EndorsementControl
-        interaction={makeInteraction({ act_marks: [{ ...mark, undone: true }] })}
+        interaction={makeInteraction({
+          act_marks: [{ ...mark, undone: true, undone_by: 'gm' as const }],
+        })}
         sceneId="1"
         kind="pose"
       />
     );
-    expect(screen.getByRole('button', { name: /endorse/i })).toBeInTheDocument();
+    // A GM's undo does not give the pose back: the server still refuses to endorse it.
+    expect(screen.queryByRole('button', { name: /endorse/i })).toBeNull();
   });
 
   it('a reached pose offers its one resonance and sends no resonance', async () => {

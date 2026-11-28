@@ -106,6 +106,8 @@ export interface JournalEntryDetail {
   reflection_line?: string;
   /** Told to the writer alone when the entry carried a mark: what it paid (#5327). */
   mark_line?: string;
+  /** False when the entry posted but its mark paid nothing; `mark_line` then says why (#5327). */
+  mark_recorded?: boolean;
   id: number;
   author: number;
   author_name: string;

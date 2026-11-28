@@ -162,11 +162,41 @@ describe('JournalComposerDialog', () => {
     );
   });
 
+  it('shows a refused mark as an error and still treats the entry as posted', async () => {
+    const user = userEvent.setup();
+    const mutateMock = makeCreateMock();
+    const onClose = vi.fn();
+    mutateMock.mockImplementation((_vars, callbacks) => {
+      callbacks?.onSuccess?.({
+        mark_line: 'Hale is too worn to pay for this. Mark it again once he has recovered.',
+        mark_recorded: false,
+      });
+    });
+
+    render(<JournalComposerDialog open onClose={onClose} />);
+
+    await user.type(screen.getByLabelText('Title'), 'Title');
+    await user.type(screen.getByLabelText('Entry'), 'Body');
+    await user.click(screen.getByRole('button', { name: /post entry/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Hale is too worn to pay for this. Mark it again once he has recovered.'
+      );
+    });
+    expect(toast.success).toHaveBeenCalledWith('Journal entry recorded.');
+    expect(toast.success).not.toHaveBeenCalledWith(expect.stringContaining('too worn'));
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it('tells the writer what the mark paid', async () => {
     const user = userEvent.setup();
     const mutateMock = makeCreateMock();
     mutateMock.mockImplementation((_vars, callbacks) => {
-      callbacks?.onSuccess?.({ mark_line: 'You inspire. Your Mercy grows by 8.' });
+      callbacks?.onSuccess?.({
+        mark_line: 'You inspire. Your Mercy grows by 8.',
+        mark_recorded: true,
+      });
     });
 
     render(<JournalComposerDialog open onClose={vi.fn()} />);

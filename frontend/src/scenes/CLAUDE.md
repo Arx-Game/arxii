@@ -46,7 +46,7 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   and Withdraw; the poser, the scene's GM and staff see "<Name> proposed <Resonance>" with Accept and
   Decline (`useAnswerPoseEndorsement`), both from `Interaction.pending_picks` (`mine` / `can_answer`; the
   server sends them to nobody else). A pose that named its own resonance keeps the one-click "Endorse their X".
-  The menu is withheld while a mark on the pose is not undone. `DramaticMomentTagDialog` has a second picker
+  The menu is withheld once the pose carries any mark, an undone one included (the server refuses it). `DramaticMomentTagDialog` has a second picker
   naming the resonance the tag pays (any resonance, the moment type's own showing until the GM picks another).
 - **`hooks/useKudos.ts`** (#2031, #4128): the first kudos on a pose, lazily opening its
   kudos window and recording the reaction in one call; was `ReactionStrip`'s standalone

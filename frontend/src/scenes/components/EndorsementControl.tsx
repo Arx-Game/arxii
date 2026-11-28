@@ -16,7 +16,7 @@
  * <Name>" with Change (the same menu again) and Withdraw; the poser, the scene's GM and staff
  * see "<Name> proposed <Resonance>" with Accept and Decline. A pose that named its own
  * resonance keeps the one-click "Endorse their X", which needs no accept. The menu is gone
- * once a mark on the pose paid. Entry and style endorsements still list
+ * once the pose carries a mark, even an undone one. Entry and style endorsements still list
  * `endorsable_resonances` and are unchanged.
  *
  * Hidden entirely when (entry/style):
@@ -211,10 +211,11 @@ function PoseEndorsementControl({
         }
       : null);
   const answerable = picks.filter((pick) => pick.can_answer && !pick.mine);
-  // A pose whose mark paid cannot also be endorsed: it pays once.
-  const hasLiveMark = (interaction.act_marks ?? []).some((mark) => !mark.undone);
+  // A pose that carried a mark is never endorsable, undone or not: the server refuses it once
+  // a mark ever paid, and a GM's undo does not give the pose back.
+  const hasMark = (interaction.act_marks ?? []).length > 0;
   const reached = interaction.reached_resonance ?? null;
-  const canEndorse = !isSelfPose && !hasLiveMark && (reached != null || groups.length > 0);
+  const canEndorse = !isSelfPose && !hasMark && (reached != null || groups.length > 0);
   const endorsers = isSelfPose ? [] : interaction.pose_endorsers;
 
   if (
