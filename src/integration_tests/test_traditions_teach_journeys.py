@@ -39,10 +39,10 @@ from integration_tests.tradition_teaching_helpers import (
     MENTOR_CANNOT_TEACH_LINE,
     TEACHER_LINE,
     author_the_three_skills,
-    filled,
     hold_rating,
     tradition_teaching,
 )
+from web.admin.tests.support import form_data
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_creation.factories import CharacterDraftFactory
 from world.character_sheets.models import CharacterSheet
@@ -613,11 +613,9 @@ class StaffChoosingWhatATraditionTeaches(_TeachingCase):
         url = reverse("admin:arxii_tradition_change", args=[tradition.pk])
         page = self.client.get(url)
         self.assertEqual(page.status_code, 200)
-        data = filled(page.context["adminform"].form)
-        for inline in page.context["inline_admin_formsets"]:
-            data.update(filled(inline.formset.management_form))
-            for form in inline.formset.forms:
-                data.update(filled(form))
+        # What a browser posts back untouched: every field as rendered, a blank extra inline row
+        # left as rendered (a field with no value sends nothing), the management counts intact.
+        data = form_data(page)
         data["taught_skills"] = [str(skill.pk) for skill in skills]
         return self.client.post(url, data)
 

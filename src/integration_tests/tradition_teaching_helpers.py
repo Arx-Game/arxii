@@ -9,10 +9,6 @@ back from the code under test.
 
 from __future__ import annotations
 
-from collections.abc import Iterable
-
-from django.forms import BoundField
-
 from world.character_creation.sheet_writers import set_skill_values
 from world.character_sheets.models import CharacterSheet
 from world.magic.factories import TraditionFactory, ensure_conversion_pairs
@@ -67,18 +63,3 @@ def hold_rating(sheet: CharacterSheet, skill: Skill, rating: int) -> None:
         source=TraitChangeSource.CHARACTER_CREATION,
         enforce_caps=False,
     )
-
-
-def filled(bound_fields: Iterable[BoundField]) -> dict[str, str | list[str]]:
-    """What a browser posts for these bound fields untouched; unchecked boxes are left out."""
-    data: dict[str, str | list[str]] = {}
-    for bound in bound_fields:
-        value = bound.value()
-        if isinstance(value, bool):
-            if value:
-                data[bound.html_name] = "on"
-        elif isinstance(value, (list, tuple)):
-            data[bound.html_name] = [str(item) for item in value]
-        else:
-            data[bound.html_name] = "" if value is None else str(value)
-    return data
