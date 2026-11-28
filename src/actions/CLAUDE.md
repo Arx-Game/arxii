@@ -67,7 +67,7 @@ They do not use the command system, dispatchers, or handlers.
   Sineating did not happen: <why>". Sineating needs no anima and no fatigue;
   `gm_props.py` (#5124) adds `KindleResonanceAction` (`"stage_kindle"`, the room GM's gate, writes
   `kindle_by_gm`) and `GMListKindlingAction` (`"gm_list_kindling"`, scoped to a character in the
-  GM's room); `CreateJournalEntryAction` also takes `reach_act_id` and `reach_resonance_id` together (#5327: a journal entry marks an act and has no bare reach; the entry, its reflection and its mark are one transaction, and `data.mark_line` carries the private line); `PoseAction` and `CreateJournalEntryAction` take optional `reflect_choice` with
+  GM's room); `CreateJournalEntryAction` also takes `reach_act_id` and `reach_resonance_id` together (#5327: a journal entry marks an act and has no bare reach; the entry and its reflection are one transaction, but a mark refused late (the weekly table, a worn payer) does NOT undo the entry: it stays posted, and `data.mark_line` carries the private line or the refusal with `data.mark_recorded` saying which); `PoseAction` and `CreateJournalEntryAction` take optional `reflect_choice` with
   `reflect_grant_id`, `reflect_resonance_id` or (#5177) `reflect_tether_id` and record a `Reflection` with the writing (checked
   before the pose posts; the room sees only the pose; the result `data` carries
   `reflection_recorded`); `PoseAction` also takes `sineating_role` (`entreat` or `perform`),
@@ -562,7 +562,15 @@ They do not use the command system, dispatchers, or handlers.
   `action.run()`; `dramatic_moments.py`'s `ConfirmDramaticMomentSuggestionAction` /
   `DismissDramaticMomentSuggestionAction` (account-authorized, mirroring
   `events.py`'s host-lifecycle actions) close the recognition loop a qualifying
-  entrance opens.
+  entrance opens. Confirming a suggestion tags through `create_dramatic_moment_tag`, so the tag rules
+  hold there too: nobody tags a character she plays ("You cannot tag a moment for your own character."),
+  and a worn payer refuses the tag before it is written. `endorsements.py` carries the pose endorsement
+  family (#5327): `PoseEndorseAction` (a pick on a pose that named no resonance commits at once and waits
+  for the poser; typed again with another resonance, telnet changes it), `AnswerPoseProposalAction`
+  (`"answer_pose_proposal"`, the poser's accept or decline) and `WithdrawPoseEndorsementAction`
+  (`"withdraw_pose_endorsement"`, the endorser takes her own back until settlement); the last two are
+  registered. Telnet reaches them through `endorse pose|accept|decline|withdraw`; a GM or staff member
+  answering someone else's pick is the web's `.../accept/` and `.../decline/` only.
 
   **GM prompt narration (#4101).** `communication.py`'s `EmitAction`/`PemitAction`
   (keys `"emit"`/`"pemit"`) accept an optional

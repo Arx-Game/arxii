@@ -155,11 +155,17 @@
   `gain_fatigue_payer`; `fatigue_cost_for`, `fatigue_room` and `add_fatigue_points` in `world/fatigue/services.py`;
   type `GainFatigueCharge`). A witness's pick on a pose that named no resonance waits for the poser
   (`PoseEndorsement.awaiting_acceptance`; `accept_pose_proposal`, `decline_pose_proposal`,
-  `change_pose_endorsement`; REST `POST /api/magic/pose-endorsements/<id>/change|accept|decline/`). Staff and
-  the scene's GM undo a reward (`services/undo.py`: `undo_resonance_grant`, `may_undo_grant`;
-  `ResonanceGrant.nullified_at`, `nullified_by`; `POST /api/magic/resonance-grants/<id>/undo/`;
-  `ResonanceUndoError`). Claiming (#5181) is removed. Readers: `GET /api/magic/recorded-acts/?character_sheet=<id>`
-  (`RecordedActViewSet`) and telnet `acts` list the acts a mark can point at, both from
+  `change_pose_endorsement`, `withdraw_pose_endorsement`; REST `POST /api/magic/pose-endorsements/<id>/change|accept|decline/`,
+  DELETE for the endorser's own). Only the scene's GM and staff name a tag's resonance outside the character's
+  aura and nobody tags her own character (`create_dramatic_moment_tag`, `is_scene_gm_or_staff` in
+  `world/scenes/services.py`; a system outcome passes `by_system=True`, charges no fatigue and skips both rules). Staff and
+  the scene's GM undo a reward (`services/undo.py`: `undo_resonance_grant`, `may_undo_grant`,
+  `REWARD_SCENE_PATHS` for the six scene-bound rewards; `ResonanceGrant.nullified_at`, `nullified_by`;
+  `POST /api/magic/resonance-grants/<id>/undo/` answers `{id, nullified_at}`; `ResonanceUndoError`). `RecordedAct.act_phrase`
+  keeps the act's label without the target's name so each reader of a pose sees the target under the name they know
+  (`pose_marks._act_text`). Five Required content rows report what marks need (`weekly-mark-returns`,
+  `affinity-gain-fatigue`, `affinity-claim-verbs`, `kindled-deed-awards`, `kindled-strength-tier`). Claiming (#5181) is removed. Readers: `GET /api/magic/recorded-acts/?character_sheet=<id>`
+  (`RecordedActViewSet`) and telnet `acts` (each act by its own id, newest 20) list the acts a mark can point at, both from
   `services/marking.pointable_acts_queryset`; the web "Pointing at" row is `ReachRow.tsx`; `act_marks` and
   `pending_picks` ride on the pose feed and the live frame (`services/pose_marks.py`). Why intent is said by
   the player and checked by people: `docs/adr/adr-5327-resonance-is-earned-by-attested-acts-and-situations-only-suggest.md`.

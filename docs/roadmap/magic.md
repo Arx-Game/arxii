@@ -1598,7 +1598,9 @@ Built as one PR (the numbered steps of the spec were the build order; one schema
   `GainSource.MARKED_ACT`: the act's award times the strength share, cut by the weekly table, shrunk by the
   payer's fatigue room, grown by the bonus check of the marked resonance's affinity. Any resonance may be
   marked, Primal included. The writer alone reads one private line in the affinity's `claim_verb`. A mark
-  in an ephemeral scene pays nothing; she marks the act later from a journal entry.
+  in an ephemeral scene pays nothing; she marks the act later in a pose in another scene or from a journal
+  entry. A journal entry whose mark is refused stays posted and carries the refusal. The chip on a marked
+  pose names the target as each reader knows them, so a mask stays a mask (`RecordedAct.act_phrase`).
 - **A bare reach still needs another player.** A pose that names a resonance and points at no act pays when
   another player's endorsement settles weekly (as #5311 built), and the poser's own endorsement is refused.
 - **A witness's pick waits for the poser.** On a pose that named no resonance, a witness picks from one list
@@ -1609,12 +1611,21 @@ Built as one PR (the numbered steps of the spec were the build order; one schema
 - **Fatigue and the week.** `Affinity.gain_fatigue` is charged to the payer of each gain (the gainer for
   Primal, the character who acted for Celestial, the target for Abyssal, nobody for a game-run opponent),
   shrinking the gain to the room left and stopping at nothing. `WeeklyMarkReturn` takes a percent of the next
-  mark by what this game week's marks paid.
+  mark by what this game week's marks paid. Fatigue is charged for what a person causes (a mark, an
+  endorsement, a tag a GM or staff member writes), never for a standoff's ending; a weekly endorsement a
+  worn payer cannot pay stays unsettled and is tried again next week, and a worn payer's tag is refused
+  before it is written.
 - **Undo.** Staff and the scene's GM undo a reward (`undo_resonance_grant`; `ResonanceGrant.nullified_at` and
-  `nullified_by`). The totals fall, the ledger row stays, a waiting reflection is withdrawn and the act
+  `nullified_by`); the GM's reach is the six scene-bound rewards, and the endpoint answers `{id,
+  nullified_at}` and 404 for anything the requester may not undo. The totals fall, the ledger row stays, a waiting reflection is withdrawn and the act
   cannot be marked again; favor, achievements, a conversion offer, a Compulsion given in to and the payer's
   fatigue stay.
-- **A GM's tag** may name any resonance, and the tagged player reads which one it paid.
+- **A tag** may name any resonance only when the scene's GM or staff write it; a scene owner's named
+  resonance counts only when the character already has it; nobody tags her own character. The tagged
+  player reads which resonance it paid, by the tagger's role.
+- **Staff authoring checks.** Five Required content rows now show what marks need: `weekly-mark-returns`,
+  `affinity-gain-fatigue`, `affinity-claim-verbs`, `kindled-deed-awards` and `kindled-strength-tier`
+  (`web/admin/tuning/required_content.py`).
 - **A Compulsion** lifts when she marks a gain in that resonance in the scene, not when she merely acts.
 - **Removed.** Claiming, `kindled_unclaimed`, `GainSource.KINDLED_CLAIM`, `KindlingConfig.instant_percent` and
   `claim_percent`, telnet `pose/claim`, the claim row.

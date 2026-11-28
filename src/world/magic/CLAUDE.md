@@ -2659,24 +2659,29 @@ and marks"; flow and diagrams: `docs/architecture/resonance-gain.md` §14.
   (`reach_act_id` with `reach_resonance_id`; raises `MarkError`), `record_pending_mark(sheet, pending, *,
   interaction=None, journal_entry=None)` pays after it, in one transaction: the act's award times the
   strength share, `weekly_percent_paid`, `charge_gain_fatigue`, then `grant_resonance(source=MARKED_ACT,
-  act_stat=, deed_label=)`. A mark that would pay nothing consumes nothing. A journal entry must name an act
-  and is one transaction with its mark; a pose that cannot pay its mark still posts. A mark may name any
+  act_stat=, deed_label=)`. A mark that would pay nothing consumes nothing. A journal entry must name an act;
+  one whose mark is refused late STAYS posted (the refusal is caught inside the entry's transaction and
+  returned as `mark_line` with `mark_recorded` false), as a pose that cannot pay its mark still posts. A mark may name any
   resonance, in her aura or not, Primal included.
 - **Gain fatigue** (`services/gain_fatigue.py`). `Affinity.gain_fatigue` through `fatigue_cost_for` (the
   one place a cost is priced, shared with `apply_fatigue`); the payer is the gainer for Primal and Celestial
   and the act's target for Abyssal (`gain_fatigue_payer`), nobody for a game-run opponent. The gain shrinks
   to `fatigue_room` and stops at nothing; never take a payer to Exhausted for someone else's gain. A gain
-  that points at no act (a settled endorsement, a GM's tag) calls `charge_gain_fatigue` too, with
+  that points at no act (a settled endorsement, a person's tag) calls `charge_gain_fatigue` too, with
   `pose_gain_payer` (Abyssal tires the pose's one named target, else nobody); an authored choice charges
-  nobody. Every gain source that can tire someone goes through `charge_gain_fatigue`, never `apply_fatigue`.
+  nobody, and so does a tag the game itself pays (`create_dramatic_moment_tag(by_system=True)`, the
+  standoff ending). A weekly endorsement a worn payer refuses stays UNSETTLED (tried again next week); a
+  worn payer's tag is refused before the row is written. Every gain source that can tire someone goes through `charge_gain_fatigue`, never `apply_fatigue`.
 - **The weekly table** (`WeeklyMarkReturn`, `weekly_percent_paid`) counts only this game week's non-undone
   `MARKED_ACT` grants. An authored choice, an endorsement and a GM's tag are never counted or reduced.
 - **Undo** (`services/undo.py`, `POST /api/magic/resonance-grants/<id>/undo/`). `undo_resonance_grant`
   lowers balance and lifetime by the amount (each stopping at 0), stamps `nullified_at` and `nullified_by`,
   recomputes the aura, withdraws a waiting reflection, and leaves favor, achievements, a conversion offer, a
   Compulsion given in to and the fatigue. Staff undo any grant; the scene's GM (`Scene.is_gm`, never
-  `is_owner`: every player present at scene start is a co-owner) undoes a mark, an endorsement or a tag in a
-  scene they GM and can read. Do not re-validate a stored grant's source shape in undo (a legacy row would
+  `is_owner`: every player present at scene start is a co-owner) undoes the six scene-bound rewards named once
+  in `REWARD_SCENE_PATHS` (the endpoint's queryset reads the same table; add a scene-bound source there, not
+  in a second list) in a scene they GM and can read. The endpoint answers `{id, nullified_at}` and 404 for
+  anything the requester may not undo. Do not re-validate a stored grant's source shape in undo (a legacy row would
   be refused).
 - **Rules a change here must not break:**
   - **Every reader of a `ResonanceGrant` that counts what a character earned skips a grant with
@@ -2685,7 +2690,10 @@ and marks"; flow and diagrams: `docs/architecture/resonance-gain.md` §14.
     views show the undo instead of hiding the row.
   - **A player never sees an account name.** An undone line names the role ("Staff", "The scene's GM"),
     a fatigue line names a character by the name its reader knows (`shown_names`), and a tag line names the
-    moment type and the resonance.
+    moment type, the resonance and the tagger's role ("Staff", "The scene's GM", "Someone"). A pose's chip
+    shows the target through each READER's eyes (`pose_marks._act_text`: the actor reads `label`, everyone
+    else `act_phrase` plus the name they know, the live frame the phrase alone); never put the actor's
+    `label` on a payload another player reads.
   - **A witness is never shown what is in someone's aura.** The Endorse menu on a pose that named no
     resonance lists every resonance, the same for every pose, and the pick waits for the poser. Entrance
     and outfit endorsements still list the aura's resonances (`get_endorsable_resonances`); do not copy
@@ -2694,6 +2702,12 @@ and marks"; flow and diagrams: `docs/architecture/resonance-gain.md` §14.
     `test_deed_classification.py`): accelerated or not, deed or not, rate-scaled or exempt, and one of the
     three bonus sets. `MARKED_ACT` is non-accelerated, a deed, rate-scaled, bonus-rolled and
     Compulsion-indulging; it is not in `PASSIVE_DEED_SOURCES`, so a mark earns pledge favor.
+  - **Private lines are narrative messages.** The payer's, a proposal, a tag, an undo and a shrunk or refused
+    settlement line go through `send_player_line` / `tell_player`, never `character.msg`, so an offline player
+    reads them at login.
+  - **Who may name a tag's resonance is one question.** `is_scene_gm_or_staff` (`world/scenes/services.py`)
+    answers it for the tag, undo and answering a pick; never ask `is_owner` or `is_gm` by hand. Nobody tags a
+    character she plays (`player_of_sheet`), enforced in `create_dramatic_moment_tag` so no path skips it.
   - **Player copy never says a character "holds" a resonance.** It says the resonance is in her aura.
   - **A situation never pays.** Do not add a situation to `CHOSEN_DEED_SITUATIONS` unless the act is itself
     a declared choice, and never pay a resonance from `fed_tier`.

@@ -1762,7 +1762,11 @@ actions, backends, and service functions.
   serializer calls, not via an Action). `moment tag list` browses the authored
   `DramaticMomentType` catalog; a type with no resonance lists as "their own resonance",
   since its grant follows the character's own (#4323: it had raised on that row). Both GM-gated via `_account_can_gm_scene` on the caller's
-  active scene. Its `func` sends a `CommandError` the way `ArxCommand.func` does, typed
+  active scene (#5327 narrows what a tag may do: only the scene's GM and staff name a resonance the
+  character does not already have, nobody tags a character she plays, a character who is not part of the
+  scene is refused ("That character is not part of this scene."), and a worn payer refuses the tag before it
+  is written; the service decides all of it, so `moment confirm` for the GM's own character is refused with
+  the same line). Its `func` sends a `CommandError` the way `ArxCommand.func` does, typed
   `error` with the structured `command_error` frame (#3657 tranche 11: the override had sent a
   bare line the web could not place); the tagged name resolves through a quiet global search
   and an absent name is the command's own line (the loud search had sent Evennia's bare line

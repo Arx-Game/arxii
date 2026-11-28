@@ -1311,7 +1311,9 @@ flowchart TD
 
 A **recorded act** (`RecordedAct`, `world/magic/models/recorded_act.py`) is written by `award_kindled_deeds`
 for an act that has an award row and paid no chosen deed. It keeps a label the game words from the action and
-its target, the result tier and check type (references, not copied numbers, so an award retune reaches the
+its target as the actor knows them, an `act_phrase` (the same label without the target's name, filled when the
+target is a person with a sheet, so a reader of the pose can be shown the target under the name THAT reader
+knows), the result tier and check type (references, not copied numbers, so an award retune reaches the
 acts that wait), the target when a person, the fatigue pool, and a `RecordedActSuggestion` for each resonance a
 situation reached with the strength it reached and the situation's reason line. A situation never pays: it
 suggests, and it sets the strength a mark pays at. An act that already paid a chosen deed, a failed roll, an
@@ -1323,7 +1325,10 @@ table of its own: the act row carries it (`marked_grant`, `marked_interaction` o
 because a separate row would repeat the act's identity. A mark may name any resonance, in her aura or not,
 Primal included. She can mark every act, one after another; an act pays once and a writing carries one
 mark (both enforced by database constraints). A journal entry must name an act. In an ephemeral scene a mark
-pays nothing, because no pose is stored to carry it; she can mark the act later from a journal entry.
+pays nothing, because no pose is stored to carry it; she can mark the act later in a pose in another scene
+or from a journal entry. A journal entry whose mark is refused late (the weekly row pays 0 percent, or the
+payer has no room) stays posted: the act stays pointable and the response carries the refusal in `mark_line`
+with `mark_recorded` false, as a pose does. (A reflection that fails late still takes its entry back.)
 
 ### 14.2 What a mark pays, and what it costs
 
@@ -1346,8 +1351,13 @@ not set up pays nothing and the gain is not reduced. A gain that points at no ac
 (`charge_gain_fatigue`): an endorsed pose at its weekly settlement, an accepted proposal and a GM's tag,
 from the social pool, with `pose_gain_payer` naming the payer (the gainer for Primal and Celestial; for
 Abyssal the pose's one named target, or nobody when it names none or several). A gain whose payer has
-nothing left pays 0 and the gainer is told why. An authored choice charges nobody. A payer other than the gainer reads one private line
-naming the gainer as that payer knows them. The bonus check of the marked resonance's own affinity rolls
+nothing left pays 0 and the gainer is told why. At the weekly settlement such an endorsement is left
+unsettled and tried again next week, because the endorser cannot make the same endorsement twice; a tag is
+refused before it is written, so it spends none of the scene's cap. Fatigue is charged for a gain a person
+causes (a mark, an endorsement, a tag a GM or staff member writes or confirms); the game's own outcomes, such
+as a standoff's ending, charge nobody. An authored choice charges nobody. A payer other than the gainer
+reads one private line naming the gainer as that payer knows them. Every private line of this feature is a
+narrative message, so a player who is offline reads it at login. The bonus check of the marked resonance's own affinity rolls
 once, with the stat of the act's own check, and grows what is left.
 
 ### 14.3 A witness's pick waits for the poser
@@ -1372,7 +1382,11 @@ unchanged: it uses the same control, pays at once, is permanent and still lists 
 ### 14.4 Undo
 
 Staff undo any grant. The scene's GM (`Scene.is_gm`, never `is_owner`, since every player present at scene
-start is a co-owner) undoes a mark, a pose endorsement or a GM's tag in a scene they GM and can read.
+start is a co-owner) undoes the six scene-bound rewards in a scene they GM and, when a pose carries the reward,
+can read: a mark, a pose endorsement, a tag, an entrance endorsement, an outfit endorsement and an entry
+flourish. One table (`REWARD_SCENE_PATHS`) names them and builds both the service's check and the endpoint's
+queryset. A mark carried by a journal entry has no scene, so only staff undo it. The endpoint answers
+`{id, nullified_at}` and 404 for anything the requester may not undo.
 `undo_resonance_grant` lowers the balance and the lifetime total by the amount (each stopping at 0), stamps
 the ledger row with `nullified_at` and `nullified_by` instead of deleting it, recomputes the aura and
 withdraws a reflection still waiting on it. Pledge favor, aura thresholds and achievements, a drift
@@ -1381,6 +1395,10 @@ mark paid for cannot be marked again. The player reads which role undid it, neve
 of the ledger that counts what a character earned skips an undone grant.
 
 ### 14.5 What a situation still does
+
+A tag follows its own rule (`create_dramatic_moment_tag`): only the scene's GM and staff name a resonance
+outside the character's aura; a scene owner's named resonance counts only when the character already has it,
+else the default pays; nobody tags a character she plays.
 
 A situation still kindles a resonance: the strength sets a pull's uplift, the depth of a give-in, a Dig deep
 or Rally surge, a cast's power, the strength a mark pays at, and the line the player reads beside an act. A
@@ -1394,25 +1412,30 @@ unmarked act inside `KindlingConfig.recorded_act_days`, newest first, each with 
 first. Every surface below reads it.
 
 - **The recorded-acts list.** `GET /api/magic/recorded-acts/?character_sheet=<id>` (`RecordedActViewSet`,
-  `views_kindling.py`) lists those acts for the player's own characters, or any character for staff; another
+  `views_kindling.py`) lists those acts for the characters the requester plays now (the loan rule), or any character for staff; another
   player's character is an empty page. Each row is `id`, `label`, `created_at` and the suggestions
   (`resonance_id`, `resonance_name`, `reason`); no strength and no amount leaves the server. The web "Pointing at"
   row on the pose composer and the journal form (`ReachRow.tsx`) reads it. The journal form requires an act and
   has no "Nothing" choice, because no one can endorse a journal entry.
 - **Marks and waiting picks on the pose.** The feed serializer and the live frame build `act_marks` and
   `pending_picks` from one pair of functions (`services/pose_marks.py`), so a refetch and a push read the same
-  fields for the same viewer. A mark carries the resonance, the act's label, `undone`, `undone_by` (`"staff"` or
+  fields for the same viewer. A mark carries the resonance, the act's label as that viewer reads it (the actor
+  reads her own label; every other reader gets the phrase and the target under the name THAT reader knows, so a
+  mask they have not seen through stays a mask; a target with no sheet keeps its name for everyone; the live
+  frame carries the phrase alone), `undone`, `undone_by` (`"staff"` or
   `"gm"`, never an account name) and `can_undo`, which is true only for staff and the scene's GM on a mark nobody
   has undone. A waiting pick reaches only its endorser (`mine`) and whoever may answer it (`can_answer`: the poser,
   the scene's GM and staff). The live frame goes to the whole room, so it carries no per-viewer data: its
   `act_marks` and `pending_picks` are empty and `can_undo` is false there. Every change to a mark or a pick sends
   an ids-only `interaction_changed` frame, and each client refetches its own view.
-- **Telnet.** `acts` lists the character's pointable acts, newest first, each with its own id, its age and what a
-  situation suggested (or "No resonance suggested."). `pose/reach <resonance>:<act id>=<text>` poses and marks
+- **Telnet.** `acts` lists the character's pointable acts, newest first, at most 20 with a line saying how many
+  older ones are not shown, each with its own id, its age and what a situation suggested (or "No resonance
+  suggested."). `pose/reach <resonance>:<act id>=<text>` poses and marks
   that act: the id is the act's own, so it never shifts when a new act lands. `endorse pose <char> #N
   resonance=<name>` makes a pick that waits for the poser, and typing it again with another resonance changes
   it; `endorse accept <char> #N` and `endorse decline <char> #N` are the poser's answer, and `endorse withdraw
-  <char> #N` takes a pick back. A pose carries one of these switches and `pose/reach` stands alone.
+  <char> #N` takes a pick back (typing the same pick again changes nothing, and the poser is told "proposed"
+  once, when the pick is made). A pose carries one of these switches and `pose/reach` stands alone.
 - **Not on telnet.** A GM or staff member answers someone else's waiting pick on the web only, undo is web only
   (`POST /api/magic/resonance-grants/<id>/undo/`), and marking from a journal entry is web only.
 - **History.** `resonance history` ends a reward that was undone with ", undone".
