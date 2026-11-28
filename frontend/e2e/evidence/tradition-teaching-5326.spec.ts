@@ -175,7 +175,9 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     // Screen 5, first frame: the Cinder Court teaches Villainy, so the course saves. It is
     // saved with the values it already holds.
     await page.goto(`/admin/arxii/skillcourseofferdetails/${seed.evil_course_id}/change/`);
-    await expect(page.getByText(`Academy master of ${seed.evil_tradition_name}`)).toBeVisible();
+    await expect(
+      page.locator('div.readonly', { hasText: `Academy master of ${seed.evil_tradition_name}` })
+    ).toBeVisible();
     await shot(testInfo, '05a-course-offer-before-save.png', page, { fullPage: true });
     await page.locator('input[name="_continue"]').click();
     await expect(page.locator('.messagelist .success')).toBeVisible();
@@ -184,7 +186,9 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     // Screen 5, second frame: a Villainy course on a role of the Lantern Concord, which does
     // not teach Villainy. The save is refused and nothing changes.
     await page.goto(`/admin/arxii/skillcourseofferdetails/${seed.lantern_course_id}/change/`);
-    await expect(page.getByText(`Academy master of ${seed.good_tradition_name}`)).toBeVisible();
+    await expect(
+      page.locator('div.readonly', { hasText: `Academy master of ${seed.good_tradition_name}` })
+    ).toBeVisible();
     await page.locator('input[name="_continue"]').click();
     await expect(page.locator('.errornote')).toBeVisible();
     await expect(
