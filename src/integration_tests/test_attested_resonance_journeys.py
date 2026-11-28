@@ -34,10 +34,14 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 
-from actions.constants import ActionCategory
+from actions.constants import ActionCategory, ActionTargetType
+from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from integration_tests.test_earning_kindled_deeds_journeys import _Gate
+from world.checks.factories import CheckTypeFactory
+from world.checks.test_helpers import force_every_check_outcome
+from world.consent.factories import SocialConsentCategoryFactory
 from world.fatigue.services import get_fatigue_capacity, get_or_create_fatigue_pool
 from world.fatigue.tests import setup_stat
 from world.gm.constants import GMLevel, GMPromptStatus
@@ -50,6 +54,7 @@ from world.magic.factories import (
     DramaticMomentTypeFactory,
     KindledDeedAwardFactory,
     KindledStrengthTierFactory,
+    PoseResonanceReachFactory,
     RecordedActFactory,
     ResonanceFactory,
     WeeklyMarkReturnFactory,
@@ -63,19 +68,27 @@ from world.magic.models import (
     PoseEndorsement,
     RecordedAct,
     ResonanceGrant,
+    SceneEntryEndorsement,
 )
 from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.magic.services.gain import get_resonance_gain_config, settle_weekly_pot
 from world.magic.services.kindling import award_scene_act
 from world.narrative.models import NarrativeMessageDelivery
-from world.scenes.constants import ScenePrivacyMode
+from world.scenes.constants import (
+    InteractionMode,
+    InteractionVisibility,
+    PoseKind,
+    ScenePrivacyMode,
+)
 from world.scenes.factories import (
+    InteractionFactory,
     SceneFactory,
     SceneGMParticipationFactory,
     SceneOwnerParticipationFactory,
     SceneParticipationFactory,
 )
 from world.scenes.interaction_services import invalidate_active_scene_cache
+from world.traits.factories import CheckSystemSetupFactory
 from world.traits.models import TraitCategory
 from world.traits.services import ensure_canonical_check_outcome
 
@@ -305,6 +318,50 @@ class ListingAndMarkingActsByTelnet(_Attested):
         # No strength or amount leaves the server.
         self.assertEqual(set(row["suggestions"][0]), {"resonance_id", "resonance_name", "reason"})
         self.assertEqual(theirs.json()["results"], [])
+
+
+class DavenIntimidatesHaleAndMarksTheAct(_Attested):
+    """The whole story on the real seams: a real social action, the act it leaves, the mark.
+
+    Daven types ``intimidate Hale``, Hale accepts, the roll lands on a Success, and the game
+    writes the act down with Cruelty suggested (it is kindled by a feeling he carries). Daven
+    reads it in ``acts``, marks it with ``pose/reach`` and reads what he gained, and Hale reads
+    that he is wearier. Nothing is paid until the mark.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        CheckSystemSetupFactory.create()
+        ActionTemplateFactory(
+            name="Intimidate",
+            category="social",
+            target_type=ActionTargetType.SINGLE,
+            check_type=CheckTypeFactory(name="Intimidation"),
+            consent_category=SocialConsentCategoryFactory(key="menace", name="Menace"),
+        )
+        kindle_resonance(self.daven.sheet_data, self.cruelty, self.faint)
+        self.give_capacity(self.hale)
+
+    def test_a_real_intimidation_leaves_an_act_that_a_mark_pays(self) -> None:
+        asked = self.telnet(self.daven, "intimidate Hale")
+        self.assertIn("You move to intimidate Hale. Awaiting their response", asked)
+        with force_every_check_outcome(self.success):
+            self.telnet(self.hale, "accept")
+
+        # The roll wrote the act down and paid nothing, though Cruelty is kindled.
+        act = RecordedAct.objects.get(character_sheet=self.daven.sheet_data)
+        self.assertEqual(act.label, "Intimidate Hale")
+        self.assertFalse(ResonanceGrant.objects.exists())
+        listed = self.telnet(self.daven, "acts")
+        self.assertIn(f"{act.pk}. Intimidate Hale (", listed)
+        self.assertIn("Cruelty: You carry ", listed)
+
+        told = self.mark_by_telnet(self.daven, "cruelty", act, "leans over Hale. He is smiling.")
+
+        self.assertIn("You gloat. Your Cruelty grows by 10.", told)
+        self.assertEqual(self.balance(self.daven, self.cruelty), 10)
+        self.assertIn(ONE_PLAYER_TIRED, self.notices(self.hale))
+        self.assertNotIn("Intimidate Hale", self.telnet(self.daven, "acts"))
 
 
 class MarkingByTheWebAndAJournalEntry(_Attested):
@@ -720,6 +777,97 @@ class AWitnessProposesAndThePoserDecides(_Attested):
             ("marek", self.marek),
             ("hale", self.hale),
         )
+
+
+class EndorsingByTelnet(_Attested):
+    """The endorsement commands a player types: ``poses``, ``endorse pose``, ``endorse entry``.
+
+    Brannoc has two poses in the scene, a plain one (#1) and his entrance (#2), and holds Fury.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        CharacterResonanceFactory(
+            character_sheet=self.brannoc.sheet_data,
+            resonance=self.fury,
+            balance=0,
+            lifetime_earned=0,
+        )
+        persona = self.brannoc.sheet_data.primary_persona
+        self.plain = InteractionFactory(
+            scene=self.scene,
+            persona=persona,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+            content="polishes the cracked bell.",
+        )
+        self.entrance = InteractionFactory(
+            scene=self.scene,
+            persona=persona,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+            pose_kind=PoseKind.ENTRY,
+            content="walks in and shakes the rain from his coat.",
+        )
+
+    def test_poses_lists_each_pose_with_the_number_endorse_takes(self) -> None:
+        told = self.telnet(self.ilsa, "poses Brannoc")
+
+        self.assertIn("Endorseable poses from Brannoc in this scene:", told)
+        self.assertIn("#1: polishes the cracked bell.", told)
+        self.assertIn("#2: walks in and shakes the rain from his coat.", told)
+        self.assertIn("Use: endorse pose <char> #N resonance=<name>", told)
+
+    def test_a_number_picks_which_pose_and_the_pick_waits_for_the_poser(self) -> None:
+        told = self.telnet(self.ilsa, "endorse pose Brannoc #2 resonance=fury")
+
+        self.assertIn(
+            "You endorse Brannoc's pose #2 with Fury. It pays only if Brannoc accepts.", told
+        )
+        pick = PoseEndorsement.objects.get()
+        self.assertEqual((pick.interaction, pick.resonance), (self.entrance, self.fury))
+        self.assertTrue(pick.awaiting_acceptance)
+
+    def test_a_pose_that_named_its_resonance_is_previewed_then_confirmed_once(self) -> None:
+        PoseResonanceReachFactory(interaction=self.plain, resonance=self.fury)
+
+        preview = self.telnet(self.ilsa, "endorse pose Brannoc #1")
+        self.assertIn("confirm", preview.lower())
+        self.assertFalse(PoseEndorsement.objects.exists())
+
+        confirmed = self.telnet(self.ilsa, "endorse pose Brannoc #1 confirm")
+        self.assertIn(
+            "You endorse the pose for Fury. It will count toward the weekly pot.", confirmed
+        )
+        self.assertFalse(PoseEndorsement.objects.get().awaiting_acceptance)
+
+        again = self.telnet(self.ilsa, "endorse pose Brannoc #1 confirm")
+        self.assertIn("Already endorsed this pose", again)
+        self.assertEqual(PoseEndorsement.objects.count(), 1)
+
+    def test_endorsing_an_entrance_pays_at_once(self) -> None:
+        told = self.telnet(self.ilsa, "endorse entry Brannoc resonance=fury")
+
+        self.assertIn(
+            "You endorse Brannoc's scene entry for Fury. The grant fires immediately.", told
+        )
+        endorsement = SceneEntryEndorsement.objects.get()
+        self.assertEqual(
+            (endorsement.endorser_sheet, endorsement.endorsee_sheet, endorsement.scene),
+            (self.ilsa.sheet_data, self.brannoc.sheet_data, self.scene),
+        )
+        self.assertEqual(
+            self.balance(self.brannoc, self.fury), get_resonance_gain_config().scene_entry_grant
+        )
+
+    def test_outside_a_live_scene_poses_says_there_is_none(self) -> None:
+        elsewhere = self.make_room("The Cellar")
+        self.ilsa.move_to(elsewhere, quiet=True)
+        self.brannoc.move_to(elsewhere, quiet=True)
+
+        told = self.telnet(self.ilsa, "poses Brannoc")
+
+        self.assertIn("There is no active scene here.", told)
 
 
 class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
