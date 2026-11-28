@@ -1933,6 +1933,7 @@ class TraditionTeachingSeed:
     config_id: int
     modifier_target_id: int
     distinction_id: int
+    unbound_distinction_id: int
     evil_role_id: int
     evil_course_id: int
     #: The role the trainer players talk to: it fronts a house, so a course can be taken.
@@ -1995,6 +1996,7 @@ TEACHING_MENTOR_RATED = "Drusa Kell"
 TEACHING_ROOM = "The Cinder Hall"
 TEACHING_STAFF = "teaching_staff"
 TEACHING_COURSE = "Villainy course"
+TEACHING_STYLE = "Thornwall Guard"
 TEACHING_ACADEMY = "The Cinder Academy"
 TEACHING_OWN_ALT = "Mira Alder"
 TEACHING_MENTOR_ACCOUNT = "teaching_mentor"
@@ -2086,6 +2088,12 @@ def _teaching_skills() -> dict[str, object]:
         ("Villainy", TraitCategory.MAGIC, abyssal, "Magic worked at another's cost."),
         ("Occult", TraitCategory.MAGIC, None, "The ordinary study of hidden things."),
         ("Observation", TraitCategory.GENERAL, None, "Noticing what is in front of you."),
+        (
+            TEACHING_STYLE,
+            TraitCategory.MAGIC,
+            None,
+            "The fighting style's own skill: a shield-bearer's patience in the brambles.",
+        ),
     )
     for name, category, affinity, tooltip in rows:
         skill = Skill.objects.filter(name=name).first()
@@ -2203,6 +2211,38 @@ def _teaching_levers_and_training() -> tuple[object, object]:
         distinction=training, target=training_target, defaults={"value_per_rank": 30}
     )
     return target, prodigy
+
+
+def _teaching_unbound(target: object) -> object:
+    """The Unbound drawback: a distinction carrying one effect on the self-teaching target.
+
+    Returns the distinction. It reimburses points (a drawback), sits in its own category, and
+    carries the same value-1 effect as Hedge-born Prodigy, so a character who holds it may
+    allocate a magical skill with no mentor. Safe to run twice.
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionEffect,
+    )
+
+    category, _ = DistinctionCategory.objects.get_or_create(
+        name="Drawbacks", defaults={"slug": "drawbacks", "description": "Costs a character bears."}
+    )
+    unbound, _ = Distinction.objects.get_or_create(
+        name="Unbound",
+        defaults={
+            "slug": "unbound",
+            "category": category,
+            "description": "She belongs to no school and answers to no master.",
+            "cost_per_rank": -5,
+            "max_rank": 1,
+        },
+    )
+    DistinctionEffect.objects.get_or_create(
+        distinction=unbound, target=target, defaults={"value_per_rank": 1}
+    )
+    return unbound
 
 
 def _teaching_trainer(skills: dict[str, object], good: object, evil: object) -> dict[str, object]:
@@ -2532,6 +2572,8 @@ def _teaching_draft(  # noqa: PLR0915 - the whole Gift stage world, one row afte
     from world.character_sheets.models import Gender  # noqa: PLC0415
     from world.classes.factories import PathFactory  # noqa: PLC0415
     from world.classes.models import Path, PathStage  # noqa: PLC0415
+    from world.covenants.constants import DefenseStyle  # noqa: PLC0415
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
     from world.distinctions.models import Distinction  # noqa: PLC0415
     from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
     from world.forms.models import Build, HeightBand  # noqa: PLC0415
@@ -2639,6 +2681,16 @@ def _teaching_draft(  # noqa: PLR0915 - the whole Gift stage world, one row afte
         name="Hearthlight"
     )
     training = Distinction.objects.get(name="Tradition Training")
+    # A fighting style whose own skill the Lantern Concord teaches: the draft chose it, so the
+    # training list offers its skill beside Reflection, Heroism and Occult.
+    style = CombatStyle.objects.filter(name=TEACHING_STYLE).first() or CombatStyle.objects.create(
+        name=TEACHING_STYLE,
+        description="A shield held steady while the thorns do the arguing.",
+        defense_style=DefenseStyle.GEAR_SOAK,
+        armor_share_tenths=10,
+        skill=skills[TEACHING_STYLE],
+    )
+    style.taught_by.add(good)
 
     draft = CharacterDraft.objects.filter(account=account).first()
     if draft is None:
@@ -2650,6 +2702,7 @@ def _teaching_draft(  # noqa: PLR0915 - the whole Gift stage world, one row afte
     draft.selected_gender = gender
     draft.selected_path = path
     draft.selected_tradition = good
+    draft.selected_combat_style = style
     draft.age = 25
     draft.birthday_month = 6
     draft.birthday_day = 12
@@ -2760,6 +2813,7 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
         skills = _teaching_skills()
         good, evil = _teaching_traditions(skills)
         target, prodigy = _teaching_levers_and_training()
+        unbound = _teaching_unbound(target)
         config = get_teaching_config()
         config.other_tradition_course_difficulty = 3
         config.save(update_fields=["other_tradition_course_difficulty"])
@@ -2839,6 +2893,7 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
         config_id=config.pk,
         modifier_target_id=target.pk,
         distinction_id=prodigy.pk,
+        unbound_distinction_id=unbound.pk,
         evil_role_id=trainer["evil_role"].pk,
         evil_course_id=trainer["evil"].pk,
         trainer_role_id=trainer["trainer_role"].pk,

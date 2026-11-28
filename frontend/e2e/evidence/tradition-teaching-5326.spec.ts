@@ -44,6 +44,7 @@ interface Seed {
   config_id: number;
   modifier_target_id: number;
   distinction_id: number;
+  unbound_distinction_id: number;
   evil_role_id: number;
   evil_course_id: number;
   trainer_role_id: number;
@@ -204,6 +205,13 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await page.locator('#effects-module').scrollIntoViewIfNeeded();
     await shot(testInfo, '03c-distinction-builder-effect.png', page, { fullPage: true });
 
+    // Screen 3, the same effect on the Unbound drawback.
+    await page.goto(`/admin/_distinction_builder/${seed.unbound_distinction_id}/`);
+    await expect(page.getByRole('heading', { name: 'Distinction Builder' })).toBeVisible();
+    await expect(page.locator('#effects-body')).toContainText(/self_teaching/);
+    await page.locator('#effects-module').scrollIntoViewIfNeeded();
+    await shot(testInfo, '03d-distinction-builder-unbound-effect.png', page, { fullPage: true });
+
     // Screen 4: the trainer role's page, naming the Tradition it teaches.
     await page.goto(`/admin/arxii/npcrole/${seed.evil_role_id}/change/`);
     await expect(page.locator('#id_teaches_tradition')).toHaveValue(String(seed.evil_tradition_id));
@@ -280,6 +288,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await expect(training).toContainText('Reflection');
     await expect(training).toContainText('Heroism');
     await expect(training).toContainText('Occult');
+    await expect(training).toContainText('Thornwall Guard');
     await expect(training).not.toContainText('Villainy');
     await training.scrollIntoViewIfNeeded();
     await shot(testInfo, '06b-creation-training-list.png', training);
@@ -537,7 +546,10 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     const card = page.getByTestId('training-card');
     await expect(card).toBeVisible({ timeout: 30000 });
     const villainyRow = card.getByTestId('training-allocation-row').filter({ hasText: 'Villainy' });
-    await expect(villainyRow.getByText('Self-study')).toBeVisible();
+    await expect(villainyRow.getByTestId('training-mentor-needed-line')).toHaveText(
+      'Villainy needs a teacher. Choose a mentor whose Tradition teaches it.'
+    );
+    await expect(villainyRow.getByText('Self-study')).toHaveCount(0);
     await expect(villainyRow.getByTestId('training-mentor-line')).toHaveCount(0);
     await card.scrollIntoViewIfNeeded();
     await shot(testInfo, '07p-training-card-after-stop.png', card);
