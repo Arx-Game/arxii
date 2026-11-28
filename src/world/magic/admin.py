@@ -4088,6 +4088,7 @@ class RecordedActSuggestionInline(admin.TabularInline):
     """What situations suggested for one recorded act, read-only (#5327)."""
 
     model = RecordedActSuggestion
+    formset = OneRowPerFormSet
     extra = 0
     can_delete = False
     fields = ["resonance", "strength", "reason"]
