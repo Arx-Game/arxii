@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from world.magic.models import Resonance
 
 _SOMEONE = "Someone"
+_YOU = "you"
 
 
 def gain_fatigue_payer(
@@ -86,34 +87,49 @@ def charge_gain_fatigue(
             return GainFatigueCharge(amount=0, charged=0, payer=payer, shrunk=True)
     add_fatigue_points(payer, category, charged)
     if payer.pk != gainer.pk:
-        transaction.on_commit(_told_payer(payer, gainer, resonance))
+        transaction.on_commit(_told_payer(payer, gainer, resonance, shrunk=shrunk))
     return GainFatigueCharge(amount=paid, charged=charged, payer=payer, shrunk=shrunk)
 
 
-def worn_clause(charge: GainFatigueCharge, gainer: CharacterSheet) -> str:
-    """The sentence telling ``gainer`` a gain shrank or was refused because its payer was worn,
-    and what to do next; "" when the gain was not reduced.
+def _payer_is_gainer(charge: GainFatigueCharge, gainer: CharacterSheet) -> bool:
+    return charge.payer is None or charge.payer.pk == gainer.pk
 
-    ``charge`` is what ``charge_gain_fatigue`` returned. A gain's payer is the gainer
-    ("You are") or another character, named as the gainer knows them.
-    """
-    if not charge.shrunk:
-        return ""
-    payer = charge.payer
-    if payer is None or payer.pk == gainer.pk:
-        who, are, has = "You", "were", "you have"
+
+def payer_name(charge: GainFatigueCharge, gainer: CharacterSheet) -> str:
+    """How ``gainer`` names whoever pays: "you" for herself, else the name she knows them by."""
+    if _payer_is_gainer(charge, gainer):
+        return _YOU
+    return _name_for(gainer, charge.payer)  # ty: ignore[invalid-argument-type]
+
+
+def refusal_line(charge: GainFatigueCharge, gainer: CharacterSheet, resonance: Resonance) -> str:
+    """What ``gainer`` reads when a gain was refused because its payer is worn, and what to do
+    next: "Hale is too worn to pay for this, so your Cruelty does not grow. The act stays on
+    your list. Mark it again once Hale has recovered, or mark another act." Herself as the
+    payer it reads "You were too worn ...", "... once you have recovered ..."."""
+    who = payer_name(charge, gainer)
+    if _payer_is_gainer(charge, gainer):
+        lead, again = "You were too worn to pay for this", "you have"
     else:
-        name = _name_for(gainer, payer)
-        who, are, has = name, "was", f"{name} has"
-    if charge.refused:
-        return (
-            f"{who} {are} too worn for this to pay anything. "
-            f"Mark another act, or wait until {has} recovered."
-        )
+        lead, again = f"{who} is too worn to pay for this", f"{who} has"
     return (
-        f"{who} {are} too worn to bear all of this, so it paid less. "
-        f"Mark another act, or wait until {has} recovered."
+        f"{lead}, so your {resonance.name} does not grow. The act stays on your list. "
+        f"Mark it again once {again} recovered, or mark another act."
     )
+
+
+def shrink_reason(charge: GainFatigueCharge, gainer: CharacterSheet) -> str:
+    """The "because ..." clause of a gain that shrank: "because Hale had little left to give",
+    or "because you had little left to give" when the gainer is the payer."""
+    return f"because {payer_name(charge, gainer)} had little left to give"
+
+
+def stay_small_sentence(charge: GainFatigueCharge, gainer: CharacterSheet) -> str:
+    """What to expect next after a gain shrank: "Marks against Hale stay small until they have
+    recovered." (or "Marks stay small until you have recovered." for her own fatigue)."""
+    if _payer_is_gainer(charge, gainer):
+        return "Marks stay small until you have recovered."
+    return f"Marks against {payer_name(charge, gainer)} stay small until they have recovered."
 
 
 def _name_for(viewer: CharacterSheet, sheet: CharacterSheet) -> str:
@@ -124,17 +140,21 @@ def _name_for(viewer: CharacterSheet, sheet: CharacterSheet) -> str:
 
 
 def _told_payer(
-    payer: CharacterSheet, gainer: CharacterSheet, resonance: Resonance
+    payer: CharacterSheet, gainer: CharacterSheet, resonance: Resonance, *, shrunk: bool
 ) -> Callable[[], None]:
-    """The after-commit send of the one private line a payer other than the gainer reads."""
+    """The after-commit send of the one private line a payer other than the gainer reads;
+    when the charge took only part of the cost it says so."""
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
     def _send() -> None:
         name = _name_for(payer, gainer)
+        body = f"{name} marked {resonance.name} on what they did to you. You are wearier."
+        if shrunk:
+            body += " You had little left to give, so it took only part."
         send_narrative_message(
             recipients=[payer],
-            body=f"{name} marked {resonance.name} on what they did to you. You are wearier.",
+            body=body,
             category=NarrativeCategory.SYSTEM,
             ooc_note="Resonance gain fatigue",
         )
@@ -142,4 +162,11 @@ def _told_payer(
     return _send
 
 
-__all__ = ["charge_gain_fatigue", "gain_fatigue_payer", "worn_clause"]
+__all__ = [
+    "charge_gain_fatigue",
+    "gain_fatigue_payer",
+    "payer_name",
+    "refusal_line",
+    "shrink_reason",
+    "stay_small_sentence",
+]

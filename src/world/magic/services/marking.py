@@ -27,11 +27,18 @@ from world.magic.models import (
     KindledDeedAward,
     KindledStrengthTier,
     RecordedAct,
+    RecordedActSuggestion,
     Resonance,
     ResonanceGrant,
     WeeklyMarkReturn,
 )
-from world.magic.services.gain_fatigue import charge_gain_fatigue, gain_fatigue_payer, worn_clause
+from world.magic.services.gain_fatigue import (
+    charge_gain_fatigue,
+    gain_fatigue_payer,
+    refusal_line,
+    shrink_reason,
+    stay_small_sentence,
+)
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.resonance_checks import (
     FULL_WORTH_PERCENT,
@@ -67,8 +74,28 @@ _WEEK_SPENT = (
     "The act stays on your list: mark it next week, when marks pay in full again."
 )
 _EPHEMERAL = (
-    "Your pose was posted, but a scene like this keeps no poses to carry a mark, so nothing "
-    "paid. The act stays on your list: mark it later from a journal entry."
+    "This scene is ephemeral and stores nothing, so a mark here pays nothing. "
+    "Mark the act later from a journal entry."
+)
+_POSE_HAS_MARK = (
+    "This pose already marks an act, and a pose marks only one. Mark the next act in "
+    "another pose or in a journal entry."
+)
+_ENTRY_HAS_MARK = (
+    "This journal entry already marks an act, and an entry marks only one. Mark the next "
+    "act in another entry."
+)
+_ORDINALS = (
+    "first",
+    "second",
+    "third",
+    "fourth",
+    "fifth",
+    "sixth",
+    "seventh",
+    "eighth",
+    "ninth",
+    "tenth",
 )
 
 
@@ -206,6 +233,17 @@ def record_pending_mark(
         raise MarkError(_NO_ACT)
     if locked[0] is not None:
         raise MarkError(_ALREADY_MARKED)
+    # One mark per writing: refused cleanly here, before anything is paid.
+    if (
+        interaction is not None
+        and RecordedAct.objects.filter(marked_interaction=interaction).exists()
+    ):
+        raise MarkError(_POSE_HAS_MARK)
+    if (
+        journal_entry is not None
+        and RecordedAct.objects.filter(marked_journal_entry=journal_entry).exists()
+    ):
+        raise MarkError(_ENTRY_HAS_MARK)
     act = RecordedAct.objects.select_related("outcome", "check_type", "target_sheet").get(
         pk=pending.act_id
     )
@@ -215,7 +253,8 @@ def record_pending_mark(
     if base is None:
         raise MarkError(_WORTHLESS)
     standing = weekly_percent_paid(sheet)
-    amount = base * standing.percent_paid // 100
+    # A step above 0 percent pays at least 1; only a 0 percent step refuses the mark.
+    amount = max(1, base * standing.percent_paid // 100) if standing.percent_paid > 0 else 0
     if amount <= 0:
         raise MarkError(_WEEK_SPENT)
     charge = charge_gain_fatigue(
@@ -226,7 +265,7 @@ def record_pending_mark(
         amount,
     )
     if charge.refused:
-        raise MarkError(worn_clause(charge, sheet))
+        raise MarkError(refusal_line(charge, sheet, resonance))
 
     ledger: list[ResonanceGrant] = []
     grant_resonance(
@@ -243,30 +282,59 @@ def record_pending_mark(
     act.marked_interaction = interaction
     act.marked_journal_entry = journal_entry
     act.save(update_fields=["marked_grant", "marked_interaction", "marked_journal_entry"])
+    # What situations suggested is dead weight once the act is marked.
+    RecordedActSuggestion.objects.filter(act=act).delete()
     if interaction is not None:
         notify_interaction_changed(interaction)
-    return MarkResult(line=_paid_line(sheet, resonance, grant, standing, charge), grant=grant)
+    return MarkResult(
+        line=_paid_line(sheet, resonance, grant, standing, charge, asked=amount), grant=grant
+    )
 
 
-def _paid_line(
+def _full_size(resonance: Resonance, asked: int, bonus_percent: int) -> int:
+    """What a gain of ``asked`` would have been after the affinity's earn rate and the bonus
+    percent, the two steps ``grant_resonance`` applies, so a shrunk gain can say what it was
+    cut from."""
+    scaled = max(asked * resonance.affinity.earn_rate_percent // 100, 1)
+    return scaled + scaled * bonus_percent // 100
+
+
+def _mark_ordinal(number: int) -> str:
+    """ "your fifth mark" up to the tenth, then "mark number 11"."""
+    if number <= len(_ORDINALS):
+        return f"your {_ORDINALS[number - 1]} mark"
+    return f"mark number {number}"
+
+
+def _paid_line(  # noqa: PLR0913 - the sheet, what was marked, what it paid and why
     sheet: CharacterSheet,
     resonance: Resonance,
     grant: ResonanceGrant,
     standing: WeeklyStanding,
     charge: GainFatigueCharge,
+    *,
+    asked: int,
 ) -> str:
-    """The private line a mark's writer reads: the affinity's verb, what grew, and why any of
-    it was cut."""
+    """The private line a mark's writer reads, in the order the approved design shows: the
+    affinity's verb, what grew (and that she is wearier, when she paid), why it was cut by
+    fatigue, why it was cut by the week, then the bonus check."""
     verb = resonance.affinity.claim_verb.strip()
+    grew = f"Your {resonance.name} grows by {grant.amount}"
     parts = [f"You {verb}." if verb else ""]
-    parts.append(f"Your {resonance.name} grows by {grant.amount}.")
-    parts.append(gain_bonus_clause(resonance.affinity, grant.bonus_percent))
+    if charge.shrunk:
+        full = _full_size(resonance, asked, grant.bonus_percent)
+        grew += f" instead of {full}, {shrink_reason(charge, sheet)}"
+    if charge.payer is not None and charge.payer.pk == sheet.pk and charge.charged > 0:
+        grew += ", and you are wearier"
+    parts.append(f"{grew}.")
+    if charge.shrunk:
+        parts.append(stay_small_sentence(charge, sheet))
     if standing.percent_paid < FULL_WORTH_PERCENT:
         parts.append(
-            f"This was mark number {standing.marks + 1} this week, so it paid "
+            f"This is {_mark_ordinal(standing.marks + 1)} this week, so it paid "
             f"{standing.percent_paid} percent. Marks pay in full again next week."
         )
-    parts.append(worn_clause(charge, sheet))
+    parts.append(gain_bonus_clause(resonance.affinity, grant.bonus_percent))
     return " ".join(part for part in parts if part)
 
 

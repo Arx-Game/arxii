@@ -993,7 +993,7 @@ def _record_pose_mark(
     try:
         result = record_pending_mark(actor.character_sheet, mark, interaction=interaction)
     except MarkError as exc:
-        return f"Your pose was posted, but your mark was not recorded: {exc.user_message}", False
+        return exc.user_message, False
     return result.line, result.paid
 
 

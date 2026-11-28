@@ -313,8 +313,7 @@ def _recorded_mark_fields(
     try:
         result = record_pending_mark(persona.character_sheet, mark, interaction=writing)
     except MarkError as exc:
-        line = f"Your pose was posted, but your mark was not recorded: {exc.user_message}"
-        return {"mark_line": line, "mark_recorded": False}
+        return {"mark_line": exc.user_message, "mark_recorded": False}
     return {"mark_line": result.line, "mark_recorded": result.paid}
 
 

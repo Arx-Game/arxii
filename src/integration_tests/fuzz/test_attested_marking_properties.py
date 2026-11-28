@@ -58,6 +58,7 @@ from world.magic.models import (
     Affinity,
     CharacterResonance,
     RecordedAct,
+    RecordedActSuggestion,
     Resonance,
     ResonanceCheckAward,
     ResonanceGrant,
@@ -280,6 +281,8 @@ class MarkWorthFollowsTheActsAward(_World, HypothesisTestCase):
             share = shares[suggested or 1]
             self.assertEqual(grant.amount, max(1, award * share // 100))
             self.assertEqual(grant.source, GainSource.MARKED_ACT)
+            # What situations suggested is dropped once the act is marked.
+            self.assertFalse(RecordedActSuggestion.objects.filter(act=act).exists())
             paid.append(grant.amount)
         self.assertEqual(paid, sorted(paid))
 
@@ -346,7 +349,9 @@ class AnActPaysOnce(_World, HypothesisTestCase):
         sheet = self.character()
         act = self.act(sheet, "Success")
         self.mark(sheet, act, first_key, pose=first_pose)
-        grants = ResonanceGrant.objects.filter(character_sheet=sheet).count()
+        grants = ResonanceGrant.objects.filter(
+            character_sheet=sheet, nullified_at__isnull=True
+        ).count()
         balances = sorted(
             CharacterResonance.objects.filter(character_sheet=sheet).values_list("pk", "balance")
         )
@@ -362,7 +367,10 @@ class AnActPaysOnce(_World, HypothesisTestCase):
                 {"reach_act_id": act.pk, "reach_resonance_id": self.resonances[second_key].pk},
             )
 
-        self.assertEqual(ResonanceGrant.objects.filter(character_sheet=sheet).count(), grants)
+        self.assertEqual(
+            ResonanceGrant.objects.filter(character_sheet=sheet, nullified_at__isnull=True).count(),
+            grants,
+        )
         self.assertEqual(
             sorted(
                 CharacterResonance.objects.filter(character_sheet=sheet).values_list(
@@ -371,6 +379,49 @@ class AnActPaysOnce(_World, HypothesisTestCase):
             ),
             balances,
         )
+
+
+class OneMarkPerWriting(_World, HypothesisTestCase):
+    """A pose or a journal entry carries one mark, however many acts the player has."""
+
+    @settings(max_examples=20, deadline=None)
+    @given(
+        first_key=st.sampled_from(KEYS),
+        second_key=st.sampled_from(KEYS),
+        pose=st.booleans(),
+    )
+    def test_a_second_mark_in_the_same_pose_or_entry_is_refused_and_consumes_nothing(
+        self, first_key: str, second_key: str, pose: bool
+    ) -> None:
+        """Maintainer: "they point to an act" (one writing, one act).
+
+        Given two unmarked acts and one pose or journal entry that has already carried a mark,
+        a second mark carried by that same writing is refused cleanly before anything is paid:
+        no grant is written, the second act stays unmarked and pointable, and the same acts
+        can then be marked in writings of their own.
+        """
+        self.configure()
+        sheet = self.character()
+        first_act, second_act = self.act(sheet, "Success"), self.act(sheet, "Success")
+        interaction = InteractionFactory(persona=sheet.primary_persona)
+        entry = JournalEntryFactory(author=sheet)
+        writing = {"interaction": interaction} if pose else {"journal_entry": entry}
+
+        def mark_in(act: RecordedAct, key: str, **where: object) -> MarkResult:
+            pending = pending_mark_from(
+                sheet, {"reach_act_id": act.pk, "reach_resonance_id": self.resonances[key].pk}
+            )
+            return record_pending_mark(sheet, pending, **where)
+
+        mark_in(first_act, first_key, **writing)
+        grants = ResonanceGrant.objects.filter(character_sheet=sheet).count()
+        with self.assertRaises(MarkError):
+            mark_in(second_act, second_key, **writing)
+        self.assertEqual(ResonanceGrant.objects.filter(character_sheet=sheet).count(), grants)
+        self.assertTrue(self.is_unmarked(second_act))
+
+        other = {"journal_entry": entry} if pose else {"interaction": interaction}
+        self.assertTrue(mark_in(second_act, second_key, **other).paid)
 
 
 class JournalAndPoseAreOneSystem(_World, HypothesisTestCase):
@@ -493,16 +544,23 @@ class FatigueFallsOnTheRightPayer(_World, HypothesisTestCase):
 
         refused = False
         grant = None
+        line = ""
         try:
-            grant = self.mark(gainer, act, key, pose=pose).grant
-        except MarkError:
+            result = self.mark(gainer, act, key, pose=pose)
+            grant, line = result.grant, result.line
+        except MarkError as exc:
             refused = True
+            line = exc.user_message
 
         self.assertEqual(refused, paid == 0)
         if refused:
             self.assertTrue(self.is_unmarked(act))
+            self.assertIn("does not grow. The act stays on your list.", line)
         else:
             self.assertEqual(grant.amount, paid)
+            self_paid = payer_exists and payer.pk == gainer.pk and charged > 0
+            self.assertEqual("and you are wearier" in line, self_paid)
+            self.assertEqual("had little left to give" in line, paid < base)
         for pk, (pool, capacity_of) in pools.items():
             expected = before[pk] + (charged if payer_exists and pk == payer.pk else 0)
             self.assertEqual(pool.get_current(ActionCategory.SOCIAL), expected)
@@ -531,7 +589,8 @@ class WeeklyTableCutsRepeatMarks(_World, HypothesisTestCase):
         Given a weekly table whose steps never pay more as she has gained more, and a run of
         marks of acts of equal worth in one game week, each mark pays the percent of its
         amount that the step she had reached allows, so no mark pays more than the one before;
-        a mark whose share rounds to nothing is refused and the act stays unmarked. Grants
+        a step that pays 0 percent refuses the mark and the act stays unmarked, while any step
+        above 0 pays at least 1. Grants
         from other sources (an endorsement, a staff grant) never count toward the table. A
         mark that is then undone (``nullified_at`` set on its grant) stops counting: she
         stands where she did before it, and the next mark pays what that step allows.
@@ -548,7 +607,9 @@ class WeeklyTableCutsRepeatMarks(_World, HypothesisTestCase):
 
         def allowed(gained: int) -> int:
             step = max(t for t in THRESHOLDS if t <= gained)
-            return amount * percents[THRESHOLDS.index(step)] // 100
+            percent = percents[THRESHOLDS.index(step)]
+            # A step above 0 percent pays at least 1; only a 0 percent step pays nothing.
+            return max(1, amount * percent // 100) if percent > 0 else 0
 
         paid: list[int] = []
         for _ in range(count):
