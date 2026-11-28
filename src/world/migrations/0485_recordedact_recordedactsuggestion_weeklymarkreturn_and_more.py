@@ -179,7 +179,7 @@ class Migration(migrations.Migration):
             field=models.CharField(
                 blank=True,
                 db_default="",
-                help_text="The word a player reads when a mark pays resonance in this affinity, in the present tense, such as 'gloat', 'inspire' or 'relish'. The line reads 'You <verb>. Your <resonance> grows by N.'",
+                help_text="The word a player reads when a mark pays resonance in this affinity, in the present tense, such as 'gloat', 'inspire' or 'relish'. The line reads 'You gloat. Your Cruelty grows by 9.'",
                 max_length=30,
             ),
         ),

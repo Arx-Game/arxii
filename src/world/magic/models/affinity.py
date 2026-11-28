@@ -126,10 +126,12 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         max_length=30,
         blank=True,
         db_default="",
+        # The example is written out: the admin renders help text as HTML, so a placeholder in
+        # angle brackets vanishes from the page.
         help_text=(
             "The word a player reads when a mark pays resonance in this affinity, in the "
             "present tense, such as 'gloat', 'inspire' or 'relish'. The line reads "
-            "'You <verb>. Your <resonance> grows by N.'"
+            "'You gloat. Your Cruelty grows by 9.'"
         ),
     )
     earn_rate_percent = models.PositiveSmallIntegerField(
