@@ -1510,27 +1510,36 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
         if paid is not None and resonance is not None and not by_system:
             _tell_tagged_player(character_sheet, moment_type, paid, tagged_by, scene)
 
-    try:
-        persona = character_sheet.primary_persona
-    except Persona.DoesNotExist:
-        persona = None
-
-    if persona is not None:
-        from world.societies.renown import fire_renown_award  # noqa: PLC0415
-
-        fire_renown_award(
-            persona=persona,
-            magnitude=moment_type.magnitude,
-            risk=moment_type.risk,
-            reach=moment_type.reach or None,
-            archetypes=list(archetypes) or list(moment_type.archetypes.all()),
-            origin_area=area_for_scene(scene),
-            title=moment_type.label,
-        )
+    _fire_moment_renown(character_sheet, moment_type, scene, archetypes)
 
     if interaction is not None:
         notify_interaction_changed(interaction)
     return tag
+
+
+def _fire_moment_renown(
+    character_sheet: CharacterSheet,
+    moment_type: DramaticMomentType,
+    scene: Scene | None,
+    archetypes: Sequence[PhilosophicalArchetype],
+) -> None:
+    """Fire the moment's renown award for the character's primary persona, if she has one."""
+    try:
+        persona = character_sheet.primary_persona
+    except Persona.DoesNotExist:
+        return
+
+    from world.societies.renown import fire_renown_award  # noqa: PLC0415
+
+    fire_renown_award(
+        persona=persona,
+        magnitude=moment_type.magnitude,
+        risk=moment_type.risk,
+        reach=moment_type.reach or None,
+        archetypes=list(archetypes) or list(moment_type.archetypes.all()),
+        origin_area=area_for_scene(scene),
+        title=moment_type.label,
+    )
 
 
 def maybe_suggest_dramatic_moments(
