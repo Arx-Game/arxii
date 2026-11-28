@@ -654,7 +654,10 @@ class BridgeEvacuationAcceptanceTests(TestCase):
 
         with patch(
             "world.combat.services.perform_check",
-            return_value=SimpleNamespace(success_level=2, outcome=None),
+            # perform_check's result always names the check it rolled
+            side_effect=lambda _character, check_type, *_args, **_kwargs: SimpleNamespace(
+                success_level=2, outcome=None, check_type=check_type
+            ),
         ):
             resolve_round(encounter)
 
