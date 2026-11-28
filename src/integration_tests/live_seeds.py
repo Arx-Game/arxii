@@ -2412,8 +2412,11 @@ def _attested_daven_state(  # noqa: PLR0913 - Daven's world: scene, target, reso
         fatigue_category=ActionCategory.SOCIAL,
     )
     now = timezone.now()
-    RecordedAct.objects.filter(pk=intimidated.pk).update(created_at=now - timedelta(minutes=2))
-    RecordedAct.objects.filter(pk=cellar.pk).update(created_at=now - timedelta(minutes=9))
+    # created_at is set once on creation; the instances are idmapped, so they are saved.
+    intimidated.created_at = now - timedelta(minutes=2)
+    intimidated.save(update_fields=["created_at"])
+    cellar.created_at = now - timedelta(minutes=9)
+    cellar.save(update_fields=["created_at"])
 
     # Brannoc's pose first, so the feed reads in the order the demo draws it.
     bell_poser = RosterEntry.objects.get(character_sheet__character__db_key=ATTESTED_BELL_POSER)
