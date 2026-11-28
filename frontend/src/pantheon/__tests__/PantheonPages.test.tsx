@@ -186,6 +186,78 @@ describe('BeingEditPage', () => {
   });
 });
 
+describe('BeingEditPage unsaved draft', () => {
+  const STORED_KEY = 'arxii:unsaved-draft:pantheon-being:1';
+
+  function renderEditor() {
+    return renderWithProviders(
+      <Routes>
+        <Route path="/staff/pantheon/:id/edit" element={<BeingEditPage />} />
+      </Routes>,
+      { initialEntries: ['/staff/pantheon/1/edit'] }
+    );
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    window.localStorage.clear();
+    vi.mocked(api.fetchBeingPage).mockResolvedValue(page);
+    vi.mocked(api.fetchEditorOptions).mockResolvedValue(options);
+    vi.mocked(api.saveBeingPage).mockResolvedValue(page);
+  });
+
+  it('keeps typing that was never saved and puts it back when the page is reopened', async () => {
+    const first = renderEditor();
+    await userEvent.type(await screen.findByDisplayValue('Fleshreaper'), ' of Blood');
+    expect(screen.getByTestId('draft-state')).toHaveTextContent('Unsaved. Kept in this browser.');
+    first.unmount();
+
+    renderEditor();
+    expect(await screen.findByDisplayValue('Fleshreaper of Blood')).toBeInTheDocument();
+    expect(screen.getByTestId('draft-state')).toHaveTextContent('Unsaved. Kept in this browser.');
+    // Restoring fills the form only: nothing was published.
+    expect(api.saveBeingPage).not.toHaveBeenCalled();
+  });
+
+  it('forgets the kept copy once the page is saved', async () => {
+    renderEditor();
+    await userEvent.type(await screen.findByDisplayValue('Fleshreaper'), ' of Blood');
+    await waitFor(() => expect(window.localStorage.getItem(STORED_KEY)).not.toBeNull());
+
+    await userEvent.click(screen.getByTestId('save-top'));
+    await waitFor(() => expect(api.saveBeingPage).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(window.localStorage.getItem(STORED_KEY)).toBeNull());
+  });
+
+  it('leaves a kept copy alone when the page was saved since it was started', async () => {
+    const stale = {
+      base: JSON.stringify({ name: 'Fleshreaper, as it once was' }),
+      draft: { name: 'Old unsaved name' },
+    };
+    window.localStorage.setItem(STORED_KEY, JSON.stringify(stale));
+
+    renderEditor();
+    expect(await screen.findByDisplayValue('Fleshreaper')).toBeInTheDocument();
+    expect(screen.queryByDisplayValue('Old unsaved name')).not.toBeInTheDocument();
+    expect(screen.getByTestId('draft-state')).toHaveTextContent('Live the moment you save.');
+    expect(window.localStorage.getItem(STORED_KEY)).toBe(JSON.stringify(stale));
+  });
+
+  it('warns before the tab closes with unsaved changes, and only then', async () => {
+    renderEditor();
+    const name = await screen.findByDisplayValue('Fleshreaper');
+
+    const clean = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(clean);
+    expect(clean.defaultPrevented).toBe(false);
+
+    await userEvent.type(name, '!');
+    const dirty = new Event('beforeunload', { cancelable: true });
+    window.dispatchEvent(dirty);
+    expect(dirty.defaultPrevented).toBe(true);
+  });
+});
+
 describe('BeingDashboardPage', () => {
   beforeEach(() => vi.resetAllMocks());
 

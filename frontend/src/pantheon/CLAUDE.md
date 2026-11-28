@@ -14,6 +14,18 @@ Staff-only authoring of the pantheon over `/api/worship/admin/beings/`.
 - Staff-page conventions only (plain cards, `container mx-auto max-w-6xl px-4 py-8`); never
   the realm-themed fonts.
 
+## Unsaved typing survives a closed tab
+
+The edit page holds every field in the tab's memory and sends the whole page on Save, so a
+closed tab used to lose a half-written god. `useUnsavedDraft.ts` copies the working draft to
+`localStorage` (key `arxii:unsaved-draft:pantheon-being:<id|new>`) while it differs from the
+server's page, restores it on reopen with a "Discard them" action, warns before the tab closes
+with unsaved changes, and forgets the copy once Save succeeds. It only ever fills the form:
+nothing goes live until Save. When the server's page changed since the copy was started
+(another editor saved), the copy is not applied on its own, because the next Save would
+overwrite their work; a toast offers "Restore mine" instead. The copy lives in one browser, so
+it does not follow a person to another machine.
+
 ## Facets on the edit page (#4197)
 
 "Favored facets" picks through the shared `FacetPicker` (`@/magic/components/FacetPicker`),

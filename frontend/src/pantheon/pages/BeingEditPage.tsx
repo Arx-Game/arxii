@@ -2,7 +2,8 @@
  * The edit page (#3780): one long page, never a wizard. Every section is collapsible and
  * carries a highlight dot while an optional field is unfilled. No explainer copy; each
  * "+ Add" carries its explanation as a hover tooltip. Save is live at once: there is no
- * draft gate pre-launch. Blank fields simply do not render on the Codex.
+ * draft gate pre-launch. Blank fields simply do not render on the Codex. Typing that was
+ * never saved is kept in this browser (`useUnsavedDraft`) and restored on reopen.
  */
 
 import { useEffect, useMemo, useState } from 'react';
@@ -30,6 +31,7 @@ import { useAccount } from '@/store/hooks';
 import { EditorSection } from '../components/EditorSection';
 import { VISIBILITY_LABELS } from '../visibility';
 import { pantheonKeys, useBeingPage, useEditorOptions, useSaveBeing } from '../queries';
+import { useUnsavedDraft } from '../useUnsavedDraft';
 import type {
   EditorOptions,
   FeastDayLine,
@@ -219,6 +221,17 @@ export function BeingEditPage() {
     }
   }, [page, loadedFor]);
 
+  const baseline = useMemo(() => {
+    if (page) return draftFrom(page);
+    return beingId === null ? EMPTY : null;
+  }, [page, beingId]);
+  const { isDirty, clear: clearUnsaved } = useUnsavedDraft<Draft>({
+    storageKey: `pantheon-being:${beingId ?? 'new'}`,
+    baseline,
+    current: draft,
+    onRestore: setDraft,
+  });
+
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((prev) => ({ ...prev, [key]: value }));
 
@@ -256,6 +269,7 @@ export function BeingEditPage() {
     }
     save.mutate(toRequest(draft), {
       onSuccess: (saved) => {
+        clearUnsaved();
         toast.success(`${saved.name} saved. Live now.`);
         navigate(`/staff/pantheon/${saved.id}`);
       },
@@ -279,7 +293,9 @@ export function BeingEditPage() {
           </h1>
         </div>
         <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground">Live the moment you save.</span>
+          <span className="text-xs text-muted-foreground" data-testid="draft-state">
+            {isDirty ? 'Unsaved. Kept in this browser.' : 'Live the moment you save.'}
+          </span>
           <Button onClick={handleSave} disabled={save.isPending} data-testid="save-top">
             {save.isPending ? 'Saving…' : 'Save'}
           </Button>
