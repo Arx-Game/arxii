@@ -149,9 +149,7 @@ def taught_affinity_skill_names_by_tradition(
 
     ids = list(tradition_ids)
     offerable = magic_category_skills().filter(affinity__isnull=False)
-    reflection = list(
-        offerable.filter(affinity__name=AFFINITY_PRIMAL).values_list("name", flat=True)
-    )
+    reflection = offerable.filter(affinity__name=AFFINITY_PRIMAL).values_list("name", flat=True)
     names: dict[int, list[str]] = {tradition_id: list(reflection) for tradition_id in ids}
     ticks = Tradition.taught_skills.through.objects.filter(
         tradition_id__in=ids, skill__in=offerable

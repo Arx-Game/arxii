@@ -163,13 +163,13 @@ class CmdTraining(DispatchCommand):
         if self._subverb in self._ANSWER_SUBVERBS:
             return self._resolve_answer_args()
         parsed = _parse_assignment_args(self._rest)
-        if self._subverb == _SUBVERB_ADD:
-            return self._resolve_add_args(parsed)
-        if self._subverb == _SUBVERB_UPDATE:
-            return self._resolve_update_args(parsed)
-        if self._subverb == _SUBVERB_REMOVE:
-            return self._resolve_remove_args(parsed)
-        return {}
+        resolvers = {
+            _SUBVERB_ADD: self._resolve_add_args,
+            _SUBVERB_UPDATE: self._resolve_update_args,
+            _SUBVERB_REMOVE: self._resolve_remove_args,
+        }
+        resolver = resolvers.get(self._subverb)
+        return resolver(parsed) if resolver is not None else {}
 
     # -- helpers ------------------------------------------------------------------
 
@@ -299,7 +299,6 @@ class CmdTraining(DispatchCommand):
     def _show_listing(self) -> None:
         """Render the caller's training allocations and weekly AP budget."""
         from world.action_points.models import ActionPointConfig  # noqa: PLC0415
-        from world.skills.mentoring import mentor_is_waiting  # noqa: PLC0415
         from world.skills.models import TrainingAllocation  # noqa: PLC0415
         from world.skills.services import skills_at_boundary  # noqa: PLC0415
 
@@ -318,27 +317,36 @@ class CmdTraining(DispatchCommand):
         if not allocations:
             lines.append("No training allocations set.")
         else:
-            for allocation in allocations:
-                plateau = ""
-                if allocation.skill is not None:
-                    target = allocation.skill.name
-                    if allocation.skill.pk in gated_skill_ids:
-                        plateau = " [at threshold: breakthrough required]"
-                else:
-                    target = allocation.specialization.name
-                mentor = ""
-                if allocation.mentor is not None:
-                    mentor = f" (mentor: {allocation.mentor.name})"
-                    if mentor_is_waiting(allocation):
-                        mentor = (
-                            f" (mentor: {allocation.mentor.name}, "
-                            f"waiting for {allocation.mentor.name} to agree)"
-                        )
-                lines.append(
-                    f"[{allocation.pk}] {target}: {allocation.ap_amount} AP{mentor}{plateau}"
-                )
+            lines.extend(
+                self._allocation_line(allocation, gated_skill_ids) for allocation in allocations
+            )
 
         self.msg("\n".join(lines))
+
+    @staticmethod
+    def _allocation_line(allocation: Any, gated_skill_ids: set[int]) -> str:
+        """One allocation's listing line: target, AP, mentor, and a plateau note."""
+        plateau = ""
+        if allocation.skill is not None:
+            target = allocation.skill.name
+            if allocation.skill.pk in gated_skill_ids:
+                plateau = " [at threshold: breakthrough required]"
+        else:
+            target = allocation.specialization.name
+        mentor = CmdTraining._mentor_phrase(allocation)
+        return f"[{allocation.pk}] {target}: {allocation.ap_amount} AP{mentor}{plateau}"
+
+    @staticmethod
+    def _mentor_phrase(allocation: Any) -> str:
+        """The listing's mentor note: empty, the mentor's name, or that she has not agreed."""
+        from world.skills.mentoring import mentor_is_waiting  # noqa: PLC0415
+
+        if allocation.mentor is None:
+            return ""
+        name = allocation.mentor.name
+        if mentor_is_waiting(allocation):
+            return f" (mentor: {name}, waiting for {name} to agree)"
+        return f" (mentor: {name})"
 
     def _parse_optional_id(self, value: str | None, name: str) -> int | None:
         """Return an int id, None for empty, or raise CommandError for bad input."""
