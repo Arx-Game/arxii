@@ -137,7 +137,6 @@ export function useUnsavedDraft<T>({
     if (!isDirty) return undefined;
     const warn = (event: BeforeUnloadEvent) => {
       event.preventDefault();
-      event.returnValue = '';
     };
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
