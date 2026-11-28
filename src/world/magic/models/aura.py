@@ -215,7 +215,7 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
         default=0,
         help_text=(
             "Running total of resonance earned. Spending does not lower it; converting "
-            "resonance and undoing a gain (#5327) do."
+            "resonance and undoing a gain do."
         ),
     )
     claimed_at = models.DateTimeField(

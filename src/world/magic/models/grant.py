@@ -223,7 +223,7 @@ class ResonanceGrant(SharedMemoryModel):
     nullified_at = models.DateTimeField(
         null=True,
         blank=True,
-        help_text="Set when staff or the scene's GM undid this gain (#5327).",
+        help_text="Set when staff or the scene's GM undid this gain.",
     )
     nullified_by = models.ForeignKey(
         "accounts.AccountDB",

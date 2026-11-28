@@ -126,13 +126,9 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         max_length=30,
         blank=True,
         db_default="",
-        # The example is written out: the admin renders help text as HTML, so a placeholder in
-        # angle brackets vanishes from the page.
-        help_text=(
-            "The word a player reads when a mark pays resonance in this affinity, in the "
-            "present tense, such as 'gloat', 'inspire' or 'relish'. The line reads "
-            "'You gloat. Your Cruelty grows by 9.'"
-        ),
+        # No angle brackets: the admin renders help text as HTML, so a placeholder in angle
+        # brackets would vanish from the page.
+        help_text='The verb a player reads when a mark in this affinity pays, as in "You gloat."',
     )
     earn_rate_percent = models.PositiveSmallIntegerField(
         default=100,
@@ -175,7 +171,8 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         db_default=0,
         help_text=(
             "What one gain in this affinity's resonance costs whoever pays for it, in "
-            "fatigue, before any fatigue reduction the payer has. 0 charges nothing."
+            "fatigue. 0 charges nothing. A positive number is the base cost, before any "
+            "fatigue reduction the payer has."
         ),
     )
     skill = models.OneToOneField(
@@ -276,7 +273,10 @@ class Resonance(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     description = models.TextField(
         blank=True,
-        help_text="Description of this resonance.",
+        help_text=(
+            "Players read this under the picker when they choose this resonance. Write good "
+            "and bad examples of acts."
+        ),
     )
     affinity = models.ForeignKey(
         Affinity,

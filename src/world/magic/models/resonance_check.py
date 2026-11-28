@@ -66,7 +66,10 @@ class ResonanceGainSourceStat(SharedMemoryModel):
         on_delete=models.PROTECT,
         limit_choices_to={"trait_type": "stat"},
         related_name="+",
-        help_text="The stat the bonus check rolls for this kind of gain.",
+        help_text=(
+            "The stat the bonus check rolls for this kind of gain when the act rolled no "
+            "stat of its own."
+        ),
     )
 
     class Meta:
@@ -74,4 +77,4 @@ class ResonanceGainSourceStat(SharedMemoryModel):
         ordering = ["source"]
 
     def __str__(self) -> str:
-        return f"{self.source}: {self.stat.name}"
+        return self.get_source_display()

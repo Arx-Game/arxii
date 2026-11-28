@@ -2032,9 +2032,17 @@ class StandingCapBandAdmin(admin.ModelAdmin):
 
 @admin.register(WeeklyMarkReturn)
 class WeeklyMarkReturnAdmin(admin.ModelAdmin):
-    """Staff-set diminishing returns on marks within one game week (#5327)."""
+    """Staff-set diminishing returns on marks within one game week (#5327).
 
+    The table is one page: every step is a row of two fields edited in place and saved
+    together, and the changelist template adds the heading and help line the approved demo
+    draws. A row has no link of its own, because there is nothing on it to open.
+    """
+
+    change_list_template = "admin/magic/weeklymarkreturn/change_list.html"
     list_display = ("gained_at_least", "percent_paid")
+    list_display_links = None
+    list_editable = ("gained_at_least", "percent_paid")
     ordering = ("gained_at_least",)
 
 

@@ -2634,7 +2634,12 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
     grants paid, skipping any that was undone (`nullified_at`), and the row with the greatest
     `gained_at_least` at or below that sum sets the percent of the next mark; no rows, or none reached,
     means 100. A step above 0 percent pays at least 1. Authored choices, endorsements and a GM's tag are
-    never counted or reduced.
+    never counted or reduced. Staff edit the table on one page: the Weekly mark returns changelist shows every
+    step as a row with an editable "Gained at least" and "Percent paid", saved together with one Save, under
+    the heading "One row for each step in the game week" and the help line "A row applies once she has gained
+    at least this much from marks this game week, before this mark. With no rows, nothing is reduced.
+    Authored choices are never reduced." (`WeeklyMarkReturnAdmin`, template
+    `admin/magic/weeklymarkreturn/change_list.html`).
   - **Gain fatigue** (`services/gain_fatigue.py`, `fatigue/services.py`). `Affinity.gain_fatigue` is the one
     staff-set cost of a gain in that affinity (0 charges nothing). `gain_fatigue_payer(gainer, resonance,
     target)` names who pays: Primal and Celestial the gainer (for Celestial, the character who acted),
@@ -5071,7 +5076,7 @@ skill per affinity or a stat per source with no roll of its own is unset.
 | `Affinity.spend_worth_floor_percent` | The least a pull or kindled cast of that affinity is worth, whatever the check rolls (0 sets no floor). |
 | `ResonanceGainConfig.bonus_check_type`, `bonus_difficulty_level` | The check and its difficulty level. `clean()` requires a check type weighing exactly one stat, so the act's stat can stand in for it. Blank turns the whole mechanism off. |
 | `ResonanceCheckAward` (`models/resonance_check.py`) | Staff table, an `OutcomeTierAward`: `gain_bonus_percent` (default 0) grows a gain and `spend_worth_percent` (default 100) sets a pull's worth, per roll result. A result with no row adds 0 and is worth 100. |
-| `ResonanceGainSourceStat` | One row per `GainSource` (unique): the stat the bonus check rolls for a source whose act made no roll of its own. A source with no row rolls the check type's own stat. |
+| `ResonanceGainSourceStat` | One row per `GainSource` (unique): the stat the bonus check rolls for a source whose act made no roll of its own. A source with no row rolls the check type's own stat. The row's name in the admin is the source's label, such as "Marked act", not its key. |
 | `ResonanceGrant.bonus_outcome`, `bonus_percent` | What the check was and what it added to this gain; the recorded `amount` already includes it. The ledger serializer serves `bonus_percent` and `bonus_outcome` (the tier's name), `resonance history` prints "+15 (Kindled deed, +50% from Villainy)" when `bonus_percent` is above 0, and the admin list shows `bonus_percent`. |
 | `TrickleAccrual` (`models/trickle.py`) | One day's waiting trickle (see "Trickles wait for the anima ritual" below). |
 | `PoseResonanceReach` (`models/endorsement.py`) | The resonance a pose reaches for; one per pose (see "Reaching" below). A pose that points at an act writes none: it is a mark. |

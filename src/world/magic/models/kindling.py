@@ -199,8 +199,8 @@ class KindlingConfig(SharedMemoryModel):
         default=90,
         db_default=90,
         help_text=(
-            "How many days an act a player character took stays on her list of acts to point "
-            "a mark at (#5327). An act older than this, and never marked, is dropped."
+            "How many days an act she took stays on her list to point at. After that it is "
+            "removed, and a journal entry can no longer point at it."
         ),
     )
 
