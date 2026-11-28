@@ -504,8 +504,7 @@ act makes the writing a mark that pays when it is posted. A journal entry passes
 legend reads "Pointing at (required)", there is no "Nothing" choice, and `isReachActMissing(draft)`
 (`isReachUnfinished` on the journal's fields value) holds Post entry until an act is chosen, because no
 one can endorse a journal entry. In an ephemeral scene (`SceneDetail.is_ephemeral`, read by
-`CommandInput` from the scene query) the act list is replaced by "This scene is ephemeral and stores
-nothing, so a mark here pays nothing. Mark the act later from a journal entry." and no acts are read.
+`CommandInput` from the scene query) the act list is replaced by "This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the act later, in a pose in another scene or from a journal entry." and no acts are read.
 
 State is a `ReachDraft` (`{ on, resonanceId, actId }`, `NO_REACH` while idle); `reachFields(draft)` gives
 `reach_resonance_id`, plus `reach_act_id` when an act is chosen, and nothing while the row is off or

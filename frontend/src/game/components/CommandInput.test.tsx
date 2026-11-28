@@ -2838,7 +2838,7 @@ describe('the "Reaching for" row on a pose (#5308, #5327)', () => {
     await reachFor31();
 
     expect(await screen.findByTestId('reach-ephemeral')).toHaveTextContent(
-      'This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the act later from a journal entry.'
+      'This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the act later, in a pose in another scene or from a journal entry.'
     );
     expect(screen.queryByTestId('reach-acts')).toBeNull();
   });

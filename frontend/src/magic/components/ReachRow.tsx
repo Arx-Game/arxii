@@ -127,7 +127,7 @@ export function ReachRow({
       {value.on && ephemeral && (
         <p className="text-xs text-amber-700 dark:text-amber-400" data-testid="reach-ephemeral">
           This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the act
-          later from a journal entry.
+          later, in a pose in another scene or from a journal entry.
         </p>
       )}
       {choosing && (

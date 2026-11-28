@@ -162,7 +162,7 @@ describe('ReachRow', () => {
     await chooseCruelty(user);
 
     expect(screen.getByTestId('reach-ephemeral')).toHaveTextContent(
-      'This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the act later from a journal entry.'
+      'This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the act later, in a pose in another scene or from a journal entry.'
     );
     expect(screen.queryByTestId('reach-acts')).toBeNull();
     expect(api.getRecordedActs).not.toHaveBeenCalled();
