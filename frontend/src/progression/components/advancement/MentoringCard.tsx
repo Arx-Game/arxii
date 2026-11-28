@@ -92,7 +92,7 @@ export function MentoringCard() {
                 data-testid="mentoring-student-row"
               >
                 <div className="min-w-0 font-medium">
-                  {row.student_name}: {row.skill_name} (as {row.mentor_name})
+                  {row.mentor_name} teaches {row.student_name} {row.skill_name}
                 </div>
                 <Button
                   variant="outline"

@@ -303,7 +303,7 @@ class AMentorAnswersHerRequests(_TeachingCase):
             "You agree to teach Ysmay Villainy.", self.telnet(self.hobb, "training accept 1")
         )
         self.assertEqual(self.notices(self.ysmay)[-1], "Hobb agreed to teach you Villainy.")
-        self.assertIn("Ysmay: Villainy (as Hobb)", self.telnet(self.hobb, "training requests"))
+        self.assertIn("Hobb teaches Ysmay Villainy", self.telnet(self.hobb, "training requests"))
         self.assertIn("(mentor: Hobb)", self.telnet(self.ysmay, "training"))
 
         run_weekly_skill_cron()

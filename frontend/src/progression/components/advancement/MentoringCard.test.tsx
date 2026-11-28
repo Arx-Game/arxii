@@ -114,7 +114,7 @@ describe('MentoringCard', () => {
 
     expect(screen.getByText('Teaching')).toBeInTheDocument();
     expect(screen.getByTestId('mentoring-student-row')).toHaveTextContent(
-      'Odalys Fenn: Occult (as Magister Vey)'
+      'Magister Vey teaches Odalys Fenn Occult'
     );
 
     await userEvent.click(screen.getByTestId('mentoring-stop-12'));

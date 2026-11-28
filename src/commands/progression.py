@@ -252,7 +252,7 @@ class CmdTraining(DispatchCommand):
         if rows.students:
             lines.append("Teaching:")
             lines.extend(
-                f"  {row.student_name}: {row.skill_name} (as {row.mentor_name})"
+                f"  {row.mentor_name} teaches {row.student_name} {row.skill_name}"
                 for row in rows.students
             )
         if not lines:
