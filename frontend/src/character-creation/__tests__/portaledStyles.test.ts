@@ -50,3 +50,22 @@ describe('an element that carries the root class itself', () => {
     expect(stylesheet).not.toMatch(new RegExp(`\\.interview \\.${name}[\\s{,.:>]`));
   });
 });
+
+/**
+ * A declaration that reads a token nobody defines is discarded whole: the rule is in the
+ * file, the class has a rule, and nothing is drawn. #5292 wrote `var(--cg-hair)` for
+ * `--cg-hairline` twice, so the rule above each part of the Glimpse and the rule beside
+ * an answer's card were never drawn, past a test that only asked whether each class had
+ * a rule. The page's own tokens are all `--cg-*` and all defined in this stylesheet.
+ */
+describe('the tokens cg.css reads', () => {
+  it('are each defined in cg.css', () => {
+    const defined = new Set(
+      Array.from(stylesheet.matchAll(/^\s*(--cg-[a-z0-9-]+)\s*:/gm), (match) => match[1])
+    );
+    const read = new Set(
+      Array.from(stylesheet.matchAll(/var\(\s*(--cg-[a-z0-9-]+)/g), (match) => match[1])
+    );
+    expect([...read].filter((token) => !defined.has(token))).toEqual([]);
+  });
+});

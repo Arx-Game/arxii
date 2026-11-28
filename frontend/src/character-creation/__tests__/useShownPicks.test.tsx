@@ -91,6 +91,7 @@ function setUp() {
       { offer_id: 10, cost_per_rank: 10 },
     ],
     terms: [],
+    glimpse_cards: [],
   });
   // The draft fetch the save sets off. It answers only when the test settles it.
   const draftFetch = held<CharacterDraft>();
@@ -145,6 +146,7 @@ describe('useShownPicks', () => {
     queryClient.setQueryData(characterCreationKeys.draftOffers(DRAFT_ID, 'appearance'), {
       offers: [{ offer_id: 90, cost_per_rank: 1 }],
       terms: [],
+      glimpse_cards: [],
     });
     const tiers = (rank: number): SyncDistinctionEntry[] => [
       row(1, 11),
@@ -164,6 +166,7 @@ describe('useShownPicks', () => {
     queryClient.setQueryData(characterCreationKeys.draftOffers(DRAFT_ID, 'appearance'), {
       offers: [{ offer_id: 90, cost_per_rank: 1 }],
       terms: [],
+      glimpse_cards: [],
     });
 
     act(() =>

@@ -1,29 +1,21 @@
 /**
- * GlimpseSection Component Tests (#2427, offers slot #3675, folio-grammar
- * fix round 1).
+ * GlimpseSection Component Tests (#2427; folio-grammar fix round 1; one bonus
+ * from each of four parts, three ways in and no CG points, #5292).
  *
- * Mirrors GiftSelector.test.tsx's mock/provider setup: the catalog and draft
- * distinctions queries are pre-seeded, and the API module is mocked so only
- * updateDraft is actually exercised.
+ * Mirrors GiftSelector.test.tsx's mock/provider setup: the catalog and copy
+ * queries are pre-seeded, and the API module is mocked so only updateDraft is
+ * actually exercised.
  */
 
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
-import { distinctionKeys } from '@/hooks/useDistinctions';
 import type { TagOffer } from '@/magic/components/glimpse/glimpseTypes';
-import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { unreachableClasses } from '../offers/classGuard';
 import { GlimpseSection } from '../../../components/gift/GlimpseSection';
 import { characterCreationKeys } from '../../../queries';
-import type {
-  CGExplanations,
-  CharacterDraft,
-  GlimpseTagOption,
-  OffersResponse,
-  VisibleOffer,
-} from '../../../types';
-import { createMockDraft } from '../../fixtures';
+import type { CGExplanations, CharacterDraft, GlimpseTagOption } from '../../../types';
+import { createMockDraft, mockBeginnings } from '../../fixtures';
 import {
   createTestQueryClient,
   renderWithCharacterCreationProviders,
@@ -31,10 +23,9 @@ import {
 } from '../../testUtils';
 
 const updateDraftMock = vi.fn();
-const syncDistinctionsMutate = vi.fn();
 
-// getGlimpseTags/getDraftOffers/getCGExplanations are never invoked because
-// the query caches are pre-seeded below.
+// getGlimpseTags/getCGExplanations are never invoked because the query caches
+// are pre-seeded below.
 vi.mock('../../../api', () => ({
   getGlimpseTags: vi.fn(),
   getDraftOffers: vi.fn(),
@@ -42,178 +33,68 @@ vi.mock('../../../api', () => ({
   updateDraft: (...args: unknown[]) => updateDraftMock(...args),
 }));
 
-vi.mock('@/hooks/useDistinctions', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/hooks/useDistinctions')>()),
-  useSyncDistinctions: () => ({ mutate: syncDistinctionsMutate }),
-}));
-
-function tagOffer(overrides: Partial<TagOffer> & Pick<TagOffer, 'offer_id' | 'name'>): TagOffer {
+function card(name: string, effectLine: string): TagOffer {
   return {
-    distinction_id: overrides.offer_id,
-    player_line: `Player line for ${overrides.name}.`,
-    cost_per_rank: 5,
+    offer_id: 900 + name.length,
+    distinction_id: 900 + name.length,
+    name,
+    player_line: '',
+    cost_per_rank: 20,
     max_rank: 1,
-    ...overrides,
+    effect_line: effectLine,
   };
 }
 
-const TONE_WONDER: GlimpseTagOption = {
-  id: 1,
-  axis: 'TONE',
-  name: 'Wonder',
-  slug: 'wonder',
-  description: 'Awe at the impossible.',
-  example: 'The light bent around her hand like water.',
-  sort_order: 1,
-  stands_alone: false,
-  offers: [tagOffer({ offer_id: 201, name: 'Keen Senses', cost_per_rank: 5 })],
-};
+function answer(
+  id: number,
+  axis: GlimpseTagOption['axis'],
+  name: string,
+  description: string,
+  offers: TagOffer[] = []
+): GlimpseTagOption {
+  return {
+    id,
+    axis,
+    name,
+    slug: name.toLowerCase().replace(/\W+/g, '-'),
+    description,
+    example: '',
+    sort_order: id,
+    stands_alone: false,
+    offers,
+  };
+}
 
-const TONE_DREAD: GlimpseTagOption = {
-  id: 2,
-  axis: 'TONE',
-  name: 'Dread',
-  slug: 'dread',
-  description: 'Fear at the impossible.',
-  example: 'The shadows breathed.',
-  sort_order: 2,
-  stands_alone: false,
-  offers: [tagOffer({ offer_id: 202, name: 'Marked', cost_per_rank: 5 })],
-};
-
-const CONSEQUENCE_A: GlimpseTagOption = {
-  id: 3,
-  axis: 'CONSEQUENCE',
-  name: 'A Debt Incurred',
-  slug: 'debt-incurred',
-  description: 'Something was owed after.',
-  example: 'The price came due at midnight.',
-  sort_order: 1,
-  stands_alone: false,
-  offers: [tagOffer({ offer_id: 301, name: 'Wrathful', cost_per_rank: -5 })],
-};
-
-const CONSEQUENCE_B: GlimpseTagOption = {
-  id: 4,
-  axis: 'CONSEQUENCE',
-  name: 'A Door Opened',
-  slug: 'door-opened',
-  description: 'Something new became possible.',
-  example: 'A door that was not there before, now was.',
-  sort_order: 2,
-  stands_alone: false,
-  offers: [tagOffer({ offer_id: 302, name: 'Impoverished', cost_per_rank: -25 })],
-};
-
-const WITNESS_ALONE: GlimpseTagOption = {
-  id: 5,
-  axis: 'WITNESS',
-  name: 'Alone',
-  slug: 'alone',
-  description: 'No one else saw.',
-  example: 'She told no one.',
-  sort_order: 1,
-  stands_alone: false,
-  offers: [tagOffer({ offer_id: 501, name: 'Solitary', cost_per_rank: -10 })],
-};
-
-const TRIGGER_CRISIS: GlimpseTagOption = {
-  id: 6,
-  axis: 'TRIGGER',
-  name: 'Crisis',
-  slug: 'crisis',
-  description: 'Magic woke when you needed more than you had.',
-  example: '',
-  sort_order: 1,
-  stands_alone: false,
-  offers: [],
-};
-
-// A tag that stands alone on an axis that otherwise takes several (#5193).
-const CONSEQUENCE_ALONE: GlimpseTagOption = {
-  id: 7,
-  axis: 'CONSEQUENCE',
-  name: 'Nothing You Recall',
-  slug: 'nothing-you-recall',
-  description: 'You were told afterward.',
-  example: '',
-  sort_order: 3,
-  stands_alone: true,
-  offers: [],
-};
+const TRIGGER_CRISIS = answer(6, 'TRIGGER', 'Crisis', 'Magic woke when you needed more.', [
+  card('Crisisborn', '+Resolve'),
+]);
+const REFLECTION_RADIANT = answer(8, 'REFLECTION', 'Radiant', 'You saw yourself shining.', [
+  card('Glimmering', '+Presence'),
+]);
+const TONE_WONDER = answer(1, 'TONE', 'Wonder', 'Awe at the impossible.', [
+  card('Wonderstruck', '+Anima'),
+]);
+// An answer with no card: it gives nothing, and nothing stands in for the card.
+const TONE_GRIEF = answer(2, 'TONE', 'Grief', 'It came with a loss.');
+const CONSEQUENCE_A = answer(3, 'CONSEQUENCE', 'A Debt Incurred', 'Something was owed after.', [
+  card('Indebted', '-Composure'),
+]);
+const CONSEQUENCE_B = answer(4, 'CONSEQUENCE', 'A Door Opened', 'Something new became possible.');
+const WITNESS_ALONE = answer(5, 'WITNESS', 'Alone', 'No one else saw.');
 
 const CATALOG: GlimpseTagOption[] = [
   TRIGGER_CRISIS,
+  REFLECTION_RADIANT,
   TONE_WONDER,
-  TONE_DREAD,
+  TONE_GRIEF,
   CONSEQUENCE_A,
   CONSEQUENCE_B,
-  CONSEQUENCE_ALONE,
   WITNESS_ALONE,
 ];
-
-function visibleOffer(tag: GlimpseTagOption, overrides: Partial<VisibleOffer> = {}): VisibleOffer {
-  const catalogOffer = tag.offers[0];
-  return {
-    offer_id: catalogOffer.offer_id,
-    distinction_id: catalogOffer.distinction_id,
-    name: catalogOffer.name,
-    distinction_name: catalogOffer.name,
-    distinction_description: '',
-    player_line: catalogOffer.player_line,
-    chapter: 'glimpse',
-    arrives_as: 'choice',
-    opener_label: tag.name,
-    cost_per_rank: catalogOffer.cost_per_rank,
-    max_rank: catalogOffer.max_rank,
-    is_locked: false,
-    lock_reason: '',
-    opener_key: '',
-    first_look: false,
-    held: false,
-    effect_line: '',
-    taken_per_feature: false,
-    cg_max_rank: 0,
-    group: '',
-    asks_figure_name: false,
-    effects: [],
-    ...overrides,
-  };
-}
-
-const OFFERS_RESPONSE: OffersResponse = {
-  offers: [
-    visibleOffer(TONE_WONDER),
-    visibleOffer(TONE_DREAD),
-    visibleOffer(CONSEQUENCE_A),
-    visibleOffer(CONSEQUENCE_B),
-    visibleOffer(WITNESS_ALONE),
-  ],
-  terms: [],
-};
-
-const DRAFT_DISTINCTION: DraftDistinctionEntry = {
-  distinction_id: 10,
-  distinction_name: 'Keen Senses',
-  distinction_slug: 'keen-senses',
-  category_slug: 'advantages',
-  rank: 1,
-  cost: 2,
-  notes: '',
-  offer_ids: [],
-  sources: [],
-  arrivals: [],
-};
 
 function renderSection(draft: CharacterDraft, copy: CGExplanations = {}) {
   const queryClient = createTestQueryClient();
   seedQueryData(queryClient, characterCreationKeys.glimpseTags(), CATALOG);
-  seedQueryData(queryClient, distinctionKeys.draftDistinctions(draft.id), [DRAFT_DISTINCTION]);
-  seedQueryData(
-    queryClient,
-    characterCreationKeys.draftOffers(draft.id, 'glimpse'),
-    OFFERS_RESPONSE
-  );
   seedQueryData(queryClient, characterCreationKeys.explanations(), copy);
   const glimpseProseField = {
     name: 'glimpse_story' as const,
@@ -222,10 +103,21 @@ function renderSection(draft: CharacterDraft, copy: CGExplanations = {}) {
     ref: vi.fn(),
   };
   const result = renderWithCharacterCreationProviders(
-    <GlimpseSection draft={draft} glimpseProseField={glimpseProseField} />,
+    <div className="interview">
+      <GlimpseSection draft={draft} glimpseProseField={glimpseProseField} />
+    </div>,
     { queryClient }
   );
   return { ...result, glimpseProseField };
+}
+
+function expectSaved(draftData: Record<string, unknown>) {
+  return waitFor(() => {
+    expect(updateDraftMock).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ draft_data: expect.objectContaining(draftData) })
+    );
+  });
 }
 
 describe('GlimpseSection', () => {
@@ -234,199 +126,300 @@ describe('GlimpseSection', () => {
     updateDraftMock.mockResolvedValue({});
   });
 
-  it('renders every axis as its own field, with a pick button per tag, all visible at once', () => {
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft);
+  describe('the parts', () => {
+    it('draws every part at once, in the order they are asked, an answer button for each tag', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
 
-    // TONE (single-select) and CONSEQUENCE/WITNESS (multi) are all present
-    // simultaneously; no accordion collapsing any of them away.
-    expect(screen.getByRole('group', { name: 'Tone' })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: /^Consequence/ })).toBeInTheDocument();
-    expect(screen.getByRole('group', { name: /^Witness & Secrecy/ })).toBeInTheDocument();
-
-    const wonderPick = screen.getByRole('button', { name: /Wonder/ });
-    expect(wonderPick).toHaveAttribute('aria-pressed', 'false');
-    expect(screen.getByText('Awe at the impossible.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Dread/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /A Debt Incurred/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /A Door Opened/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Alone/ })).toBeInTheDocument();
-  });
-
-  it("heads an axis with its name and a lead-in line, and never prints 'choose one' (#5191)", () => {
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft);
-
-    expect(screen.getByRole('heading', { level: 3, name: 'Trigger' })).toBeInTheDocument();
-    expect(screen.getByText('The Circumstances Around Your Glimpse:')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { level: 3, name: 'Tone' })).toBeInTheDocument();
-    expect(screen.getByText('How It Felt:')).toBeInTheDocument();
-    // The old question headings are gone, and so is the mark on the default.
-    expect(screen.queryByText('What was happening')).not.toBeInTheDocument();
-    expect(screen.queryByText('choose one')).not.toBeInTheDocument();
-  });
-
-  it("marks only an axis that takes several answers with 'choose any' (#5191)", () => {
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft);
-
-    // CONSEQUENCE and WITNESS take several; TRIGGER and TONE take one.
-    expect(screen.getAllByText('choose any')).toHaveLength(2);
-    expect(
-      within(screen.getByRole('group', { name: /^Consequence/ })).getByText('choose any')
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('group', { name: 'Trigger' })).queryByText('choose any')
-    ).not.toBeInTheDocument();
-  });
-
-  it("lays an axis's tags out as the life page's cards, one list item each (#5191)", () => {
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft);
-
-    const tone = screen.getByRole('group', { name: 'Tone' });
-    const toneList = within(tone).getByRole('list');
-    expect(toneList).toHaveClass('stances', 'grid', 'pair', 'oneof');
-    expect(within(toneList).getAllByRole('listitem')).toHaveLength(2);
-    const wonder = within(toneList).getByRole('button', { name: /Wonder/ });
-    expect(wonder).toHaveClass('stance');
-    // One answer: a round mark. Several: a square one.
-    expect(wonder.querySelector('.dot')).not.toHaveClass('sq');
-
-    const consequence = screen.getByRole('group', { name: /^Consequence/ });
-    const consequenceList = within(consequence).getAllByRole('list')[0];
-    expect(consequenceList).toHaveClass('stances', 'grid');
-    expect(consequenceList).not.toHaveClass('oneof');
-    expect(
-      within(consequenceList)
-        .getByRole('button', { name: /A Debt Incurred/ })
-        .querySelector('.dot')
-    ).toHaveClass('sq');
-  });
-
-  it('reads the lead-in from its own copy key, never from the retired prompt key (#5191)', () => {
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft, {
-      glimpse_axis_trigger_prompt: 'What was happening',
-      glimpse_axis_tone_lead_in: 'What it was like:',
+      const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+      expect(titles).toEqual([
+        'Trigger',
+        'The Reflection',
+        'Tone',
+        'Consequence',
+        'Witness & Secrecy',
+      ]);
+      for (const tag of CATALOG) {
+        expect(screen.getByRole('button', { name: new RegExp(tag.name) })).toBeInTheDocument();
+      }
     });
 
-    // A database that still holds the old prompt row shows the new line.
-    expect(screen.getByText('The Circumstances Around Your Glimpse:')).toBeInTheDocument();
-    expect(screen.queryByText('What was happening')).not.toBeInTheDocument();
-    // An authored lead-in row beats the fallback.
-    expect(screen.getByText('What it was like:')).toBeInTheDocument();
-    expect(screen.queryByText('How It Felt:')).not.toBeInTheDocument();
-  });
+    it('heads a part with a title in the larger style, the same for a part that gives no card', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
 
-  it('selecting a tone card PATCHes draft_data.glimpse_tag_ids', async () => {
-    const user = userEvent.setup();
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft);
+      for (const title of ['Trigger', 'Witness & Secrecy']) {
+        const group = screen.getByRole('group', { name: title });
+        expect(group).toHaveClass('field', 'part');
+      }
+    });
 
-    await user.click(screen.getByRole('button', { name: /Wonder/ }));
+    it('reads the lead-in under a title until the part has an explanation, which replaces it', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }), {
+        glimpse_axis_tone_explanation: 'What the moment felt like from inside.',
+      });
 
-    await waitFor(() => {
-      expect(updateDraftMock).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          draft_data: expect.objectContaining({ glimpse_tag_ids: [1] }),
-        })
+      const tone = screen.getByRole('group', { name: 'Tone' });
+      expect(within(tone).getByText('What the moment felt like from inside.')).toHaveClass(
+        'explain'
+      );
+      expect(within(tone).queryByText('How It Felt:')).not.toBeInTheDocument();
+      // A part with no explanation written yet keeps its lead-in, so it is never bare.
+      const trigger = screen.getByRole('group', { name: 'Trigger' });
+      expect(within(trigger).getByText('The Circumstances Around Your Glimpse:')).toHaveClass(
+        'lead-in'
       );
     });
+
+    it('every part takes one answer: round marks, and nothing says "choose any"', () => {
+      const { container } = renderSection(createMockDraft({ id: 1, draft_data: {} }));
+
+      expect(screen.queryByText('choose any')).not.toBeInTheDocument();
+      expect(screen.queryByText('choose one')).not.toBeInTheDocument();
+      expect(container.querySelectorAll('.part .dot.sq')).toHaveLength(0);
+      expect(container.querySelectorAll('.part ul.stances.oneof')).toHaveLength(5);
+    });
+
+    it("lays a part's answers out as the life page's cards, one list item each (#5191)", () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
+
+      const tone = screen.getByRole('group', { name: 'Tone' });
+      const list = within(tone).getByRole('list');
+      expect(list).toHaveClass('stances', 'grid', 'pair');
+      expect(within(list).getAllByRole('listitem')).toHaveLength(2);
+    });
+
+    it('picking an answer PATCHes draft_data.glimpse_tag_ids', async () => {
+      const user = userEvent.setup();
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
+
+      await user.click(screen.getByRole('button', { name: /Wonder/ }));
+
+      await expectSaved({ glimpse_tag_ids: [1] });
+    });
+
+    it('a second answer in a part replaces the first, in a part that used to take several', async () => {
+      const user = userEvent.setup();
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 3] } }));
+
+      await user.click(screen.getByRole('button', { name: /A Door Opened/ }));
+
+      // Consequence swaps 3 for 4; Tone's answer is untouched.
+      await expectSaved({ glimpse_tag_ids: [1, 4] });
+    });
+
+    it('a draft holding two answers in one part sends one of them with the next pick', async () => {
+      // Saved before every part took one answer. The server refuses a list with two in
+      // a part, so a pick in another part must not send the pair back.
+      const user = userEvent.setup();
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [3, 4] } }));
+
+      await user.click(screen.getByRole('button', { name: /Wonder/ }));
+
+      await expectSaved({ glimpse_tag_ids: [3, 1] });
+    });
+
+    it('picking the chosen answer again lets it go', async () => {
+      const user = userEvent.setup();
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 3] } }));
+
+      await user.click(screen.getByRole('button', { name: /Wonder/ }));
+
+      await expectSaved({ glimpse_tag_ids: [3] });
+    });
+
+    it('selects an answer via the keyboard (Enter, native button semantics)', async () => {
+      const user = userEvent.setup();
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
+
+      screen.getByRole('button', { name: /Wonder/ }).focus();
+      await user.keyboard('{Enter}');
+
+      await expectSaved({ glimpse_tag_ids: [1] });
+    });
   });
 
-  it('picking a tag that stands alone drops the other picks of its axis, and no other axis (#5193)', async () => {
-    const user = userEvent.setup();
-    // Wonder (TONE) and both ordinary CONSEQUENCE tags are picked.
-    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 3, 4] } });
-    renderSection(draft);
+  describe('the card an answer gives', () => {
+    it('shows the card on the answer before it is picked: its name and its mechanics line', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
 
-    await user.click(screen.getByRole('button', { name: /Nothing You Recall/ }));
+      const wonder = screen.getByRole('button', { name: /Wonder/ });
+      expect(wonder).toHaveAttribute('aria-pressed', 'false');
+      const bonus = wonder.querySelector('.bonus');
+      expect(bonus).toHaveTextContent('Wonderstruck');
+      expect(bonus).toHaveTextContent('+Anima');
+    });
 
-    await waitFor(() => {
-      expect(updateDraftMock).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          draft_data: expect.objectContaining({ glimpse_tag_ids: [1, 7] }),
+    it('an answer with no card shows only its own words', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [2] } }));
+
+      const grief = screen.getByRole('button', { name: /Grief/ });
+      expect(grief).toHaveAttribute('aria-pressed', 'true');
+      expect(grief.querySelector('.bonus')).toBeNull();
+      expect(grief).toHaveTextContent('GriefIt came with a loss.');
+    });
+
+    it('a picked answer opens no second list, no price and nothing else to pick', () => {
+      const { container } = renderSection(
+        createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 3] } })
+      );
+
+      expect(container.querySelector('.conditional')).toBeNull();
+      expect(container.querySelector('.price')).toBeNull();
+      expect(screen.queryByText('optional')).not.toBeInTheDocument();
+      expect(screen.queryByText('What it left in you')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('the three ways into the Glimpse', () => {
+    it('offers the three ways under the owner’s labels, the first chosen on a new draft', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
+
+      const pressed = (name: string) =>
+        screen.getByRole('button', { name }).getAttribute('aria-pressed');
+      expect(pressed('Create Glimpse in CG')).toBe('true');
+      expect(pressed('Amnesiac, No Memory of Glimpse')).toBe('false');
+      expect(pressed('Create Glimpse Post-CG')).toBe('false');
+    });
+
+    it('opens on the owner’s paragraph, without the sentence that promised CG points', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
+
+      const intro = screen.getByText(/The Glimpse is the often traumatic event/);
+      expect(intro).toHaveClass('explain');
+      expect(intro).toHaveTextContent(/may have no memory of this\.$/);
+      expect(screen.queryByText(/CG points/)).not.toBeInTheDocument();
+    });
+
+    it('a copy row replaces the paragraph', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }), {
+        glimpse_intro: 'The owner rewrote this.',
+      });
+
+      expect(screen.getByText('The owner rewrote this.')).toBeInTheDocument();
+      expect(screen.queryByText(/often traumatic event/)).not.toBeInTheDocument();
+    });
+
+    it('choosing the amnesiac way saves no memory', async () => {
+      const user = userEvent.setup();
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1] } }));
+
+      await user.click(screen.getByRole('button', { name: 'Amnesiac, No Memory of Glimpse' }));
+
+      await expectSaved({ glimpse_memory: 'no_memory' });
+      // The answers are not cleared: they stay in the draft for a change of mind.
+      expect(updateDraftMock).toHaveBeenCalledTimes(1);
+      expect(updateDraftMock.mock.calls[0][1].draft_data).not.toHaveProperty('glimpse_tag_ids');
+    });
+
+    it('with no memory no part is asked, and one line says what the choice means', () => {
+      renderSection(
+        createMockDraft({
+          id: 1,
+          draft_data: { glimpse_memory: 'no_memory', glimpse_tag_ids: [1] },
         })
       );
+
+      expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
+      expect(screen.queryByLabelText('Your story')).not.toBeInTheDocument();
+      expect(screen.getByText(/Nothing of the Glimpse is asked/)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', { name: 'Amnesiac, No Memory of Glimpse' })
+      ).toHaveAttribute('aria-pressed', 'true');
     });
-  });
 
-  it('picking another tag lets a stand-alone one go (#5193)', async () => {
-    const user = userEvent.setup();
-    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 7] } });
-    renderSection(draft);
+    it('with the Glimpse left for after creation no part is asked either', async () => {
+      const user = userEvent.setup();
+      const { unmount } = renderSection(createMockDraft({ id: 1, draft_data: {} }));
+      await user.click(screen.getByRole('button', { name: 'Create Glimpse Post-CG' }));
+      await expectSaved({ glimpse_memory: 'later' });
+      unmount();
 
-    await user.click(screen.getByRole('button', { name: /A Debt Incurred/ }));
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_memory: 'later' } }));
+      expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
+      expect(screen.getByText(/written from the character sheet after/)).toBeInTheDocument();
+    });
 
-    await waitFor(() => {
-      expect(updateDraftMock).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          draft_data: expect.objectContaining({ glimpse_tag_ids: [1, 3] }),
+    it('going back to the first way saves remembered', async () => {
+      const user = userEvent.setup();
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_memory: 'later' } }));
+
+      await user.click(screen.getByRole('button', { name: 'Create Glimpse in CG' }));
+
+      await expectSaved({ glimpse_memory: 'remembered' });
+    });
+
+    it('"Skip for now" is gone: the third way is that choice', () => {
+      renderSection(createMockDraft({ id: 1, draft_data: {} }));
+
+      expect(screen.queryByText(/Skip for now/)).not.toBeInTheDocument();
+      expect(screen.queryByText(/set aside for now/)).not.toBeInTheDocument();
+    });
+
+    it('a beginning with no memory of the Glimpse shows no ways and no parts', () => {
+      renderSection(
+        createMockDraft({
+          id: 1,
+          selected_beginnings: { ...mockBeginnings, no_glimpse_memory: true },
+          // Whatever the draft holds, such a beginning has no memory.
+          draft_data: { glimpse_memory: 'remembered', glimpse_tag_ids: [1] },
         })
       );
+
+      expect(
+        screen.queryByRole('button', { name: 'Create Glimpse in CG' })
+      ).not.toBeInTheDocument();
+      expect(screen.queryAllByRole('heading', { level: 3 })).toHaveLength(0);
+      expect(screen.getByText(/Nothing of the Glimpse is asked/)).toBeInTheDocument();
     });
   });
 
-  it('never PATCHes glimpse_linked_distinction_ids (#3675: offers are chapter-scoped now)', async () => {
-    const user = userEvent.setup();
-    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1] } });
-    renderSection(draft);
+  describe('the blackout', () => {
+    it('sits between Trigger and The Reflection with the owner’s words, as a tick', () => {
+      const { container } = renderSection(createMockDraft({ id: 1, draft_data: {} }));
 
-    // The Wonder-opened offer, Keen Senses, is toggleable; clicking it
-    // should write through useSyncDistinctions, never through updateDraft.
-    await user.click(screen.getByRole('button', { name: /Keen Senses/ }));
-
-    await waitFor(() => {
-      expect(syncDistinctionsMutate).toHaveBeenCalled();
-    });
-    for (const call of updateDraftMock.mock.calls) {
-      const body = call[1] as { draft_data?: Record<string, unknown> };
-      expect(body.draft_data ?? {}).not.toHaveProperty('glimpse_linked_distinction_ids');
-    }
-  });
-
-  it("a chosen tag's offers render in their own sub-block under that axis, and nowhere else", () => {
-    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1] } });
-    renderSection(draft);
-
-    // Wonder (selected, TONE) opens Keen Senses.
-    expect(screen.getByText('Keen Senses')).toBeInTheDocument();
-    // Dread (unselected, same TONE axis) does not open Marked.
-    expect(screen.queryByText('Marked')).not.toBeInTheDocument();
-    // Consequence and Witness have no selection at all.
-    expect(screen.queryByText('Wrathful')).not.toBeInTheDocument();
-    expect(screen.queryByText('Impoverished')).not.toBeInTheDocument();
-    expect(screen.queryByText('Solitary')).not.toBeInTheDocument();
-  });
-
-  it('two chosen tags on the same (multi-select) axis each get their own offers sub-block and heading', () => {
-    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [3, 4] } });
-    renderSection(draft, {
-      'glimpse_offers_heading_debt-incurred': 'What the debt was',
-      'glimpse_offers_heading_door-opened': 'What the door led to',
+      const tick = screen.getByRole('button', { name: /Blacked out/ });
+      expect(tick).toHaveAttribute('aria-pressed', 'false');
+      expect(tick).toHaveTextContent('You gain the Glimpse Mystery distinction.');
+      expect(tick.querySelector('.dot.sq')).not.toBeNull();
+      const order = [...container.querySelectorAll('h3, ul.blackout')].map((node) =>
+        node.tagName === 'UL' ? 'blackout' : node.textContent
+      );
+      expect(order.slice(0, 3)).toEqual(['Trigger', 'blackout', 'The Reflection']);
     });
 
-    expect(screen.getByText('Wrathful')).toBeInTheDocument();
-    expect(screen.getByText('Impoverished')).toBeInTheDocument();
-    // Distinct per-tag headings, not one merged heading for the whole axis
-    // (the gap Task 13's per-axis renderOffers slot could not close).
-    expect(screen.getByText('What the debt was')).toBeInTheDocument();
-    expect(screen.getByText('What the door led to')).toBeInTheDocument();
-  });
+    it('ticking it saves blacked out, and unticking saves remembered', async () => {
+      const user = userEvent.setup();
+      const { unmount } = renderSection(createMockDraft({ id: 1, draft_data: {} }));
+      await user.click(screen.getByRole('button', { name: /Blacked out/ }));
+      await expectSaved({ glimpse_memory: 'blacked_out' });
+      unmount();
+      updateDraftMock.mockClear();
 
-  it('falls back to the shared offers heading, per axis, when no per-tag copy is authored', () => {
-    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [3, 4] } });
-    renderSection(draft);
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_memory: 'blacked_out' } }));
+      await user.click(screen.getByRole('button', { name: /Blacked out/ }));
+      await expectSaved({ glimpse_memory: 'remembered' });
+    });
 
-    // Both sub-blocks fall all the way back to the same generic heading,
-    // still two separate blocks, each with its own offer underneath.
-    expect(screen.getAllByText('What it left in you')).toHaveLength(2);
-    expect(screen.getByText('Wrathful')).toBeInTheDocument();
-    expect(screen.getByText('Impoverished')).toBeInTheDocument();
+    it('ticked, The Reflection and Tone are not shown and the other parts still are', () => {
+      renderSection(
+        createMockDraft({
+          id: 1,
+          draft_data: { glimpse_memory: 'blacked_out', glimpse_tag_ids: [1, 8] },
+        })
+      );
+
+      const titles = screen.getAllByRole('heading', { level: 3 }).map((h) => h.textContent);
+      expect(titles).toEqual(['Trigger', 'Consequence', 'Witness & Secrecy']);
+      expect(screen.getByRole('button', { name: /Blacked out/ })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      // Still the first way: a blackout is not amnesia.
+      expect(screen.getByRole('button', { name: 'Create Glimpse in CG' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      expect(screen.getByLabelText('Your story')).toBeInTheDocument();
+    });
   });
 
   it('registers the prose textarea under glimpse_story via the passed-down field', async () => {
@@ -450,8 +443,7 @@ describe('GlimpseSection', () => {
   });
 
   it('renders the default story hint under the story textarea', () => {
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft);
+    renderSection(createMockDraft({ id: 1, draft_data: {} }));
 
     expect(
       screen.getByText('The detail behind any of the picks above goes here; the picks stay short.')
@@ -459,53 +451,24 @@ describe('GlimpseSection', () => {
   });
 
   it('renders no heading of its own: the h2 above this mount is GiftStage’s job', () => {
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft);
+    renderSection(createMockDraft({ id: 1, draft_data: {} }));
 
+    expect(screen.queryByRole('heading', { level: 2 })).not.toBeInTheDocument();
     expect(screen.queryByText('The Glimpse')).not.toBeInTheDocument();
   });
 
-  it('selects a tag card via the keyboard (Enter, native button semantics)', async () => {
-    const user = userEvent.setup();
-    const draft = createMockDraft({ id: 1, draft_data: {} });
-    renderSection(draft);
-
-    screen.getByRole('button', { name: /Wonder/ }).focus();
-    await user.keyboard('{Enter}');
-
-    await waitFor(() => {
-      expect(updateDraftMock).toHaveBeenCalledWith(
-        1,
-        expect.objectContaining({
-          draft_data: expect.objectContaining({ glimpse_tag_ids: [1] }),
-        })
-      );
-    });
-  });
-
   it('emits no class hook that cg.css has no rule reaching it (#3667 shape)', () => {
-    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 3, 4] } });
-    const queryClient = createTestQueryClient();
-    seedQueryData(queryClient, characterCreationKeys.glimpseTags(), CATALOG);
-    seedQueryData(queryClient, distinctionKeys.draftDistinctions(draft.id), [DRAFT_DISTINCTION]);
-    seedQueryData(
-      queryClient,
-      characterCreationKeys.draftOffers(draft.id, 'glimpse'),
-      OFFERS_RESPONSE
-    );
-    seedQueryData(queryClient, characterCreationKeys.explanations(), {});
-    const glimpseProseField = {
-      name: 'glimpse_story' as const,
-      onChange: vi.fn(),
-      onBlur: vi.fn(),
-      ref: vi.fn(),
-    };
-    const { container } = renderWithCharacterCreationProviders(
-      <div className="interview">
-        <GlimpseSection draft={draft} glimpseProseField={glimpseProseField} />
-      </div>,
-      { queryClient }
-    );
-    expect(unreachableClasses(container)).toEqual([]);
+    for (const draftData of [
+      { glimpse_tag_ids: [1, 3] },
+      { glimpse_memory: 'blacked_out' as const },
+      { glimpse_memory: 'no_memory' as const },
+    ]) {
+      const { container, unmount } = renderSection(
+        createMockDraft({ id: 1, draft_data: draftData }),
+        { glimpse_axis_tone_explanation: 'An explanation.' }
+      );
+      expect(unreachableClasses(container)).toEqual([]);
+      unmount();
+    }
   });
 });

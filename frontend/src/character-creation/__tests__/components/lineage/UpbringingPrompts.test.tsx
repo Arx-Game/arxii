@@ -217,6 +217,7 @@ beforeEach(() => {
   offersResponse = {
     offers: [somehowAlwaysBroke, waryOfDebts, decoyMatchingLabel],
     terms: [],
+    glimpse_cards: [],
   };
 });
 

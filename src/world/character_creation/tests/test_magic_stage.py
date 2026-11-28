@@ -828,8 +828,15 @@ class CGGlimpseTagEndpointTest(TestCase):
         assert slugs == [consequence_a.slug, tone_a.slug, tone_b.slug]
 
     def test_embeds_offers(self):
+        """The card an answer gives rides on the answer, with its mechanics line (#5292)."""
+        from world.distinctions.factories import DistinctionEffectFactory
+        from world.mechanics.factories import ModifierTargetFactory
+
         tag = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-x")
         distinction = DistinctionFactory(name="Fated")
+        DistinctionEffectFactory(
+            distinction=distinction, target=ModifierTargetFactory(name="anima"), value_per_rank=2
+        )
         offer = DistinctionOfferFactory(
             distinction=distinction,
             chapter=OfferChapter.GLIMPSE,
@@ -849,6 +856,7 @@ class CGGlimpseTagEndpointTest(TestCase):
                 "player_line": "A line.",
                 "cost_per_rank": distinction.cost_per_rank,
                 "max_rank": distinction.max_rank,
+                "effect_line": "+Anima",
             }
         ]
 
@@ -955,9 +963,9 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         assert len(big.captured_queries) == len(small.captured_queries)
 
-    def test_list_is_three_queries_offers_batched_via_prefetch(self):
-        """Session lookup + tags query + one batched offers query (ADR-0298) -
-        fed via ``get_queryset()``'s ``Prefetch`` onto the ``offers``
+    def test_list_is_four_queries_offers_batched_via_prefetch(self):
+        """Session lookup + the cards' mechanics lines + tags query + one batched offers
+        query (ADR-0298) - fed via ``get_queryset()``'s ``Prefetch`` onto the ``offers``
         ``PrunedCachedProperty``, never one query per tag."""
         url = "/api/character-creation/glimpse-tags/"
         self.client.get(url)  # warm the session row's first-request INSERT
@@ -971,7 +979,8 @@ class CGGlimpseTagEndpointTest(TestCase):
             distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_b
         )
 
-        with self.assertNumQueries(3):
+        # The fourth is the cards' mechanics lines (#5292), read once for the catalogue.
+        with self.assertNumQueries(4):
             response = self.client.get(url)
 
         assert response.status_code == status.HTTP_200_OK

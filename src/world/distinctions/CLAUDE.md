@@ -23,7 +23,7 @@ are the only other writers — no in-play caller re-implements the create/rank-u
   existing row's `origin`; that reverses a ratified #2037 design decision (see the docstring in
   `services.py` and "Post-CG acquisition" in `docs/systems/distinctions.md`).
   `DistinctionOrigin.GAMEPLAY` is vestigial — kept for schema stability, no writer assigns it.
-- Exclusion checks (`_check_exclusions`, a service-layer port of `DraftDistinctionViewSet`'s
+- Exclusion checks (`check_distinction_exclusions`, a service-layer port of `DraftDistinctionViewSet`'s
   mutual/variant checks) raise `DistinctionExclusionError`, not a DRF `ValidationError` — this
   seam has non-HTTP callers. **Every in-play caller except the GM action/telnet path catches it
   and skips just that grant** (logs, continues) rather than failing the surrounding operation —
@@ -57,6 +57,16 @@ down: resonance currency seeded via `DistinctionResonanceGrant` (permanent, mono
 no clawback), `NPCAsset` rows, and codex grants. Legacy ad hoc deleters (e.g.
 `world.magic.services.tradition_membership._shed_traditionless_drawbacks`) predate the seam;
 new removal callers go through `remove_distinction`.
+
+## The sheet's list of held cards (#5292)
+
+The character sheet reads `CharacterSheet.cached_distinctions`, a `PrunedCachedProperty`
+its serializer's prefetch lands on. `CharacterDistinction.save()` and `.delete()` drop it
+through the identity map (`_drop_sheet_list`, ADR-0298), so a card gained or removed in
+play shows on the sheet's next read. Before #5292 the prefetch wrote a plain attribute onto
+the identity-mapped sheet and nothing cleared it: the sheet kept the cards it first
+loaded. A writer that skips `save()` and `delete()` (a queryset delete, a bulk create)
+must drop the list itself.
 
 ## Post-CG change requests — the `SheetUpdateRequest` framework (#2628, table-routed #2631)
 

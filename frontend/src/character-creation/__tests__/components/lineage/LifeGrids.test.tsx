@@ -23,7 +23,7 @@ const mutateAsync = vi.fn().mockResolvedValue({});
 const syncMutate = vi.fn();
 const loadMutate = vi.fn();
 let pool: BeatPoolEntry[] = [];
-let offersResponse: OffersResponse = { offers: [], terms: [] };
+let offersResponse: OffersResponse = { offers: [], terms: [], glimpse_cards: [] };
 let draftDistinctions: {
   id: number;
   distinction_id?: number;
@@ -182,6 +182,7 @@ describe('LifeGrids', () => {
         offer({ offer_id: 32, distinction_id: 302, name: 'Kept a shop', opener_key: 'beat:3' }),
       ],
       terms: [{ name: 'sailing', label: 'sailing', definition: 'Handling a ship at sea.' }],
+      glimpse_cards: [],
     };
   });
 
@@ -689,7 +690,11 @@ describe('LifeGrids (the suggested life, #4865)', () => {
   beforeEach(() => {
     loadMutate.mockClear();
     pool = [beat({ beat_id: 1, name: 'The household' })];
-    offersResponse = { offers: [offer({ offer_id: 10, name: 'Spoiled' })], terms: [] };
+    offersResponse = {
+      offers: [offer({ offer_id: 10, name: 'Spoiled' })],
+      terms: [],
+      glimpse_cards: [],
+    };
     draftDistinctions = [];
   });
 

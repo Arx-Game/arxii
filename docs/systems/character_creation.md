@@ -420,6 +420,24 @@ refuses points in a Magic skill or one of its specializations (`CharacterDraft._
 from `validate_path_skills`), so the training pool is the only creation source of Magic skills. Full
 account: [magic.md](magic.md), "Tradition training and Academy skill courses".
 
+**The Glimpse's cards (#5292, ADR-5292):** every line of the Glimpse chapter arrives
+bundled (`DistinctionOffer.save` sets it), so an answer's card is held free while the
+answer is in the draft and `offers_for(draft, GLIMPSE)` lists nothing to pick. A line is
+opened by an answer (`glimpse_tag`) or by a memory state (`glimpse_memory`: blacked out
+or no memory, the card that marks the mystery). `world/character_creation/glimpse.py`
+says which of a draft's answers count: `draft_glimpse_memory(draft)` (`draft_data
+["glimpse_memory"]`, overridden by a beginning ticked `no_glimpse_memory`),
+`asked_glimpse_tags(draft)` (asked in that state, one for each part) and
+`draft_glimpse_story(draft)`. `_opener_satisfied` reads only those, so answers kept in the
+draft from before a change of mind open nothing and are not written at finalize.
+`glimpse_cards(draft)` lists the cards the Glimpse gave the draft, served as
+`glimpse_cards` on `GET drafts/<id>/offers/?chapter=glimpse` for the Gift stage's panel;
+the answer catalogue (`glimpse-tags/`) carries each card's `effect_line`.
+`validate_draft_data` refuses a second answer in one part and an unknown memory state.
+`DistinctionOffer.clean` refuses a line under an answer of a part that gives no card, a
+second active line under one answer, a card under answers of two parts, a card that marks
+a memory state under an answer, and a Glimpse card on any other stage.
+
 **Reconcile-on-patch:** `CharacterDraftViewSet.perform_update` calls
 `reconcile_offer_picks(draft)` after every draft save, and `select-tradition` calls it
 after clearing/setting the tradition -- so a Glimpse tag pick, a Lineage answer, or a

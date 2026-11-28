@@ -110,7 +110,7 @@ def set_secret_distinctions(
     return linked, unlinked
 
 
-def _check_exclusions(character: CharacterSheet, distinction: Distinction) -> None:
+def check_distinction_exclusions(character: CharacterSheet, distinction: Distinction) -> None:
     """Service-layer port of ``DraftDistinctionViewSet._check_mutual_exclusions``/
     ``_check_variant_exclusions`` (#2037 Decision 2).
 
@@ -192,7 +192,7 @@ def grant_distinction(  # noqa: PLR0913 - the feature pair mirrors the held row'
     from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
     from world.narrative.services import send_narrative_message  # noqa: PLC0415
 
-    _check_exclusions(character, distinction)
+    check_distinction_exclusions(character, distinction)
 
     # A per-feature distinction is held once per feature (#3739), so the holder row is
     # the one aimed at the same feature; a plain one has neither feature set.
@@ -392,7 +392,7 @@ def create_sheet_update_request(  # noqa: PLR0913
         if target_distinction is None:
             msg = "DISTINCTION_ADD requires target_distinction."
             raise SheetUpdateRequestError(msg)
-        _check_exclusions(character_sheet, target_distinction)
+        check_distinction_exclusions(character_sheet, target_distinction)
         rank = 1
         xp_cost = compute_sheet_update_xp_cost(request_type, target_distinction, rank)
     elif request_type == SheetUpdateRequestType.DISTINCTION_REMOVE:

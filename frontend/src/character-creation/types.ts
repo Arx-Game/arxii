@@ -5,6 +5,8 @@
 // Single definition lives with the shared guided-flow component; both CG and
 // the character sheet mount (Task 6) import it from here.
 export type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
+import type { GlimpseMemory } from '@/magic/components/glimpse/glimpseTypes';
+export type { GlimpseMemory };
 
 // Single definition lives in the magic module (#2898) — every technique
 // surface imports the same shape rather than re-declaring it.
@@ -60,6 +62,9 @@ export interface Beginnings {
   /** What the life page shows in place of the stage rows when every stage is struck
    * (#4830, the Sleeper's); blank on a beginning that keeps its stages. */
   struck_stages_text: string;
+  /** A character of this beginning has no memory of their Glimpse (#5292, the
+   * Sleeper's): the Gift stage asks nothing about it. */
+  no_glimpse_memory: boolean;
   art_image: string | null;
   allowed_species_ids: number[];
   grants_species_languages: boolean;
@@ -1174,6 +1179,8 @@ export interface DraftData {
   // The Glimpse guided flow (#2427)
   glimpse_story?: string;
   glimpse_tag_ids?: number[];
+  // How much of the Glimpse is remembered (#5292); absent reads as remembered
+  glimpse_memory?: GlimpseMemory;
   // Magic fields - the weighted resonances that anchor the latent GIFT thread at CG
   // finalization (#1620, #5123). A partial spread may be saved; the stage reads complete
   // only when every creation point is placed.
@@ -1774,6 +1781,9 @@ export type EnemyReason = components['schemas']['EnemyReason'];
 /** The `offers` payload `GET .../offers/?chapter=` returns (#3675); a card the route
  * closes is absent from it and named nowhere (#4979). */
 export type OffersResponse = components['schemas']['OffersResponse'];
+/** One card the Glimpse has given the draft (#5292); `axis` is blank for the card
+ * that marks a blackout or no memory. */
+export type GlimpseCard = components['schemas']['GlimpseCard'];
 
 /** A term on a card's mechanics line with its definition (#4874). */
 export type OfferTerm = components['schemas']['OfferTerm'];

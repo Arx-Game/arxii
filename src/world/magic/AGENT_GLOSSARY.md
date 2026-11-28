@@ -98,6 +98,13 @@ The narrative of a character's first magical awakening — prose living on `Char
 An authored catalog choice (`GlimpseTag`) on one of four narrative axes (`GlimpseTagAxis`: Tone, Consequence, Witness & Secrecy, Sensory & Discovery) that a player picks while composing their Glimpse. Content model, lore-repo authored, no factory-seeded catalog. A tag's distinctions are `character_creation.DistinctionOffer` rows opened by it (`chapter=glimpse`, `glimpse_tag=<this tag>`), read behind `GlimpseTag.offers` (a `PrunedCachedProperty`-backed `Prefetch(to_attr=...)` target, ADR-0298; migrated off the old `CachedRowsHandler`/ADR-0278 wrapper, #3816 Task 9), the same offer mechanism every other CG chapter uses, replacing the retired `GlimpseTagDistinctionSuggestion` pairing table (#3675).
 _Avoid_: conflating with `Ritual.glimpse_eligible` — an unrelated ritual-gating flag (whether a `Ritual` may be performed pre-formal-training), not a tag from this catalog.
 
+**Glimpse Memory**:
+How much of the Glimpse the character remembers (`GlimpseMemory`, #5292): remembered, blacked out, or no memory, held on `CharacterAura.glimpse_memory`. A draft also holds "later" (the Glimpse is written from the sheet after creation), which the character stores as remembered. A blackout takes The Reflection and Tone together; no memory asks no part. Each of the two is marked by a card, given through a Glimpse offer line opened by the state (`DistinctionOffer.glimpse_memory`).
+_Avoid_: reading it off `glimpse_state`, which says how much is written, not whether it can be; "Sleeper" as a synonym (a Sleeper is one beginning that has no memory, `Beginnings.no_glimpse_memory`).
+
+**Glimpse Card**:
+A distinction only the Glimpse gives (#5292): the one card an answer of Trigger, The Reflection, Tone or Consequence carries, free with the answer, or the card that marks a blackout or no memory. Authored as a `DistinctionOffer` line of the Glimpse chapter, which always arrives bundled. In play it is given by `write_glimpse` when the part is answered. See ADR-5292.
+
 **Glimpse State**:
 `CharacterAura.glimpse_state` — the NOT_STARTED/TAGS_ONLY/COMPLETE deferral cache tracking whether a character's Glimpse has any chosen tags and/or written prose. Maintained exclusively by `world.magic.services.glimpse`, mirroring the `CharacterDistinction.secret`/`.from_glimpse` FK-presence-is-state precedent — never written directly. (#2427.)
 

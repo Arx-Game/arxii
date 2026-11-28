@@ -7325,6 +7325,33 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/character-sheets/{id}/staff-glimpse-memory/:
+    put:
+      operationId: character_sheets_staff_glimpse_memory_update
+      description: |-
+        Set how much of the Glimpse the character remembers (#5292).
+
+        What a story flips when it returns a lost Glimpse. The answers themselves are
+        written through the aura's own action, which staff may use on any character.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StaffGlimpseMemoryRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/character-sheets/{id}/staff-goals/:
     put:
       operationId: character_sheets_staff_goals_update
@@ -22524,7 +22551,11 @@ paths:
   /api/magic/character-auras/{id}/set-glimpse-prose/:
     post:
       operationId: magic_character_auras_set_glimpse_prose_create
-      description: Write the aura's glimpse story prose (#2427).
+      description: |-
+        Write the aura's glimpse story prose (#2427).
+
+        Through ``write_glimpse`` (#5292): refused for a player with no memory of the
+        Glimpse, and it gives any card an earlier answer is still owed.
       parameters:
       - in: path
         name: id
@@ -22551,7 +22582,11 @@ paths:
   /api/magic/character-auras/{id}/set-glimpse-tags/:
     post:
       operationId: magic_character_auras_set_glimpse_tags_create
-      description: Replace the aura's glimpse tags for one axis (#2427).
+      description: |-
+        Write the aura's answers to one or more axes of the Glimpse (#2427, #5292).
+
+        Through ``write_glimpse``: a player is refused where a story is to settle the
+        Glimpse and where an axis has its answer, and an answer gives its card.
       parameters:
       - in: path
         name: id
@@ -49999,6 +50034,10 @@ components:
           type: string
           description: Shown in place of the life's stages when this beginning strikes
             every one of them; blank otherwise.
+        no_glimpse_memory:
+          type: boolean
+          description: 'A character of this beginning has no memory of their Glimpse:
+            the Gift stage asks nothing about it and a story settles it in play.'
         art_image:
           type: string
           nullable: true
@@ -50088,6 +50127,10 @@ components:
           type: string
           description: Shown in place of the life's stages when this beginning strikes
             every one of them; blank otherwise.
+        no_glimpse_memory:
+          type: boolean
+          description: 'A character of this beginning has no memory of their Glimpse:
+            the Gift stage asks nothing about it and a story settles it in play.'
         grants_species_languages:
           type: boolean
           description: If False, characters don't get species' racial language (Misbegotten)
@@ -51019,9 +51062,9 @@ components:
       description: |-
         Glimpse tag row for the CG guided flow (#2427, #3675).
 
-        Backs ``GET /api/character-creation/glimpse-tags/``. The distinctions this tag
-        opens are embedded as offers (prefetched); the client dedupes across the chosen
-        tag set.
+        Backs ``GET /api/character-creation/glimpse-tags/``. The card an answer gives is
+        embedded under ``offers`` (prefetched) with its mechanics line (#5292), so the page
+        prints the card on the answer.
       properties:
         id:
           type: integer
@@ -51105,9 +51148,12 @@ components:
           type: integer
         max_rank:
           type: integer
+        effect_line:
+          type: string
       required:
       - cost_per_rank
       - distinction_id
+      - effect_line
       - max_rank
       - name
       - offer_id
@@ -64231,6 +64277,34 @@ components:
         * `environmental_detail` - Environmental Detail
         * `room_trigger` - Room Trigger
         * `board` - Notice Board
+    GlimpseAxisAnswerRequest:
+      type: object
+      description: The answer to one axis of the Glimpse; an empty ``tag_ids`` clears
+        the axis.
+      properties:
+        axis:
+          $ref: '#/components/schemas/AxisEnum'
+        tag_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - axis
+      - tag_ids
+    GlimpseCard:
+      type: object
+      description: A ``world.character_creation.types.GlimpseCard`` (#5292).
+      properties:
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        axis:
+          type: string
+      required:
+      - axis
+      - distinction_id
+      - name
     GlimpseDistinctionLinkRequest:
       type: object
       description: Input for CharacterAuraViewSet.link/unlink_glimpse_distinction
@@ -64250,17 +64324,19 @@ components:
       - text
     GlimpseSetTagsRequest:
       type: object
-      description: Input for CharacterAuraViewSet.set_glimpse_tags (#2427).
+      description: |-
+        Input for CharacterAuraViewSet.set_glimpse_tags (#2427).
+
+        The answers to one or more axes, saved together or not at all (#5292): the sheet's
+        editor stages a player's picks and sends them on one confirm, because an answer is
+        final for the player once it is saved.
       properties:
-        axis:
-          $ref: '#/components/schemas/AxisEnum'
-        tag_ids:
+        answers:
           type: array
           items:
-            type: integer
+            $ref: '#/components/schemas/GlimpseAxisAnswerRequest'
       required:
-      - axis
-      - tag_ids
+      - answers
     GlimpseStateEnum:
       enum:
       - NOT_STARTED
@@ -69408,6 +69484,16 @@ components:
       required:
       - quota_bytes
       - used_bytes
+    MemoryEnum:
+      enum:
+      - remembered
+      - blacked_out
+      - no_memory
+      type: string
+      description: |-
+        * `remembered` - Remembered
+        * `blacked_out` - Blacked out
+        * `no_memory` - No memory
     MentorPersona:
       type: object
       description: Minimal read-only representation of a mentor persona.
@@ -73632,7 +73718,12 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/OfferTerm'
+        glimpse_cards:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlimpseCard'
       required:
+      - glimpse_cards
       - offers
       - terms
     OldLevelEnum:
@@ -94969,6 +95060,14 @@ components:
       - id
       - name
       - options
+    StaffGlimpseMemoryRequest:
+      type: object
+      description: How much of the Glimpse the character remembers (#5292).
+      properties:
+        memory:
+          $ref: '#/components/schemas/MemoryEnum'
+      required:
+      - memory
     StaffGoalsRequest:
       type: object
       properties:

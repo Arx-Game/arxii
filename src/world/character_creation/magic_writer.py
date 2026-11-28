@@ -19,7 +19,7 @@ from typing import TYPE_CHECKING, Any
 from django.db import transaction
 
 from world.character_creation.sheet_writers import SheetWriteError, grant_codex_entries
-from world.magic.constants import AFFINITY_PRIMAL
+from world.magic.constants import AFFINITY_PRIMAL, GlimpseMemory
 
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
@@ -61,7 +61,11 @@ class MagicPicks:
     species: Species | None = None
     beginnings: Beginnings | None = None
     glimpse_story: str = ""
+    #: The answers to write, already narrowed to the ones asked (#5292).
     glimpse_tag_ids: Sequence[int] = field(default_factory=tuple)
+    #: How much of the Glimpse is remembered (#5292); ``GlimpseMemory``. A Glimpse left
+    #: for later is stored on the character as remembered.
+    glimpse_memory: str = GlimpseMemory.REMEMBERED
 
     @property
     def ordered_resonances(self) -> list[WeightedResonance]:
@@ -270,15 +274,24 @@ def _glimpse(sheet: CharacterSheet, picks: MagicPicks) -> CharacterAura:
     )
 
     aura = CharacterAura.objects.filter(character=sheet).first()
+    memory = (
+        GlimpseMemory.REMEMBERED
+        if picks.glimpse_memory == GlimpseMemory.LATER
+        else GlimpseMemory(picks.glimpse_memory)
+    )
     if aura is None:
-        aura = CharacterAura(character=sheet)
+        aura = CharacterAura(character=sheet, glimpse_memory=memory)
         aura.full_clean()
+        aura.save()
+    elif aura.glimpse_memory != memory:
+        aura.glimpse_memory = memory
         aura.save()
     if picks.glimpse_tag_ids:
         tags = list(GlimpseTag.objects.filter(pk__in=list(picks.glimpse_tag_ids), is_active=True))
         for axis in GlimpseTagAxis:
-            # A draft's list is not checked pick by pick, so a tag that stands alone
-            # is kept alone here and never fails the finalize (#5193).
+            # A draft's list is narrowed by ``asked_glimpse_tags`` to one answer for each
+            # axis that takes one (#5292). On an axis set to take several, a tag that
+            # stands alone is kept alone here and never fails the finalize (#5193).
             axis_tags = keep_stand_alone([tag for tag in tags if tag.axis == axis])
             if axis_tags:
                 set_glimpse_tags(aura, axis_tags, axis=axis)

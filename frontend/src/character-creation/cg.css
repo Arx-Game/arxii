@@ -430,6 +430,10 @@
   color: var(--cg-muted);
   font-style: italic;
 }
+/* A row that holds no value of its own ("not asked", "no card"): muted, upright. */
+.interview .record-rail .absent {
+  color: var(--cg-muted);
+}
 .interview .rail-ledger {
   display: block;
   margin-top: 0.8rem;
@@ -1113,6 +1117,80 @@
 .interview .field .lead-in {
   margin: -0.15rem 0 0;
   font-size: 0.875rem;
+  font-style: italic;
+  color: var(--cg-muted);
+}
+/* A part of the Glimpse (#5292, owner ruling 2026-11-22: "Larger Part titles are good").
+   The part's name is a ruled heading clearly larger than an answer's name (13px
+   capitals), in the realm's accent, so the stage reads as a sequence of parts and not a
+   run of cards. */
+.interview .field.part {
+  margin-top: 1.9rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cg-rule);
+}
+.interview .field.part > .label {
+  font-size: 1.35rem;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  color: var(--cg-accent);
+  margin-bottom: 0.55rem;
+}
+/* The explanation under a title, and the Glimpse's own paragraph under the chapter
+   heading: body text at reading width, where the lead-in it replaces was a muted line. */
+.interview .explain {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+/* The card an answer gives, set off inside the answer by a left rule (#5292). */
+.interview .stance .bonus {
+  display: block;
+  margin-top: 0.35rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--cg-rule);
+  font-size: 0.95rem;
+}
+.interview .stance .bonus .card-name {
+  display: block;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+}
+.interview .stance[aria-pressed='true'] .bonus {
+  border-left-color: var(--cg-accent);
+}
+.interview .stance[aria-pressed='true'] .bonus .card-name {
+  color: var(--cg-accent);
+}
+/* The blackout between two parts is one card with a paragraph on it: it takes the whole
+   column where a grid's cards share it, and stands a part's distance below Trigger's
+   answers so it does not read as one of them. The selector carries `.grid` so it
+   outranks the `.stances.grid` margin further down. */
+.interview .stances.grid.blackout {
+  grid-template-columns: minmax(0, 1fr);
+  margin-top: 1.9rem;
+}
+/* The Glimpse's own heading is drawn as its parts' are (the approved mock titles the
+   block as the first part): the same size and the same rule above. */
+.interview .section-h.part-h {
+  margin-top: 2.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cg-rule);
+  font-size: 1.35rem;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+/* The line that stands in for the parts when none is asked (no memory, or later). */
+.interview .glimpse-aside {
+  margin: 1.2rem 0 0;
+  max-width: 65ch;
+  font-size: 1rem;
+  line-height: 1.5;
   font-style: italic;
   color: var(--cg-muted);
 }

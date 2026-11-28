@@ -18,7 +18,7 @@ from django.utils.text import Truncator
 from web.admin.authoring.identity_map import keep_for_this_admin_post
 from web.admin.authoring.offers import DistinctionOfferFormSetMixin
 from world.admin_utils import OneRowPerFormSet, describe_reverse_relations
-from world.character_creation.constants import OfferChapter
+from world.character_creation.constants import OfferArrival, OfferChapter
 from world.character_creation.models import DistinctionOffer
 from world.codex.admin import GrantReachOnSaveMixin
 from world.codex.models import TraditionCodexGrant
@@ -963,6 +963,24 @@ class GlimpseTagOfferFormSet(DistinctionOfferFormSetMixin, BaseInlineFormSet):
 
     owner_noun = "tag"
 
+    def clean(self):
+        """An answer gives one card (#5292), so one active line.
+
+        The model's own ``clean`` looks at the saved rows; two rows added on this page
+        in one save are both new to it, so the page counts them itself.
+        """
+        super().clean()
+        active = [
+            form
+            for form in self.forms
+            if hasattr(form, "cleaned_data")
+            and not form.cleaned_data.get("DELETE")
+            and form.cleaned_data.get("is_active")
+        ]
+        if len(active) > 1:
+            one_card = "An answer gives one card."
+            raise forms.ValidationError(one_card)
+
 
 class GlimpseTagOfferForm(forms.ModelForm):
     """One "what it offers" row on a Glimpse tag's own change form (#3675).
@@ -979,16 +997,31 @@ class GlimpseTagOfferForm(forms.ModelForm):
 
     class Meta:
         model = DistinctionOffer
-        fields = ["distinction", "arrives_as", "name", "player_line", "sort_order", "is_active"]
+        # No ``arrives_as``: a Glimpse card always comes free with its answer (#5292),
+        # and the model sets that on save.
+        fields = ["distinction", "name", "player_line", "sort_order", "is_active"]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.instance.chapter = OfferChapter.GLIMPSE
+        self.instance.arrives_as = OfferArrival.BUNDLED
+
+    def _post_clean(self):
+        """Show the model's refusals about the answer on the row itself (#5292).
+
+        ``DistinctionOffer.clean`` keys them to ``glimpse_tag``, which on this page is
+        the inline's hidden parent key: a tabular inline draws no error for a hidden
+        field, so the page said "Please correct the error below" over nothing.
+        """
+        super()._post_clean()
+        about_the_answer = self._errors.pop("glimpse_tag", None) if self._errors else None  # noqa: STRING_LITERAL - form field name
+        if about_the_answer:
+            self.add_error(None, list(about_the_answer))
 
 
 class DistinctionOfferInline(admin.TabularInline):
-    """ "What it offers" on a Glimpse tag's own page (#3675): every priced offer
-    this tag opens. A stock admin inline, not a new builder - the tag's own
+    """ "The card it gives" on a Glimpse tag's own page (#3675, #5292): the one card
+    that comes free with this answer. A stock admin inline, not a new builder - the tag's own
     change form already carries this table, matching how a Distinction's
     Lineage offers are also editable from the Upbringing Builder's own answer
     row (either side can add one).
@@ -1000,18 +1033,27 @@ class DistinctionOfferInline(admin.TabularInline):
     formset = GlimpseTagOfferFormSet
     fields = [
         "distinction",
-        "arrives_as",
+        "arrival",
         "name",
         "player_line",
-        "sort_order",
+        # No sort order: an answer gives one card, so there is nothing to order (#5292).
         "is_active",
         "builder_link",
     ]
-    readonly_fields = ["builder_link"]
+    readonly_fields = ["arrival", "builder_link"]
     autocomplete_fields = ["distinction"]
     extra = 1
-    verbose_name = "offer"
-    verbose_name_plural = "What it offers"
+    max_num = 1
+    # With one row at most the admin heads the table with the singular name.
+    verbose_name = "the card it gives"
+    verbose_name_plural = "the card it gives"
+
+    @admin.display(description="Arrives")
+    def arrival(self, obj: DistinctionOffer) -> str:
+        """How a Glimpse card arrives: stated, never chosen (#5292)."""
+        # A new row has not been saved yet; the model sets bundled when it is.
+        arrival = OfferArrival(obj.arrives_as) if obj.pk else OfferArrival.BUNDLED
+        return arrival.label
 
     @admin.display(description="")
     def builder_link(self, obj: DistinctionOffer) -> str:

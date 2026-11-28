@@ -69,6 +69,8 @@ const mockBaseForm: TechniqueForm = {
   effect_summary: mockEffectSummary,
 };
 
+const staffRowMutate = vi.hoisted(() => vi.fn());
+
 vi.mock('@/character_sheets/queries', () => ({
   useCharacterSheetQuery: vi.fn(),
   // Staff edit mode's field (#4224) draws the Glimpse; only its save hook is reached.
@@ -76,6 +78,8 @@ vi.mock('@/character_sheets/queries', () => ({
   useProfileTextVersions: vi.fn(() => ({ data: [] })),
   useRestoreProfileTextVersion: vi.fn(() => ({ mutate: vi.fn() })),
   useStaffChoiceOptions: vi.fn(() => ({ data: [] })),
+  // The staff door on the Glimpse (#5292): the memory a story returns.
+  useStaffRowMutation: vi.fn(() => ({ mutate: staffRowMutate, isPending: false })),
 }));
 
 // MotifStylePanel (#2030) and TechniqueProgressPanel (#2739) are mounted below
@@ -191,6 +195,27 @@ const glimpseTagCatalog: GlimpseTagOption[] = [
     stands_alone: false,
     offers: [],
   },
+  {
+    id: 3,
+    axis: 'CONSEQUENCE',
+    name: 'Loss',
+    slug: 'loss',
+    description: 'Something was taken.',
+    example: '',
+    sort_order: 1,
+    stands_alone: false,
+    offers: [
+      {
+        offer_id: 31,
+        distinction_id: 31,
+        name: 'Bereft',
+        player_line: '',
+        cost_per_rank: 20,
+        max_rank: 1,
+        effect_line: '+Resolve',
+      },
+    ],
+  },
 ];
 
 /** Mocks GlimpseEditorDialog's own hooks. Returns the mock functions for assertions. */
@@ -206,7 +231,10 @@ function mockGlimpseQueries() {
 
   vi.mocked(magicQueries.useSetGlimpseTags).mockReturnValue({
     mutate: setTagsMutate,
+    reset: vi.fn(),
     isPending: false,
+    isError: false,
+    error: null,
   } as unknown as ReturnType<typeof magicQueries.useSetGlimpseTags>);
 
   vi.mocked(magicQueries.useSetGlimpseProse).mockReturnValue({
@@ -246,6 +274,7 @@ function makeAura(overrides: Partial<CharacterSheetAura> = {}): CharacterSheetAu
     dominant_affinity: 'Primal',
     glimpse_story: 'A candle guttered and did not go out.',
     glimpse_state: 'COMPLETE',
+    glimpse_memory: 'remembered',
     glimpse_tags: [],
     can_finish_glimpse: false,
     ...overrides,
@@ -902,14 +931,114 @@ describe('SpellbookTab', () => {
       expect(screen.getByTestId('glimpse-save-story')).toBeDisabled();
     });
 
-    it('fires useSetGlimpseTags when a different TONE tag is picked', async () => {
+    it('an answered part is closed to the player: a click on another answer stages nothing', async () => {
       const { setTagsMutate } = mockGlimpseQueries();
       renderWithFinishableGlimpse();
       await userEvent.click(screen.getByTestId('finish-glimpse-button'));
 
       await userEvent.click(screen.getByText('Dread'));
 
-      expect(setTagsMutate).toHaveBeenCalledWith({ axis: 'TONE', tag_ids: [2] });
+      expect(setTagsMutate).not.toHaveBeenCalled();
+      expect(screen.getByTestId('glimpse-save-answers')).toBeDisabled();
+    });
+
+    it('a pick saves nothing until the one confirm, which says the answers are final (#5292)', async () => {
+      const { setTagsMutate } = mockGlimpseQueries();
+      renderWithFinishableGlimpse();
+      await userEvent.click(screen.getByTestId('finish-glimpse-button'));
+
+      await userEvent.click(screen.getByText('Consequence: what did it leave behind?'));
+      // The card the answer gives is on the answer.
+      expect(screen.getByTestId('glimpse-card')).toHaveTextContent('Bereft');
+      await userEvent.click(screen.getByText('Loss'));
+      expect(setTagsMutate).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByTestId('glimpse-save-answers'));
+      const confirm = screen.getByTestId('glimpse-confirm');
+      expect(confirm).toHaveTextContent('Consequence: Loss');
+      expect(confirm).toHaveTextContent('These answers are final.');
+      expect(setTagsMutate).not.toHaveBeenCalled();
+
+      await userEvent.click(screen.getByTestId('glimpse-confirm-save'));
+      expect(setTagsMutate).toHaveBeenCalledWith(
+        { answers: [{ axis: 'CONSEQUENCE', tag_ids: [3] }] },
+        expect.anything()
+      );
+    });
+
+    it('after a blackout the editor does not offer The Reflection or Tone', async () => {
+      mockGlimpseQueries();
+      mockPayload(
+        makeMagic({
+          aura: makeAura({
+            can_finish_glimpse: true,
+            glimpse_state: 'NOT_STARTED',
+            glimpse_memory: 'blacked_out',
+          }),
+        })
+      );
+      renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={true} />);
+      expect(screen.getByText('Blacked out during the Glimpse.')).toBeInTheDocument();
+      await userEvent.click(screen.getByTestId('finish-glimpse-button'));
+
+      expect(screen.queryByText('Tone: how did it feel?')).not.toBeInTheDocument();
+      expect(screen.getByText('Consequence: what did it leave behind?')).toBeInTheDocument();
+    });
+
+    it('with no memory the sheet says so and offers the player no editor', () => {
+      mockPayload(
+        makeMagic({
+          aura: makeAura({
+            can_finish_glimpse: false,
+            glimpse_state: 'NOT_STARTED',
+            glimpse_story: '',
+            glimpse_memory: 'no_memory',
+          }),
+        })
+      );
+      renderWithProviders(<SpellbookTab characterId={1} isMyCharacter={true} />);
+
+      expect(screen.getByText('No memory of the Glimpse.')).toBeInTheDocument();
+      expect(screen.queryByText(/You have not looked into your own aura yet/)).toBeNull();
+      expect(screen.queryByTestId('finish-glimpse-button')).not.toBeInTheDocument();
+    });
+
+    it('staff set the memory and open the same editor with every part open (#5292)', async () => {
+      const { setTagsMutate } = mockGlimpseQueries();
+      mockPayload(
+        makeMagic({
+          aura: makeAura({
+            glimpse_memory: 'no_memory',
+            glimpse_tags: [
+              { id: 1, axis: 'TONE', name: 'Wonder', description: 'It felt like magic.' },
+            ],
+          }),
+        })
+      );
+      const stored = { prose: { glimpse: '' } } as unknown as CharacterSheetStaffEdit;
+      renderWithProviders(
+        <StaffEditContext.Provider value={{ sheetId: 1, stored }}>
+          <SpellbookTab characterId={1} isMyCharacter={false} />
+        </StaffEditContext.Provider>
+      );
+
+      await userEvent.selectOptions(screen.getByLabelText('Memory of the Glimpse'), 'remembered');
+      expect(staffRowMutate).toHaveBeenCalledWith({
+        path: 'staff-glimpse-memory',
+        method: 'PUT',
+        body: { memory: 'remembered' },
+      });
+
+      await userEvent.click(screen.getByTestId('staff-glimpse-button'));
+      // An answered part is open to staff, and the confirm does not call it final.
+      await userEvent.click(screen.getByText('Dread'));
+      await userEvent.click(screen.getByTestId('glimpse-save-answers'));
+      expect(screen.getByTestId('glimpse-confirm')).not.toHaveTextContent('final');
+      await userEvent.click(screen.getByTestId('glimpse-confirm-save'));
+      expect(setTagsMutate).toHaveBeenCalledWith(
+        { answers: [{ axis: 'TONE', tag_ids: [2] }] },
+        expect.anything()
+      );
     });
 
     it('fires useSetGlimpseProse with the edited text when Save story is clicked', async () => {

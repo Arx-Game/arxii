@@ -13,6 +13,7 @@ from world.character_creation.factories import (
 )
 from world.character_creation.models import DistinctionOffer
 from world.distinctions.factories import DistinctionFactory
+from world.magic.constants import GlimpseMemory, GlimpseTagAxis
 from world.magic.factories import GlimpseTagFactory
 
 
@@ -171,3 +172,165 @@ class OfferModelTests(TestCase):
         highborn = DistinctionFactory(name="Highborn")
         route.closed_distinctions.add(highborn)
         assert list(route.closed_distinctions.all()) == [highborn]
+
+
+class GlimpseOfferRuleTests(TestCase):
+    """What a line of the Glimpse chapter may be (#5292).
+
+    A Glimpse answer gives one card, free; the card is the Glimpse's alone; a blackout
+    and no memory are each marked by a card through a line the memory state opens.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.wonder = GlimpseTagFactory(name="Wonder", axis=GlimpseTagAxis.TONE)
+        cls.terror = GlimpseTagFactory(name="Terror", axis=GlimpseTagAxis.TONE)
+        cls.crisis = GlimpseTagFactory(name="Crisis", axis=GlimpseTagAxis.TRIGGER)
+        cls.public = GlimpseTagFactory(name="Public", axis=GlimpseTagAxis.WITNESS)
+
+    def line(self, card=None, **kwargs) -> DistinctionOffer:
+        return DistinctionOffer(
+            distinction=card or DistinctionFactory(), chapter=OfferChapter.GLIMPSE, **kwargs
+        )
+
+    def refusal(self, offer: DistinctionOffer) -> str:
+        with self.assertRaises(ValidationError) as raised:
+            offer.full_clean()
+        return " ".join(raised.exception.messages)
+
+    def test_a_glimpse_line_is_saved_bundled_whatever_it_was_given(self):
+        offer = self.line(glimpse_tag=self.wonder, arrives_as=OfferArrival.CHOICE)
+        offer.full_clean()
+        offer.save()
+        offer.refresh_from_db()
+        assert offer.arrives_as == OfferArrival.BUNDLED
+
+    def test_a_line_of_another_chapter_keeps_the_arrival_it_was_given(self):
+        offer = DistinctionOfferFactory(chapter=OfferChapter.APPEARANCE)
+        assert offer.arrives_as == OfferArrival.CHOICE
+
+    def test_a_memory_state_opens_a_line_and_only_the_two_a_card_marks(self):
+        offer = self.line(glimpse_memory=GlimpseMemory.NO_MEMORY)
+        offer.full_clean()
+        assert offer.opener_key == "memory:no_memory"
+        for state in (GlimpseMemory.REMEMBERED, GlimpseMemory.LATER):
+            with self.subTest(state=state):
+                assert "is not a valid choice" in self.refusal(self.line(glimpse_memory=state))
+
+    def test_a_line_names_an_answer_or_a_memory_state_never_both(self):
+        offer = self.line(glimpse_tag=self.wonder, glimpse_memory=GlimpseMemory.BLACKED_OUT)
+        assert "An offer is opened by at most one thing." in self.refusal(offer)
+
+    def test_a_memory_state_opens_no_line_outside_the_glimpse(self):
+        offer = DistinctionOffer(
+            distinction=DistinctionFactory(),
+            chapter=OfferChapter.IDENTITY,
+            glimpse_memory=GlimpseMemory.NO_MEMORY,
+        )
+        assert "not opened by this field" in self.refusal(offer)
+
+    def test_an_answer_of_a_part_that_gives_no_card_is_refused(self):
+        assert "An answer to Witness & Secrecy gives no card." in self.refusal(
+            self.line(glimpse_tag=self.public)
+        )
+
+    def test_an_answer_gives_one_card(self):
+        first = DistinctionOfferFactory(chapter=OfferChapter.GLIMPSE, glimpse_tag=self.wonder)
+        assert "This answer already gives a card." in self.refusal(
+            self.line(glimpse_tag=self.wonder)
+        )
+        # A line switched off gives nothing, so it is in nobody's way.
+        first.is_active = False
+        first.save()
+        self.line(glimpse_tag=self.wonder).full_clean()
+        # And the line itself can be saved again.
+        first.is_active = True
+        first.full_clean()
+
+    def test_a_card_sits_under_answers_of_one_part(self):
+        card = DistinctionFactory(name="Stormcalled")
+        DistinctionOfferFactory(
+            distinction=card, chapter=OfferChapter.GLIMPSE, glimpse_tag=self.wonder
+        )
+        self.line(card, glimpse_tag=self.terror).full_clean()
+        assert "An answer to another part of the Glimpse already gives this card." in (
+            self.refusal(self.line(card, glimpse_tag=self.crisis))
+        )
+
+    def test_a_glimpse_card_is_offered_on_no_other_stage(self):
+        card = DistinctionFactory(name="Stormcalled")
+        DistinctionOfferFactory(
+            distinction=card, chapter=OfferChapter.GLIMPSE, glimpse_tag=self.wonder
+        )
+        elsewhere = DistinctionOffer(distinction=card, chapter=OfferChapter.IDENTITY)
+        assert "The Glimpse gives this card, so no other stage offers it." in self.refusal(
+            elsewhere
+        )
+
+    def test_a_card_another_stage_offers_cannot_be_a_glimpse_card(self):
+        card = DistinctionFactory(name="Proud")
+        DistinctionOfferFactory(distinction=card, chapter=OfferChapter.IDENTITY)
+        assert "Another stage offers this card, so the Glimpse cannot give it." in (
+            self.refusal(self.line(card, glimpse_tag=self.wonder))
+        )
+
+    def test_the_marking_card_may_sit_under_both_states_and_under_no_answer(self):
+        mystery = DistinctionFactory(name="Glimpse Mystery")
+        one = DistinctionOfferFactory(
+            distinction=mystery,
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_memory=GlimpseMemory.BLACKED_OUT,
+        )
+        other = self.line(mystery, glimpse_memory=GlimpseMemory.NO_MEMORY)
+        other.full_clean()
+        other.save()
+        # The memory state is part of what names a line, so the two are told apart.
+        assert one.natural_key() != other.natural_key()
+        assert "so no answer can give it" in self.refusal(
+            self.line(mystery, glimpse_tag=self.wonder)
+        )
+
+    def test_a_memory_state_has_one_card(self):
+        DistinctionOfferFactory(
+            chapter=OfferChapter.GLIMPSE, glimpse_memory=GlimpseMemory.NO_MEMORY
+        )
+        assert "This memory state already has the card that marks it." in self.refusal(
+            self.line(glimpse_memory=GlimpseMemory.NO_MEMORY)
+        )
+        self.line(glimpse_memory=GlimpseMemory.BLACKED_OUT).full_clean()
+
+    def test_the_rules_hold_for_a_row_under_an_answer_or_a_card_not_saved_yet(self):
+        """The "add" pages validate a row before its parent is saved: the answer's part
+        is still known from the unsaved answer, and a new card has no other line."""
+        from world.distinctions.models import Distinction
+        from world.magic.models import GlimpseTag
+
+        unsaved_witness = GlimpseTag(name="Rumoured", slug="rumoured", axis=GlimpseTagAxis.WITNESS)
+        row = DistinctionOffer(
+            distinction=DistinctionFactory(),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=unsaved_witness,
+        )
+        with self.assertRaises(ValidationError) as raised:
+            row.clean()
+        assert "An answer to Witness & Secrecy gives no card." in " ".join(
+            raised.exception.messages
+        )
+
+        new_card = Distinction(name="Not Saved Yet", slug="not-saved-yet")
+        under_public = DistinctionOffer(chapter=OfferChapter.GLIMPSE, glimpse_tag=self.public)
+        under_public.distinction = new_card
+        with self.assertRaises(ValidationError) as raised:
+            under_public.clean()
+        assert "An answer to Witness & Secrecy gives no card." in " ".join(
+            raised.exception.messages
+        )
+
+    def test_an_answers_card_cannot_also_mark_a_memory_state(self):
+        card = DistinctionFactory(name="Stormcalled")
+        DistinctionOfferFactory(
+            distinction=card, chapter=OfferChapter.GLIMPSE, glimpse_tag=self.wonder
+        )
+        assert "so it cannot mark a memory" in self.refusal(
+            self.line(card, glimpse_memory=GlimpseMemory.NO_MEMORY)
+        )

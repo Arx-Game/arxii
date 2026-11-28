@@ -2,18 +2,22 @@
  * GlimpseFlow — the guided flow for authoring "The Glimpse" (#2427).
  *
  * Presentational only: props in, callbacks out — no queries or mutations.
- * Two mount points share this component: the CG GiftStage
- * (`character-creation/components/gift/GlimpseSection.tsx`) and the
- * character sheet (Task 6).
+ * Mounted by the character sheet's Glimpse editor (`GlimpseEditorDialog`).
+ * Character creation draws its own layout (`GlimpseAxes`) and shares this
+ * file's `AXIS_STEPS`.
  *
  * Structure: a staff-authorable `heading` (defaults to `'The Glimpse'`,
  * mirrors `magic_motif_heading`'s CGExplanation pattern on the sibling Motif
  * field — review fix, previously hardcoded) rendered at the top, then a Radix
  * `Accordion type="single" collapsible` with one item per axis, then an
- * always-visible story step. TONE is single-select; CONSEQUENCE and WITNESS
- * are multi-select. SENSORY doesn't get an accordion item — its tags render
- * as optional toggle chips inside the story step (`GLIMPSE_AXIS_CONFIG`'s
- * `prose_prompt` rendering), alongside the sensory prompts themselves.
+ * always-visible story step. Every part takes one answer (#5292). SENSORY
+ * doesn't get an accordion item — its tags render as optional toggle chips
+ * inside the story step (`GLIMPSE_AXIS_CONFIG`'s `prose_prompt` rendering),
+ * alongside the sensory prompts themselves.
+ *
+ * An answer that gives a card shows the card on itself (#5292): its name and
+ * its mechanics line. A part in `closedAxes` shows its saved answer and takes
+ * no click, and a part in `hiddenAxes` is not drawn.
  *
  * The axis tag Cards are `role="button" tabIndex={0}` (not native buttons),
  * so they carry an explicit `onKeyDown` (Enter/Space) for keyboard
@@ -27,7 +31,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
@@ -36,21 +39,43 @@ import { Check } from 'lucide-react';
 import { useMemo } from 'react';
 import type { KeyboardEvent } from 'react';
 import { nextAxisSelection } from './axisSelection';
-import type { GlimpseFlowProps, GlimpseTagOption } from './glimpseTypes';
+import type { GlimpseAxisStep, GlimpseFlowProps, GlimpseTagOption } from './glimpseTypes';
 
+const part = (
+  axis: GlimpseTagOption['axis'],
+  label: string,
+  rule: { givesCard?: boolean; lostInBlackout?: boolean } = {}
+): GlimpseAxisStep => ({
+  axis,
+  label,
+  multi: false,
+  givesCard: rule.givesCard ?? false,
+  lostInBlackout: rule.lostInBlackout ?? false,
+});
+
+// The parts in the order they are asked, with each part's rule (#5292): every part
+// takes one answer; Trigger, The Reflection, Tone and Consequence give a card; a
+// blackout takes The Reflection and Tone. A copy of `GLIMPSE_AXIS_CONFIG` and
+// `GLIMPSE_AXIS_ORDER` in `world.magic.constants`.
 // CHOOSING tags are all path-scoped to the Path of the Chosen, so the step
 // self-hides for other paths (axes with zero catalog tags don't render).
 // Exported so GlimpseAxes (the CG mount's own folio-grammar layout, #3675
-// fix round 1) can reuse this axis order + arity without redeclaring it,
+// fix round 1) can reuse this axis order and rule without redeclaring it;
 // only this component's own question-style `label` text is GlimpseFlow-only.
-export const AXIS_STEPS: { axis: GlimpseTagOption['axis']; label: string; multi: boolean }[] = [
-  { axis: 'TRIGGER', label: 'Trigger: what was happening?', multi: false },
-  { axis: 'CHOOSING', label: 'The Choosing; how did it claim you?', multi: false },
-  { axis: 'REFLECTION', label: 'The Reflection: what did you see in yourself?', multi: true },
-  { axis: 'TONE', label: 'Tone; how did it feel?', multi: false },
-  { axis: 'CONSEQUENCE', label: 'Consequence: what did it leave behind?', multi: true },
-  { axis: 'WITNESS', label: 'Witness & Secrecy: who saw?', multi: true },
+export const AXIS_STEPS: GlimpseAxisStep[] = [
+  part('TRIGGER', 'Trigger: what was happening?', { givesCard: true }),
+  part('CHOOSING', 'The Choosing: how did it claim you?'),
+  part('REFLECTION', 'The Reflection: what did you see in yourself?', {
+    givesCard: true,
+    lostInBlackout: true,
+  }),
+  part('TONE', 'Tone: how did it feel?', { givesCard: true, lostInBlackout: true }),
+  part('CONSEQUENCE', 'Consequence: what did it leave behind?', { givesCard: true }),
+  part('WITNESS', 'Witness & Secrecy: who saw?'),
 ];
+
+/** The sensory chips beside the story take one answer, like every part (#5292). */
+const SENSORY_TAKES_SEVERAL = false;
 
 export function GlimpseFlow({
   heading = 'The Glimpse',
@@ -59,9 +84,9 @@ export function GlimpseFlow({
   prose,
   onChangeAxis,
   onChangeProse,
-  onSkip,
-  showDeferralControls,
   storyHint,
+  closedAxes,
+  hiddenAxes,
 }: GlimpseFlowProps) {
   const tagsByAxis = useMemo(() => {
     const map = new Map<GlimpseTagOption['axis'], GlimpseTagOption[]>();
@@ -85,10 +110,11 @@ export function GlimpseFlow({
   // Axes with zero authored tags don't render — an empty catalog collapses
   // the accordion entirely rather than showing empty steps.
   const visibleAxisSteps = AXIS_STEPS.filter(
-    (step) => (tagsByAxis.get(step.axis)?.length ?? 0) > 0
+    (step) => (tagsByAxis.get(step.axis)?.length ?? 0) > 0 && !hiddenAxes?.has(step.axis)
   );
 
   const handleTagClick = (axis: GlimpseTagOption['axis'], multi: boolean, tagId: number) => {
+    if (closedAxes?.has(axis)) return;
     onChangeAxis(axis, nextAxisSelection(tagsByAxis.get(axis) ?? [], selectedTagIds, tagId, multi));
   };
 
@@ -125,15 +151,21 @@ export function GlimpseFlow({
                 <div className="grid gap-3 sm:grid-cols-2">
                   {(tagsByAxis.get(step.axis) ?? []).map((tag) => {
                     const isSelected = selectedTagIdSet.has(tag.id);
+                    const isClosed = closedAxes?.has(step.axis) ?? false;
+                    const card = tag.offers[0];
                     return (
                       <Card
                         key={tag.id}
                         role="button"
-                        tabIndex={0}
+                        tabIndex={isClosed ? -1 : 0}
+                        aria-pressed={isSelected}
+                        aria-disabled={isClosed || undefined}
                         className={cn(
-                          'cursor-pointer transition-all',
+                          'transition-all',
                           isSelected && 'ring-2 ring-primary',
-                          !isSelected && 'hover:ring-1 hover:ring-primary/50'
+                          isClosed && !isSelected && 'opacity-50',
+                          !isClosed && 'cursor-pointer',
+                          !isClosed && !isSelected && 'hover:ring-1 hover:ring-primary/50'
                         )}
                         onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
                         onKeyDown={(event) =>
@@ -149,6 +181,12 @@ export function GlimpseFlow({
                         <CardContent className="space-y-1 px-3 pb-3 pt-0">
                           <CardDescription className="text-xs">{tag.description}</CardDescription>
                           <p className="text-xs italic text-muted-foreground">{tag.example}</p>
+                          {card && (
+                            <p className="border-l-2 pl-2 text-xs" data-testid="glimpse-card">
+                              <span className="block font-semibold">{card.name}</span>
+                              {card.effect_line}
+                            </p>
+                          )}
                         </CardContent>
                       </Card>
                     );
@@ -182,7 +220,9 @@ export function GlimpseFlow({
                       ? 'border-primary bg-primary/10 text-primary'
                       : 'border-muted-foreground/30 text-muted-foreground hover:border-primary/50'
                   )}
-                  onClick={() => handleTagClick('SENSORY', true, tag.id)}
+                  disabled={closedAxes?.has('SENSORY')}
+                  aria-pressed={isSelected}
+                  onClick={() => handleTagClick('SENSORY', SENSORY_TAKES_SEVERAL, tag.id)}
                 >
                   {tag.name}
                 </button>
@@ -200,17 +240,6 @@ export function GlimpseFlow({
         />
         {storyHint && <p className="text-xs text-muted-foreground">{storyHint}</p>}
       </div>
-
-      {showDeferralControls && (
-        <div className="flex flex-wrap gap-2">
-          <Button type="button" variant="outline" onClick={onSkip}>
-            Skip for now
-          </Button>
-          <Button type="button" variant="ghost" onClick={onSkip}>
-            Save tags: write the story later
-          </Button>
-        </div>
-      )}
     </div>
   );
 }

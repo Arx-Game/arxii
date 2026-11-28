@@ -65,7 +65,7 @@ const sectionOffer = makeVisibleOffer({
   opener_key: 'frame',
 });
 
-let offersResponse: OffersResponse = { offers: [], terms: [] };
+let offersResponse: OffersResponse = { offers: [], terms: [], glimpse_cards: [] };
 let draftDistinctions: DraftDistinctionEntry[] = [];
 let pendingEntries: SyncDistinctionEntry[] | null = null;
 
@@ -112,7 +112,11 @@ beforeEach(() => {
   onClosed.mockClear();
   draftDistinctions = [];
   pendingEntries = null;
-  offersResponse = { offers: [sectionOffer, alluringOffer, menacingOffer], terms: [] };
+  offersResponse = {
+    offers: [sectionOffer, alluringOffer, menacingOffer],
+    terms: [],
+    glimpse_cards: [],
+  };
 });
 
 describe('FeatureDistinctions', () => {
@@ -220,7 +224,7 @@ describe('FeatureDistinctions', () => {
   });
 
   it('renders nothing when staff have authored no quality', () => {
-    offersResponse = { offers: [sectionOffer], terms: [] };
+    offersResponse = { offers: [sectionOffer], terms: [], glimpse_cards: [] };
     const { container } = renderBlock({ feature_trait: 'eye_color' });
     expect(container.querySelector('.qualities')).toBeNull();
   });

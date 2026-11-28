@@ -24,7 +24,7 @@ from django.utils.functional import cached_property
 from core.descriptors import ReverseOneToOneOrNone
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.cached_property import PrunedCachedProperty, pop_cached_rows
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.character_creation.constants import FinalTouchesPrompt
 from world.checks.constants import ModifierSize
@@ -826,6 +826,25 @@ class CharacterDistinction(SharedMemoryModel):
             Total cost (cost_per_rank * rank).
         """
         return self.distinction.calculate_total_cost(self.rank)
+
+    def save(self, *args, **kwargs) -> None:
+        super().save(*args, **kwargs)
+        self._drop_sheet_list()
+
+    def delete(self, *args, **kwargs) -> tuple[int, dict[str, int]]:
+        deleted = super().delete(*args, **kwargs)
+        self._drop_sheet_list()
+        return deleted
+
+    def _drop_sheet_list(self) -> None:
+        """Drop the sheet's ``cached_distinctions`` so the next read reloads it (#5292).
+
+        The write-side half of that ``PrunedCachedProperty`` (ADR-0298). It asks the
+        identity map for the sheet by id, so the list is dropped on the instance the
+        character sheet reads whichever object this row's ``character`` is.
+        """
+        sheet_model = type(self)._meta.get_field("character").related_model  # noqa: SLF001
+        pop_cached_rows(sheet_model, self.character_id, "cached_distinctions")
 
 
 class CharacterDistinctionOther(SharedMemoryModel):

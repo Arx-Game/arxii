@@ -1041,6 +1041,31 @@ class TestDistinctionsSection(TestCase):
         assert strong_arm["notes"] == ""
         assert strong_arm["is_from_glimpse"] is False
 
+    def test_a_card_gained_or_lost_in_play_shows_on_the_next_read(self) -> None:
+        """The sheet lists the cards the character holds now, not the ones it first read.
+
+        The sheet is identity-mapped, so the list it reads lives on one shared object.
+        Before #5292 a prefetch wrote that list onto a plain attribute nothing cleared:
+        a card given in play (a Glimpse answer's, a GM's award) did not appear on the
+        sheet, and a removed one stayed, for as long as the server kept the sheet.
+        """
+        from world.distinctions.services import delete_character_distinction, grant_distinction
+        from world.distinctions.types import DistinctionOrigin
+
+        before = [row["name"] for row in self._get_distinctions()]
+        gained = grant_distinction(
+            self.character.sheet_data,
+            DistinctionFactory(name="Wonderstruck"),
+            origin=DistinctionOrigin.GAMEPLAY,
+        )
+        after = [row["name"] for row in self._get_distinctions()]
+        delete_character_distinction(gained)
+        removed = [row["name"] for row in self._get_distinctions()]
+
+        assert sorted(before) == ["Misbegotten", "Strong Arm"]
+        assert sorted(after) == ["Misbegotten", "Strong Arm", "Wonderstruck"]
+        assert sorted(removed) == ["Misbegotten", "Strong Arm"]
+
     def test_distinction_entry_is_from_glimpse_true_when_linked(self) -> None:
         """A distinction linked via CharacterDistinction.from_glimpse reports True (#2427)."""
         from world.magic.factories import CharacterAuraFactory
@@ -1451,25 +1476,46 @@ class TestMagicSectionFull(TestCase):
         assert cleared == []
 
     def test_aura_can_finish_glimpse_true_for_owner_when_unfinished(self) -> None:
-        """Owner sees can_finish_glimpse=True while the glimpse is unfinished (#2427)."""
-        self.aura.glimpse_state = GlimpseState.TAGS_ONLY
-        self.aura.save()
+        """Owner sees can_finish_glimpse=True while a part has no answer (#2427, #5292).
+
+        The fixture's story is written. Before #5292 that closed the door for good,
+        which shut a part left unanswered away with the card it gives.
+        """
+        GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="ms-open-tone")
 
         magic = self._get_magic()
         assert magic["aura"]["can_finish_glimpse"] is True
 
     def test_aura_can_finish_glimpse_false_when_complete(self) -> None:
-        """Even the owner sees can_finish_glimpse=False once the glimpse is complete (#2427)."""
-        self.aura.glimpse_state = GlimpseState.COMPLETE
-        self.aura.save()
+        """The owner sees can_finish_glimpse=False once the story is written and every
+        part that has answers is answered (#2427, #5292)."""
+        from world.magic.services.glimpse import set_glimpse_tags
+
+        tone = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="ms-done-tone")
+        set_glimpse_tags(self.aura, [tone], axis=GlimpseTagAxis.TONE)
 
         magic = self._get_magic()
+        set_glimpse_tags(self.aura, [], axis=GlimpseTagAxis.TONE)
+        assert magic["aura"]["can_finish_glimpse"] is False
+
+    def test_aura_shows_the_memory_state_and_no_memory_closes_the_door(self) -> None:
+        """#5292: the sheet says how much of the Glimpse is remembered; with no memory
+        the player has nothing to finish, whatever is unanswered."""
+        from world.magic.constants import GlimpseMemory
+        from world.magic.services.glimpse import set_glimpse_memory
+
+        GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="ms-lost-tone")
+        assert self._get_magic()["aura"]["glimpse_memory"] == GlimpseMemory.REMEMBERED
+
+        set_glimpse_memory(self.aura, GlimpseMemory.NO_MEMORY)
+        magic = self._get_magic()
+        set_glimpse_memory(self.aura, GlimpseMemory.REMEMBERED)
+        assert magic["aura"]["glimpse_memory"] == GlimpseMemory.NO_MEMORY
         assert magic["aura"]["can_finish_glimpse"] is False
 
     def test_aura_can_finish_glimpse_false_for_non_privileged_viewer(self) -> None:
         """A non-owner viewer who can see the section never sees can_finish_glimpse=True (#2427)."""
-        self.aura.glimpse_state = GlimpseState.TAGS_ONLY
-        self.aura.save()
+        GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="ms-viewer-tone")
         self.sheet.magic_visibility = SheetVisibility.PUBLIC
         self.sheet.save(update_fields=["magic_visibility"])
 
@@ -1479,7 +1525,6 @@ class TestMagicSectionFull(TestCase):
         response = client.get(f"/api/character-sheets/{self.character.pk}/")
 
         assert response.status_code == 200
-        assert response.data["magic"]["aura"]["glimpse_state"] == GlimpseState.TAGS_ONLY
         assert response.data["magic"]["aura"]["can_finish_glimpse"] is False
 
     # --- Resonance balance tests (#2032) ---

@@ -41,6 +41,22 @@ class OfferTerm:
 
 
 @dataclass(frozen=True)
+class GlimpseCard:
+    """One card the Glimpse has given a draft (#5292).
+
+    Built by ``world.character_creation.offers.glimpse_cards`` for the Gift stage's
+    panel, which names the card beside its part. A Glimpse card comes free with its
+    answer or memory state, so it has no price and is not a choice.
+    """
+
+    distinction_id: int
+    name: str
+    #: The part of the Glimpse whose answer gave it; blank for the card that marks a
+    #: memory state.
+    axis: str
+
+
+@dataclass(frozen=True)
 class VisibleOffer:
     """One priced choice a draft can see in a CG chapter (#3675).
 

@@ -207,6 +207,7 @@ reason; a page extending `base_site.html` directly does not get it for free.
                 <td class="db-openers">
                   <span class="db-opener" data-opener="schooling_line">{{ f.schooling_line }}</span>
                   <span class="db-opener" data-opener="glimpse_tag">{{ f.glimpse_tag }}</span>
+                  <span class="db-opener" data-opener="glimpse_memory">{{ f.glimpse_memory }}</span>
                   <span class="db-opener" data-opener="origin_choice">{{ f.origin_choice }}</span>
                   <span class="db-opener" data-opener="prompt">{{ f.prompt }}</span>
                   <span class="db-opener" data-opener="enemy_reason">{{ f.enemy_reason }}</span>
@@ -219,7 +220,10 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   {% if url %}<a class="db-opener-link" href="{{ url }}">open</a>{% endif %}
                   {% endwith %}
                 </td>
-                <td>{{ f.arrives_as }}</td>
+                <td>
+                  <span class="db-arrival-chosen">{{ f.arrives_as }}</span>
+                  <span class="db-arrival-fixed" hidden>free with its answer</span>
+                </td>
                 <td>
                   <span class="db-reads-editable">{{ f.name }} {{ f.player_line }}</span>
                   <span class="db-reads-derived" hidden>{{ f.instance.name }}
@@ -245,6 +249,8 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   {{ offers.empty_form.schooling_line }}</span>
                 <span class="db-opener" data-opener="glimpse_tag">
                   {{ offers.empty_form.glimpse_tag }}</span>
+                <span class="db-opener" data-opener="glimpse_memory">
+                  {{ offers.empty_form.glimpse_memory }}</span>
                 <span class="db-opener" data-opener="origin_choice">
                   {{ offers.empty_form.origin_choice }}</span>
                 <span class="db-opener" data-opener="prompt">
@@ -262,7 +268,10 @@ reason; a page extending `base_site.html` directly does not get it for free.
                 <span class="db-opener" data-opener="unlocked_by">
                   {{ offers.empty_form.unlocked_by }}</span>
               </td>
-              <td>{{ offers.empty_form.arrives_as }}</td>
+              <td>
+                <span class="db-arrival-chosen">{{ offers.empty_form.arrives_as }}</span>
+                <span class="db-arrival-fixed" hidden>free with its answer</span>
+              </td>
               <td>
                 <span class="db-reads-editable">
                   {{ offers.empty_form.name }} {{ offers.empty_form.player_line }}</span>
@@ -337,6 +346,13 @@ reason; a page extending `base_site.html` directly does not get it for free.
     var derived = row.querySelector(".db-reads-derived");
     if (editable) { editable.hidden = isTraditionStep; }
     if (derived) { derived.hidden = !isTraditionStep; }
+    // A Glimpse card always comes free with its answer or memory state (#5292), so
+    // how it arrives is stated, not chosen. The server sets it whatever is posted.
+    var isGlimpse = wanted.includes("glimpse_tag");
+    var chosen = row.querySelector(".db-arrival-chosen");
+    var fixed = row.querySelector(".db-arrival-fixed");
+    if (chosen) { chosen.hidden = isGlimpse; }
+    if (fixed) { fixed.hidden = !isGlimpse; }
   }
 
   var offerRows = document.querySelectorAll(".db-offer-row");

@@ -23,13 +23,16 @@ from world.character_creation.factories import (
     TraditionStateLineFactory,
     enemy_card_entry,
 )
+from world.character_creation.glimpse import draft_glimpse_memory
 from world.character_creation.offers import (
     degree_marks,
+    glimpse_cards,
     offers_for,
     reconcile_offer_picks,
     slate_state,
 )
 from world.distinctions.factories import DistinctionFactory
+from world.magic.constants import GlimpseMemory, GlimpseTagAxis
 from world.magic.factories import GlimpseTagFactory, TraditionFactory
 
 
@@ -54,12 +57,149 @@ class OffersForTests(TestCase):
             account=self.account, selected_beginnings=self.beginning, draft_data=data
         )
 
-    def test_glimpse_offers_open_with_their_tag_only(self):
+    def test_a_glimpse_line_always_arrives_bundled(self):
+        """#5292: a Glimpse card comes free with its answer; staff do not choose how."""
+        assert self.scar_offer.arrives_as == OfferArrival.BUNDLED
+        assert self.poor_offer.arrives_as == OfferArrival.BUNDLED
+
+    def test_a_glimpse_answer_gives_its_card_free_and_is_no_choice(self):
+        """#5292: the answer is the choice. The card is held at no price while the answer
+        is, the chapter lists nothing to pick, and ``glimpse_cards`` reports the card."""
         draft = self._draft(glimpse_tag_ids=[self.mark.id])
-        offers = offers_for(draft, OfferChapter.GLIMPSE)
-        assert [o.offer_id for o in offers] == [self.scar_offer.id]
-        assert offers[0].opener_label == "Mark"
-        assert offers[0].max_rank == 3
+        assert offers_for(draft, OfferChapter.GLIMPSE) == []
+        (card,) = glimpse_cards(draft)
+        assert (card.distinction_id, card.name, card.axis) == (
+            self.scar.id,
+            "Magical Scar",
+            "TONE",
+        )
+        assert reconcile_offer_picks(draft) == ["Magical Scar"]
+        (entry,) = draft.draft_data["distinctions"]
+        assert entry["distinction_id"] == self.scar.id
+        assert entry["cost"] == 0
+        assert entry["arrivals"] == ["bundled"]
+        assert entry["sources"] == ["Mark"]
+
+    def test_changing_the_answer_swaps_the_card(self):
+        draft = self._draft(glimpse_tag_ids=[self.mark.id])
+        reconcile_offer_picks(draft)
+        draft.draft_data["glimpse_tag_ids"] = [self.loss.id]
+        reconcile_offer_picks(draft)
+        assert [e["distinction_name"] for e in draft.draft_data["distinctions"]] == ["Impoverished"]
+        assert draft.draft_data["distinctions"][0]["cost"] == 0
+        draft.draft_data["glimpse_tag_ids"] = []
+        reconcile_offer_picks(draft)
+        assert draft.draft_data["distinctions"] == []
+
+    def test_a_second_answer_in_one_part_gives_nothing(self):
+        """#5292: a list with two answers to one part (it cannot come from the page)
+        counts the first only."""
+        draft = self._draft(glimpse_tag_ids=[self.loss.id, self.mark.id])
+        assert [card.name for card in glimpse_cards(draft)] == ["Impoverished"]
+
+    def test_a_memory_state_gives_its_marking_card_and_takes_the_answers_cards(self):
+        """#5292: no memory asks no part, so no answer gives a card; the line opened by
+        the state gives the card that marks the mystery. A Glimpse left for later gives
+        nothing at all. The answers stay in the draft for a change of mind."""
+        mystery = DistinctionFactory(name="Glimpse Mystery")
+        for state in (GlimpseMemory.NO_MEMORY, GlimpseMemory.BLACKED_OUT):
+            DistinctionOfferFactory(
+                distinction=mystery, chapter=OfferChapter.GLIMPSE, glimpse_memory=state
+            )
+        draft = self._draft(glimpse_tag_ids=[self.mark.id], glimpse_memory=GlimpseMemory.NO_MEMORY)
+        (card,) = glimpse_cards(draft)
+        assert (card.name, card.axis) == ("Glimpse Mystery", "")
+        reconcile_offer_picks(draft)
+        (entry,) = draft.draft_data["distinctions"]
+        assert entry["distinction_name"] == "Glimpse Mystery"
+        assert entry["sources"] == ["No memory"]
+
+        draft.draft_data["glimpse_memory"] = GlimpseMemory.LATER
+        assert glimpse_cards(draft) == []
+        reconcile_offer_picks(draft)
+        assert draft.draft_data["distinctions"] == []
+        assert draft.draft_data["glimpse_tag_ids"] == [self.mark.id]
+
+        draft.draft_data["glimpse_memory"] = GlimpseMemory.REMEMBERED
+        reconcile_offer_picks(draft)
+        assert [e["distinction_name"] for e in draft.draft_data["distinctions"]] == ["Magical Scar"]
+
+    def test_a_blackout_takes_the_reflection_and_tone_and_keeps_the_rest(self):
+        trigger = GlimpseTagFactory(name="Crisis", axis=GlimpseTagAxis.TRIGGER)
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Crisisborn"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=trigger,
+        )
+        mystery = DistinctionFactory(name="Glimpse Mystery")
+        DistinctionOfferFactory(
+            distinction=mystery,
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_memory=GlimpseMemory.BLACKED_OUT,
+        )
+        draft = self._draft(
+            glimpse_tag_ids=[trigger.id, self.mark.id], glimpse_memory=GlimpseMemory.BLACKED_OUT
+        )
+        # Trigger first, the card that marks the blackout last; Tone's card is not given.
+        assert [card.name for card in glimpse_cards(draft)] == ["Crisisborn", "Glimpse Mystery"]
+
+    def test_a_beginning_with_no_memory_of_the_glimpse_overrides_the_draft(self):
+        """#5292: the Sleeper. Whatever the draft holds, its state is no memory."""
+        mystery = DistinctionFactory(name="Glimpse Mystery")
+        DistinctionOfferFactory(
+            distinction=mystery,
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_memory=GlimpseMemory.NO_MEMORY,
+        )
+        sleeper = BeginningsFactory(no_glimpse_memory=True)
+        draft = CharacterDraftFactory(
+            account=self.account,
+            selected_beginnings=sleeper,
+            draft_data={"glimpse_tag_ids": [self.mark.id], "glimpse_memory": "remembered"},
+        )
+        assert draft_glimpse_memory(draft) == GlimpseMemory.NO_MEMORY
+        assert [card.name for card in glimpse_cards(draft)] == ["Glimpse Mystery"]
+
+    def test_a_line_under_an_answer_of_a_part_that_gives_no_card_gives_nothing(self):
+        """A line left under a Witness answer from before #5292 (the model refuses a new
+        one) gives no card in character creation, as it gives none in play."""
+        public = GlimpseTagFactory(name="Public", axis=GlimpseTagAxis.WITNESS)
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Known Face"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=public,
+        )
+        draft = self._draft(glimpse_tag_ids=[public.id])
+        assert glimpse_cards(draft) == []
+        assert reconcile_offer_picks(draft) == []
+
+    def test_an_answer_of_another_path_does_not_count(self):
+        """An answer restricted to a path the draft is not on opens nothing, however it
+        came to be in the draft's list."""
+        from world.classes.factories import PathFactory
+
+        chosen = PathFactory(name="Path of the Chosen")
+        claimed = GlimpseTagFactory(name="Claimed", axis=GlimpseTagAxis.TRIGGER)
+        claimed.paths.add(chosen)
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Claimed by It"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=claimed,
+        )
+        draft = self._draft(glimpse_tag_ids=[claimed.id])
+        assert glimpse_cards(draft) == []
+        draft.selected_path = chosen
+        draft.save(update_fields=["selected_path"])
+        assert [card.name for card in glimpse_cards(draft)] == ["Claimed by It"]
+
+    def test_a_route_closed_card_is_not_given_by_the_glimpse(self):
+        route = OriginTemplateFactory(beginning=self.beginning)
+        route.closed_distinctions.add(self.scar)
+        draft = self._draft(glimpse_tag_ids=[self.mark.id])
+        draft.selected_origin_template = route
+        draft.save(update_fields=["selected_origin_template"])
+        assert glimpse_cards(draft) == []
+        assert reconcile_offer_picks(draft) == []
 
     def test_appearance_offers_hang_off_a_section(self):
         """An Appearance line is grouped by its section; one with none is not shown (#3709)."""
@@ -223,14 +363,15 @@ class OffersForTests(TestCase):
         assert draft.draft_data["enemy"]["degree"] == "ruined"
 
     def test_the_degree_mark_leaves_in_the_same_pass_that_drops_the_enemy_card(self):
-        """#5255: the card is held through a Glimpse line, and the player unpicks the tag.
+        """#5255: the card is held through a Glimpse line, and the player unpicks the answer.
         The pass that drops the card also drops the mark its enemy's degree bundled; the
         mark is not left for the next request to tidy."""
         grudge = DistinctionFactory(
             name="Old Grudge", cost_per_rank=0, final_touches_prompt=FinalTouchesPrompt.ENEMY
         )
+        crisis = GlimpseTagFactory(name="Crisis", axis=GlimpseTagAxis.TRIGGER)
         grudge_line = DistinctionOfferFactory(
-            distinction=grudge, chapter=OfferChapter.GLIMPSE, glimpse_tag=self.mark
+            distinction=grudge, chapter=OfferChapter.GLIMPSE, glimpse_tag=crisis
         )
         DistinctionOfferFactory(
             distinction=DistinctionFactory(name="Marked", cost_per_rank=0),
@@ -244,11 +385,11 @@ class OffersForTests(TestCase):
             "rank": 1,
             "cost": 0,
             "offer_ids": [grudge_line.pk],
-            "sources": ["Mark"],
-            "arrivals": ["choice"],
+            "sources": ["Crisis"],
+            "arrivals": ["bundled"],
         }
         draft = self._draft(
-            glimpse_tag_ids=[self.mark.id],
+            glimpse_tag_ids=[crisis.id],
             enemy={"kind": "group", "degree": "ruined"},
             distinctions=[held],
         )
@@ -279,18 +420,22 @@ class OffersForTests(TestCase):
     def test_a_route_closed_distinction_is_absent_from_the_chapter(self):
         """#4979: a distinction the route closes is left out of ``offers_for`` and named
         nowhere else; the player sees nothing in its place."""
+        tall = DistinctionFactory(name="Towering")
+        DistinctionOfferFactory(distinction=tall, chapter=OfferChapter.APPEARANCE)
         route = OriginTemplateFactory(beginning=self.beginning)
-        route.closed_distinctions.add(self.scar)
-        draft = self._draft(glimpse_tag_ids=[self.mark.id])
+        route.closed_distinctions.add(tall)
+        draft = self._draft()
+        assert len(offers_for(draft, OfferChapter.APPEARANCE)) == 1
         draft.selected_origin_template = route
         draft.save(update_fields=["selected_origin_template"])
-        assert offers_for(draft, OfferChapter.GLIMPSE) == []
+        assert offers_for(draft, OfferChapter.APPEARANCE) == []
 
     def test_mutual_exclusion_locks_with_reason(self):
         other = DistinctionFactory(name="Other")
-        self.scar.mutually_exclusive_with.add(other)
+        tall = DistinctionFactory(name="Towering")
+        tall.mutually_exclusive_with.add(other)
+        DistinctionOfferFactory(distinction=tall, chapter=OfferChapter.APPEARANCE)
         draft = self._draft(
-            glimpse_tag_ids=[self.mark.id],
             distinctions=[
                 {
                     "distinction_id": other.id,
@@ -306,7 +451,7 @@ class OffersForTests(TestCase):
                 }
             ],
         )
-        offer = offers_for(draft, OfferChapter.GLIMPSE)[0]
+        offer = offers_for(draft, OfferChapter.APPEARANCE)[0]
         assert offer.is_locked
         # The player can swap the blocking pick, so the card stays, disabled, and says why
         # in the one pattern every lock uses (#4979).
@@ -408,21 +553,19 @@ class ReconcileTests(TestCase):
         entry = self._ids(draft)[self.poor.id]
         assert entry["cost"] == 0
         assert entry["offer_ids"] == [self.bundle.id]
-        # a Glimpse pick of the same distinction becomes a second source, not a row
-        loss = GlimpseTagFactory(name="Loss")
+        # a pick of the same distinction on another stage becomes a second source, not a row
         choice = DistinctionOfferFactory(
-            distinction=self.poor, chapter=OfferChapter.GLIMPSE, glimpse_tag=loss
+            distinction=self.poor, chapter=OfferChapter.ACTORS_SHEET, prompt="fear"
         )
-        draft.draft_data["glimpse_tag_ids"] = [loss.id]
         entry["offer_ids"].append(choice.id)
-        entry["sources"].append("Loss")
+        entry["sources"].append("What are you deathly afraid of?")
         entry["arrivals"].append("choice")
         draft.save(update_fields=["draft_data"])
         reconcile_offer_picks(draft)
         entries = draft.draft_data["distinctions"]
         assert len(entries) == 1
         assert entries[0]["cost"] == 0
-        # the answer changes: the bundled source leaves, the Glimpse pick stays, priced
+        # the answer changes: the bundled source leaves, the pick stays, priced
         draft.draft_data["origin_choices"] = {}
         draft.save(update_fields=["draft_data"])
         reconcile_offer_picks(draft)

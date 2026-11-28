@@ -14,7 +14,7 @@ differ only in which offers they hand it.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from django import forms
 from django.contrib.admin.models import CHANGE, LogEntry
@@ -93,8 +93,11 @@ def preview_from_offers(offers: Iterable[DistinctionOffer]) -> PreviewLine | Non
     if not offers:
         return None
     offer = min(offers, key=offer_sort_key)
+    # A line that arrives bundled or carried costs the player nothing whatever the
+    # card's own price (``offers.entry_price``); every Glimpse line is one (#5292).
+    cost = offer.distinction.cost_per_rank if offer.arrives_as == OfferArrival.CHOICE else 0
     return PreviewLine(
-        price=price_text(offer.distinction.cost_per_rank, per_rank=offer.distinction.max_rank > 1),
+        price=price_text(cost, per_rank=offer.distinction.max_rank > 1),
         name=offer.name or offer.distinction.name,
         player_line=offer.player_line,
     )
@@ -111,6 +114,8 @@ class IdentityPlacement:
     switched_off: list[Distinction]
     #: Cards that are not active; a player could not take one, so it is not placed.
     inactive: list[Distinction]
+    #: Cards the Glimpse gives (#5292): no other stage offers one, so it is not placed.
+    glimpse: list[Distinction] = field(default_factory=list)
 
 
 def offer_on_identity(
@@ -133,7 +138,13 @@ def offer_on_identity(
     already: list[Distinction] = []
     switched_off: list[Distinction] = []
     inactive: list[Distinction] = []
+    glimpse: list[Distinction] = []
     with transaction.atomic():
+        glimpse_ids = set(
+            DistinctionOffer.objects.filter(
+                chapter=OfferChapter.GLIMPSE, is_active=True, distinction__in=cards
+            ).values_list("distinction_id", flat=True)
+        )
         placed = dict(
             DistinctionOffer.objects.filter(
                 chapter=OfferChapter.IDENTITY, distinction__in=cards
@@ -153,6 +164,11 @@ def offer_on_identity(
             if not card.is_active:
                 inactive.append(card)
                 continue
+            if card.pk in glimpse_ids:
+                # The model's own rule (``DistinctionOffer.clean``), which a bare
+                # ``create`` does not run.
+                glimpse.append(card)
+                continue
             offer = DistinctionOffer.objects.create(
                 distinction=card,
                 chapter=OfferChapter.IDENTITY,
@@ -169,4 +185,4 @@ def offer_on_identity(
                 CHANGE,
                 change_message="Offered on the Identity stage (#5255)",
             )
-    return IdentityPlacement(created, already, switched_off, inactive)
+    return IdentityPlacement(created, already, switched_off, inactive, glimpse)

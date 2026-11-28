@@ -113,7 +113,7 @@ from world.items.models import EquippedItem, ItemFacet, ItemInstance
 from world.items.services.visibility import compute_worn_visibility
 from world.locations.constants import LocationRole
 from world.locations.models import LocationTenancy
-from world.magic.constants import AcquisitionOrigin, GlimpseState
+from world.magic.constants import AcquisitionOrigin
 from world.magic.models import (
     CharacterAura,
     CharacterGift,
@@ -128,6 +128,7 @@ from world.magic.models import (
     aura_shares_prefetch,
 )
 from world.magic.models.aura import share_lead_key
+from world.magic.services.glimpse import player_can_finish_glimpse
 from world.magic.services.technique_effects import technique_payload_prefetches
 from world.magic.services.technique_forms import (
     available_technique_forms,
@@ -1167,8 +1168,10 @@ def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | No
     """Build the aura sub-section (OneToOne on the sheet, read via the puppet).
 
     Returns ``None`` when the character has no aura. Glimpse tags share the
-    prose's visibility (the whole section is already tier-gated); only the
-    ``can_finish_glimpse`` affordance is privileged-only (#2427).
+    prose's visibility (the whole section is already tier-gated), and so does the
+    memory state (#5292), which tells a viewer who can already read the Glimpse that
+    there is none to read; only the ``can_finish_glimpse`` affordance is
+    privileged-only (#2427).
     """
     try:
         aura = character.aura
@@ -1184,6 +1187,7 @@ def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | No
         dominant_affinity=_aura_dominant_name(aura),
         glimpse_story=aura.glimpse_story,
         glimpse_state=aura.glimpse_state,
+        glimpse_memory=aura.glimpse_memory,
         glimpse_tags=[
             GlimpseTagEntry(
                 id=row.tag.pk,
@@ -1193,8 +1197,18 @@ def _build_magic_aura(character: ObjectDB, *, privileged: bool) -> AuraData | No
             )
             for row in tag_rows
         ],
-        can_finish_glimpse=privileged and aura.glimpse_state != GlimpseState.COMPLETE,
+        # While the player has an axis left to answer or the story to write (#5292);
+        # before, the door closed once the story was written, which shut an axis left
+        # unanswered away with its card.
+        can_finish_glimpse=privileged
+        and player_can_finish_glimpse(aura, path_id=_current_path_id(aura.character)),
     )
+
+
+def _current_path_id(sheet: CharacterSheet) -> int | None:
+    """The sheet's current path, from the prefetched history (newest first)."""
+    path_history: list = sheet.cached_path_history
+    return path_history[0].path_id if path_history else None
 
 
 def _build_magic_resonances(character: ObjectDB) -> list[ResonanceBalanceEntry]:
@@ -1360,14 +1374,9 @@ def _build_beats(sheet: CharacterSheet) -> list[BeatEntry]:
     if not rows:
         return []
     held: dict[int, str] = {}
-    # The serializer path prefetched the distinctions (``cached_distinctions``); a
-    # direct call reads them live, the way ``_build_distinctions`` does.
-    cds = (
-        sheet.cached_distinctions
-        if hasattr(sheet, "cached_distinctions")
-        else sheet.distinctions.select_related("distinction")
-    )
-    for cd in cds:
+    # The sheet's own list (``CharacterSheet.cached_distinctions``): prefetched on the
+    # serializer path, read once otherwise.
+    for cd in sheet.cached_distinctions:
         held[cd.distinction_id] = cd.distinction.name
     from world.character_creation.offers import LIFE_STAGE_ORDER  # noqa: PLC0415
 

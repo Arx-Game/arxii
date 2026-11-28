@@ -104,6 +104,12 @@ light/dark selectors below, so the page follows the theme toggle.
   #distinction-builder-root .db-reads-editable[hidden] { display: none; }
   #distinction-builder-root .db-reads-derived .help { margin: 0.15rem 0 0; }
 
+  /* A Glimpse card always comes free with its answer or memory state (#5292): the
+     arrival select and the words that stand in for it swap places the same way. */
+  #distinction-builder-root .db-arrival-chosen[hidden],
+  #distinction-builder-root .db-arrival-fixed[hidden] { display: none; }
+  #distinction-builder-root .db-arrival-fixed { color: var(--body-quiet-color, #666); }
+
   /* The preview: "how the offer reads to a player" itself is rendered by the
      shared `admin/authoring/_offer_preview.html` fragment (#3675), which
      carries its own self-contained `<style>` - not scoped under this page's

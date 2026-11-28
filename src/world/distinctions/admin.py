@@ -206,6 +206,12 @@ class DistinctionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
             self.message_user(
                 request, f"Not active, so not placed: {names(result.inactive)}.", messages.WARNING
             )
+        if result.glimpse:
+            self.message_user(
+                request,
+                f"Given by the Glimpse, so not placed: {names(result.glimpse)}.",
+                messages.WARNING,
+            )
 
     @admin.display(description="Resonance grants/thresholds")
     def get_resonance_grants(self, obj: Distinction) -> str:

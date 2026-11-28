@@ -4,9 +4,13 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from world.distinctions.factories import CharacterDistinctionFactory
+from world.character_creation.constants import OfferChapter
+from world.character_creation.factories import DistinctionOfferFactory
+from world.distinctions.factories import CharacterDistinctionFactory, DistinctionFactory
+from world.distinctions.models import CharacterDistinction
 from world.magic.constants import GlimpseState, GlimpseTagAxis
 from world.magic.factories import CharacterAuraFactory, GlimpseTagFactory
+from world.magic.tests.glimpse_helpers import axis_takes_several
 from world.roster.factories import RosterTenureFactory
 
 
@@ -38,7 +42,7 @@ class SetGlimpseTagsActionTest(GlimpseAuraActionTestBase):
     def test_owner_sets_tags_for_axis(self):
         response = self.client.post(
             self._url("set-glimpse-tags"),
-            {"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id]},
+            {"answers": [{"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id]}]},
             format="json",
         )
 
@@ -48,14 +52,22 @@ class SetGlimpseTagsActionTest(GlimpseAuraActionTestBase):
     def test_tone_multi_select_rejected(self):
         response = self.client.post(
             self._url("set-glimpse-tags"),
-            {"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id, self.tone_b.id]},
+            {
+                "answers": [
+                    {"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id, self.tone_b.id]}
+                ]
+            },
             format="json",
         )
 
         assert response.status_code == status.HTTP_400_BAD_REQUEST
 
+    @axis_takes_several(GlimpseTagAxis.REFLECTION)
     def test_stand_alone_tag_beside_another_is_refused_in_words(self):
-        """#5193: the sheet's editor cannot save Fugue beside another Reflection answer."""
+        """#5193: the sheet's editor cannot save Fugue beside another Reflection answer.
+
+        On an axis set to take several answers, the path #5292 keeps as the way back.
+        """
         majestic = GlimpseTagFactory(
             axis=GlimpseTagAxis.REFLECTION, slug="api-majestic", name="Majestic"
         )
@@ -65,12 +77,12 @@ class SetGlimpseTagsActionTest(GlimpseAuraActionTestBase):
 
         both = self.client.post(
             self._url("set-glimpse-tags"),
-            {"axis": GlimpseTagAxis.REFLECTION, "tag_ids": [majestic.id, fugue.id]},
+            {"answers": [{"axis": GlimpseTagAxis.REFLECTION, "tag_ids": [majestic.id, fugue.id]}]},
             format="json",
         )
         alone = self.client.post(
             self._url("set-glimpse-tags"),
-            {"axis": GlimpseTagAxis.REFLECTION, "tag_ids": [fugue.id]},
+            {"answers": [{"axis": GlimpseTagAxis.REFLECTION, "tag_ids": [fugue.id]}]},
             format="json",
         )
 
@@ -78,10 +90,60 @@ class SetGlimpseTagsActionTest(GlimpseAuraActionTestBase):
         assert both.data["detail"] == "Fugue cannot be chosen with another The Reflection tag."
         assert alone.status_code == status.HTTP_200_OK
 
+    def test_two_answers_to_one_axis_are_refused_in_words(self):
+        """#5292: every axis takes one answer."""
+        witness_a = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug="api-witness-a")
+        witness_b = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug="api-witness-b")
+        response = self.client.post(
+            self._url("set-glimpse-tags"),
+            {
+                "answers": [
+                    {"axis": GlimpseTagAxis.WITNESS, "tag_ids": [witness_a.id, witness_b.id]}
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "Witness & Secrecy accepts a single tag."
+
+    def test_one_axis_named_twice_is_refused(self):
+        response = self.client.post(
+            self._url("set-glimpse-tags"),
+            {
+                "answers": [
+                    {"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id]},
+                    {"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_b.id]},
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_several_axes_are_saved_together_and_give_their_cards(self):
+        """#5292: the editor's one confirm sends every staged answer in one request."""
+        card = DistinctionFactory(name="Wonderstruck", slug="api-wonderstruck")
+        DistinctionOfferFactory(
+            distinction=card, chapter=OfferChapter.GLIMPSE, glimpse_tag=self.tone_a
+        )
+        witness = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug="api-witness")
+        response = self.client.post(
+            self._url("set-glimpse-tags"),
+            {
+                "answers": [
+                    {"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id]},
+                    {"axis": GlimpseTagAxis.WITNESS, "tag_ids": [witness.id]},
+                ]
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_200_OK
+        held = CharacterDistinction.objects.get(character=self.aura.character, distinction=card)
+        assert held.from_glimpse_id == self.aura.pk
+
     def test_unknown_tag_id_rejected(self):
         response = self.client.post(
             self._url("set-glimpse-tags"),
-            {"axis": GlimpseTagAxis.TONE, "tag_ids": [999999]},
+            {"answers": [{"axis": GlimpseTagAxis.TONE, "tag_ids": [999999]}]},
             format="json",
         )
 
@@ -92,7 +154,7 @@ class SetGlimpseTagsActionTest(GlimpseAuraActionTestBase):
 
         response = self.client.post(
             self._url("set-glimpse-tags"),
-            {"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id]},
+            {"answers": [{"axis": GlimpseTagAxis.TONE, "tag_ids": [self.tone_a.id]}]},
             format="json",
         )
 

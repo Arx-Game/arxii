@@ -1221,7 +1221,11 @@ export async function getStyleCatalog(): Promise<PaginatedStyleList> {
 // character-sheet query rather than read this response.
 // ---------------------------------------------------------------------------
 
-/** POST /api/magic/character-auras/{id}/set-glimpse-tags/ — replace one axis's tag picks. */
+/**
+ * POST /api/magic/character-auras/{id}/set-glimpse-tags/ — write the answers to one or
+ * more parts of the Glimpse, together or not at all (#5292). An answer gives its card,
+ * and a player cannot change an answered part.
+ */
 export async function setGlimpseTags(
   auraId: number,
   body: SetGlimpseTagsRequest

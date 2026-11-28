@@ -19,6 +19,8 @@ import {
   characterCreationKeys,
 } from '../queries';
 import type { CharacterDraft } from '../types';
+import { distinctionKeys } from '@/hooks/useDistinctions';
+import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { mockStartingAreas, mockSpeciesList, mockFamilies, mockDraftWithArea } from './fixtures';
 import { mockCanCreateYes, mockCanCreateNo } from './mocks';
 
@@ -249,6 +251,121 @@ describe('Character Creation Query Hooks', () => {
         expect(cached?.selected_vacancy).toBe(12);
         expect(cached?.claimed_kin_slot).toBeNull();
       });
+    });
+
+    it("a saved Glimpse answer's card is held without a reload (#5292)", async () => {
+      // A Glimpse answer gives its card with the save. The selections panel and every
+      // later stage read the held cards and the draft's offers, so both have to follow
+      // the save or the card only shows after a reload.
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      });
+      const held = {
+        ...mockDraftWithArea,
+        draft_data: { ...mockDraftWithArea.draft_data, glimpse_tag_ids: [], distinctions: [] },
+      };
+      const given: DraftDistinctionEntry = {
+        distinction_id: 31,
+        distinction_name: 'Stormcalled',
+        distinction_slug: 'stormcalled',
+        category_slug: 'glimpse',
+        rank: 1,
+        cost: 0,
+        notes: '',
+        offer_ids: [9],
+        sources: ['Wonder'],
+        arrivals: ['bundled'],
+      };
+      const answered = {
+        ...held,
+        draft_data: { ...held.draft_data, glimpse_tag_ids: [5], distinctions: [given] },
+      };
+      queryClient.setQueryData(characterCreationKeys.draft(), held);
+      queryClient.setQueryData(distinctionKeys.draftDistinctions(held.id), []);
+      const offersKey = characterCreationKeys.draftOffers(held.id, 'glimpse');
+      queryClient.setQueryData(offersKey, { offers: [] });
+      vi.mocked(api.updateDraft).mockResolvedValue(answered);
+      const { result } = renderHook(() => useUpdateDraft(), {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      });
+
+      result.current.mutate({ draftId: held.id, data: { draft_data: { glimpse_tag_ids: [5] } } });
+
+      await waitFor(() => {
+        expect(queryClient.getQueryData(distinctionKeys.draftDistinctions(held.id))).toEqual([
+          given,
+        ]);
+      });
+      expect(queryClient.getQueryState(offersKey)?.isInvalidated).toBe(true);
+    });
+
+    it('a change of beginning refreshes the held cards and the offers too (#5292)', async () => {
+      // A beginning can have no memory of the Glimpse: the answers' cards go and the
+      // marking card comes, on a stage the Glimpse is not on.
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      });
+      const marker: DraftDistinctionEntry = {
+        distinction_id: 40,
+        distinction_name: 'Glimpse Mystery',
+        distinction_slug: 'glimpse-mystery',
+        category_slug: 'glimpse',
+        rank: 1,
+        cost: 0,
+        notes: '',
+        offer_ids: [12],
+        sources: ['No memory'],
+        arrivals: ['bundled'],
+      };
+      const answered = {
+        ...mockDraftWithArea,
+        draft_data: { ...mockDraftWithArea.draft_data, distinctions: [marker] },
+      };
+      queryClient.setQueryData(characterCreationKeys.draft(), mockDraftWithArea);
+      queryClient.setQueryData(distinctionKeys.draftDistinctions(mockDraftWithArea.id), []);
+      const offersKey = characterCreationKeys.draftOffers(mockDraftWithArea.id, 'glimpse');
+      queryClient.setQueryData(offersKey, { offers: [] });
+      vi.mocked(api.updateDraft).mockResolvedValue(answered);
+      const { result } = renderHook(() => useUpdateDraft(), {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      });
+
+      result.current.mutate({ draftId: mockDraftWithArea.id, data: { selected_beginnings_id: 3 } });
+
+      await waitFor(() => {
+        expect(
+          queryClient.getQueryData(distinctionKeys.draftDistinctions(mockDraftWithArea.id))
+        ).toEqual([marker]);
+      });
+      expect(queryClient.getQueryState(offersKey)?.isInvalidated).toBe(true);
+    });
+
+    it('a save that leaves the Glimpse alone does not refetch the offers (#5292)', async () => {
+      // A stat click saves the draft too; it must not ask for every chapter's offers.
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, gcTime: Infinity } },
+      });
+      queryClient.setQueryData(characterCreationKeys.draft(), mockDraftWithArea);
+      const offersKey = characterCreationKeys.draftOffers(mockDraftWithArea.id, 'glimpse');
+      queryClient.setQueryData(offersKey, { offers: [] });
+      vi.mocked(api.updateDraft).mockResolvedValue(mockDraftWithArea);
+      const { result } = renderHook(() => useUpdateDraft(), {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+        ),
+      });
+
+      result.current.mutate({
+        draftId: mockDraftWithArea.id,
+        data: { draft_data: { glimpse_story: 'It rained.' } },
+      });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(queryClient.getQueryState(offersKey)?.isInvalidated).toBe(false);
     });
   });
 

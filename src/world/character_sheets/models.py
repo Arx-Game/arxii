@@ -1110,6 +1110,22 @@ class CharacterSheet(SharedMemoryModel):
     path_intent_or_none = ReverseOneToOneOrNone("path_intent")
 
     @PrunedCachedProperty
+    def cached_distinctions(self) -> list:
+        """The distinctions this character holds, the card and its feature joined (#5292).
+
+        The sheet serializer's prefetch lands on this name. Cleared by any
+        ``CharacterDistinction`` save or delete (``_drop_sheet_list``, ADR-0298).
+        Until #5292 that prefetch wrote a plain attribute of this name onto the
+        identity-mapped sheet and nothing cleared it: the sheet went on listing the
+        cards it first loaded, so a card gained in play did not appear and a removed
+        one stayed. A writer that skips ``save()`` and ``delete()`` (a queryset delete,
+        a bulk create) clears the list itself.
+        """
+        return list(
+            self.distinctions.select_related("distinction", "feature_trait", "feature_marking")
+        )
+
+    @PrunedCachedProperty
     def origin_slot_rows(self) -> list:
         """Every Upbringing answer and beat row on this sheet (#2478, #4124). Cleared by
         any CharacterOriginSlot save or delete through its related_cache_fields."""

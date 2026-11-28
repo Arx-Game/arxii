@@ -21,6 +21,7 @@ from django.utils import timezone
 from evennia.objects.models import ObjectDB
 from rest_framework import serializers
 
+from evennia_extensions.cached_property import pop_cached_rows
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import (
     ACTOR_SHEET_QUESTIONS,
@@ -46,6 +47,11 @@ from world.character_creation.constants import (
     ParentFate,
     QuestionKind,
     StartingAreaAccessLevel,
+)
+from world.character_creation.glimpse import (
+    asked_glimpse_tags,
+    draft_glimpse_memory,
+    draft_glimpse_story,
 )
 from world.character_creation.models import (
     CharacterDraft,
@@ -2098,6 +2104,8 @@ def _create_distinctions(
         if char_dist.notes and char_dist.distinction.asks_figure_name:
             asset_names.setdefault(char_dist.distinction_id, char_dist.notes)
     created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
+    # A bulk create skips ``CharacterDistinction.save``, so the sheet's list is dropped here.
+    pop_cached_rows(type(character.sheet_data), character.pk, "cached_distinctions")
     _create_distinction_modifiers_bulk(
         character.sheet_data, created_distinctions, asset_names=asset_names
     )
@@ -2784,8 +2792,11 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
         origin=AcquisitionOrigin.CHARACTER_CREATION,
         species=draft.selected_species,
         beginnings=draft.selected_beginnings,
-        glimpse_story=data.get("glimpse_story", ""),
-        glimpse_tag_ids=data.get("glimpse_tag_ids", []),
+        # Only what the draft's memory state asks is written (#5292): answers and a
+        # story kept in the draft from before a change of mind stay there.
+        glimpse_story=draft_glimpse_story(draft),
+        glimpse_tag_ids=[tag.pk for tag in asked_glimpse_tags(draft)],
+        glimpse_memory=draft_glimpse_memory(draft),
     )
 
     def other_codex() -> None:
@@ -2822,7 +2833,11 @@ def _finalize_combat_style(draft: CharacterDraft, sheet: CharacterSheet) -> None
 
 
 def _link_glimpse_distinctions(draft: CharacterDraft, sheet: CharacterSheet, aura: Any) -> None:
-    """Mark the distinctions the player took from Glimpse-tagged offers as born there."""
+    """Mark the cards the Glimpse gave as born there (#5292).
+
+    Every card that arrived through a line of the Glimpse chapter: an answer's card and
+    the card that marks a blackout or no memory alike.
+    """
     from world.magic.services.glimpse import link_distinction_to_glimpse  # noqa: PLC0415
 
     picked_offer_ids = {
@@ -2833,12 +2848,13 @@ def _link_glimpse_distinctions(draft: CharacterDraft, sheet: CharacterSheet, aur
     }
     if not picked_offer_ids:
         return
+    from world.character_creation.constants import OfferChapter  # noqa: PLC0415
     from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
     from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
 
     glimpse_distinction_ids = set(
         DistinctionOffer.objects.filter(
-            pk__in=picked_offer_ids, glimpse_tag__isnull=False
+            pk__in=picked_offer_ids, chapter=OfferChapter.GLIMPSE
         ).values_list("distinction_id", flat=True)
     )
     if not glimpse_distinction_ids:
