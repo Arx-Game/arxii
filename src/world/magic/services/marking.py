@@ -284,6 +284,7 @@ def record_pending_mark(
     act.save(update_fields=["marked_grant", "marked_interaction", "marked_journal_entry"])
     # What situations suggested is dead weight once the act is marked.
     RecordedActSuggestion.objects.filter(act=act).delete()
+    del act.cached_suggestions
     if interaction is not None:
         notify_interaction_changed(interaction)
     return MarkResult(

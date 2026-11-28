@@ -27,6 +27,7 @@ from django.utils import timezone
 from world.magic.constants import GainSource
 from world.magic.exceptions import ResonanceUndoError
 from world.magic.models import CharacterResonance, RecordedAct, Reflection, ResonanceGrant
+from world.scenes.interaction_services import notify_interaction_changed
 from world.scenes.models import Interaction
 
 if TYPE_CHECKING:
@@ -154,6 +155,13 @@ def undo_resonance_grant(grant: ResonanceGrant, by: AccountDB) -> ResonanceGrant
         waiting.delete()
 
     recompute_aura(row.character_sheet)
+
+    # The pose that carries a mark shows it struck through: drop its cached marks and tell its
+    # audience to refetch.
+    _scene, carrier = _reward_scene(row)
+    if carrier is not None:
+        del carrier.cached_act_marks
+        notify_interaction_changed(carrier)
 
     line = _undone_line(row, by, balance_fell=balance_fell, lifetime_fell=lifetime_fell)
     character = row.character_sheet.character

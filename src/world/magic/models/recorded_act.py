@@ -9,19 +9,26 @@ act; the act then carries the grant it paid and the writing that carried the mar
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from django.db import models
 from django.db.models import Q
 
 from actions.constants import ActionCategory
 from core.models import ArxSharedMemoryModel as SharedMemoryModel
+from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 
 
-class RecordedAct(SharedMemoryModel):
+class RecordedAct(RelatedCacheClearingMixin, SharedMemoryModel):
     """One act a player character took, waiting to be marked or already marked (#5327).
 
     Unmarked means ``marked_grant`` is null. The result tier and check type are references,
     not copied numbers, so a retune of the kindled deed award table reaches acts that wait.
+    Marking one saves it, which clears the marked pose's ``cached_act_marks``.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["marked_interaction"]
 
     character_sheet = models.ForeignKey(
         "arxii.CharacterSheet",
@@ -139,6 +146,19 @@ class RecordedAct(SharedMemoryModel):
                 ),
             ),
         ]
+
+    @PrunedCachedProperty
+    def cached_suggestions(self) -> list[RecordedActSuggestion]:
+        """What situations suggested for this act, strongest first (#5327).
+
+        Fed by the recorded-act list's ``Prefetch`` (``to_attr`` "cached_suggestions"), and a
+        live query on first read otherwise. Marking the act deletes the rows and clears this.
+        """
+        return list(
+            self.suggestions.select_related("resonance").order_by(
+                "-strength__rank", "resonance__name"
+            )
+        )
 
     def __str__(self) -> str:
         return f"RecordedAct(sheet={self.character_sheet_id}, {self.label})"

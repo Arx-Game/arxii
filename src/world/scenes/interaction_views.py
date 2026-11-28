@@ -19,7 +19,12 @@ from actions.definitions.sineating import run_pose_sineating
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
 from world.magic.exceptions import MarkError, ReachError, ReflectionError, SoulTetherError
-from world.magic.models import CharacterResonance, PoseEndorsement, PoseResonanceReach
+from world.magic.models import (
+    CharacterResonance,
+    PoseEndorsement,
+    PoseResonanceReach,
+    RecordedAct,
+)
 from world.magic.services.marking import pending_mark_from, record_pending_mark
 from world.magic.services.reach import pending_reach_from, record_pending_reach
 from world.magic.services.reflection import (
@@ -202,6 +207,7 @@ def _seed_fresh_pose_caches(
         del interaction.cached_action_links
         del interaction.cached_endorsements
         del interaction.cached_resonance_reaches
+        del interaction.cached_act_marks
         del interaction.cached_reaction_windows
         del interaction.cached_dramatic_moment_tags
         del interaction.cached_prompt_narrations
@@ -214,6 +220,9 @@ def _seed_fresh_pose_caches(
         # A reach recorded with this pose has already set its own cache (``record_pending_reach``);
         # a pose that reached for nothing has none.
         interaction.__dict__.setdefault("cached_resonance_reaches", [])
+        # A mark is paid after the pose is down (``record_pending_mark``, which clears this
+        # again), so a fresh pose reads its marks from the database when it is next asked.
+        del interaction.cached_act_marks
         del interaction.cached_reaction_windows
         # Neither dramatic-moment tags nor prompt narrations are ever created by
         # `_on_created` above -- both require a technique-entrance cast / GM tag
@@ -554,6 +563,11 @@ class InteractionViewSet(
                 "resonance_reaches",
                 queryset=PoseResonanceReach.objects.select_related("resonance"),
                 to_attr="cached_resonance_reaches",
+            ),
+            Prefetch(
+                "marked_acts",
+                queryset=RecordedAct.objects.select_related("marked_grant__resonance"),
+                to_attr="cached_act_marks",
             ),
             Prefetch(
                 "interaction_targets",

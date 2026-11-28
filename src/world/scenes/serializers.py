@@ -520,6 +520,7 @@ class SceneDetailSerializer(SceneListSerializer):
     declared_risk = serializers.SerializerMethodField()
     clock = serializers.SerializerMethodField()
     art_url = serializers.SerializerMethodField()
+    is_ephemeral = serializers.BooleanField(read_only=True)
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -528,6 +529,7 @@ class SceneDetailSerializer(SceneListSerializer):
             "date_finished",
             "is_active",
             "privacy_mode",
+            "is_ephemeral",
             "personas",
             "positions",
             "position_adjacency",

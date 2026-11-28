@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from rest_framework import serializers
 
+from world.magic.models import RecordedAct
+
 
 class KindledResonanceSerializer(serializers.Serializer):
     """A ``KindledResonance`` as the panel reads it."""
@@ -28,6 +30,31 @@ class KindledResonanceSerializer(serializers.Serializer):
         to harvest (#5308). The view puts the amounts in ``context["trickle"]`` (resonance id
         to amount)."""
         return self.context.get("trickle", {}).get(obj.resonance.pk, 0)
+
+
+class RecordedActSuggestionSerializer(serializers.Serializer):
+    """One resonance a situation suggested for an act (#5327): its id, its name and the line the
+    player reads beside the act. No strength or amount leaves the server."""
+
+    resonance_id = serializers.IntegerField()
+    resonance_name = serializers.CharField(source="resonance.name")
+    reason = serializers.CharField()
+
+
+class RecordedActSerializer(serializers.ModelSerializer):
+    """An act a player can point a mark at (#5327): what she did and what situations suggested.
+
+    ``suggestions`` is strongest first. The view prefetches them in that order.
+    """
+
+    suggestions = RecordedActSuggestionSerializer(
+        many=True, read_only=True, source="cached_suggestions"
+    )
+
+    class Meta:
+        model = RecordedAct
+        fields = ["id", "label", "created_at", "suggestions"]
+        read_only_fields = fields
 
 
 class ImpulseSerializer(serializers.Serializer):

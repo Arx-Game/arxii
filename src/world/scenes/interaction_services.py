@@ -818,6 +818,8 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         reactions=feed["reactions"],
         reaction_windows=feed["reaction_windows"],
         dramatic_moment_tags=feed["dramatic_moment_tags"],
+        act_marks=feed["act_marks"],
+        pending_picks=feed["pending_picks"],
     )
     payload["line"] = _line_for(payload, content)
     return payload
@@ -890,6 +892,8 @@ def _feed_fields_payload(
             reactions=[],
             reaction_windows=[],
             dramatic_moment_tags=[],
+            act_marks=[],
+            pending_picks=[],
         )
     context: dict[str, Any] = {}
     if interaction.pose_kind == PoseKind.ENTRY and interaction.scene_id is not None:
@@ -907,6 +911,8 @@ def _feed_fields_payload(
         reactions=cast("list[dict[str, Any]]", serializer.get_reactions(interaction)),
         reaction_windows=serializer.get_reaction_windows(interaction),
         dramatic_moment_tags=serializer.get_dramatic_moment_tags(interaction),
+        act_marks=serializer.get_act_marks(interaction),
+        pending_picks=serializer.get_pending_picks(interaction),
     )
 
 
