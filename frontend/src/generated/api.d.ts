@@ -15666,13 +15666,23 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Create + delete-if-unsettled pose endorsements (Spec C Task 23).
+     * @description Create + delete-if-unsettled pose endorsements (Spec C Task 23), and answer proposals.
      *
      *     Listing is not supported here — use ResonanceGrantViewSet (Task 25) for
      *     audit queries.
      *
-     *     POST /api/magic/pose-endorsements/ — create an endorsement.
+     *     POST /api/magic/pose-endorsements/ — create an endorsement. On a pose that named no
+     *         resonance it is saved waiting for the poser (``awaiting_acceptance`` true).
      *     DELETE /api/magic/pose-endorsements/<pk>/ — retract an unsettled endorsement.
+     *     POST /api/magic/pose-endorsements/<pk>/change/ — the endorser picks another resonance,
+     *         body ``{"resonance": <resonance id>}``; the row waits for the poser again (#5327).
+     *     POST /api/magic/pose-endorsements/<pk>/accept/ — the poser, the scene's GM or staff accept a
+     *         waiting pick; no body (#5327).
+     *     POST /api/magic/pose-endorsements/<pk>/decline/ — the same people decline it, which deletes
+     *         the row; no body, 204 (#5327).
+     *
+     *     Change, accept and decline read only the endorsements the requester made, was endorsed
+     *     by, or GMs the scene of (staff read all); anyone else gets a 404.
      */
     post: operations['magic_pose_endorsements_create'];
     delete?: never;
@@ -15698,6 +15708,57 @@ export interface paths {
      *     the weekly tick has run. Only the endorsing account can delete.
      */
     delete: operations['magic_pose_endorsements_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/pose-endorsements/{id}/accept/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Accept a waiting pick, so the weekly settlement pays it. */
+    post: operations['magic_pose_endorsements_accept_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/pose-endorsements/{id}/change/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description The endorser picks another resonance; the row waits for the poser again. */
+    post: operations['magic_pose_endorsements_change_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/pose-endorsements/{id}/decline/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Decline a waiting pick: the row is deleted and pays nothing. */
+    post: operations['magic_pose_endorsements_decline_create'];
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -15849,6 +15910,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/magic/recorded-acts/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The acts a character can point a mark at (#5327), newest first.
+     *
+     *     ``GET /api/magic/recorded-acts/?character_sheet=<id>`` lists only unmarked acts inside the
+     *     pointable window (``KindlingConfig.recorded_act_days``), each with the resonances situations
+     *     suggested for it, strongest first. The owner reads their own characters', staff anyone's;
+     *     another player's character is an empty page. Nothing here writes: an act is written by
+     *     ``award_kindled_deeds`` and marked by a pose or journal entry.
+     */
+    get: operations['magic_recorded_acts_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/magic/reflectables/': {
     parameters: {
       query?: never;
@@ -15914,6 +16000,23 @@ export interface paths {
     get: operations['magic_resonance_grants_retrieve'];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/magic/resonance-grants/{id}/undo/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Lower the character's totals by what the grant paid and stamp the ledger row. */
+    post: operations['magic_resonance_grants_undo_create'];
     delete?: never;
     options?: never;
     head?: never;
@@ -31507,6 +31610,10 @@ export interface components {
      * @enum {string}
      */
     ChangeEnum: 'opt_in' | 'opt_out' | 'cause' | 'drive' | 'drop_drive';
+    /** @description Body of ``POST /api/magic/pose-endorsements/<pk>/change/`` (#5327): the new pick. */
+    ChangePoseEndorsementRequest: {
+      resonance: number;
+    };
     /** @description A channel the requester can reach, with their own subscription (or null). */
     Channel: {
       readonly id: number;
@@ -32141,7 +32248,7 @@ export interface components {
       readonly resonance_detail: components['schemas']['Resonance'];
       /** @description Spendable resonance currency. */
       balance?: number;
-      /** @description Monotonic total of resonance earned (never decremented). */
+      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain (#5327) do. */
       lifetime_earned?: number;
       /**
        * Format: date-time
@@ -32159,7 +32266,7 @@ export interface components {
       resonance: number;
       /** @description Spendable resonance currency. */
       balance?: number;
-      /** @description Monotonic total of resonance earned (never decremented). */
+      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain (#5327) do. */
       lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
@@ -34431,6 +34538,7 @@ export interface components {
      *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
      *     ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
      *     ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+     *     ``resonance`` (write-only, optional, #5327) names the resonance the tag pays.
      */
     DramaticMomentTag: {
       readonly id: number;
@@ -34452,6 +34560,7 @@ export interface components {
      *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
      *     ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
      *     ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+     *     ``resonance`` (write-only, optional, #5327) names the resonance the tag pays.
      */
     DramaticMomentTagRequest: {
       moment_type: number;
@@ -34461,6 +34570,8 @@ export interface components {
       scene?: number | null;
       /** @description The pose that earned this moment; nullable for non-pose tags. */
       interaction?: number | null;
+      /** @description The resonance this tag pays, any resonance whether or not it is in the tagged character's aura. Omit it to let the moment type and her gifts decide. The tagged player is told which resonance it paid. */
+      resonance?: number;
     };
     /** @description Read-only catalog of authored dramatic-moment types (for the tag picker). */
     DramaticMomentType: {
@@ -37973,6 +38084,29 @@ export interface components {
       readonly endorsable_resonances: {
         [key: string]: unknown;
       }[];
+      /** @description The marks this pose carries (#5327), from the one builder the live frame shares. */
+      readonly act_marks: {
+        grant_id: number;
+        resonance_id: number;
+        resonance_name: string;
+        act_label: string;
+        undone: boolean;
+        /** @enum {string|null} */
+        undone_by: 'gm' | 'staff' | null;
+        can_undo: boolean;
+      }[];
+      /**
+       * @description The picks waiting for the poser, shown only to the endorser, the poser, the scene's
+       *     GM and staff (#5327), from the one builder the live frame shares.
+       */
+      readonly pending_picks: {
+        endorsement_id: number;
+        resonance_id: number;
+        resonance_name: string;
+        endorser_name: string;
+        mine: boolean;
+        can_answer: boolean;
+      }[];
       /** @description The resonance the poser said this pose reaches for (#5308), or None. */
       readonly reached_resonance: {
         [key: string]: unknown;
@@ -38216,6 +38350,29 @@ export interface components {
        */
       readonly endorsable_resonances: {
         [key: string]: unknown;
+      }[];
+      /** @description The marks this pose carries (#5327), from the one builder the live frame shares. */
+      readonly act_marks: {
+        grant_id: number;
+        resonance_id: number;
+        resonance_name: string;
+        act_label: string;
+        undone: boolean;
+        /** @enum {string|null} */
+        undone_by: 'gm' | 'staff' | null;
+        can_undo: boolean;
+      }[];
+      /**
+       * @description The picks waiting for the poser, shown only to the endorser, the poser, the scene's
+       *     GM and staff (#5327), from the one builder the live frame shares.
+       */
+      readonly pending_picks: {
+        endorsement_id: number;
+        resonance_id: number;
+        resonance_name: string;
+        endorser_name: string;
+        mine: boolean;
+        can_answer: boolean;
       }[];
       /** @description The resonance the poser said this pose reaches for (#5308), or None. */
       readonly reached_resonance: {
@@ -38776,13 +38933,6 @@ export interface components {
       kindled: boolean;
       readonly strength_name: string | null;
       reasons: string[];
-      claim_verb: string;
-      /**
-       * @description What a kindled deed set aside for the character in this resonance and they have not
-       *     claimed (#5181). Kindled or not: it waits however long it takes. The view puts the
-       *     character's amounts in ``context["unclaimed"]`` (resonance id to amount).
-       */
-      readonly unclaimed: number;
       /**
        * @description What the character's days have piled up in this resonance for the next anima ritual
        *     to harvest (#5308). The view puts the amounts in ``context["trickle"]`` (resonance id
@@ -45148,6 +45298,21 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['ReactionEmoji'][];
     };
+    PaginatedRecordedActList: {
+      /** @example 123 */
+      count: number;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=4
+       */
+      next?: string | null;
+      /**
+       * Format: uri
+       * @example http://api.example.org/accounts/?page=2
+       */
+      previous?: string | null;
+      results: components['schemas']['RecordedAct'][];
+    };
     PaginatedRecordedProfileList: {
       /** @example 123 */
       count: number;
@@ -46774,7 +46939,7 @@ export interface components {
       resonance?: number;
       /** @description Spendable resonance currency. */
       balance?: number;
-      /** @description Monotonic total of resonance earned (never decremented). */
+      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain (#5327) do. */
       lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
@@ -49611,7 +49776,9 @@ export interface components {
      *
      *     Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
      *     optional when the pose's author reached for one (#5308), which is then the resonance
-     *     endorsed; the action asks "Which resonance?" for a pose that did not.
+     *     endorsed; the action asks "Which resonance?" for a pose that did not. On a pose that
+     *     named none, any resonance is saved waiting for the poser to accept it
+     *     (``awaiting_acceptance`` is true on the row that comes back, #5327).
      *     The ``endorser_sheet`` is resolved from the requesting account in the
      *     view (``PoseEndorsementViewSet.perform_create``) and injected via
      *     ``serializer.save(endorser_sheet=sheet)``.
@@ -49636,13 +49803,17 @@ export interface components {
       readonly settled_at: string | null;
       /** @description Set at weekly settlement. */
       readonly granted_amount: number | null;
+      /** @description True while a witness's proposed resonance waits for the poser or a GM to accept it. Settlement skips these rows. */
+      readonly awaiting_acceptance: boolean;
     };
     /**
      * @description Serializer for PoseEndorsement create + read (Spec C Task 23).
      *
      *     Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
      *     optional when the pose's author reached for one (#5308), which is then the resonance
-     *     endorsed; the action asks "Which resonance?" for a pose that did not.
+     *     endorsed; the action asks "Which resonance?" for a pose that did not. On a pose that
+     *     named none, any resonance is saved waiting for the poser to accept it
+     *     (``awaiting_acceptance`` is true on the row that comes back, #5327).
      *     The ``endorser_sheet`` is resolved from the requesting account in the
      *     view (``PoseEndorsementViewSet.perform_create``) and injected via
      *     ``serializer.save(endorser_sheet=sheet)``.
@@ -50448,6 +50619,28 @@ export interface components {
       /** @description The line the movement ends on, shown in the display face. Blank shows nothing. */
       readonly motto: string;
     };
+    /**
+     * @description An act a player can point a mark at (#5327): what she did and what situations suggested.
+     *
+     *     ``suggestions`` is strongest first. The view prefetches them in that order.
+     */
+    RecordedAct: {
+      readonly id: number;
+      /** @description What she did, as the game words it from the action and its target. A deed grant records the same label. */
+      readonly label: string;
+      /** Format: date-time */
+      readonly created_at: string;
+      readonly suggestions: components['schemas']['RecordedActSuggestion'][];
+    };
+    /**
+     * @description One resonance a situation suggested for an act (#5327): its id, its name and the line the
+     *     player reads beside the act. No strength or amount leaves the server.
+     */
+    RecordedActSuggestion: {
+      resonance_id: number;
+      resonance_name: string;
+      reason: string;
+    };
     /** @description A character's Archive profile sittings + recorded history (#2632). */
     RecordedProfile: {
       readonly id: number;
@@ -50860,7 +51053,8 @@ export interface components {
      * @description Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
      *
      *     ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
-     *     no bonus check) say what the bonus check added to ``amount`` (#5308).
+     *     no bonus check) say what the bonus check added to ``amount`` (#5308). ``nullified_at`` is
+     *     when staff or the scene's GM undid the gain, null while it stands (#5327).
      */
     ResonanceGrant: {
       readonly id: number;
@@ -50904,13 +51098,18 @@ export interface components {
        *     * `SUCCUMBED` - Succumbed to the Mire
        *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
        *     * `SINEATER_FALL` - Sineater fell
-       *     * `KINDLED_CLAIM` - Kindled deed claimed
        *     * `ANIMA_RITUAL` - Anima ritual
        *     * `TRICKLE_HARVEST` - Trickle harvest
+       *     * `MARKED_ACT` - Marked act
        */
       readonly source: components['schemas']['ResonanceGrantSourceEnum'];
       /** Format: date-time */
       readonly granted_at: string;
+      /**
+       * Format: date-time
+       * @description Set when staff or the scene's GM undid this gain (#5327).
+       */
+      readonly nullified_at: string | null;
       readonly source_room_profile: number | null;
       readonly source_staff_account: number | null;
       readonly source_pose_endorsement: number | null;
@@ -50947,9 +51146,9 @@ export interface components {
      *     * `SUCCUMBED` - Succumbed to the Mire
      *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
      *     * `SINEATER_FALL` - Sineater fell
-     *     * `KINDLED_CLAIM` - Kindled deed claimed
      *     * `ANIMA_RITUAL` - Anima ritual
      *     * `TRICKLE_HARVEST` - Trickle harvest
+     *     * `MARKED_ACT` - Marked act
      * @enum {string}
      */
     ResonanceGrantSourceEnum:
@@ -50983,9 +51182,9 @@ export interface components {
       | 'SUCCUMBED'
       | 'SUCCUMB_BONUS'
       | 'SINEATER_FALL'
-      | 'KINDLED_CLAIM'
       | 'ANIMA_RITUAL'
-      | 'TRICKLE_HARVEST';
+      | 'TRICKLE_HARVEST'
+      | 'MARKED_ACT';
     ResonanceLine: {
       resonance: number;
       tier: components['schemas']['ResonanceLineTierEnum'];
@@ -51807,6 +52006,7 @@ export interface components {
        *     * `ephemeral` - Ephemeral
        */
       privacy_mode?: components['schemas']['PrivacyModeEnum'];
+      readonly is_ephemeral: boolean;
       readonly personas: {
         [key: string]: unknown;
       }[];
@@ -62812,8 +63012,7 @@ export interface operations {
       query?: never;
       header?: never;
       path: {
-        /** @description A unique integer value identifying this title. */
-        id: number;
+        id: string;
       };
       cookie?: never;
     };
@@ -77725,6 +77924,75 @@ export interface operations {
       };
     };
   };
+  magic_pose_endorsements_accept_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this pose endorsement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PoseEndorsement'];
+        };
+      };
+    };
+  };
+  magic_pose_endorsements_change_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this pose endorsement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ChangePoseEndorsementRequest'];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PoseEndorsement'];
+        };
+      };
+    };
+  };
+  magic_pose_endorsements_decline_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this pose endorsement. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   magic_prepared_crossing_texts_list: {
     parameters: {
       query?: {
@@ -77970,6 +78238,30 @@ export interface operations {
       };
     };
   };
+  magic_recorded_acts_list: {
+    parameters: {
+      query?: {
+        /** @description A page number within the paginated result set. */
+        page?: number;
+        /** @description Number of results to return per page. */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedRecordedActList'];
+        };
+      };
+    };
+  };
   magic_reflectables_list: {
     parameters: {
       query?: {
@@ -77999,6 +78291,9 @@ export interface operations {
       query?: {
         granted_after?: string;
         granted_before?: string;
+        nullified?: boolean;
+        nullified_after?: string;
+        nullified_before?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
         /** @description Number of results to return per page. */
@@ -78037,9 +78332,9 @@ export interface operations {
          *     * `SUCCUMBED` - Succumbed to the Mire
          *     * `SUCCUMB_BONUS` - Sineater succumbed bonus
          *     * `SINEATER_FALL` - Sineater fell
-         *     * `KINDLED_CLAIM` - Kindled deed claimed
          *     * `ANIMA_RITUAL` - Anima ritual
          *     * `TRICKLE_HARVEST` - Trickle harvest
+         *     * `MARKED_ACT` - Marked act
          */
         source?:
           | 'ANIMA_RITUAL'
@@ -78053,8 +78348,8 @@ export interface operations {
           | 'EMBRACED_DEED'
           | 'ENTRY_FLOURISH'
           | 'FALL_CONVERSION'
-          | 'KINDLED_CLAIM'
           | 'KINDLED_DEED'
+          | 'MARKED_ACT'
           | 'MIRE_PURIFIED'
           | 'MISSION_REPORT'
           | 'MISSION_REWARD'
@@ -78098,6 +78393,27 @@ export interface operations {
       header?: never;
       path: {
         /** @description A unique integer value identifying this resonance grant. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['ResonanceGrant'];
+        };
+      };
+    };
+  };
+  magic_resonance_grants_undo_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
         id: number;
       };
       cookie?: never;
