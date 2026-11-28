@@ -457,6 +457,7 @@ class AMentorAnswersOverTheWeb(_TeachingCase):
                     {
                         "allocation_id": self.row.pk,
                         "student_name": "Ysmay",
+                        "student_pronoun": self.ysmay.sheet_data.pronoun_object,
                         "mentor_name": "Hobb",
                         "skill_name": "Villainy",
                     }
