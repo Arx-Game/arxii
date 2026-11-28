@@ -55,7 +55,7 @@ import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { createActionRequest } from '@/scenes/actionQueries';
 import { useUnsavedNavigationGuard } from '../useUnsavedNavigationGuard';
 import { submitPose, fetchScene, sceneKeys, fetchPoseSubmission } from '@/scenes/queries';
-import type { SceneDetail } from '@/scenes/queries';
+import type { SceneDetail, SubmitPoseResult } from '@/scenes/queries';
 import { replyReachability } from '@/scenes/replyReachability';
 import { tagReachability } from '@/scenes/tagReachability';
 import { excerptOf } from '@/lib/formatParser';
@@ -1070,6 +1070,50 @@ export function CommandInput({
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       const reachRequest = reachFields(reach);
+      // What each structured attachment does once the pose is accepted, each kept out of the
+      // ack callback below so the callback reads as the order of what happens.
+      function settleReach(response: SubmitPoseResult | undefined) {
+        if (reachRequest.reach_resonance_id === undefined) return;
+        setReach(NO_REACH);
+        if (response?.mark_line) {
+          showMarkLine(response.mark_line, response.mark_recorded !== false);
+        }
+        refreshRecordedActs();
+      }
+      function settleSineating(response: SubmitPoseResult | undefined) {
+        if (!isSineating(sineating)) return;
+        if (response?.sineating_line) {
+          showSineatingLine(response.sineating_line, response.sineating_recorded !== false);
+        }
+        setSineating(NO_SINEATING);
+        refreshSineating();
+      }
+      function settleReflection(response: SubmitPoseResult | undefined) {
+        if (!isReflecting(reflection)) return;
+        if (response?.reflection_line) {
+          showReflectionLine(response.reflection_line, response.reflection_recorded !== false);
+        }
+        setReflection(NO_REFLECTION);
+        refreshReflectionOptions();
+      }
+      function dispatchEntranceTechnique(response: SubmitPoseResult | undefined) {
+        // #2183 — an entrance technique was attached: dispatch it now that
+        // the entry pose exists, so EntranceAction can anchor to it. Plain
+        // entrances (no technique attached) send nothing further — byte
+        // identical to pre-#2183 behavior.
+        if (isEntrance && entranceTechnique && sceneId !== undefined) {
+          createActionRequest(sceneId, {
+            action_key: 'entrance',
+            technique_id: entranceTechnique.techniqueId,
+            target_persona_id: entranceTechnique.targetPersonaId,
+            entry_interaction_id: typeof response?.id === 'number' ? response.id : undefined,
+          }).catch((error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : 'Failed to dispatch entrance technique.';
+            toast.error(message);
+          });
+        }
+      }
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
@@ -1096,27 +1140,9 @@ export function CommandInput({
         ...reachRequest,
       })
         .then((response) => {
-          if (reachRequest.reach_resonance_id !== undefined) {
-            setReach(NO_REACH);
-            if (response?.mark_line) {
-              showMarkLine(response.mark_line, response.mark_recorded !== false);
-            }
-            refreshRecordedActs();
-          }
-          if (isSineating(sineating)) {
-            if (response?.sineating_line) {
-              showSineatingLine(response.sineating_line, response.sineating_recorded !== false);
-            }
-            setSineating(NO_SINEATING);
-            refreshSineating();
-          }
-          if (isReflecting(reflection)) {
-            if (response?.reflection_line) {
-              showReflectionLine(response.reflection_line, response.reflection_recorded !== false);
-            }
-            setReflection(NO_REFLECTION);
-            refreshReflectionOptions();
-          }
+          settleReach(response);
+          settleSineating(response);
+          settleReflection(response);
           if (attachedAction && onSubmitAction) {
             onSubmitAction(attachedAction, clientRequestId);
           }
@@ -1135,22 +1161,7 @@ export function CommandInput({
           // ack without a `commandRef` comparison of our own.
           setHistory((prev) => [...prev, trimmed]);
           setHistoryIndex(-1);
-          // #2183 — an entrance technique was attached: dispatch it now that
-          // the entry pose exists, so EntranceAction can anchor to it. Plain
-          // entrances (no technique attached) send nothing further — byte
-          // identical to pre-#2183 behavior.
-          if (isEntrance && entranceTechnique && sceneId !== undefined) {
-            createActionRequest(sceneId, {
-              action_key: 'entrance',
-              technique_id: entranceTechnique.techniqueId,
-              target_persona_id: entranceTechnique.targetPersonaId,
-              entry_interaction_id: typeof response?.id === 'number' ? response.id : undefined,
-            }).catch((error: unknown) => {
-              const message =
-                error instanceof Error ? error.message : 'Failed to dispatch entrance technique.';
-              toast.error(message);
-            });
-          }
+          dispatchEntranceTechnique(response);
           setEntranceTechnique(null);
         })
         .catch((error: unknown) => {
