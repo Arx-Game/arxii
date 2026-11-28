@@ -1021,7 +1021,9 @@ Villainy.
 | `traditions_offered_in_creation()` | same file | The active Traditions some Beginning lists. The Tradition endpoint (`TraditionViewSet.get_queryset`) and the `affinity-skills-taught` row both read it |
 | `taught_affinity_skill_filter(tradition_id)`, `taught_affinity_skill_names_by_tradition(ids)` | same file | The query form creation narrows its list with, and the names the Tradition list shows ("Reflection, Villainy"); two queries for the whole list |
 | `TeachingContext`, `build_teaching_context(sheet_ids, *, lever_sheet_ids=None, player_sheet_ids=None)`, `build_outsider_context(sheet_ids)` | same file; `world/magic/types/tradition_teaching.py` | A frozen snapshot a caller builds once and passes down, never stores: the governed and universal skill ids, the skills each Tradition teaches, the active Tradition of every sheet, the account that plays each sheet asked about, and the sheets whose self-teaching lever is positive. A fixed number of queries covers a whole weekly run. `sheet_ids` must hold every student and mentor asked about (asking about another sheet raises `KeyError`); `lever_sheet_ids` limits which sheets get the lever read (one modifier walk each, ADR-0278) and `player_sheet_ids` which sheets get their player read (two queries in all, `roster.services.npc_lending.current_player_ids`); both default to every sheet, and asking `training_verdict` about a sheet whose lever or player was not read raises `KeyError`, never "no lever". `build_outsider_context` reads neither, for callers that never ask the verdict (menus, courses, probes) |
-| `training_verdict(context, sheet, skill, mentor) -> TrainingVerdict` | same file | `TrainingVerdict.refusal` is the full line the player reads, or `None`. A skill outside the Magic category is never refused here. `mentor` is the persona the player named, and the refusal names that persona and never the character behind it. It never reads whether the student is an outsider, and never a mentor's own lever |
+| `training_verdict(context, sheet, skill, mentor, *, mentor_agreed) -> TrainingVerdict` | same file | `TrainingVerdict.refusal` is the full line the player reads, or `None`. A skill outside the Magic category is never refused here. `mentor` is the persona the player named, and the refusal names that persona and never the character behind it. A mentor who has not agreed counts as no mentor (the lever lets her train, else "{Mentor} has not agreed to teach you yet."). It never reads whether the student is an outsider, and never a mentor's own lever |
+| `training_asking_refusal(context, sheet, skill, mentor)` | same file | What naming a mentor refuses: no mentor on a Magic skill without the lever, and a mentor one account also plays. It reads nothing about the mentor, so the student learns nothing about her |
+| `mentor_shortfall(context, mentor_sheet, skill)`, `mentor_acceptance_refusal(context, mentor_sheet, skill, *, npc_name=None)` | same file | The mentor's three facts (`MentorShortfall`: no Tradition, a Tradition that does not teach it, no rating), and the second-person line the mentor reads when she cannot agree |
 | `is_outsider(context, sheet, skill)` | same file | True when the skill is governed and the student's active Tradition (none counts as not teaching) does not teach it. Courses read it |
 | `active_tradition_row(sheet)` | `world/magic/services/tradition_membership.py` | The student's one active `CharacterTradition` row (made public by #5326; its other inline copies are unchanged) |
 | `self_teaching_granted(sheet)` | `world/mechanics/levers.py` | The exception, below |
@@ -1031,9 +1033,12 @@ Villainy.
 
 - "{Skill} needs a teacher. Choose a mentor whose Tradition teaches it." (no mentor on a Magic skill)
 - "{Mentor} cannot teach you {Skill}. Choose a mentor whose Tradition teaches it and who has trained in it."
-  (one line for all three reasons, no Tradition, a Tradition that does not teach it, no rating, so naming a
-  persona, a mask included, tells the asker nothing about the character behind it; `{Mentor}` is the persona
-  she typed or picked, never the name behind it)
+  (the weekly run's line for a mentor who agreed and no longer qualifies; one line for all three reasons, no
+  Tradition, a Tradition that does not teach it, no rating, so a persona, a mask included, tells the student
+  nothing about the character behind it; `{Mentor}` is the persona she typed or picked, never the name behind it.
+  Asking a mentor never raises it, see "The mentor must agree" below)
+- "{Mentor} has not agreed to teach you yet." (the weekly run's line for a Magic allocation whose mentor has
+  not agreed, when the student lacks the lever)
 - "You cannot name another of your own characters as your mentor. Choose a mentor another player plays."
   (a mentor one account also plays, read by `current_player_ids`; a character nobody plays, an NPC a GM runs,
   stays allowed). Naming her own persona counts as naming no mentor, so the teacher line applies unless she
@@ -1057,16 +1062,26 @@ and by the draft PATCH when the Tradition or style changes) also drops allocated
 Tradition does not teach. `TraditionSerializer.taught_skill_names` carries the one-line "Teaches Reflection
 and Heroism" names.
 
+**The mentor must agree (ruled 2026-11-28).** Naming a mentor only asks her: `TrainingAllocation.mentor_accepted_at`
+stays empty until she agrees, and a mentor who has not agreed counts as no mentor in the verdict, in
+`calculate_training_development` and in the weekly run. She answers as an account (the player of her character
+now, which for a lent NPC is the borrower and for a held NPC its holder; the creator of her roster entry when
+nobody plays her; staff; never the student's player) through `accept_mentoring`, `decline_mentoring` and
+`stop_mentoring` in `world/skills/mentoring.py`, reached by telnet `training requests|accept|decline|stop`, by
+`AnswerMentoringAction` and by the training viewset's `mentoring/`, `accept-mentoring/`, `decline-mentoring/` and
+`stop-mentoring/` routes. Accepting reads the mentor's own facts (`mentor_acceptance_refusal`) and tells her which
+one fails. See [skills.md](skills.md), "The mentor must agree".
+
 **Weekly training.** `create_training_allocation` and `update_training_allocation` (`skills/services.py`)
-call `_training_refusal`, which builds a one-character context and asks `training_verdict`; a refusal
+call `_training_refusal`, which builds a one-character context and asks `training_asking_refusal`; a refusal
 raises `ValueError` with the line, which `ManageTrainingAction` turns into the player's message. An update
 re-checks on every call, so changing the amount, or clearing the mentor on a Magic skill, is judged as the
 allocation would stand afterward. `process_weekly_training` builds one context for every allocation it loaded
-(`_weekly_teaching_context`, reading the lever only for characters with a no-mentor allocation on a Magic
-skill), asks again for each, and skips a refused one (`_skip_refused_allocation`): no development, no action
+(`_weekly_teaching_context`, reading the lever only for characters with a Magic allocation that has no mentor or
+a waiting one), asks `training_verdict` again for each, and skips a refused one (`_skip_refused_allocation`): no development, no action
 points spent, the row left in place so she can fix it, and one `SYSTEM` narrative line: "Your weekly training in
-{Skill} did not run, and no action points were spent. {refusal}". A weekly mentored week pays what any mentored
-week pays: `calculate_training_development` is unchanged and carries no penalty for another Tradition's
+{Skill} did not run, and no action points were spent. {refusal}". A weekly week with an agreed mentor pays what any
+mentored week pays: `calculate_training_development` is unchanged and carries no penalty for another Tradition's
 mentor.
 
 **Academy courses.** `SkillCourseOfferDetails.clean()` refuses a governed skill on a role with no

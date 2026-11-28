@@ -144,7 +144,7 @@ A skill a Tradition's teachers teach. Reflection (the Primal affinity's skill, f
 _Avoid_: favored skill, Tradition skill grant, good or evil rating on a Tradition.
 
 **Teacher** (#5326, ADR-5326):
-A mentor or Academy trainer who belongs to a Tradition that teaches the skill. A mentor must also hold a rating above 0 in it (`skill_rating`); an Academy trainer's Tradition is the role's `NPCRole.teaches_tradition`. A teacher with no Tradition teaches no **governed skill**; an ungoverned Magic skill (Occult) needs only that the mentor belongs to some Tradition and holds a rating. Weekly mentoring from a teacher of another Tradition carries no penalty; a course does, through the student being an outsider.
+A mentor or Academy trainer who belongs to a Tradition that teaches the skill. A mentor must also hold a rating above 0 in it (`skill_rating`); an Academy trainer's Tradition is the role's `NPCRole.teaches_tradition`. A teacher with no Tradition teaches no **governed skill**; an ungoverned Magic skill (Occult) needs only that the mentor belongs to some Tradition and holds a rating. Weekly mentoring from a teacher of another Tradition carries no penalty; a course does, through the student being an outsider. A mentor must also agree to teach (#5326, ruled 2026-11-28): naming her only asks, `TrainingAllocation.mentor_accepted_at` records her agreement, and until she agrees the training counts as having no mentor. She answers from her own account's list (the player of her character now, the creator of her roster entry when nobody plays her, or staff, never the student's player), so a game master who holds an NPC answers for it.
 _Avoid_: tutor (for a mentor), instructor.
 
 **Governed skill** (#5326, ADR-5326):

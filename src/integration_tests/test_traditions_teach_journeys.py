@@ -10,6 +10,9 @@ carries the self-teaching lever. Two journeys live here:
   with one line to the character and no action points spent, and a prodigy trains alone.
 * Staff tick a Tradition's skills in the admin and author the self-teaching effect on a
   distinction, and the mentor's answer and the creation list follow.
+* A mentor must agree (ruled 2026-11-28): naming a mentor only asks her, the training counts as
+  having no mentor until she agrees, and she answers from her own account's list, over telnet and
+  the REST training endpoint, a game master who holds an NPC included.
 
 The other rows of the feature live where the rest of their story is told:
 ``test_earning_your_keep_journeys`` (the training command), ``test_tradition_training_journeys``
@@ -53,6 +56,9 @@ from world.mechanics.constants import SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING
 from world.mechanics.test_helpers import grant_lever, lever_target
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
+from world.roster.factories import RosterFactory
+from world.roster.models import RosterTenure
+from world.roster.models.choices import RosterType
 from world.skills.models import Skill, TrainingAllocation
 from world.skills.services import run_weekly_skill_cron
 from world.traits.factories import CheckSystemSetupFactory
@@ -133,21 +139,23 @@ class TheWeeklyRunAndTheTraditionRule(_TeachingCase):
         ):
             hold_rating(character.sheet_data, skill, 11)
 
+    def ask_and_agree(self, student, skill, mentor) -> None:
+        """The student names the mentor, and the mentor agrees to the one request waiting."""
+        self.assertIn(
+            f"You ask {mentor.db_key} to teach you {skill.name}. Your training waits until "
+            f"{mentor.db_key} agrees.",
+            self.telnet(
+                student, f"training add skill={skill.pk} ap=2 mentor={self.persona_of(mentor)}"
+            ),
+        )
+        self.assertIn(
+            f"You agree to teach {student.db_key} {skill.name}.",
+            self.telnet(mentor, "training accept 1"),
+        )
+
     def test_a_mentored_week_is_paid_and_a_stale_allocation_is_skipped_with_a_notice(self) -> None:
-        self.assertIn(
-            "Training allocation set for Villainy.",
-            self.telnet(
-                self.ysmay,
-                f"training add skill={self.villainy.pk} ap=2 mentor={self.persona_of(self.hobb)}",
-            ),
-        )
-        self.assertIn(
-            "Training allocation set for Heroism.",
-            self.telnet(
-                self.ysmay,
-                f"training add skill={self.heroism.pk} ap=2 mentor={self.persona_of(self.pell)}",
-            ),
-        )
+        self.ask_and_agree(self.ysmay, self.villainy, self.hobb)
+        self.ask_and_agree(self.ysmay, self.heroism, self.pell)
         # Staff take Villainy off the Ashen Court's list before the week turns, so Hobb's
         # Tradition no longer teaches what she asked him for.
         self.ashen.taught_skills.remove(self.villainy)
@@ -164,8 +172,10 @@ class TheWeeklyRunAndTheTraditionRule(_TeachingCase):
         self.assertEqual(
             self.notices(self.ysmay),
             [
+                "Hobb agreed to teach you Villainy.",
+                "Pell agreed to teach you Heroism.",
                 "Your weekly training in Villainy did not run, and no action points were "
-                "spent. " + MENTOR_CANNOT_TEACH_LINE.format(mentor="Hobb", skill="Villainy")
+                "spent. " + MENTOR_CANNOT_TEACH_LINE.format(mentor="Hobb", skill="Villainy"),
             ],
         )
         # The row stays, so she can choose another mentor and have it run next week.
@@ -176,15 +186,31 @@ class TheWeeklyRunAndTheTraditionRule(_TeachingCase):
         )
 
     def test_a_week_with_nothing_stale_sends_no_notice(self) -> None:
-        self.telnet(
-            self.ysmay,
-            f"training add skill={self.villainy.pk} ap=2 mentor={self.persona_of(self.hobb)}",
-        )
+        self.ask_and_agree(self.ysmay, self.villainy, self.hobb)
 
         run_weekly_skill_cron()
 
         self.assertEqual(rating_of(self.ysmay.sheet_data, self.villainy), 12)
-        self.assertEqual(self.notices(self.ysmay), [])
+        self.assertEqual(self.notices(self.ysmay), ["Hobb agreed to teach you Villainy."])
+
+    def test_a_week_before_the_mentor_agrees_pays_nothing_and_says_who_has_not(self) -> None:
+        self.telnet(
+            self.ysmay,
+            f"training add skill={self.villainy.pk} ap=2 mentor={self.persona_of(self.hobb)}",
+        )
+        ap_before = self.ap_of(self.ysmay)
+
+        run_weekly_skill_cron()
+
+        self.assertEqual(rating_of(self.ysmay.sheet_data, self.villainy), 11)
+        self.assertEqual(self.ap_of(self.ysmay), ap_before)
+        self.assertEqual(
+            self.notices(self.ysmay),
+            [
+                "Your weekly training in Villainy did not run, and no action points were "
+                "spent. Hobb has not agreed to teach you yet."
+            ],
+        )
 
     def test_the_prodigy_trains_alone_and_a_character_without_the_lever_does_not(self) -> None:
         # A distinction effect on the self-teaching target, the way staff author it.
@@ -232,6 +258,280 @@ class TheWeeklyRunAndTheTraditionRule(_TeachingCase):
         )
 
 
+class AMentorAnswersHerRequests(_TeachingCase):
+    """Ysmay names Hobb; Hobb is asked, lists the request, agrees, and the week then pays (#5326).
+
+    Maintainer (2026-11-28): "The mentor must agree". Until Hobb agrees the allocation counts as
+    having no mentor, so a magical skill does not train.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        hold_rating(self.ysmay.sheet_data, self.villainy, 11)
+        hold_rating(self.hobb.sheet_data, self.villainy, 11)
+        self.pronoun = self.ysmay.sheet_data.pronoun_object
+        self.add = f"training add skill={self.villainy.pk} ap=2 mentor={self.persona_of(self.hobb)}"
+
+    def test_a_player_mentor_is_asked_listed_and_agrees_and_the_week_pays(self) -> None:
+        asked = self.telnet(self.ysmay, self.add)
+        self.assertIn(
+            "You ask Hobb to teach you Villainy. Your training waits until Hobb agrees.", asked
+        )
+        self.assertIn(f"Ysmay asks you to teach {self.pronoun} Villainy.", self.notices(self.hobb))
+        self.assertIn(
+            "(mentor: Hobb, waiting for Hobb to agree)", self.telnet(self.ysmay, "training")
+        )
+        ap_before = self.ap_of(self.ysmay)
+
+        run_weekly_skill_cron()
+
+        # Before Hobb agrees, the week counts as having no mentor: nothing is paid.
+        self.assertEqual(rating_of(self.ysmay.sheet_data, self.villainy), 11)
+        self.assertEqual(self.ap_of(self.ysmay), ap_before)
+        self.assertEqual(
+            self.notices(self.ysmay),
+            [
+                "Your weekly training in Villainy did not run, and no action points were "
+                "spent. Hobb has not agreed to teach you yet."
+            ],
+        )
+
+        listed = self.telnet(self.hobb, "training requests")
+        self.assertIn("Asked to teach:", listed)
+        self.assertIn(f"1. Ysmay asks Hobb to teach {self.pronoun} Villainy", listed)
+        self.assertIn(
+            "You agree to teach Ysmay Villainy.", self.telnet(self.hobb, "training accept 1")
+        )
+        self.assertEqual(self.notices(self.ysmay)[-1], "Hobb agreed to teach you Villainy.")
+        self.assertIn("Ysmay: Villainy (as Hobb)", self.telnet(self.hobb, "training requests"))
+        self.assertIn("(mentor: Hobb)", self.telnet(self.ysmay, "training"))
+
+        run_weekly_skill_cron()
+
+        # Mentored, two AP pay 12: one step from 11 to 12, and two points kept.
+        self.assertEqual(rating_of(self.ysmay.sheet_data, self.villainy), 12)
+        self.assertEqual(self.ap_of(self.ysmay), ap_before - 2)
+
+    def test_declining_and_stopping_clear_the_mentor_and_tell_the_student(self) -> None:
+        self.telnet(self.ysmay, self.add)
+
+        self.assertIn(
+            "You decline to teach Ysmay Villainy.", self.telnet(self.hobb, "training decline 1")
+        )
+
+        row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data)
+        self.assertIsNone(row.mentor_id)
+        self.assertEqual(self.notices(self.ysmay), ["Hobb declined to teach you Villainy."])
+        self.assertIn(
+            "Nobody has asked you to teach, and you teach nobody.",
+            self.telnet(self.hobb, "training requests"),
+        )
+        self.telnet(self.ysmay, f"training update id={row.pk} mentor={self.persona_of(self.hobb)}")
+        self.telnet(self.hobb, "training accept 1")
+
+        self.assertIn(
+            "You stop teaching Ysmay Villainy.", self.telnet(self.hobb, "training stop Ysmay")
+        )
+
+        row.refresh_from_db()
+        self.assertIsNone(row.mentor_id)
+        self.assertIsNone(row.mentor_accepted_at)
+        self.assertEqual(self.notices(self.ysmay)[-1], "Hobb stopped teaching you Villainy.")
+        self.assertIn(
+            "You are not teaching anyone called Ysmay.",
+            self.telnet(self.hobb, "training stop Ysmay"),
+        )
+
+    def test_nobody_else_may_answer_for_hobb(self) -> None:
+        self.telnet(self.ysmay, self.add)
+        pell = self.make_player("Pell", room=self.lantern)
+
+        for character in (self.ysmay, pell):
+            self.assertIn(
+                "Nobody has asked you to teach, and you teach nobody.",
+                self.telnet(character, "training requests"),
+            )
+            self.assertIn(
+                "No request number 1. Type training requests to see them.",
+                self.telnet(character, "training accept 1"),
+            )
+        row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data)
+        self.assertIsNone(row.mentor_accepted_at)
+
+
+class AGameMasterAnswersForAnNpc(_TeachingCase):
+    """A game master who holds Magister Vey answers for her from her own list (#5326).
+
+    Maintainer (2026-11-28): "The mentor is also not unlikely to be a GM'd NPC, so we need to
+    accomodate that as well". The list belongs to the account, and each row names which of the
+    account's characters was asked.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.reflection = self.skills["Reflection"]
+        self.odalys = self.make_player("Odalys", room=self.lantern)
+        self.vey = self.make_player("Magister Vey", room=self.lantern)
+        # Vey stands on the NPC shelf and Odalys's account holds her tenure.
+        entry = self.vey.sheet_data.roster_entry
+        entry.roster = RosterFactory(roster_type=RosterType.NPC)
+        entry.save()
+        tenure = RosterTenure.objects.get(roster_entry=entry, end_date__isnull=True)
+        tenure.player_data = RosterTenure.objects.get(
+            roster_entry__character_sheet=self.odalys.sheet_data, end_date__isnull=True
+        ).player_data
+        tenure.save()
+        CharacterTraditionFactory(character=self.vey.sheet_data, tradition=self.dawn)
+        hold_rating(self.vey.sheet_data, self.reflection, 11)
+        self.pronoun = self.ysmay.sheet_data.pronoun_object
+
+    def ask_vey(self, student, skill) -> None:
+        self.telnet(
+            student,
+            f"training add skill={skill.pk} ap=2 mentor={self.persona_of(self.vey)}",
+        )
+
+    def test_the_gm_reads_and_answers_the_requests_addressed_to_her_npc(self) -> None:
+        self.ask_vey(self.ysmay, self.reflection)
+
+        listed = self.telnet(self.odalys, "training requests")
+
+        self.assertIn(f"1. Ysmay asks Magister Vey to teach {self.pronoun} Reflection", listed)
+        self.assertIn(
+            "You agree to teach Ysmay Reflection.", self.telnet(self.odalys, "training accept 1")
+        )
+        self.assertIn("Magister Vey agreed to teach you Reflection.", self.notices(self.ysmay))
+        row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data)
+        self.assertIsNotNone(row.mentor_accepted_at)
+
+    def test_an_npc_that_cannot_teach_is_refused_by_name_not_as_you(self) -> None:
+        # The Dawn Vigil does not tick Villainy, and Vey holds no rating in it either.
+        hold_rating(self.ysmay.sheet_data, self.villainy, 11)
+        self.ask_vey(self.ysmay, self.villainy)
+
+        told = self.telnet(self.odalys, "training accept 1")
+
+        self.assertIn("Magister Vey's Tradition does not teach Villainy.", told)
+        self.assertNotIn("Your Tradition", told)
+        row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data)
+        self.assertIsNone(row.mentor_accepted_at)
+        self.assertNotIn(
+            "Magister Vey's Tradition does not teach Villainy.", self.notices(self.ysmay)
+        )
+
+    def test_a_character_the_gm_does_not_hold_has_no_say(self) -> None:
+        self.ask_vey(self.ysmay, self.reflection)
+
+        for character in (self.hobb, self.ysmay):
+            self.assertIn(
+                "No request number 1. Type training requests to see them.",
+                self.telnet(character, "training accept 1"),
+            )
+
+
+class AMentorAnswersOverTheWeb(_TeachingCase):
+    """The training viewset carries the same mentoring answers as the command (#5326)."""
+
+    url = "/api/skills/training-allocations/"
+
+    def setUp(self) -> None:
+        super().setUp()
+        hold_rating(self.ysmay.sheet_data, self.villainy, 11)
+        hold_rating(self.hobb.sheet_data, self.villainy, 11)
+        self.pell = self.make_player("Pell", room=self.lantern)
+        telnet_line = (
+            f"training add skill={self.villainy.pk} ap=2 mentor={self.persona_of(self.hobb)}"
+        )
+        self.telnet(self.ysmay, telnet_line)
+        self.row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data)
+        self.hobb_client = self.api(self.account_of(self.hobb))
+
+    def test_the_mentor_lists_her_request_and_the_row_carries_no_account(self) -> None:
+        listed = self.hobb_client.get(f"{self.url}mentoring/")
+
+        self.assertEqual(listed.status_code, 200, listed.content)
+        self.assertEqual(
+            listed.json(),
+            {
+                "requests": [
+                    {
+                        "allocation_id": self.row.pk,
+                        "student_name": "Ysmay",
+                        "mentor_name": "Hobb",
+                        "skill_name": "Villainy",
+                    }
+                ],
+                "students": [],
+            },
+        )
+        stranger = self.api(self.account_of(self.pell)).get(f"{self.url}mentoring/")
+        self.assertEqual(stranger.json(), {"requests": [], "students": []})
+
+    def test_an_id_outside_what_the_requester_may_answer_for_is_a_404(self) -> None:
+        for character in (self.ysmay, self.pell):
+            client = self.api(self.account_of(character))
+            for action in ("accept-mentoring", "decline-mentoring", "stop-mentoring"):
+                response = client.post(f"{self.url}{self.row.pk}/{action}/")
+                self.assertEqual(response.status_code, 404, (character.db_key, action))
+        missing = self.hobb_client.post(f"{self.url}99999/accept-mentoring/")
+        self.assertEqual(missing.status_code, 404)
+        self.row.refresh_from_db()
+        self.assertIsNone(self.row.mentor_accepted_at)
+
+    def test_accepting_declining_and_stopping_answer_as_the_telnet_command_does(self) -> None:
+        accepted = self.hobb_client.post(f"{self.url}{self.row.pk}/accept-mentoring/")
+
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.assertEqual(accepted.json(), {"detail": "You agree to teach Ysmay Villainy."})
+        self.row.refresh_from_db()
+        self.assertIsNotNone(self.row.mentor_accepted_at)
+        students = self.hobb_client.get(f"{self.url}mentoring/").json()
+        self.assertEqual([row["skill_name"] for row in students["students"]], ["Villainy"])
+        self.assertEqual(students["requests"], [])
+        own = self.api(self.account_of(self.ysmay)).get(self.url).json()["allocations"][0]
+        self.assertIsNotNone(own["mentor_accepted_at"])
+        self.assertFalse(own["mentor_waiting"])
+
+        declined = self.hobb_client.post(f"{self.url}{self.row.pk}/decline-mentoring/")
+        self.assertEqual(declined.status_code, 400, declined.content)
+        self.assertEqual(declined.json(), {"detail": "You already agreed to teach Ysmay Villainy."})
+        stopped = self.hobb_client.post(f"{self.url}{self.row.pk}/stop-mentoring/")
+        self.assertEqual(stopped.status_code, 200, stopped.content)
+        self.assertEqual(stopped.json(), {"detail": "You stop teaching Ysmay Villainy."})
+        self.row.refresh_from_db()
+        self.assertIsNone(self.row.mentor_id)
+        self.assertEqual(self.notices(self.ysmay)[-1], "Hobb stopped teaching you Villainy.")
+
+    def test_a_mentor_who_cannot_teach_is_refused_with_the_sentence(self) -> None:
+        # Staff take Villainy off the Ashen Court's list after Ysmay asked.
+        self.ashen.taught_skills.remove(self.villainy)
+
+        refused = self.hobb_client.post(f"{self.url}{self.row.pk}/accept-mentoring/")
+
+        self.assertEqual(refused.status_code, 400, refused.content)
+        self.assertEqual(refused.json(), {"detail": "Your Tradition does not teach Villainy."})
+        self.row.refresh_from_db()
+        self.assertIsNone(self.row.mentor_accepted_at)
+
+    def test_declining_over_the_web_clears_the_mentor(self) -> None:
+        declined = self.hobb_client.post(f"{self.url}{self.row.pk}/decline-mentoring/")
+
+        self.assertEqual(declined.status_code, 200, declined.content)
+        self.assertEqual(declined.json(), {"detail": "You decline to teach Ysmay Villainy."})
+        self.row.refresh_from_db()
+        self.assertIsNone(self.row.mentor_id)
+        self.assertEqual(self.notices(self.ysmay), ["Hobb declined to teach you Villainy."])
+
+    def test_staff_may_answer_for_any_mentor(self) -> None:
+        staff = AccountFactory(is_staff=True)
+
+        accepted = self.api(staff).post(f"{self.url}{self.row.pk}/accept-mentoring/")
+
+        self.assertEqual(accepted.status_code, 200, accepted.content)
+        self.row.refresh_from_db()
+        self.assertIsNotNone(self.row.mentor_accepted_at)
+
+
 class StaffChoosingWhatATraditionTeaches(_TeachingCase):
     """Staff tick a Tradition's skills and author the self-teaching effect in the admin."""
 
@@ -272,9 +572,14 @@ class StaffChoosingWhatATraditionTeaches(_TeachingCase):
     def test_a_tick_opens_the_skill_to_mentors_and_to_creation(self) -> None:
         mentor = self.persona_of(self.hobb)
         line = f"training add skill={self.villainy.pk} ap=2 mentor={mentor}"
+        # Asking checks nothing about Hobb, so Ysmay learns nothing about him; he is the one
+        # told, when he answers, that his Tradition does not teach it.
         self.assertIn(
-            MENTOR_CANNOT_TEACH_LINE.format(mentor="Hobb", skill="Villainy"),
+            "You ask Hobb to teach you Villainy. Your training waits until Hobb agrees.",
             self.telnet(self.ysmay, line),
+        )
+        self.assertIn(
+            "Your Tradition does not teach Villainy.", self.telnet(self.hobb, "training accept 1")
         )
         self.assertEqual(self.creation_list(self.ashen), ["Reflection"])
 
@@ -288,7 +593,9 @@ class StaffChoosingWhatATraditionTeaches(_TeachingCase):
         self.assertEqual(saved.status_code, 302, saved.context and saved.context.get("errors"))
         self.assertEqual(list(self.ashen.taught_skills.all()), [self.villainy])
 
-        self.assertIn("Training allocation set for Villainy.", self.telnet(self.ysmay, line))
+        self.assertIn(
+            "You agree to teach Ysmay Villainy.", self.telnet(self.hobb, "training accept 1")
+        )
         self.assertEqual(self.creation_list(self.ashen), ["Reflection", "Villainy"])
         self.assertEqual(self.creation_list(self.dawn), ["Heroism", "Reflection"])
 

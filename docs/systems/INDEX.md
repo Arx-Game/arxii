@@ -102,13 +102,17 @@
   fighting style's skill is taught by the Traditions in `CombatStyle.taught_by`) and the rule module
   `world/magic/services/tradition_teaching.py` (`tradition_teaches`, `is_tradition_governed`, `is_outsider`,
   `TeachingContext`, `build_teaching_context`, `build_outsider_context`, `traditions_offered_in_creation`,
-  `training_verdict` -> `TrainingVerdict.refusal`,
+  `training_verdict` -> `TrainingVerdict.refusal`, `training_asking_refusal`, `mentor_acceptance_refusal`,
   `taught_affinity_skill_filter`, `taught_affinity_skill_names_by_tradition`; value types in
   `world/magic/types/tradition_teaching.py`) answer every question for creation, weekly training and
-  courses. `create_training_allocation` / `update_training_allocation` refuse a Magic skill with no teacher, a
-  mentor who cannot teach it (one line for every reason) and another of her own characters as mentor;
-  `process_weekly_training` asks again for every standing allocation and skips a stale one with one narrative
-  line and no AP spent. A course in a governed skill is refused at authoring (`SkillCourseOfferDetails.clean`) and at
+  courses. `create_training_allocation` / `update_training_allocation` refuse a Magic skill with no teacher and another of
+  her own characters as mentor, and naming a mentor only asks her (nothing about her is checked). A mentor must
+  agree (ruled 2026-11-28): `TrainingAllocation.mentor_accepted_at`, `world/skills/mentoring.py`
+  (`accept_mentoring`, `decline_mentoring`, `stop_mentoring`, `mentoring_for_account`, `answerable_allocation_ids`),
+  `AnswerMentoringAction`, telnet `training requests|accept|decline|stop` and the training viewset's `mentoring/`,
+  `accept-mentoring/`, `decline-mentoring/` and `stop-mentoring/` routes; a mentor who has not agreed counts as no
+  mentor. `process_weekly_training` asks again for every standing allocation and skips a stale one with one
+  narrative line and no AP spent. A course in a governed skill is refused at authoring (`SkillCourseOfferDetails.clean`) and at
   enrollment (`_refuse_closed_course`); an outsider's session adds
   `TraditionTeachingConfig.other_tradition_course_difficulty` (`CourseTerms`). Creation offers a draft only the
   affinity skills its Tradition teaches (`training_skills`, `reconcile_magic_training`,

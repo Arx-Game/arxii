@@ -1312,8 +1312,11 @@ Proven end-to-end by
   "no lever"); `build_outsider_context` is the one for callers that never ask `training_verdict`. A skill that
   is both an affinity's and a style's follows the affinity's list. `tradition_teaches` and `is_tradition_governed`
   read the same context, so the one-question and batch answers cannot differ. Her own character is never her
-  mentor, nor another character her player plays; a refused mentor always gets one line that names only the
-  persona she typed (`MENTOR_CANNOT_TEACH`), whatever the reason. The Tradition's state (self-taught, teachers gone, living) is
+  mentor, nor another character her player plays; a mentor who agreed and no longer qualifies gets one weekly line that names only the
+  persona she typed (`MENTOR_CANNOT_TEACH`), whatever the reason. A mentor must agree (#5326, ruled 2026-11-28):
+  naming a mentor only asks her (`training_asking_refusal` reads nothing about her), a mentor who has not agreed
+  counts as no mentor in `training_verdict(..., mentor_agreed=)`, and she reads which of her own facts fails when she
+  accepts (`mentor_acceptance_refusal`, `world/skills/mentoring.py`). The Tradition's state (self-taught, teachers gone, living) is
   never read. A student whose own Tradition does not teach a governed skill is an outsider: her Academy
   course sessions add `TraditionTeachingConfig.other_tradition_course_difficulty` (default 0), weekly mentoring
   carries no penalty. The exception is the `self_teaching` lever (`world.mechanics.levers.self_teaching_granted`),
