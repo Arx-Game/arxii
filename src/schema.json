@@ -6399,6 +6399,7 @@ paths:
         name: id
         schema:
           type: string
+          pattern: ^\d+$
         required: true
       tags:
       - character-creation
