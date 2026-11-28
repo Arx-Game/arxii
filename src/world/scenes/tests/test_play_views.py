@@ -1065,7 +1065,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         """Baseline: 6 total poses, 1 of them a reply."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=1)
-        with self.assertNumQueries(29):  # ... 27->28 #3751, 28->29 #5308
+        with self.assertNumQueries(30):  # ... 27->28 #3751, 28->29 #5308, 29->30 #5327
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -1076,7 +1076,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         replies adds no query."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=3)
-        with self.assertNumQueries(29):  # ... 27->28 #3751, 28->29 #5308
+        with self.assertNumQueries(30):  # ... 27->28 #3751, 28->29 #5308, 29->30 #5327
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -1206,7 +1206,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
 
         # 18->17 by #4101 (cold-only GM/owner fallback retired), 17->18 by #4413
         # (cached_selected_entry, paid once on a cold account).
-        with self.assertNumQueries(19):  # 18->19 by #5308 (the pose-reach Prefetch)
+        with self.assertNumQueries(20):  # 18->19 by #5308 (reach), 19->20 by #5327 (marked acts)
             _, interactions = _rows(request, params={"conversation": f"scene:{scene.pk}"})
 
         pose_ids = {pose.pk for pose in poses}

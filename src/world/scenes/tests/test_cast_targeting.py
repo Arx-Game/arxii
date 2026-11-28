@@ -382,13 +382,13 @@ class TestFilteredGroupDeferredCases(CastScenarioMixin):
 
 
 @tag("postgres")
-class TestCastOnAnAllyInTroubleEarns(CastScenarioMixin):
-    """A beneficial cast on a badly hurt ally earns the resonance that notices them (#5124)."""
+class TestCastOnAnAllyInTroubleIsRecorded(CastScenarioMixin):
+    """A beneficial cast on a badly hurt ally is written down with the resonance that notices
+    them as a suggestion, and pays nothing until her player marks it (#5124, #5327)."""
 
-    def test_the_cast_roll_earns_a_someone_in_trouble_resonance(self) -> None:
+    def test_the_cast_roll_records_a_someone_in_trouble_suggestion(self) -> None:
         from evennia_extensions.factories import AccountFactory
         from world.covenants.perks.constants import Situation
-        from world.magic.constants import GainSource
         from world.magic.factories import (
             CharacterResonanceFactory,
             KindledDeedAwardFactory,
@@ -396,7 +396,7 @@ class TestCastOnAnAllyInTroubleEarns(CastScenarioMixin):
             KindlingSituationFactory,
             ResonanceFactory,
         )
-        from world.magic.models import ResonanceGrant
+        from world.magic.models import RecordedAct, RecordedActSuggestion, ResonanceGrant
 
         technique = TechniqueFactory(
             effect_type=BinaryEffectTypeFactory(),
@@ -440,7 +440,8 @@ class TestCastOnAnAllyInTroubleEarns(CastScenarioMixin):
                 technique=technique,
             )
 
-        grant = ResonanceGrant.objects.get(source=GainSource.KINDLED_DEED)
+        act = RecordedAct.objects.get(character_sheet=caster_sheet)
         self.assertEqual(
-            (grant.character_sheet, grant.resonance, grant.amount), (caster_sheet, mercy, 10)
+            [row.resonance for row in RecordedActSuggestion.objects.filter(act=act)], [mercy]
         )
+        self.assertFalse(ResonanceGrant.objects.exists())

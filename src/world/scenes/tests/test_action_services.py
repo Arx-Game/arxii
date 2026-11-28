@@ -2079,11 +2079,12 @@ class KindledDeedSceneSeamTests(TestCase):
         )
 
     @patch("world.scenes.action_services.start_action_resolution")
-    def test_the_primary_roll_earns_and_an_additional_target_roll_does_not(
+    def test_the_primary_roll_is_recorded_and_an_additional_target_roll_is_not(
         self, mock_resolve: MagicMock
     ) -> None:
-        from world.magic.constants import GainSource
-        from world.magic.models import ResonanceGrant
+        """A situation only suggests (#5327): the primary roll writes one act for her player to
+        mark, with the resonance the situation reached, and pays nothing."""
+        from world.magic.models import RecordedAct, RecordedActSuggestion, ResonanceGrant
         from world.scenes.action_services import (
             _resolve_action_against_persona,
             _resolve_standard_action,
@@ -2093,11 +2094,16 @@ class KindledDeedSceneSeamTests(TestCase):
         request = self._request()
 
         _resolve_standard_action(request)
-        grant = ResonanceGrant.objects.get(source=GainSource.KINDLED_DEED)
+        act = RecordedAct.objects.get(character_sheet=self.initiator.character_sheet)
+        self.assertEqual(act.outcome, self.success)
         self.assertEqual(
-            (grant.character_sheet, grant.resonance, grant.amount),
-            (self.initiator.character_sheet, self.resonance, 10),
+            [row.resonance for row in RecordedActSuggestion.objects.filter(act=act)],
+            [self.resonance],
         )
+        self.assertFalse(ResonanceGrant.objects.exists())
 
         _resolve_action_against_persona(request, self.other_target)
-        self.assertEqual(ResonanceGrant.objects.filter(source=GainSource.KINDLED_DEED).count(), 1)
+        self.assertEqual(
+            RecordedAct.objects.filter(character_sheet=self.initiator.character_sheet).count(), 1
+        )
+        self.assertFalse(ResonanceGrant.objects.exists())

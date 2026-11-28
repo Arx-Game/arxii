@@ -25,7 +25,11 @@ from evennia.utils.idmapper import models as idmapper_models
 from commands.endorse import CmdEndorse, CmdPoses
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+from world.magic.factories import (
+    CharacterResonanceFactory,
+    PoseResonanceReachFactory,
+    ResonanceFactory,
+)
 from world.magic.models import PoseEndorsement, SceneEntryEndorsement
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility, PoseKind
@@ -55,9 +59,9 @@ class EndorsementJourneyE2ETests(TestCase):
 
     Golden path:
     1. ``poses <endorsee>``              → lists the pose with its #1 position
-    2. ``endorse pose <endorsee> resonance=<R>``         → preview (no DB row)
-    3. ``endorse pose <endorsee> resonance=<R> confirm`` → creates PoseEndorsement
-    4. ``endorse entry <endorsee> resonance=<R>``        → creates SceneEntryEndorsement
+    2. ``endorse pose <endorsee> resonance=<R> confirm`` → creates PoseEndorsement (a pick on a
+       pose that named no resonance commits at once, waiting for the poser to accept, #5327)
+    3. ``endorse entry <endorsee> resonance=<R>``        → creates SceneEntryEndorsement
     """
 
     def setUp(self) -> None:
@@ -124,14 +128,6 @@ class EndorsementJourneyE2ETests(TestCase):
         self.assertIn("#1", output)
         self.assertIn(self.pose.content[:20], output)
 
-    def test_endorse_pose_preview_no_db_row(self) -> None:
-        """``endorse pose <char> resonance=<R>`` shows preview; no PoseEndorsement written."""
-        endorsee_name = self.endorsee_char.name
-        self._run_cmd(CmdEndorse, f"pose {endorsee_name} resonance={self.resonance.name}")
-        self.assertEqual(PoseEndorsement.objects.count(), 0)
-        last_output = self.endorser_char.msg.call_args_list[-1][0][0]
-        self.assertIn("confirm", last_output.lower())
-
     def test_endorse_pose_confirm_creates_row(self) -> None:
         """``endorse pose <char> resonance=<R> confirm`` creates a PoseEndorsement."""
         endorsee_name = self.endorsee_char.name
@@ -173,9 +169,11 @@ class EndorsementJourneyE2ETests(TestCase):
         self.assertEqual(endorsement.scene, self.scene)
 
     def test_endorse_duplicate_pose_shows_error(self) -> None:
-        """A second ``confirm`` for the same pose shows an error, not an exception."""
+        """A second ``confirm`` for a pose that named its resonance shows an error, not an
+        exception. (Typing the command again on a pose that named none changes the pick.)"""
+        PoseResonanceReachFactory(interaction=self.pose, resonance=self.resonance)
         endorsee_name = self.endorsee_char.name
-        args = f"pose {endorsee_name} resonance={self.resonance.name} confirm"
+        args = f"pose {endorsee_name} confirm"
         self._run_cmd(CmdEndorse, args)
         self._run_cmd(CmdEndorse, args)  # second attempt
         # Only one endorsement; second attempt sent an error message

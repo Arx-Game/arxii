@@ -70,7 +70,8 @@ class NarratedEventFieldTest(APITestCase):
         # Prefetch (an extra query) is gone. 25 (#4413): the viewer's selected
         # character, Account.cached_selected_entry, paid once on a cold account.
         # 26 (#5308): the feed prefetches each pose's resonance reach in one more query.
-        with self.assertNumQueries(26):
+        # 27 (#5327): and each pose's marked acts in one more.
+        with self.assertNumQueries(27):
             resp = self.client.get(url, {"scene": self.scene.pk})
         self.assertEqual(resp.status_code, 200, resp.data)
         rows = {row["id"]: row for row in resp.data["results"]}

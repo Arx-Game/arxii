@@ -14,6 +14,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     CharacterResonanceFactory,
     PoseEndorsementFactory,
+    PoseResonanceReachFactory,
     ResonanceFactory,
     SceneEntryEndorsementFactory,
 )
@@ -1253,6 +1254,9 @@ class PoseSubmitViewTests(APITestCase):
         # and the retry below.
         resonance = ResonanceFactory()
         CharacterResonanceFactory(character_sheet=self.identity, resonance=resonance)
+        # The pose named its resonance, so the endorsement counts at once (a pick on a pose that
+        # named none waits for the poser and is not listed, #5327).
+        PoseResonanceReachFactory(interaction=interaction, resonance=resonance)
         create_pose_endorsement(self.other_identity, interaction, resonance)
         toggle_interaction_favorite(interaction=interaction, roster_entry=self.roster_entry)
         toggle_interaction_reaction(interaction=interaction, account=self.other_account, emoji="👍")
@@ -1571,7 +1575,8 @@ class InteractionListQueryBudgetTests(APITestCase):
         # Run once to observe the count, then assert.
         # 52->27 by #3816, 27->26 by #4101 (see below), 26->27 by #4413 (the viewer's
         # selected character, one cold query per account: cached_selected_entry).
-        with self.assertNumQueries(28):  # 27->28 by #5308 (the pose-reach Prefetch)
+        # 28->29 by #5327 (the marked-acts Prefetch).
+        with self.assertNumQueries(29):  # 27->28 by #5308 (the pose-reach Prefetch)
             # #3816 dropped this from 52 to 27: Interaction.cached_receivers /
             # cached_target_personas / cached_favorites / cached_reactions /
             # cached_action_links were plain @property/@x.setter pairs backed by
@@ -1671,7 +1676,8 @@ class InteractionListQueryBudgetTests(APITestCase):
 
         url = reverse("interaction-list")
         # 52->27 by #3816, 27->26 by #4101 — see above, 26->27 by #4413 (cached_selected_entry).
-        with self.assertNumQueries(28):  # 27->28 by #5308 (the pose-reach Prefetch)
+        # 28->29 by #5327 (the marked-acts Prefetch).
+        with self.assertNumQueries(29):  # 27->28 by #5308 (the pose-reach Prefetch)
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset
@@ -1721,8 +1727,8 @@ class InteractionListQueryBudgetTests(APITestCase):
 
         url = reverse("interaction-list")
         # unchanged from the sibling tests above (27->26 by #4101, 26->27 by #4413,
-        # 27->28 by #5308)
-        with self.assertNumQueries(28):
+        # 27->28 by #5308, 28->29 by #5327)
+        with self.assertNumQueries(29):
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         results = response.data["results"]
