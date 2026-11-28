@@ -127,9 +127,9 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         db_default="",
         help_text=(
-            "The word a player reads when they claim resonance set aside from a kindled deed "
-            "in this affinity, in the present tense, such as 'gloat', 'inspire' or 'relish'. "
-            "The line reads 'You <verb>. Your <resonance> grows by N.'"
+            "The word a player reads when a mark pays resonance in this affinity, in the "
+            "present tense, such as 'gloat', 'inspire' or 'relish'. The line reads "
+            "'You <verb>. Your <resonance> grows by N.'"
         ),
     )
     earn_rate_percent = models.PositiveSmallIntegerField(
@@ -166,6 +166,14 @@ class Affinity(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "What an Anima ritual of this affinity's resonance does to the partner who joins "
             "in. A positive number adds that much fatigue to the partner, a negative number "
             "eases that much, and zero does nothing."
+        ),
+    )
+    gain_fatigue = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        help_text=(
+            "What one gain in this affinity's resonance costs whoever pays for it, in "
+            "fatigue, before any fatigue reduction the payer has. 0 charges nothing."
         ),
     )
     skill = models.OneToOneField(

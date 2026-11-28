@@ -167,8 +167,7 @@ class KindlingAdminPagesTests(TestCase):
         self.assertEqual(positions, sorted(positions))
         self.assertLess(page.index("Rally kindles at"), page.index("Earned per result"))
         self.assertLess(page.index("Earned per result"), page.index("Anima ritual earns"))
-        self.assertIn("Instant percent", page)
-        self.assertIn("Claim percent", page)
+        self.assertIn("Recorded act days", page)
         data = form_data(response)
         harm = PropertyFactory()
         success, good = CheckOutcomeFactory(), CheckOutcomeFactory()
@@ -182,8 +181,7 @@ class KindlingAdminPagesTests(TestCase):
         earned = "kindleddeedaward"
         data[f"{earned}-0-outcome_tier"] = str(good.pk)
         data[f"{earned}-0-amount"] = "5"
-        data["instant_percent"] = "80"
-        data["claim_percent"] = "60"
+        data["recorded_act_days"] = "60"
         ritual = "animaritualresonanceaward"
         data[f"{ritual}-0-outcome_tier"] = str(success.pk)
         data[f"{ritual}-0-amount"] = "7"
@@ -191,7 +189,7 @@ class KindlingAdminPagesTests(TestCase):
         response = self.client.post(url, data)
         self.assertEqual(response.status_code, 302)
         config = KindlingConfig.objects.get(pk=self.config.pk)
-        self.assertEqual((config.instant_percent, config.claim_percent), (80, 60))
+        self.assertEqual(config.recorded_act_days, 60)
         self.assertEqual(config.harm_property, harm)
         tier = KindledStrengthTier.objects.get(rank=1)
         self.assertEqual((tier.name, tier.pull_levels), ("Glimmer", 4))

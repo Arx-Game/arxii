@@ -15,7 +15,6 @@ from rest_framework.response import Response
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.serializers_kindling import ImpulseSerializer, KindledResonanceSerializer
-from world.magic.services.claiming import unclaimed_by_resonance
 from world.magic.services.gain import waiting_trickles
 from world.magic.services.impulses import impulses_now, safe_refresh_impulses_for_character
 from world.magic.services.kindling import kindled_resonances_now
@@ -105,12 +104,9 @@ class KindledResonanceViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
         sheet = self.filter_queryset(self.get_queryset()).first()
         rows = kindled_resonances_now(sheet) if sheet is not None else []
         impulses = ImpulseSerializer(self._impulses(sheet), many=True).data
-        # What each resonance has set aside to claim (#5181): read once for the whole page.
-        # And what their days have piled up for the next anima ritual to harvest (#5308).
-        context = {
-            "unclaimed": unclaimed_by_resonance(sheet) if sheet is not None else {},
-            "trickle": waiting_trickles(sheet) if sheet is not None else {},
-        }
+        # What their days have piled up for the next anima ritual to harvest (#5308): read
+        # once for the whole page.
+        context = {"trickle": waiting_trickles(sheet) if sheet is not None else {}}
         page = self.paginate_queryset(rows)
         if page is not None:
             response = self.get_paginated_response(

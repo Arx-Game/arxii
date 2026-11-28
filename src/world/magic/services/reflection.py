@@ -56,8 +56,13 @@ _NOT_A_DEED = "That is not a deed you can reflect on."
 _CHOICES = {choice.lower(): choice for choice in ReflectionChoice.values}
 _BAD_CHOICE = "Say whether you embrace or disown it."
 _BAD_BURDEN_CHOICE = "Say whether you absolve, condemn or succumb to it."
-# The deeds a player can reflect on: a kindled deed, or having succumbed to the Mire (#5177).
-_REFLECTABLE_DEED_SOURCES = (GainSource.KINDLED_DEED, GainSource.SUCCUMBED)
+# The deeds a player can reflect on: a kindled deed, a gain marked on an act (#5327), or having
+# succumbed to the Mire (#5177).
+_REFLECTABLE_DEED_SOURCES = (
+    GainSource.KINDLED_DEED,
+    GainSource.MARKED_ACT,
+    GainSource.SUCCUMBED,
+)
 # The literal a player types before a Sinner's name to name the Mire they carry for them.
 BURDEN_PREFIX = "mire:"
 _VERB = {

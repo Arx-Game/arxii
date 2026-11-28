@@ -39,21 +39,6 @@ class SineatingFieldsMixin(serializers.Serializer):
     sineating_units = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
 
-class ClaimFieldsMixin(serializers.Serializer):
-    """The optional claim a pose or journal entry carries (#5181).
-
-    ``claim`` collects the resonance a kindled deed set aside; ``claim_resonance_ids`` limits it
-    to those resonances (omitted or empty means everything waiting). A named resonance the
-    character has nothing waiting in is refused before the pose or entry is written. A claim
-    can ride on the same pose as a reflection or a Sineating.
-    """
-
-    claim = serializers.BooleanField(required=False, default=False)
-    claim_resonance_ids = serializers.ListField(
-        child=serializers.IntegerField(), required=False, allow_empty=True
-    )
-
-
 class ReachFieldsMixin(serializers.Serializer):
     """The optional reach a pose carries (#5308).
 

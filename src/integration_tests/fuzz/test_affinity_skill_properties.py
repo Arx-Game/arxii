@@ -5,7 +5,7 @@ check per affinity it pays (the act's stat plus that affinity's skill), a good r
 gain, and every pull rolls a worth check with the same skill. Each class below holds one rule of
 that design, quoted in the maintainer's words from the issue. Every example builds its
 characters fresh with factories and uses our own functions (``grant_resonance``,
-``award_kindled_deeds``, ``claim_kindled``, ``apply_ritual_bond``, ``spend_resonance_for_pull``);
+``award_kindled_deeds``, ``apply_ritual_bond``, ``spend_resonance_for_pull``);
 the shared catalog lives once in ``setUpTestData`` (a Hypothesis test's own ``setUp`` runs
 outside any transaction, so it would leak rows between examples).
 
@@ -68,7 +68,6 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     KindledDeedAwardFactory,
     KindledStrengthTierFactory,
-    KindlingConfigFactory,
     KindlingSituationFactory,
     ResonanceCheckAwardFactory,
     ResonanceFactory,
@@ -88,7 +87,6 @@ from world.magic.models import (
     TrickleAccrual,
 )
 from world.magic.services import preview_resonance_pull, spend_resonance_for_pull
-from world.magic.services.claiming import claim_kindled
 from world.magic.services.gain import (
     get_resonance_gain_config,
     residence_trickle_tick,
@@ -630,57 +628,6 @@ class UnheldIsEarned(_World, HypothesisTestCase):
         self.assertFalse(CharacterResonance.objects.filter(character_sheet=sheet).exists())
 
 
-class ClaimIsOnlyACollection(_World, HypothesisTestCase):
-    """What a deed set aside grew at the deed, so collecting it rolls nothing."""
-
-    @settings(max_examples=40, deadline=None)
-    @given(
-        key=st.sampled_from(RESONANCE_KEYS),
-        amount=st.integers(1, 60),
-        instant=st.integers(1, 100),
-        aside=st.integers(1, 100),
-        percent=st.integers(0, 200),
-    )
-    def test_the_instant_and_set_aside_shares_grow_alike_and_a_claim_writes_bonus_0(
-        self, key: str, amount: int, instant: int, aside: int, percent: int
-    ) -> None:
-        """Maintainer: "since the deed was already rolled once and got the bonus, the journal is
-        just a collection step".
-
-        Given any award, split of the award between what is paid now and what is set aside,
-        and bonus percent the deed's one check is worth: the grant records that percent; the
-        instant share and the set-aside share are each the plain share plus that same percent
-        of it; and claiming what waits writes a grant with bonus 0 for exactly what was set
-        aside, rolling no check at all.
-        """
-        assume(amount * aside // 100 > 0)
-        self.configure(gain=percent)
-        sheet = self.character(holds=[key])
-        self.kindle([key], sheet)
-        self.deed_award(amount)
-        KindlingConfigFactory(instant_percent=instant, claim_percent=aside)
-
-        with force_every_check_outcome(self.outcomes["Success"]) as capture:
-            (deed,) = self.do_deed(sheet)
-            rolls_at_the_deed = len(self.bonus_calls(capture))
-            waiting = CharacterResonance.objects.get(
-                character_sheet=sheet, resonance=self.resonances[key]
-            ).kindled_unclaimed
-            claimed = claim_kindled(sheet)
-
-        plain_instant = max(1, amount * instant // 100)
-        plain_aside = amount * aside // 100
-        self.assertEqual(rolls_at_the_deed, 1)
-        self.assertEqual(deed.bonus_percent, percent)
-        self.assertEqual(deed.amount, plain_instant + plain_instant * percent // 100)
-        self.assertEqual(waiting, plain_aside + plain_aside * percent // 100)
-        self.assertEqual(len(self.bonus_calls(capture)), rolls_at_the_deed)
-        (claim,) = ResonanceGrant.objects.filter(source=GainSource.KINDLED_CLAIM)
-        self.assertEqual(claim.amount, waiting)
-        self.assertEqual((claim.bonus_outcome, claim.bonus_percent), (None, 0))
-        self.assertEqual([c.amount for c in claimed], [waiting])
-
-
 def _tier_name(outcome: CheckOutcome) -> str:
     return outcome.name
 
@@ -719,7 +666,7 @@ class TricklesWaitForTheRitual(_World, HypothesisTestCase):
         resonance gains. So they're distinct."
 
         Given any resonances a room's residence trickles, any days of ticks and a ritual that
-        succeeds or fails: the ticks change no balance and no ``kindled_unclaimed``, and what
+        succeeds or fails: the ticks change no balance, and what
         waits is exactly the days' trickle; the ritual then writes one ``TRICKLE_HARVEST`` grant
         per trickle resonance, each the pile grown by its affinity's check; it rolls one check
         per affinity across every grant it wrote (a roll's result shared by that affinity's
@@ -728,7 +675,7 @@ class TricklesWaitForTheRitual(_World, HypothesisTestCase):
         self.configure(gain=RANKED_GAINS)
         sheet, daily = self.performer_with_a_residence(sorted(keys))
         before = {
-            row.resonance_id: (row.balance, row.kindled_unclaimed)
+            row.resonance_id: row.balance
             for row in CharacterResonance.objects.filter(character_sheet=sheet)
         }
 
@@ -736,7 +683,7 @@ class TricklesWaitForTheRitual(_World, HypothesisTestCase):
             residence_trickle_tick()
 
         after = {
-            row.resonance_id: (row.balance, row.kindled_unclaimed)
+            row.resonance_id: row.balance
             for row in CharacterResonance.objects.filter(character_sheet=sheet)
         }
         self.assertEqual(after, before)

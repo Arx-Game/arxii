@@ -497,11 +497,12 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         GainSource.MIRE_PURIFIED,
         GainSource.SUCCUMB_BONUS,
         GainSource.SINEATER_FALL,
-        # #5181: a claimed share and an Anima ritual's resonance name no typed row either.
-        GainSource.KINDLED_CLAIM,
+        # #5181: an Anima ritual's resonance names no typed row either.
         GainSource.ANIMA_RITUAL,
         # #5308: the harvest of waiting trickles names no typed row either.
         GainSource.TRICKLE_HARVEST,
+        # #5327: a mark names no typed row; the recorded act holds the link back to the grant.
+        GainSource.MARKED_ACT,
     ):
         # No typed source FK — the grant is attributed by discriminator only.
         return

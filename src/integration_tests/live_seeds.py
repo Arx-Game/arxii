@@ -1574,7 +1574,7 @@ def seed_strength_spec(*, username: str) -> StrengthSpecSeed:  # noqa: PLR0915 -
                     outcome_tier=ensure_canonical_check_outcome(tier_name),
                     defaults={"amount": 10},
                 )
-            KindlingConfigFactory(instant_percent=100, claim_percent=50)
+            KindlingConfigFactory()
             template = ConditionTemplateFactory(
                 name="Corruption (Praedari)",
                 has_progression=True,
@@ -1716,7 +1716,7 @@ def _strength_spec_world() -> None:
     blazing.cast_power = 6
     blazing.earn_percent = 100
     blazing.save()
-    KindlingConfigFactory(instant_percent=100, claim_percent=50)
+    KindlingConfigFactory()
     kindled = Resonance.objects.get(name="Praedari")
     if kindled.feeling is None:
         kindled.feeling = PropertyFactory(name="Praedari feeling")

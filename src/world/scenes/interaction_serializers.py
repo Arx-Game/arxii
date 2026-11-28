@@ -7,7 +7,6 @@ from rest_framework import serializers
 
 from world.conditions.thumbnail_services import persona_face_url
 from world.magic.serializers_reflection import (
-    ClaimFieldsMixin,
     ReachFieldsMixin,
     ReflectionFieldsMixin,
     SineatingFieldsMixin,
@@ -1112,9 +1111,7 @@ class ReplyTargetSerializer(serializers.Serializer):
         return attrs
 
 
-class PoseSubmitSerializer(
-    ReflectionFieldsMixin, SineatingFieldsMixin, ClaimFieldsMixin, ReachFieldsMixin
-):
+class PoseSubmitSerializer(ReflectionFieldsMixin, SineatingFieldsMixin, ReachFieldsMixin):
     """Write serializer for submitting a POSE-mode Interaction from the web frontend.
 
     Validates persona ownership and action_link_ids integrity before the view

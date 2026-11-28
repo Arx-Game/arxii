@@ -8,8 +8,7 @@ through the web cast endpoint, naming the resonance to work it in. Numbers this 
 
 * Blazing: cast power 6, earn percent 100. Abyssal: kindled boost 150, earn rate 150, corruption
   coefficient 10. Primal: kindled boost 100, earn rate 100, corruption coefficient 0.
-* A Success earns a kindled deed 10. The kindling config pays all of it at once
-  (instant percent 100) and sets half aside to claim.
+* A Success earns a kindled deed 10, and the whole deed pays at once.
 * Corruption config: tier 1 coefficient 10, light part 10 percent below an Abyssal share of 50.
   The technique is tier 1 with intensity 20, and a cast worked in a resonance puts its whole
   intensity on that resonance.
@@ -206,7 +205,7 @@ class _AnAbyssalCasterInAScene(JourneyCase):
         )
         success = CheckOutcome.objects.get(name="Success")
         KindledDeedAward.objects.update_or_create(outcome_tier=success, defaults={"amount": 10})
-        KindlingConfigFactory(instant_percent=100, claim_percent=50)
+        KindlingConfigFactory()
         self.assertEqual(self.technique.tier, 1)
         _corruption_condition(self.praedari)
 

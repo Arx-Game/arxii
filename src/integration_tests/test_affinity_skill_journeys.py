@@ -3,10 +3,9 @@
 Staff linked one Magic skill to each affinity and gave the bonus check a stat (Presence), a
 difficulty of 0 and an award table: a Critical Success grows a gain by 50 percent, a Partial
 Success adds nothing. Hand-worked numbers: a threatening act earns 10 Cruelty at its roll's
-Success, split 10 now and 10 set aside (the kindling config pays all of it now and sets aside
-as much again). A 50 percent check makes both 15. The dice are pinned by queueing the results
-(``force_check_outcome(first, second)``): the act's own roll lands on Success, then the bonus
-check on the result named in the test. Nothing of ours is patched.
+Success, all of it at once. A 50 percent check makes it 15. The dice are pinned by queueing
+the results (``force_check_outcome(first, second)``): the act's own roll lands on Success, then
+the bonus check on the result named in the test. Nothing of ours is patched.
 
 Mirelle (Abyssal, Villainy 30) and Aldric (Celestial, no Villainy) threaten the same prisoner.
 Both earn Cruelty, which neither held. Both bonus checks add Villainy, the stat of the threat's
@@ -126,7 +125,7 @@ class TheHeroAndTheVillainDoOneCruelAct(_Skills, _Gate):
     def setUp(self) -> None:
         super().setUp()
         self.author_the_skills()
-        KindlingConfigFactory(instant_percent=100, claim_percent=100)
+        KindlingConfigFactory()
         self.mirelle, self.aldric = self.mira, self.tomas
         self.cruelty = ResonanceFactory(name="Cruelty", affinity=self.abyssal)
         self.mercy = ResonanceFactory(name="Mercy", affinity=self.celestial)
@@ -181,27 +180,13 @@ class TheHeroAndTheVillainDoOneCruelAct(_Skills, _Gate):
         self.assertEqual(self.points_of(self.mirelle, villain_call), 30)
         self.assertEqual(self.points_of(self.aldric, hero_call), 0)
 
-        # Cruelty was held by neither; both hold it now. 10 now and 10 set aside for Aldric;
-        # Mirelle's 50 percent makes both shares 15.
-        self.assertEqual(
-            (
-                self.cruelty_row(self.aldric).balance,
-                self.cruelty_row(self.aldric).kindled_unclaimed,
-            ),
-            (10, 10),
-        )
-        self.assertEqual(
-            (
-                self.cruelty_row(self.mirelle).balance,
-                self.cruelty_row(self.mirelle).kindled_unclaimed,
-            ),
-            (15, 15),
-        )
-        self.assertTold(self.aldric, "You earned 10 Cruelty. 10 more is waiting to be claimed.")
+        # Cruelty was held by neither; both hold it now. The whole deed pays at once: 10 for
+        # Aldric, and Mirelle's 50 percent makes hers 15.
+        self.assertEqual(self.cruelty_row(self.aldric).balance, 10)
+        self.assertEqual(self.cruelty_row(self.mirelle).balance, 15)
+        self.assertTold(self.aldric, "You earned 10 Cruelty.")
         self.assertTold(
-            self.mirelle,
-            "You earned 15 Cruelty. Your Villainy check added 50 percent. "
-            "15 more is waiting to be claimed.",
+            self.mirelle, "You earned 15 Cruelty. Your Villainy check added 50 percent."
         )
         self.assertNotTold(self.aldric, "Villainy check")
         grants = {
@@ -215,18 +200,6 @@ class TheHeroAndTheVillainDoOneCruelAct(_Skills, _Gate):
             aura__character=self.aldric.sheet_data, affinity=self.abyssal
         )
         self.assertGreater(share.percent, share.settled_percent)
-
-    def test_claiming_what_the_deed_set_aside_rolls_nothing(self) -> None:
-        self.threaten(self.mirelle, self.mirelle_mission, self.crit)
-
-        with force_every_check_outcome(self.crit) as capture:
-            told = self.telnet(self.mirelle, "pose/claim glares down at the prisoner.")
-
-        self.assertIn("Your Cruelty grows by 15.", told)
-        self.assertEqual(capture.calls, [])
-        claim = ResonanceGrant.objects.get(source=GainSource.KINDLED_CLAIM)
-        self.assertEqual((claim.amount, claim.bonus_outcome, claim.bonus_percent), (15, None, 0))
-        self.assertEqual(self.cruelty_row(self.mirelle).balance, 30)
 
 
 def _assign(template, character):

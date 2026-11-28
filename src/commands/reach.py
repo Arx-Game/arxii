@@ -3,10 +3,9 @@
     pose/reach <resonance>=<text>
 
 ``pose/reach`` poses ``<text>`` and records that the pose reaches for the resonance named before
-the ``=``, held or not. An endorsement of the pose pays that resonance. It combines only with a
-bare ``pose/claim`` (as ``pose/claim/reach``), because ``=`` already belongs to the other
-attachments. No game logic lives here: the service resolves the name and the pose action checks
-the reach before the pose posts and writes it after.
+the ``=``, held or not. An endorsement of the pose pays that resonance. It stands alone, because
+``=`` already belongs to the other attachments. No game logic lives here: the service resolves
+the name and the pose action checks the reach before the pose posts and writes it after.
 """
 
 from __future__ import annotations

@@ -37,6 +37,7 @@ Submodules (see Scope 6 §4.4):
 - trickle: TrickleAccrual (#5308)
 - kindling: KindlingSituation, KindledStrengthTier, KindlingConfig, KindledDeedAward,
   AnimaRitualResonanceAward (#5181), RallyKindlingStrength, Kindling (#5124)
+- recorded_act: RecordedAct, RecordedActSuggestion (#5327)
 - reflection: Reflection, SettlingRite (#5124)
 - progression_milestone: MagicProgressionMilestone
 - drift: DriftCorrectionConfig, DriftCorrectionOutcomeShare, DriftConversionOffer,
@@ -131,7 +132,7 @@ from world.magic.models.fall_redemption import (
     ResonanceConversion,
 )
 from world.magic.models.fury import FuryConfig, FuryDegreeShare, FuryTier
-from world.magic.models.gain_config import ResonanceGainConfig
+from world.magic.models.gain_config import ResonanceGainConfig, WeeklyMarkReturn
 from world.magic.models.ghost_tutor import GhostTutelage
 from world.magic.models.gift_unlocks import (
     CharacterGiftUnlock,
@@ -206,6 +207,7 @@ from world.magic.models.primum import (
     PrimumSighting,
 )
 from world.magic.models.progression_milestone import MagicProgressionMilestone
+from world.magic.models.recorded_act import RecordedAct, RecordedActSuggestion
 from world.magic.models.reflection import Reflection, SettlingRite
 from world.magic.models.reincarnation import Reincarnation
 from world.magic.models.relationship_bond_pull_tuning import RelationshipBondPullTuning
@@ -484,6 +486,9 @@ __all__ = [
     "PrimumSighting",
     "PrimumStep",
     "RallyKindlingStrength",
+    # recorded acts and their suggestions (#5327)
+    "RecordedAct",
+    "RecordedActSuggestion",
     "Reflection",
     "Reincarnation",
     # relationship bond pull modulation (#1849)
@@ -602,5 +607,7 @@ __all__ = [
     "TrainingOutcomeAward",
     # waiting resonance trickles (#5308)
     "TrickleAccrual",
+    # weekly table that cuts repeat marks (#5327)
+    "WeeklyMarkReturn",
     "aura_shares_prefetch",
 ]

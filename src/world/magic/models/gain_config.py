@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from django.core.exceptions import ValidationError
+from django.core.validators import MaxValueValidator
 from django.db import models
 
 from core.managers import ArxSharedMemoryManager
@@ -122,3 +123,33 @@ class ResonanceGainConfig(SharedMemoryModel):
                     )
                 }
             )
+
+
+class WeeklyMarkReturn(SharedMemoryModel):
+    """One step of the weekly table that cuts repeat marks (#5327).
+
+    ``gained_at_least`` is what she must already have gained from marks this game week, before
+    the mark in hand, for the row to apply. The row with the greatest threshold she has reached
+    sets the percent of the mark's amount that pays. No rows authored means nothing is reduced.
+    Authored choices and endorsements are never reduced by it. Follows ``StandingCapBand``.
+    """
+
+    gained_at_least = models.PositiveIntegerField(
+        unique=True,
+        help_text=(
+            "Applies once she has gained at least this much from marks this game week, "
+            "before this mark."
+        ),
+    )
+    percent_paid = models.PositiveSmallIntegerField(
+        validators=[MaxValueValidator(100)],
+        help_text="The percent of a mark's amount that pays at this step. 0 pays nothing.",
+    )
+
+    class Meta:
+        ordering = ["gained_at_least"]
+        verbose_name = "Weekly mark return"
+        verbose_name_plural = "Weekly mark returns"
+
+    def __str__(self) -> str:
+        return f"WeeklyMarkReturn({self.gained_at_least}+ pays {self.percent_paid}%)"

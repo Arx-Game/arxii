@@ -8,7 +8,7 @@ from world.game_clock.serializers import IcDateDisplayField
 from world.journals.constants import PosthumousOverride, ResponseType
 from world.journals.models import JournalEntry, JournalTag
 from world.journals.services import can_retort
-from world.magic.serializers_reflection import ClaimFieldsMixin, ReflectionFieldsMixin
+from world.magic.serializers_reflection import ReflectionFieldsMixin
 
 # Serializer field names, extracted to satisfy the string-literal lint
 # (tools/lint_string_literal.py) at their "<name> in attrs" membership checks below.
@@ -188,7 +188,7 @@ class JournalEntryDetailSerializer(_ViewerFieldsMixin, serializers.ModelSerializ
         return obj.revealed_at is not None
 
 
-class JournalEntryCreateSerializer(ReflectionFieldsMixin, ClaimFieldsMixin):
+class JournalEntryCreateSerializer(ReflectionFieldsMixin):
     """Serializer for creating a new journal entry."""
 
     title = serializers.CharField(max_length=200)

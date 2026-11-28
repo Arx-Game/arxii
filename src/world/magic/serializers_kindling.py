@@ -18,18 +18,10 @@ class KindledResonanceSerializer(serializers.Serializer):
     kindled = serializers.BooleanField(source="is_kindled")
     strength_name = serializers.SerializerMethodField()
     reasons = serializers.ListField(child=serializers.CharField())
-    claim_verb = serializers.CharField(source="resonance.affinity.claim_verb")
-    unclaimed = serializers.SerializerMethodField()
     waiting_trickle = serializers.SerializerMethodField()
 
     def get_strength_name(self, obj) -> str | None:
         return obj.tier.name if obj.tier is not None else None
-
-    def get_unclaimed(self, obj) -> int:
-        """What a kindled deed set aside for the character in this resonance and they have not
-        claimed (#5181). Kindled or not: it waits however long it takes. The view puts the
-        character's amounts in ``context["unclaimed"]`` (resonance id to amount)."""
-        return self.context.get("unclaimed", {}).get(obj.resonance.pk, 0)
 
     def get_waiting_trickle(self, obj) -> int:
         """What the character's days have piled up in this resonance for the next anima ritual

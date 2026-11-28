@@ -72,9 +72,6 @@ class SeeingWhatIsKindled(JourneyCase):
                 "kindled": True,
                 "strength_name": "Blazing",
                 "reasons": ["You carry Rage"],
-                # #5181: what a kindled deed set aside, and the affinity's claiming verb.
-                "claim_verb": "",
-                "unclaimed": 0,
                 "waiting_trickle": 0,
             },
         )

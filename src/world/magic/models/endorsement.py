@@ -101,6 +101,14 @@ class PoseEndorsement(RelatedCacheClearingMixin, EndorsementBase):
         blank=True,
         help_text="Set at weekly settlement.",
     )
+    awaiting_acceptance = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "True while a witness's proposed resonance waits for the poser or a GM to accept "
+            "it. Settlement skips these rows."
+        ),
+    )
 
     class Meta:
         constraints = [
