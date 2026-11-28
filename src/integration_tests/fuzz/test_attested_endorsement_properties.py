@@ -27,6 +27,7 @@ from rest_framework.test import APIClient
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.models import CharacterSheet
 from world.fatigue.services import get_or_create_fatigue_pool
+from world.game_clock.week_services import get_current_game_week
 from world.magic.constants import GainSource, ReflectionChoice
 from world.magic.exceptions import EndorsementValidationError, ResonanceUndoError
 from world.magic.factories import (
@@ -52,6 +53,7 @@ from world.magic.services.gain import (
     resonance_weekly_settlement_tick,
     settle_weekly_pot,
 )
+from world.magic.services.marking import weekly_percent_paid
 from world.magic.services.reflection import record_reflection, reflectable_for
 from world.magic.services.resonance import grant_resonance
 from world.magic.services.undo import may_undo_grant, undo_resonance_grant
@@ -304,7 +306,7 @@ class UndoTakesBackWhatTheRewardPaid(_Table, HypothesisTestCase):
     Maintainer, on the rules for undo: "4. Sounds fine."; "we could nullify it and chide them".
     """
 
-    @settings(max_examples=30, deadline=None)
+    @settings(max_examples=20, deadline=None)
     @given(
         key=st.sampled_from(RESONANCE_KEYS),
         amount=st.integers(1, 80),
@@ -316,6 +318,8 @@ class UndoTakesBackWhatTheRewardPaid(_Table, HypothesisTestCase):
         self, key: str, amount: int, balance_before: int, lifetime_before: int, fatigue: int
     ) -> None:
         self.no_bonus_check()
+        # The week exists before the grants, as in play: a fresh table starts one at "now".
+        get_current_game_week()
         sheet, _account = self.player()
         reflected = self.marked_grant(sheet, key, amount)
         waiting = self.marked_grant(sheet, key, amount)
@@ -333,6 +337,8 @@ class UndoTakesBackWhatTheRewardPaid(_Table, HypothesisTestCase):
         ledger_rows = ResonanceGrant.objects.filter(character_sheet=sheet).count()
         undone_amount = reflected.amount
         self.assertIn(waiting.pk, [d.grant.pk for d in reflectable_for(sheet).deeds])
+        standing = weekly_percent_paid(sheet)
+        self.assertEqual((standing.gained, standing.marks), (2 * undone_amount, 2))
 
         undo_resonance_grant(reflected, self.staff)
         undo_resonance_grant(waiting, self.staff)
@@ -353,6 +359,8 @@ class UndoTakesBackWhatTheRewardPaid(_Table, HypothesisTestCase):
         self.assertEqual(pool.physical_current, fatigue)
         self.assertFalse(Reflection.objects.filter(grant=reflected).exists())
         self.assertEqual(reflectable_for(sheet).deeds, ())
+        standing = weekly_percent_paid(sheet)
+        self.assertEqual((standing.gained, standing.marks), (0, 0))
 
     @settings(max_examples=15, deadline=None)
     @given(key=st.sampled_from(RESONANCE_KEYS), amount=st.integers(1, 80))

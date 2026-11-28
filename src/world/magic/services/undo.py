@@ -81,27 +81,30 @@ def may_undo_grant(by: AccountDB, grant: ResonanceGrant) -> bool:
 
 
 def _reward_phrase(grant: ResonanceGrant) -> str:
-    """What the reward was, worded for the player who loses it."""
+    """What the reward was, worded for the player who loses it ("your Mercy reward ...")."""
     name = grant.resonance.name
     if grant.deed_label:
-        return f"{name} you gained from {grant.deed_label}"
+        return f"your {name} reward for {grant.deed_label}"
     if grant.source == GainSource.POSE_ENDORSEMENT:
-        return f"{name} you gained from an endorsement of your pose"
+        return f"your {name} reward from an endorsement of your pose"
     if grant.source == GainSource.DRAMATIC_MOMENT:
-        return f"{name} you gained from a GM's tag of a dramatic moment"
-    return f"{name} you gained from {grant.get_source_display()}"
+        return f"your {name} reward from a GM's tag"
+    return f"your {name} reward from {grant.get_source_display()}"
 
 
 def _undone_line(
     grant: ResonanceGrant, by: AccountDB, *, balance_fell: int, lifetime_fell: int
 ) -> str:
-    """The private line the player whose reward was undone reads."""
-    name = grant.resonance.name
+    """The private line the player whose reward was undone reads.
+
+    It names the role that undid it, never the account: players are anonymous to each other.
+    """
+    who = "Staff" if by.is_staff else "The scene's GM"
     line = (
-        f"{by.username} undid the {_reward_phrase(grant)}. Your lifetime {name} total fell by "
-        f"{lifetime_fell} and your spendable {name} fell by {balance_fell}."
+        f"{who} undid {_reward_phrase(grant)}. "
+        f"Your {grant.resonance.name} falls by {lifetime_fell}."
     )
-    if balance_fell < grant.amount:
+    if balance_fell < lifetime_fell:
         line += " What you already spent stays spent."
     return line
 

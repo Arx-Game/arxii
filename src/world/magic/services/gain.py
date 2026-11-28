@@ -1118,13 +1118,15 @@ def anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
     return picks[0] if picks else None
 
 
-def _tell_tagged_player(character_sheet: CharacterSheet, grant: ResonanceGrant) -> None:
-    """Tell the tagged player which resonance a GM's tag paid, and how much (#5327).
+def _tell_tagged_player(
+    character_sheet: CharacterSheet, moment_type: DramaticMomentType, grant: ResonanceGrant
+) -> None:
+    """Tell the tagged player which resonance a GM's tag paid (#5327).
 
-    The GM named the resonance, so the player would otherwise not know which one grew. Sent
-    once the tag commits, to the character's player.
+    The GM named the resonance, so the player would otherwise not know which one grew. The line
+    names the moment type and the resonance, not an amount, and is sent once the tag commits.
     """
-    line = f"A GM recognised your moment: your {grant.resonance.name} grew by {grant.amount}."
+    line = f"A GM tagged your pose as a {moment_type.label}. It paid you {grant.resonance.name}."
     character = character_sheet.character
     transaction.on_commit(lambda: character.msg(line))
 
@@ -1217,7 +1219,7 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
             ledger_out=ledger,
         )
         if resonance is not None:
-            _tell_tagged_player(character_sheet, ledger[-1])
+            _tell_tagged_player(character_sheet, moment_type, ledger[-1])
 
     try:
         persona = character_sheet.primary_persona
