@@ -223,7 +223,9 @@ character-creation/
     │                        #   draft_data.alter_ego, null when skipped); both share FaceForm.
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
-    ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep
+    ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep; each
+    │                        #   entry names the affinity skills it teaches ("Teaches Reflection
+    │                        #   and Heroism", from `taught_skill_names`, #5326)
     ├── PerspectivesPanel.tsx # "On {subject}" shop-window opinions; renders as margin
     │                        #   notes in HeritageStage and inside the chosen tradition's
     │                        #   entry in TraditionPicker (#3281, #3630)

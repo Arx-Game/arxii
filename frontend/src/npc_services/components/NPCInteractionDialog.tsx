@@ -140,6 +140,12 @@ export function NPCInteractionDialog({
                     {offer.price.fit_line}
                   </span>
                 )}
+                {offer.price?.outsider_line && (
+                  // The app's warning-text pair (amber), under the fit line.
+                  <span className="basis-full text-left text-sm font-normal text-amber-700 dark:text-amber-400">
+                    {offer.price.outsider_line}
+                  </span>
+                )}
               </Button>
             ))}
           </div>

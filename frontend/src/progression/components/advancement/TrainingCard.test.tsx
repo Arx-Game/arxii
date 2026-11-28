@@ -5,6 +5,7 @@
 
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { toast } from 'sonner';
 import { vi } from 'vitest';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { TrainingCard } from './TrainingCard';
@@ -25,6 +26,8 @@ vi.mock('@/skills/queries', () => ({
   useDeleteTrainingAllocationMutation: vi.fn(),
 }));
 
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }));
+
 vi.mock('@/roster/usePersonaSearch', () => ({
   usePersonaSearch: vi.fn(() => ({ results: [], isFetching: false })),
 }));
@@ -44,13 +47,16 @@ function setupMocks(options?: {
   allocations?: TrainingAllocation[];
   remaining?: number;
   isLoading?: boolean;
+  catalog?: { id: number; name: string; category: string; category_display: string }[];
 }) {
   const create = vi.fn();
   const update = vi.fn();
   const remove = vi.fn();
 
   vi.mocked(skillsQueries.useSkillsCatalogQuery).mockReturnValue({
-    data: [{ id: 1, name: 'Swordplay', category: 'combat', category_display: 'Combat' }],
+    data: options?.catalog ?? [
+      { id: 1, name: 'Swordplay', category: 'combat', category_display: 'Combat' },
+    ],
   } as unknown as ReturnType<typeof useSkillsCatalogQuery>);
 
   vi.mocked(skillsQueries.useTrainingAllocationsQuery).mockReturnValue({
@@ -155,5 +161,60 @@ describe('TrainingCard', () => {
     setupMocks();
     renderWithProviders(<TrainingCard />);
     expect(screen.getByTestId('training-add-submit')).toBeDisabled();
+  });
+
+  describe('a magical skill needs a mentor (#5326)', () => {
+    const catalog = [
+      { id: 1, name: 'Swordplay', category: 'combat', category_display: 'Combat' },
+      { id: 14, name: 'Villainy', category: 'magic', category_display: 'Magic' },
+    ];
+
+    it('labels the mentor field required once a magical skill is chosen', async () => {
+      setupMocks({ catalog });
+      renderWithProviders(<TrainingCard />);
+
+      expect(screen.getByText('Mentor')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Mentor (optional)…')).toBeInTheDocument();
+
+      await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '14');
+
+      expect(screen.getByText('Mentor (required)')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Mentor (required)…')).toBeInTheDocument();
+      expect(screen.getByTestId('training-add-submit')).toBeEnabled();
+    });
+
+    it('keeps the mentor field optional for a skill that is not magical', async () => {
+      setupMocks({ catalog });
+      renderWithProviders(<TrainingCard />);
+
+      await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '1');
+
+      expect(screen.getByText('Mentor')).toBeInTheDocument();
+      expect(screen.getByPlaceholderText('Mentor (optional)…')).toBeInTheDocument();
+    });
+
+    it('shows the optional label again when the skill changes back', async () => {
+      setupMocks({ catalog });
+      renderWithProviders(<TrainingCard />);
+
+      await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '14');
+      await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '1');
+
+      expect(screen.getByPlaceholderText('Mentor (optional)…')).toBeInTheDocument();
+    });
+
+    it("shows the server's refusal text in the error toast", async () => {
+      const refusal = 'Villainy needs a teacher. Choose a mentor whose Tradition teaches it.';
+      const { create } = setupMocks({ catalog });
+      create.mockImplementation((_body: unknown, opts: { onError: (e: unknown) => void }) =>
+        opts.onError(new Error(refusal))
+      );
+      renderWithProviders(<TrainingCard />);
+
+      await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '14');
+      await userEvent.click(screen.getByTestId('training-add-submit'));
+
+      expect(toast.error).toHaveBeenCalledWith(refusal);
+    });
   });
 });

@@ -26,15 +26,20 @@ import {
   useUpdateTrainingAllocationMutation,
 } from '@/skills/queries';
 
+/** `SkillCategory.MAGIC` on the wire: the category whose training needs a mentor (#5326). */
+const MAGIC_CATEGORY = 'magic';
+
 const SELECT_CLASS =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
 
 function MentorPicker({
   onSelect,
   selectedName,
+  placeholder,
 }: {
   onSelect: (personaId: number | null, name: string) => void;
   selectedName: string;
+  placeholder: string;
 }) {
   const [query, setQuery] = useState(selectedName);
   const { results, isFetching } = usePersonaSearch(query);
@@ -43,7 +48,7 @@ function MentorPicker({
   return (
     <div className="relative">
       <Input
-        placeholder="Mentor (optional)…"
+        placeholder={placeholder}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -84,6 +89,8 @@ function AddAllocationForm() {
   const [mentorName, setMentorName] = useState('');
   const create = useCreateTrainingAllocationMutation();
 
+  // A magical skill is taught only by a mentor whose Tradition teaches it (#5326).
+  const mentorRequired = skills.find((s) => s.id === skillId)?.category === MAGIC_CATEGORY;
   const parsedAp = parseInt(apAmount, 10);
   const canSubmit = skillId !== null && !isNaN(parsedAp) && parsedAp >= 1 && !create.isPending;
 
@@ -140,13 +147,16 @@ function AddAllocationForm() {
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="training-add-mentor">Mentor</Label>
+          <Label htmlFor="training-add-mentor">
+            {mentorRequired ? 'Mentor (required)' : 'Mentor'}
+          </Label>
           <MentorPicker
             onSelect={(id, name) => {
               setMentorId(id);
               setMentorName(name);
             }}
             selectedName={mentorName}
+            placeholder={mentorRequired ? 'Mentor (required)…' : 'Mentor (optional)…'}
           />
         </div>
       </div>

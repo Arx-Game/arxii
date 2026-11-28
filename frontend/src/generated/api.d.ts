@@ -3813,7 +3813,7 @@ export interface paths {
      *     state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
      *     to that state may name a drawback distinction the pick carries for free,
      *     applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
-     *     removes whatever it carried the same way. ``reconcile_combat_style`` then clears
+     *     removes whatever it carried the same way. ``reconcile_magic_training`` then clears
      *     a combat style the new tradition does not teach (#4921).
      */
     post: operations['character_creation_drafts_select_tradition_create'];
@@ -41460,6 +41460,7 @@ export interface components {
       training_points: number | null;
       teaching_line: string | null;
       fit_line: string | null;
+      outsider_line: string | null;
       display: string;
     };
     /** @description Serializer for a directed-offer summons (#2050). */
@@ -55740,6 +55741,8 @@ export interface components {
       readonly favored_gift_names: string[];
       /** @description The affinities this Tradition teaches well (``favored_affinities``, #4659). */
       readonly favored_affinity_names: string[];
+      /** @description The affinity skills this Tradition's teachers teach (#5326): Reflection and its ticks. */
+      readonly taught_skill_names: string[];
       /** @description Whether this Tradition offers a new character no gift yet on the Path asked about. */
       readonly not_yet_implemented: boolean;
     };

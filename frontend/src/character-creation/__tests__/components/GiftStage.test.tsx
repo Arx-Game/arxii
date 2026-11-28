@@ -134,6 +134,32 @@ describe('GiftStage (folio)', () => {
     expect(screen.getByText('Whispers of Shadow', { selector: '.tag' })).toBeInTheDocument();
   });
 
+  it('names the affinity skills a tradition teaches on its entry (#5326)', () => {
+    traditions = [
+      { ...mockTradition, taught_skill_names: ['Reflection'] },
+      { ...mockSelfTaughtTradition, taught_skill_names: ['Reflection', 'Heroism'] },
+      {
+        ...mockTradition,
+        id: 3,
+        name: 'The Ember Road',
+        taught_skill_names: ['Reflection', 'Heroism', 'Villainy'],
+      },
+      { ...mockTradition, id: 4, name: 'The Quiet Way', taught_skill_names: [] },
+    ];
+    const draft = createMockDraft({
+      selected_path: mockPath,
+      selected_tradition: null,
+      selected_beginnings: mockBeginnings,
+    });
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText('Teaches Reflection')).toBeInTheDocument();
+    expect(screen.getByText('Teaches Reflection and Heroism')).toBeInTheDocument();
+    expect(screen.getByText('Teaches Reflection, Heroism and Villainy')).toBeInTheDocument();
+    expect(screen.getAllByText(/^Teaches (Reflection|Heroism|Villainy)/)).toHaveLength(3);
+  });
+
   describe('the resonance step (#5231)', () => {
     const pickedDraft = (weights: { resonance_id: number; weight: number }[]) =>
       createMockDraft({

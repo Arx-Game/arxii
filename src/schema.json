@@ -5955,7 +5955,7 @@ paths:
         state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
         to that state may name a drawback distinction the pick carries for free,
         applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
-        removes whatever it carried the same way. ``reconcile_combat_style`` then clears
+        removes whatever it carried the same way. ``reconcile_magic_training`` then clears
         a combat style the new tradition does not teach (#4921).
       parameters:
       - in: path
@@ -73467,6 +73467,9 @@ components:
         fit_line:
           type: string
           nullable: true
+        outsider_line:
+          type: string
+          nullable: true
         display:
           type: string
       required:
@@ -73477,6 +73480,7 @@ components:
       - display
       - fit_line
       - golden_hares
+      - outsider_line
       - per_session_ap
       - teaching_line
       - training_points
@@ -100996,6 +101000,13 @@ components:
           description: 'The affinities this Tradition teaches well (``favored_affinities``,
             #4659).'
           readOnly: true
+        taught_skill_names:
+          type: array
+          items:
+            type: string
+          description: 'The affinity skills this Tradition''s teachers teach (#5326):
+            Reflection and its ticks.'
+          readOnly: true
         not_yet_implemented:
           type: boolean
           description: Whether this Tradition offers a new character no gift yet on
@@ -101016,6 +101027,7 @@ components:
       - sort_order
       - state
       - state_line
+      - taught_skill_names
     TrainingAllocation:
       type: object
       description: Read-only serializer for a character's training allocation.
