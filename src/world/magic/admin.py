@@ -1036,7 +1036,7 @@ class DistinctionOfferInline(admin.TabularInline):
         "arrival",
         "name",
         "player_line",
-        "sort_order",
+        # No sort order: an answer gives one card, so there is nothing to order (#5292).
         "is_active",
         "builder_link",
     ]

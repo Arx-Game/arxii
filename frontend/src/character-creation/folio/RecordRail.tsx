@@ -9,10 +9,21 @@ export interface RecordRow {
   onEdit?: () => void;
   /** The CG points row: it carries the page's hover text about unspent points (#5201). */
   points?: boolean;
+  /** The value says there is nothing to show ("not asked", "no card"): drawn muted. */
+  absent?: boolean;
 }
 
-function RecordValue({ value, onEdit }: { value?: string | null; onEdit?: () => void }) {
+function RecordValue({
+  value,
+  onEdit,
+  absent,
+}: {
+  value?: string | null;
+  onEdit?: () => void;
+  absent?: boolean;
+}) {
   if (!value) return <span className="unwritten">not yet chosen</span>;
+  if (absent) return <span className="absent">{value}</span>;
   if (onEdit) {
     return (
       <button type="button" className="btn-quiet" onClick={onEdit}>
@@ -33,7 +44,7 @@ export function RecordRail({ rows, ledger }: { rows: RecordRow[]; ledger?: strin
           <div className="row" key={row.label} title={row.points ? pointsHint : undefined}>
             <dt>{row.label}</dt>
             <dd>
-              <RecordValue value={row.value} onEdit={row.onEdit} />
+              <RecordValue value={row.value} onEdit={row.onEdit} absent={row.absent} />
             </dd>
           </div>
         ))}

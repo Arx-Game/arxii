@@ -430,6 +430,10 @@
   color: var(--cg-muted);
   font-style: italic;
 }
+/* A row that holds no value of its own ("not asked", "no card"): muted, upright. */
+.interview .record-rail .absent {
+  color: var(--cg-muted);
+}
 .interview .rail-ledger {
   display: block;
   margin-top: 0.8rem;
@@ -1123,7 +1127,7 @@
 .interview .field.part {
   margin-top: 1.9rem;
   padding-top: 1rem;
-  border-top: 1px solid var(--cg-hair);
+  border-top: 1px solid var(--cg-rule);
 }
 .interview .field.part > .label {
   font-size: 1.35rem;
@@ -1145,7 +1149,7 @@
   display: block;
   margin-top: 0.35rem;
   padding-left: 0.6rem;
-  border-left: 2px solid var(--cg-hair);
+  border-left: 2px solid var(--cg-rule);
   font-size: 0.95rem;
 }
 .interview .stance .bonus .card-name {
@@ -1163,16 +1167,30 @@
 .interview .stance[aria-pressed='true'] .bonus .card-name {
   color: var(--cg-accent);
 }
-/* The three ways into the Glimpse, and the blackout between two parts: the same cards,
-   with room above so neither reads as an answer of the part before it. */
-.interview .stances.ways,
-.interview .stances.blackout {
-  margin-top: 1.2rem;
-}
-/* The blackout is one card with a paragraph on it, so it takes the whole column where a
-   grid's cards share it. */
+/* The blackout between two parts is one card with a paragraph on it: it takes the whole
+   column where a grid's cards share it, and stands a part's distance below Trigger's
+   answers so it does not read as one of them. The selector carries `.grid` so it
+   outranks the `.stances.grid` margin further down. */
 .interview .stances.grid.blackout {
   grid-template-columns: minmax(0, 1fr);
+  margin-top: 1.9rem;
+}
+/* The Glimpse's own heading is drawn as its parts' are (the approved mock titles the
+   block as the first part): the same size and the same rule above. */
+.interview .section-h.part-h {
+  margin-top: 2.75rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cg-rule);
+  font-size: 1.35rem;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+}
+/* The line that stands in for the parts when none is asked (no memory, or later). */
+.interview .glimpse-aside {
+  margin: 1.2rem 0 0;
+  max-width: 65ch;
+  font-style: italic;
+  color: var(--cg-muted);
 }
 /* An axis is a fieldset (a named group of toggles). A fieldset is by default at least as
    wide as its widest word, which would push a card past a narrow column. */

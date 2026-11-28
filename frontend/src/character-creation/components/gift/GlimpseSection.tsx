@@ -78,8 +78,8 @@ const GLIMPSE_INTRO_FALLBACK =
 
 // PLACEHOLDER: Apostate rewrite. Plain statements of what each choice does.
 const NO_MEMORY_LINE_FALLBACK =
-  'Nothing of the Glimpse is asked. The character holds the card that marks it as a mystery, ' +
-  'and each part gives its bonus when a story returns the memory.';
+  'Nothing of the Glimpse is asked. The character holds the Glimpse Mystery card, and the ' +
+  'four bonuses arrive when a story returns the memory.';
 const LATER_LINE_FALLBACK =
   'The Glimpse is written from the character sheet after character creation, and each part ' +
   'gives its bonus then.';
@@ -153,7 +153,11 @@ export function GlimpseSection({ draft, glimpseProseField }: GlimpseSectionProps
     <>
       <p className="explain">{copy?.glimpse_intro ?? GLIMPSE_INTRO_FALLBACK}</p>
       {!isForced && (
-        <ul className="stances pair oneof ways grid" aria-labelledby="glimpse-heading">
+        <ul
+          className="stances pair oneof grid"
+          aria-labelledby="glimpse-heading"
+          data-testid="glimpse-ways"
+        >
           {WAYS.map((option) => (
             <li key={option.way}>
               <button
@@ -172,10 +176,10 @@ export function GlimpseSection({ draft, glimpseProseField }: GlimpseSectionProps
         </ul>
       )}
       {way === 'none' && (
-        <p className="ledger-line">{copy?.glimpse_no_memory_line ?? NO_MEMORY_LINE_FALLBACK}</p>
+        <p className="glimpse-aside">{copy?.glimpse_no_memory_line ?? NO_MEMORY_LINE_FALLBACK}</p>
       )}
       {way === 'later' && (
-        <p className="ledger-line">{copy?.glimpse_later_line ?? LATER_LINE_FALLBACK}</p>
+        <p className="glimpse-aside">{copy?.glimpse_later_line ?? LATER_LINE_FALLBACK}</p>
       )}
       {way === 'now' && (
         <GlimpseAxes

@@ -30,6 +30,7 @@ interface Seed {
   tone_tag_id: number;
   spare_card_id: number;
   witness_tag_id: number;
+  choosing_tag_id: number;
   later_entry_id: number;
   later_sheet_id: number;
   amnesiac_entry_id: number;
@@ -87,7 +88,7 @@ const answer = (page: Page, name: string): Locator =>
   page.locator('.part button.stance').filter({ has: page.locator('b', { hasText: name }) });
 
 const way = (page: Page, name: string): Locator =>
-  page.locator('.ways button.stance').filter({ hasText: name });
+  page.getByTestId('glimpse-ways').locator('button.stance').filter({ hasText: name });
 
 async function shot(page: Page, info: TestInfo, name: string, target?: Locator) {
   const path = info.outputPath(name);
@@ -132,6 +133,35 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
       .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
     expect(titleSize).toBeGreaterThan(nameSize * 1.4);
 
+    // The rules are drawn, not only written: a line above each part and beside each
+    // card. A declaration that reads a token nobody defines is dropped whole, and the
+    // class still "has a rule" (both of these were missing until the demo review).
+    const drawn = (el: Element, side: 'Top' | 'Left') => {
+      const style = getComputedStyle(el);
+      return {
+        width: parseFloat(style[`border${side}Width`]),
+        color: style[`border${side}Color`],
+      };
+    };
+    const partRule = await page.locator('#glimpse-axis-tone').locator('..').evaluate(drawn, 'Top');
+    expect(partRule.width).toBe(1);
+    expect(partRule.color).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    const cardRule = await answer(page, 'Wonder').locator('.bonus').evaluate(drawn, 'Left');
+    expect(cardRule.width).toBe(2);
+    expect(cardRule.color).not.toMatch(/rgba\(0, 0, 0, 0\)|transparent/);
+    // The Glimpse's own title is drawn as its parts' are.
+    const blockTitle = await page
+      .locator('#glimpse-heading')
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+    expect(blockTitle).toBe(titleSize);
+    // The blackout stands a part's distance below Trigger's answers.
+    const gap = await page.evaluate(() => {
+      const above = document.querySelector('#glimpse-axis-trigger')!.parentElement!;
+      const blackout = document.querySelector('.blackout')!;
+      return blackout.getBoundingClientRect().top - above.getBoundingClientRect().bottom;
+    });
+    expect(gap).toBeGreaterThanOrEqual(24);
+
     // The card is on the answer before it is picked; an answer with no card shows none.
     await expect(answer(page, 'Wonder').locator('.bonus')).toContainText('Wonderstruck');
     await expect(answer(page, 'Wonder').locator('.bonus')).toContainText('+Anima');
@@ -157,6 +187,7 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await answer(page, 'Grief').click();
     await expect(railRow(page, 'Tone').locator('dd')).toHaveText('no card');
     await expect.poll(async () => held(await savedDraft(page, seed))).toEqual({});
+    await shot(page, info, 'panel-answer-with-no-card.png', page.locator('.record-rail'));
 
     // The server refuses two answers in one part, in a part that gives a card and one
     // that gives none.
@@ -220,11 +251,20 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
       .poll(async () => held(await savedDraft(page, seed)))
       .toEqual({ 'Glimpse Mystery': 0 });
     await shot(page, info, 'stage-no-memory-1440.png');
+    await expect(page.locator('.glimpse-aside')).toContainText(
+      'The character holds the Glimpse Mystery card'
+    );
     await way(page, 'Create Glimpse Post-CG').click();
     await expect(page.locator('fieldset.part')).toHaveCount(0);
+    await expect(page.locator('.glimpse-aside')).toHaveText(
+      'The Glimpse is written from the character sheet after character creation, and each ' +
+        'part gives its bonus then.'
+    );
+    await expect(railRow(page, 'Trigger').locator('dd')).toHaveText('not asked');
     await expect(railRow(page, 'Glimpse Mystery')).toHaveCount(0);
     await expect.poll(async () => held(await savedDraft(page, seed))).toEqual({});
     expect((await savedDraft(page, seed)).cg_points_remaining).toBe(points);
+    await shot(page, info, 'stage-later-1440.png');
 
     // Back to the first way: the answers were kept, and so the cards return.
     await way(page, 'Create Glimpse in CG').click();
@@ -276,6 +316,49 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await expect(trigger.locator('.lead-in')).toHaveText('The Circumstances Around Your Glimpse:');
     await shot(page, info, 'stage-explanation-under-tone.png', tone);
 
+    // The Choosing has one answer, open to another path only: this draft is not asked it.
+    await expect(page.locator('#glimpse-axis-choosing')).toHaveCount(0);
+    // Staff open that answer to this draft's path, and the part appears after Trigger.
+    // The admin's two-list widget keeps its own record of each list, so the move goes
+    // through its own function, as the arrow between the lists does.
+    const movePath = async (from: string, to: string) => {
+      await admin.goto(`/admin/arxii/glimpsetag/${seed.choosing_tag_id}/change/`);
+      await expect(admin.locator(`#${to}`)).toBeVisible();
+      await admin.locator(`#${from}`).selectOption({ label: 'Strength Path (Prospect)' });
+      await admin.evaluate(
+        ([source, target]) => {
+          const boxes = window as unknown as {
+            SelectBox: { move: (source: string, target: string) => void };
+          };
+          boxes.SelectBox.move(source, target);
+        },
+        [from, to]
+      );
+      await admin.locator('input[name="_save"]').click();
+      await expect(admin.locator('.errornote')).toHaveCount(0);
+    };
+    await movePath('id_paths_from', 'id_paths_to');
+    await page.reload();
+    await expect(page.locator('#glimpse-axis-choosing')).toBeVisible({ timeout: 20000 });
+    const partOrder = await page
+      .locator('fieldset.part > h3')
+      .evaluateAll((titles) => titles.map((title) => title.id));
+    expect(partOrder.slice(0, 3)).toEqual([
+      'glimpse-axis-trigger',
+      'glimpse-axis-choosing',
+      'glimpse-axis-reflection',
+    ]);
+    const choosing = page.locator('fieldset.part', {
+      has: page.locator('#glimpse-axis-choosing'),
+    });
+    await expect(choosing.locator('.bonus')).toHaveCount(0);
+    await shot(page, info, 'stage-the-choosing-on-its-path.png', choosing);
+    // Closed to this path again, the part is gone.
+    await movePath('id_paths_to', 'id_paths_from');
+    await page.reload();
+    await expect(page.locator('#glimpse-axis-trigger')).toBeVisible({ timeout: 20000 });
+    await expect(page.locator('#glimpse-axis-choosing')).toHaveCount(0);
+
     // Staff tick the beginning as having no memory of the Glimpse.
     await admin.goto(`/admin/arxii/beginnings/${seed.beginning_id}/change/`);
     await admin.locator('#id_no_glimpse_memory').check();
@@ -284,7 +367,7 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
 
     await page.reload();
     await expect(page.locator('#glimpse-heading')).toBeVisible({ timeout: 20000 });
-    await expect(page.locator('.ways')).toHaveCount(0);
+    await expect(page.getByTestId('glimpse-ways')).toHaveCount(0);
     await expect(page.locator('fieldset.part')).toHaveCount(0);
     await expect(page.getByText('Nothing of the Glimpse is asked.')).toBeVisible();
     // The draft's own choice is still "remembered" with four answers; the beginning wins.
@@ -308,6 +391,7 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
 
   test('on the sheet a Glimpse left for later gives its cards on one confirm, and is then final', async ({
     page,
+    browser,
   }, info) => {
     const seed = readSeed();
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -324,13 +408,18 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
 
     await page.goto(`/characters/${seed.later_entry_id}`);
     await page.getByRole('button', { name: 'Magic', exact: true }).click();
+    // A Glimpse left for later reads as unwritten, with no line about memory.
+    await expect(page.getByText('You have not looked into your own aura yet.')).toBeVisible();
+    await expect(page.getByText('No memory of the Glimpse.')).toHaveCount(0);
+    await expect(page.getByText('Blacked out during the Glimpse.')).toHaveCount(0);
+    await shot(page, info, 'sheet-later-unwritten.png');
     await page.getByTestId('finish-glimpse-button').click();
     const dialog = page.getByTestId('glimpse-editor-dialog');
     await expect(dialog).toBeVisible();
 
     // Picks are staged: nothing is saved by a click.
     await dialog.getByText('Crisis', { exact: true }).click();
-    await dialog.getByText('Tone; how did it feel?').click();
+    await dialog.getByText('Tone: how did it feel?').click();
     await expect(
       dialog.getByTestId('glimpse-card').filter({ hasText: 'Wonderstruck' })
     ).toBeVisible();
@@ -390,6 +479,26 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await expect
       .poll(async () => (await sheet()).distinctions.map((d) => d.name).sort())
       .toEqual(['Bereft', 'Crisisborn', 'Wonderstruck']);
+
+    // Staff open the same editor on this character with every part open: the parts the
+    // player can no longer change are not closed to them.
+    const staffContext = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+    const staff = await staffContext.newPage();
+    await logIn(staff, seed.staff_username, seed.staff_password);
+    await staff.goto(`/characters/${seed.later_entry_id}`);
+    await staff.getByRole('switch', { name: 'Edit' }).click();
+    await staff.getByRole('button', { name: 'Magic', exact: true }).click();
+    await staff.getByTestId('staff-glimpse-button').click();
+    const staffDialog = staff.getByTestId('glimpse-editor-dialog');
+    await expect(staffDialog).toBeVisible();
+    await staffDialog.getByText('Tone: how did it feel?').click();
+    const saved = staffDialog.locator('[role="button"][aria-pressed="true"]').filter({
+      hasText: 'Wonder',
+    });
+    await expect(saved).toBeVisible();
+    await expect(staffDialog.locator('[aria-disabled="true"]')).toHaveCount(0);
+    await shot(staff, info, 'sheet-staff-editor-every-part-open.png', staffDialog);
+    await staffContext.close();
   });
 
   test('with no memory the player is refused until staff set the memory to remembered', async ({
@@ -445,6 +554,24 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     const memory = staff.getByLabel('Memory of the Glimpse');
     await expect(memory).toHaveValue('no_memory');
     await shot(staff, info, 'sheet-staff-memory.png', staff.getByTestId('staff-glimpse'));
+
+    // Blacked out: one line says so, and the player's editor offers neither The
+    // Reflection nor Tone.
+    await memory.selectOption('blacked_out');
+    await expect.poll(async () => (await sheet()).magic.aura.glimpse_memory).toBe('blacked_out');
+    await page.reload();
+    await page.getByRole('button', { name: 'Magic', exact: true }).click();
+    await expect(page.getByText('Blacked out during the Glimpse.')).toBeVisible();
+    await page.getByTestId('finish-glimpse-button').click();
+    const editor = page.getByTestId('glimpse-editor-dialog');
+    await expect(editor.getByText('Trigger: what was happening?')).toBeVisible();
+    await expect(editor.getByText('Consequence: what did it leave behind?')).toBeVisible();
+    await expect(editor.getByText('The Reflection: what did you see in yourself?')).toHaveCount(0);
+    await expect(editor.getByText('Tone: how did it feel?')).toHaveCount(0);
+    await shot(page, info, 'sheet-blacked-out-editor.png');
+    const blackedOut = await write();
+    expect(blackedOut.status()).toBe(400);
+
     await memory.selectOption('remembered');
     await expect.poll(async () => (await sheet()).magic.aura.glimpse_memory).toBe('remembered');
     await staffContext.close();
@@ -458,7 +585,7 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     ]);
   });
 
-  test('the admin refuses a second card under an answer and a card under a Witness answer', async ({
+  test('the admin refuses a card under a Witness answer and saves one under a Tone answer', async ({
     browser,
   }, info) => {
     const seed = readSeed();
@@ -478,6 +605,24 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
     await expect(admin.locator('.errornote')).toBeVisible();
     await expect(admin.getByText('An answer to Witness & Secrecy gives no card.')).toBeVisible();
     await shot(admin, info, 'admin-witness-answer-refused.png');
+
+    // A card an answer of another part gives (Crisisborn, Trigger's) cannot go under a
+    // Tone answer.
+    const catalogue = (await (
+      await admin.request.get('/api/character-creation/glimpse-tags/')
+    ).json()) as { name: string; offers: { distinction_id: number }[] }[];
+    const crisisborn = catalogue.find((tag) => tag.name === 'Crisis')!.offers[0].distinction_id;
+    await admin.goto(`/admin/arxii/glimpsetag/${seed.tone_tag_id}/change/`);
+    await admin.locator('#id_distinction_offers-0-distinction').evaluate((el, id) => {
+      const select = el as HTMLSelectElement;
+      select.add(new Option('Crisisborn', String(id), true, true));
+    }, crisisborn);
+    await admin.locator('input[name="_save"]').click();
+    await expect(admin.locator('.errornote')).toBeVisible();
+    await expect(
+      admin.getByText('An answer to another part of the Glimpse already gives this card.')
+    ).toBeVisible();
+    await shot(admin, info, 'admin-card-of-another-part-refused.png');
 
     // Grief (Tone) has no card: staff give it one, and it arrives bundled.
     await admin.goto(`/admin/arxii/glimpsetag/${seed.tone_tag_id}/change/`);

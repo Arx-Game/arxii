@@ -228,7 +228,7 @@ describe('GlimpseFlow', () => {
   it('a hidden part is not drawn (#5292)', () => {
     render(<GlimpseFlow {...makeProps({ hiddenAxes: new Set(['TONE']) })} />);
 
-    expect(screen.queryByText('Tone; how did it feel?')).not.toBeInTheDocument();
+    expect(screen.queryByText('Tone: how did it feel?')).not.toBeInTheDocument();
     expect(screen.getByText('Consequence: what did it leave behind?')).toBeInTheDocument();
   });
 

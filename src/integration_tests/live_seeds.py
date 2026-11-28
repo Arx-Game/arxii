@@ -1955,6 +1955,8 @@ class GlimpseSpecSeed:
     tone_tag_id: int
     spare_card_id: int
     witness_tag_id: int
+    #: The Choosing's one answer, open only to a path the draft is not on.
+    choosing_tag_id: int
     #: Roster entry ids of the two characters the account plays: one whose Glimpse was
     #: left for after creation, one with no memory of it.
     later_entry_id: int
@@ -1969,6 +1971,8 @@ def _glimpse_spec_catalogue() -> None:
     """The answers, their cards and the card that marks a lost Glimpse, made once."""
     from world.character_creation.constants import OfferChapter  # noqa: PLC0415
     from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+    from world.classes.factories import PathFactory  # noqa: PLC0415
+    from world.classes.models import PathStage  # noqa: PLC0415
     from world.distinctions.factories import (  # noqa: PLC0415
         DistinctionCategoryFactory,
         DistinctionEffectFactory,
@@ -2013,6 +2017,19 @@ def _glimpse_spec_catalogue() -> None:
         )
     if not Distinction.objects.filter(name="Spare Card").exists():
         DistinctionFactory(name="Spare Card", slug="spec-spare-card", category=category)
+    # The Choosing has one answer, open to one path the draft is not on, so the stage
+    # shows the part only once staff open the answer to the draft's path. Set on every
+    # run: the spec opens it in the admin.
+    claimed, _ = GlimpseTag.objects.get_or_create(
+        slug="spec-claimed",
+        defaults={
+            "axis": "CHOOSING",
+            "name": "Claimed",
+            "description": "Something chose you, and said so.",
+            "sort_order": len(_GLIMPSE_SPEC_ANSWERS),
+        },
+    )
+    claimed.paths.set([PathFactory(name="Chosen Path", stage=PathStage.PROSPECT, minimum_level=1)])
 
 
 def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - draft and two sheets
@@ -2020,8 +2037,9 @@ def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - d
 
     The catalogue holds two answers each for Trigger, The Reflection and Consequence and
     three for Tone, every one with a card except Grief, plus two Witness & Secrecy answers
-    that give none; "Glimpse Mystery" marks a blackout and no memory. *username*'s draft is
-    at the Gift stage with nothing of the Glimpse chosen, on a beginning that remembers its
+    that give none and one answer to The Choosing that only another path may give;
+    "Glimpse Mystery" marks a blackout and no memory. *username*'s draft is at the Gift
+    stage with nothing of the Glimpse chosen, on a beginning that remembers its
     Glimpse. The account also plays Maren Vosk, whose Glimpse was left for after creation
     (nothing written, no card), and Oriel Thane, who has no memory of theirs and holds the
     marking card. A staff account opens the admin and the staff sheet editor. Run again, it
@@ -2114,6 +2132,7 @@ def seed_glimpse_spec(*, username: str) -> GlimpseSpecSeed:  # noqa: PLR0915 - d
         tone_tag_id=GlimpseTag.objects.get(slug="spec-grief").pk,
         spare_card_id=Distinction.objects.get(name="Spare Card").pk,
         witness_tag_id=GlimpseTag.objects.get(slug="spec-public").pk,
+        choosing_tag_id=GlimpseTag.objects.get(slug="spec-claimed").pk,
         later_entry_id=entries[GLIMPSE_SPEC_LATER].pk,
         later_sheet_id=entries[GLIMPSE_SPEC_LATER].character_sheet.pk,
         amnesiac_entry_id=entries[GLIMPSE_SPEC_AMNESIAC].pk,

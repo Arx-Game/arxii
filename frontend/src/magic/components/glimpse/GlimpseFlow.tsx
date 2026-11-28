@@ -64,12 +64,12 @@ const part = (
 // only this component's own question-style `label` text is GlimpseFlow-only.
 export const AXIS_STEPS: GlimpseAxisStep[] = [
   part('TRIGGER', 'Trigger: what was happening?', { givesCard: true }),
-  part('CHOOSING', 'The Choosing; how did it claim you?'),
+  part('CHOOSING', 'The Choosing: how did it claim you?'),
   part('REFLECTION', 'The Reflection: what did you see in yourself?', {
     givesCard: true,
     lostInBlackout: true,
   }),
-  part('TONE', 'Tone; how did it feel?', { givesCard: true, lostInBlackout: true }),
+  part('TONE', 'Tone: how did it feel?', { givesCard: true, lostInBlackout: true }),
   part('CONSEQUENCE', 'Consequence: what did it leave behind?', { givesCard: true }),
   part('WITNESS', 'Witness & Secrecy: who saw?'),
 ];

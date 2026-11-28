@@ -28,6 +28,7 @@ import {
   Marginalia,
   Note,
   RecordRail,
+  type RecordRow,
   stageEyebrow,
 } from '../folio';
 import {
@@ -164,15 +165,15 @@ function glimpseRailRows(
   cards: GlimpseCard[] | undefined,
   isRefreshing: boolean,
   copy: CGExplanations | undefined
-): { label: string; value: string | undefined }[] {
+): RecordRow[] {
   const asked = (step: GlimpseAxisStep) =>
     memory === 'remembered' || (memory === 'blacked_out' && !step.lostInBlackout);
-  const rows: { label: string; value: string | undefined }[] = [];
+  const rows: RecordRow[] = [];
   for (const step of AXIS_STEPS.filter((candidate) => candidate.givesCard)) {
     const label =
       copy?.[`glimpse_axis_${step.axis.toLowerCase()}_chip`] ?? AXIS_DISPLAY_NAME[step.axis];
     if (!asked(step)) {
-      rows.push({ label, value: copy?.glimpse_rail_not_asked ?? 'not asked' });
+      rows.push({ label, value: copy?.glimpse_rail_not_asked ?? 'not asked', absent: true });
       continue;
     }
     const answer = answers.find((tag) => tag.axis === step.axis);
@@ -182,7 +183,11 @@ function glimpseRailRows(
     }
     const given = cards?.find((card) => card.axis === step.axis)?.name;
     const card = given ?? (isRefreshing || !cards ? answer.offers[0]?.name : undefined);
-    rows.push({ label, value: card ?? copy?.glimpse_rail_no_card ?? 'no card' });
+    rows.push(
+      card
+        ? { label, value: card }
+        : { label, value: copy?.glimpse_rail_no_card ?? 'no card', absent: true }
+    );
   }
   for (const marker of (cards ?? []).filter((card) => card.axis === '')) {
     rows.push({ label: marker.name, value: copy?.glimpse_rail_held ?? 'held' });
@@ -538,7 +543,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       </Field>
       <GiftFacetsField draft={draft} resonanceName={leadResonanceName} />
 
-      <h2 className="section-h" id="glimpse-heading">
+      <h2 className="section-h part-h" id="glimpse-heading">
         {copy?.magic_glimpse_heading ?? 'The Glimpse'}
       </h2>
       <GlimpseSection draft={draft} glimpseProseField={register('glimpse_story')} />

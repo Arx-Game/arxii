@@ -981,7 +981,7 @@ describe('SpellbookTab', () => {
       expect(screen.getByText('Blacked out during the Glimpse.')).toBeInTheDocument();
       await userEvent.click(screen.getByTestId('finish-glimpse-button'));
 
-      expect(screen.queryByText('Tone; how did it feel?')).not.toBeInTheDocument();
+      expect(screen.queryByText('Tone: how did it feel?')).not.toBeInTheDocument();
       expect(screen.getByText('Consequence: what did it leave behind?')).toBeInTheDocument();
     });
 

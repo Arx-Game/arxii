@@ -374,8 +374,8 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "glimpse_way_none": "Amnesiac, No Memory of Glimpse",
     "glimpse_way_later": "Create Glimpse Post-CG",
     "glimpse_no_memory_line": (
-        "Nothing of the Glimpse is asked. The character holds the card that marks it as "
-        "a mystery, and each part gives its bonus when a story returns the memory."
+        "Nothing of the Glimpse is asked. The character holds the Glimpse Mystery card, "
+        "and the four bonuses arrive when a story returns the memory."
     ),  # PLACEHOLDER: Apostate rewrite
     "glimpse_later_line": (
         "The Glimpse is written from the character sheet after character creation, and "
