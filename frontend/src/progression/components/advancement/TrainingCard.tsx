@@ -14,6 +14,11 @@
  * agree" until she accepts: the training counts as having no mentor in the meantime. A row
  * whose mentor has agreed reads "Mentor: <Name>". The mentor answers from `MentoringCard`,
  * which sits beside this card.
+ *
+ * A row with no mentor reads "Self-study" unless the server sent `mentor_needed_line`: that
+ * sentence means the weekly run would skip the row for want of a teacher, so the row shows it
+ * in amber and no "Self-study" badge. Only the server knows whether she may teach herself, so
+ * the frontend never works this out from the skill's category.
  */
 
 import { useState } from 'react';
@@ -31,6 +36,7 @@ import {
   useTrainingAllocationsQuery,
   useUpdateTrainingAllocationMutation,
 } from '@/skills/queries';
+import type { TrainingAllocation } from '@/skills/types';
 
 /** `SkillCategory.MAGIC` on the wire: the category whose training needs a mentor (#5326). */
 const MAGIC_CATEGORY = 'magic';
@@ -131,7 +137,7 @@ function AddAllocationForm() {
 
   return (
     <div className="space-y-2 rounded-lg border border-dashed p-3" data-testid="training-add-form">
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,1.4fr)]">
         <div className="space-y-1">
           <Label htmlFor="training-add-skill">Skill</Label>
           <select
@@ -160,7 +166,7 @@ function AddAllocationForm() {
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="training-add-mentor">
+          <Label htmlFor="training-add-mentor" className="whitespace-nowrap">
             {mentorRequired ? 'Mentor (required)' : 'Mentor'}
           </Label>
           <MentorPicker
@@ -170,7 +176,7 @@ function AddAllocationForm() {
               setMentorName(name);
             }}
             selectedName={mentorName}
-            placeholder={mentorRequired ? 'Mentor (required)…' : 'Mentor (optional)…'}
+            placeholder="Search by name…"
           />
         </div>
       </div>
@@ -184,6 +190,28 @@ function AddAllocationForm() {
       </Button>
     </div>
   );
+}
+
+function MentorLine({ allocation }: { allocation: TrainingAllocation }) {
+  if (allocation.mentor_needed_line) {
+    return (
+      <span
+        className="text-amber-600 dark:text-amber-400"
+        data-testid="training-mentor-needed-line"
+      >
+        {allocation.mentor_needed_line}
+      </span>
+    );
+  }
+  if (allocation.mentor) {
+    return (
+      <span data-testid="training-mentor-line">
+        Mentor: {allocation.mentor.name}
+        {allocation.mentor_waiting && ` · waiting for ${allocation.mentor.name} to agree`}
+      </span>
+    );
+  }
+  return <Badge variant="outline">Self-study</Badge>;
 }
 
 export function TrainingCard() {
@@ -240,15 +268,7 @@ export function TrainingCard() {
                 {allocation.skill?.name ?? allocation.specialization?.name}
               </div>
               <div className="text-sm text-muted-foreground">
-                {allocation.mentor ? (
-                  <span data-testid="training-mentor-line">
-                    Mentor: {allocation.mentor.name}
-                    {allocation.mentor_waiting &&
-                      ` · waiting for ${allocation.mentor.name} to agree`}
-                  </span>
-                ) : (
-                  <Badge variant="outline">Self-study</Badge>
-                )}
+                <MentorLine allocation={allocation} />
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">

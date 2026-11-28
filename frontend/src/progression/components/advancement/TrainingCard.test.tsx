@@ -42,6 +42,7 @@ const allocation: TrainingAllocation = {
   mentor: null as unknown as TrainingAllocation['mentor'],
   mentor_accepted_at: null,
   mentor_waiting: false,
+  mentor_needed_line: null,
   ap_amount: 2,
   remaining_weekly_budget: 3,
 };
@@ -162,6 +163,22 @@ describe('TrainingCard', () => {
     expect(toast.success).toHaveBeenCalledWith('Training allocated. Drusa Kell has been asked.');
   });
 
+  it('shows the needed-mentor sentence and no self-study badge when the server sends one', () => {
+    const line = 'Villainy needs a teacher. Choose a mentor whose Tradition teaches it.';
+    setupMocks({ allocations: [{ ...allocation, mentor_needed_line: line }] });
+    renderWithProviders(<TrainingCard />);
+    const row = screen.getByTestId('training-allocation-row');
+    expect(screen.getByTestId('training-mentor-needed-line')).toHaveTextContent(line);
+    expect(row).not.toHaveTextContent('Self-study');
+  });
+
+  it('still reads as self-study when there is no mentor and no needed-mentor sentence', () => {
+    setupMocks();
+    renderWithProviders(<TrainingCard />);
+    expect(screen.getByTestId('training-allocation-row')).toHaveTextContent('Self-study');
+    expect(screen.queryByTestId('training-mentor-needed-line')).not.toBeInTheDocument();
+  });
+
   it('shows the empty state when nothing is allocated', () => {
     setupMocks({ allocations: [] });
     renderWithProviders(<TrainingCard />);
@@ -273,12 +290,10 @@ describe('TrainingCard', () => {
       renderWithProviders(<TrainingCard />);
 
       expect(screen.getByText('Mentor')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Mentor (optional)…')).toBeInTheDocument();
 
       await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '14');
 
       expect(screen.getByText('Mentor (required)')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Mentor (required)…')).toBeInTheDocument();
       expect(screen.getByTestId('training-add-submit')).toBeEnabled();
     });
 
@@ -289,7 +304,6 @@ describe('TrainingCard', () => {
       await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '1');
 
       expect(screen.getByText('Mentor')).toBeInTheDocument();
-      expect(screen.getByPlaceholderText('Mentor (optional)…')).toBeInTheDocument();
     });
 
     it('shows the optional label again when the skill changes back', async () => {
@@ -299,7 +313,7 @@ describe('TrainingCard', () => {
       await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '14');
       await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '1');
 
-      expect(screen.getByPlaceholderText('Mentor (optional)…')).toBeInTheDocument();
+      expect(screen.getByText('Mentor')).toBeInTheDocument();
     });
 
     it("shows the server's refusal text in the error toast", async () => {

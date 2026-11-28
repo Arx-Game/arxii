@@ -71,7 +71,7 @@ export function MentoringCard() {
                 Accept
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
                 disabled={busyFor(row)}
                 onClick={() => handleAnswer(row, 'decline')}
