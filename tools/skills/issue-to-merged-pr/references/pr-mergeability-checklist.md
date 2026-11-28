@@ -58,6 +58,17 @@ gh api "repos/<owner>/<repo>/code-scanning/alerts?ref=refs/pull/<pr>/head"
 
 An empty array and "no alerts" are indistinguishable unless you got both right.
 
+**A token that cannot read the alerts gets HTTP 403, and that is not a finding.**
+The agents' token lacks the **Code scanning alerts: Read-only** permission.
+`gh api` writes the 403 body (`Resource not accessible by personal access token`)
+to stdout and then exits non-zero, so a script decides "unreadable" from the exit
+status, never from the text it captured. `enqueue-pr.sh` does this (#5329): it
+prints a `NOTE:` line and reads the security bot's unresolved review threads
+instead. That bot's login is `github-advanced-security`, and it posts CodeQL and
+SonarCloud security findings as review threads. When the script can read neither
+the alerts nor the threads it refuses, because an unread gate is not a clean one.
+Before #5329 the script printed the 403 body as a finding and refused every PR.
+
 Same shape for the other two surfaces:
 
 ```bash
