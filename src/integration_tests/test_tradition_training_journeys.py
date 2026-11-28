@@ -464,11 +464,13 @@ class TraditionsTeachCGJourney(_StanceDrafts, FinalizationTestMixin, JourneyCase
         skills = author_the_three_skills()
         cls.evil = tradition_teaching("Ashen Court", skills["Villainy"])
         cls.good = tradition_teaching("Dawn Vigil", skills["Heroism"])
+        cls.both = tradition_teaching("Twin Lamps", skills["Heroism"], skills["Villainy"])
         cls.plain = tradition_teaching("Grey Hall")
         cls.self_taught = tradition_teaching("Lone Road")
         for tradition, state in (
             (cls.evil, TraditionState.LIVING_MASTERS),
             (cls.good, TraditionState.LIVING_MASTERS),
+            (cls.both, TraditionState.LIVING_MASTERS),
             (cls.plain, TraditionState.LIVING_MASTERS),
             (cls.self_taught, TraditionState.SELF_TAUGHT),
         ):
@@ -502,6 +504,14 @@ class TraditionsTeachCGJourney(_StanceDrafts, FinalizationTestMixin, JourneyCase
         self.assertEqual(response.status_code, 200, response.content)
 
     def test_the_tradition_list_names_the_skills_each_one_teaches(self) -> None:
+        """The server sends the names; the web card composes "Teaches Reflection and Heroism".
+
+        The sentence itself is joined in `TraditionPicker.tsx` and asserted by the component
+        test `GiftStage.test.tsx` ("Teaches Reflection", "Teaches Reflection and Heroism",
+        "Teaches Reflection, Heroism and Villainy"); this journey asserts the exact names it
+        is composed from, in order, for a Tradition that teaches Heroism, one that teaches
+        both, one that teaches neither, and the self-taught one.
+        """
         response = self.client.get(
             f"/api/character-creation/traditions/?beginning_id={self.beginnings.pk}"
         )
@@ -509,6 +519,9 @@ class TraditionsTeachCGJourney(_StanceDrafts, FinalizationTestMixin, JourneyCase
         rows = {row["id"]: row for row in response.json()}
         self.assertEqual(rows[self.evil.pk]["taught_skill_names"], ["Reflection", "Villainy"])
         self.assertEqual(rows[self.good.pk]["taught_skill_names"], ["Reflection", "Heroism"])
+        self.assertEqual(
+            rows[self.both.pk]["taught_skill_names"], ["Reflection", "Heroism", "Villainy"]
+        )
         self.assertEqual(rows[self.plain.pk]["taught_skill_names"], ["Reflection"])
         self.assertEqual(rows[self.self_taught.pk]["taught_skill_names"], ["Reflection"])
 

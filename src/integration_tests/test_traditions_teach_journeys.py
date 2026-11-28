@@ -46,6 +46,7 @@ from web.admin.tests.support import form_data
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_creation.factories import CharacterDraftFactory
 from world.character_sheets.models import CharacterSheet
+from world.checks.factories import CheckTypeFactory
 from world.distinctions.factories import DistinctionFactory
 from world.distinctions.models import DistinctionEffect
 from world.distinctions.services import grant_distinction
@@ -58,6 +59,9 @@ from world.mechanics.constants import SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING
 from world.mechanics.test_helpers import grant_lever, lever_target
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
+from world.npc_services.constants import OfferKind
+from world.npc_services.factories import NPCRoleFactory, NPCServiceOfferFactory
+from world.npc_services.models import NPCServiceOffer, SkillCourseOfferDetails
 from world.roster.factories import RosterFactory
 from world.roster.models import RosterTenure
 from world.roster.models.choices import RosterType
@@ -259,6 +263,85 @@ class TheWeeklyRunAndTheTraditionRule(_TeachingCase):
                 "spent. " + TEACHER_LINE.format(skill="Villainy")
             ],
         )
+
+
+class StaffSavingACourse(_TeachingCase):
+    """Staff save a Villainy course on three trainer roles in the admin (#5326).
+
+    The course is saved only on a role whose Tradition teaches the skill. On a role whose
+    Tradition does not, and on a role with no Tradition, the page answers 200 with the
+    sentence that tells staff what to change, and no course row is written.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        staff = get_user_model().objects.create_user(
+            username="warden", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(staff)
+        self.check = CheckTypeFactory(name="Study a magical skill")
+
+    def course_on(self, tradition: Tradition | None) -> NPCServiceOffer:
+        """A course offer on a new trainer role that teaches ``tradition`` (None: none)."""
+        role = NPCRoleFactory(teaches_tradition=tradition)
+        return NPCServiceOfferFactory(
+            role=role, kind=OfferKind.SKILL_COURSE, ap_cost=0, label="Villainy course"
+        )
+
+    def save_course(self, offer: NPCServiceOffer):
+        """Post the add page as a browser does, with the course's fields filled in."""
+        url = reverse("admin:arxii_skillcourseofferdetails_add")
+        page = self.client.get(url)
+        self.assertEqual(page.status_code, 200)
+        data = form_data(page)
+        data.update(
+            {
+                "offer": str(offer.pk),
+                "skill": str(self.villainy.pk),
+                "total_development": "60",
+                "session_development": "10",
+                "session_ap_cost": "2",
+                "coin_cost": "100",
+                "check_type": str(self.check.pk),
+                "check_difficulty_level": "2",
+            }
+        )
+        return self.client.post(url, data)
+
+    def test_a_course_is_refused_on_a_role_whose_tradition_does_not_teach_the_skill(self) -> None:
+        offer = self.course_on(self.dawn)
+
+        refused = self.save_course(offer)
+
+        self.assertEqual(refused.status_code, 200)
+        self.assertContains(
+            refused,
+            "Dawn Vigil does not teach Villainy. Choose a skill it teaches, or give this role "
+            "a Tradition that teaches it.",
+        )
+        self.assertFalse(SkillCourseOfferDetails.objects.filter(offer=offer).exists())
+
+    def test_a_course_is_refused_on_a_role_with_no_tradition(self) -> None:
+        offer = self.course_on(None)
+
+        refused = self.save_course(offer)
+
+        self.assertEqual(refused.status_code, 200)
+        self.assertContains(
+            refused,
+            "This role names no Tradition, so it cannot offer a course in Villainy. "
+            "Set Teaches tradition on the role first.",
+        )
+        self.assertFalse(SkillCourseOfferDetails.objects.filter(offer=offer).exists())
+
+    def test_the_same_course_is_saved_on_a_role_whose_tradition_teaches_it(self) -> None:
+        offer = self.course_on(self.ashen)
+
+        saved = self.save_course(offer)
+
+        self.assertEqual(saved.status_code, 302, saved.context and saved.context.get("errors"))
+        course = SkillCourseOfferDetails.objects.get(offer=offer)
+        self.assertEqual((course.skill, course.total_development), (self.villainy, 60))
 
 
 class AMentorAnswersHerRequests(_TeachingCase):
