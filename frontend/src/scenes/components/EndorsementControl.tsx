@@ -40,7 +40,7 @@
  * wearing a bound style") is surfaced verbatim via the mutation's `error`.
  */
 
-import { useMemo, type ReactNode } from 'react';
+import { useMemo } from 'react';
 import { useViewerPersonaId } from '@/roster/persona';
 import { useResonanceCatalog } from '@/magic/queries';
 import type { CatalogResonance } from '@/magic/types';
@@ -59,7 +59,7 @@ import {
   useCreateSceneEntryEndorsement,
   useCreateStyleEndorsement,
 } from '../queries';
-import type { Interaction, EndorserBadge } from '../types';
+import type { Interaction, EndorserBadge, PendingPick } from '../types';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -172,70 +172,95 @@ function isPrivatePose(interaction: Interaction): boolean {
 // Pose endorsements (#5327)
 // ---------------------------------------------------------------------------
 
-function PoseEndorsementControl({
-  interaction,
-  sceneId,
-}: {
-  interaction: Interaction;
-  sceneId: string;
-}) {
-  const viewerPersonaId = useViewerPersonaId();
+type MyPoseEndorsement = Interaction['my_pose_endorsement'];
+
+interface WaitingPick {
+  endorsement_id: number;
+  resonance_name: string;
+}
+
+function usePoseMutations(sceneId: string) {
   const createPose = useCreatePoseEndorsement(sceneId);
   const deletePose = useDeletePoseEndorsement(sceneId);
   const changePose = useChangePoseEndorsement(sceneId);
   const answerPose = useAnswerPoseEndorsement(sceneId);
-  const { data: catalog = [] } = useResonanceCatalog();
-  const groups = useMemo(() => groupByAffinity(catalog), [catalog]);
-  const resonanceNames = useMemo(
-    () =>
-      new Map([
-        ...catalog.map((r): [number, string] => [r.id, r.name]),
-        ...interaction.endorsable_resonances.map((r): [number, string] => [r.id, r.name]),
-      ]),
-    [catalog, interaction.endorsable_resonances]
-  );
-
-  if (isPrivatePose(interaction)) return null;
-
-  const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
-  const picks = interaction.pending_picks ?? [];
-  const myEndorsement = isSelfPose ? null : interaction.my_pose_endorsement;
-  // My own waiting pick, from `pending_picks` or, failing that, from my endorsement row, which
-  // says it waits (`awaiting_acceptance`). Either way it is never an endorsed badge or a Retract.
-  const minePick: { endorsement_id: number; resonance_name: string } | null =
-    picks.find((pick) => pick.mine) ??
-    (myEndorsement?.awaiting_acceptance
-      ? {
-          endorsement_id: myEndorsement.id,
-          resonance_name: resonanceNames.get(myEndorsement.resonance_id) ?? '',
-        }
-      : null);
-  const answerable = picks.filter((pick) => pick.can_answer && !pick.mine);
-  // A pose that carried a mark is never endorsable, undone or not: the server refuses it once
-  // a mark ever paid, and a GM's undo does not give the pose back.
-  const hasMark = (interaction.act_marks ?? []).length > 0;
-  const reached = interaction.reached_resonance ?? null;
-  const canEndorse = !isSelfPose && !hasMark && (reached != null || groups.length > 0);
-  const endorsers = isSelfPose ? [] : interaction.pose_endorsers;
-
-  if (
-    !canEndorse &&
-    myEndorsement == null &&
-    minePick == null &&
-    answerable.length === 0 &&
-    endorsers.length === 0
-  ) {
-    return null;
-  }
-
   const error =
     createPose.error ?? changePose.error ?? answerPose.error ?? deletePose.error ?? null;
   const busy =
     createPose.isPending || changePose.isPending || answerPose.isPending || deletePose.isPending;
+  return { createPose, deletePose, changePose, answerPose, error, busy };
+}
 
-  let affordance: ReactNode = null;
+type PoseMutations = ReturnType<typeof usePoseMutations>;
+
+/**
+ * My own waiting pick, from `pending_picks` or, failing that, from my endorsement row, which
+ * says it waits (`awaiting_acceptance`). Either way it is never an endorsed badge or a Retract.
+ */
+function findWaitingPick(
+  picks: PendingPick[],
+  myEndorsement: MyPoseEndorsement,
+  resonanceNames: Map<number, string>
+): WaitingPick | null {
+  const listed = picks.find((pick) => pick.mine);
+  if (listed) return listed;
+  if (!myEndorsement?.awaiting_acceptance) return null;
+  return {
+    endorsement_id: myEndorsement.id,
+    resonance_name: resonanceNames.get(myEndorsement.resonance_id) ?? '',
+  };
+}
+
+interface PoseControlState {
+  isSelfPose: boolean;
+  myEndorsement: MyPoseEndorsement;
+  minePick: WaitingPick | null;
+  answerable: PendingPick[];
+  reached: { id: number; name: string } | null;
+  canEndorse: boolean;
+  endorsers: EndorserBadge[];
+}
+
+/** What the pose control shows for this viewer: her own state, the picks she answers, the badges. */
+function poseControlState(
+  interaction: Interaction,
+  viewerPersonaId: number | null,
+  hasResonances: boolean,
+  resonanceNames: Map<number, string>
+): PoseControlState {
+  const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
+  const picks = interaction.pending_picks ?? [];
+  const myEndorsement = isSelfPose ? null : interaction.my_pose_endorsement;
+  // A pose that carried a mark is never endorsable, undone or not: the server refuses it once
+  // a mark ever paid, and a GM's undo does not give the pose back.
+  const hasMark = (interaction.act_marks ?? []).length > 0;
+  const reached = interaction.reached_resonance ?? null;
+  return {
+    isSelfPose,
+    myEndorsement,
+    minePick: findWaitingPick(picks, myEndorsement, resonanceNames),
+    answerable: picks.filter((pick) => pick.can_answer && !pick.mine),
+    reached,
+    canEndorse: !isSelfPose && !hasMark && (reached != null || hasResonances),
+    endorsers: isSelfPose ? [] : interaction.pose_endorsers,
+  };
+}
+
+function PoseAffordance({
+  interaction,
+  state,
+  groups,
+  mutations,
+}: {
+  interaction: Interaction;
+  state: PoseControlState;
+  groups: ResonanceGroup[];
+  mutations: PoseMutations;
+}) {
+  const { createPose, deletePose, changePose, busy } = mutations;
+  const { isSelfPose, minePick, myEndorsement, canEndorse, reached } = state;
   if (minePick != null && !isSelfPose) {
-    affordance = (
+    return (
       <>
         <span data-testid="pose-pick-waiting" className={`${CHIP_CLASS} border-dashed`}>
           {minePick.resonance_name} · waiting for {interaction.persona.name}
@@ -258,8 +283,9 @@ function PoseEndorsementControl({
         </button>
       </>
     );
-  } else if (myEndorsement != null) {
-    affordance = (
+  }
+  if (myEndorsement != null) {
+    return (
       <button
         type="button"
         disabled={myEndorsement.settled || deletePose.isPending}
@@ -273,9 +299,10 @@ function PoseEndorsementControl({
         Retract
       </button>
     );
-  } else if (canEndorse && reached != null) {
+  }
+  if (canEndorse && reached != null) {
     // A reached pose is endorsed for its reach, which the server reads; nothing is sent.
-    affordance = (
+    return (
       <button
         type="button"
         disabled={createPose.isPending}
@@ -286,8 +313,9 @@ function PoseEndorsementControl({
         Endorse their {reached.name}
       </button>
     );
-  } else if (canEndorse) {
-    affordance = (
+  }
+  if (canEndorse) {
+    return (
       <ResonanceMenu
         label={ENDORSE_LABELS.pose}
         groups={groups}
@@ -297,13 +325,56 @@ function PoseEndorsementControl({
       />
     );
   }
+  return null;
+}
+
+function PoseEndorsementControl({
+  interaction,
+  sceneId,
+}: {
+  interaction: Interaction;
+  sceneId: string;
+}) {
+  const viewerPersonaId = useViewerPersonaId();
+  const mutations = usePoseMutations(sceneId);
+  const { answerPose, busy, error } = mutations;
+  const { data: catalog = [] } = useResonanceCatalog();
+  const groups = useMemo(() => groupByAffinity(catalog), [catalog]);
+  const resonanceNames = useMemo(
+    () =>
+      new Map([
+        ...catalog.map((r): [number, string] => [r.id, r.name]),
+        ...interaction.endorsable_resonances.map((r): [number, string] => [r.id, r.name]),
+      ]),
+    [catalog, interaction.endorsable_resonances]
+  );
+
+  if (isPrivatePose(interaction)) return null;
+
+  const state = poseControlState(interaction, viewerPersonaId, groups.length > 0, resonanceNames);
+  const { myEndorsement, minePick, answerable, canEndorse, endorsers } = state;
+
+  if (
+    !canEndorse &&
+    myEndorsement == null &&
+    minePick == null &&
+    answerable.length === 0 &&
+    endorsers.length === 0
+  ) {
+    return null;
+  }
 
   return (
     <div
       data-testid="endorsement-control-pose"
       className="mt-1 flex flex-wrap items-center gap-1.5"
     >
-      {affordance}
+      <PoseAffordance
+        interaction={interaction}
+        state={state}
+        groups={groups}
+        mutations={mutations}
+      />
 
       {/* Picks waiting for the poser, for the poser, the scene's GM and staff. */}
       {answerable.map((pick) => (
