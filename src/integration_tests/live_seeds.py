@@ -18,7 +18,12 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.channels.models import Channel
+    from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckOutcome, CheckType
+    from world.magic.models import KindledStrengthTier, RecordedAct, Resonance
+    from world.missions.models import MissionInstance
     from world.roster.models import RosterTenure
+    from world.scenes.models import Scene
 
 
 @dataclass(frozen=True)
@@ -1918,5 +1923,665 @@ def seed_strength_fight_spec(*, username: str) -> StrengthFightSeed:  # noqa: PL
         usual_name="Sereni",
         kindled_name="Praedari",
         staff_username=STRENGTH_FIGHT_STAFF,
+        staff_password=staff_password,
+    )
+
+
+@dataclass(frozen=True)
+class AttestedResonanceSeed:
+    """What `frontend/e2e/evidence/attested-resonance-5327.spec.ts` reads back (#5327)."""
+
+    scene_id: int
+    scene_name: str
+    daven_name: str
+    daven_sheet_id: int
+    #: Daven's two acts that wait to be marked: one with a Cruelty suggestion, one without.
+    act_intimidated_id: int
+    act_cellar_id: int
+    #: The Mercy reward on a marked pose of Daven's, which the scene's GM undoes in the spec.
+    marked_grant_id: int
+    marked_pose_text: str
+    bell_pose_text: str
+    moment_type_label: str
+    mission_instance_id: int
+    mission_name: str
+    abyssal_affinity_id: int
+    cruelty_id: int
+    cruelty_description: str
+    mercy_description: str
+    weekly_row_count: int
+    kindling_config_id: int
+    gain_source_stat_id: int
+    player_password: str
+    #: The witness (Ilsa, a scene co-owner who is not its GM) and the poser of the bell pose.
+    witness_username: str
+    bell_poser_username: str
+    gm_username: str
+    gm_password: str
+    staff_username: str
+    staff_password: str
+
+
+#: Invented names for the #5327 evidence run. No game character, resonance or place.
+ATTESTED_PASSWORD = "TestPass123!"  # noqa: S105 - the public password of every seeded e2e player
+ATTESTED_ROOM = "The Lantern"
+ATTESTED_SCENE = "Supper at the Lantern"
+ATTESTED_POSER = "Daven"
+ATTESTED_TARGET = "Hale"
+ATTESTED_WITNESS = "Ilsa"
+ATTESTED_BELL_POSER = "Brannoc"
+ATTESTED_GM = "Marek"
+ATTESTED_ACCOUNTS = {
+    ATTESTED_TARGET: "attested_hale",
+    ATTESTED_WITNESS: "attested_ilsa",
+    ATTESTED_BELL_POSER: "attested_brannoc",
+}
+ATTESTED_GM_ACCOUNT = "attested_gm"
+ATTESTED_STAFF = "attested_staff"
+ATTESTED_MISSION = "The smugglers at the tollgate"
+ATTESTED_MOMENT_TYPE = "Defiant stand"
+ATTESTED_BELL_POSE = "sets the cracked bell back on its hook and does not look at the empty pew."
+ATTESTED_MARKED_POSE = "catches the child by the collar and lets her see the knife, then laughs."
+#: Each resonance with its affinity and the description that reads as help text under the picker.
+ATTESTED_RESONANCES = (
+    (
+        "Cruelty",
+        "Abyssal",
+        "Pleasure taken from another person's fear or pain. Mark it when your character hurts "
+        "someone on purpose and enjoys it. Do not mark it for a fight that was forced on her "
+        "or a hard choice she regretted.",
+    ),
+    (
+        "Dread",
+        "Abyssal",
+        "The cold weight of what is about to happen. Mark it when your character makes others "
+        "feel it coming. Do not mark it for a fear she feels herself.",
+    ),
+    (
+        "Mercy",
+        "Celestial",
+        "Help given to someone who cannot repay it, at a cost to your character. Mark it when "
+        "she gives freely. Do not mark it for a favor she expects returned.",
+    ),
+    (
+        "Valor",
+        "Celestial",
+        "Courage shown for someone else's sake. Mark it when your character steps forward "
+        "while afraid. Do not mark it for a risk taken for her own gain.",
+    ),
+    (
+        "Fury",
+        "Primal",
+        "What your character feels when she is cornered and will not go down. Mark it when "
+        "the feeling drives the act. Do not mark it for a plan she made calmly.",
+    ),
+    (
+        "Grief",
+        "Primal",
+        "The ache of a loss still being felt. Mark it when the loss drives what she does. "
+        "Do not mark it for a sad scene she only watches.",
+    ),
+)
+#: The seven rows of the demo's weekly table: gained at least, percent paid.
+ATTESTED_WEEKLY_TABLE = ((0, 100), (9, 85), (18, 70), (27, 55), (36, 40), (54, 20), (72, 0))
+
+
+def _refuse_unless_rt_database() -> None:
+    """Refuse unless both ``DATABASE_URL`` and the live connection name an ``rt_`` database."""
+    import os  # noqa: PLC0415
+    from urllib.parse import urlparse  # noqa: PLC0415
+
+    from django.db import connection  # noqa: PLC0415
+
+    named = {
+        "DATABASE_URL": urlparse(os.environ.get("DATABASE_URL", "")).path.lstrip("/"),
+        "the connected database": str(connection.settings_dict["NAME"]),
+    }
+    for source, name in named.items():
+        if not name.startswith("rt_"):
+            msg = f"Refusing to seed: {source} names {name!r}, not a throwaway rt_ database."
+            raise RuntimeError(msg)
+
+
+def _attested_player_account(username: str) -> AccountDB:
+    """A pre-verified player account that logs in with the shared e2e password."""
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    from world.seeds.test_account import seed_test_account  # noqa: PLC0415
+
+    seed_test_account(
+        username=username, email=f"{username}@example.com", password=ATTESTED_PASSWORD
+    )
+    return AccountDB.objects.get(username=username)
+
+
+def _attested_privileged_account(username: str, *, staff: bool) -> tuple[AccountDB, str]:
+    """An account with a fresh password: a staff superuser, or a player who is only a GM."""
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    from world.seeds.test_account import seed_test_account  # noqa: PLC0415
+
+    password = secrets.token_urlsafe(18)
+    seed_test_account(username=username, email=f"{username}@example.com", password=password)
+    account = AccountDB.objects.get(username=username)
+    account.set_password(password)
+    account.is_staff = staff
+    account.is_superuser = staff
+    account.save()
+    return account, password
+
+
+def _attested_affinities_and_resonances() -> dict[str, Resonance]:
+    """The three affinities with a verb, a gain fatigue and a skill each, and the six resonances.
+
+    Abyssal reads "gloat" and costs 6, Celestial "inspire" and 5, Primal "blaze" and 4, each
+    with its skill (Villainy, Heroism, Reflection) and an earn rate of 100 percent. Returns the
+    resonances by name.
+    """
+    from world.magic.models import Affinity, Resonance  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
+
+    celestial, primal, abyssal = _canonical_affinities()
+    by_name = {row.name: row for row in (celestial, primal, abyssal)}
+    for affinity, verb, fatigue, skill_name, tooltip in (
+        (abyssal, "gloat", 6, "Villainy", "Magic worked at another's cost."),
+        (celestial, "inspire", 5, "Heroism", "Magic worked for those who cannot repay it."),
+        (primal, "blaze", 4, "Reflection", "Magic worked from what the caster feels."),
+    ):
+        skill = Skill.objects.filter(name=skill_name).first() or Skill.objects.create(
+            name=skill_name, category=TraitCategory.MAGIC, tooltip=tooltip
+        )
+        affinity.claim_verb = verb
+        affinity.gain_fatigue = fatigue
+        affinity.earn_rate_percent = 100
+        affinity.skill = skill
+        affinity.save()
+    Affinity.objects.clear_cache()
+    resonances: dict[str, Resonance] = {}
+    for name, affinity_name, description in ATTESTED_RESONANCES:
+        resonance, _ = Resonance.objects.update_or_create(
+            name=name, defaults={"affinity": by_name[affinity_name], "description": description}
+        )
+        resonances[name] = resonance
+    return resonances
+
+
+def _attested_awards_and_tables() -> tuple[CheckOutcome, KindledStrengthTier, int]:
+    """Strength tiers, what an act is worth, the weekly table and the days an act stays listed.
+
+    Faint pays half of an award, Strong three quarters, Blazing all of it. A Partial Success is
+    worth 3, a Success 7 and a Critical Success 12. Returns the Success tier, the Blazing
+    strength tier and the kindling configuration's id.
+    """
+    from world.magic.models import (  # noqa: PLC0415
+        KindledDeedAward,
+        KindledStrengthTier,
+        KindlingConfig,
+        WeeklyMarkReturn,
+    )
+    from world.traits.services import ensure_canonical_check_outcome  # noqa: PLC0415
+
+    tiers: dict[str, KindledStrengthTier] = {}
+    for rank, name, earn in ((1, "Faint", 50), (2, "Strong", 75), (3, "Blazing", 100)):
+        tier, _ = KindledStrengthTier.objects.update_or_create(
+            rank=rank, defaults={"name": name, "earn_percent": earn}
+        )
+        tiers[name] = tier
+    for outcome_name, amount in (("Partial Success", 3), ("Success", 7), ("Critical Success", 12)):
+        KindledDeedAward.objects.update_or_create(
+            outcome_tier=ensure_canonical_check_outcome(outcome_name),
+            defaults={"amount": amount},
+        )
+    for gained_at_least, percent_paid in ATTESTED_WEEKLY_TABLE:
+        WeeklyMarkReturn.objects.update_or_create(
+            gained_at_least=gained_at_least, defaults={"percent_paid": percent_paid}
+        )
+    config, _ = KindlingConfig.objects.update_or_create(pk=1, defaults={"recorded_act_days": 90})
+    return ensure_canonical_check_outcome("Success"), tiers["Blazing"], config.pk
+
+
+def _attested_bonus_check() -> tuple[CheckType, CheckType, CheckType, int]:
+    """The bonus check, what each result adds to a gain, and the stat a marked act rolls.
+
+    The bonus check weighs Presence alone; every one of the five results adds 30 percent to a
+    gain, so a player always reads "Your Villainy check added 30 percent". An act with no check
+    of its own rolls Presence too, through the gain source stat row. Returns the bonus check
+    type, the Intimidate check type, the Persuasion check type and the source stat row's id.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.checks.models import CheckCategory, CheckType, CheckTypeTrait  # noqa: PLC0415
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.models import ResonanceCheckAward, ResonanceGainSourceStat  # noqa: PLC0415
+    from world.traits.constants import CANONICAL_OUTCOME_LEVELS  # noqa: PLC0415
+    from world.traits.models import Trait, TraitCategory, TraitType  # noqa: PLC0415
+    from world.traits.services import ensure_canonical_check_outcome  # noqa: PLC0415
+
+    presence, _ = Trait.objects.get_or_create(
+        name="presence",
+        defaults={
+            "trait_type": TraitType.STAT,
+            "category": TraitCategory.SOCIAL,
+            "description": "Force of personality.",
+        },
+    )
+    magic, _ = CheckCategory.objects.get_or_create(name="Magic")
+    social, _ = CheckCategory.objects.get_or_create(name="Social")
+    checks: dict[str, CheckType] = {}
+    for name, category in (
+        ("Resonance bonus", magic),
+        ("Intimidate", social),
+        ("Persuasion", social),
+    ):
+        check, _ = CheckType.objects.get_or_create(name=name, category=category)
+        CheckTypeTrait.objects.update_or_create(
+            check_type=check, trait=presence, defaults={"weight": Decimal("1.0")}
+        )
+        checks[name] = check
+    for outcome_name in CANONICAL_OUTCOME_LEVELS:
+        ResonanceCheckAward.objects.update_or_create(
+            outcome_tier=ensure_canonical_check_outcome(outcome_name),
+            defaults={"gain_bonus_percent": 30, "spend_worth_percent": 100},
+        )
+    source_stat, _ = ResonanceGainSourceStat.objects.update_or_create(
+        source=GainSource.MARKED_ACT, defaults={"stat": presence}
+    )
+    return checks["Resonance bonus"], checks["Intimidate"], checks["Persuasion"], source_stat.pk
+
+
+def _attested_player(
+    name: str,
+    account: AccountDB,
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM - a factory character's location; no RoomProfile
+) -> CharacterSheet:
+    """The sheet of *name*, played by *account* in *room*, and the account's selected character."""
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.roster.services.selection import set_selected_entry  # noqa: PLC0415
+
+    tenure = _played_character(account, name, room)
+    set_selected_entry(PlayerData.objects.get(account=account), tenure.roster_entry)
+    return tenure.roster_entry.character_sheet
+
+
+def _attested_scene(
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM - the room a factory scene is attached to
+    seats: tuple[tuple[AccountDB, bool, bool], ...],
+) -> Scene:
+    """The live scene in *room* (it stores its poses), with one seat per (account, GM, owner)."""
+    from world.scenes.factories import SceneFactory  # noqa: PLC0415
+    from world.scenes.interaction_services import invalidate_active_scene_cache  # noqa: PLC0415
+    from world.scenes.models import Scene, SceneParticipation  # noqa: PLC0415
+
+    scene = Scene.objects.filter(name=ATTESTED_SCENE).first() or SceneFactory(
+        room=room,
+        name=ATTESTED_SCENE,
+        description="Supper in a lamplit room.",
+        is_active=True,
+    )
+    invalidate_active_scene_cache(room)
+    for account, is_gm, is_owner in seats:
+        SceneParticipation.objects.update_or_create(
+            scene=scene,
+            account=account,
+            defaults={"is_gm": is_gm, "is_owner": is_owner, "left_at": None},
+        )
+    return scene
+
+
+def _attested_mission(
+    daven: CharacterSheet, mercy: Resonance, persuasion: CheckType
+) -> MissionInstance:
+    """A mission Daven is on, whose beat has an option that pays Mercy at once.
+
+    The first option ("Let the smugglers go and pay their fine yourself", Persuasion, risk 2)
+    carries a theme that names Mercy, so the beat says what it pays before he picks; the second
+    ("Turn them in to the tollwarden", Law, no risk) carries none.
+    """
+    from world.checks.models import CheckCategory, CheckType, Consequence  # noqa: PLC0415
+    from world.covenants.perks.constants import Situation  # noqa: PLC0415
+    from world.magic.models import KindlingSituation  # noqa: PLC0415
+    from world.missions.constants import (  # noqa: PLC0415
+        ConflictMode,
+        MissionVisibility,
+        OptionKind,
+        OptionSource,
+    )
+    from world.missions.factories import (  # noqa: PLC0415
+        MissionNodeFactory,
+        MissionOptionFactory,
+        MissionOptionRouteFactory,
+        MissionTemplateFactory,
+    )
+    from world.missions.models import MissionInstance, MissionTheme  # noqa: PLC0415
+    from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
+    from world.traits.constants import CANONICAL_OUTCOME_LEVELS  # noqa: PLC0415
+    from world.traits.services import ensure_canonical_check_outcome  # noqa: PLC0415
+
+    theme, _ = MissionTheme.objects.update_or_create(
+        name="Mercy to the desperate",
+        defaults={
+            "description": "Sparing people who cannot pay for what they did.",
+            "player_text": "This option is about sparing them.",
+        },
+    )
+    KindlingSituation.objects.update_or_create(
+        resonance=mercy,
+        situation=Situation.MISSION_THEME,
+        mission_theme=theme,
+        defaults={"strength": 2, "is_active": True},
+    )
+    social, _ = CheckCategory.objects.get_or_create(name="Social")
+    law, _ = CheckType.objects.get_or_create(name="Law", category=social)
+    template = MissionTemplateFactory(
+        name=ATTESTED_MISSION,
+        summary="Smugglers are caught at the tollgate and cannot pay the fine.",
+        level_band_min=0,
+        level_band_max=99,
+        risk_tier=1,
+        visibility=MissionVisibility.OPEN,
+    )
+    if not template.nodes.exists():
+        entry = MissionNodeFactory(
+            template=template,
+            key="entry",
+            is_entry=True,
+            conflict_mode=ConflictMode.GROUP_VOTE,
+            flavor_text=(
+                "Four smugglers sit in the road beside a tipped cart, and the tollwarden's "
+                "lantern is coming up the hill. They cannot pay the fine."
+            ),
+        )
+        done = MissionNodeFactory(
+            template=template,
+            key="done",
+            conflict_mode=ConflictMode.GROUP_VOTE,
+            flavor_text="The road is quiet again.",
+        )
+        for order, key, label, check_type, risk in (
+            (
+                0,
+                "let-them-go",
+                "Let the smugglers go and pay their fine yourself",
+                persuasion,
+                2,
+            ),
+            (1, "turn-them-in", "Turn them in to the tollwarden", law, 0),
+        ):
+            option = MissionOptionFactory(
+                node=entry,
+                order=order,
+                key=key,
+                option_kind=OptionKind.CHECK,
+                source_kind=OptionSource.AUTHORED,
+                authored_check_type=check_type,
+                authored_base_risk=risk,
+                authored_ic_framing=label,
+            )
+            if order == 0:
+                option.themes.add(theme)
+            for tier_name in CANONICAL_OUTCOME_LEVELS:
+                tier = ensure_canonical_check_outcome(tier_name)
+                consequence, _ = Consequence.objects.get_or_create(
+                    outcome_tier=tier, label=f"The tollgate goes quiet ({tier_name})"
+                )
+                MissionOptionRouteFactory(
+                    option=option, outcome_tier=tier, target_node=done, consequence=consequence
+                )
+    instance = MissionInstance.objects.filter(
+        template=template, participants__character=daven
+    ).first()
+    return instance or staff_assign_mission(template, daven.character)
+
+
+def _attested_daven_state(  # noqa: PLR0913 - Daven's world: scene, target, resonances, checks
+    daven: CharacterSheet,
+    hale: CharacterSheet,
+    scene: Scene,
+    resonances: dict[str, Resonance],
+    success: CheckOutcome,
+    blazing: KindledStrengthTier,
+    intimidate: CheckType,
+) -> tuple[RecordedAct, RecordedAct, RecordedAct]:
+    """Daven's aura, his two acts that wait, and a pose of his that already carries a Mercy mark.
+
+    Everything he holds is wiped and written again, so a second run starts the same. Intimidated
+    Hale (Success, aimed at Hale) carries a Cruelty suggestion; Searched the cellar carries none.
+    The marked pose is "catches the child ...", its act Frightened the child, its reward 8 Mercy
+    written through ``grant_resonance`` with the bonus check off, so it adds nothing. Returns the
+    two waiting acts and the marked one.
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from django.utils import timezone  # noqa: PLC0415
+
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.factories import CharacterAuraFactory  # noqa: PLC0415
+    from world.magic.models import (  # noqa: PLC0415
+        CharacterAura,
+        CharacterResonance,
+        RecordedAct,
+        RecordedActSuggestion,
+        ResonanceGrant,
+    )
+    from world.magic.services.gain import get_resonance_gain_config  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+    from world.roster.models import RosterEntry  # noqa: PLC0415
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import create_interaction  # noqa: PLC0415
+    from world.scenes.models import Interaction  # noqa: PLC0415
+
+    # The poses go first (their endorsements and marks go with them), then the acts, then the
+    # grants the acts held, then the resonances.
+    Interaction.objects.filter(scene=scene).delete()
+    RecordedAct.objects.filter(character_sheet=daven).delete()
+    ResonanceGrant.objects.filter(character_sheet=daven).delete()
+    CharacterResonance.objects.filter(character_sheet=daven).delete()
+    if not CharacterAura.objects.filter(character=daven).exists():
+        CharacterAuraFactory(character=daven, celestial="0", primal="40", abyssal="60")
+    CharacterResonance.objects.create(
+        character_sheet=daven, resonance=resonances["Cruelty"], balance=20, lifetime_earned=20
+    )
+
+    intimidated = RecordedAct.objects.create(
+        character_sheet=daven,
+        label="Intimidated Hale",
+        act_phrase="Intimidated",
+        outcome=success,
+        check_type=intimidate,
+        target_sheet=hale,
+        fatigue_category=ActionCategory.SOCIAL,
+    )
+    RecordedActSuggestion.objects.create(
+        act=intimidated,
+        resonance=resonances["Cruelty"],
+        strength=blazing,
+        reason="You left Hale in the grip of Terror.",
+    )
+    cellar = RecordedAct.objects.create(
+        character_sheet=daven,
+        label="Searched the cellar",
+        outcome=success,
+        fatigue_category=ActionCategory.MENTAL,
+    )
+    child = RecordedAct.objects.create(
+        character_sheet=daven,
+        label="Frightened the child",
+        outcome=success,
+        fatigue_category=ActionCategory.SOCIAL,
+    )
+    now = timezone.now()
+    RecordedAct.objects.filter(pk=intimidated.pk).update(created_at=now - timedelta(minutes=2))
+    RecordedAct.objects.filter(pk=cellar.pk).update(created_at=now - timedelta(minutes=9))
+
+    # Brannoc's pose first, so the feed reads in the order the demo draws it.
+    bell_poser = RosterEntry.objects.get(character_sheet__character__db_key=ATTESTED_BELL_POSER)
+    create_interaction(  # noqa: UNDELIVERED - a seed row; the spec's pages read it from the feed
+        persona=bell_poser.character_sheet.primary_persona,
+        content=ATTESTED_BELL_POSE,
+        mode=InteractionMode.POSE,
+        scene=scene,
+    )
+    marked_pose = create_interaction(  # noqa: UNDELIVERED - a seed row, read from the feed
+        persona=daven.primary_persona,
+        content=ATTESTED_MARKED_POSE,
+        mode=InteractionMode.POSE,
+        scene=scene,
+    )
+    config = get_resonance_gain_config()
+    previous_check = config.bonus_check_type
+    config.bonus_check_type = None
+    config.save(update_fields=["bonus_check_type"])
+    ledger: list[ResonanceGrant] = []
+    grant_resonance(
+        daven,
+        resonances["Mercy"],
+        8,
+        source=GainSource.MARKED_ACT,
+        deed_label=child.label,
+        ledger_out=ledger,
+    )
+    config.bonus_check_type = previous_check
+    config.save(update_fields=["bonus_check_type"])
+    child.marked_grant = ledger[-1]
+    child.marked_interaction = marked_pose
+    child.save(update_fields=["marked_grant", "marked_interaction"])
+    return intimidated, cellar, child
+
+
+def seed_attested_resonance_spec(*, username: str) -> AttestedResonanceSeed:
+    """The rows `attested-resonance-5327.spec.ts` photographs, in an `rt_` database only (#5327).
+
+    Run on a fresh `rt_5327` database (schema and *username*'s account already there); it
+    refuses any other. Written from explicit values in the shape the approved demo draws, and
+    safe to run twice: rows are found by name, and Daven's acts, grants and resonances, the
+    scene's poses, the waiting picks and Hale's fatigue are wiped and written again.
+
+    Staff set: Abyssal reads "gloat" and costs 6, Celestial "inspire" and 5, Primal "blaze" and
+    4, each with its skill; the six resonances carry help text; an act is worth 3, 7 or 12 at
+    Partial Success, Success or Critical Success, and Faint, Strong and Blazing pay half, three
+    quarters and all of it; the weekly table has the demo's seven rows; an act stays listed for
+    90 days; the bonus check adds 30 percent at every result.
+
+    *username*'s account plays Daven, in The Lantern with a live scene that stores its poses.
+    Hale (the target, with room to pay 6 social fatigue), Ilsa (a witness and scene co-owner),
+    Brannoc (whose pose names no resonance) and Marek (the scene's GM) are played by their own
+    accounts. Daven holds Cruelty in his aura and has three acts: Intimidated Hale (a Cruelty
+    suggestion), Searched the cellar (none) and Frightened the child (already marked Mercy on
+    a pose, worth 8). He is on a mission whose first option pays Mercy at once.
+
+    Worked by hand: marking Intimidated Hale as Cruelty is Success 7 at Blazing (100 percent) =
+    7, no weekly step applies below 9 gained, Abyssal's earn rate is 100 percent, and the bonus
+    check adds 7 * 30 // 100 = 2, so Daven reads "grows by 9" and Hale takes 6 social fatigue.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+    from evennia.utils import create  # noqa: PLC0415
+
+    from actions.constants import ActionCategory  # noqa: PLC0415
+    from world.fatigue.services import get_or_create_fatigue_pool  # noqa: PLC0415
+    from world.game_clock.week_services import get_current_game_week  # noqa: PLC0415
+    from world.gm.constants import GMLevel  # noqa: PLC0415
+    from world.gm.models import GMProfile  # noqa: PLC0415
+    from world.magic.models import Affinity, DramaticMomentType  # noqa: PLC0415
+    from world.magic.services.gain import get_resonance_gain_config  # noqa: PLC0415
+    from world.traits.factories import CheckSystemSetupFactory  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue, ResultChart, Trait  # noqa: PLC0415
+    from world.traits.services import ensure_stat_trait  # noqa: PLC0415
+
+    _refuse_unless_rt_database()
+    staff, staff_password = _attested_privileged_account(ATTESTED_STAFF, staff=True)
+    gm_account, gm_password = _attested_privileged_account(ATTESTED_GM_ACCOUNT, staff=False)
+    daven_account = AccountDB.objects.get(username=username)
+    players = {name: _attested_player_account(user) for name, user in ATTESTED_ACCOUNTS.items()}
+    with transaction.atomic():
+        get_current_game_week()
+        if not ResultChart.objects.exists():
+            CheckSystemSetupFactory.create()
+        resonances = _attested_affinities_and_resonances()
+        success, blazing, kindling_config_id = _attested_awards_and_tables()
+        bonus_check, intimidate, persuasion, source_stat_id = _attested_bonus_check()
+
+        room = ObjectDB.objects.filter(
+            db_key=ATTESTED_ROOM, db_typeclass_path="typeclasses.rooms.Room"
+        ).first() or create.create_object("typeclasses.rooms.Room", key=ATTESTED_ROOM)
+        daven = _attested_player(ATTESTED_POSER, daven_account, room)
+        hale = _attested_player(ATTESTED_TARGET, players[ATTESTED_TARGET], room)
+        _attested_player(ATTESTED_WITNESS, players[ATTESTED_WITNESS], room)
+        _attested_player(ATTESTED_BELL_POSER, players[ATTESTED_BELL_POSER], room)
+        _attested_player(ATTESTED_GM, gm_account, room)
+        GMProfile.objects.update_or_create(
+            account=gm_account, defaults={"level": GMLevel.GM, "approved_by": staff}
+        )
+        scene = _attested_scene(
+            room,
+            (
+                (daven_account, False, False),
+                (players[ATTESTED_TARGET], False, False),
+                (players[ATTESTED_BELL_POSER], False, False),
+                (players[ATTESTED_WITNESS], False, True),
+                (gm_account, True, False),
+            ),
+        )
+
+        # What the characters can do: Hale has room to pay social fatigue, Daven a Villainy rating.
+        composure = ensure_stat_trait("composure")
+        CharacterTraitValue.objects.update_or_create(
+            character=hale, trait=composure, defaults={"value": 100}
+        )
+        villainy = Trait.objects.get(name="Villainy")
+        CharacterTraitValue.objects.update_or_create(
+            character=daven, trait=villainy, defaults={"value": 20}
+        )
+        pool = get_or_create_fatigue_pool(hale)
+        pool.set_current(ActionCategory.SOCIAL, 0)
+        pool.save()
+
+        intimidated, cellar, child = _attested_daven_state(
+            daven, hale, scene, resonances, success, blazing, intimidate
+        )
+        config = get_resonance_gain_config()
+        config.bonus_check_type = bonus_check
+        config.bonus_difficulty_level = 0
+        config.save(update_fields=["bonus_check_type", "bonus_difficulty_level"])
+
+        DramaticMomentType.objects.update_or_create(
+            label=ATTESTED_MOMENT_TYPE,
+            defaults={
+                "description": "A character holds her ground when she should have fled.",
+                "resonance": None,
+                "resonance_amount": 10,
+                "per_scene_cap": 1,
+            },
+        )
+        instance = _attested_mission(daven, resonances["Mercy"], persuasion)
+    return AttestedResonanceSeed(
+        scene_id=scene.pk,
+        scene_name=scene.name,
+        daven_name=ATTESTED_POSER,
+        daven_sheet_id=daven.pk,
+        act_intimidated_id=intimidated.pk,
+        act_cellar_id=cellar.pk,
+        marked_grant_id=child.marked_grant_id,
+        marked_pose_text=ATTESTED_MARKED_POSE,
+        bell_pose_text=ATTESTED_BELL_POSE,
+        moment_type_label=ATTESTED_MOMENT_TYPE,
+        mission_instance_id=instance.pk,
+        mission_name=ATTESTED_MISSION,
+        abyssal_affinity_id=Affinity.objects.get(name="Abyssal").pk,
+        cruelty_id=resonances["Cruelty"].pk,
+        cruelty_description=resonances["Cruelty"].description,
+        mercy_description=resonances["Mercy"].description,
+        weekly_row_count=len(ATTESTED_WEEKLY_TABLE),
+        kindling_config_id=kindling_config_id,
+        gain_source_stat_id=source_stat_id,
+        player_password=ATTESTED_PASSWORD,
+        witness_username=ATTESTED_ACCOUNTS[ATTESTED_WITNESS],
+        bell_poser_username=ATTESTED_ACCOUNTS[ATTESTED_BELL_POSER],
+        gm_username=gm_account.username,
+        gm_password=gm_password,
+        staff_username=staff.username,
         staff_password=staff_password,
     )
