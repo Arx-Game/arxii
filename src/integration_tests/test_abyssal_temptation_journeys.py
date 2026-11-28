@@ -314,7 +314,7 @@ class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
         # suggested (#5327).
         self.assertEqual(self.earned(self.praedari), 0)
         listed = self.acts_listing()
-        self.assertEqual(listed.count(f"{self.technique.name} on Ysmay ("), 1)
+        self.assertEqual(listed.count(f"{self.technique.name} ("), 1)
         self.assertIn("Praedari", listed)
         self.assertNotIn("Warmth", listed)
         # Warns, lightly: ceil(20 * 10 / 100) = 2.
@@ -333,7 +333,7 @@ class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
         # The act decides what is suggested, not the resonance the cast was worked in: the same
         # kindled Praedari is suggested again, and nothing is paid in Praedari or in Warmth.
         listed = self.acts_listing()
-        self.assertEqual(listed.count(f"{self.technique.name} on Ysmay ("), 2)
+        self.assertEqual(listed.count(f"{self.technique.name} ("), 2)
         self.assertEqual(listed.count("Praedari"), 2)
         self.assertNotIn("Warmth", listed)
         self.assertEqual(self.earned(self.praedari), 0)
