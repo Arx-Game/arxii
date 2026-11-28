@@ -1364,7 +1364,7 @@ stateDiagram-v2
     Accepted --> Settled: weekly settlement pays it
 ```
 
-The list shows nothing about the poser's aura, so a witness learns nothing about it from the menu. A pick
+The menu's list shows nothing about the poser's aura, so a witness learns nothing about it from the menu. (The pose payload still carries `endorsable_resonances`, the poser's resonances, because entrance and outfit endorsements use it; the maintainer has not ruled whether an aura is secret.) A pick
 changed after the poser accepted waits for her again. `settle_weekly_pot` and the weekly tick skip a waiting
 row, and a pose whose mark already paid cannot be endorsed. Endorsing a character's entrance or outfit is
 unchanged: it uses the same control, pays at once, is permanent and still lists the resonances in her aura.
@@ -1387,8 +1387,32 @@ or Rally surge, a cast's power, the strength a mark pays at, and the line the pl
 Compulsion lifts, and its corruption is added, when she marks a gain in that resonance in the scene, not
 when she merely acts on it.
 
-### 14.6 Not described yet
+### 14.6 The readers and the surfaces a player reaches
 
-PLACEHOLDER, filled by a later task of #5327: the recorded-acts list endpoint, the marks and waiting picks
-carried on the pose feed and the live frame, the telnet `acts` list, `pose/reach <resonance>:<n>=<text>`,
-`endorse accept` and `endorse decline`, and the web "Pointing at" row.
+One service, `pointable_acts_queryset` (`services/marking.py`), defines what a mark can still point at: every
+unmarked act inside `KindlingConfig.recorded_act_days`, newest first, each with its suggestions strongest
+first. Every surface below reads it.
+
+- **The recorded-acts list.** `GET /api/magic/recorded-acts/?character_sheet=<id>` (`RecordedActViewSet`,
+  `views_kindling.py`) lists those acts for the player's own characters, or any character for staff; another
+  player's character is an empty page. Each row is `id`, `label`, `created_at` and the suggestions
+  (`resonance_id`, `resonance_name`, `reason`); no strength and no amount leaves the server. The web "Pointing at"
+  row on the pose composer and the journal form (`ReachRow.tsx`) reads it. The journal form requires an act and
+  has no "Nothing" choice, because no one can endorse a journal entry.
+- **Marks and waiting picks on the pose.** The feed serializer and the live frame build `act_marks` and
+  `pending_picks` from one pair of functions (`services/pose_marks.py`), so a refetch and a push read the same
+  fields for the same viewer. A mark carries the resonance, the act's label, `undone`, `undone_by` (`"staff"` or
+  `"gm"`, never an account name) and `can_undo`, which is true only for staff and the scene's GM on a mark nobody
+  has undone. A waiting pick reaches only its endorser (`mine`) and whoever may answer it (`can_answer`: the poser,
+  the scene's GM and staff). The live frame goes to the whole room, so it carries no per-viewer data: its
+  `act_marks` and `pending_picks` are empty and `can_undo` is false there. Every change to a mark or a pick sends
+  an ids-only `interaction_changed` frame, and each client refetches its own view.
+- **Telnet.** `acts` lists the character's pointable acts, newest first, each with its own id, its age and what a
+  situation suggested (or "No resonance suggested."). `pose/reach <resonance>:<act id>=<text>` poses and marks
+  that act: the id is the act's own, so it never shifts when a new act lands. `endorse pose <char> #N
+  resonance=<name>` makes a pick that waits for the poser, and typing it again with another resonance changes
+  it; `endorse accept <char> #N` and `endorse decline <char> #N` are the poser's answer, and `endorse withdraw
+  <char> #N` takes a pick back. A pose carries one of these switches and `pose/reach` stands alone.
+- **Not on telnet.** A GM or staff member answers someone else's waiting pick on the web only, undo is web only
+  (`POST /api/magic/resonance-grants/<id>/undo/`), and marking from a journal entry is web only.
+- **History.** `resonance history` ends a reward that was undone with ", undone".

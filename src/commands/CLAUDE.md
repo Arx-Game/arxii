@@ -944,8 +944,15 @@ actions, backends, and service functions.
   `reach_kwargs_and_rest` builds the pose action's `reach_resonance_id` kwarg; `PoseAction` checks it before
   the pose posts (`pending_reach_from`) and writes it after (`record_pending_reach`), and an endorsement of the
   pose pays that resonance. Claiming (`pose/claim`, #5181) is gone: a gain from an act is a mark (#5327), which
-  the telnet face names an act for. PLACEHOLDER, filled by a later task of #5327: the `acts` list, the
-  `pose/reach <resonance>:<n>=<text>` form that points at an act, and `endorse accept` and `endorse decline`.
+  the telnet face names an act for. `acts` (`acts.py`, `CmdActs`) prints the character's pointable acts from
+  `marking.pointable_acts` (newest first, at most 20 with a line for the rest), each as `<act id>. <label> (<age>)`
+  with its suggestions or "No resonance suggested.". `pose/reach <resonance>:<act id>=<text>` (`reach_kwargs_and_rest`
+  resolves the id to the character's own act, so another character's act or a stale id is the command's own error)
+  marks that act through the pose action; with no `:<id>` it is the bare reach. `endorse` answers a pick in
+  `endorse.py`: `endorse pose <char> #N resonance=<name>` commits a pick that waits for the poser (typed again it
+  changes the pick, and it has no preview on a pose that named no resonance), `endorse accept|decline <char> #N` is
+  the poser's answer through `AnswerPoseProposalAction`, and `endorse withdraw <char> #N` takes it back. Not on
+  telnet: a GM answering someone else's pick, undo, and marking from a journal entry.
 - **The Anima ritual with a partner** (#5181; `ritual.py`). `ritual anima <partner>` asks someone in the scene to
   take part in the caller's own anima ritual (`start_partner_ritual`, the same consent request the web
   scene-action create opens), tells the partner what is asked, the sentence about their fatigue and `accept` /

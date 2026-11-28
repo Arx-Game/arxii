@@ -158,8 +158,10 @@
   `change_pose_endorsement`; REST `POST /api/magic/pose-endorsements/<id>/change|accept|decline/`). Staff and
   the scene's GM undo a reward (`services/undo.py`: `undo_resonance_grant`, `may_undo_grant`;
   `ResonanceGrant.nullified_at`, `nullified_by`; `POST /api/magic/resonance-grants/<id>/undo/`;
-  `ResonanceUndoError`). Claiming (#5181) is removed. PLACEHOLDER, filled by a later task of #5327: the
-  recorded-acts list endpoint, the telnet `acts` list and the web "Pointing at" row. Why intent is said by
+  `ResonanceUndoError`). Claiming (#5181) is removed. Readers: `GET /api/magic/recorded-acts/?character_sheet=<id>`
+  (`RecordedActViewSet`) and telnet `acts` list the acts a mark can point at, both from
+  `services/marking.pointable_acts_queryset`; the web "Pointing at" row is `ReachRow.tsx`; `act_marks` and
+  `pending_picks` ride on the pose feed and the live frame (`services/pose_marks.py`). Why intent is said by
   the player and checked by people: `docs/adr/adr-5327-resonance-is-earned-by-attested-acts-and-situations-only-suggest.md`.
   Rates (#5181): `Affinity.earn_rate_percent` scales what `grant_resonance` records except for
   `AFFINITY_RATE_EXEMPT_SOURCES` (read from the affinity of the resonance earned since #5231, whoever earns it),

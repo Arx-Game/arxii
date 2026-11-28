@@ -2697,9 +2697,14 @@ and marks"; flow and diagrams: `docs/architecture/resonance-gain.md` §14.
   - **Player copy never says a character "holds" a resonance.** It says the resonance is in her aura.
   - **A situation never pays.** Do not add a situation to `CHOSEN_DEED_SITUATIONS` unless the act is itself
     a declared choice, and never pay a resonance from `fed_tier`.
-- **Not described yet:** PLACEHOLDER, filled by a later task of #5327: the recorded-acts
-  endpoint, the marks and waiting picks on the pose feed and live frame, and the telnet `acts` list,
-  `pose/reach <resonance>:<n>=<text>`, `endorse accept` and `endorse decline`.
+- **Readers.** `pointable_acts_queryset` in `services/marking.py` is the one definition of what a mark can still
+  point at; the recorded-acts endpoint (`RecordedActViewSet` in `views_kindling.py`), telnet `acts` and the web
+  "Pointing at" row all start from it, so add no second definition. `services/pose_marks.py` builds `act_marks`
+  and `pending_picks` for the pose feed and the live frame from one pair of functions; the live frame has no
+  viewer, so it carries both empty and `interaction_changed` makes each client refetch its own view. A new write
+  that changes a mark or a pick must call `notify_interaction_changed`. Telnet: `acts`, `pose/reach
+  <resonance>:<act id>=<text>` and `endorse accept|decline|withdraw <char> #N`; undo, answering another
+  player's pick as GM, and a journal mark are web only.
 - **Authoring left to staff:** a `ResonanceGainSourceStat` row for `MARKED_ACT`, each affinity's
   `gain_fatigue` and `claim_verb`, the `WeeklyMarkReturn` rows, `recorded_act_days`, the reason text on each
   `KindlingSituation` (a player reads it beside an act), mission themes that name a resonance, help text with

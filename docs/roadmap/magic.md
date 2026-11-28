@@ -1602,7 +1602,8 @@ Built as one PR (the numbered steps of the spec were the build order; one schema
 - **A bare reach still needs another player.** A pose that names a resonance and points at no act pays when
   another player's endorsement settles weekly (as #5311 built), and the poser's own endorsement is refused.
 - **A witness's pick waits for the poser.** On a pose that named no resonance, a witness picks from one list
-  of every resonance (it shows nothing about the poser's aura), the row is saved with
+  of every resonance (the menu shows nothing about the poser's aura, though the pose payload still carries
+  `endorsable_resonances` for entrance and outfit endorsements), the row is saved with
   `PoseEndorsement.awaiting_acceptance`, and settlement skips it until the poser, the scene's GM or staff
   accept. The endorser may change or withdraw it until settlement.
 - **Fatigue and the week.** `Affinity.gain_fatigue` is charged to the payer of each gain (the gainer for
@@ -1618,8 +1619,11 @@ Built as one PR (the numbered steps of the spec were the build order; one schema
 - **Removed.** Claiming, `kindled_unclaimed`, `GainSource.KINDLED_CLAIM`, `KindlingConfig.instant_percent` and
   `claim_percent`, telnet `pose/claim`, the claim row.
 - **Properties:** `integration_tests/fuzz/test_attested_earning_properties.py`,
-  `test_attested_marking_properties.py` and `test_attested_endorsement_properties.py`. PLACEHOLDER, filled by a
-  later task of #5327: the journeys, and the readers (the recorded-acts endpoint and the telnet `acts` list).
+  `test_attested_marking_properties.py` and `test_attested_endorsement_properties.py`. **Journeys:**
+  `integration_tests/test_attested_resonance_journeys.py` (marking by telnet, web and journal entry, who pays the
+  fatigue, the weekly table, a witness's pick, the GM's undo and tag, a mission option that pays at once) and the
+  rewritten rows of `docs/testing/journeys.md`. **Readers:** `GET /api/magic/recorded-acts/`, telnet `acts`,
+  and `act_marks` and `pending_picks` on the pose feed and live frame.
 - **Staff authoring left.** A `ResonanceGainSourceStat` row for `MARKED_ACT`; each affinity's `gain_fatigue`
   and `claim_verb`; the `WeeklyMarkReturn` rows and `recorded_act_days`; a check of the reason text on each
   `KindlingSituation` row, because a player now reads it beside an act as a suggestion; mission options whose

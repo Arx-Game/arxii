@@ -2679,10 +2679,17 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
     gains `nullified`, `nullified_after` and `nullified_before`; the grant serializer serves `nullified_at`.
     Every reader of `ResonanceGrant` that counts what a character earned skips a grant with `nullified_at` set
     (the reflectable deeds, `validate_reflection`, the weekly table and the Compulsion read `earned_in_scene` do); a new reader does the same.
-  - **Readers and telnet.** PLACEHOLDER, filled by a later task of #5327: the recorded-acts list endpoint,
-    the marks and waiting picks on the pose feed and live frame, the telnet `acts` list,
-    `pose/reach <resonance>:<n>=<text>`, `endorse accept` and `endorse decline`, and the undone rows in
-    `resonance history`.
+  - **Readers and telnet.** `pointable_acts_queryset` (`services/marking.py`) is the one definition of what a
+    mark can still point at (unmarked, inside `recorded_act_days`, newest first, suggestions strongest first).
+    `GET /api/magic/recorded-acts/?character_sheet=<id>` (`RecordedActViewSet`, `RecordedActSerializer`) lists
+    it for the player's own characters (staff: any); a row is `id`, `label`, `created_at` and suggestions of
+    `resonance_id`, `resonance_name` and `reason`, with no strength or amount. The pose feed and the live frame
+    carry `act_marks` and `pending_picks` from `services/pose_marks.py` (`act_marks_payload`,
+    `pending_picks_payload`): the feed fills in each viewer's own `can_undo`, `mine` and `can_answer`, and the
+    live frame, which has no viewer, carries both lists empty, then an ids-only `interaction_changed` frame
+    makes each client refetch. Telnet: `acts` (each act by its own id), `pose/reach <resonance>:<act id>=<text>`,
+    `endorse accept|decline|withdraw <char> #N`; a GM answering another player's pick, undo and a journal mark
+    are web only. `resonance history` ends an undone row with ", undone".
 - **Earn rate and learn rate** (#5181). `Affinity.earn_rate_percent` scales what a character earns:
   `grant_resonance` multiplies the amount by the rate of the earned resonance's own affinity
   (`resonance.affinity.earn_rate_percent`, #5231, whatever the earner's main affinity; `drift.earn_rate_percent(sheet)`
