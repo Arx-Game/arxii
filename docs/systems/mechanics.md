@@ -243,13 +243,15 @@ bonus once (`covenant_role_base_total`) instead of once per equipped item. See
 | `favor_invocation` / `favor_earning` | `<being> favor invocation` / `<being> favor earning`; one `Any being ...` target each | `target_being` names the being; null = any being (#4333) |
 | `income` / `reputation_gain` / `relationship_gain` / `comfort` / `fatigue_cost` | The category's own name; `reputation_gain` also `reputation_gain_society` and `reputation_gain_organization` | The five levers (#4394); see "Levers" |
 | `disguise_sight` | `mundane`, `magical` (one per `DisguiseKind` value) | Sight through a mask (#4396); see "Levers" |
+| `self_teaching` | `self_teaching` | Teaching herself magical skills (#5326); see "Levers" |
 | `botch_immunity` | Staff-named, one per scope (for example `Exploration botch immunity`) | `target_check_category` or `target_scope_check_type`, exactly one (#4386); a positive total means the character cannot botch at checks in that scope. See `checks.md` "Niche botch immunity" |
 
 ## Levers (#4394)
 
-The five IC levers ApostateCD ruled a distinction may pull (2026-09-07; XP and Kudos never):
+The five IC levers ApostateCD ruled a distinction may pull (2026-09-07; XP and Kudos never),
+and two yes-or-no levers added since (disguise sight, #4396, and teaching herself magical skills, #5326):
 one `ModifierCategory` each, read at exactly one seam through `get_modifier_total`
-(ADR-0278), by `world/mechanics/levers.py` (`lever_total`, `scale_by_percent`). A percent
+(ADR-0278), by `world/mechanics/levers.py` (`lever_total`, `scale_by_percent`, `self_teaching_granted`). A percent
 lever is integer percentage points on the amount being gained or charged (the
 `favor_earning` convention): `amount * (100 + total) // 100`, whole units, floored. A loss is
 never scaled. An unauthored target reads as 0 and the seam is byte for byte what it was.
@@ -262,6 +264,7 @@ never scaled. An unauthored target reads as 0 and the seam is byte for byte what
 | Comfort | `comfort` / `comfort` | `locations.comfort_effect.comfort_level_for_character`, the residence read behind the AP-regen comfort modifier | flat shift in comfort levels, clamped to 1-10. Read when the residence modifier is re-materialized: on a residence or room-comfort change, and (`refresh_comfort_lever`) when a distinction carrying a comfort effect is granted, ranked up or removed, and once at the end of finalize, after the picks (before #4394 a new character's residence modifier was never computed at all: finalize assigns the home directly, so the tenancy grant's residence default saw a chosen residence and skipped the recompute) |
 | Fatigue cost | `fatigue_cost` / `fatigue_cost` | `fatigue.services.apply_fatigue` | percent on the charged cost, floor `MIN_FATIGUE_COST`. Covers every action charged through `apply_fatigue` (actions, moves under load, combat); technique fatigue (`apply_technique_fatigue`, magic's own charge) is not a lever seam |
 | Disguise sight (#4396) | `disguise_sight` / `mundane`, `magical` | `forms.services.identification.pierced_disguise_kinds`, read by the persona reveal rule (`scenes.persona_display`: `resolve_display_for_viewer`, `build_persona_display_map`, so `identity_revealed_to_viewer`, `look` and the sheet) once per page and only when an undiscovered mask is left on it | a positive total on a kind's target reveals a disguise of that kind as `<mask> (<real>)`, no `PersonaDiscovery` row and no identification check. The kind is the worn overlay's `overlay_kind`, or MUNDANE for a bare false name (`presented_disguise_kind`); a named alt is not a disguise and no sight pierces it. Not a percent: the first point is the whole effect |
+| Teaching herself magic (#5326) | `self_teaching` / `self_teaching` (`SELF_TEACHING_CATEGORY_NAME`, `SELF_TEACHING_TARGET_NAME`) | `world.mechanics.levers.self_teaching_granted`, read by `world.magic.services.tradition_teaching.build_teaching_context` for a character with a no-mentor weekly allocation on a Magic skill (`create_training_allocation`, `update_training_allocation`, the weekly run) | a positive total lets the character allocate weekly training on a Magic skill with no mentor. Yes or no: staff give the effect the value 1, and a larger value, a higher rank or a second source adds nothing. Staff put it on a prodigy distinction and on the `unbound` distinction. See `magic.md` "Which Traditions teach which skills" |
 
 The rows are content (#2698): staff author the categories and targets (`world/seeds/levers.py`
 `ensure_lever_targets` creates them on a dev or E2E database under `SEED_SAMPLE_CONTENT`), and a

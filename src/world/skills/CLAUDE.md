@@ -66,13 +66,14 @@ Skills (a proxy of Trait, #5008) and specializations for character abilities.
 **CRUD:**
 - `create_training_allocation(character, ap_amount, *, skill, specialization, mentor)` — creates allocation, validates the weekly AP budget. **That budget is shared with ties (#3957):** the check sums this character's training allocations AND their standing `RelationshipAllocation` rows (`world.relationships.services.standing_tie_ap`) against `ActionPointConfig.get_weekly_regen()`, because both are paid from the one `ActionPointPool` at the weekly turn. The tie door enforces the same total from its side (`set_allocation`, via `standing_weekly_ap`).
 - `update_training_allocation(allocation, *, ap_amount, mentor)` — updates allocation, against that same shared budget (its own row excluded)
+- **Both ask the Tradition rule first (#5326, ADR-5326).** No Magic-category skill is learned by self-study: `_training_refusal` builds a one-character `TeachingContext` and asks `world.magic.services.tradition_teaching.training_verdict`, and a refusal raises `ValueError` with the line the player reads (`ManageTrainingAction` turns it into the message, so telnet and web share it). A Magic skill (or a specialization of one, judged on its parent) needs a mentor whose active Tradition teaches it and who holds a rating above 0, unless `world.mechanics.levers.self_teaching_granted(sheet)` is true. An update re-checks on every call, judging the allocation as it would stand, so clearing the mentor on a Magic skill is refused. A skill outside the Magic category is never refused. Do not add a second reading of "who may teach"; call the verdict
 - `remove_training_allocation(allocation)` — deletes allocation
 
 **Calculation:**
 - `calculate_training_development(allocation)` — computes dev points from training formula
 
 **Cron Processing:**
-- `process_weekly_training()` — processes all allocations, awards dev points, consumes AP
+- `process_weekly_training()` processes all allocations, awards dev points, consumes AP. It builds one `TeachingContext` for the whole run (`_weekly_teaching_context`, which reads the self-teaching lever only for characters with a no-mentor allocation on a Magic skill), asks `training_verdict` again per allocation, and skips a refused one (`_skip_refused_allocation`): no development, no AP spent, the row stays, and one `SYSTEM` narrative line goes to the character
 - `run_weekly_skill_cron()` — weekly training only; rust is the rollover's one pass (#5010)
 
 **Development from training (#4457):**

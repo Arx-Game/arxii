@@ -7458,6 +7458,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - favored_affinities -> magic.Affinity [M2M]
+  - taught_skills -> skills.Skill [M2M]
 **Pointed to by:**
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
@@ -10420,6 +10421,7 @@
   - classes_requiring_trait <- classes.CharacterClass
   - legend_spreads <- societies.LegendSpread
   - affinity <- magic.Affinity
+  - teaching_traditions <- magic.Tradition
   - technique_styles <- magic.TechniqueStyle
   - override_techniques <- magic.Technique
   - maturation_spends <- progression.MaturationSpend
@@ -12154,6 +12156,7 @@
   - classes_requiring_trait <- classes.CharacterClass
   - legend_spreads <- societies.LegendSpread
   - affinity <- magic.Affinity
+  - teaching_traditions <- magic.Tradition
   - technique_styles <- magic.TechniqueStyle
   - override_techniques <- magic.Technique
   - maturation_spends <- progression.MaturationSpend

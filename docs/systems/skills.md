@@ -299,11 +299,11 @@ per `(character, skill)` and `(character, specialization)`.
 
 | Function | Purpose |
 |----------|---------|
-| `create_training_allocation(character, ap_amount, *, skill, specialization, mentor)` | Creates an allocation, validating the weekly AP budget |
-| `update_training_allocation(allocation, *, ap_amount, mentor)` | Updates an existing allocation |
+| `create_training_allocation(character, ap_amount, *, skill, specialization, mentor)` | Creates an allocation, validating the Tradition rule for a Magic skill (#5326, below) and the weekly AP budget |
+| `update_training_allocation(allocation, *, ap_amount, mentor)` | Updates an existing allocation; the Tradition rule is re-checked on every call, judging the allocation as it would stand afterward (clearing the mentor on a Magic skill is refused) |
 | `remove_training_allocation(allocation)` | Deletes an allocation |
 | `calculate_training_development(allocation)` | Computes development points from the training formula |
-| `process_weekly_training()` | Processes all allocations, awards dev points, consumes AP |
+| `process_weekly_training()` | Processes all allocations, awards dev points, consumes AP; skips an allocation the Tradition rule no longer allows (#5326, below) |
 | `train_skill(sheet, skill, dev_points, *, description, stop_at_boundary=False) -> SkillTrainingResult` | The one writer for development from training (#4457): a skill the character has no rating in starts at `DP_BASE_LEVEL` (10); the points go into the skill trait's `DevelopmentPoints` ledger through `award_points` (#5010), and one `DevelopmentTransaction` records the points applied, stamped with the current `game_week`. The skill branch of `process_weekly_training()` and Academy skill courses both call it. With `stop_at_boundary=True` the points are clamped to `points_to_next_boundary`, so nothing dissipates; the caller keeps the excess. `SkillTrainingResult` (`world/skills/types.py`) carries `old_value`, `new_value`, `points_applied`, `plateau_message` |
 | `points_to_next_boundary(tracker: DevelopmentPoints) -> int or None` | Development the skill can take before it parks at the next XP boundary (19, 29, 39, 49) or the band's skill cap, whichever comes first (#4585), read from its ledger (#5010): unpaid rust, then each level's cost up to the stop, less progress banked toward it. A skill already at a boundary or its cap can take only its rust; `None` above 49 with no cap (#4457) |
 | `stored_skill_cap(sheet) -> int or None` / `skill_cap_message(name, stored_cap) -> str` | The band's skill cap as a stored value (`skill_cap_for(sheet) * 10`, `None` for no cap), and the message every raise path shows when development stops at it (#4585) |
@@ -330,6 +330,19 @@ dev_points    = base_gain + mentor_bonus
 All writes dispatch through `ManageTrainingAction` (`registry_key="manage_training"`) so the
 web and telnet paths share the same validation and mutation logic.
 
+### Who may train a Magic skill (#5326, ADR-5326)
+
+No Magic-category skill is learned by self-study. Allocating weekly training on one (or on a specialization of
+one) needs a mentor whose active Tradition teaches the skill and who holds a rating above 0 in it, unless a
+distinction effect on the `self_teaching` lever lets the character teach herself
+(`world.mechanics.levers.self_teaching_granted`). Every Tradition teaches Reflection and the ordinary Magic
+skills; Heroism and Villainy only when staff ticked them on `Tradition.taught_skills`; a fighting style's skill
+only the Traditions in `CombatStyle.taught_by`. `world.magic.services.tradition_teaching.training_verdict` holds
+the rule and each refusal names the next step ("Villainy needs a teacher. Choose a mentor whose Tradition
+teaches it."); `skills.services._training_refusal` asks it for one allocation. A skill outside the Magic
+category is never refused. A mentor of another Tradition costs nothing extra: `calculate_training_development`
+is unchanged. Full account: [magic.md](magic.md), "Which Traditions teach which skills".
+
 ### Telnet Command
 
 Defined in `commands/progression.py`:
@@ -353,6 +366,12 @@ same cadence as `weekly_rollover`). It processes every character's allocations, 
 `DevelopmentTransaction` rows with `source=TRAINING`, `reason=SYSTEM_AWARD` and the current
 `game_week`. It applies no rust: the weekly rollover's skill development pass does, once,
 and that game week stamp exempts a trained skill from it (#5010).
+
+The run asks the Tradition rule again for every standing allocation, with one teaching context built for the
+whole run (`_weekly_teaching_context`). An allocation the rule no longer allows (the mentor left the Tradition,
+staff took the tick off, a row saved with no mentor before the rule) is skipped: no development, no action
+points spent, the row left in place so the character can fix it, and one `SYSTEM` narrative line to her: "Your
+weekly training in {Skill} did not run, and no action points were spent. {refusal}".
 
 ---
 
