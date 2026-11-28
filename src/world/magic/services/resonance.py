@@ -184,7 +184,8 @@ def grant_resonance(  # noqa: PLR0913
             grew the deed or took the Mire.
         reflection: Required for EMBRACED_DEED and SUCCUMBED; the reflection the rite applied.
         deed_label: What the character did, in her own words, recorded on a KINDLED_DEED
-            grant (#5124); None for every other source.
+            grant (#5124) or a MARKED_ACT grant (#5327, the recorded act's label); None for
+            every other source.
         ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
             for a caller that needs the ledger row as well as the updated resonance.
         act_stat: The stat of the roll the act itself made, which replaces the bonus check's

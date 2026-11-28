@@ -28,6 +28,9 @@ _MSG_INVALID_DISPOSITION = "disposition must be reveal or seal."
 _MSG_INVALID_OVERRIDE = "override must be inherit, reveal, or seal."
 _MSG_ABOUT_NOT_FOUND = "That character was not found."
 _MSG_INVALID_CONSENT = "consent must be rivals or anyone."
+_MSG_MARK_NEEDS_ACT = (
+    "A journal entry marks an act. Choose the act this entry is about, or leave the resonance out."
+)
 
 
 def _resolve_about(about_id: Any) -> tuple[Any, str | None]:
@@ -58,7 +61,14 @@ class _BaseJournalAction(Action):
 
 @dataclass
 class CreateJournalEntryAction(_BaseJournalAction):
-    """Write a new journal entry (optionally public, with tags)."""
+    """Write a new journal entry (optionally public, with tags).
+
+    A reflection (#5124) rides with it: ``reflect_choice`` and one target. A mark (#5327) rides
+    with it too: ``reach_act_id`` (one of the writer's recorded acts) and ``reach_resonance_id``,
+    both needed, since a journal entry marks an act and has no bare reach. Both are checked
+    before the entry is written and recorded in the same transaction as it, so one that fails
+    late takes the entry back with it.
+    """
 
     key: str = "create_journal_entry"
     name: str = "Write Journal Entry"
@@ -73,7 +83,11 @@ class CreateJournalEntryAction(_BaseJournalAction):
     ) -> ActionResult:
         from world.journals.constants import PosthumousOverride  # noqa: PLC0415
         from world.journals.services import create_journal_entry  # noqa: PLC0415
-        from world.magic.exceptions import ReflectionError  # noqa: PLC0415
+        from world.magic.exceptions import MarkError, ReflectionError  # noqa: PLC0415
+        from world.magic.services.marking import (  # noqa: PLC0415
+            pending_mark_from,
+            record_pending_mark,
+        )
         from world.magic.services.reflection import (  # noqa: PLC0415
             pending_reflection_from,
             record_pending_reflection,
@@ -99,8 +113,18 @@ class CreateJournalEntryAction(_BaseJournalAction):
         except ReflectionError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
-        # Entry and reflection are one transaction: a reflection that fails late (a race on
-        # the same deed) takes the entry back with it, and the writer is told why.
+        # A mark (#5327) is checked the same way. A journal entry marks an act, so a resonance
+        # with no act is refused here.
+        if kwargs.get("reach_act_id") is None and kwargs.get("reach_resonance_id") is not None:
+            return ActionResult(success=False, message=_MSG_MARK_NEEDS_ACT)
+        try:
+            pending_mark = pending_mark_from(sheet, kwargs)
+        except MarkError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        # Entry, reflection and mark are one transaction: one that fails late (a race on the
+        # same deed or act, a mark that would pay nothing) takes the entry back with it, and
+        # the writer is told why.
         try:
             with transaction.atomic():
                 entry = create_journal_entry(
@@ -117,16 +141,23 @@ class CreateJournalEntryAction(_BaseJournalAction):
                     if pending is not None
                     else None
                 )
-        except ReflectionError as exc:
+                mark = (
+                    record_pending_mark(sheet, pending_mark, journal_entry=entry)
+                    if pending_mark is not None
+                    else None
+                )
+        except (ReflectionError, MarkError) as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
             success=True,
             message=(
                 f"You write a new journal entry: {entry.title}."
                 + (f" {recorded_line(reflection)}" if reflection is not None else "")
+                + (f" {mark.line}" if mark is not None else "")
             ),
             data={"entry_id": entry.pk}
-            | ({"reflection_line": recorded_line(reflection)} if reflection is not None else {}),
+            | ({"reflection_line": recorded_line(reflection)} if reflection is not None else {})
+            | ({"mark_line": mark.line} if mark is not None else {}),
         )
 
 

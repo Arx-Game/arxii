@@ -18,8 +18,9 @@ from rest_framework.serializers import BaseSerializer
 from actions.definitions.sineating import run_pose_sineating
 from flows.scene_data_manager import SceneDataManager
 from flows.service_functions.communication import message_location
-from world.magic.exceptions import ReachError, ReflectionError, SoulTetherError
+from world.magic.exceptions import MarkError, ReachError, ReflectionError, SoulTetherError
 from world.magic.models import CharacterResonance, PoseEndorsement, PoseResonanceReach
+from world.magic.services.marking import pending_mark_from, record_pending_mark
 from world.magic.services.reach import pending_reach_from, record_pending_reach
 from world.magic.services.reflection import (
     pending_reflection_from,
@@ -87,6 +88,7 @@ from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 
 if TYPE_CHECKING:
     from world.magic.types.kindling import PendingReach
+    from world.magic.types.marking import PendingMark
     from world.magic.types.reflection import PendingReflection
     from world.magic.types.soul_tether import PendingSineating
 
@@ -253,13 +255,15 @@ def _pose_deed_fields(  # noqa: PLR0913
     reflection: PendingReflection | None,
     sineating: PendingSineating | None,
     reach: PendingReach | None = None,
+    mark: PendingMark | None = None,
     writing: Interaction | None,
 ) -> dict[str, object]:
-    """The reflection and Sineating lines a new pose answers with (#5124, #5177), and the
-    reach it records (#5308).
+    """The reflection, Sineating and mark lines a new pose answers with (#5124, #5177, #5327),
+    and the reach it records (#5308).
 
-    Each is carried out once the pose is down, on first acceptance only. A reflection that
-    cannot be recorded does not undo the pose: the writer is told why.
+    Each is carried out once the pose is down, on first acceptance only. A reflection or mark
+    that cannot be recorded does not undo the pose: the writer is told why. A mark in an
+    ephemeral scene (no ``writing``) pays nothing and says so.
     """
     if replayed:
         return {}
@@ -267,6 +271,8 @@ def _pose_deed_fields(  # noqa: PLR0913
         # Only the pose's author gets here, with the pose they have just posted.
         record_pending_reach(writing, reach)
     fields: dict[str, object] = {}
+    if mark is not None:
+        fields = _recorded_mark_fields(persona, mark, writing)
     if reflection is not None:
         reflection_line = None
         reflection_recorded = True
@@ -283,6 +289,7 @@ def _pose_deed_fields(  # noqa: PLR0913
             )
         if reflection_line:
             fields = {
+                **fields,
                 "reflection_line": reflection_line,
                 "reflection_recorded": reflection_recorded,
             }
@@ -294,6 +301,21 @@ def _pose_deed_fields(  # noqa: PLR0913
             "sineating_recorded": sineating_recorded,
         }
     return fields
+
+
+def _recorded_mark_fields(
+    persona: Persona, mark: PendingMark, writing: Interaction | None
+) -> dict[str, object]:
+    """Record the mark a new pose carried (#5327): the line its writer reads and whether it paid.
+
+    A mark that cannot pay leaves the pose standing and says why; the act stays pointable.
+    """
+    try:
+        result = record_pending_mark(persona.character_sheet, mark, interaction=writing)
+    except MarkError as exc:
+        line = f"Your pose was posted, but your mark was not recorded: {exc.user_message}"
+        return {"mark_line": line, "mark_recorded": False}
+    return {"mark_line": result.line, "mark_recorded": result.paid}
 
 
 def _record_submitted_pose(  # noqa: PLR0913
@@ -311,6 +333,7 @@ def _record_submitted_pose(  # noqa: PLR0913
     reflection: PendingReflection | None = None,
     sineating: PendingSineating | None = None,
     reach: PendingReach | None = None,
+    mark: PendingMark | None = None,
 ) -> Response:
     """Record, broadcast, and serialize a submitted pose.
 
@@ -319,6 +342,8 @@ def _record_submitted_pose(  # noqa: PLR0913
     ``sineating`` (#5177) is carried out once the pose is down, on first acceptance only; the
     response carries ``sineating_line`` and ``sineating_recorded``. ``reach`` (#5308) is the
     resonance the pose reaches for, written against the new row on first acceptance only.
+    ``mark`` (#5327) is the act and resonance the pose marks, paid on first acceptance only; the
+    response carries ``mark_line`` and ``mark_recorded``.
     """
     target_pks = frozenset(p.pk for p in target_personas) if target_personas else frozenset()
     try:
@@ -371,6 +396,7 @@ def _record_submitted_pose(  # noqa: PLR0913
         reflection=reflection,
         sineating=sineating,
         reach=reach,
+        mark=mark,
         writing=interaction,
     )
     if not result.replayed:
@@ -391,32 +417,34 @@ def _checked_pose_deeds(
     PendingReflection | None,
     PendingSineating | None,
     PendingReach | None,
+    PendingMark | None,
     Response | None,
 ]:
-    """Check a pose's reflection, Sineating and reach before anything posts (#5124, #5177,
-    #5308).
+    """Check a pose's reflection, Sineating, reach and mark before anything posts (#5124, #5177,
+    #5308, #5327).
 
     A refused one costs the writer nothing: the refusal is returned as the response. A retry
     of a pose that already landed is the replay it is, and its deeds were carried out the
     first time, so nothing is checked again.
     """
     if pose_already_submitted(persona, data["client_request_id"]):
-        return None, None, None, None
+        return None, None, None, None, None
     try:
         reflection = pending_reflection_from(persona.character_sheet, data)
     except ReflectionError as exc:
-        return None, None, None, _bad_request(exc.user_message)
+        return None, None, None, None, _bad_request(exc.user_message)
     try:
         sineating = pending_sineating_from(persona.character_sheet, data)
     except SoulTetherError as exc:
-        return None, None, None, _bad_request(exc.user_message)
+        return None, None, None, None, _bad_request(exc.user_message)
     if sineating is not None and reflection is not None:
-        return None, None, None, _bad_request(BOTH_REFLECTION_AND_SINEATING)
+        return None, None, None, None, _bad_request(BOTH_REFLECTION_AND_SINEATING)
     try:
         reach = pending_reach_from(data)
-    except ReachError as exc:
-        return None, None, None, _bad_request(exc.user_message)
-    return reflection, sineating, reach, None
+        mark = pending_mark_from(persona.character_sheet, data)
+    except (ReachError, MarkError) as exc:
+        return None, None, None, None, _bad_request(exc.user_message)
+    return reflection, sineating, reach, mark, None
 
 
 def _bad_request(detail: str) -> Response:
@@ -729,7 +757,7 @@ class InteractionViewSet(
         # the writer nothing.
         # A retry of a pose that already landed is the replay it is, and its reflection was
         # recorded the first time: it is not checked again (the deed it names is now taken).
-        reflection, sineating, reach, refusal = _checked_pose_deeds(persona, data)
+        reflection, sineating, reach, mark, refusal = _checked_pose_deeds(persona, data)
         if refusal is not None:
             return refusal
 
@@ -790,6 +818,7 @@ class InteractionViewSet(
             reflection=reflection,
             sineating=sineating,
             reach=reach,
+            mark=mark,
         )
 
 

@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     from flows.object_states.base_state import BaseState
     from world.gm.models import GMPrompt
     from world.magic.types.kindling import PendingReach
+    from world.magic.types.marking import PendingMark
     from world.magic.types.reflection import PendingReflection
     from world.magic.types.soul_tether import PendingSineating
     from world.scenes.models import Interaction, Persona, Scene
@@ -720,6 +721,12 @@ class PoseAction(Action):
     once it has; an endorsement of the pose pays that resonance. Only the poser sets it, and
     only as they pose.
 
+    A mark (#5327) is a reach that also points at an act: ``reach_act_id`` is one of the poser's
+    recorded acts, beside ``reach_resonance_id``. The pair is checked before the pose posts,
+    and once it has the resonance is paid at once and the act is marked (no reach is written).
+    The poser reads one private line; a mark that cannot pay leaves the pose standing and says
+    why. In an ephemeral scene a mark pays nothing and the act stays pointable.
+
     An optional reflection (#5124) rides with the pose: ``reflect_choice`` (``EMBRACE`` or
     ``DISOWN``, or ``ABSOLVE``, ``CONDEMN`` or ``SUCCUMB`` for a burden) with one of
     ``reflect_grant_id`` (a kindled or succumbed-to-the-Mire deed), ``reflect_resonance_id``
@@ -755,7 +762,7 @@ class PoseAction(Action):
             return place_error
         if not text:
             return ActionResult(success=False, message="Pose what?")
-        pending, sineating, reach, attachment_error = _pending_pose_attachment(actor, kwargs)
+        pending, sineating, reach, mark, attachment_error = _pending_pose_attachment(actor, kwargs)
         if attachment_error is not None:
             return attachment_error
         sdm = context.scene_data if context else SceneDataManager()
@@ -764,6 +771,7 @@ class PoseAction(Action):
 
         told: list[tuple[str, bool]] = []
         sineated: list[tuple[str, bool]] = []
+        marked: list[tuple[str, bool]] = []
 
         first_pose: list[bool] = []
 
@@ -772,6 +780,7 @@ class PoseAction(Action):
             # replayed request never gets here.
             _carry_attachments(actor, pending, sineating, interaction, told, sineated)
             _record_pose_reach(interaction, reach)
+            _carry_pose_mark(actor, mark, interaction, marked)
             first_pose.append(True)
 
         client_request_id = kwargs.get("client_request_id")
@@ -809,18 +818,20 @@ class PoseAction(Action):
             )
 
             safe_refresh_impulses_for_character(actor)
-        return _pose_result(told, sineated)
+        return _pose_result(told, sineated, marked)
 
 
 def _pose_result(
     told: list[tuple[str, bool]],
     sineated: list[tuple[str, bool]] | None = None,
+    marked: list[tuple[str, bool]] | None = None,
 ) -> ActionResult:
-    """The pose's result: bare when it carried no reflection or Sineating, else the line the
-    poser reads.
+    """The pose's result: bare when it carried no reflection, Sineating or mark, else the lines
+    the poser reads.
 
-    The pose posted either way; ``reflection_recorded`` (or ``sineating_recorded``) tells a
-    client whether to show the line as a success or as the error it is.
+    The pose posted either way; ``reflection_recorded`` (or ``sineating_recorded``,
+    ``mark_recorded``) tells a client whether to show the line as a success or as the error it
+    is.
     """
     lines: list[str] = []
     data: dict[str, Any] = {}
@@ -832,6 +843,10 @@ def _pose_result(
         line, recorded = told[0]
         lines.append(line)
         data["reflection_recorded"] = recorded
+    if marked:
+        line, paid = marked[0]
+        lines.append(line)
+        data["mark_recorded"] = paid
     if not lines:
         return ActionResult(success=True)
     return ActionResult(success=True, message="\n".join(lines), data=data)
@@ -896,20 +911,24 @@ def _pending_pose_attachment(
     PendingReflection | None,
     PendingSineating | None,
     PendingReach | None,
+    PendingMark | None,
     ActionResult | None,
 ]:
-    """The checked reflection or Sineating, and the reach (#5308), a pose carries, or the
-    refusal that stops the pose."""
+    """The checked reflection or Sineating, the reach (#5308) and the mark (#5327), a pose
+    carries, or the refusal that stops the pose."""
     reflection, refusal = _pending_pose_reflection(actor, kwargs)
     if refusal is not None:
-        return None, None, None, refusal
+        return None, None, None, None, refusal
     sineating, refusal = _pending_pose_sineating(actor, kwargs, reflection)
     if refusal is not None:
-        return None, None, None, refusal
+        return None, None, None, None, refusal
     reach, refusal = _pending_pose_reach(actor, kwargs)
     if refusal is not None:
-        return None, None, None, refusal
-    return reflection, sineating, reach, None
+        return None, None, None, None, refusal
+    mark, refusal = _pending_pose_mark(actor, kwargs)
+    if refusal is not None:
+        return None, None, None, None, refusal
+    return reflection, sineating, reach, mark, None
 
 
 def _record_pose_reach(interaction: Interaction | None, reach: PendingReach | None) -> None:
@@ -944,6 +963,65 @@ def _pending_pose_reach(
     try:
         return pending_reach_from(kwargs), None
     except ReachError as exc:
+        return None, ActionResult(success=False, message=exc.user_message)
+
+
+def _carry_pose_mark(
+    actor: ObjectDB,
+    mark: PendingMark | None,
+    interaction: Interaction | None,
+    marked: list[tuple[str, bool]],
+) -> None:
+    """Record the mark a posted pose carried, if any, collecting the line the poser reads."""
+    if mark is not None:
+        marked.append(_record_pose_mark(actor, mark, interaction))
+
+
+def _record_pose_mark(
+    actor: ObjectDB, mark: PendingMark, interaction: Interaction | None
+) -> tuple[str, bool]:
+    """Record the mark a posted pose carried (#5327); returns the line the poser reads and
+    whether the mark paid.
+
+    The pose cannot be un-posted, so it stands whatever happens: a mark that cannot pay says
+    why and leaves the act on the poser's list. A pose in an ephemeral scene has no row to
+    carry the mark, so it pays nothing.
+    """
+    from world.magic.exceptions import MarkError  # noqa: PLC0415
+    from world.magic.services.marking import record_pending_mark  # noqa: PLC0415
+
+    try:
+        result = record_pending_mark(actor.character_sheet, mark, interaction=interaction)
+    except MarkError as exc:
+        return f"Your pose was posted, but your mark was not recorded: {exc.user_message}", False
+    return result.line, result.paid
+
+
+def _pending_pose_mark(
+    actor: ObjectDB, kwargs: dict[str, Any]
+) -> tuple[PendingMark | None, ActionResult | None]:
+    """The checked mark a pose asked for, or the refusal that stops the pose (#5327).
+
+    A replayed ``client_request_id`` asks for no check: what the first send did stands.
+    """
+    from world.magic.exceptions import MarkError  # noqa: PLC0415
+    from world.magic.services.marking import pending_mark_from  # noqa: PLC0415
+    from world.scenes.interaction_services import pose_already_submitted  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    if kwargs.get("reach_act_id") is None:
+        return None, None
+    sheet = actor.character_sheet
+    if sheet is None:
+        return None, ActionResult(success=False, message="You need a character to mark an act.")
+    request_id = kwargs.get("client_request_id")
+    if request_id is not None:
+        persona = active_persona_for_sheet(sheet)
+        if persona is not None and pose_already_submitted(persona, request_id):
+            return None, None
+    try:
+        return pending_mark_from(sheet, kwargs), None
+    except MarkError as exc:
         return None, ActionResult(success=False, message=exc.user_message)
 
 

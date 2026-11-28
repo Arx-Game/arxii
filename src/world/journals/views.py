@@ -38,6 +38,7 @@ from world.journals.services import (
 )
 
 _REFLECTION_LINE = "reflection_line"
+_MARK_LINE = "mark_line"
 _NO_CHARACTER_DETAIL = "No character found."
 _NOT_FOUND_DETAIL = "Not found."
 # Serializer/validated_data field names, extracted to satisfy the string-literal lint
@@ -340,6 +341,8 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
             reflect_grant_id=serializer.validated_data.get("reflect_grant_id"),
             reflect_resonance_id=serializer.validated_data.get("reflect_resonance_id"),
             reflect_tether_id=serializer.validated_data.get("reflect_tether_id"),
+            reach_resonance_id=serializer.validated_data.get("reach_resonance_id"),
+            reach_act_id=serializer.validated_data.get("reach_act_id"),
         )
         if not result.success:
             return Response(
@@ -353,6 +356,9 @@ class JournalEntryViewSet(CharacterContextMixin, viewsets.GenericViewSet):
         # Told to the writer alone when the entry carried a reflection that was recorded (#5124).
         if _REFLECTION_LINE in result.data:
             body[_REFLECTION_LINE] = result.data[_REFLECTION_LINE]
+        # Told to the writer alone when the entry carried a mark that paid (#5327).
+        if _MARK_LINE in result.data:
+            body[_MARK_LINE] = result.data[_MARK_LINE]
         return Response(body, status=status.HTTP_201_CREATED)
 
     def partial_update(self, request: Request, pk: str | None = None) -> Response:
