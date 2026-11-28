@@ -127,7 +127,13 @@ async function shot(
  * One PNG of the page cut to the box that holds all of `targets`, with a margin: a pose and the
  * private line under it, as the demo draws them, without the rest of the play page around them.
  */
-async function shotAround(testInfo: TestInfo, name: string, page: Page, targets: Locator[]) {
+async function shotAround(
+  testInfo: TestInfo,
+  name: string,
+  page: Page,
+  targets: Locator[],
+  extraBottom = 0
+) {
   const boxes = [];
   for (const target of targets) {
     await target.scrollIntoViewIfNeeded();
@@ -135,11 +141,11 @@ async function shotAround(testInfo: TestInfo, name: string, page: Page, targets:
     if (box === null) throw new Error(`${name}: a target has no box to cut around`);
     boxes.push(box);
   }
-  const margin = 12;
+  const margin = 6;
   const left = Math.max(0, Math.min(...boxes.map((box) => box.x)) - margin);
   const top = Math.max(0, Math.min(...boxes.map((box) => box.y)) - margin);
   const right = Math.max(...boxes.map((box) => box.x + box.width)) + margin;
-  const bottom = Math.max(...boxes.map((box) => box.y + box.height)) + margin;
+  const bottom = Math.max(...boxes.map((box) => box.y + box.height)) + 1 + extraBottom;
   await page.screenshot({
     path: testInfo.outputPath(name),
     clip: { x: left, y: top, width: right - left, height: bottom - top },
@@ -302,7 +308,8 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
       const earned = feedLine(page, /You earned \d+ Mercy\./);
       await expect(earned).toBeVisible({ timeout: 30000 });
       await expect(earned).toContainText('Your Heroism check added 30 percent.');
-      await shotAround(testInfo, '01b-earned-line-after-the-pick.png', page, [earned]);
+      // The next line of the feed is what the pick did in the story.
+      await shotAround(testInfo, '01b-earned-line-after-the-pick.png', page, [earned], 46);
       await shot(testInfo, '01c-beat-result-after-the-pick.png', row.getByTestId('beat-result'));
     } catch (error) {
       failures.push(error);
