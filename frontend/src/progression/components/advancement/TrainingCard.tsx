@@ -176,7 +176,7 @@ function AddAllocationForm() {
               setMentorName(name);
             }}
             selectedName={mentorName}
-            placeholder="Search by name…"
+            placeholder="Name…"
           />
         </div>
       </div>
