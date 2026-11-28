@@ -67,12 +67,12 @@ They do not use the command system, dispatchers, or handlers.
   Sineating did not happen: <why>". Sineating needs no anima and no fatigue;
   `gm_props.py` (#5124) adds `KindleResonanceAction` (`"stage_kindle"`, the room GM's gate, writes
   `kindle_by_gm`) and `GMListKindlingAction` (`"gm_list_kindling"`, scoped to a character in the
-  GM's room); `PoseAction` and `CreateJournalEntryAction` take optional `reflect_choice` with
+  GM's room); `CreateJournalEntryAction` also takes `reach_act_id` and `reach_resonance_id` together (#5327: a journal entry marks an act and has no bare reach; the entry, its reflection and its mark are one transaction, and `data.mark_line` carries the private line); `PoseAction` and `CreateJournalEntryAction` take optional `reflect_choice` with
   `reflect_grant_id`, `reflect_resonance_id` or (#5177) `reflect_tether_id` and record a `Reflection` with the writing (checked
   before the pose posts; the room sees only the pose; the result `data` carries
   `reflection_recorded`); `PoseAction` also takes `sineating_role` (`entreat` or `perform`),
   `sineating_partner_id` and `sineating_units` (#5177), refuses a pose that carries both a reflection and a
-  Sineating, takes `claim` and `claim_resonance_ids` (#5181: collects the resonance kindled deeds set aside once the pose has posted; checked before, rides with either of the others; the result `message` and `data.claim_lines` carry one private line per resonance), and refreshes the writer's impulses once the pose posts (`refresh_impulses_for_character`); `CastTechniqueAction` carries `fury_resonance_id` into the combat
+  Sineating, takes `reach_resonance_id` (#5308: the resonance the pose reaches for, written once the pose has posted, paid when another player endorses it) and, with it, `reach_act_id` (#5327: a mark, `pending_mark_from` before the pose posts and `record_pending_mark` after, which pays the resonance at once and writes no reach; it rides beside a reflection or a Sineating; the result `message` carries the private line and `data.mark_recorded` says whether it paid, and a mark that cannot pay leaves the pose posted), and refreshes the writer's impulses once the pose posts (`refresh_impulses_for_character`); `CastTechniqueAction` carries `fury_resonance_id` into the combat
   declaration kwargs;
   `cast.py` — `CastTechniqueAction`, key `"cast_technique"`, the SCENE_ADAPTIVE
   seam for standalone technique casts — see "SCENE_ADAPTIVE Backend" below;

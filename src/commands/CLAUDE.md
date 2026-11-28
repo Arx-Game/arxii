@@ -937,15 +937,15 @@ actions, backends, and service functions.
   forms the bond and `tether dissolve` ends it. `tether entreat` and `sineater consume` are gone. Typed in
   `integration_tests/test_sineating_journeys.py`; formation, brace, rescue and dissolve by hand in
   `commands/tests/test_soul_tether_e2e.py`.
-- **Claiming** (#5181; `claim.py`, `evennia_overrides/communication.py`). `pose/claim <text>` poses and collects
-  what kindled deeds set aside (`CharacterResonance.kindled_unclaimed`): everything waiting, or with
-  `pose/claim ruin,mercy=<text>` only the resonances named (matched without regard to case among the ones
-  with something waiting; a name that is not one is the command's own error and nothing posts). Once `=`
-  is present the text before it is read as names. It combines as `pose/claim/reflect`, `pose/claim/entreat`
-  and `pose/claim/sineat`, where it claims everything (the `=` belongs to the other part). `claim_kwargs_and_rest`
-  builds the pose action's `claim` and `claim_resonance_ids` kwargs; `PoseAction` checks them before the pose
-  posts (`pending_claim_from`) and collects them after (`claim_kindled`), and the claimer alone reads one
-  line per resonance in the affinity's `claim_verb`. Typed in `integration_tests/test_claiming_kindled_journeys.py`.
+- **Reaching** (#5308; `reach.py`, `evennia_overrides/communication.py`). `pose/reach <resonance>=<text>` poses and
+  names the resonance the pose reaches for, in her aura or not (matched without regard to case by
+  `resolve_reach_name`; a name that matches none is the command's own error and nothing posts). It stands
+  alone: `CmdPose._attachment_and_rest` refuses it with any other switch, because `=` belongs to the resonance.
+  `reach_kwargs_and_rest` builds the pose action's `reach_resonance_id` kwarg; `PoseAction` checks it before
+  the pose posts (`pending_reach_from`) and writes it after (`record_pending_reach`), and an endorsement of the
+  pose pays that resonance. Claiming (`pose/claim`, #5181) is gone: a gain from an act is a mark (#5327), which
+  the telnet face names an act for. PLACEHOLDER, filled by a later task of #5327: the `acts` list, the
+  `pose/reach <resonance>:<n>=<text>` form that points at an act, and `endorse accept` and `endorse decline`.
 - **The Anima ritual with a partner** (#5181; `ritual.py`). `ritual anima <partner>` asks someone in the scene to
   take part in the caller's own anima ritual (`start_partner_ritual`, the same consent request the web
   scene-action create opens), tells the partner what is asked, the sentence about their fatigue and `accept` /
