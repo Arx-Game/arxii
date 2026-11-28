@@ -2665,7 +2665,10 @@ and marks"; flow and diagrams: `docs/architecture/resonance-gain.md` §14.
 - **Gain fatigue** (`services/gain_fatigue.py`). `Affinity.gain_fatigue` through `fatigue_cost_for` (the
   one place a cost is priced, shared with `apply_fatigue`); the payer is the gainer for Primal and Celestial
   and the act's target for Abyssal (`gain_fatigue_payer`), nobody for a game-run opponent. The gain shrinks
-  to `fatigue_room` and stops at nothing; never take a payer to Exhausted for someone else's gain.
+  to `fatigue_room` and stops at nothing; never take a payer to Exhausted for someone else's gain. A gain
+  that points at no act (a settled endorsement, a GM's tag) calls `charge_gain_fatigue` too, with
+  `pose_gain_payer` (Abyssal tires the pose's one named target, else nobody); an authored choice charges
+  nobody. Every gain source that can tire someone goes through `charge_gain_fatigue`, never `apply_fatigue`.
 - **The weekly table** (`WeeklyMarkReturn`, `weekly_percent_paid`) counts only this game week's non-undone
   `MARKED_ACT` grants. An authored choice, an endorsement and a GM's tag are never counted or reduced.
 - **Undo** (`services/undo.py`, `POST /api/magic/resonance-grants/<id>/undo/`). `undo_resonance_grant`

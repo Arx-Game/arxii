@@ -1342,7 +1342,11 @@ someone pays fatigue, as `Affinity.gain_fatigue` says:
 A payer's room is capacity minus current fatigue minus 1, never below 0, so a gain never takes anyone into the
 Exhausted zone and runs no collapse check. When the room is below the cost, the gain shrinks in proportion
 and stops at nothing; at no room the mark is refused and the act stays pointable. A payer whose capacity is
-not set up pays nothing and the gain is not reduced. A payer other than the gainer reads one private line
+not set up pays nothing and the gain is not reduced. A gain that points at no act charges the same way
+(`charge_gain_fatigue`): an endorsed pose at its weekly settlement, an accepted proposal and a GM's tag,
+from the social pool, with `pose_gain_payer` naming the payer (the gainer for Primal and Celestial; for
+Abyssal the pose's one named target, or nobody when it names none or several). A gain whose payer has
+nothing left pays 0 and the gainer is told why. An authored choice charges nobody. A payer other than the gainer reads one private line
 naming the gainer as that payer knows them. The bonus check of the marked resonance's own affinity rolls
 once, with the stat of the act's own check, and grows what is left.
 

@@ -2643,6 +2643,13 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
     ("Daven marked Cruelty on what they did to you. You are wearier."), in the name that payer knows the
     gainer by. The pool is the act's `fatigue_category` (`act_fatigue_category`: the category the call site
     passed, else attacks, defenses and aid physical, and social acts and mission options social).
+    A gain that points at no act charges through the same function: an endorsed pose paid by the weekly
+    settlement (including an accepted proposal) and a GM's tag, both from the social pool. `pose_gain_payer`
+    names the payer: the gainer for Primal and Celestial, and for Abyssal the pose's one named target
+    (`pose_gain_target`), or nobody when the pose names none or several. A gain whose payer has nothing left
+    pays 0, the endorsement is settled with `granted_amount` 0 (the tag and its renown stand), and the gainer is
+    told why and what to do next (`gain_without_act_refusal_line`, `gain_without_act_shrunk_line`). An
+    authored choice (a mission option) charges nobody.
   - **Waiting picks** (`PoseEndorsement.awaiting_acceptance`). On a pose that named no resonance, a witness
     picks any resonance from one list; `create_pose_endorsement` saves the row waiting and no longer
     checks that the poser has the resonance. `settle_weekly_pot` and the weekly tick skip a waiting row.
