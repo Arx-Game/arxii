@@ -273,6 +273,11 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     for (const resonance of ['Fury', 'Grief', 'Mercy', 'Valor', 'Cruelty', 'Dread']) {
       await expect(menu.getByRole('menuitem', { name: resonance, exact: true })).toBeVisible();
     }
+    // The menu fades in; wait for that to finish so the feed does not show through it.
+    await menu.evaluate((element) =>
+      Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished))
+    );
+    await expect(menu).toHaveCSS('opacity', '1');
     await shot(testInfo, '07a-endorse-menu-every-resonance.png', page);
 
     // She picks Grief: the pick waits, with Change and Withdraw.
