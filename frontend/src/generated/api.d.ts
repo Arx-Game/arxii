@@ -32260,7 +32260,7 @@ export interface components {
       readonly resonance_detail: components['schemas']['Resonance'];
       /** @description Spendable resonance currency. */
       balance?: number;
-      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain (#5327) do. */
+      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain do. */
       lifetime_earned?: number;
       /**
        * Format: date-time
@@ -32278,7 +32278,7 @@ export interface components {
       resonance: number;
       /** @description Spendable resonance currency. */
       balance?: number;
-      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain (#5327) do. */
+      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain do. */
       lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
@@ -46965,7 +46965,7 @@ export interface components {
       resonance?: number;
       /** @description Spendable resonance currency. */
       balance?: number;
-      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain (#5327) do. */
+      /** @description Running total of resonance earned. Spending does not lower it; converting resonance and undoing a gain do. */
       lifetime_earned?: number;
       /** @description Optional player-defined description of how this resonance manifests. */
       flavor_text?: string;
@@ -51066,7 +51066,7 @@ export interface components {
       /** @description Which affinity this resonance contributes to. */
       readonly affinity: number;
       readonly affinity_name: string;
-      /** @description Description of this resonance. */
+      /** @description Players read this under the picker when they choose this resonance. Write good and bad examples of acts. */
       readonly description: string;
       readonly codex_entry_id: number | null;
       /**
@@ -51133,7 +51133,7 @@ export interface components {
       readonly granted_at: string;
       /**
        * Format: date-time
-       * @description Set when staff or the scene's GM undid this gain (#5327).
+       * @description Set when staff or the scene's GM undid this gain.
        */
       readonly nullified_at: string | null;
       readonly source_room_profile: number | null;

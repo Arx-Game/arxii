@@ -6399,6 +6399,7 @@ paths:
         name: id
         schema:
           type: string
+          pattern: ^\d+$
         required: true
       tags:
       - character-creation
@@ -54087,7 +54088,7 @@ components:
           maximum: 2147483647
           minimum: 0
           description: Running total of resonance earned. Spending does not lower
-            it; converting resonance and undoing a gain (#5327) do.
+            it; converting resonance and undoing a gain do.
         claimed_at:
           type: string
           format: date-time
@@ -54123,7 +54124,7 @@ components:
           maximum: 2147483647
           minimum: 0
           description: Running total of resonance earned. Spending does not lower
-            it; converting resonance and undoing a gain (#5327) do.
+            it; converting resonance and undoing a gain do.
         flavor_text:
           type: string
           description: Optional player-defined description of how this resonance manifests.
@@ -82897,7 +82898,7 @@ components:
           maximum: 2147483647
           minimum: 0
           description: Running total of resonance earned. Spending does not lower
-            it; converting resonance and undoing a gain (#5327) do.
+            it; converting resonance and undoing a gain do.
         flavor_text:
           type: string
           description: Optional player-defined description of how this resonance manifests.
@@ -90955,7 +90956,8 @@ components:
         description:
           type: string
           readOnly: true
-          description: Description of this resonance.
+          description: Players read this under the picker when they choose this resonance.
+            Write good and bad examples of acts.
         codex_entry_id:
           type: integer
           readOnly: true
@@ -91054,7 +91056,7 @@ components:
           format: date-time
           readOnly: true
           nullable: true
-          description: Set when staff or the scene's GM undid this gain (#5327).
+          description: Set when staff or the scene's GM undid this gain.
         source_room_profile:
           type: integer
           readOnly: true
