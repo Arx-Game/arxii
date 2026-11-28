@@ -206,6 +206,17 @@ describe('GlimpseSection', () => {
       await expectSaved({ glimpse_tag_ids: [1, 4] });
     });
 
+    it('a draft holding two answers in one part sends one of them with the next pick', async () => {
+      // Saved before every part took one answer. The server refuses a list with two in
+      // a part, so a pick in another part must not send the pair back.
+      const user = userEvent.setup();
+      renderSection(createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [3, 4] } }));
+
+      await user.click(screen.getByRole('button', { name: /Wonder/ }));
+
+      await expectSaved({ glimpse_tag_ids: [3, 1] });
+    });
+
     it('picking the chosen answer again lets it go', async () => {
       const user = userEvent.setup();
       renderSection(createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [1, 3] } }));

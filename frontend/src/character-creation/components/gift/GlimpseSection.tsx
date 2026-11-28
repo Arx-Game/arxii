@@ -116,8 +116,17 @@ export function GlimpseSection({ draft, glimpseProseField }: GlimpseSectionProps
 
   const handleChangeAxis = (axis: GlimpseTagOption['axis'], tagIds: number[]) => {
     if (!tags) return;
-    const axisTagIds = new Set(tags.filter((tag) => tag.axis === axis).map((tag) => tag.id));
-    const otherAxisSelections = selectedTagIds.filter((id) => !axisTagIds.has(id));
+    // The other parts' answers ride along, one for each part: a draft saved before
+    // every part took one answer (#5292) may hold two in a part, and the server refuses
+    // such a list, which would leave the player unable to answer anything else.
+    const axisOf = new Map(tags.map((tag) => [tag.id, tag.axis]));
+    const kept = new Set<GlimpseTagOption['axis']>([axis]);
+    const otherAxisSelections = selectedTagIds.filter((id) => {
+      const other = axisOf.get(id);
+      if (other === undefined || kept.has(other)) return false;
+      kept.add(other);
+      return true;
+    });
     updateDraft.mutate({
       draftId: draft.id,
       data: {

@@ -1169,6 +1169,11 @@
 .interview .stances.blackout {
   margin-top: 1.2rem;
 }
+/* The blackout is one card with a paragraph on it, so it takes the whole column where a
+   grid's cards share it. */
+.interview .stances.grid.blackout {
+  grid-template-columns: minmax(0, 1fr);
+}
 /* An axis is a fieldset (a named group of toggles). A fieldset is by default at least as
    wide as its widest word, which would push a card past a narrow column. */
 .interview fieldset.field {

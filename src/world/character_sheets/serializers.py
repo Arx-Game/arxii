@@ -1374,14 +1374,9 @@ def _build_beats(sheet: CharacterSheet) -> list[BeatEntry]:
     if not rows:
         return []
     held: dict[int, str] = {}
-    # The serializer path prefetched the distinctions (``cached_distinctions``); a
-    # direct call reads them live, the way ``_build_distinctions`` does.
-    cds = (
-        sheet.cached_distinctions
-        if hasattr(sheet, "cached_distinctions")
-        else sheet.distinctions.select_related("distinction")
-    )
-    for cd in cds:
+    # The sheet's own list (``CharacterSheet.cached_distinctions``): prefetched on the
+    # serializer path, read once otherwise.
+    for cd in sheet.cached_distinctions:
         held[cd.distinction_id] = cd.distinction.name
     from world.character_creation.offers import LIFE_STAGE_ORDER  # noqa: PLC0415
 

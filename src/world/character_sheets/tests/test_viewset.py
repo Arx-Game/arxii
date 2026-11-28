@@ -1041,6 +1041,31 @@ class TestDistinctionsSection(TestCase):
         assert strong_arm["notes"] == ""
         assert strong_arm["is_from_glimpse"] is False
 
+    def test_a_card_gained_or_lost_in_play_shows_on_the_next_read(self) -> None:
+        """The sheet lists the cards the character holds now, not the ones it first read.
+
+        The sheet is identity-mapped, so the list it reads lives on one shared object.
+        Before #5292 a prefetch wrote that list onto a plain attribute nothing cleared:
+        a card given in play (a Glimpse answer's, a GM's award) did not appear on the
+        sheet, and a removed one stayed, for as long as the server kept the sheet.
+        """
+        from world.distinctions.services import delete_character_distinction, grant_distinction
+        from world.distinctions.types import DistinctionOrigin
+
+        before = [row["name"] for row in self._get_distinctions()]
+        gained = grant_distinction(
+            self.character.sheet_data,
+            DistinctionFactory(name="Wonderstruck"),
+            origin=DistinctionOrigin.GAMEPLAY,
+        )
+        after = [row["name"] for row in self._get_distinctions()]
+        delete_character_distinction(gained)
+        removed = [row["name"] for row in self._get_distinctions()]
+
+        assert sorted(before) == ["Misbegotten", "Strong Arm"]
+        assert sorted(after) == ["Misbegotten", "Strong Arm", "Wonderstruck"]
+        assert sorted(removed) == ["Misbegotten", "Strong Arm"]
+
     def test_distinction_entry_is_from_glimpse_true_when_linked(self) -> None:
         """A distinction linked via CharacterDistinction.from_glimpse reports True (#2427)."""
         from world.magic.factories import CharacterAuraFactory
