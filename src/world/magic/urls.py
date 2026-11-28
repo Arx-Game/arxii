@@ -41,6 +41,7 @@ from world.magic.views import (
     PreparedCrossingTextViewSet,
     PreparedSurgeTextViewSet,
     PurchaseGiftUnlockView,
+    ResonanceGrantUndoViewSet,
     ResonanceGrantViewSet,
     ResonanceViewSet,
     RestrictionViewSet,
@@ -206,6 +207,14 @@ urlpatterns = [
         "progression/",
         MagicProgressionView.as_view(),
         name="magic-progression",
+    ),
+    # #5327 — undo a resonance reward. A literal path rather than a second router
+    # registration of "resonance-grants", which would replace the ledger's entry in the API
+    # root listing.
+    path(
+        "resonance-grants/<int:pk>/undo/",
+        ResonanceGrantUndoViewSet.as_view({"post": "undo"}),
+        name="resonance-grant-undo",
     ),
     path(
         "applicable-pulls/",

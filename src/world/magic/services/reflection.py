@@ -234,13 +234,14 @@ SUCCUMBED_WHAT_RELATED = (
 
 
 def _unreflected_deeds(sheet: CharacterSheet) -> list[ResonanceGrant]:
-    """Deed grants on ``sheet`` (kindled, or succumbing to the Mire) with no reflection yet,
-    newest first."""
+    """Deed grants on ``sheet`` (kindled, marked, or succumbing to the Mire) with no reflection
+    yet, newest first. A grant a GM or staff undid (#5327) is no longer a deed."""
     return list(
         ResonanceGrant.objects.filter(
             character_sheet=sheet,
             source__in=_REFLECTABLE_DEED_SOURCES,
             reflections__isnull=True,
+            nullified_at__isnull=True,
         )
         .select_related("resonance", "source_kindling_situation", *SUCCUMBED_WHAT_RELATED)
         .order_by("-granted_at", "-pk")
@@ -325,8 +326,9 @@ def validate_reflection(
 ) -> ReflectionTarget:
     """Check a reflection's target before any writing is posted.
 
-    Exactly one of ``grant_id``, ``resonance_id`` or ``tether_id``. A deed must be a kindled
-    or succumbed-to-the-Mire grant on ``sheet`` with no reflection yet; a resonance must be the
+    Exactly one of ``grant_id``, ``resonance_id`` or ``tether_id``. A deed must be a kindled,
+    marked or succumbed-to-the-Mire grant on ``sheet`` that was not undone and has no
+    reflection yet; a resonance must be the
     one unsettling ``sheet`` now; a tether must be ``sheet``'s own side as a Sineater, on which
     they hold some Mire.
 
@@ -346,7 +348,10 @@ def validate_reflection(
     if grant_id is not None:
         grant = (
             ResonanceGrant.objects.filter(
-                pk=grant_id, character_sheet=sheet, source__in=_REFLECTABLE_DEED_SOURCES
+                pk=grant_id,
+                character_sheet=sheet,
+                source__in=_REFLECTABLE_DEED_SOURCES,
+                nullified_at__isnull=True,
             )
             .select_related("resonance", "source_kindling_situation", *SUCCUMBED_WHAT_RELATED)
             .first()

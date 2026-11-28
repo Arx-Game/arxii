@@ -2056,7 +2056,9 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
 
     Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
     optional when the pose's author reached for one (#5308), which is then the resonance
-    endorsed; the action asks "Which resonance?" for a pose that did not.
+    endorsed; the action asks "Which resonance?" for a pose that did not. On a pose that
+    named none, any resonance is saved waiting for the poser to accept it
+    (``awaiting_acceptance`` is true on the row that comes back, #5327).
     The ``endorser_sheet`` is resolved from the requesting account in the
     view (``PoseEndorsementViewSet.perform_create``) and injected via
     ``serializer.save(endorser_sheet=sheet)``.
@@ -2077,6 +2079,7 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
             "created_at",
             "settled_at",
             "granted_amount",
+            "awaiting_acceptance",
         ]
         read_only_fields = [
             "endorser_sheet",
@@ -2085,6 +2088,7 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
             "created_at",
             "settled_at",
             "granted_amount",
+            "awaiting_acceptance",
         ]
         extra_kwargs: ClassVar[dict[str, dict[str, bool]]] = {"resonance": {"required": False}}
 
@@ -2102,6 +2106,12 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
         if not result.success:
             raise serializers.ValidationError({"detail": result.message})
         return result.data["endorsement"]
+
+
+class ChangePoseEndorsementSerializer(serializers.Serializer):
+    """Body of ``POST /api/magic/pose-endorsements/<pk>/change/`` (#5327): the new pick."""
+
+    resonance = serializers.PrimaryKeyRelatedField(queryset=Resonance.objects.all())
 
 
 # =============================================================================
@@ -2219,7 +2229,8 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
     """Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
 
     ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
-    no bonus check) say what the bonus check added to ``amount`` (#5308).
+    no bonus check) say what the bonus check added to ``amount`` (#5308). ``nullified_at`` is
+    when staff or the scene's GM undid the gain, null while it stands (#5327).
     """
 
     bonus_outcome = serializers.CharField(
@@ -2237,6 +2248,7 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
             "bonus_outcome",
             "source",
             "granted_at",
+            "nullified_at",
             "source_room_profile",
             "source_staff_account",
             "source_pose_endorsement",
@@ -4038,7 +4050,19 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
     ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
     ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+    ``resonance`` (write-only, optional, #5327) names the resonance the tag pays.
     """
+
+    resonance = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.all(),
+        required=False,
+        write_only=True,
+        help_text=(
+            "The resonance this tag pays, any resonance whether or not it is in the tagged "
+            "character's aura. Omit it to let the moment type and her gifts decide. The "
+            "tagged player is told which resonance it paid."
+        ),
+    )
 
     class Meta:
         model = DramaticMomentTag
@@ -4048,6 +4072,7 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
             "character_sheet",
             "scene",
             "interaction",
+            "resonance",
             "tagged_by",
             "tagged_at",
         ]
@@ -4091,6 +4116,7 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
                 tagged_by=validated_data["tagged_by"],
                 scene=validated_data.get("scene"),
                 interaction=validated_data.get("interaction"),
+                resonance=validated_data.get("resonance"),
             )
         except (EndorsementValidationError, DramaticMomentCapExceeded) as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc

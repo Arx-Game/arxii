@@ -51,7 +51,9 @@ from world.magic.crossing.handlers import (
 from world.magic.exceptions import (
     AnimaRitualPickError,
     DuplicateTechniqueName,
+    EndorsementValidationError,
     InvalidImbueAmount,
+    ResonanceUndoError,
     TechniqueAuthoringNotPermitted,
     TechniqueBudgetExceeded,
     UnknownResonance,
@@ -104,6 +106,7 @@ from world.magic.models.dramatic_moment import (
 )
 from world.magic.permissions import (
     CanPrepareCharacterText,
+    CanUndoResonanceGrant,
     IsRitualAuthorOrStaff,
     IsStaffForBaseWrites,
     IsStaffOrReadOnly,
@@ -133,6 +136,7 @@ from world.magic.serializers import (
     AudereRespondSerializer,
     AudereUltimateQuerySerializer,
     AudereUltimateStateSerializer,
+    ChangePoseEndorsementSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
     CharacterGiftSerializer,
@@ -208,7 +212,13 @@ from world.magic.services import (
     preview_resonance_pull,
 )
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
-from world.magic.services.gain import account_for_sheet, retract_pose_endorsement
+from world.magic.services.gain import (
+    accept_pose_proposal,
+    account_for_sheet,
+    change_pose_endorsement,
+    decline_pose_proposal,
+    retract_pose_endorsement,
+)
 from world.magic.services.pull_applicability import PullActionContext, compute_thread_applicability
 from world.magic.services.pull_payers import resolve_pull_payers
 from world.magic.services.technique_builder import (
@@ -217,7 +227,9 @@ from world.magic.services.technique_builder import (
     author_staff_technique,
     enforce_policy,
 )
+from world.magic.services.undo import undo_resonance_grant
 from world.roster.models import RosterEntry
+from world.scenes.models import SceneParticipation
 from world.stories.pagination import StandardResultsSetPagination
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
@@ -1834,13 +1846,23 @@ class PoseEndorsementViewSet(
     mixins.DestroyModelMixin,
     GenericViewSet,
 ):
-    """Create + delete-if-unsettled pose endorsements (Spec C Task 23).
+    """Create + delete-if-unsettled pose endorsements (Spec C Task 23), and answer proposals.
 
     Listing is not supported here — use ResonanceGrantViewSet (Task 25) for
     audit queries.
 
-    POST /api/magic/pose-endorsements/ — create an endorsement.
+    POST /api/magic/pose-endorsements/ — create an endorsement. On a pose that named no
+        resonance it is saved waiting for the poser (``awaiting_acceptance`` true).
     DELETE /api/magic/pose-endorsements/<pk>/ — retract an unsettled endorsement.
+    POST /api/magic/pose-endorsements/<pk>/change/ — the endorser picks another resonance,
+        body ``{"resonance": <resonance id>}``; the row waits for the poser again (#5327).
+    POST /api/magic/pose-endorsements/<pk>/accept/ — the poser, the scene's GM or staff accept a
+        waiting pick; no body (#5327).
+    POST /api/magic/pose-endorsements/<pk>/decline/ — the same people decline it, which deletes
+        the row; no body, 204 (#5327).
+
+    Change, accept and decline read only the endorsements the requester made, was endorsed
+    by, or GMs the scene of (staff read all); anyone else gets a 404.
     """
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
@@ -1853,6 +1875,28 @@ class PoseEndorsementViewSet(
     )
     serializer_class = PoseEndorsementSerializer
     permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):  # type: ignore[override]
+        qs = super().get_queryset()
+        if self.action not in {"change", "accept", "decline"}:
+            return qs
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        return qs.filter(
+            Q(
+                endorser_sheet__roster_entry__tenures__player_data__account=user,
+                endorser_sheet__roster_entry__tenures__end_date__isnull=True,
+            )
+            | Q(
+                endorsee_sheet__roster_entry__tenures__player_data__account=user,
+                endorsee_sheet__roster_entry__tenures__end_date__isnull=True,
+            )
+            | Q(
+                interaction__scene__participations__account=user,
+                interaction__scene__participations__is_gm=True,
+            )
+        ).distinct()
 
     def perform_create(self, serializer: PoseEndorsementSerializer) -> None:
         """Resolve the endorser sheet from the requesting account and save."""
@@ -1871,6 +1915,45 @@ class PoseEndorsementViewSet(
         if account_for_sheet(endorsement.endorser_sheet) != request.user:
             raise PermissionDenied
         retract_pose_endorsement(endorsement)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        request=ChangePoseEndorsementSerializer, responses={200: PoseEndorsementSerializer}
+    )
+    @action(detail=True, methods=["post"])
+    def change(self, request: Request, pk: str | None = None) -> Response:
+        """The endorser picks another resonance; the row waits for the poser again."""
+        endorsement = self.get_object()
+        body = ChangePoseEndorsementSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            changed = change_pose_endorsement(
+                endorsement, body.validated_data["resonance"], request.user
+            )
+        except EndorsementValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        return Response(PoseEndorsementSerializer(changed).data)
+
+    @extend_schema(request=None, responses={200: PoseEndorsementSerializer})
+    @action(detail=True, methods=["post"])
+    def accept(self, request: Request, pk: str | None = None) -> Response:
+        """Accept a waiting pick, so the weekly settlement pays it."""
+        endorsement = self.get_object()
+        try:
+            accepted = accept_pose_proposal(endorsement, request.user)
+        except EndorsementValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        return Response(PoseEndorsementSerializer(accepted).data)
+
+    @extend_schema(request=None, responses={204: None})
+    @action(detail=True, methods=["post"])
+    def decline(self, request: Request, pk: str | None = None) -> Response:
+        """Decline a waiting pick: the row is deleted and pays nothing."""
+        endorsement = self.get_object()
+        try:
+            decline_pose_proposal(endorsement, request.user)
+        except EndorsementValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -1986,6 +2069,50 @@ class ResonanceGrantViewSet(
             character_sheet__roster_entry__tenures__player_data__account=user,
             character_sheet__roster_entry__tenures__end_date__isnull=True,
         ).distinct()
+
+
+class ResonanceGrantUndoViewSet(viewsets.GenericViewSet):
+    """Undo a resonance reward (#5327): staff, or the GM of the scene it happened in.
+
+    POST /api/magic/resonance-grants/<pk>/undo/ — no body. Returns the grant as
+    ``ResonanceGrantSerializer`` shows it, with ``nullified_at`` set. A refusal is a 400 with
+    ``detail`` (already undone, or not yours to undo); a grant outside the requester's scenes
+    is a 404. This is an action, never a model update: nothing here writes a row directly.
+
+    There is no list or retrieve (``ResonanceGrantViewSet`` is the ledger), so the paginator is
+    off and the filter set is the ledger's own, there for the detail lookup only.
+    """
+
+    queryset = ResonanceGrant.objects.select_related("character_sheet", "resonance")
+    serializer_class = ResonanceGrantSerializer
+    permission_classes = [IsAuthenticated, CanUndoResonanceGrant]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ResonanceGrantFilterSet
+    pagination_class = None
+    http_method_names = ["post", "options"]
+
+    def get_queryset(self):  # type: ignore[override]
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        gm_scenes = SceneParticipation.objects.filter(account=user, is_gm=True).values("scene_id")
+        return qs.filter(
+            Q(marked_act__marked_interaction__scene__in=gm_scenes)
+            | Q(source_pose_endorsement__interaction__scene__in=gm_scenes)
+            | Q(source_dramatic_moment__scene__in=gm_scenes)
+        ).distinct()
+
+    @extend_schema(request=None, responses={200: ResonanceGrantSerializer})
+    @action(detail=True, methods=["post"])
+    def undo(self, request: Request, pk: str | None = None) -> Response:
+        """Lower the character's totals by what the grant paid and stamp the ledger row."""
+        grant = self.get_object()
+        try:
+            undone = undo_resonance_grant(grant, request.user)
+        except ResonanceUndoError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        return Response(ResonanceGrantSerializer(undone).data)
 
 
 # =============================================================================
