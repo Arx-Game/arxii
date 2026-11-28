@@ -832,7 +832,8 @@ class TrainingAMagicSkill(JourneyCase):
                     ),
                 )
             self.assertIn(refusal, self.telnet(mentor, "training accept 1"))
-            self.assertNotIn(refusal, notices_to(self.ysmay))
+            # She is told nothing at all about whoever she asked.
+            self.assertEqual(notices_to(self.ysmay), [])
             row.refresh_from_db()
             self.assertIsNone(row.mentor_accepted_at)
         # The same goes for a specialization, whose refusal names its parent skill.

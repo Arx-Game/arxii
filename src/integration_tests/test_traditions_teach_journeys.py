@@ -414,13 +414,11 @@ class AGameMasterAnswersForAnNpc(_TeachingCase):
 
         told = self.telnet(self.odalys, "training accept 1")
 
-        self.assertIn("Magister Vey's Tradition does not teach Villainy.", told)
-        self.assertNotIn("Your Tradition", told)
+        self.assertEqual(told.strip(), "Magister Vey's Tradition does not teach Villainy.")
         row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data)
         self.assertIsNone(row.mentor_accepted_at)
-        self.assertNotIn(
-            "Magister Vey's Tradition does not teach Villainy.", self.notices(self.ysmay)
-        )
+        # Ysmay is told nothing at all about the NPC she asked.
+        self.assertEqual(self.notices(self.ysmay), [])
 
     def test_a_character_the_gm_does_not_hold_has_no_say(self) -> None:
         self.ask_vey(self.ysmay, self.reflection)

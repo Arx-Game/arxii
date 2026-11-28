@@ -200,7 +200,8 @@ class _World:
 
 
 class EveryTraditionTeachesReflection(_World, HypothesisTestCase):
-    @settings(max_examples=20, deadline=None)
+    # The whole domain: four tick sets (none, Heroism, Villainy, both) times three states.
+    @settings(max_examples=12, deadline=None)
     @given(ticked=ticks, state=states)
     def test_reflection_is_taught_whatever_was_ticked_and_whatever_the_state(
         self, ticked: set[str], state: str
@@ -341,6 +342,11 @@ class CreationOffersWhatTheTraditionTeaches(_World, HypothesisTestCase):
         offered = sorted(self.offered(draft))
         maximum = SkillPointBudget.get_active_budget().max_skill_value
 
+        # The Gift stage's rule, in the spec's words: the player must spend all of the pool, up to
+        # what the offered Magic skills can hold. The pool is the training distinction's ten
+        # points per rank (no Gift is picked, so no teaching fit adds to it).
+        self.assertEqual(pool.total, rank * 10)
+        self.assertEqual(pool.required_spend, min(rank * 10, len(offered) * maximum))
         self.assertLessEqual(pool.required_spend, pool.total)
         self.assertLessEqual(pool.required_spend, len(offered) * maximum)
         remaining = pool.required_spend
@@ -358,7 +364,8 @@ class CreationOffersWhatTheTraditionTeaches(_World, HypothesisTestCase):
 
 
 class NoStateIsSpecialCased(_World, HypothesisTestCase):
-    @settings(max_examples=20, deadline=None)
+    # The whole domain: four tick sets (the three states are built inside each example).
+    @settings(max_examples=4, deadline=None)
     @given(ticked=ticks)
     def test_three_states_with_the_same_ticks_are_offered_and_teach_the_same(
         self, ticked: set[str]
@@ -1570,11 +1577,10 @@ class ACharacterIsNeverHerOwnMentor(_TrainingWorld, HypothesisTestCase):
             self.assertEqual(str(caught.exception), line)
             self.assertEqual(self.stored(student), 0)
 
-    @settings(max_examples=20, deadline=None)
-    @given(key=governed_keys, who=st.sampled_from(("her own alt", "another player's character")))
-    def test_the_weekly_run_skips_a_standing_allocation_naming_her_own_alt(
-        self, key: str, who: str
-    ) -> None:
+    # The whole domain: two kinds of mentor. The skill changes only the sentence's text.
+    @settings(max_examples=2, deadline=None)
+    @given(who=st.sampled_from(("her own alt", "another player's character")))
+    def test_the_weekly_run_skips_a_standing_allocation_naming_her_own_alt(self, who: str) -> None:
         """Owner rule (a player never benefits from pairing her own characters), for a
         standing allocation.
 
@@ -1583,7 +1589,7 @@ class ACharacterIsNeverHerOwnMentor(_TrainingWorld, HypothesisTestCase):
         paid when the mentor is another player's character, and when the mentor is another
         of her own it is skipped, no AP are spent, and she is sent the one own-character line.
         """
-        skill = self.skill(key)
+        skill = self.skill("villainy")
         teaching = self.teaching_tradition(set(TICKABLE), True)
         player = PlayerDataFactory()
         student = self.played(self.character(), player)
@@ -1614,13 +1620,11 @@ class ACharacterIsNeverHerOwnMentor(_TrainingWorld, HypothesisTestCase):
 
 
 class ARefusedMentorRevealsNothingAboutThePersona(_TrainingWorld, HypothesisTestCase):
-    @settings(max_examples=30, deadline=None)
-    @given(
-        key=st.sampled_from(("heroism", "villainy", "style")),
-        reason=st.sampled_from(("no tradition", "tradition does not teach", "no rating")),
-    )
+    # The whole domain: the three reasons. The skill changes only the sentence's text.
+    @settings(max_examples=3, deadline=None)
+    @given(reason=st.sampled_from(("no tradition", "tradition does not teach", "no rating")))
     def test_naming_a_persona_reveals_nothing_and_the_weekly_line_names_only_it(
-        self, key: str, reason: str
+        self, reason: str
     ) -> None:
         """Implementer call (privacy): naming a persona must not tell the asker about the
         character behind it.
@@ -1633,7 +1637,7 @@ class ARefusedMentorRevealsNothingAboutThePersona(_TrainingWorld, HypothesisTest
         a mentor whose Tradition teaches it and who has trained in it." for each reason, and
         the name behind the mask is not in it.
         """
-        skill = self.skill(key)
+        skill = self.skill("villainy")
         if reason == "no tradition":
             tradition = None
         elif reason == "tradition does not teach":
@@ -1682,7 +1686,8 @@ class ARefusedMentorRevealsNothingAboutThePersona(_TrainingWorld, HypothesisTest
 class AnEditToASavedCourseIsRefusedOnceItsTraditionStoppedTeaching(
     _TrainingWorld, HypothesisTestCase
 ):
-    @settings(max_examples=20, deadline=None)
+    # The whole domain: three governed skills times ticked or not.
+    @settings(max_examples=6, deadline=None)
     @given(key=st.sampled_from(("heroism", "villainy", "style")), untick=flags)
     def test_changing_any_field_of_a_saved_course_is_refused_on_the_skill_field(
         self, key: str, untick: bool
@@ -2020,10 +2025,11 @@ class WhoMayAnswerForAMentor(_MentoringWorld, HypothesisTestCase):
 
 
 class ChangingTheMentorAsksAgain(_MentoringWorld, HypothesisTestCase):
-    @settings(max_examples=25, deadline=None)
-    @given(key=st.sampled_from(SKILL_KEYS), change=st.sampled_from(("ap", "same", "other")))
+    # The whole domain: the three changes. The skill changes only the sentences' text.
+    @settings(max_examples=3, deadline=None)
+    @given(change=st.sampled_from(("ap", "same", "other")))
     def test_a_new_mentor_asks_again_and_the_same_mentor_keeps_the_agreement(
-        self, key: str, change: str
+        self, change: str
     ) -> None:
         """Maintainer (2026-11-28): "The mentor must agree".
         Implementer call: changing the mentor asks again; changing only the action points
@@ -2035,6 +2041,7 @@ class ChangingTheMentorAsksAgain(_MentoringWorld, HypothesisTestCase):
         agreement is cleared, the new mentor is sent the one request line, and the first
         mentor is told the student no longer trains with her.
         """
+        key = "villainy"
         skill = self.skill(key)
         first_player, second_player = PlayerDataFactory(), PlayerDataFactory()
         first = self.mentor(key, first_player)
@@ -2073,10 +2080,12 @@ class ChangingTheMentorAsksAgain(_MentoringWorld, HypothesisTestCase):
 
 
 class DecliningAndStoppingClearTheMentor(_MentoringWorld, HypothesisTestCase):
-    @settings(max_examples=20, deadline=None)
-    @given(key=st.sampled_from(SKILL_KEYS), agreed_first=flags)
+    # The whole domain: declining a waiting request, or stopping after agreeing. The skill
+    # changes only the sentences' text.
+    @settings(max_examples=2, deadline=None)
+    @given(agreed_first=flags)
     def test_declining_or_stopping_clears_the_mentor_and_tells_the_student(
-        self, key: str, agreed_first: bool
+        self, agreed_first: bool
     ) -> None:
         """Maintainer (2026-11-28): "The mentor must agree".
         Implementer call: declining a request, or stopping teaching a student, clears the
@@ -2088,6 +2097,7 @@ class DecliningAndStoppingClearTheMentor(_MentoringWorld, HypothesisTestCase):
         A mentor cannot decline what she already agreed to, and cannot stop teaching a student
         she has not agreed to teach; each is refused and changes nothing.
         """
+        key = "villainy"
         skill = self.skill(key)
         player = PlayerDataFactory()
         mentor = self.mentor(key, player)

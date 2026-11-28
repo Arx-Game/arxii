@@ -821,12 +821,18 @@ class TheTrainersTradition(_AcademyCourseCase):
         charged again, the menu now reads the caution line, and that session rolls harder."""
         join_tradition(self.sheet, self.ashen)
         self.assertNotIn(self.OUTSIDER_LINE, self.menu())
-        _told, first = self.take_villainy()
+        told, first = self.take_villainy()
+        self.assertIn(
+            f"Success. Villainy rises from 10 to 11. The course has 30 of {TOTAL} left.", told
+        )
         self.assertEqual(first.target_difficulty, difficulty_points(1))
         self.telnet(self.ysmay, "hire end")
         advance_game_week()
         self.assertNotIn(self.OUTSIDER_LINE, self.menu())
-        _told, second = self.take_villainy()
+        told, second = self.take_villainy()
+        self.assertIn(
+            f"Success. Villainy rises from 11 to 12. The course has 20 of {TOTAL} left.", told
+        )
         self.assertEqual(second.target_difficulty, difficulty_points(1))
         self.telnet(self.ysmay, "hire end")
         advance_game_week()
@@ -848,6 +854,9 @@ class TheTrainersTradition(_AcademyCourseCase):
 
         told, third = self.take_villainy()
 
+        self.assertIn(
+            f"Success. Villainy rises from 12 to 13. The course has 10 of {TOTAL} left.", told
+        )
         self.assertNotIn("closed", told)
         self.assertNotIn("Nothing was charged", told)
         self.assertEqual(third.target_difficulty, difficulty_points(1) + self.EXTRA)
@@ -898,6 +907,9 @@ class TheTrainersTradition(_AcademyCourseCase):
 
         told, _capture = self.take_villainy()
 
+        self.assertIn(
+            f"Success. Villainy rises from 11 to 12. The course has 20 of {TOTAL} left.", told
+        )
         self.assertNotIn("closed", told)
         self.assertEqual(self.ap(), ap_before - SESSION_AP)
         self.assertEqual(self.enrollments(), 1)
@@ -1023,7 +1035,10 @@ class ASelfTaughtCharacterOnTheUnboundEntry(_AcademyCourseCase):
 
         self.telnet(self.ysmay, "hire Magister Cadwen")
         with force_check_outcome(self.outcomes["success"]) as capture:
-            self.telnet(self.ysmay, f"hire offer {self.villainy_offer.pk}")
+            told = strip_ansi(self.telnet(self.ysmay, f"hire offer {self.villainy_offer.pk}"))
 
+        self.assertIn(
+            f"Success. Villainy rises from 11 to 12. The course has 30 of {TOTAL} left.", told
+        )
         self.assertEqual(self.enrollments(), 1)
         self.assertEqual(capture.target_difficulty, difficulty_points(1) + self.EXTRA)
