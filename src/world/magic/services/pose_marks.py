@@ -58,6 +58,10 @@ def act_marks_payload(interaction: Interaction, viewer: PoseViewer | None) -> li
         if grant is None:
             continue
         undone = grant.nullified_at is not None
+        undone_by = None
+        if undone:
+            # Staff, else the scene's GM: the role, never the account.
+            undone_by = "staff" if grant.nullified_by.is_staff else "gm"
         rows.append(
             ActMarkPayload(
                 grant_id=grant.pk,
@@ -65,6 +69,7 @@ def act_marks_payload(interaction: Interaction, viewer: PoseViewer | None) -> li
                 resonance_name=grant.resonance.name,
                 act_label=act.label,
                 undone=undone,
+                undone_by=undone_by,
                 can_undo=can_undo_any and not undone,
             )
         )

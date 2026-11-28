@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
 
 from actions.types import PendingActionResolution
 from world.magic.types import TechniqueUseResult
@@ -57,8 +57,9 @@ class NarratedEventPayload(TypedDict):
 class ActMarkPayload(TypedDict):
     """One mark a pose carries (#5327): the resonance it marked and the act it pointed at.
 
-    ``undone`` is true once staff or the scene's GM undid the reward. ``can_undo`` is true
-    only for staff and the scene's GM, and only while the mark stands.
+    ``undone`` is true once staff or the scene's GM undid the reward, and ``undone_by`` says
+    which: ``"staff"`` or ``"gm"`` (never an account name), null while the mark stands.
+    ``can_undo`` is true only for staff and the scene's GM, and only while the mark stands.
     """
 
     grant_id: int
@@ -66,6 +67,7 @@ class ActMarkPayload(TypedDict):
     resonance_name: str
     act_label: str
     undone: bool
+    undone_by: Literal["gm", "staff"] | None
     can_undo: bool
 
 

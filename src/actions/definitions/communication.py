@@ -831,7 +831,8 @@ def _pose_result(
 
     The pose posted either way; ``reflection_recorded`` (or ``sineating_recorded``,
     ``mark_recorded``) tells a client whether to show the line as a success or as the error it
-    is.
+    is. ``mark_line`` is the mark's own line alone (empty when the pose carried no mark), so a
+    client never has to pick it out of the joined message.
     """
     lines: list[str] = []
     data: dict[str, Any] = {}
@@ -847,6 +848,9 @@ def _pose_result(
         line, paid = marked[0]
         lines.append(line)
         data["mark_recorded"] = paid
+        data["mark_line"] = line
+    elif lines:
+        data["mark_line"] = ""
     if not lines:
         return ActionResult(success=True)
     return ActionResult(success=True, message="\n".join(lines), data=data)

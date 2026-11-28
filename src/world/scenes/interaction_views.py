@@ -566,7 +566,9 @@ class InteractionViewSet(
             ),
             Prefetch(
                 "marked_acts",
-                queryset=RecordedAct.objects.select_related("marked_grant__resonance"),
+                queryset=RecordedAct.objects.select_related(
+                    "marked_grant__resonance", "marked_grant__nullified_by"
+                ),
                 to_attr="cached_act_marks",
             ),
             Prefetch(

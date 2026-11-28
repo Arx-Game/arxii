@@ -1319,7 +1319,9 @@ class Interaction(SharedMemoryModel):
         ``to_attr`` target. A mark and an undo clear it (``RecordedAct`` is a
         ``RelatedCacheClearingMixin`` on its pose; ``undo_resonance_grant`` clears it too).
         """
-        return list(self.marked_acts.select_related("marked_grant__resonance"))
+        return list(
+            self.marked_acts.select_related("marked_grant__resonance", "marked_grant__nullified_by")
+        )
 
     @property
     def cached_resonance_reach(self) -> PoseResonanceReach | None:
