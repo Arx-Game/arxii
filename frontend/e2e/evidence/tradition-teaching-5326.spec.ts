@@ -19,13 +19,17 @@ import {
  * Lantern Concord (teaches Heroism) and the Cinder Court (teaches Villainy); an other-Tradition
  * course difficulty of 3; the self-teaching target and a distinction carrying one effect on it;
  * two Academy master roles with a Villainy course each; Wren Alder (Lantern Concord, 6 action
- * points) standing in the Cinder Hall with the Cinder Court master; three mentors; a creation
- * draft at the Gift stage with the Lantern Concord chosen; and a staff account for admin.
+ * points, 3 of them already asked of Drusa Kell) standing in the Cinder Hall with the Cinder
+ * Court master; mentors; a creation draft at the Gift stage with the Lantern Concord chosen; a
+ * staff account for admin; a mentor account that plays Drusa Kell and Aldric Voss; and a game
+ * master account that holds two NPCs (Magister Vey and Warden Ilsa Tarn).
  *
  * One named PNG per screen of the approved demo (.demos/issue-5326-traditions-teach.html), each
- * written to the test's own output folder, which `just shot` lists when the run ends. The run
- * changes nothing a second run would trip over: the saved allocation is removed at the end, and
- * the Skill Course Offer Details page saved in screen 5 is saved with the values it already had.
+ * written to the test's own output folder, which `just shot` lists when the run ends. The
+ * mentor's and the game master's answers (Accept, Decline) change rows for good, so run the seed
+ * again before a second run of this spec. The rest changes nothing a second run would trip over:
+ * the allocation the student saves is removed again, and the Skill Course Offer Details page
+ * saved in screen 5 is saved with the values it already had.
  */
 
 const ACCOUNT = 'e2e_test_account';
@@ -53,6 +57,25 @@ interface Seed {
   mentor_rated: string;
   staff_username: string;
   staff_password: string;
+  own_alt_name: string;
+  mentor_username: string;
+  mentor_password: string;
+  mentor_entry_id: number;
+  gm_username: string;
+  gm_password: string;
+  gm_entry_id: number;
+  gm_character_name: string;
+  npc_cannot_teach: string;
+  npc_declined: string;
+  student_of_aldric: string;
+  student_taught: string;
+  student_of_vey: string;
+  student_of_ilsa: string;
+  wren_allocation_id: number;
+  aldric_allocation_id: number;
+  taught_allocation_id: number;
+  vey_allocation_id: number;
+  ilsa_allocation_id: number;
 }
 
 function readSeed(): Seed {
@@ -74,6 +97,15 @@ async function signedInPage(browser: Browser, username: string, password: string
   const page = await context.newPage();
   await logIn(page, username, password);
   return page;
+}
+
+/** Opens the Growth section of the character sheet at `/characters/<entry id>`. */
+async function openGrowth(page: Page, entryId: number) {
+  await page.goto(`/characters/${entryId}`);
+  await page
+    .getByRole('navigation', { name: 'Character sheet sections' })
+    .getByRole('button', { name: 'Growth', exact: true })
+    .click();
 }
 
 /** One PNG of `target` (the page when none is given), named for the demo screen it matches. */
@@ -200,22 +232,28 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await page.context().close();
   });
 
-  test('screen 7: the weekly training card refuses a Magic skill without a teacher and saves it with one', async ({
+  test('screen 7, student: the card shows the waiting row, refuses no mentor and her own character, and asks a mentor', async ({
     browser,
   }, testInfo) => {
     test.setTimeout(180_000);
     const seed = readSeed();
     const page = await signedInPage(browser, ACCOUNT, PASSWORD);
-    await page.goto(`/characters/${seed.entry_id}`);
-    await page
-      .getByRole('navigation', { name: 'Character sheet sections' })
-      .getByRole('button', { name: 'Growth', exact: true })
-      .click();
+    await openGrowth(page, seed.entry_id);
     const card = page.getByTestId('training-card');
     await expect(card).toBeVisible({ timeout: 30000 });
-    await expect(card.getByText('6 AP remaining this week')).toBeVisible();
+    await expect(card.getByText('3 AP remaining this week')).toBeVisible();
+
+    // Wren already asked Drusa Kell for Villainy: the row waits.
+    const villainyRow = card.getByTestId('training-allocation-row').filter({ hasText: 'Villainy' });
+    await expect(villainyRow.getByTestId('training-mentor-line')).toHaveText(
+      `Mentor: ${seed.mentor_rated} · waiting for ${seed.mentor_rated} to agree`
+    );
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07a-training-card-waiting-for-mentor.png', page);
+
     const skill = card.getByTestId('training-skill-select');
     await expect(skill.locator('option', { hasText: 'Villainy' })).toHaveCount(1);
+    await expect(skill.locator('option', { hasText: 'Occult' })).toHaveCount(1);
     await skill.selectOption({ label: 'Villainy' });
     await card.locator('#training-add-ap').fill('3');
     const toasts = page.locator('[data-sonner-toast]');
@@ -234,40 +272,167 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
       await expect(toasts).toHaveCount(0, { timeout: 20000 });
     };
 
-    // No mentor at all.
+    // No mentor at all: refused, nothing saved.
     await attempt(null);
     await settle(
       'Villainy needs a teacher. Choose a mentor whose Tradition teaches it.',
-      '07a-training-no-mentor.png'
+      '07b-training-no-mentor.png'
     );
 
-    // A mentor of her own Tradition, which does not teach Villainy.
-    await attempt(seed.mentor_good);
+    // Another character her own player plays: refused, nothing saved.
+    await attempt(seed.own_alt_name);
     await settle(
-      `${seed.mentor_good}'s Tradition does not teach Villainy. Choose a mentor whose Tradition does.`,
-      '07b-training-mentor-wrong-tradition.png'
+      'You cannot name another of your own characters as your mentor. ' +
+        'Choose a mentor another player plays.',
+      '07c-training-own-character.png'
     );
 
-    // A mentor of the Cinder Court who holds no Villainy rating.
+    // Occult with a mentor nobody plays: saved at once, and the mentor is asked. Nothing about
+    // her is checked, so the card learns nothing about her.
+    await skill.selectOption({ label: 'Occult' });
     await attempt(seed.mentor_unrated);
-    await settle(
-      `${seed.mentor_unrated} has no rating in Villainy. Choose a mentor who has one.`,
-      '07c-training-mentor-unrated.png'
+    await expect(
+      page.getByText(`Training allocated. ${seed.mentor_unrated} has been asked.`, {
+        exact: true,
+      })
+    ).toBeVisible();
+    const occultRow = card.getByTestId('training-allocation-row').filter({ hasText: 'Occult' });
+    await expect(occultRow.getByTestId('training-mentor-line')).toHaveText(
+      `Mentor: ${seed.mentor_unrated} · waiting for ${seed.mentor_unrated} to agree`
     );
-
-    // A mentor of the Cinder Court who holds a rating: saved.
-    await attempt(seed.mentor_rated);
-    await expect(page.getByText('Training allocated.', { exact: true })).toBeVisible();
-    const row = card.getByTestId('training-allocation-row');
-    await expect(row).toContainText('Villainy');
-    await expect(row).toContainText(`Mentor: ${seed.mentor_rated}`);
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07d-training-mentor-teaches.png', page);
+    await shot(testInfo, '07d-training-asked-toast.png', page);
 
-    // Leave the week as it was found, so a second run starts from the same place.
+    // Leave the week as it was found: only the Villainy row, still waiting.
     await expect(toasts).toHaveCount(0, { timeout: 20000 });
-    await card.getByRole('button', { name: 'Remove' }).click();
-    await expect(card.getByTestId('training-empty')).toBeVisible();
+    await occultRow.getByRole('button', { name: 'Remove' }).click();
+    await expect(card.getByTestId('training-allocation-row')).toHaveCount(1);
+    await expect(villainyRow).toBeVisible();
+
+    await page.context().close();
+  });
+
+  test('screen 7, mentor: Drusa Kell and Aldric Voss are played by one account, which answers from its Mentoring card', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.mentor_username, seed.mentor_password);
+    await openGrowth(page, seed.mentor_entry_id);
+    const card = page.getByTestId('mentoring-card');
+    await expect(card).toBeVisible({ timeout: 30000 });
+    const toasts = page.locator('[data-sonner-toast]');
+
+    const wrenRequest = card.getByTestId('mentoring-request-row').filter({
+      hasText: `${seed.character_name} asks ${seed.mentor_rated} to teach her Villainy`,
+    });
+    const aldricRequest = card.getByTestId('mentoring-request-row').filter({
+      hasText: `${seed.student_of_aldric} asks ${seed.mentor_good} to teach her Villainy`,
+    });
+    const taughtRow = card.getByTestId('mentoring-student-row').filter({
+      hasText: `${seed.mentor_rated} teaches ${seed.student_taught} Villainy`,
+    });
+    await expect(wrenRequest).toBeVisible();
+    await expect(wrenRequest.getByRole('button', { name: 'Accept' })).toBeVisible();
+    await expect(wrenRequest.getByRole('button', { name: 'Decline' })).toBeVisible();
+    await expect(aldricRequest).toBeVisible();
+    await expect(taughtRow).toBeVisible();
+    await expect(taughtRow.getByRole('button', { name: 'Stop' })).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07e-mentor-card-requests-and-teaching.png', page);
+
+    // Aldric Voss's Tradition does not teach Villainy: Accept is refused to him, in his own
+    // terms, and the request stays with Decline beside it.
+    await aldricRequest.getByRole('button', { name: 'Accept' }).click();
+    await expect(
+      page.getByText('Your Tradition does not teach Villainy.', { exact: true })
+    ).toBeVisible();
+    await expect(aldricRequest).toBeVisible();
+    await expect(aldricRequest.getByRole('button', { name: 'Decline' })).toBeEnabled();
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07f-mentor-accept-refused.png', page);
+    await expect(toasts).toHaveCount(0, { timeout: 20000 });
+
+    // Drusa Kell qualifies: the answer is the success sentence and the row moves to Teaching.
+    await wrenRequest.getByRole('button', { name: 'Accept' }).click();
+    await expect(
+      page.getByText(`You agree to teach ${seed.character_name} Villainy.`, { exact: true })
+    ).toBeVisible();
+    await expect(wrenRequest).toHaveCount(0);
+    await expect(
+      card.getByTestId('mentoring-student-row').filter({
+        hasText: `${seed.mentor_rated} teaches ${seed.character_name} Villainy`,
+      })
+    ).toBeVisible();
+    await expect(taughtRow).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07g-mentor-accepted.png', page);
+
+    await page.context().close();
+  });
+
+  test('screen 7, game master: the card lists the requests to the NPCs she holds, refuses one by name and declines another', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.gm_username, seed.gm_password);
+    await openGrowth(page, seed.gm_entry_id);
+    const card = page.getByTestId('mentoring-card');
+    await expect(card).toBeVisible({ timeout: 30000 });
+    const toasts = page.locator('[data-sonner-toast]');
+
+    const veyRequest = card.getByTestId('mentoring-request-row').filter({
+      hasText: `${seed.student_of_vey} asks ${seed.npc_cannot_teach} to teach her Occult`,
+    });
+    const ilsaRequest = card.getByTestId('mentoring-request-row').filter({
+      hasText: `${seed.student_of_ilsa} asks ${seed.npc_declined} to teach him Heroism`,
+    });
+    await expect(veyRequest).toBeVisible();
+    await expect(ilsaRequest).toBeVisible();
+    await expect(card.getByTestId('mentoring-request-row')).toHaveCount(2);
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07h-gm-card-two-npcs.png', page);
+
+    // Magister Vey holds no Occult rating: refused by her name, the row stays.
+    await veyRequest.getByRole('button', { name: 'Accept' }).click();
+    await expect(
+      page.getByText(`${seed.npc_cannot_teach} has no rating in Occult.`, { exact: true })
+    ).toBeVisible();
+    await expect(veyRequest).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07i-gm-npc-accept-refused.png', page);
+    await expect(toasts).toHaveCount(0, { timeout: 20000 });
+
+    // Warden Ilsa Tarn's request is declined: the row is gone.
+    await ilsaRequest.getByRole('button', { name: 'Decline' }).click();
+    await expect(
+      page.getByText(`You decline to teach ${seed.student_of_ilsa} Heroism.`, { exact: true })
+    ).toBeVisible();
+    await expect(ilsaRequest).toHaveCount(0);
+    await expect(veyRequest).toBeVisible();
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07j-gm-npc-declined.png', page);
+
+    await page.context().close();
+  });
+
+  test('screen 7, student again: her row reads the mentor as agreed once Drusa Kell accepted', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, ACCOUNT, PASSWORD);
+    await openGrowth(page, seed.entry_id);
+    const card = page.getByTestId('training-card');
+    await expect(card).toBeVisible({ timeout: 30000 });
+    const villainyRow = card.getByTestId('training-allocation-row').filter({ hasText: 'Villainy' });
+    await expect(villainyRow.getByTestId('training-mentor-line')).toHaveText(
+      `Mentor: ${seed.mentor_rated}`
+    );
+    await expect(card.getByText('waiting for')).toHaveCount(0);
+    await card.scrollIntoViewIfNeeded();
+    await shot(testInfo, '07k-training-card-mentor-agreed.png', page);
 
     await page.context().close();
   });
