@@ -42,8 +42,12 @@ class OfferPrice:
     ``teaching_line`` names the Tradition a skill course's role teaches ("Taught in the
     manner of X", None when it teaches none); ``fit_line`` says what of the learner the
     Tradition fits and that sessions are easier ("Fits your X. Sessions are easier for
-    you.", None when nothing fits or the fit eases nothing). Both
-    ride the wire under their own names (#4659).
+    you.", None when nothing fits or the fit eases nothing). ``outsider_line`` is "Your
+    Tradition does not teach this. Sessions are harder for you.", set when the course's skill
+    is one a Tradition's list governs, the learner's own Tradition does not teach it and
+    staff set an extra course difficulty above 0 (#5326); it is separate from ``fit_line``
+    because a learner can be an outsider and still have a Gift that fits. All three ride the
+    wire under their own names (#4659).
 
     A TRAIN offer charges no AP on acceptance (``ap`` 0): its Hare and coin are paid
     now, and its ``learn_ap_cost`` only sizes the training meter (``training_points``,
@@ -62,3 +66,18 @@ class OfferPrice:
     next_session_next_week: bool = False
     teaching_line: str | None = None
     fit_line: str | None = None
+    outsider_line: str | None = None
+
+
+@dataclass(frozen=True)
+class CourseTerms:
+    """What one skill course session's check is adjusted by for one student (#5326).
+
+    ``ease`` is the difficulty points a student who fits the trainer's Tradition takes off
+    (#4659). ``added_difficulty`` is the points an outsider adds: the student's own Tradition
+    does not teach the course's skill. Both are read live at each session, and the roll is at
+    the course's difficulty plus ``added_difficulty`` minus ``ease``.
+    """
+
+    ease: int = 0
+    added_difficulty: int = 0

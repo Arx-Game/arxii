@@ -32,6 +32,7 @@ from world.skills.types import SkillTrainingResult
 from world.traits.models import (
     CharacterTraitChange,
     CharacterTraitValue,
+    TraitCategory,
     TraitChangeSource,
     TraitType,
 )
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.character_sheets.models import CharacterSheet
+    from world.magic.types.tradition_teaching import TeachingContext
     from world.scenes.models import Persona
     from world.traits.models import Trait
 
@@ -270,6 +272,37 @@ def total_allocated_training_ap(character_id: int, exclude_pk: int | None = None
     return qs.aggregate(total=Sum("ap_amount"))["total"] or 0
 
 
+def _training_refusal(
+    sheet: CharacterSheet,
+    skill: Skill | Specialization,
+    mentor: Persona | None,
+) -> str | None:
+    """The line that refuses this training, or None when the Tradition rule allows it (#5326).
+
+    Builds a one-character teaching context (the student and the mentor), so a caller
+    allocating one row asks once. The weekly run builds its own context for every row.
+    """
+    from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+        build_teaching_context,
+        training_verdict,
+    )
+
+    sheet_ids = {sheet.pk}
+    mentor_sheet = None
+    if mentor is not None:
+        mentor_sheet = mentor.character_sheet
+        sheet_ids.add(mentor_sheet.pk)
+    context = build_teaching_context(sheet_ids)
+    verdict = training_verdict(
+        context,
+        sheet,
+        skill,
+        mentor_sheet,
+        mentor_name=None if mentor is None else mentor.name,
+    )
+    return verdict.refusal
+
+
 def create_training_allocation(
     character: ObjectDB,
     ap_amount: int,
@@ -291,13 +324,19 @@ def create_training_allocation(
         The created TrainingAllocation instance.
 
     Raises:
-        ValueError: If ap_amount is <= 0, or the character's standing allocations —
+        ValueError: If ap_amount is <= 0, the character's standing allocations —
             training AND ties, which share one weekly purse (#3957) — would exceed the
-            weekly AP budget.
+            weekly AP budget, or the Tradition rule refuses the training: a Magic skill
+            needs a mentor whose Tradition teaches it and who holds a rating in it, unless
+            a distinction lets her teach herself (#5326). The message is the refusal line.
     """
     if ap_amount <= 0:
         msg = "AP amount must be greater than 0."
         raise ValueError(msg)
+
+    refusal = _training_refusal(character.sheet_data, skill or specialization, mentor)
+    if refusal is not None:
+        raise ValueError(refusal)
 
     budget = ActionPointConfig.get_weekly_regen()
     current_total = total_allocated_training_ap(character.pk) + standing_tie_ap(character.pk)
@@ -335,10 +374,19 @@ def update_training_allocation(
         The updated TrainingAllocation instance.
 
     Raises:
-        ValueError: If ap_amount is <= 0, or the character's standing allocations —
+        ValueError: If ap_amount is <= 0, the character's standing allocations —
             training AND ties, which share one weekly purse (#3957) — would exceed the
-            weekly AP budget.
+            weekly AP budget, or the Tradition rule refuses the allocation as it would
+            stand after the update, clearing a mentor on a Magic skill included (#5326).
+            Nothing is saved when it raises.
     """
+    new_mentor = allocation.mentor if mentor is _UNSET else mentor
+    refusal = _training_refusal(
+        allocation.character, allocation.skill or allocation.specialization, new_mentor
+    )
+    if refusal is not None:
+        raise ValueError(refusal)
+
     if ap_amount is not None:
         if ap_amount <= 0:
             msg = "AP amount must be greater than 0."
@@ -778,6 +826,69 @@ def _apply_development_to_specialization(
     return message
 
 
+def _allocation_skill(allocation: TrainingAllocation) -> Skill | Specialization:
+    """The allocation's skill, or its specialization when it trains one."""
+    return allocation.skill or allocation.specialization  # type: ignore[return-value]
+
+
+def _allocation_parent_skill(allocation: TrainingAllocation) -> Skill:
+    """The skill the allocation trains, or the parent skill of the specialization it trains."""
+    return allocation.skill or allocation.specialization.parent_skill  # type: ignore[union-attr]
+
+
+def _weekly_teaching_context(allocations: list[TrainingAllocation]) -> TeachingContext:
+    """One teaching context for every allocation the weekly run loaded (#5326).
+
+    It holds every student and every mentor. The self-teaching lever is read only for a
+    student with an allocation that has no mentor on a Magic skill, so a run after the first
+    reads it for prodigies only.
+    """
+    from world.magic.services.tradition_teaching import build_teaching_context  # noqa: PLC0415
+
+    sheet_ids = {a.character_id for a in allocations}
+    sheet_ids.update(a.mentor.character_sheet_id for a in allocations if a.mentor is not None)
+    lever_sheet_ids = {
+        a.character_id
+        for a in allocations
+        if a.mentor is None and _allocation_parent_skill(a).category == TraitCategory.MAGIC
+    }
+    return build_teaching_context(sheet_ids, lever_sheet_ids=lever_sheet_ids)
+
+
+def _weekly_refusal(teaching: TeachingContext, allocation: TrainingAllocation) -> str | None:
+    """The line that refuses this standing allocation this week, or None when it is allowed."""
+    from world.magic.services.tradition_teaching import training_verdict  # noqa: PLC0415
+
+    mentor = allocation.mentor
+    verdict = training_verdict(
+        teaching,
+        allocation.character,
+        _allocation_skill(allocation),
+        None if mentor is None else mentor.character_sheet,
+        mentor_name=None if mentor is None else mentor.name,
+    )
+    return verdict.refusal
+
+
+def _skip_refused_allocation(allocation: TrainingAllocation, refusal: str) -> None:
+    """Tell the character one line why this week's training did not run (#5326).
+
+    The allocation row stays so she can fix it, and no development is paid and no action
+    points are spent.
+    """
+    from world.narrative.constants import NarrativeCategory  # noqa: PLC0415
+    from world.narrative.services import send_narrative_message  # noqa: PLC0415
+
+    target = _allocation_skill(allocation)
+    send_narrative_message(
+        recipients=[allocation.character],
+        body=f"Your weekly training in {target.name} did not run, and no action points were "
+        f"spent. {refusal}",
+        category=NarrativeCategory.SYSTEM,
+        sender_account=None,
+    )
+
+
 @transaction.atomic
 def process_weekly_training() -> None:
     """Process all training allocations for the weekly tick.
@@ -813,9 +924,14 @@ def process_weekly_training() -> None:
     # Batch-fetch path levels for all involved characters (1 query).
     character_pks = {a.character_id for a in allocations}
     path_levels = _bulk_path_levels(character_pks)
+    teaching = _weekly_teaching_context(allocations)
 
     for allocation in allocations:
         character = allocation.character
+        refusal = _weekly_refusal(teaching, allocation)
+        if refusal is not None:
+            _skip_refused_allocation(allocation, refusal)
+            continue
         dev_points = calculate_training_development(
             allocation, _teaching_skill=teaching_skill, _path_levels=path_levels
         )
