@@ -447,9 +447,9 @@ class MarkingByTheWebAndAJournalEntry(_Attested):
         ilsa_reads = self.pose_row(self.ilsa, posed["id"])["act_marks"][0]["act_label"]
 
         # The actor reads the name she knows; a reader who has not seen through the mask reads
-        # the mask, never "Hale".
+        # the mask as the game words a stranger's view of one, never "Hale".
         self.assertEqual(daven_reads, "Intimidated Hale")
-        self.assertEqual(ilsa_reads, "Intimidated Owl Mask")
+        self.assertEqual(ilsa_reads, "Intimidated a person wearing an Owl Mask")
         self.assertNotIn("Hale", json.dumps(self.pose_row(self.ilsa, posed["id"]), default=str))
         # A reader who has seen through it, and staff, read the real name beside the mask.
         mask = Persona.objects.get(character_sheet=self.hale.sheet_data, name="Owl Mask")
