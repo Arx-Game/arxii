@@ -164,7 +164,8 @@ class _Attested(JourneyCase):
         with self.captureOnCommitCallbacks(execute=True):
             return super().telnet(character, line)
 
-    def client(self, character):
+    def rest(self, character):
+        """A REST client signed in as ``character``'s player (Django owns the name ``client``)."""
         return self.api(self.account_of(character))
 
     def notices(self, character) -> str:
@@ -224,13 +225,13 @@ class _Attested(JourneyCase):
 
     def pose_row(self, viewer, pose_id: int) -> dict:
         """The pose as ``viewer``'s own feed read shows it."""
-        response = self.client(viewer).get(f"/api/interactions/{pose_id}/")
+        response = self.rest(viewer).get(f"/api/interactions/{pose_id}/")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content)
         return response.json()
 
     def web_pose(self, character, text: str, **extra) -> dict:
         with self.captureOnCommitCallbacks(execute=True):
-            response = self.client(character).post(
+            response = self.rest(character).post(
                 SUBMIT_POSE,
                 {
                     "persona_id": character.sheet_data.primary_persona.pk,
@@ -293,6 +294,9 @@ class ListingAndMarkingActsByTelnet(_Attested):
 
     def test_a_mark_in_an_ephemeral_scene_pays_nothing_and_says_so(self) -> None:
         road = self.make_room("The Road")
+        # An ephemeral scene may only be held in a room that is not publicly listed (#1287).
+        road.room_profile.is_public = False
+        road.room_profile.save()
         SceneFactory(room=road, privacy_mode=ScenePrivacyMode.EPHEMERAL)
         invalidate_active_scene_cache(road)
         self.daven.move_to(road, quiet=True)
@@ -332,8 +336,8 @@ class ListingAndMarkingActsByTelnet(_Attested):
         act = self.take_act(self.daven, self.hale, "Intimidated")
         url = f"{RECORDED_ACTS}?character_sheet={self.daven.sheet_data.pk}"
 
-        mine = self.client(self.daven).get(url)
-        theirs = self.client(self.ilsa).get(url)
+        mine = self.rest(self.daven).get(url)
+        theirs = self.rest(self.ilsa).get(url)
 
         self.assertEqual(mine.status_code, status.HTTP_200_OK, mine.content)
         (row,) = mine.json()["results"]
@@ -480,7 +484,7 @@ class MarkingByTheWebAndAJournalEntry(_Attested):
         self.give_capacity(self.wren)
         act = self.take_act(self.wren, None, "Tended the stranger")
 
-        response = self.client(self.wren).post(
+        response = self.rest(self.wren).post(
             JOURNAL_ENTRIES,
             {
                 "title": "The stranger at the tollgate",
@@ -508,7 +512,7 @@ class MarkingByTheWebAndAJournalEntry(_Attested):
         WeeklyMarkReturnFactory(gained_at_least=0, percent_paid=0)
         act = self.take_act(self.wren, None, "Tended the stranger")
 
-        response = self.client(self.wren).post(
+        response = self.rest(self.wren).post(
             JOURNAL_ENTRIES,
             {
                 "title": "Too late",
@@ -707,10 +711,10 @@ class AWitnessProposesAndThePoserDecides(_Attested):
         pick = PoseEndorsement.objects.get()
 
         # Only the witness's own player may withdraw over the web: another player's pick is a 404.
-        hale_delete = self.client(self.hale).delete(f"{POSE_ENDORSEMENTS}{pick.pk}/")
+        hale_delete = self.rest(self.hale).delete(f"{POSE_ENDORSEMENTS}{pick.pk}/")
         self.assertEqual(hale_delete.status_code, status.HTTP_404_NOT_FOUND)
         # She cannot accept the resonance she proposed herself.
-        own = self.client(self.ilsa).post(f"{POSE_ENDORSEMENTS}{pick.pk}/accept/")
+        own = self.rest(self.ilsa).post(f"{POSE_ENDORSEMENTS}{pick.pk}/accept/")
         self.assertIn(own.status_code, (status.HTTP_400_BAD_REQUEST, status.HTTP_404_NOT_FOUND))
         pick.refresh_from_db()
         self.assertTrue(pick.awaiting_acceptance)
@@ -747,7 +751,7 @@ class AWitnessProposesAndThePoserDecides(_Attested):
 
     def test_over_the_web_each_viewer_reads_only_the_picks_that_are_theirs_to_see(self) -> None:
         pose = self.pose_row_id()
-        picked = self.client(self.ilsa).post(
+        picked = self.rest(self.ilsa).post(
             POSE_ENDORSEMENTS,
             {"interaction": pose, "resonance": self.grief.pk},
             format="json",
@@ -773,17 +777,17 @@ class AWitnessProposesAndThePoserDecides(_Attested):
         self.assertEqual(self.pose_row(self.hale, pose)["pose_endorsers"], [])
 
         # The witness changes it; a stranger to the pick cannot answer it.
-        changed = self.client(self.ilsa).post(
+        changed = self.rest(self.ilsa).post(
             f"{POSE_ENDORSEMENTS}{pick_id}/change/", {"resonance": self.mercy.pk}, format="json"
         )
         self.assertEqual(changed.status_code, status.HTTP_200_OK, changed.content)
         self.assertEqual(changed.json()["resonance"], self.mercy.pk)
         self.assertTrue(changed.json()["awaiting_acceptance"])
-        refused = self.client(self.hale).post(f"{POSE_ENDORSEMENTS}{pick_id}/accept/")
+        refused = self.rest(self.hale).post(f"{POSE_ENDORSEMENTS}{pick_id}/accept/")
         self.assertEqual(refused.status_code, status.HTTP_404_NOT_FOUND)
 
         # The poser accepts; it is now counted, and her player can no longer be asked.
-        accepted = self.client(self.brannoc).post(f"{POSE_ENDORSEMENTS}{pick_id}/accept/")
+        accepted = self.rest(self.brannoc).post(f"{POSE_ENDORSEMENTS}{pick_id}/accept/")
         self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.content)
         row = self.pose_row(self.hale, pose)
         self.assertEqual([e["resonance_id"] for e in row["pose_endorsers"]], [self.mercy.pk])
@@ -791,10 +795,10 @@ class AWitnessProposesAndThePoserDecides(_Attested):
 
     def test_a_decline_over_the_web_deletes_the_pick(self) -> None:
         pose = self.pose_row_id()
-        picked = self.client(self.ilsa).post(
+        picked = self.rest(self.ilsa).post(
             POSE_ENDORSEMENTS, {"interaction": pose, "resonance": self.grief.pk}, format="json"
         )
-        declined = self.client(self.brannoc).post(
+        declined = self.rest(self.brannoc).post(
             f"{POSE_ENDORSEMENTS}{picked.json()['id']}/decline/"
         )
         self.assertEqual(declined.status_code, status.HTTP_204_NO_CONTENT)
@@ -802,7 +806,7 @@ class AWitnessProposesAndThePoserDecides(_Attested):
 
     def pose_row_id(self) -> int:
         """The id of Brannoc's pose, read from the scene feed as Ilsa sees it."""
-        feed = self.client(self.ilsa).get(f"/api/interactions/?scene={self.scene.pk}")
+        feed = self.rest(self.ilsa).get(f"/api/interactions/?scene={self.scene.pk}")
         data = feed.json()
         rows = data["results"] if isinstance(data, dict) else data
         return next(row["id"] for row in rows if PICK_ON_THE_BELL in row["content"])
@@ -933,7 +937,7 @@ class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
             {name: row["can_undo"] for name, row in reads.items()},
             {"marek": True, "ilsa": False, "daven": False},
         )
-        endorsed = self.client(self.ilsa).post(
+        endorsed = self.rest(self.ilsa).post(
             POSE_ENDORSEMENTS,
             {"interaction": self.posed["id"], "resonance": self.cruelty.pk},
             format="json",
@@ -946,7 +950,7 @@ class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
         self.assertEqual(self.balance(self.daven, self.cruelty), 10)
 
         with self.captureOnCommitCallbacks(execute=True):
-            undone = self.client(self.marek).post(f"{GRANTS}{self.grant.pk}/undo/")
+            undone = self.rest(self.marek).post(f"{GRANTS}{self.grant.pk}/undo/")
 
         self.assertEqual(undone.status_code, status.HTTP_200_OK, undone.content)
         self.assertEqual(set(undone.json()), {"id", "nullified_at"})
@@ -962,7 +966,7 @@ class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
         # The chip stays, struck through, naming the role; nobody can undo it twice.
         chip = self.pose_row(self.ilsa, self.posed["id"])["act_marks"][0]
         self.assertEqual((chip["undone"], chip["undone_by"], chip["can_undo"]), (True, "gm", False))
-        again = self.client(self.marek).post(f"{GRANTS}{self.grant.pk}/undo/")
+        again = self.rest(self.marek).post(f"{GRANTS}{self.grant.pk}/undo/")
         self.assertEqual(again.status_code, status.HTTP_400_BAD_REQUEST, again.content)
         # The act cannot be marked again.
         self.assertNotIn("Frightened the child", self.telnet(self.daven, "acts"))
@@ -999,7 +1003,7 @@ class AMarkedPoseCannotBeEndorsedAndTheGMCanUndoIt(_Attested):
         return self.pose_row(self.ilsa, self.posed["id"])["act_marks"][0]
 
     def test_a_scene_co_owner_who_is_not_the_gm_is_refused_and_nothing_changes(self) -> None:
-        refused = self.client(self.ilsa).post(f"{GRANTS}{self.grant.pk}/undo/")
+        refused = self.rest(self.ilsa).post(f"{GRANTS}{self.grant.pk}/undo/")
 
         self.assertEqual(refused.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(self.balance(self.daven, self.cruelty), 10)
@@ -1194,9 +1198,9 @@ class StaffSeeWhatMarksNeedBeforeTheyWork(JourneyCase):
         weightless = AffinityFactory(name="Weightless", gain_fatigue=0, claim_verb="relish")
 
         self.assertIn("A gain fatigue above 0 on every affinity", self.page())
-        self.assertIn("Weightless", self.page())
+        self.assertIn("Gain fatigue is 0 for affinity(ies): Weightless.", self.page())
 
         weightless.gain_fatigue = 4
         weightless.save()
 
-        self.assertNotIn("Weightless", self.page())
+        self.assertNotIn("Gain fatigue is 0 for affinity(ies)", self.page())
