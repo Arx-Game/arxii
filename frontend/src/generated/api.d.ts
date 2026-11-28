@@ -55846,6 +55846,13 @@ export interface components {
       readonly mentor_accepted_at: string | null;
       /** @description Whether a mentor was named and has not agreed, so the training counts as unmentored. */
       readonly mentor_waiting: boolean;
+      /**
+       * @description The teacher line when the weekly run would skip this row for want of a mentor.
+       *
+       *     Reads the ``teaching_context`` the view built once for the page of allocations
+       *     (``training_teaching_context``), so no row costs a query of its own.
+       */
+      readonly mentor_needed_line: string | null;
       /** @description Action points allocated per week (minimum 1) */
       ap_amount: number;
       /** @description Return AP left in the character's weekly training budget. */

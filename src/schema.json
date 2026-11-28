@@ -101175,6 +101175,15 @@ components:
           description: Whether a mentor was named and has not agreed, so the training
             counts as unmentored.
           readOnly: true
+        mentor_needed_line:
+          type: string
+          nullable: true
+          description: |-
+            The teacher line when the weekly run would skip this row for want of a mentor.
+
+            Reads the ``teaching_context`` the view built once for the page of allocations
+            (``training_teaching_context``), so no row costs a query of its own.
+          readOnly: true
         ap_amount:
           type: integer
           maximum: 2147483647
@@ -101189,6 +101198,7 @@ components:
       - id
       - mentor
       - mentor_accepted_at
+      - mentor_needed_line
       - mentor_waiting
       - remaining_weekly_budget
       - skill
