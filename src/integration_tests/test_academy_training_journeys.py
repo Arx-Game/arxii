@@ -213,6 +213,7 @@ class TrainingAtTheAcademy(JourneyCase):
                 "training_points": 5,
                 "teaching_line": None,
                 "fit_line": None,
+                "outsider_line": None,
                 "display": MENU_LINE,
             },
         )
