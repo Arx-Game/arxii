@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from enum import StrEnum
 
 
 @dataclass(frozen=True)
@@ -122,3 +123,16 @@ class TrainingVerdict:
     def allowed(self) -> bool:
         """True when nothing refuses the training."""
         return self.refusal is None
+
+
+class MentorShortfall(StrEnum):
+    """Why a character cannot teach a Magic skill (#5326).
+
+    Three facts about the mentor, read by the weekly verdict (which hides which one it is
+    behind one line, so a named persona reveals nothing) and by the mentor's own answer to a
+    request, which names the one that applies because the facts are hers.
+    """
+
+    NO_TRADITION = "no_tradition"
+    DOES_NOT_TEACH = "does_not_teach"
+    NO_RATING = "no_rating"

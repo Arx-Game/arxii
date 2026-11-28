@@ -498,7 +498,11 @@ from actions.definitions.positioning import (
     TakePositionAction,
 )
 from actions.definitions.primum import HarvestPrimumAction
-from actions.definitions.progression import ManageTrainingAction, PurchaseUnlockAction
+from actions.definitions.progression import (
+    AnswerMentoringAction,
+    ManageTrainingAction,
+    PurchaseUnlockAction,
+)
 from actions.definitions.progression_rewards import (
     ClaimKudosAction,
     ClaimRandomSceneAction,
@@ -1048,6 +1052,7 @@ _ALL_ACTIONS: list[Action] = [
     CaterEventAction(),
     ContributeGrandeurAction(),
     ManageTrainingAction(),
+    AnswerMentoringAction(),
     PurchaseUnlockAction(),
     ClaimKudosAction(),
     NominateAction(),

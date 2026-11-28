@@ -394,6 +394,7 @@ class ActionRegistryTests(TestCase):
             "mark_beat",
             "declare_stakes",
             "manage_training",
+            "answer_mentoring",
             "purchase_unlock",
             "toggle_interaction_favorite",
             "toggle_interaction_reaction",

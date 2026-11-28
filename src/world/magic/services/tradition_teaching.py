@@ -31,7 +31,11 @@ from django.db.models import Q
 
 from world.magic.constants import AFFINITY_PRIMAL
 from world.magic.models import Affinity, CharacterTradition, Tradition
-from world.magic.types.tradition_teaching import TeachingContext, TrainingVerdict
+from world.magic.types.tradition_teaching import (
+    MentorShortfall,
+    TeachingContext,
+    TrainingVerdict,
+)
 from world.skills.models import Skill, Specialization
 from world.traits.models import TraitCategory
 
@@ -42,16 +46,20 @@ if TYPE_CHECKING:
     from world.scenes.models import Persona
 
 __all__ = [
+    "MentorShortfall",
     "TeachingContext",
     "TrainingVerdict",
     "build_outsider_context",
     "build_teaching_context",
     "is_outsider",
     "is_tradition_governed",
+    "mentor_acceptance_refusal",
+    "mentor_shortfall",
     "taught_affinity_skill_filter",
     "taught_affinity_skill_names_by_tradition",
     "tradition_teaches",
     "traditions_offered_in_creation",
+    "training_asking_refusal",
     "training_verdict",
 ]
 
@@ -63,6 +71,7 @@ MENTOR_CANNOT_TEACH = (
     "{mentor} cannot teach you {skill}. Choose a mentor whose Tradition teaches it and who has "
     "trained in it."
 )
+MENTOR_HAS_NOT_AGREED = "{mentor} has not agreed to teach you yet."
 MENTOR_IS_ANOTHER_OF_YOUR_CHARACTERS = (
     "You cannot name another of your own characters as your mentor. "
     "Choose a mentor another player plays."
@@ -260,34 +269,118 @@ def _is_magic_skill(skill: Skill) -> bool:
     return skill.category == TraitCategory.MAGIC
 
 
+def mentor_shortfall(
+    context: TeachingContext, mentor_sheet: CharacterSheet, skill: Skill | Specialization
+) -> MentorShortfall | None:
+    """Why this character cannot teach a Magic skill, or None when she can (#5326).
+
+    A skill outside the Magic category needs nothing of a mentor. Otherwise she needs an
+    active Tradition, that Tradition must teach the skill (a specialization is judged on its
+    parent), and she must hold a rating above 0 in it. The context must hold her sheet.
+    """
+    from world.skills.services import skill_rating  # noqa: PLC0415
+
+    parent = _governing_skill(skill)
+    if not _is_magic_skill(parent):
+        return None
+    tradition = context.tradition_of(mentor_sheet.pk)
+    if tradition is None:
+        return MentorShortfall.NO_TRADITION
+    if not context.teaches(tradition, parent.pk):
+        return MentorShortfall.DOES_NOT_TEACH
+    if skill_rating(mentor_sheet, parent) <= 0:
+        return MentorShortfall.NO_RATING
+    return None
+
+
+def mentor_acceptance_refusal(
+    context: TeachingContext,
+    mentor_sheet: CharacterSheet,
+    skill: Skill | Specialization,
+    *,
+    npc_name: str | None = None,
+) -> str | None:
+    """The line a mentor reads when she cannot agree to teach, or None when she can (#5326).
+
+    The facts are the mentor's own, so the line names the one that applies, unlike the
+    student's weekly line. It speaks to her as "You" and "Your". For an NPC a game master
+    answers for, pass ``npc_name`` and the same sentences use the name.
+    """
+    shortfall = mentor_shortfall(context, mentor_sheet, skill)
+    if shortfall is None:
+        return None
+    name = _governing_skill(skill).name
+    if npc_name is None:
+        lines = {
+            MentorShortfall.NO_TRADITION: "You belong to no Tradition.",
+            MentorShortfall.DOES_NOT_TEACH: f"Your Tradition does not teach {name}.",
+            MentorShortfall.NO_RATING: f"You have no rating in {name}.",
+        }
+    else:
+        lines = {
+            MentorShortfall.NO_TRADITION: f"{npc_name} belongs to no Tradition.",
+            MentorShortfall.DOES_NOT_TEACH: f"{npc_name}'s Tradition does not teach {name}.",
+            MentorShortfall.NO_RATING: f"{npc_name} has no rating in {name}.",
+        }
+    return lines[shortfall]
+
+
+def training_asking_refusal(
+    context: TeachingContext,
+    sheet: CharacterSheet,
+    skill: Skill | Specialization,
+    mentor: Persona | None,
+) -> str | None:
+    """The line that refuses naming this mentor on this training, or None (#5326).
+
+    Naming a mentor only asks her, so nothing about the named character is read: the student
+    learns nothing about her Tradition or rating. The student is refused for no mentor on a
+    Magic skill she may not teach herself (her own persona counts as no mentor), and for
+    naming another character her own player plays, on any skill. ``context`` must hold the
+    student's lever when she names no mentor, and both players when she names one.
+    """
+    parent = _governing_skill(skill)
+    mentor_sheet = None if mentor is None else mentor.character_sheet
+    if mentor_sheet is None or mentor_sheet.pk == sheet.pk:
+        if _is_magic_skill(parent) and not context.may_teach_herself(sheet.pk):
+            return NEEDS_A_TEACHER.format(skill=parent.name)
+        return None
+    if context.played_by_one_account(sheet.pk, mentor_sheet.pk):
+        return MENTOR_IS_ANOTHER_OF_YOUR_CHARACTERS
+    return None
+
+
 def training_verdict(
     context: TeachingContext,
     sheet: CharacterSheet,
     skill: Skill | Specialization,
     mentor: Persona | None,
+    *,
+    mentor_agreed: bool,
 ) -> TrainingVerdict:
-    """Whether ``sheet`` may allocate weekly training on ``skill`` with this mentor persona.
+    """Whether ``sheet`` may train ``skill`` this week with this mentor persona.
 
     ``skill`` is the allocation's skill, or its specialization, which is judged on its parent
     skill. ``mentor`` is the persona the player named, or ``None`` for no mentor; the refusal
-    names that persona and never the character behind it. ``context`` must hold the student and
-    the mentor, their players, and the student's lever when she has no mentor (see
-    ``build_teaching_context``).
+    names that persona and never the character behind it. ``mentor_agreed`` says whether she
+    agreed to teach (``TrainingAllocation.mentor_accepted_at`` is set). ``context`` must hold
+    the student and the mentor, their players, and the student's lever when she has no
+    mentor or a mentor who has not agreed (see ``build_teaching_context``).
 
-    A skill outside the Magic category is never refused here. For a Magic skill, with no
-    mentor the training is refused unless the student's self-teaching lever is positive; her
-    own persona counts as no mentor. A mentor another of her own characters (one account plays
-    both) is refused. Any other mentor is refused with one line, whatever the reason, when
-    they have no active Tradition, their Tradition does not teach the skill, or they hold no
-    rating (a stored value above 0) in it: the line never says which, so naming a persona
-    reveals nothing about who they are. It never reads whether the student is an outsider:
-    mentoring from another Tradition carries no penalty. A mentor's own lever is never read.
+    A skill outside the Magic category is never refused here. For a Magic skill, a mentor who
+    has not agreed counts as no mentor: the training is refused unless the student's
+    self-teaching lever is positive, with the line that the mentor has not agreed yet (or, for
+    no mentor at all, that the skill needs a teacher). Her own persona counts as no mentor. A
+    mentor another of her own characters (one account plays both) is refused. An agreed mentor
+    is refused with one line, whatever the reason, when she has no active Tradition, her
+    Tradition does not teach the skill, or she holds no rating (a stored value above 0) in it:
+    the line never says which, so naming a persona reveals nothing about who they are. It
+    never reads whether the student is an outsider: mentoring from another Tradition carries
+    no penalty. A mentor's own lever is never read.
 
     The refusal is ``TrainingVerdict.refusal``, the full line the player reads, to be raised
     or sent as it stands.
     """
-    from world.skills.services import skill_rating  # noqa: PLC0415
-
     parent = _governing_skill(skill)
     if not _is_magic_skill(parent):
         return TrainingVerdict()
@@ -296,13 +389,12 @@ def training_verdict(
         if context.may_teach_herself(sheet.pk):
             return TrainingVerdict()
         return TrainingVerdict(NEEDS_A_TEACHER.format(skill=parent.name))
+    if not mentor_agreed:
+        if context.may_teach_herself(sheet.pk):
+            return TrainingVerdict()
+        return TrainingVerdict(MENTOR_HAS_NOT_AGREED.format(mentor=mentor.name))
     if context.played_by_one_account(sheet.pk, mentor_sheet.pk):
         return TrainingVerdict(MENTOR_IS_ANOTHER_OF_YOUR_CHARACTERS)
-    mentor_tradition = context.tradition_of(mentor_sheet.pk)
-    if (
-        mentor_tradition is None
-        or not context.teaches(mentor_tradition, parent.pk)
-        or skill_rating(mentor_sheet, parent) <= 0
-    ):
+    if mentor_shortfall(context, mentor_sheet, skill) is not None:
         return TrainingVerdict(MENTOR_CANNOT_TEACH.format(mentor=mentor.name, skill=parent.name))
     return TrainingVerdict()

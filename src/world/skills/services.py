@@ -21,6 +21,12 @@ from world.progression.types import DevelopmentSource, ProgressionReason
 from world.relationships.helpers import get_relationship_tier
 from world.relationships.services import standing_tie_ap
 from world.roster.models import RosterEntry
+from world.skills.mentoring import (
+    ask_mentor,
+    mentor_has_agreed,
+    mentor_is_waiting,
+    tell_mentor_student_left,
+)
 from world.skills.models import (
     CharacterSpecializationValue,
     Skill,
@@ -187,7 +193,7 @@ def calculate_training_development(
 
         base_gain = 5 * AP_spent * path_level
 
-        If mentor:
+        If a mentor who has agreed (a mentor who has not counts as none, #5326):
             mentor_skill_total = mentor_skill + teaching (+ parent if spec)
             student_skill_total = student_skill (+ parent if spec)
             ratio = mentor_skill_total / student_skill_total
@@ -213,7 +219,7 @@ def calculate_training_development(
         path_level = _get_path_level(character)
     base_gain = 5 * ap_spent * path_level
 
-    if not allocation.mentor:
+    if not mentor_has_agreed(allocation):
         return int(base_gain)
 
     mentor_character = allocation.mentor.character_sheet
@@ -277,35 +283,42 @@ def _trains_without_a_mentor(student_sheet_id: int, mentor: Persona | None) -> b
     return mentor is None or mentor.character_sheet_id == student_sheet_id
 
 
+def _persona_pk(persona: Persona | None) -> int | None:
+    """The persona's id, or None for no persona."""
+    return None if persona is None else persona.pk
+
+
 def _training_refusal(
     sheet: CharacterSheet,
     skill: Skill | Specialization,
     mentor: Persona | None,
 ) -> str | None:
-    """The line that refuses this training, or None when the Tradition rule allows it (#5326).
+    """The line that refuses naming this mentor on this training, or None (#5326).
 
-    A skill outside the Magic category is never refused, so no context is built for it.
-    Otherwise builds a one-character teaching context (the student and the mentor), so a
-    caller allocating one row asks once. The weekly run builds its own context for every row.
+    Naming a mentor only asks her, so nothing about her Tradition or rating is read here and
+    the student learns nothing about the character she named. She is refused for no mentor on
+    a Magic skill she may not teach herself, and for naming another character her own player
+    plays (any skill). Builds a one-character teaching context, so a caller allocating one
+    row asks once; the weekly run builds its own context for every row.
     """
     from world.magic.services.tradition_teaching import (  # noqa: PLC0415
         build_teaching_context,
-        training_verdict,
+        training_asking_refusal,
     )
 
     parent = skill.parent_skill if isinstance(skill, Specialization) else skill
-    if parent.category != TraitCategory.MAGIC:
+    alone = _trains_without_a_mentor(sheet.pk, mentor)
+    if alone and parent.category != TraitCategory.MAGIC:
         return None
     sheet_ids = {sheet.pk}
     if mentor is not None:
         sheet_ids.add(mentor.character_sheet_id)
-    alone = _trains_without_a_mentor(sheet.pk, mentor)
     context = build_teaching_context(
         sheet_ids,
         lever_sheet_ids=[sheet.pk] if alone else [],
         player_sheet_ids=[] if alone else sheet_ids,
     )
-    return training_verdict(context, sheet, skill, mentor).refusal
+    return training_asking_refusal(context, sheet, skill, mentor)
 
 
 def create_training_allocation(
@@ -323,7 +336,9 @@ def create_training_allocation(
         ap_amount: Action points to allocate.
         skill: The skill to train (mutually exclusive with specialization).
         specialization: The specialization to train (mutually exclusive with skill).
-        mentor: Optional mentor persona for the training.
+        mentor: Optional mentor persona for the training. Naming one only asks her: the
+            allocation is saved with ``mentor_accepted_at`` empty and the mentor's character
+            is told (#5326). Nothing about the mentor is checked.
 
     Returns:
         The created TrainingAllocation instance.
@@ -331,9 +346,10 @@ def create_training_allocation(
     Raises:
         ValueError: If ap_amount is <= 0, the character's standing allocations —
             training AND ties, which share one weekly purse (#3957) — would exceed the
-            weekly AP budget, or the Tradition rule refuses the training: a Magic skill
-            needs a mentor whose Tradition teaches it and who holds a rating in it, unless
-            a distinction lets her teach herself (#5326). The message is the refusal line.
+            weekly AP budget, or the Tradition rule refuses naming this mentor: a Magic
+            skill needs a mentor, unless a distinction lets her teach herself, and the
+            mentor is never her own character or another character her player plays
+            (#5326). The message is the refusal line.
     """
     if ap_amount <= 0:
         msg = "AP amount must be greater than 0."
@@ -352,13 +368,16 @@ def create_training_allocation(
         )
         raise ValueError(msg)
 
-    return TrainingAllocation.objects.create(
+    allocation = TrainingAllocation.objects.create(
         character=character.sheet_data,
         skill=skill,
         specialization=specialization,
         mentor=mentor,
         ap_amount=ap_amount,
     )
+    if mentor_is_waiting(allocation):
+        ask_mentor(allocation)
+    return allocation
 
 
 def update_training_allocation(
@@ -373,7 +392,9 @@ def update_training_allocation(
         allocation: The allocation to update.
         ap_amount: New AP amount (if provided).
         mentor: New mentor persona, or None to remove mentor. Pass the sentinel
-            ``_UNSET`` (default) to leave unchanged.
+            ``_UNSET`` (default) to leave unchanged. A different mentor clears the
+            agreement and asks the new one; the same mentor, or only the action points,
+            keeps the agreement (#5326).
 
     Returns:
         The updated TrainingAllocation instance.
@@ -381,9 +402,9 @@ def update_training_allocation(
     Raises:
         ValueError: If ap_amount is <= 0, the character's standing allocations —
             training AND ties, which share one weekly purse (#3957) — would exceed the
-            weekly AP budget, or the Tradition rule refuses the allocation as it would
-            stand after the update, clearing a mentor on a Magic skill included (#5326).
-            Nothing is saved when it raises.
+            weekly AP budget, or the Tradition rule refuses naming this mentor as the
+            allocation would stand after the update, clearing a mentor on a Magic skill
+            included (#5326). Nothing is saved when it raises.
     """
     new_mentor = allocation.mentor if mentor is _UNSET else mentor
     refusal = _training_refusal(
@@ -409,19 +430,27 @@ def update_training_allocation(
             raise ValueError(msg)
         allocation.ap_amount = ap_amount
 
-    if mentor is not _UNSET:
+    mentor_changed = mentor is not _UNSET and _persona_pk(mentor) != allocation.mentor_id
+    if mentor_changed:
+        tell_mentor_student_left(allocation)
         allocation.mentor = mentor
+        allocation.mentor_accepted_at = None
 
     allocation.save()
+    if mentor_changed and mentor_is_waiting(allocation):
+        ask_mentor(allocation)
     return allocation
 
 
 def remove_training_allocation(allocation: TrainingAllocation) -> None:
     """Delete a training allocation.
 
+    An agreed mentor is told the student no longer trains with her (#5326).
+
     Args:
         allocation: The allocation to remove.
     """
+    tell_mentor_student_left(allocation)
     allocation.delete()
 
 
@@ -844,10 +873,11 @@ def _allocation_parent_skill(allocation: TrainingAllocation) -> Skill:
 def _weekly_teaching_context(allocations: list[TrainingAllocation]) -> TeachingContext:
     """One teaching context for every allocation the weekly run loaded (#5326).
 
-    It holds every student and every mentor. The self-teaching lever is read only for a
-    student with an allocation that has no mentor on a Magic skill, so a run after the first
-    reads it for prodigies only. The players are read once, in bulk, for the student and the
-    mentor of each mentored allocation.
+    It holds every student and every mentor. A mentor who has not agreed counts as no mentor,
+    so the self-teaching lever is read for a student with an allocation on a Magic skill that
+    has no mentor or a waiting one, and a run after the first reads it for prodigies only. The
+    players are read once, in bulk, for the student and the mentor of each allocation whose
+    mentor agreed.
     """
     from world.magic.services.tradition_teaching import build_teaching_context  # noqa: PLC0415
 
@@ -858,7 +888,7 @@ def _weekly_teaching_context(allocations: list[TrainingAllocation]) -> TeachingC
     for allocation in allocations:
         if _allocation_parent_skill(allocation).category != TraitCategory.MAGIC:
             continue
-        if _trains_without_a_mentor(allocation.character_id, allocation.mentor):
+        if not mentor_has_agreed(allocation):
             lever_sheet_ids.add(allocation.character_id)
         else:
             player_sheet_ids.update({allocation.character_id, allocation.mentor.character_sheet_id})
@@ -876,6 +906,7 @@ def _weekly_refusal(teaching: TeachingContext, allocation: TrainingAllocation) -
         allocation.character,
         _allocation_skill(allocation),
         allocation.mentor,
+        mentor_agreed=mentor_has_agreed(allocation),
     )
     return verdict.refusal
 
