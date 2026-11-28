@@ -260,6 +260,13 @@ test.describe('the Glimpse gives a card from each of four parts', () => {
       'The Glimpse is written from the character sheet after character creation, and each ' +
         'part gives its bonus then.'
     );
+    // The line reads at the size of the paragraph above it.
+    const sizes = await page.evaluate(() =>
+      ['.glimpse-aside', 'p.explain'].map((selector) =>
+        parseFloat(getComputedStyle(document.querySelector(selector)!).fontSize)
+      )
+    );
+    expect(sizes[0]).toBe(sizes[1]);
     await expect(railRow(page, 'Trigger').locator('dd')).toHaveText('not asked');
     await expect(railRow(page, 'Glimpse Mystery')).toHaveCount(0);
     await expect.poll(async () => held(await savedDraft(page, seed))).toEqual({});

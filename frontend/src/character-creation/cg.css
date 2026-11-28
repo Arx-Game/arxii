@@ -1189,6 +1189,8 @@
 .interview .glimpse-aside {
   margin: 1.2rem 0 0;
   max-width: 65ch;
+  font-size: 1rem;
+  line-height: 1.5;
   font-style: italic;
   color: var(--cg-muted);
 }
