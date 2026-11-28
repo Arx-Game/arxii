@@ -15039,18 +15039,28 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+     * @description Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139, #5327).
      *
-     *     POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
-     *     GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+     *     POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment. The scene's GM
+     *         and staff may name any resonance; a scene owner who is not its GM tags with the moment
+     *         type's own resonance or one the character already has. Nobody tags a character she
+     *         plays. The permission is checked before anything in the body is validated, so a stranger
+     *         learns nothing about which ids exist, and the answer never names the real character.
+     *     GET  /api/magic/dramatic-moment-tags/ — the tags of scenes the requester GMs or owns (staff
+     *         read all), filterable by ``scene``; ``character_sheet`` is staff's alone.
      */
     get: operations['magic_dramatic_moment_tags_list'];
     put?: never;
     /**
-     * @description Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+     * @description Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139, #5327).
      *
-     *     POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
-     *     GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+     *     POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment. The scene's GM
+     *         and staff may name any resonance; a scene owner who is not its GM tags with the moment
+     *         type's own resonance or one the character already has. Nobody tags a character she
+     *         plays. The permission is checked before anything in the body is validated, so a stranger
+     *         learns nothing about which ids exist, and the answer never names the real character.
+     *     GET  /api/magic/dramatic-moment-tags/ — the tags of scenes the requester GMs or owns (staff
+     *         read all), filterable by ``scene``; ``character_sheet`` is staff's alone.
      */
     post: operations['magic_dramatic_moment_tags_create'];
     delete?: never;
@@ -15682,7 +15692,8 @@ export interface paths {
      *         the row; no body, 204 (#5327).
      *
      *     Change, accept and decline read only the endorsements the requester made, was endorsed
-     *     by, or GMs the scene of (staff read all); anyone else gets a 404.
+     *     by, or GMs the scene of (staff read all); DELETE reads only the ones she made; anyone else
+     *     gets a 404.
      */
     post: operations['magic_pose_endorsements_create'];
     delete?: never;
@@ -15702,10 +15713,10 @@ export interface paths {
     put?: never;
     post?: never;
     /**
-     * @description Delete an unsettled endorsement.
+     * @description Delete an unsettled endorsement of one's own.
      *
-     *     Settled endorsements are hidden behind 404 — they are immutable once
-     *     the weekly tick has run. Only the endorsing account can delete.
+     *     The queryset holds only the requester's own endorsements, so anyone else's answers
+     *     404. A settled one is refused: the weekly tick has paid it and it is now a record.
      */
     delete: operations['magic_pose_endorsements_destroy'];
     options?: never;
@@ -15922,8 +15933,9 @@ export interface paths {
      *
      *     ``GET /api/magic/recorded-acts/?character_sheet=<id>`` lists only unmarked acts inside the
      *     pointable window (``KindlingConfig.recorded_act_days``), each with the resonances situations
-     *     suggested for it, strongest first. The owner reads their own characters', staff anyone's;
-     *     another player's character is an empty page. Nothing here writes: an act is written by
+     *     suggested for it, strongest first. A player reads the acts of the characters they play now
+     *     (a borrower of a lent NPC, never the holder who lent it away), staff anyone's; another
+     *     player's character is an empty page. Nothing here writes: an act is written by
      *     ``award_kindled_deeds`` and marked by a pose or journal entry.
      */
     get: operations['magic_recorded_acts_list'];
@@ -34538,7 +34550,14 @@ export interface components {
      *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
      *     ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
      *     ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
-     *     ``resonance`` (write-only, optional, #5327) names the resonance the tag pays.
+     *     ``resonance`` (write-only, optional, #5327) names the resonance the tag pays: the scene's GM
+     *     and staff may name any, anyone else's counts only when the character already has it.
+     *
+     *     The view has already checked the requester may tag in the scene before this validates
+     *     anything, so a refusal here never tells a stranger whether an id exists. A pose fixes the
+     *     scene (a different ``scene`` is refused), and the character must be the pose's author or
+     *     take part in the scene. What comes back never names the real character or the account
+     *     behind a pose, except to staff.
      */
     DramaticMomentTag: {
       readonly id: number;
@@ -34560,7 +34579,14 @@ export interface components {
      *     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
      *     ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
      *     ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
-     *     ``resonance`` (write-only, optional, #5327) names the resonance the tag pays.
+     *     ``resonance`` (write-only, optional, #5327) names the resonance the tag pays: the scene's GM
+     *     and staff may name any, anyone else's counts only when the character already has it.
+     *
+     *     The view has already checked the requester may tag in the scene before this validates
+     *     anything, so a refusal here never tells a stranger whether an id exists. A pose fixes the
+     *     scene (a different ``scene`` is refused), and the character must be the pose's author or
+     *     take part in the scene. What comes back never names the real character or the account
+     *     behind a pose, except to staff.
      */
     DramaticMomentTagRequest: {
       moment_type: number;
@@ -34570,7 +34596,7 @@ export interface components {
       scene?: number | null;
       /** @description The pose that earned this moment; nullable for non-pose tags. */
       interaction?: number | null;
-      /** @description The resonance this tag pays, any resonance whether or not it is in the tagged character's aura. Omit it to let the moment type and her gifts decide. The tagged player is told which resonance it paid. */
+      /** @description The resonance this tag pays. The scene's GM and staff may name any resonance, whether or not it is in the tagged character's aura; for anyone else it counts only when she already has it. Omit it to let the moment type and her gifts decide. The tagged player is told which resonance it paid. */
       resonance?: number;
     };
     /** @description Read-only catalog of authored dramatic-moment types (for the tag picker). */
@@ -50626,7 +50652,7 @@ export interface components {
      */
     RecordedAct: {
       readonly id: number;
-      /** @description What she did, as the game words it from the action and its target. A deed grant records the same label. */
+      /** @description What she did, as the game words it from the action and its target, with the target named as she knows them. Only she reads it: her own list, her private lines and the deed label of the grant a mark pays. */
       readonly label: string;
       /** Format: date-time */
       readonly created_at: string;
@@ -51994,6 +52020,14 @@ export interface components {
       readonly participants: string;
       readonly is_owner: string;
       readonly viewer_can_gm: boolean;
+      /**
+       * @description Whether the viewer may choose the resonance a dramatic-moment tag pays (#5327).
+       *
+       *     The scene's GM and staff only, by ``is_scene_gm_or_staff``: a scene owner who is not
+       *     the GM still sees ``viewer_can_gm`` and may tag, but with the moment type's resonance
+       *     or one the character already has, so the tag dialog offers her no picker.
+       */
+      readonly viewer_can_name_tag_resonance: boolean;
       readonly running_beat: string;
       /** Format: date-time */
       date_finished?: string | null;
@@ -52108,6 +52142,14 @@ export interface components {
       }[];
       readonly is_owner: string;
       readonly viewer_can_gm: boolean;
+      /**
+       * @description Whether the viewer may choose the resonance a dramatic-moment tag pays (#5327).
+       *
+       *     The scene's GM and staff only, by ``is_scene_gm_or_staff``: a scene owner who is not
+       *     the GM still sees ``viewer_can_gm`` and may tag, but with the moment type's resonance
+       *     or one the character already has, so the tag dialog offers her no picker.
+       */
+      readonly viewer_can_name_tag_resonance: boolean;
       readonly running_beat: string;
     };
     /** @description Read-only view of a scene's active round, for the round-settings control (#1467). */
@@ -56722,6 +56764,11 @@ export interface components {
       readonly companion_name: string;
       readonly alternate_self_name: string;
       cards: components['schemas']['UltimateRevealCard'][];
+    };
+    UndoneResonanceGrant: {
+      id: number;
+      /** Format: date-time */
+      nullified_at: string;
     };
     /** @description One visible union in a family tree payload. */
     UnionEdge: {
@@ -78425,7 +78472,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          'application/json': components['schemas']['ResonanceGrant'];
+          'application/json': components['schemas']['UndoneResonanceGrant'];
         };
       };
     };
