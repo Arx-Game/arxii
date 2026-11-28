@@ -17,12 +17,20 @@ from evennia.utils.ansi import strip_ansi
 
 from evennia_extensions.factories import CharacterFactory, RoomProfileFactory
 from integration_tests.harness import JourneyCase
+from integration_tests.test_traditions_teach_journeys import (
+    TEACHER_LINE,
+    WRONG_TRADITION_LINE,
+    author_the_three_skills,
+    hold_rating,
+    tradition_teaching,
+)
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.areas.constants import AreaLevel
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.types import RetortConsent
 from world.classes.factories import CharacterClassFactory, PathFactory
+from world.covenants.factories import CombatStyleFactory
 from world.fatigue.services import get_or_create_fatigue_pool
 from world.game_clock.week_services import get_current_game_week
 from world.goals.factories import GoalDomainFactory
@@ -30,6 +38,7 @@ from world.goals.models import CharacterGoal, GoalJournal
 from world.journals.models import JournalEntry, WeeklyJournalXP
 from world.magic.constants import GiftKind
 from world.magic.factories import (
+    CharacterTraditionFactory,
     GiftFactory,
     GiftUnlockFactory,
     ResonanceFactory,
@@ -64,7 +73,7 @@ from world.roster.models.choices import ApplicationStatus
 from world.scenes.models import Interaction, Persona
 from world.secrets.factories import SecretFactory
 from world.seeds.modifier_values import seed_pool_and_cap_lanes
-from world.skills.factories import SkillFactory, SpecializationFactory
+from world.skills.factories import MagicSkillFactory, SkillFactory, SpecializationFactory
 from world.skills.models import TrainingAllocation
 from world.societies.factories import (
     LegendEntryFactory,
@@ -708,6 +717,124 @@ class TrainingAndUnlocking(JourneyCase):
             "XP available: 0 (no active character on the roster)",
             self.telnet(stray, "progression unlocks"),
         )
+
+
+class TrainingAMagicSkill(JourneyCase):
+    """Ysmay asks for weekly training in a magical skill and is told who may teach it (#5326).
+
+    No Magic skill is learned by self-study. A mentor must belong to a Tradition that teaches
+    the skill and hold a rating in it: every Tradition teaches Reflection and the ordinary Magic
+    skills, a Tradition teaches Heroism or Villainy only when staff ticked it, and a fighting
+    style's skill is taught by the Traditions that style names. Each refusal names the next
+    step and saves nothing.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.lantern = self.make_room("The Lantern")
+        ActionPointConfig.objects.update_or_create(
+            name="Default", defaults={"is_active": True, "weekly_regen": 80}
+        )
+        skills = author_the_three_skills()
+        self.villainy, self.reflection = skills["Villainy"], skills["Reflection"]
+        self.occult = MagicSkillFactory(name="Occult")
+        self.footwork = MagicSkillFactory(name="Duelist's Footwork")
+        self.dawn = tradition_teaching("Dawn Vigil", skills["Heroism"])
+        self.ashen = tradition_teaching("Ashen Court", self.villainy)
+        CombatStyleFactory(skill=self.footwork).taught_by.add(self.ashen)
+        self.ysmay = self.player("Ysmay", self.dawn)
+        # Hobb teaches in the Dawn Vigil, which does not tick Villainy.
+        self.hobb = self.player("Hobb", self.dawn, (self.villainy, self.reflection, self.occult))
+        # Mira belongs to the Ashen Court and holds no rating in Villainy.
+        self.mira = self.player("Mira", self.ashen)
+        # Corvin belongs to the Ashen Court and holds one.
+        self.corvin = self.player("Corvin", self.ashen, (self.villainy,))
+        # The Drifter belongs to no Tradition.
+        self.drifter = self.player("Drifter", None, (self.villainy,))
+
+    def player(self, name: str, tradition, rated: tuple = ()):
+        character = self.make_player(name, room=self.lantern)
+        if tradition is not None:
+            CharacterTraditionFactory(character=character.sheet_data, tradition=tradition)
+        for skill in rated:
+            hold_rating(character.sheet_data, skill, 11)
+        return character
+
+    def persona_of(self, character) -> int:
+        return character.sheet_data.primary_persona.pk
+
+    def allocations(self) -> int:
+        return TrainingAllocation.objects.filter(character=self.ysmay.sheet_data).count()
+
+    def test_a_magic_skill_needs_a_mentor_whose_tradition_teaches_it(self) -> None:
+        for skill in (self.villainy, self.occult, self.footwork):
+            self.assertIn(
+                TEACHER_LINE.format(skill=skill.name),
+                self.telnet(self.ysmay, f"training add skill={skill.pk} ap=5"),
+            )
+        for mentor, reply in (
+            (self.hobb, WRONG_TRADITION_LINE.format(mentor="Hobb", skill="Villainy")),
+            (self.mira, "Mira has no rating in Villainy. Choose a mentor who has one."),
+            (
+                self.drifter,
+                "Drifter belongs to no Tradition. Choose a mentor whose Tradition teaches "
+                "Villainy.",
+            ),
+        ):
+            self.assertIn(
+                reply,
+                self.telnet(
+                    self.ysmay,
+                    f"training add skill={self.villainy.pk} ap=5 mentor={self.persona_of(mentor)}",
+                ),
+            )
+        self.assertEqual(self.allocations(), 0)
+
+        self.assertIn(
+            "Training allocation set for Villainy.",
+            self.telnet(
+                self.ysmay,
+                f"training add skill={self.villainy.pk} ap=5 mentor={self.persona_of(self.corvin)}",
+            ),
+        )
+        # Every Tradition teaches Reflection and Occult, so Hobb of the Dawn Vigil may teach both.
+        for skill in (self.reflection, self.occult):
+            self.assertIn(
+                f"Training allocation set for {skill.name}.",
+                self.telnet(
+                    self.ysmay,
+                    f"training add skill={skill.pk} ap=5 mentor={self.persona_of(self.hobb)}",
+                ),
+            )
+        self.assertEqual(self.allocations(), 3)
+
+        # Taking the mentor off an allocation is the same request as having none.
+        row = TrainingAllocation.objects.get(character=self.ysmay.sheet_data, skill=self.villainy)
+        self.assertIn(
+            TEACHER_LINE.format(skill="Villainy"),
+            self.telnet(self.ysmay, f"training update id={row.pk} mentor="),
+        )
+        row.refresh_from_db()
+        self.assertEqual(row.mentor_id, self.persona_of(self.corvin))
+
+    def test_the_web_refuses_and_accepts_the_same_way(self) -> None:
+        refused = self.web(
+            self.ysmay, "manage_training", operation="add", skill_id=self.villainy.pk, ap_amount=5
+        )
+        self.assertFalse(refused.detail.success)
+        self.assertEqual(refused.detail.message, TEACHER_LINE.format(skill="Villainy"))
+        self.assertEqual(self.allocations(), 0)
+
+        accepted = self.web(
+            self.ysmay,
+            "manage_training",
+            operation="add",
+            skill_id=self.villainy.pk,
+            ap_amount=5,
+            mentor_persona_id=self.persona_of(self.corvin),
+        )
+        self.assertTrue(accepted.detail.success, accepted.detail.message)
+        self.assertEqual(self.allocations(), 1)
 
 
 class LearningAGift(JourneyCase):
