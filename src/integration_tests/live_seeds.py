@@ -2311,13 +2311,14 @@ def _attested_wipe() -> None:
 
     sheets = list(CharacterSheet.objects.filter(character__db_key__in=ATTESTED_CAST))
     scenes = list(Scene.objects.filter(name__in=ATTESTED_SCENE_NAMES))
+    # The acts go before the grants they hold, and the grants before the tags that paid them.
     MissionInstance.objects.filter(participants__character__in=sheets).delete()
+    RecordedAct.objects.filter(character_sheet__in=sheets).delete()
+    ResonanceGrant.objects.filter(character_sheet__in=sheets).delete()
     DramaticMomentTag.objects.filter(character_sheet__in=sheets).delete()
     Interaction.objects.filter(scene__in=scenes).delete()
     JournalEntry.objects.filter(author__in=sheets).delete()
     WeeklyJournalXP.objects.filter(character_sheet__in=sheets).delete()
-    RecordedAct.objects.filter(character_sheet__in=sheets).delete()
-    ResonanceGrant.objects.filter(character_sheet__in=sheets).delete()
     CharacterResonance.objects.filter(character_sheet__in=sheets).delete()
     NarrativeMessageDelivery.objects.filter(recipient_character_sheet__in=sheets).delete()
     NarrativeMessage.objects.filter(deliveries__isnull=True).delete()
@@ -2389,6 +2390,16 @@ def _attested_act(  # noqa: PLR0913 - one act: whose, what, how worth, aimed at 
     return act
 
 
+def _attested_earlier_pose(sheet: CharacterSheet, scene: Scene, text: str) -> None:
+    """A pose *sheet* wrote in *scene* before the one the spec posts, so the next is no entrance."""
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import create_interaction  # noqa: PLC0415
+
+    create_interaction(  # noqa: UNDELIVERED - a seed row, read from the feed
+        persona=sheet.primary_persona, content=text, mode=InteractionMode.POSE, scene=scene
+    )
+
+
 def _attested_week_marks(
     sheet: CharacterSheet, resonance: Resonance, amounts: tuple[int, ...]
 ) -> None:
@@ -2433,11 +2444,12 @@ def _attested_duel(  # noqa: PLR0913 - one cast: who, how worn the target is, th
     room = _attested_room(f"The Lantern, {tag} table")
     daven = _attested_player(ATTESTED_POSER, poser_account, room)
     hale = _attested_player(ATTESTED_TARGET, target_account, room)
-    _attested_scene(
+    scene = _attested_scene(
         room,
         ((poser_account, False, False), (target_account, False, False)),
         name=f"Supper at the Lantern, {tag} table",
     )
+    _attested_earlier_pose(daven, scene, "pulls out a chair and sits down across from Hale.")
     _attested_fatigue(hale, stat="composure", category=ActionCategory.SOCIAL, room=target_room)
     act = _attested_act(
         daven,
@@ -2467,7 +2479,8 @@ def _attested_tamsin(
     account = _attested_player_account("attested_tamsin")
     room = _attested_room("The Cinder Gate")
     tamsin = _attested_player("Tamsin", account, room)
-    _attested_scene(room, ((account, False, False),), name="Raiders at the Cinder Gate")
+    scene = _attested_scene(room, ((account, False, False),), name="Raiders at the Cinder Gate")
+    _attested_earlier_pose(tamsin, scene, "plants her feet in the gateway and draws her knife.")
     _attested_fatigue(tamsin, stat="stamina", category=ActionCategory.PHYSICAL, room=None)
     act = _attested_act(
         tamsin,
@@ -2554,7 +2567,11 @@ def _attested_mission(
         MissionOptionRouteFactory,
         MissionTemplateFactory,
     )
-    from world.missions.models import MissionInstance, MissionTheme  # noqa: PLC0415
+    from world.missions.models import (  # noqa: PLC0415
+        MissionInstance,
+        MissionOptionRoute,
+        MissionTheme,
+    )
     from world.missions.services.run import staff_assign_mission  # noqa: PLC0415
     from world.traits.constants import CANONICAL_OUTCOME_LEVELS  # noqa: PLC0415
     from world.traits.services import ensure_canonical_check_outcome  # noqa: PLC0415
@@ -2629,6 +2646,18 @@ def _attested_mission(
                 MissionOptionRouteFactory(
                     option=option, outcome_tier=tier, target_node=done, consequence=consequence
                 )
+    outcome_texts = {
+        "let-them-go": (
+            "You pay the smugglers' fine from your own purse, and they are gone before the "
+            "tollwarden's lantern reaches the cart."
+        ),
+        "turn-them-in": "The tollwarden takes the smugglers away, and the road is quiet again.",
+    }
+    for route in MissionOptionRoute.objects.filter(option__node__template=template).select_related(
+        "option"
+    ):
+        route.outcome_text = outcome_texts[route.option.key]
+        route.save(update_fields=["outcome_text"])
     instance = MissionInstance.objects.filter(
         template=template, participants__character=daven
     ).first()

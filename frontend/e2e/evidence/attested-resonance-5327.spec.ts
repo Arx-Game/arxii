@@ -123,6 +123,29 @@ async function shot(
   }
 }
 
+/**
+ * One PNG of the page cut to the box that holds all of `targets`, with a margin: a pose and the
+ * private line under it, as the demo draws them, without the rest of the play page around them.
+ */
+async function shotAround(testInfo: TestInfo, name: string, page: Page, targets: Locator[]) {
+  const boxes = [];
+  for (const target of targets) {
+    await target.scrollIntoViewIfNeeded();
+    const box = await target.boundingBox();
+    if (box === null) throw new Error(`${name}: a target has no box to cut around`);
+    boxes.push(box);
+  }
+  const margin = 12;
+  const left = Math.max(0, Math.min(...boxes.map((box) => box.x)) - margin);
+  const top = Math.max(0, Math.min(...boxes.map((box) => box.y)) - margin);
+  const right = Math.max(...boxes.map((box) => box.x + box.width)) + margin;
+  const bottom = Math.max(...boxes.map((box) => box.y + box.height)) + margin;
+  await page.screenshot({
+    path: testInfo.outputPath(name),
+    clip: { x: left, y: top, width: right - left, height: bottom - top },
+  });
+}
+
 /** The pose in the feed whose text holds `text`. */
 function poseWith(page: Page, text: string): Locator {
   return page.getByTestId('pose-unit').filter({ hasText: text });
@@ -185,104 +208,107 @@ async function openScene(page: Page, seed: Seed) {
 test.use({ viewport: VIEWPORT });
 
 test.describe('A character gains resonance from the acts she took (#5327)', () => {
-  test('01 screen 1: the mission beat says what an option pays, and the line she reads after she picks it', async ({
+  test('01 to 03 screens 1 to 3: the composer, the result, and the mission beat she then picks', async ({
     browser,
   }, testInfo) => {
     test.setTimeout(240_000);
     const seed = readSeed();
     const page = await signedInPage(browser, ACCOUNT, PASSWORD);
     await enterGame(page, seed.daven_name);
+    // Daven's session stays open to the end: a mission pauses the moment its player disconnects,
+    // so the mission frames come last, after the composer frames, in the same session. A failure
+    // in one part does not hide the other.
+    const failures: unknown[] = [];
+    try {
+      // The scene's feed is loaded once Brannoc's pose is in it.
+      await expect(poseWith(page, 'cracked bell')).toBeVisible({ timeout: 60000 });
 
-    // Before she picks: the option that names Mercy says what it pays, with the mission theme's
-    // player text as the reason, and shows no amount; the other option says nothing of the kind.
-    await page.getByTestId('actions-fold').getByRole('button', { name: 'Stories' }).click();
-    const row = page.getByTestId(`story-row-${seed.mission_instance_id}`);
-    await row.getByRole('button', { name: seed.mission_name }).click();
-    const beat = row.getByTestId('beat-card');
-    await expect(beat).toBeVisible({ timeout: 30000 });
-    await expect(beat.getByTestId('beat-option')).toHaveCount(2);
-    await expect(beat).toContainText('Let the smugglers go and pay their fine yourself');
-    await expect(beat).toContainText('Persuasion · risk 2');
-    await expect(beat).toContainText('Turn them in to the tollwarden');
-    await expect(beat).toContainText('Law');
-    await expect(beat.getByTestId('option-feeds')).toHaveCount(1);
-    await expect(beat.getByTestId('option-feeds')).toHaveText(
-      'Pays you Mercy at once: This option is about sparing them.'
-    );
-    await row.scrollIntoViewIfNeeded();
-    await shot(testInfo, '01a-mission-beat-option-pays-mercy.png', row);
+      // Screen 2: the composer's Reaching for row, with Cruelty chosen. Its description is the
+      // help text; "Pointing at" lists both acts, the one with the suggestion and the reason
+      // beside it, and the choice that sends the pose to another player to endorse.
+      await page.getByRole('textbox').fill(POSE_TEXT);
+      const reach = page.getByTestId('reach-row');
+      await reach.getByTestId('reach-toggle').click();
+      await reach.getByTestId('reach-select').selectOption({ label: 'Cruelty' });
+      await expect(reach.getByTestId('reach-help')).toHaveText(seed.cruelty_description);
+      const acts = reach.getByTestId('reach-acts');
+      await expect(acts.getByText('Pointing at', { exact: true })).toBeVisible();
+      await expect(acts).toContainText('Intimidated Hale');
+      await expect(acts).toContainText('Suggested: Cruelty. You left Hale in the grip of Terror.');
+      await expect(acts).toContainText('Searched the cellar');
+      await expect(acts).toContainText('No resonance suggested.');
+      await expect(reach.getByTestId('reach-act-none')).toBeVisible();
+      await expect(acts).toContainText('Nothing: another player has to endorse it');
+      await reach.scrollIntoViewIfNeeded();
+      await shot(testInfo, '02a-composer-reaching-for-open.png', page);
 
-    // She picks it. Her staff roll modifier is +100, so the roll lands on the best result its
-    // chart has, and the authored choice pays.
-    await beat
-      .getByTestId('beat-option')
-      .first()
-      .getByRole('button', { name: /Let the smugglers go/ })
-      .click();
-    await expect(row.getByTestId('beat-result')).toBeVisible({ timeout: 30000 });
-    const earned = feedLine(page, /You earned \d+ Mercy\./);
-    await expect(earned).toBeVisible({ timeout: 30000 });
-    await expect(earned).toContainText('Your Heroism check added 30 percent.');
-    await earned.scrollIntoViewIfNeeded();
-    await shot(testInfo, '01b-earned-line-after-the-pick.png', page);
+      // She chooses Intimidated Hale: the demo draws the act chosen.
+      await reach.getByTestId(`reach-act-${seed.act_intimidated_id}`).check();
+      await expect(reach.getByTestId(`reach-act-${seed.act_intimidated_id}`)).toBeChecked();
+      await shot(testInfo, '02b-composer-act-chosen.png', page);
 
+      // Screen 3: post. The room reads the chip, which names the resonance and the act; Daven
+      // alone reads his private line, with the verb, the amount and the check that grew it.
+      await page.getByRole('button', { name: 'Send', exact: true }).click();
+      const posed = poseWith(page, 'lantern light');
+      await expect(posed).toBeVisible({ timeout: 30000 });
+      await expect(posed.getByTestId('act-mark-chips')).toContainText(
+        'Cruelty · Intimidated Hale',
+        {
+          timeout: 30000,
+        }
+      );
+      const line = page
+        .locator('[data-testid="feed-note"][data-kind="system"]')
+        .filter({ hasText: 'Your Cruelty grows by' });
+      await expect(line).toBeVisible({ timeout: 30000 });
+      await expect(line).toContainText(/You gloat\. Your Cruelty grows by \d+\./);
+      await expect(line).toContainText('Your Villainy check added 30 percent.');
+      await posed.scrollIntoViewIfNeeded();
+      await shot(testInfo, '03a-pose-with-chip.png', posed);
+      await shot(testInfo, '03b-daven-private-line.png', line);
+      await shotAround(testInfo, '03c-feed-with-chip-and-line.png', page, [posed, line]);
+    } catch (error) {
+      failures.push(error);
+    }
+    try {
+      // Before she picks: the option that names Mercy says what it pays, with the mission theme's
+      // player text as the reason, and shows no amount; the other option says nothing of the kind.
+      await page.getByTestId('actions-fold').getByRole('button', { name: 'Stories' }).click();
+      const row = page.getByTestId(`story-row-${seed.mission_instance_id}`);
+      await row.getByRole('button', { name: seed.mission_name }).click();
+      const beat = row.getByTestId('beat-card');
+      await expect(beat).toBeVisible({ timeout: 30000 });
+      await expect(beat.getByTestId('beat-option')).toHaveCount(2);
+      await expect(beat).toContainText('Let the smugglers go and pay their fine yourself');
+      await expect(beat).toContainText('Persuasion · risk 2');
+      await expect(beat).toContainText('Turn them in to the tollwarden');
+      await expect(beat).toContainText('Law');
+      await expect(beat.getByTestId('option-feeds')).toHaveCount(1);
+      await expect(beat.getByTestId('option-feeds')).toHaveText(
+        'Pays you Mercy at once: This option is about sparing them.'
+      );
+      await row.scrollIntoViewIfNeeded();
+      await shot(testInfo, '01a-mission-beat-option-pays-mercy.png', row);
+
+      // She picks it. Her staff roll modifier is +100, so the roll lands on the best result its
+      // chart has, and the authored choice pays.
+      await beat
+        .getByTestId('beat-option')
+        .first()
+        .getByRole('button', { name: /Let the smugglers go/ })
+        .click();
+      await expect(row.getByTestId('beat-result')).toBeVisible({ timeout: 30000 });
+      const earned = feedLine(page, /You earned \d+ Mercy\./);
+      await expect(earned).toBeVisible({ timeout: 30000 });
+      await expect(earned).toContainText('Your Heroism check added 30 percent.');
+      await shotAround(testInfo, '01b-earned-line-after-the-pick.png', page, [earned]);
+      await shot(testInfo, '01c-beat-result-after-the-pick.png', row.getByTestId('beat-result'));
+    } catch (error) {
+      failures.push(error);
+    }
     await page.context().close();
-  });
-
-  test('02 screens 2 and 3: the composer with Reaching for open, the act chosen, and the result', async ({
-    browser,
-  }, testInfo) => {
-    test.setTimeout(240_000);
-    const seed = readSeed();
-    const page = await signedInPage(browser, ACCOUNT, PASSWORD);
-    await enterGame(page, seed.daven_name);
-    // The scene's feed is loaded once Brannoc's pose is in it.
-    await expect(poseWith(page, 'cracked bell')).toBeVisible({ timeout: 60000 });
-
-    // Screen 2: the composer's Reaching for row, with Cruelty chosen. Its description is the
-    // help text; "Pointing at" lists both acts, the one with the suggestion and the reason
-    // beside it, and the choice that sends the pose to another player to endorse.
-    await page.getByRole('textbox').fill(POSE_TEXT);
-    const reach = page.getByTestId('reach-row');
-    await reach.getByTestId('reach-toggle').click();
-    await reach.getByTestId('reach-select').selectOption({ label: 'Cruelty' });
-    await expect(reach.getByTestId('reach-help')).toHaveText(seed.cruelty_description);
-    const acts = reach.getByTestId('reach-acts');
-    await expect(acts.getByText('Pointing at', { exact: true })).toBeVisible();
-    await expect(acts).toContainText('Intimidated Hale');
-    await expect(acts).toContainText('Suggested: Cruelty. You left Hale in the grip of Terror.');
-    await expect(acts).toContainText('Searched the cellar');
-    await expect(acts).toContainText('No resonance suggested.');
-    await expect(reach.getByTestId('reach-act-none')).toBeVisible();
-    await expect(acts).toContainText('Nothing: another player has to endorse it');
-    await reach.scrollIntoViewIfNeeded();
-    await shot(testInfo, '02a-composer-reaching-for-open.png', page);
-
-    // She chooses Intimidated Hale: the demo draws the act chosen.
-    await reach.getByTestId(`reach-act-${seed.act_intimidated_id}`).check();
-    await expect(reach.getByTestId(`reach-act-${seed.act_intimidated_id}`)).toBeChecked();
-    await shot(testInfo, '02b-composer-act-chosen.png', page);
-
-    // Screen 3: post. The room reads the chip, which names the resonance and the act; Daven
-    // alone reads his private line, with the verb, the amount and the check that grew it.
-    await page.getByRole('button', { name: 'Send', exact: true }).click();
-    const posed = poseWith(page, 'lantern light');
-    await expect(posed).toBeVisible({ timeout: 30000 });
-    await expect(posed.getByTestId('act-mark-chips')).toContainText('Cruelty · Intimidated Hale', {
-      timeout: 30000,
-    });
-    const line = page
-      .locator('[data-testid="feed-note"][data-kind="system"]')
-      .filter({ hasText: 'Your Cruelty grows by' });
-    await expect(line).toBeVisible({ timeout: 30000 });
-    await expect(line).toContainText(/You gloat\. Your Cruelty grows by \d+\./);
-    await expect(line).toContainText('Your Villainy check added 30 percent.');
-    await posed.scrollIntoViewIfNeeded();
-    await shot(testInfo, '03a-pose-with-chip.png', posed);
-    await shot(testInfo, '03b-daven-private-line.png', line);
-    await shot(testInfo, '03c-feed-with-chip-and-line.png', page);
-
-    await page.context().close();
+    if (failures.length > 0) throw failures[0];
   });
 
   test('02 screen 2: in a scene that stores nothing, the row warns that a mark pays nothing', async ({
@@ -343,8 +369,7 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     });
     const line = feedLine(page, 'Daven marked Cruelty on what they did to you. You are wearier.');
     await expect(line).toBeVisible({ timeout: 30000 });
-    await line.scrollIntoViewIfNeeded();
-    await shot(testInfo, '04a-hale-reads-wearier.png', page);
+    await shotAround(testInfo, '04a-hale-reads-wearier.png', page, [posed, line]);
 
     await page.context().close();
   });
@@ -371,8 +396,10 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
       'Cruelty · Intimidated Hale',
       { timeout: 30000 }
     );
-    await mark.scrollIntoViewIfNeeded();
-    await shot(testInfo, '04c-daven-reads-part-paid.png', daven);
+    await shotAround(testInfo, '04c-daven-reads-part-paid.png', daven, [
+      poseWith(daven, 'Say it again'),
+      mark,
+    ]);
     await daven.context().close();
 
     // What Hale reads, with the same pose on his page.
@@ -387,8 +414,10 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
       'Daven marked Cruelty on what they did to you. You are wearier. You had little left to give, so it took only part.'
     );
     await expect(line).toBeVisible({ timeout: 30000 });
-    await line.scrollIntoViewIfNeeded();
-    await shot(testInfo, '04b-hale-reads-took-only-part.png', hale);
+    await shotAround(testInfo, '04b-hale-reads-took-only-part.png', hale, [
+      poseWith(hale, 'Say it again'),
+      line,
+    ]);
     await hale.context().close();
   });
 
@@ -447,8 +476,10 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     await expect(mark).toContainText(
       'This is your fifth mark this week, so it paid 40 percent. Marks pay in full again next week.'
     );
-    await mark.scrollIntoViewIfNeeded();
-    await shot(testInfo, '04f-daven-reads-fifth-mark-reduced.png', page);
+    await shotAround(testInfo, '04f-daven-reads-fifth-mark-reduced.png', page, [
+      poseWith(page, 'Say it again'),
+      mark,
+    ]);
 
     await page.context().close();
   });
@@ -483,8 +514,7 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     const line = feedLine(page, /You blaze\. Your Fury grows by \d+, and you are wearier\./);
     await expect(line).toBeVisible({ timeout: 30000 });
     await expect(line).toContainText('Your Reflection check added 30 percent.');
-    await line.scrollIntoViewIfNeeded();
-    await shot(testInfo, '05b-tamsin-reads-blaze-wearier.png', page);
+    await shotAround(testInfo, '05b-tamsin-reads-blaze-wearier.png', page, [posed, line]);
 
     await page.context().close();
   });
@@ -543,10 +573,10 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     await page.getByRole('button', { name: 'Write', exact: true }).click();
     const desk = page.locator('section[aria-label="Write in your journal"]');
     await expect(desk).toBeVisible({ timeout: 30000 });
-    await desk.getByLabel('Title', { exact: true }).fill('The stranger at the tollgate');
+    await desk.getByLabel('Title', { exact: true }).fill('The tollgate, a second time');
     await desk
       .getByLabel('Entry', { exact: true })
-      .fill('I should have stopped sooner. I did not know his name, only that nobody else would.');
+      .fill('I went back to the road and found it empty. I wrote down what I could.');
     await desk.getByTestId('reach-toggle').click();
     await desk.getByTestId('reach-select').selectOption({ label: 'Mercy' });
     await desk.getByTestId(`reach-act-${seed.wren_refused_act_id}`).check();
@@ -558,7 +588,10 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     );
     // The entry itself was recorded.
     await expect(toastWith(page, 'Journal entry recorded.')).toBeVisible();
+    // Hovering a toast opens the stack, so both lines read in full.
+    await refusal.hover();
     await settled(refusal);
+    await expect(page.getByText('The tollgate, a second time').first()).toBeVisible();
     await shot(testInfo, '06c-journal-mark-refused-entry-posted.png', page);
 
     await page.context().close();
@@ -697,15 +730,19 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
       `The scene's GM tagged your pose as a ${seed.moment_type_label}. It paid you Grief.`
     );
     await expect(tagLine).toBeVisible({ timeout: 60000 });
-    await tagLine.scrollIntoViewIfNeeded();
-    await shot(testInfo, '08e-daven-reads-the-tag-line.png', page);
+    await shotAround(testInfo, '08e-daven-reads-the-tag-line.png', page, [
+      poseWith(page, 'catches the child'),
+      tagLine,
+    ]);
     const undoLine = feedLine(
       page,
       "The scene's GM undid your Mercy reward for Frightened the child. Your Mercy falls by 8."
     );
     await expect(undoLine).toBeVisible({ timeout: 30000 });
-    await undoLine.scrollIntoViewIfNeeded();
-    await shot(testInfo, '08f-daven-reads-the-undo-line.png', page);
+    await shotAround(testInfo, '08f-daven-reads-the-undo-line.png', page, [
+      poseWith(page, 'catches the child'),
+      undoLine,
+    ]);
 
     await page.context().close();
   });
