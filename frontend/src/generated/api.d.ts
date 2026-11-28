@@ -39441,6 +39441,7 @@ export interface components {
     MentoringRow: {
       readonly allocation_id: number;
       readonly student_name: string;
+      readonly student_pronoun: string;
       readonly mentor_name: string;
       readonly skill_name: string;
     };

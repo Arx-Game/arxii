@@ -23,12 +23,14 @@ import * as skillsQueries from '@/skills/queries';
 const request = {
   allocation_id: 11,
   student_name: 'Wren Alder',
+  student_pronoun: 'her',
   mentor_name: 'Drusa Kell',
   skill_name: 'Villainy',
 };
 const student = {
   allocation_id: 12,
   student_name: 'Odalys Fenn',
+  student_pronoun: 'them',
   mentor_name: 'Magister Vey',
   skill_name: 'Occult',
 };
@@ -61,7 +63,7 @@ describe('MentoringCard', () => {
     setupMocks({ requests: [request], students: [] });
     renderWithProviders(<MentoringCard />);
     expect(screen.getByTestId('mentoring-request-row')).toHaveTextContent(
-      'Wren Alder asks Drusa Kell to teach Villainy'
+      'Wren Alder asks Drusa Kell to teach her Villainy'
     );
     expect(screen.getByText('Asked to teach')).toBeInTheDocument();
     expect(screen.getByTestId('mentoring-accept-11')).toBeInTheDocument();

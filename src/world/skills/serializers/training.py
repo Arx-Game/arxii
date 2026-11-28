@@ -99,6 +99,8 @@ class MentoringRowSerializer(serializers.Serializer):
 
     allocation_id = serializers.IntegerField(read_only=True)
     student_name = serializers.CharField(read_only=True)
+    # The object pronoun the request row reads: "asks Drusa Kell to teach her Villainy".
+    student_pronoun = serializers.CharField(read_only=True)
     mentor_name = serializers.CharField(read_only=True)
     skill_name = serializers.CharField(read_only=True)
 

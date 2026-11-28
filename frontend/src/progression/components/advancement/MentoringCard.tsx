@@ -58,7 +58,8 @@ export function MentoringCard() {
             data-testid="mentoring-request-row"
           >
             <div className="min-w-0 font-medium">
-              {row.student_name} asks {row.mentor_name} to teach {row.skill_name}
+              {row.student_name} asks {row.mentor_name} to teach {row.student_pronoun}{' '}
+              {row.skill_name}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button

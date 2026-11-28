@@ -69522,6 +69522,9 @@ components:
         student_name:
           type: string
           readOnly: true
+        student_pronoun:
+          type: string
+          readOnly: true
         mentor_name:
           type: string
           readOnly: true
@@ -69533,6 +69536,7 @@ components:
       - mentor_name
       - skill_name
       - student_name
+      - student_pronoun
     MenuEntry:
       type: object
       properties:
