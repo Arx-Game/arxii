@@ -1,36 +1,35 @@
 /**
- * GlimpseAxes: the CG mount's own axis-by-axis layout for "The Glimpse"
- * (#3675 fix round 1; cards and headings #5191), replacing the shared
- * `GlimpseFlow`'s shadcn accordion for this one mount. Every axis renders
- * as its own `.field` at once (no single-open accordion hiding two axes at
- * a time, the demo-fidelity defect Task 13 shipped).
+ * GlimpseAxes: the CG mount's own part-by-part layout for "The Glimpse"
+ * (#3675 fix round 1; cards and headings #5191; one bonus from each of four
+ * parts #5292). Every part renders as its own `.field.part` at once.
  *
- * An axis is headed by its name ("Trigger"), with a lead-in line under it
- * ("The Circumstances Around Your Glimpse:") in muted italic: 14px against
- * the heading's 13px capitals, so its capitals are no taller than the
- * heading's and the rest of it is lowercase. Its tags are the
- * life page's cards (`ul.stances.grid.pair` of `button.stance`): one width,
- * two across because a description can run to several sentences, the name
- * over its description, a round mark on an axis that takes one answer and
- * a square mark on one that takes several. Owner ruling
- * 2026-11-18 (#5191): the pill buttons this replaced were each as wide as
- * their own text and read as a run of uneven boxes; the question was a bad
- * title; "choose one" is not printed. An axis that takes several answers
- * keeps "choose any", because that is the exception.
+ * A part is headed by its name ("Trigger") as a ruled heading clearly larger
+ * than an answer's name (owner ruling 2026-11-22: "Larger Part titles are
+ * good"). Under it reads the part's explanation, body text the owner writes
+ * (copy `glimpse_axis_<axis>_explanation`); a part whose explanation is not
+ * written yet keeps the muted italic lead-in line of #5191 ("How It Felt:"),
+ * so the stage is never bare.
  *
- * A chosen tag opens its own `ChapterOffers` sub-block directly under the
- * cards, one sub-block PER TAG (not one per axis, Task 13's shape); two
- * tags chosen on the same axis (e.g. Consequence: Mark + Loss) each get
- * their own heading, matching the demo's "What the mark is" / "What the
- * loss was" side by side under one axis. Each sub-block's heading carries
- * an "optional" `.tag.soft` chip (`headingTag`, #3675 fix round 2). A
- * distinction the route closes is absent from the tag's offers and named
- * nowhere (#4979).
+ * Its answers are the life page's cards (`ul.stances.grid.pair` of
+ * `button.stance`): one width, two across (one on a phone), the name over its
+ * description. Every part takes one answer (owner ruling 2026-11-24), so every
+ * mark is round and a second pick replaces the first; the square mark and the
+ * "choose any" tag stay for a part set to take several, which none is.
+ *
+ * An answer that gives a card shows the card on itself, before it is picked:
+ * the card's name and its mechanics line in a `.bonus` block. Choosing the
+ * answer takes the card, free; there is no second list and nothing else to
+ * pick (the per-answer `ChapterOffers` block of #3675 is gone). An answer with
+ * no card shows only its own words.
+ *
+ * Between Trigger and The Reflection sits the blackout: one square toggle with
+ * the owner's words. Ticked, the two parts a blackout takes (The Reflection
+ * and Tone, `lostInBlackout`) are not drawn; their answers stay in the draft.
  *
  * The sheet's live editor (`magic/components/glimpse/GlimpseEditorDialog.tsx`)
- * still mounts the shared `GlimpseFlow` unchanged; this component is
- * CG-only. `GlimpseSection` stays the thin state binder around this: draft
- * reads, `updateDraft` writes, and the copy query.
+ * mounts the shared `GlimpseFlow`; this component is CG-only. `GlimpseSection`
+ * is the state binder around it: draft reads, `updateDraft` writes, the three
+ * ways into the Glimpse, and the copy query.
  */
 
 import type { ChangeEvent } from 'react';
@@ -39,27 +38,8 @@ import { nextAxisSelection } from '@/magic/components/glimpse/axisSelection';
 import { AXIS_STEPS } from '@/magic/components/glimpse/GlimpseFlow';
 import type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
 import { Field } from '../../folio';
-import type { CGExplanations, CharacterDraft } from '../../types';
-import { ChapterOffers } from '../offers/ChapterOffers';
-
-// `AXIS_STEPS` never carries a SENSORY entry (GlimpseAxes never renders a
-// field for it, same as GlimpseFlow), but `GlimpseTagOption['axis']` is the
-// full 7-member union; both maps carry an unreachable SENSORY entry purely
-// to satisfy `Record<GlimpseTagOption['axis'], string>`. The axis name is
-// the fallback behind a `glimpse_axis_<axis>_chip` copy key (mirrors
-// `GlimpseTagAxis`'s own choice labels in `world.magic.constants`, the
-// authoritative source this literal must not drift from). The key keeps the
-// name it had when the axis name was a chip beside the question, so a row
-// staff already edited still applies now that the name is the heading.
-const AXIS_DISPLAY_NAME: Record<GlimpseTagOption['axis'], string> = {
-  TRIGGER: 'Trigger',
-  CHOOSING: 'The Choosing',
-  REFLECTION: 'The Reflection',
-  TONE: 'Tone',
-  CONSEQUENCE: 'Consequence',
-  WITNESS: 'Witness & Secrecy',
-  SENSORY: '',
-};
+import type { CGExplanations } from '../../types';
+import { AXIS_DISPLAY_NAME } from './glimpseParts';
 
 // The lead-in line under each axis name, read via
 // `glimpse_axis_<axis>_lead_in` (#5191). The keys are new on purpose: copy
@@ -75,24 +55,38 @@ const AXIS_LEAD_IN_FALLBACK: Record<GlimpseTagOption['axis'], string> = {
   SENSORY: '',
 };
 
+/** The part the blackout toggle sits above: the first of the two it takes. */
+const BLACKOUT_BEFORE: GlimpseTagOption['axis'] = 'REFLECTION';
+
+// The owner's words for the blackout (ruling 2026-11-22), shown on the toggle. A copy
+// row under `glimpse_blackout_text` replaces them.
+const BLACKOUT_TEXT_FALLBACK =
+  'When your Glimpse triggered, you have no memory of it at all. It came to you, and you woke ' +
+  'up dealing with the consequences. Your Glimpse is a mystery, and it is more than a little ' +
+  'unnerving you cannot remember it, and can be unraveled by GMing. You gain the Glimpse ' +
+  'Mystery distinction.';
+
 interface GlimpseAxesProps {
-  draft: CharacterDraft;
   /** Full active catalog (SENSORY tags are not shown here; parity with GlimpseFlow). */
   tags: GlimpseTagOption[];
   selectedTagIds: number[];
   copy: CGExplanations | undefined;
   /** Replace the selection for one axis (already arity-enforced by the UI). */
   onChangeAxis: (axis: GlimpseTagOption['axis'], tagIds: number[]) => void;
+  /** The character blacked out of The Reflection and Tone. */
+  blackedOut: boolean;
+  onChangeBlackedOut: (blackedOut: boolean) => void;
   prose: string;
   onChangeProse: (text: string) => void;
 }
 
 export function GlimpseAxes({
-  draft,
   tags,
   selectedTagIds,
   copy,
   onChangeAxis,
+  blackedOut,
+  onChangeBlackedOut,
   prose,
   onChangeProse,
 }: GlimpseAxesProps) {
@@ -119,77 +113,81 @@ export function GlimpseAxes({
     onChangeAxis(axis, nextAxisSelection(tagsByAxis.get(axis) ?? [], selectedTagIds, tagId, multi));
   };
 
+  const blackout = (
+    <ul className="stances blackout grid" key="blackout">
+      <li>
+        <button
+          type="button"
+          className="stance"
+          aria-pressed={blackedOut}
+          onClick={() => onChangeBlackedOut(!blackedOut)}
+        >
+          <span className="dot sq" />
+          <span>
+            <b>{copy?.glimpse_blackout_label ?? 'Blacked out'}</b>
+            <span className="g">{copy?.glimpse_blackout_text ?? BLACKOUT_TEXT_FALLBACK}</span>
+          </span>
+        </button>
+      </li>
+    </ul>
+  );
+
   return (
     <>
       {visibleSteps.map((step) => {
         const axisTags = tagsByAxis.get(step.axis) ?? [];
         const axisKey = step.axis.toLowerCase();
         const headingId = `glimpse-axis-${axisKey}`;
-        return (
-          <fieldset className="field" aria-labelledby={headingId} key={step.axis}>
-            <h3 className="label" id={headingId}>
-              {copy?.[`glimpse_axis_${axisKey}_chip`] ?? AXIS_DISPLAY_NAME[step.axis]}
-              {step.multi && (
-                <span className="tags">
-                  <span className="tag soft">{copy?.glimpse_choose_any ?? 'choose any'}</span>
-                </span>
+        const explanation = copy?.[`glimpse_axis_${axisKey}_explanation`];
+        const part =
+          blackedOut && step.lostInBlackout ? null : (
+            <fieldset className="field part" aria-labelledby={headingId} key={step.axis}>
+              <h3 className="label" id={headingId}>
+                {copy?.[`glimpse_axis_${axisKey}_chip`] ?? AXIS_DISPLAY_NAME[step.axis]}
+                {step.multi && (
+                  <span className="tags">
+                    <span className="tag soft">{copy?.glimpse_choose_any ?? 'choose any'}</span>
+                  </span>
+                )}
+              </h3>
+              {explanation ? (
+                <p className="explain">{explanation}</p>
+              ) : (
+                <p className="lead-in">
+                  {copy?.[`glimpse_axis_${axisKey}_lead_in`] ?? AXIS_LEAD_IN_FALLBACK[step.axis]}
+                </p>
               )}
-            </h3>
-            <p className="lead-in">
-              {copy?.[`glimpse_axis_${axisKey}_lead_in`] ?? AXIS_LEAD_IN_FALLBACK[step.axis]}
-            </p>
-            <ul className={cn('stances', 'grid', 'pair', !step.multi && 'oneof')}>
-              {axisTags.map((tag) => (
-                <li key={tag.id}>
-                  <button
-                    type="button"
-                    className="stance"
-                    aria-pressed={selectedTagIdSet.has(tag.id)}
-                    onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
-                  >
-                    <span className={step.multi ? 'dot sq' : 'dot'} />
-                    <span>
-                      <b>{tag.name}</b>
-                      {tag.description && <span className="g">{tag.description}</span>}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-            {axisTags
-              .filter((tag) => selectedTagIdSet.has(tag.id) && tag.offers.length > 0)
-              .map((tag) => {
-                // Match by offer_id, the id the tag's own `offers` already carry -
-                // never by opener_label/tag.name, a display string that can collide
-                // or drift (#3676: never designate by matching strings in code).
-                const tagOfferIds = new Set(tag.offers.map((offer) => offer.offer_id));
-                return (
-                  <div className="conditional" key={tag.id}>
-                    <ChapterOffers
-                      draft={draft}
-                      chapter="glimpse"
-                      filter={(offer) => tagOfferIds.has(offer.offer_id)}
-                      heading={
-                        copy?.[`glimpse_offers_heading_${tag.slug}`] ??
-                        copy?.[`glimpse_offers_heading_${step.axis.toLowerCase()}`] ??
-                        copy?.glimpse_offers_heading ??
-                        'What it left in you'
-                      }
-                      headingTag={copy?.offers_optional_chip ?? 'optional'}
-                      showOpener={false}
-                      syncErrorHint={
-                        copy?.offers_sync_error ?? 'That pick did not save. Try again.'
-                      }
-                      wordBundled={copy?.offers_word_bundled}
-                      wordPerRank={copy?.offers_word_per_rank}
-                      wordSpent={copy?.offers_word_spent}
-                      wordAwards={copy?.offers_word_awards}
-                    />
-                  </div>
-                );
-              })}
-          </fieldset>
-        );
+              <ul className={cn('stances', 'grid', 'pair', !step.multi && 'oneof')}>
+                {axisTags.map((tag) => {
+                  // An answer gives one card (#5292); the model holds a second line out.
+                  const card = tag.offers[0];
+                  return (
+                    <li key={tag.id}>
+                      <button
+                        type="button"
+                        className="stance"
+                        aria-pressed={selectedTagIdSet.has(tag.id)}
+                        onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
+                      >
+                        <span className={step.multi ? 'dot sq' : 'dot'} />
+                        <span>
+                          <b>{tag.name}</b>
+                          {tag.description && <span className="g">{tag.description}</span>}
+                          {card && (
+                            <span className="bonus">
+                              <span className="card-name">{card.name}</span>
+                              {card.effect_line}
+                            </span>
+                          )}
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </fieldset>
+          );
+        return step.axis === BLACKOUT_BEFORE ? [blackout, part] : part;
       })}
 
       <Field

@@ -1852,9 +1852,13 @@ existed (`world/magic/admin.py`); this only adds an inline and a preview line.
   runs, the same plumbing every admin inline relies on; also sets a
   per-instance `help_text` linking the selected Distinction to its own
   Builder page, via `web.admin.authoring.links.builder_url`),
-  `DistinctionOfferInline` (`TabularInline`, `fk_name="glimpse_tag"`, fields
-  `distinction` (autocomplete) / `arrives_as` / `name` / `player_line` /
-  `sort_order` / `is_active`), and `GlimpseTagAdmin.render_change_form`
+  `DistinctionOfferInline` (`TabularInline`, `fk_name="glimpse_tag"`, headed "The
+  card it gives", one row at most; fields `distinction` (autocomplete) / `arrival`
+  (read-only: a Glimpse card always comes free with its answer, #5292, and the model
+  sets it bundled on save) / `name` / `player_line` / `sort_order` / `is_active`;
+  `GlimpseTagOfferFormSet` refuses a second active row, and `GlimpseTagOfferForm
+  ._post_clean` moves the model's refusals about the answer onto the row, since the
+  inline's parent key is a hidden field a tabular inline draws no error for), and `GlimpseTagAdmin.render_change_form`
   (injects `context["offer_preview"]`, built from
   `web.admin.authoring.offers.preview_from_offers` over the tag's own active
   offers) + `GlimpseTagAdmin.save_formset` (credits every saved offer via

@@ -31,7 +31,7 @@ vi.mock('../../api', () => ({
   updateDraft: vi.fn(),
   getCGExplanations: vi.fn(),
   getWorshippedBeings: vi.fn().mockResolvedValue([]),
-  getDraftOffers: vi.fn().mockResolvedValue({ offers: [], terms: [] }),
+  getDraftOffers: vi.fn().mockResolvedValue({ offers: [], terms: [], glimpse_cards: [] }),
 }));
 vi.mock('@/hooks/useDistinctions', () => ({
   useDraftDistinctions: () => ({ data: [] }),
@@ -224,7 +224,7 @@ describe('IdentityStage', () => {
   describe('Personality cards (#5255)', () => {
     beforeEach(() => {
       syncMutate.mockClear();
-      vi.mocked(getDraftOffers).mockResolvedValue({ offers: [], terms: [] });
+      vi.mocked(getDraftOffers).mockResolvedValue({ offers: [], terms: [], glimpse_cards: [] });
     });
 
     it('shows no Personality section when no card is placed on Identity', async () => {
@@ -242,6 +242,7 @@ describe('IdentityStage', () => {
       vi.mocked(getDraftOffers).mockResolvedValue({
         offers: [identityCard(1, 'Indolent'), identityCard(2, 'Tireless', { cost_per_rank: -5 })],
         terms: [],
+        glimpse_cards: [],
       });
       renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
         queryClient: createTestQueryClient(),
@@ -277,6 +278,7 @@ describe('IdentityStage', () => {
       vi.mocked(getDraftOffers).mockResolvedValue({
         offers: names.map((name, index) => identityCard(index + 1, name)),
         terms: [],
+        glimpse_cards: [],
       });
       const { container } = renderWithCharacterCreationProviders(
         <div className="interview">
@@ -309,6 +311,7 @@ describe('IdentityStage', () => {
           ),
         ],
         terms: [],
+        glimpse_cards: [],
       });
       renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
         queryClient: createTestQueryClient(),

@@ -149,7 +149,7 @@ describe('AppearanceStage (folio)', () => {
   beforeEach(() => {
     heightBands = [mockHeightBandAverage, mockHeightBandTall];
     copy = mockCGExplanations;
-    offersResponse = { offers: [giantsBlood, attractive], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive], terms: [], glimpse_cards: [] };
     draftDistinctions = [];
     syncMutate.mockClear();
     mutate.mockClear();
@@ -314,7 +314,7 @@ describe('AppearanceStage (folio)', () => {
   });
 
   it('shows the qualities on every feature with no step before them (#5241)', () => {
-    offersResponse = { offers: [giantsBlood, attractive, alluring], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive, alluring], terms: [], glimpse_cards: [] };
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     expect(screen.getByRole('group', { name: 'Alluring on Hair color' })).toBeInTheDocument();
     expect(screen.getByRole('group', { name: 'Alluring on Ears' })).toBeInTheDocument();
@@ -330,14 +330,14 @@ describe('AppearanceStage (folio)', () => {
   });
 
   it('keeps the description shut and the palette narrow on a feature with no tier', () => {
-    offersResponse = { offers: [giantsBlood, attractive, alluring], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive, alluring], terms: [], glimpse_cards: [] };
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     expect(screen.queryByLabelText('Describe it')).toBeNull();
     expect(screen.queryByRole('button', { name: 'Blue' })).toBeNull();
   });
 
   it('opens the description and the whole palette on a feature that holds a tier', () => {
-    offersResponse = { offers: [giantsBlood, attractive, alluring], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive, alluring], terms: [], glimpse_cards: [] };
     draftDistinctions = [held(1, 'hair_color')];
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     // Only the feature that holds the tier opens.
@@ -350,7 +350,7 @@ describe('AppearanceStage (folio)', () => {
   });
 
   it('counts the first ten points as free and says what comes from CG points', () => {
-    offersResponse = { offers: [alluring], terms: [] };
+    offersResponse = { offers: [alluring], terms: [], glimpse_cards: [] };
     const spent = createMockDraft({ ...draft, feature_points_spent: 12, feature_points_free: 10 });
     renderWithCharacterCreationProviders(<AppearanceStage {...props} draft={spent} />);
     const heading = screen.getByRole('heading', { name: /Physical features/ });
@@ -360,7 +360,7 @@ describe('AppearanceStage (folio)', () => {
 
   it('lets go of a colour only a distinctive feature may hold when its last tier comes off', async () => {
     const user = userEvent.setup();
-    offersResponse = { offers: [alluring], terms: [] };
+    offersResponse = { offers: [alluring], terms: [], glimpse_cards: [] };
     draftDistinctions = [held(1, 'hair_color')];
     const blueHaired = createMockDraft({
       ...draft,
@@ -378,7 +378,7 @@ describe('AppearanceStage (folio)', () => {
 
   it('keeps a colour the species lists when the last tier comes off', async () => {
     const user = userEvent.setup();
-    offersResponse = { offers: [alluring], terms: [] };
+    offersResponse = { offers: [alluring], terms: [], glimpse_cards: [] };
     draftDistinctions = [held(1, 'hair_color')];
     const blackHaired = createMockDraft({
       ...draft,
@@ -393,7 +393,7 @@ describe('AppearanceStage (folio)', () => {
   });
 
   it('does not mount a quality as a section of its own (#3739)', () => {
-    offersResponse = { offers: [alluring], terms: [] };
+    offersResponse = { offers: [alluring], terms: [], glimpse_cards: [] };
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     // "a feature" is the generic opener label; it must never head a section.
     expect(screen.queryByRole('heading', { name: /a feature/i })).toBeNull();
@@ -411,7 +411,7 @@ describe('AppearanceStage (folio)', () => {
 
   it('emits no class hook that cg.css has no rule for (#3667 shape)', () => {
     heightBands = [mockHeightBandAverage, mockHeightBandTall, mockHeightBandTowering];
-    offersResponse = { offers: [giantsBlood, attractive, alluring], terms: [] };
+    offersResponse = { offers: [giantsBlood, attractive, alluring], terms: [], glimpse_cards: [] };
     draftDistinctions = [held(2, 'hair_color')];
     const { container } = renderWithCharacterCreationProviders(
       <div className="interview">

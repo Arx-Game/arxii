@@ -137,6 +137,7 @@ beforeEach(() => {
   offersResponse = {
     offers: [silverTongue, magicalScar, highborn],
     terms: [],
+    glimpse_cards: [],
   };
   draftDistinctions = [otherChapterEntry];
 });
@@ -542,7 +543,7 @@ describe('ChapterOffers', () => {
   });
 
   it('bundled rows alone (no offers) still render the block', () => {
-    offersResponse = { offers: [], terms: [] };
+    offersResponse = { offers: [], terms: [], glimpse_cards: [] };
     renderWithCharacterCreationProviders(
       <ChapterOffers
         draft={createMockDraft()}
@@ -581,7 +582,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
     }));
 
   it('a block of five or more shows the pinned lines at rest and folds the rest', () => {
-    offersResponse = { offers: many(6, [203, 205]), terms: [] };
+    offersResponse = { offers: many(6, [203, 205]), terms: [], glimpse_cards: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
@@ -596,7 +597,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('with nothing pinned the first three stand in for the first look', () => {
-    offersResponse = { offers: many(7), terms: [] };
+    offersResponse = { offers: many(7), terms: [], glimpse_cards: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" wordSeeMore="{count} further" />
     );
@@ -607,7 +608,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('a block under five never folds', () => {
-    offersResponse = { offers: many(4), terms: [] };
+    offersResponse = { offers: many(4), terms: [], glimpse_cards: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
@@ -616,7 +617,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
   });
 
   it('firstLook={false} shows everything at rest', () => {
-    offersResponse = { offers: many(6, [200]), terms: [] };
+    offersResponse = { offers: many(6, [200]), terms: [], glimpse_cards: [] };
     const { container } = renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" firstLook={false} />
     );
@@ -629,6 +630,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
     offersResponse = {
       offers: [{ ...magicalScar, held: true }, silverTongue],
       terms: [],
+      glimpse_cards: [],
     };
     renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" wordHeld="yours already" />
@@ -646,6 +648,7 @@ describe('ChapterOffers fold, held state and effect line (#3709)', () => {
     offersResponse = {
       offers: [{ ...silverTongue, effect_line: '+Deception; -Willpower' }],
       terms: [],
+      glimpse_cards: [],
     };
     const { container } = renderWithCharacterCreationProviders(
       <div className="interview">

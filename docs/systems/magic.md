@@ -457,6 +457,40 @@ recomputes `glimpse_state` so it never drifts from the prose+tag truth:
 - `unlink_distinction_from_glimpse(character_distinction: CharacterDistinction) -> None`
   — clears `from_glimpse`.
 
+**One bonus from each of four parts (#5292, ADR-5292)** [BUILT & WIRED]. Every axis
+takes one answer (`GLIMPSE_AXIS_CONFIG`, every `multi=False`; the several-answers path
+and `GlimpseTag.stands_alone` stay in the code, unused). `GlimpseAxisRule` gained
+`gives_card` (TRIGGER, REFLECTION, TONE, CONSEQUENCE) and `lost_in_blackout`
+(REFLECTION, TONE); `GLIMPSE_AXIS_ORDER` is the order the parts are asked in. An answer of
+a card-giving axis may carry one card, a `DistinctionOffer` line of the Glimpse chapter
+that always arrives bundled, so the card is free with the answer.
+
+- `GlimpseMemory` (`constants.py`): `REMEMBERED`, `BLACKED_OUT`, `NO_MEMORY`, `LATER`.
+  `CharacterAura.glimpse_memory` holds one of the first three (a Glimpse left for later
+  is stored as remembered). `glimpse_axes_asked(memory)` gives the axes a character in
+  that state has an answer to: all, all but the two a blackout takes, or none.
+- `write_glimpse(aura, *, by_staff, answers=None, story=None, edited_by=None) ->
+  list[CharacterDistinction]`: the one way a Glimpse is written in play, in one
+  transaction with the aura's row locked. A player is refused any write with no memory,
+  a write to an axis a blackout took, and a new answer to an axis that has one (an
+  answer is final for the player); staff skip the three. It writes through
+  `set_glimpse_tags` / `set_glimpse_prose`, applies the aura shift for an axis first
+  answered (`apply_glimpse_affinity_nudge(aura, tags=...)`), then calls
+  `give_glimpse_cards`. A `DistinctionExclusionError` becomes a `ValidationError` and
+  nothing is saved.
+- `give_glimpse_cards(aura) -> list[CharacterDistinction]`: makes sure the character
+  holds the card of every answered axis, through `grant_distinction` (origin
+  `GAMEPLAY`, rank 1), the card's secret where it is secret by default, its codex
+  entries and the from-Glimpse mark. A held card is left alone, so every write gives
+  whatever an answered axis is still owed.
+- `set_glimpse_memory(aura, memory)`: staff's switch, from the staff sheet editor
+  (`PUT /api/character-sheets/<pk>/staff-glimpse-memory/`). The marking card stays.
+- `player_can_finish_glimpse(aura, *, path_id) -> bool`: the sheet's
+  `can_finish_glimpse`. True while the story is blank or an axis the player may write
+  has no answer and has one their path can pick; never with no memory.
+- The aura actions `set-glimpse-tags` (body `{answers: [{axis, tag_ids}]}`, saved
+  together or not at all) and `set-glimpse-prose` both go through `write_glimpse`.
+
 **CG finalize wiring** (`world/character_creation/services.py`,
 `finalize_magic_data`), after creating `CharacterAura`, two `draft_data` keys
 are consumed through the glimpse services above (never written directly to the

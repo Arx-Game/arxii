@@ -27,7 +27,7 @@ describe('character-creation/api getDraftOffers', () => {
   });
 
   it('calls /drafts/{id}/offers/?chapter=glimpse', async () => {
-    const data: OffersResponse = { offers: [], terms: [] };
+    const data: OffersResponse = { offers: [], terms: [], glimpse_cards: [] };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
 
     const result = await getDraftOffers(7, 'glimpse');
@@ -39,7 +39,7 @@ describe('character-creation/api getDraftOffers', () => {
   });
 
   it('hits a different chapter query for tradition_step', async () => {
-    const data: OffersResponse = { offers: [], terms: [] };
+    const data: OffersResponse = { offers: [], terms: [], glimpse_cards: [] };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
 
     await getDraftOffers(7, 'tradition_step');
@@ -78,6 +78,7 @@ describe('character-creation/api getDraftOffers', () => {
         },
       ],
       terms: [],
+      glimpse_cards: [],
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));
 

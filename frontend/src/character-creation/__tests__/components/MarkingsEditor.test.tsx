@@ -29,7 +29,7 @@ vi.mock('../../api', () => ({
 }));
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
-  useDraftOffers: () => ({ data: { offers: [], terms: [] }, isLoading: false }),
+  useDraftOffers: () => ({ data: { offers: [], terms: [], glimpse_cards: [] }, isLoading: false }),
 }));
 vi.mock('@/hooks/useDistinctions', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/hooks/useDistinctions')>()),

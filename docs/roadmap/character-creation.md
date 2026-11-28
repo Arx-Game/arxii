@@ -1,5 +1,45 @@
 # Character Creation & Identity
 
+## Built (2026-11-28, #5292: the Glimpse gives a magical bonus from each of four parts, every part takes one answer, and a Glimpse written in play gives the same bonuses)
+
+Owner rulings 2026-11-22 to 24. The Glimpse gives something for free, as "a monumental,
+traumatic event" should. An answer of Trigger, The Reflection, Tone or Consequence can
+carry one card that only the Glimpse gives, and choosing the answer takes the card: the
+card is printed on the answer, there is no second list, and nothing costs or pays CG
+points. Every part takes one answer. The Gift stage opens the Glimpse with the owner's
+paragraph and three ways in, labelled as the owner ruled: "Create Glimpse in CG",
+"Amnesiac, No Memory of Glimpse", "Create Glimpse Post-CG". A blackout (one tick between
+Trigger and The Reflection) takes The Reflection and Tone together. A blackout and no
+memory are each marked by a card, so a GM can find the character and run the story that
+settles it. A beginning can be ticked as having no memory of the Glimpse (the Sleeper).
+Part titles are larger, and a part shows its explanation under the title once the owner
+writes one. "Skip for now" is gone.
+
+A part not answered in character creation gives its card when it is written on the
+character in play: the sheet's "Finish your Glimpse" editor stages the picks, shows the
+card on each answer and saves on one confirm, and an answered part is then final for the
+player. With no memory the player cannot write the Glimpse at all, and after a blackout
+not The Reflection or Tone; the server refuses the write. Staff set the memory in the staff
+sheet editor and can open the same editor with every part open. A card held by an answer
+only showed after a reload before this; a draft save that changes the Glimpse now refreshes
+the held cards and the offers.
+
+Migration `0484` deletes the 26 priced pairings under Glimpse answers (a deliberate discard
+under ADR-0237; the owner ruled they were not theirs) and sets any other Glimpse line to
+arrive bundled; `0485` adds `DistinctionOffer.glimpse_memory`,
+`CharacterAura.glimpse_memory` and `Beginnings.no_glimpse_memory`. See ADR-5292.
+
+**Owed on production, all the owner's:** the rewritten answers; the Glimpse cards and
+their lines, once TehomCD has said what a magical bonus can aim at (the Distinction
+Builder, or "Add from a table" with `glimpse:<answer>`); the Glimpse Mystery card with a
+line for each memory state (`memory:blacked out`, `memory:no memory`), which the Required
+content page flags until it exists; the tick on the Sleeper's beginning; the copy rows,
+among them the last sentence of the Glimpse's paragraph (`glimpse_intro`) and each part's
+explanation (`glimpse_axis_<part>_explanation`). An export of offer lines made before this
+deploy no longer matches (the memory state joined the line's natural key) and is made
+again from the database afterwards. The eight Personality cards that sat only under
+Glimpse answers are offered nowhere until placed on Identity (#5208).
+
 ## Built (2026-11-21, #5255: the enemy is asked only of a card that starts with one; personality cards are picked on Identity)
 
 Owner rulings 2026-11-21 on the last writing stages. The enemy section of Final Touches is

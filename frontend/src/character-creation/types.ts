@@ -62,6 +62,9 @@ export interface Beginnings {
   /** What the life page shows in place of the stage rows when every stage is struck
    * (#4830, the Sleeper's); blank on a beginning that keeps its stages. */
   struck_stages_text: string;
+  /** A character of this beginning has no memory of their Glimpse (#5292, the
+   * Sleeper's): the Gift stage asks nothing about it. */
+  no_glimpse_memory: boolean;
   art_image: string | null;
   allowed_species_ids: number[];
   grants_species_languages: boolean;
@@ -1778,6 +1781,9 @@ export type EnemyReason = components['schemas']['EnemyReason'];
 /** The `offers` payload `GET .../offers/?chapter=` returns (#3675); a card the route
  * closes is absent from it and named nowhere (#4979). */
 export type OffersResponse = components['schemas']['OffersResponse'];
+/** One card the Glimpse has given the draft (#5292); `axis` is blank for the card
+ * that marks a blackout or no memory. */
+export type GlimpseCard = components['schemas']['GlimpseCard'];
 
 /** A term on a card's mechanics line with its definition (#4874). */
 export type OfferTerm = components['schemas']['OfferTerm'];

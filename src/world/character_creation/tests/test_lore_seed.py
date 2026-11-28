@@ -113,7 +113,20 @@ class TestLoreOnboardingSeed(TestCase):
         _seed_cg_explanations()
         offers_chapter_keys = (
             "glimpse_choose_any",
-            "glimpse_offers_heading",
+            # #5292: the Glimpse's paragraph, its three ways, the blackout and its
+            # rows in the side panel. `glimpse_offers_heading` is retired with the
+            # priced list it headed.
+            "glimpse_intro",
+            "glimpse_way_now",
+            "glimpse_way_none",
+            "glimpse_way_later",
+            "glimpse_no_memory_line",
+            "glimpse_later_line",
+            "glimpse_blackout_label",
+            "glimpse_blackout_text",
+            "glimpse_rail_not_asked",
+            "glimpse_rail_no_card",
+            "glimpse_rail_held",
             "offers_optional_chip",
             "glimpse_story_label",
             "glimpse_story_hint",

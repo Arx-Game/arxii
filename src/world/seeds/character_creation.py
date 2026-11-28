@@ -351,12 +351,51 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "gift_strength_aura_all_feeling": "All your strength comes from what you feel.",
     "gift_strength_aura_mostly_feeling": "Most of your strength comes from what you feel.",
     "gift_strength_aura_mostly_others": "Most of your strength comes from what you do to others.",
-    # The Glimpse's own offered distinctions (#3675 fix round 1), one
-    # sub-block per chosen tag, and the CG-only axis layout's own copy.
-    # Only an axis that takes several answers is marked (#5191); "choose one"
-    # is not printed and its key is retired.
+    # The CG-only axis layout's own copy. Only an axis that takes several answers
+    # is marked (#5191); none does since #5292, so the key waits for the day one
+    # does again. "choose one" is not printed and its key is retired, and so is
+    # `glimpse_offers_heading`: an answer's card is printed on the answer.
     "glimpse_choose_any": "choose any",
-    "glimpse_offers_heading": "What it left in you",
+    # The Glimpse's own paragraph under the chapter heading (#5292): the owner's
+    # words of 2026-11-23, without their last sentence, which promised CG points
+    # for skipping the Glimpse and is the owner's to rewrite. Mirrors
+    # GLIMPSE_INTRO_FALLBACK in GlimpseSection.tsx.
+    "glimpse_intro": (
+        "The Glimpse is the often traumatic event that begins a character's magical "
+        "awakening, catching a glimpse of who they might one day become if they survive "
+        "to fully grow into their power. Usually happening during moments of great "
+        "emotional turmoil or life-threatening danger, the character instinctively uses "
+        "magic and gains access to their Gift. Since this can be character defining, a "
+        "player has the option of skipping this in CG and defining it later. Or, in the "
+        "case of characters like Sleepers, may have no memory of this."
+    ),
+    # The three ways into the Glimpse, the owner's labels of 2026-11-24 (#5292).
+    "glimpse_way_now": "Create Glimpse in CG",
+    "glimpse_way_none": "Amnesiac, No Memory of Glimpse",
+    "glimpse_way_later": "Create Glimpse Post-CG",
+    "glimpse_no_memory_line": (
+        "Nothing of the Glimpse is asked. The character holds the card that marks it as "
+        "a mystery, and each part gives its bonus when a story returns the memory."
+    ),  # PLACEHOLDER: Apostate rewrite
+    "glimpse_later_line": (
+        "The Glimpse is written from the character sheet after character creation, and "
+        "each part gives its bonus then."
+    ),  # PLACEHOLDER: Apostate rewrite
+    # The blackout between Trigger and The Reflection (#5292): the owner's words
+    # of 2026-11-22. Mirrors BLACKOUT_TEXT_FALLBACK in GlimpseAxes.tsx.
+    "glimpse_blackout_label": "Blacked out",
+    "glimpse_blackout_text": (
+        "When your Glimpse triggered, you have no memory of it at all. It came to you, "
+        "and you woke up dealing with the consequences. Your Glimpse is a mystery, and "
+        "it is more than a little unnerving you cannot remember it, and can be unraveled "
+        "by GMing. You gain the Glimpse Mystery distinction."
+    ),
+    # The Glimpse's rows in the side panel (#5292). A part's explanation
+    # (`glimpse_axis_<axis>_explanation`) is deliberately not seeded: while it has no
+    # row the part shows its lead-in, and the explanations are the owner's to write.
+    "glimpse_rail_not_asked": "not asked",
+    "glimpse_rail_no_card": "no card",
+    "glimpse_rail_held": "held",
     "offers_optional_chip": "optional",
     # Printed under ChapterOffers/SchoolingStances (#3675 final fix F2) when
     # the sync mutation that writes a pick fails, so a rejected save is never

@@ -1116,6 +1116,59 @@
   font-style: italic;
   color: var(--cg-muted);
 }
+/* A part of the Glimpse (#5292, owner ruling 2026-11-22: "Larger Part titles are good").
+   The part's name is a ruled heading clearly larger than an answer's name (13px
+   capitals), in the realm's accent, so the stage reads as a sequence of parts and not a
+   run of cards. */
+.interview .field.part {
+  margin-top: 1.9rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cg-hair);
+}
+.interview .field.part > .label {
+  font-size: 1.35rem;
+  letter-spacing: 0.1em;
+  line-height: 1.2;
+  color: var(--cg-accent);
+  margin-bottom: 0.55rem;
+}
+/* The explanation under a title, and the Glimpse's own paragraph under the chapter
+   heading: body text at reading width, where the lead-in it replaces was a muted line. */
+.interview .explain {
+  margin: 0 0 0.6rem;
+  font-size: 1rem;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+/* The card an answer gives, set off inside the answer by a left rule (#5292). */
+.interview .stance .bonus {
+  display: block;
+  margin-top: 0.35rem;
+  padding-left: 0.6rem;
+  border-left: 2px solid var(--cg-hair);
+  font-size: 0.95rem;
+}
+.interview .stance .bonus .card-name {
+  display: block;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+}
+.interview .stance[aria-pressed='true'] .bonus {
+  border-left-color: var(--cg-accent);
+}
+.interview .stance[aria-pressed='true'] .bonus .card-name {
+  color: var(--cg-accent);
+}
+/* The three ways into the Glimpse, and the blackout between two parts: the same cards,
+   with room above so neither reads as an answer of the part before it. */
+.interview .stances.ways,
+.interview .stances.blackout {
+  margin-top: 1.2rem;
+}
 /* An axis is a fieldset (a named group of toggles). A fieldset is by default at least as
    wide as its widest word, which would push a card past a narrow column. */
 .interview fieldset.field {

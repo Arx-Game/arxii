@@ -660,91 +660,80 @@ details and opens `AcceptOfferDialog`. Teacher is shown via the anonymity-respec
 
 Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachingOffer`.
 
-### `components/glimpse/GlimpseFlow.tsx` + `glimpseTypes.ts` (#2427; CG mount replaced #3675 fix round 1)
+### `components/glimpse/GlimpseFlow.tsx` + `glimpseTypes.ts` (#2427; CG mount replaced #3675 fix round 1; one answer for each part #5292)
 
-Shared, purely presentational guided flow for authoring "The Glimpse" — props
-in (`heading` (optional, defaults `'The Glimpse'`), `tags`, `selectedTagIds`,
-`prose`, `showDeferralControls`, `storyHint` (optional, printed under the
-story `Textarea`)), callbacks out (`onChangeAxis`, `onChangeProse`, `onSkip`);
-no queries or mutations inside. `glimpseTypes.ts` is the single definition of
-`GlimpseTagOption` (backs `GET /api/character-creation/glimpse-tags/`, and
-carries `offers: TagOffer[]` per tag, #3675); the character-creation module
-re-exports it from `types.ts` rather than redeclaring it. Renders the
-`heading` at the top, then a Radix accordion (TONE single-select,
-CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags don't render a
-step; each tag Card is `role="button" tabIndex={0}` with an explicit
-`onKeyDown` for Enter/Space activation, review fix), SENSORY tags as toggle
-chips (native `<button>`s, keyboard-operable for free) inside the
-always-visible story `Textarea`. `AXIS_STEPS` (the axis order + arity) is
-exported so `GlimpseAxes` (below) can reuse it without redeclaring it.
+Purely presentational guided flow for authoring "The Glimpse", mounted only by the
+sheet's editor (`GlimpseEditorDialog`, below). Props in: `heading` (optional, defaults
+`'The Glimpse'`), `tags`, `selectedTagIds`, `prose`, `storyHint` (optional), `closedAxes`
+(parts whose saved answer takes no click), `hiddenAxes` (parts not drawn). Callbacks out:
+`onChangeAxis`, `onChangeProse`. No queries or mutations inside, and no deferral controls
+("Skip for now" is gone, #5292). `glimpseTypes.ts` is the single definition of
+`GlimpseTagOption` (backs `GET /api/character-creation/glimpse-tags/`; `offers: TagOffer[]`
+is the card the answer gives, with its `effect_line`), `GlimpseMemory`
+(`'remembered' | 'blacked_out' | 'no_memory' | 'later'`) and `GlimpseAxisStep`; the
+character-creation module re-exports the first two from `types.ts`.
+
+Renders the `heading`, then a Radix accordion with one item for each part that has tags,
+then SENSORY tags as chips inside the always-visible story `Textarea`. Each tag Card is
+`role="button"` with `aria-pressed` and an explicit `onKeyDown` for Enter/Space; a tag that
+gives a card prints the card on itself (`data-testid="glimpse-card"`: name and mechanics
+line).
+
+**`AXIS_STEPS`** (exported; `GlimpseAxes` and the Gift stage's side panel reuse it) is the
+parts in the order they are asked, each a `GlimpseAxisStep` `{axis, label, multi, givesCard,
+lostInBlackout}`. Every `multi` is false (#5292): every part takes one answer, the sensory
+chips included. `givesCard` is true for Trigger, The Reflection, Tone and Consequence;
+`lostInBlackout` for The Reflection and Tone. It copies `GLIMPSE_AXIS_CONFIG` and
+`GLIMPSE_AXIS_ORDER` in `world.magic.constants`; change both together.
 
 **One rule for a click, `axisSelection.ts` (#5193).** `nextAxisSelection(axisTags,
-selectedTagIds, clickedTagId, multi)` returns an axis's picks after a click, and both
+selectedTagIds, clickedTagId, multi)` returns a part's picks after a click, and both
 mounts call it (`GlimpseFlow` here, `GlimpseAxes` in character creation): a click on a
-picked tag lets it go, an axis that takes one answer swaps, an axis that takes several
-adds, and a tag whose `stands_alone` is true (staff tick it in admin; Fugue in The
-Reflection is the first) replaces every other pick of its axis, while picking another
-tag lets it go. The server refuses a stand-alone tag beside another
-(`set_glimpse_tags`), so never write a second copy of this rule in a component.
+picked tag lets it go, a part that takes one answer swaps, a part that takes several
+adds, and a tag whose `stands_alone` is true replaces every other pick of its part. No
+part takes several today, so only the first two branches run; the rest is the kept way
+back. Never write a second copy of this rule in a component.
 
-**Only one mount left:** the character sheet's live editor
-(`components/glimpse/GlimpseEditorDialog.tsx`, below), unchanged. The CG
-mount used to be `GiftStage` → `GlimpseSection` → this component (with a
-`renderOffers` slot, #3675 Task 13), but that shipped a demo-fidelity defect
-(the shadcn accordion hid two axes at a time, one axis' worth of offers
-merged multiple tags under one heading, and the section heading duplicated
-`GiftStage`'s own). Fix round 1 replaced the CG mount entirely with
-`character-creation/components/gift/GlimpseAxes.tsx`; see that module's own
-`CLAUDE.md` entry for its folio-grammar layout. `GlimpseFlowProps` no longer
-carries `renderOffers` at all (removed, unused now that no caller passes it).
+### `components/glimpse/GlimpseEditorDialog.tsx` (#2427 Task 6; answers final #5292)
 
-### `components/glimpse/GlimpseEditorDialog.tsx` (#2427 Task 6)
+The Glimpse editor on the character sheet: a `Dialog` hosting `GlimpseFlow`. Opened from
+`SpellbookTab`'s aura card by "Finish your Glimpse" (`isMyCharacter &&
+aura.can_finish_glimpse`) or, in staff edit mode, by "Edit the Glimpse's answers"
+(`staff`). Props: `open`, `onOpenChange`, `characterId`, `aura`, `distinctions`, `pathId`
+(narrows the catalog to the character's path, so The Choosing shows only to a path it
+belongs to), `staff`.
 
-The "finish later" Glimpse editor on the own-character sheet — a `Dialog`
-(same `@/components/ui/dialog` primitives `CodexModal` uses) hosting
-`GlimpseFlow` in live mode. Opened from `SpellbookTab`'s aura card via a
-"Finish your Glimpse" button, gated on `isMyCharacter && aura.can_finish_glimpse`
-(mirrors the `MotifStylePanel` own-view gate). Catalog comes from
-`useGlimpseTags()` (`@/character-creation/queries` — the same catalog CG's
-`GlimpseSection` reads); selection/prose are seeded from the sheet payload's
-`magic.aura.glimpse_tags`/`glimpse_story`; writes go through the Task 4 aura
-action mutations below. `showDeferralControls={false}` — closing the dialog
-IS the deferral (unlike CG, which offers an explicit "skip" button).
+An answer gives its card when it is saved, and an answer written in play is final for the
+player (the server refuses a second answer to a part). So a click saves nothing: picks are
+staged in the dialog, "Save answers" opens one confirm that names them and says they are
+final, and the confirm sends them together through `useSetGlimpseTags` as `{answers:
+[{axis, tag_ids}]}`. A part that has its answer is in `closedAxes`. After a blackout
+(`aura.glimpse_memory === 'blacked_out'`) the parts with `lostInBlackout` are in
+`hiddenAxes`. With `staff` every part is open, a saved answer can be changed, and the
+confirm does not call the answers final. A refusal's `detail` shows beside the button.
+The story still saves by its own "Save story" button (`useSetGlimpseProse`).
 
-**ID-space note:** CG's `GlimpseSection` no longer links glimpse suggestions
-by draft-held distinction id at all (#3675 retired
-`draft_data.glimpse_linked_distinction_ids`; offers are chapter-scoped
-picks synced immediately through `useSyncDistinctions`, see
-`ChapterOffers`). This dialog's own linking is a separate, still-live
-feature: linking a character's _existing_ `CharacterDistinction` rows to
-their Glimpse, by **CharacterDistinction row id**, the id the aura's
-`link-glimpse-distinction`/`unlink-glimpse-distinction` endpoints require,
-which is exactly what `CharacterSheetDistinction.id` already carries.
-`linkedDistinctionIds` (this file's own local variable, not a `GlimpseFlow`
-prop) is derived from the sheet payload's `distinctions[*].is_from_glimpse`
-flag (`world.character_sheets.types.DistinctionEntry`, #2427 backend
-touch-up: `CharacterDistinction.from_glimpse_id is not None`);
-`linkableDistinctions` maps the same list to `{id, name}`. No separate
-fetch; both come from the sheet payload `SpellbookTab` already has.
+`SpellbookTab` also prints the memory line when the Glimpse is not remembered ("Blacked
+out during the Glimpse.", "No memory of the Glimpse."), and in staff edit mode a "Memory of
+the Glimpse" select that writes through `useStaffRowMutation` (`staff-glimpse-memory`).
+`CharacterSheetAura` carries `glimpse_memory`, and `can_finish_glimpse` is true while the
+player has a part left to answer or the story to write.
 
-**Mutation hooks** (`@/magic/queries`, wrap the Task 4
-`CharacterAuraViewSet` actions — `src/world/magic/views.py`):
-`useSetGlimpseTags(auraId, characterSheetId)`,
-`useSetGlimpseProse(auraId, characterSheetId)`,
-`useToggleGlimpseDistinction(auraId, characterSheetId)` (wraps
-link+unlink behind one `toggle(characterDistinctionId, isCurrentlyLinked)`
-call). All three invalidate `['character-sheets', characterSheetId]` on
-success — the same key `useCharacterSheetQuery` reads — rather than trying
-to read the aura action responses (`CharacterAuraSerializer` output doesn't
-carry `glimpse_tags`/`glimpse_story`/`can_finish_glimpse`; those live only in
-the sheet payload's `AuraData`). Request bodies in `magic/types.ts`
-(`SetGlimpseTagsRequest`/`SetGlimpseProseRequest`/
-`GlimpseDistinctionLinkRequest`) are aliases onto the generated schema
-(`GlimpseSetTagsRequest`/`GlimpseSetProseRequest`/`GlimpseDistinctionLinkRequest`
-components) — the four `CharacterAuraViewSet` `@action` methods now carry
-`@extend_schema(request=...)` (`src/world/magic/views.py`), so drf-spectacular
-types each body against its real input serializer instead of falling back to
-the ViewSet's own `CharacterAuraSerializer`.
+**ID-space note:** this dialog's link/unlink of a character's _existing_
+`CharacterDistinction` rows to their Glimpse is a separate feature from the card an
+answer gives, by **CharacterDistinction row id**, the id the aura's
+`link-glimpse-distinction`/`unlink-glimpse-distinction` endpoints require, which is what
+`CharacterSheetDistinction.id` carries. `linkedDistinctionIds` is derived from the sheet
+payload's `distinctions[*].is_from_glimpse`; a card the Glimpse gave arrives already
+marked.
+
+**Mutation hooks** (`@/magic/queries`, wrap the `CharacterAuraViewSet` actions):
+`useSetGlimpseTags(auraId, characterSheetId)`, `useSetGlimpseProse(auraId,
+characterSheetId)`, `useToggleGlimpseDistinction(auraId, characterSheetId)` (wraps
+link+unlink behind one `toggle(characterDistinctionId, isCurrentlyLinked)` call). All
+three invalidate `['character-sheets', characterSheetId]` on success. Request bodies in
+`magic/types.ts` are aliases onto the generated schema (`GlimpseSetTagsRequest`,
+`GlimpseSetProseRequest`, `GlimpseDistinctionLinkRequest`).
 
 ### `XpKudosPage.alterationGate.test.tsx` (in `src/progression/`)
 

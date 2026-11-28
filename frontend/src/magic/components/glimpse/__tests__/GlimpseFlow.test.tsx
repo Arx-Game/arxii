@@ -122,8 +122,6 @@ function makeProps(overrides: Partial<GlimpseFlowProps> = {}): GlimpseFlowProps 
     prose: '',
     onChangeAxis: vi.fn(),
     onChangeProse: vi.fn(),
-    onSkip: vi.fn(),
-    showDeferralControls: true,
     ...overrides,
   };
 }
@@ -149,7 +147,7 @@ describe('GlimpseFlow', () => {
     expect(onChangeAxis).toHaveBeenCalledWith('TONE', []);
   });
 
-  it('toggles membership for a multi-select axis (Consequence)', async () => {
+  it('replaces the answer in a part that used to take several (Consequence, #5292)', async () => {
     const user = userEvent.setup();
     const onChangeAxis = vi.fn();
     render(<GlimpseFlow {...makeProps({ selectedTagIds: [3], onChangeAxis })} />);
@@ -157,11 +155,81 @@ describe('GlimpseFlow', () => {
     // The accordion is single-open (Tone is the default) — open Consequence first.
     await user.click(screen.getByText('Consequence: what did it leave behind?'));
     await user.click(screen.getByText('A Door Opened'));
-    expect(onChangeAxis).toHaveBeenLastCalledWith('CONSEQUENCE', [3, 4]);
+    expect(onChangeAxis).toHaveBeenLastCalledWith('CONSEQUENCE', [4]);
 
     onChangeAxis.mockClear();
     await user.click(screen.getByText('A Debt Incurred'));
     expect(onChangeAxis).toHaveBeenLastCalledWith('CONSEQUENCE', []);
+  });
+
+  it('the sensory chips take one answer, like every part (#5292)', async () => {
+    const user = userEvent.setup();
+    const onChangeAxis = vi.fn();
+    const second: GlimpseTagOption = {
+      ...SENSORY_TASTE,
+      id: 99,
+      name: 'A Ringing',
+      slug: 'ringing',
+    };
+    render(
+      <GlimpseFlow
+        {...makeProps({
+          tags: [...ALL_TAGS, second],
+          selectedTagIds: [SENSORY_TASTE.id],
+          onChangeAxis,
+        })}
+      />
+    );
+
+    await user.click(screen.getByText('A Ringing'));
+
+    expect(onChangeAxis).toHaveBeenLastCalledWith('SENSORY', [99]);
+  });
+
+  it('shows the card an answer gives on the answer, and nothing on an answer with none', async () => {
+    const withCard: GlimpseTagOption = {
+      ...TONE_WONDER,
+      offers: [
+        {
+          offer_id: 7,
+          distinction_id: 7,
+          name: 'Wonderstruck',
+          player_line: '',
+          cost_per_rank: 20,
+          max_rank: 1,
+          effect_line: '+Anima',
+        },
+      ],
+    };
+    render(<GlimpseFlow {...makeProps({ tags: [withCard, TONE_DREAD] })} />);
+
+    const cards = screen.getAllByTestId('glimpse-card');
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveTextContent('Wonderstruck');
+    expect(cards[0]).toHaveTextContent('+Anima');
+  });
+
+  it('a closed part shows its answer and takes no click (#5292)', async () => {
+    const user = userEvent.setup();
+    const onChangeAxis = vi.fn();
+    render(
+      <GlimpseFlow
+        {...makeProps({ selectedTagIds: [1], onChangeAxis, closedAxes: new Set(['TONE']) })}
+      />
+    );
+
+    const saved = screen.getByText('Wonder').closest('[role="button"]');
+    expect(saved).toHaveAttribute('aria-pressed', 'true');
+    expect(saved).toHaveAttribute('aria-disabled', 'true');
+    await user.click(screen.getByText('Dread'));
+    expect(onChangeAxis).not.toHaveBeenCalled();
+  });
+
+  it('a hidden part is not drawn (#5292)', () => {
+    render(<GlimpseFlow {...makeProps({ hiddenAxes: new Set(['TONE']) })} />);
+
+    expect(screen.queryByText('Tone; how did it feel?')).not.toBeInTheDocument();
+    expect(screen.getByText('Consequence: what did it leave behind?')).toBeInTheDocument();
   });
 
   it('does not render a link/suggestion section (#3675: offers are chapter-scoped now)', () => {
@@ -183,19 +251,8 @@ describe('GlimpseFlow', () => {
     expect(screen.queryByText('The detail goes here.')).not.toBeInTheDocument();
   });
 
-  it('calls onSkip from both deferral buttons', async () => {
-    const user = userEvent.setup();
-    const onSkip = vi.fn();
-    render(<GlimpseFlow {...makeProps({ onSkip })} />);
-
-    await user.click(screen.getByText('Skip for now'));
-    await user.click(screen.getByText('Save tags: write the story later'));
-
-    expect(onSkip).toHaveBeenCalledTimes(2);
-  });
-
-  it('does not render deferral controls when showDeferralControls is false', () => {
-    render(<GlimpseFlow {...makeProps({ showDeferralControls: false })} />);
+  it('offers no "Skip for now": closing the editor is the deferral (#5292)', () => {
+    render(<GlimpseFlow {...makeProps()} />);
 
     expect(screen.queryByText('Skip for now')).not.toBeInTheDocument();
   });

@@ -1685,6 +1685,7 @@
 - `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' - Add a message comment to an application.`
 - `age_bounds(species: 'Species | None', beginnings: 'Beginnings | None', ic_now: 'datetime | None') -> 'AgeBounds' - The one place the CG age rule lives (#3663).`
 - `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' - Approve an application and finalize the character.`
+- `asked_glimpse_tags(draft: 'CharacterDraft') -> 'list[GlimpseTag]' - The draft's Glimpse answers that count: asked in its memory state, one for each part.`
 - `assemble_origin_prose(sheet: 'CharacterSheet') -> 'str' - Compose the frame narrative + slot answers into prose.`
 - `assign_route(draft: 'CharacterDraft') -> 'None' - Point the draft at its beginning's route, clearing what hung on the old one (#4395).`
 - `beat_marks(draft: 'CharacterDraft') -> 'BeatMarks' - The secret picks, covers and figure names on the draft's beats (#4872).`
@@ -1695,6 +1696,8 @@
 - `clear_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot') -> 'None' - Delete a slot answer and recompute state.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Deny an application.`
+- `draft_glimpse_memory(draft: 'CharacterDraft') -> 'GlimpseMemory' - How much of the Glimpse this draft's character remembers.`
+- `draft_glimpse_story(draft: 'CharacterDraft') -> 'str' - The story finalize writes: the draft's own, when the Glimpse is created in CG.`
 - `family_name_is_taken(name: 'str') -> 'bool' - Case-insensitive collision with any family or organisation name (#3617).`
 - `final_touches_prompts(draft: 'CharacterDraft') -> 'list[str]' - The optional questions the draft's cards ask at Final Touches (#4846), in enum order.`
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`

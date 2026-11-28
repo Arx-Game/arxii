@@ -111,8 +111,14 @@ export interface CharacterSheetAura {
   dominant_affinity: string;
   glimpse_story: string;
   glimpse_state: 'NOT_STARTED' | 'TAGS_ONLY' | 'COMPLETE';
+  /** How much of the Glimpse the character remembers (#5292). */
+  glimpse_memory: 'remembered' | 'blacked_out' | 'no_memory';
   glimpse_tags: CharacterSheetGlimpseTag[];
-  /** Owner-only affordance: true unless the viewer isn't privileged or the glimpse is already COMPLETE. */
+  /**
+   * Owner-only affordance (#5292): true while the player has a part left to answer or
+   * the story to write; never with no memory of the Glimpse, and never for a viewer
+   * who isn't privileged.
+   */
   can_finish_glimpse: boolean;
 }
 
@@ -931,6 +937,11 @@ export type StaffRowAction =
       path: 'staff-worship';
       method: 'PUT';
       body: { public_being: number | null; secret_being: number | null };
+    }
+  | {
+      path: 'staff-glimpse-memory';
+      method: 'PUT';
+      body: { memory: CharacterSheetAura['glimpse_memory'] };
     }
   | {
       path: 'staff-markings';

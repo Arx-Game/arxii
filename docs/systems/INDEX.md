@@ -773,6 +773,15 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     drafts/{id}/personalization-options/`. Supersedes part of ADR-0136 ("personalization
     starts at level 3"). See `docs/systems/magic.md`'s "Technique personalization"
     section and `docs/systems/character_creation.md`'s Magic API section.
+  - **The Glimpse's cards and memory (#5292, ADR-5292):** an answer of Trigger, The
+    Reflection, Tone or Consequence carries one card, free with the answer (a
+    `DistinctionOffer` of the Glimpse chapter, always bundled); every axis takes one
+    answer. `GlimpseMemory` (`CharacterAura.glimpse_memory`,
+    `DistinctionOffer.glimpse_memory`, `Beginnings.no_glimpse_memory`).
+    `services/glimpse.py`: `write_glimpse(aura, *, by_staff, answers, story)` (the one
+    in-play write; final for the player), `give_glimpse_cards(aura)`,
+    `set_glimpse_memory(aura, memory)`, `player_can_finish_glimpse(aura, *, path_id)`.
+    Draft side: `world/character_creation/glimpse.py` and `offers.glimpse_cards(draft)`.
   - **Guided Glimpse Story (#2427):** `GlimpseTag` (`models/glimpse.py`, content model —
     `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
     natural key, `description`, `example`, `sort_order`, `is_active`, `stands_alone`

@@ -262,44 +262,49 @@ character-creation/
     │   │                        #   they were a button per statistic and per skill): the
     │   │                        #   suggested option first, the rest under category headings
     │   │                        #   (`optgroup`), never a Magic skill
-    │   ├── GlimpseSection.tsx   # CG state binder for the Glimpse (#2427): draft reads,
-    │   │                        #   updateDraft writes (draft_data.glimpse_tag_ids), the
-    │   │                        #   isCollapsed deferral affordance, the copy query. Prose
-    │   │                        #   stays on GiftStage's register('glimpse_story'). Renders
-    │   │                        #   `GlimpseAxes`, not the shared
-    │   │                        #   `@/magic/components/glimpse/GlimpseFlow` (#3675 fix
-    │   │                        #   round 1: that shared component's shadcn accordion hid
-    │   │                        #   two axes at a time; the sheet's live editor still uses
-    │   │                        #   it, unchanged)
+    │   ├── GlimpseSection.tsx   # CG state binder for the Glimpse (#2427, #5292): draft
+    │   │                        #   reads, updateDraft writes (draft_data.glimpse_tag_ids,
+    │   │                        #   draft_data.glimpse_memory), the copy query. Under
+    │   │                        #   GiftStage's heading it prints the owner's paragraph
+    │   │                        #   (copy `glimpse_intro`) and the three ways in (copy
+    │   │                        #   `glimpse_way_now` / `_none` / `_later`), one always
+    │   │                        #   chosen; "Skip for now" is gone. The way plus the
+    │   │                        #   blackout tick are `glimpse_memory` (remembered,
+    │   │                        #   blacked_out, no_memory, later). With no memory or
+    │   │                        #   later no part is drawn and one line says what the
+    │   │                        #   choice means; a beginning with `no_glimpse_memory`
+    │   │                        #   shows no ways. Answers and the story stay in the
+    │   │                        #   draft when not asked. Prose stays on GiftStage's
+    │   │                        #   register('glimpse_story'). Renders `GlimpseAxes`,
+    │   │                        #   not the shared `GlimpseFlow` (the sheet's editor's)
+    │   ├── glimpseParts.ts      # AXIS_DISPLAY_NAME and draftGlimpseMemory(draft): what
+    │   │                        #   the two components and the stage's side panel share
     │   └── GlimpseAxes.tsx      # CG-only folio-grammar layout for the Glimpse (#3675 fix
-    │                            #   round 1): one `.field` per axis, all visible at once.
-    │                            #   Since #5191 (owner ruling 2026-11-18) an axis is headed
-    │                            #   by its name (an `h3.label`, "Trigger"; copy
-    │                            #   `glimpse_axis_<axis>_chip`) with a muted italic `.lead-in`
-    │                            #   line under it ("The Circumstances Around Your
-    │                            #   Glimpse:"; copy `glimpse_axis_<axis>_lead_in`), and its
-    │                            #   tags are the life page's cards, `ul.stances.grid.pair`
-    │                            #   of `button.stance`: one width, two across (one on a
-    │                            #   phone) because a tag's description is prose that can
-    │                            #   run to several sentences, a round mark on an axis
-    │                            #   that takes one answer and a square one on an axis that
-    │                            #   takes several. Only the latter prints "choose any";
-    │                            #   "choose one" is never printed. What a click does to
-    │                            #   an axis's picks is `nextAxisSelection`
-    │                            #   (`@/magic/components/glimpse/axisSelection.ts`, shared
-    │                            #   with the sheet's editor): a tag that stands alone
-    │                            #   (`stands_alone`, #5193; Fugue in The Reflection)
-    │                            #   replaces the axis's other picks, and picking another
-    │                            #   lets it go. The `.picks` pill
-    │                            #   buttons, the `glimpse_axis_<axis>_prompt` keys and
-    │                            #   `glimpse_choose_one` are retired. One `ChapterOffers`
-    │                            #   `.conditional` sub-block PER SELECTED TAG (not per
-    │                            #   axis: two tags chosen on one multi-select axis each
-    │                            #   get their own heading, matching the demo). No heading
-    │                            #   of its own; GiftStage's `section-h` above the mount
-    │                            #   carries it. Each sub-block passes ChapterOffers a
-    │                            #   headingTag ("optional"); a route-closed distinction is
-    │                            #   absent and named nowhere (#4979).
+    │                            #   round 1, #5191, #5292): one `fieldset.field.part` per
+    │                            #   part, all visible at once. A part is headed by its
+    │                            #   name as a ruled heading in the larger style (copy
+    │                            #   `glimpse_axis_<axis>_chip`); under it the part's
+    │                            #   explanation (`p.explain`, copy
+    │                            #   `glimpse_axis_<axis>_explanation`) or, while that has
+    │                            #   no row, the muted italic `.lead-in` of #5191 (copy
+    │                            #   `glimpse_axis_<axis>_lead_in`). Its answers are the
+    │                            #   life page's cards, `ul.stances.grid.pair.oneof` of
+    │                            #   `button.stance`, two across (one on a phone). Every
+    │                            #   part takes one answer (`AXIS_STEPS`, every `multi`
+    │                            #   false): round marks, a second pick replaces the
+    │                            #   first; `nextAxisSelection` still holds the rule for a
+    │                            #   part set to take several. An answer that gives a
+    │                            #   card prints it on itself (`.bonus`: `.card-name` and
+    │                            #   the card's `effect_line`, from the tag's `offers[0]`);
+    │                            #   choosing the answer takes the card, free, and there
+    │                            #   is no `ChapterOffers` block, heading or price under
+    │                            #   it. Between Trigger and The Reflection sits the
+    │                            #   blackout (`ul.stances.grid.blackout`, a square
+    │                            #   toggle, copy `glimpse_blackout_label` / `_text`);
+    │                            #   ticked, the parts with `lostInBlackout` are not
+    │                            #   drawn. The retired keys `glimpse_offers_heading*`,
+    │                            #   `glimpse_axis_<axis>_prompt` and `glimpse_choose_one`
+    │                            #   are not read.
     └── lineage/             # LineageStage subsections (#3617, #3648, #4395)
         ├── (KinRows.tsx retired, #5102) The named parents' fates (#4870) are a select
         │                         #   under each parent's gender in LineageStage
@@ -428,6 +433,18 @@ changes a pick and `coverOfferId` draws that card dashed (the cover flow);
 Glimpse's rule) with four cards at rest where the others show three, and a grid folded
 under "See N more" keeps its cards; the Identity
 stage's Personality block uses both.
+
+## The Glimpse's cards follow a save (#5292)
+
+A Glimpse answer or memory state gives and takes cards on the server with the draft
+save, not through a card pick. `useUpdateDraft` therefore, when a save carries
+`glimpse_tag_ids` or `glimpse_memory`, writes the answer's `draft_data.distinctions` into
+the held-cards query (`distinctionKeys.draftDistinctions`) and invalidates every chapter's
+offers for the draft; before, the card showed only after a reload. The Gift stage's side
+panel (`glimpseRailRows` in `GiftStage.tsx`) lists one row for each part that gives a card
+(the card's name, "no card", the panel's "not yet chosen", or "not asked") and one for a
+marking card ("held"), from `glimpse_cards` on the Glimpse chapter's offers; while that
+list is refetched the card printed on the answer stands in. No row carries a price.
 
 ## A card click shows at once (#5134)
 

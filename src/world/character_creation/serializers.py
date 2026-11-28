@@ -245,6 +245,7 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "strikes_youth",
             "strikes_adulthood",
             "struck_stages_text",
+            "no_glimpse_memory",
             "art_image",
             "allowed_species_ids",
             "grants_species_languages",

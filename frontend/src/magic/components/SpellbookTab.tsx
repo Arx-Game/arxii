@@ -23,7 +23,7 @@
 
 import { useState } from 'react';
 
-import { useCharacterSheetQuery } from '@/character_sheets/queries';
+import { useCharacterSheetQuery, useStaffRowMutation } from '@/character_sheets/queries';
 import {
   Entries,
   Entry,
@@ -179,8 +179,27 @@ function TechniqueForms({ technique }: { technique: CharacterSheetTechnique }) {
   );
 }
 
+/**
+ * What anyone who can read the Glimpse is told when there is none to read (#5292).
+ * PLACEHOLDER: Apostate rewrite.
+ */
+const GLIMPSE_MEMORY_LINE: Record<CharacterSheetAura['glimpse_memory'], string> = {
+  remembered: '',
+  blacked_out: 'Blacked out during the Glimpse.',
+  no_memory: 'No memory of the Glimpse.',
+};
+
+const GLIMPSE_MEMORY_OPTIONS: { value: CharacterSheetAura['glimpse_memory']; label: string }[] = [
+  { value: 'remembered', label: 'Remembered' },
+  { value: 'blacked_out', label: 'Blacked out' },
+  { value: 'no_memory', label: 'No memory' },
+];
+
 /** Where the owner stands with their Glimpse, in a line. */
-function glimpseStateLine(state: CharacterSheetAura['glimpse_state']): string {
+function glimpseStateLine(aura: CharacterSheetAura): string {
+  // With no memory there is nothing for the owner to write: the memory line says it.
+  if (aura.glimpse_memory === 'no_memory') return '';
+  const state = aura.glimpse_state;
   if (state === 'COMPLETE') return 'Your Glimpse is written.';
   if (state === 'TAGS_ONLY') return 'Your Glimpse has its shape, and no story yet.';
   return 'You have not looked into your own aura yet.';
@@ -194,6 +213,7 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
   const { data: ownAuras } = useCharacterAuras(characterId, isMyCharacter);
   const ownAura = ownAuras?.find((row) => row.character === characterId) ?? null;
   const staffEditing = useStaffEditing();
+  const staffRow = useStaffRowMutation(characterId);
 
   if (isLoading) {
     return <Ledger>Reading their spellbook…</Ledger>;
@@ -389,7 +409,12 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
             )
           )}
           {isMyCharacter && <AuraReflections characterSheetId={characterId} />}
-          {isMyCharacter && <Ledger>{glimpseStateLine(magic.aura.glimpse_state)}</Ledger>}
+          {GLIMPSE_MEMORY_LINE[magic.aura.glimpse_memory] && (
+            <Ledger>{GLIMPSE_MEMORY_LINE[magic.aura.glimpse_memory]}</Ledger>
+          )}
+          {isMyCharacter && glimpseStateLine(magic.aura) && (
+            <Ledger>{glimpseStateLine(magic.aura)}</Ledger>
+          )}
           {magic.aura.glimpse_tags.length > 0 && (
             <div className="refsheet-tags" data-testid="spellbook-glimpse-tags">
               {magic.aura.glimpse_tags.map((tag) => (
@@ -427,16 +452,54 @@ export function SpellbookTab({ characterId, isMyCharacter, slot = 'all' }: Props
               </div>
             </Stack>
           )}
+          {/* Staff edit mode (#5292): the memory a story returns, and the same editor
+              with every part open. */}
+          {staffEditing && (
+            <div className="refsheet-doors" data-testid="staff-glimpse">
+              <label className="flex items-center gap-2 text-sm">
+                <span>Memory of the Glimpse</span>
+                <select
+                  value={magic.aura.glimpse_memory}
+                  disabled={staffRow.isPending}
+                  onChange={(event) =>
+                    staffRow.mutate({
+                      path: 'staff-glimpse-memory',
+                      method: 'PUT',
+                      body: {
+                        memory: event.target.value as CharacterSheetAura['glimpse_memory'],
+                      },
+                    })
+                  }
+                >
+                  {GLIMPSE_MEMORY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="refsheet-quiet-door"
+                onClick={() => setGlimpseDialogOpen(true)}
+                data-testid="staff-glimpse-button"
+              >
+                Edit the Glimpse's answers
+              </button>
+            </div>
+          )}
         </div>
       )}
 
-      {drawsRail && isMyCharacter && magic?.aura && (
+      {drawsRail && (isMyCharacter || staffEditing) && magic?.aura && (
         <GlimpseEditorDialog
           open={glimpseDialogOpen}
           onOpenChange={setGlimpseDialogOpen}
           characterId={characterId}
           aura={magic.aura}
           distinctions={payload?.distinctions ?? []}
+          pathId={payload?.path?.id}
+          staff={staffEditing}
         />
       )}
     </Stack>

@@ -35,6 +35,7 @@ import {
   useCGCombatStyles,
   useCGGifts,
   useDraftOffers,
+  useGlimpseTags,
   useAffinities,
   useResonances,
   useSkills,
@@ -42,13 +43,24 @@ import {
   useUpdateDraft,
 } from '../queries';
 import { useShownPicks } from '../useShownPicks';
-import type { CharacterDraft, ResonanceWeightPick, Tradition, VisibleOffer } from '../types';
+import type {
+  CGExplanations,
+  CharacterDraft,
+  GlimpseCard,
+  GlimpseMemory,
+  GlimpseTagOption,
+  ResonanceWeightPick,
+  Tradition,
+} from '../types';
 import { capitalize, countNoun } from '../utils';
 import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftFacetsField } from './gift/GiftFacetsField';
 import { GiftSelector } from './gift/GiftSelector';
+import { AXIS_STEPS } from '@/magic/components/glimpse/GlimpseFlow';
+import type { GlimpseAxisStep } from '@/magic/components/glimpse/glimpseTypes';
 import { GlimpseSection } from './gift/GlimpseSection';
+import { AXIS_DISPLAY_NAME, draftGlimpseMemory } from './gift/glimpseParts';
 import { MagicTrainingBlock } from './gift/MagicTrainingBlock';
 import { StrengthStep } from './gift/StrengthStep';
 import { StyleStep } from './gift/StyleStep';
@@ -133,33 +145,47 @@ function schoolingPickName(
 }
 
 /**
- * One rail row per draft entry whose distinction came from a Glimpse offer
- * (#3675 fix round 1): a draft entry whose `offer_ids` include an id present
- * in the glimpse chapter's own `useDraftOffers` list. Label carries the
- * rank only for a ranked offer (`max_rank > 1`); value is the amount spent
- * (`cost_per_rank * rank`), shown as a refund when negative, same
- * convention as the tradition schooling row's own refund line.
+ * The Glimpse's rows in the side panel (#5292): one row for each part that gives a
+ * card, then one for the card that marks a blackout or no memory.
+ *
+ * A part's row reads the card its answer gave, "no card" for an answer that gives
+ * none, nothing (the panel's own "not yet chosen") for a part with no answer, and
+ * "not asked" for a part the memory state leaves out. No price: a Glimpse card is
+ * free and the CG points never move because of it.
+ *
+ * The cards are the server's list of what the Glimpse gave the draft (`glimpse_cards`
+ * on the chapter's offers). While that list is being fetched again after a click, the
+ * card printed on the answer itself (the catalogue's) stands in, so the row does not
+ * read "no card" for the length of a request.
  */
 function glimpseRailRows(
-  entries: DraftDistinctionEntry[] | undefined,
-  glimpseOffers: VisibleOffer[] | undefined
-): { label: string; value: string }[] {
-  const offerById = new Map((glimpseOffers ?? []).map((offer) => [offer.offer_id, offer]));
-  const rows: { label: string; value: string }[] = [];
-  for (const entry of entries ?? []) {
-    const offerId = entry.offer_ids.find(
-      (id): id is number => typeof id === 'number' && offerById.has(id)
-    );
-    if (offerId === undefined) continue;
-    const offer = offerById.get(offerId)!;
-    const spent = offer.cost_per_rank * entry.rank;
-    rows.push({
-      label:
-        offer.max_rank > 1
-          ? `${entry.distinction_name} · rank ${entry.rank}`
-          : entry.distinction_name,
-      value: spent < 0 ? `Awards ${-spent}` : String(spent),
-    });
+  memory: GlimpseMemory,
+  answers: GlimpseTagOption[],
+  cards: GlimpseCard[] | undefined,
+  isRefreshing: boolean,
+  copy: CGExplanations | undefined
+): { label: string; value: string | undefined }[] {
+  const asked = (step: GlimpseAxisStep) =>
+    memory === 'remembered' || (memory === 'blacked_out' && !step.lostInBlackout);
+  const rows: { label: string; value: string | undefined }[] = [];
+  for (const step of AXIS_STEPS.filter((candidate) => candidate.givesCard)) {
+    const label =
+      copy?.[`glimpse_axis_${step.axis.toLowerCase()}_chip`] ?? AXIS_DISPLAY_NAME[step.axis];
+    if (!asked(step)) {
+      rows.push({ label, value: copy?.glimpse_rail_not_asked ?? 'not asked' });
+      continue;
+    }
+    const answer = answers.find((tag) => tag.axis === step.axis);
+    if (!answer) {
+      rows.push({ label, value: undefined });
+      continue;
+    }
+    const given = cards?.find((card) => card.axis === step.axis)?.name;
+    const card = given ?? (isRefreshing || !cards ? answer.offers[0]?.name : undefined);
+    rows.push({ label, value: card ?? copy?.glimpse_rail_no_card ?? 'no card' });
+  }
+  for (const marker of (cards ?? []).filter((card) => card.axis === '')) {
+    rows.push({ label: marker.name, value: copy?.glimpse_rail_held ?? 'held' });
   }
   return rows;
 }
@@ -283,10 +309,22 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
     ? [draft.selected_tradition.name, schoolingName].filter(Boolean).join(' · ')
     : undefined;
 
-  // One rail row per Glimpse-offer draft entry (#3675 fix round 1); the
-  // rail carried no Glimpse lines at all before this.
-  const { data: glimpseOffersData } = useDraftOffers(draft.id, 'glimpse');
-  const glimpseRows = glimpseRailRows(draftDistinctions, glimpseOffersData?.offers);
+  // The Glimpse's rows (#5292): the card each part's answer gave, from the chapter's
+  // own list of what the Glimpse gave this draft. The answers are read from the draft,
+  // so a click shows at once.
+  const { data: glimpseOffersData, isFetching: glimpseCardsRefreshing } = useDraftOffers(
+    draft.id,
+    'glimpse'
+  );
+  const { data: glimpseTags } = useGlimpseTags(draft.selected_path?.id);
+  const glimpseAnswerIds = new Set(draft.draft_data.glimpse_tag_ids ?? []);
+  const glimpseRows = glimpseRailRows(
+    draftGlimpseMemory(draft),
+    (glimpseTags ?? []).filter((tag) => glimpseAnswerIds.has(tag.id)),
+    glimpseOffersData?.glimpse_cards,
+    glimpseCardsRefreshing,
+    copy
+  );
 
   const shownPoints = useShownPicks(draft);
   const record = cgRecord(draft, { tradition: traditionValue, points: shownPoints });

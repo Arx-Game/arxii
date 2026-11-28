@@ -13,7 +13,13 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { GiftStage } from '../../components/GiftStage';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
-import type { CGCombatStyleOption, OffersResponse, Resonance } from '../../types';
+import type {
+  CGCombatStyleOption,
+  CharacterDraft,
+  GlimpseTagOption,
+  OffersResponse,
+  Resonance,
+} from '../../types';
 import {
   createMockDraft,
   mockBeginnings,
@@ -27,7 +33,9 @@ import { renderWithCharacterCreationProviders } from '../testUtils';
 
 let traditions = [mockTradition];
 let draftDistinctions: DraftDistinctionEntry[] = [];
-let glimpseOffers: OffersResponse = { offers: [], terms: [] };
+let glimpseOffers: OffersResponse = { offers: [], terms: [], glimpse_cards: [] };
+let glimpseOffersFetching = false;
+let glimpseTags: GlimpseTagOption[] = [];
 let cgExplanations = mockCGExplanations;
 // The Primal and outward cards the Resonance step offers: Flame is the only Primal one.
 const strengthResonances: Resonance[] = [
@@ -56,8 +64,12 @@ vi.mock('../../queries', async (importOriginal) => ({
   useCGGifts: () => ({ data: [], isLoading: false }),
   useCGCombatStyles: () => ({ data: combatStyles }),
   useCGTechniqueOptions: () => ({ data: [], isLoading: false }),
-  useGlimpseTags: () => ({ data: [], isLoading: false }),
-  useDraftOffers: () => ({ data: glimpseOffers, isLoading: false }),
+  useGlimpseTags: () => ({ data: glimpseTags, isLoading: false }),
+  useDraftOffers: () => ({
+    data: glimpseOffers,
+    isLoading: false,
+    isFetching: glimpseOffersFetching,
+  }),
   useSkills: () => ({ data: [] }),
   useStatDefinitions: () => ({ data: [] }),
   usePathSkillSuggestions: () => ({ data: [] }),
@@ -72,7 +84,9 @@ vi.mock('@/hooks/useDistinctions', () => ({
 beforeEach(() => {
   traditions = [mockTradition];
   draftDistinctions = [];
-  glimpseOffers = { offers: [], terms: [] };
+  glimpseOffers = { offers: [], terms: [], glimpse_cards: [] };
+  glimpseOffersFetching = false;
+  glimpseTags = [];
   cgExplanations = mockCGExplanations;
   combatStyles = [];
   updateDraftMutate.mockReset();
@@ -590,132 +604,117 @@ describe('GiftStage (folio)', () => {
     expect(rail.getByText('42 of 100 spent')).toBeInTheDocument();
   });
 
-  it('rail shows one row per Glimpse offer entry, ranked with its rank and spent total (#3675 fix round 1)', () => {
-    glimpseOffers = {
-      offers: [
-        {
-          offer_id: 301,
-          distinction_id: 40,
-          name: 'Magical Scar',
-          distinction_name: 'Magical Scar',
-          distinction_description: '',
-          player_line: 'A scar that answers magic. Deeper answers more.',
-          chapter: 'glimpse',
-          arrives_as: 'choice',
-          opener_label: 'Mark',
-          cost_per_rank: 5,
-          max_rank: 3,
-          is_locked: false,
-          lock_reason: '',
-          opener_key: '',
-          first_look: false,
-          held: false,
-          effect_line: '',
-          taken_per_feature: false,
-          cg_max_rank: 0,
-          group: '',
-          asks_figure_name: false,
-          effects: [],
-        },
-      ],
-      terms: [],
-    };
-    draftDistinctions = [
-      {
-        distinction_id: 40,
-        distinction_name: 'Magical Scar',
-        distinction_slug: 'magical-scar',
-        category_slug: 'magic',
-        rank: 2,
-        cost: 10,
-        notes: '',
-        offer_ids: [301],
-        sources: ['The Glimpse'],
-        arrivals: ['choice'],
-      },
-    ];
-    const draft = createMockDraft({ selected_path: mockPath });
-    const { container } = renderWithCharacterCreationProviders(
-      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
-    );
-    const rail = within(container.querySelector('.record-rail')!);
-    expect(rail.getByText('Magical Scar · rank 2')).toBeInTheDocument();
-    expect(rail.getByText('10')).toBeInTheDocument();
-  });
+  describe('the Glimpse rows of the side panel (#5292)', () => {
+    const answer = (
+      id: number,
+      axis: GlimpseTagOption['axis'],
+      name: string,
+      cardName?: string
+    ): GlimpseTagOption => ({
+      id,
+      axis,
+      name,
+      slug: name.toLowerCase(),
+      description: '',
+      example: '',
+      sort_order: id,
+      stands_alone: false,
+      offers: cardName
+        ? [
+            {
+              offer_id: id * 10,
+              distinction_id: id * 10,
+              name: cardName,
+              player_line: '',
+              cost_per_rank: 20,
+              max_rank: 1,
+              effect_line: '+Anima',
+            },
+          ]
+        : [],
+    });
+    const given = (axis: string, name: string, source: string) => ({
+      offer_id: 1,
+      distinction_id: 1,
+      name,
+      source,
+      axis,
+      effect_line: '',
+    });
+    const noCards = (): OffersResponse => ({ offers: [], terms: [], glimpse_cards: [] });
 
-  it('rail shows an unranked Glimpse offer entry as a refund, with no rank suffix', () => {
-    glimpseOffers = {
-      offers: [
-        {
-          offer_id: 302,
-          distinction_id: 41,
-          name: 'Impoverished',
-          distinction_name: 'Impoverished',
-          distinction_description: '',
-          player_line: 'Whatever you had went with it.',
-          chapter: 'glimpse',
-          arrives_as: 'choice',
-          opener_label: 'Loss',
-          cost_per_rank: -25,
-          max_rank: 1,
-          is_locked: false,
-          lock_reason: '',
-          opener_key: '',
-          first_look: false,
-          held: false,
-          effect_line: '',
-          taken_per_feature: false,
-          cg_max_rank: 0,
-          group: '',
-          asks_figure_name: false,
-          effects: [],
-        },
-      ],
-      terms: [],
-    };
-    draftDistinctions = [
-      {
-        distinction_id: 41,
-        distinction_name: 'Impoverished',
-        distinction_slug: 'impoverished',
-        category_slug: 'magic',
-        rank: 1,
-        cost: -25,
-        notes: '',
-        offer_ids: [302],
-        sources: ['The Glimpse'],
-        arrivals: ['choice'],
-      },
-    ];
-    const draft = createMockDraft({ selected_path: mockPath });
-    const { container } = renderWithCharacterCreationProviders(
-      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
-    );
-    const rail = within(container.querySelector('.record-rail')!);
-    expect(rail.getByText('Impoverished')).toBeInTheDocument();
-    expect(rail.getByText('Awards 25')).toBeInTheDocument();
-  });
+    function railRows(draftData: CharacterDraft['draft_data']) {
+      const draft = createMockDraft({ selected_path: mockPath, draft_data: draftData });
+      const { container } = renderWithCharacterCreationProviders(
+        <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+      );
+      const rows: Record<string, string> = {};
+      for (const row of container.querySelectorAll('.record-rail .row')) {
+        rows[row.querySelector('dt')!.textContent!] = row.querySelector('dd')!.textContent!;
+      }
+      return rows;
+    }
 
-  it('rail shows no Glimpse rows when no draft entry carries a Glimpse offer id', () => {
-    draftDistinctions = [
-      {
-        distinction_id: 77,
-        distinction_name: 'Tradition Training',
-        distinction_slug: 'tradition-training',
-        category_slug: 'magic',
-        rank: 1,
-        cost: 1,
-        notes: '',
-        offer_ids: [999],
-        sources: ['Trained for years'],
-        arrivals: ['choice'],
-      },
-    ];
-    const draft = createMockDraft({ selected_path: mockPath });
-    const { container } = renderWithCharacterCreationProviders(
-      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
-    );
-    const rail = within(container.querySelector('.record-rail')!);
-    expect(rail.queryByText('Tradition Training')).not.toBeInTheDocument();
+    beforeEach(() => {
+      glimpseTags = [
+        answer(1, 'TRIGGER', 'Crisis', 'Crisisborn'),
+        answer(2, 'REFLECTION', 'Radiant', 'Glimmering'),
+        answer(3, 'TONE', 'Grief'),
+        answer(4, 'WITNESS', 'Public'),
+      ];
+    });
+
+    it('reads the card each answered part gave, with no price, and names the parts that gave none', () => {
+      glimpseOffers = { ...noCards(), glimpse_cards: [given('TRIGGER', 'Crisisborn', 'Crisis')] };
+      const rows = railRows({ glimpse_tag_ids: [1, 3, 4] });
+
+      expect(rows['Trigger']).toBe('Crisisborn');
+      expect(rows['The Reflection']).toBe('not yet chosen');
+      expect(rows['Tone']).toBe('no card');
+      expect(rows['Consequence']).toBe('not yet chosen');
+      // A part that gives no card has no row.
+      expect(rows).not.toHaveProperty('Witness & Secrecy');
+    });
+
+    it('after a blackout the two parts it took read "not asked" and the marking card is held', () => {
+      glimpseOffers = {
+        ...noCards(),
+        glimpse_cards: [
+          given('TRIGGER', 'Crisisborn', 'Crisis'),
+          given('', 'Glimpse Mystery', 'Blacked out'),
+        ],
+      };
+      const rows = railRows({ glimpse_tag_ids: [1, 2], glimpse_memory: 'blacked_out' });
+
+      expect(rows['Trigger']).toBe('Crisisborn');
+      expect(rows['The Reflection']).toBe('not asked');
+      expect(rows['Tone']).toBe('not asked');
+      expect(rows['Glimpse Mystery']).toBe('held');
+    });
+
+    it('with no memory no part is asked and the marking card is held', () => {
+      glimpseOffers = {
+        ...noCards(),
+        glimpse_cards: [given('', 'Glimpse Mystery', 'No memory')],
+      };
+      const rows = railRows({ glimpse_tag_ids: [1], glimpse_memory: 'no_memory' });
+
+      expect(rows['Trigger']).toBe('not asked');
+      expect(rows['Glimpse Mystery']).toBe('held');
+    });
+
+    it('with the Glimpse left for later no part is asked and nothing is held', () => {
+      const rows = railRows({ glimpse_tag_ids: [1], glimpse_memory: 'later' });
+
+      expect(rows['Consequence']).toBe('not asked');
+      expect(rows).not.toHaveProperty('Glimpse Mystery');
+    });
+
+    it('while the cards are fetched again, the card printed on the answer stands in', () => {
+      glimpseOffersFetching = true;
+      const rows = railRows({ glimpse_tag_ids: [2] });
+
+      expect(rows['The Reflection']).toBe('Glimmering');
+    });
   });
 });

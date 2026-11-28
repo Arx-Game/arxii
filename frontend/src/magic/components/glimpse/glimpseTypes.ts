@@ -12,7 +12,11 @@
  */
 export type GlimpseMemory = 'remembered' | 'blacked_out' | 'no_memory' | 'later';
 
-/** A `DistinctionOffer` embedded on a glimpse tag row (#3675). */
+/**
+ * The card an answer gives, embedded on its glimpse tag row (#3675, #5292). It comes
+ * free with the answer, so the price fields say what the card is and are never
+ * charged; `effect_line` is its mechanics line ("+Anima"), blank for a card with none.
+ */
 export interface TagOffer {
   offer_id: number;
   distinction_id: number;
@@ -20,6 +24,24 @@ export interface TagOffer {
   player_line: string;
   cost_per_rank: number;
   max_rank: number;
+  effect_line: string;
+}
+
+/**
+ * One part of the Glimpse as both mounts ask it: its axis and how it behaves.
+ * `givesCard` and `lostInBlackout` copy `GLIMPSE_AXIS_CONFIG` in
+ * `world.magic.constants`, the authoritative source this must not drift from.
+ */
+export interface GlimpseAxisStep {
+  axis: GlimpseTagOption['axis'];
+  /** The question the sheet's editor heads the part with. */
+  label: string;
+  /** Takes several answers. No part does since #5292; the path stays as the way back. */
+  multi: boolean;
+  /** An answer of this part may carry a card. */
+  givesCard: boolean;
+  /** A character who blacked out has no answer to this part. */
+  lostInBlackout: boolean;
 }
 
 /**
@@ -58,10 +80,13 @@ export interface GlimpseFlowProps {
   /** Replace the selection for one axis (already arity-enforced by the UI). */
   onChangeAxis: (axis: GlimpseTagOption['axis'], tagIds: number[]) => void;
   onChangeProse: (text: string) => void;
-  /** "Skip for now" — clears nothing, just collapses the flow. */
-  onSkip?: () => void;
-  /** Labels the deferral affordance; CG shows both buttons, sheet omits skip. */
-  showDeferralControls: boolean;
+  /**
+   * Parts whose saved answer cannot be changed here (#5292): an answer written in
+   * play is final for the player. A closed part shows its answers and takes no click.
+   */
+  closedAxes?: ReadonlySet<GlimpseTagOption['axis']>;
+  /** Parts not asked at all (#5292): the two a blackout took. */
+  hiddenAxes?: ReadonlySet<GlimpseTagOption['axis']>;
   /**
    * Staff-authorable hint printed under the story textarea (#3675),
    * e.g. "The detail behind any of the picks above goes here; the picks
