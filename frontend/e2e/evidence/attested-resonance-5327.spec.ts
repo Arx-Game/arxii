@@ -13,33 +13,30 @@ import {
  * Review evidence for #5327, against a live server (no mocked /api/**), run by
  * `just shot --spec e2e/evidence/attested-resonance-5327.spec.ts` on the `rt_5327` database.
  *
- * Needs the rows `integration_tests.live_seeds.seed_attested_resonance_spec` writes for
- * e2e_test_account (the coordinator writes its result to the JSON file named by
- * ATTESTED_RESONANCE_SEED, default /tmp/attested-resonance-seed.json): the three affinities
- * with a verb, a gain fatigue and a skill each; the six resonances with their help text; an
- * award table, three strengths and the demo's seven-row weekly table; the bonus check; a live
- * scene that stores its poses, in The Lantern, with Daven (e2e_test_account), Hale, Ilsa (a
- * scene co-owner, not its GM), Brannoc and Marek (the scene's GM), each played by their own
- * account; two acts of Daven's that wait to be marked (Intimidated Hale, which suggests
- * Cruelty, and Searched the cellar, which suggests nothing); a pose of Daven's that already
- * carries a Mercy mark; a pose of Brannoc's that names no resonance; a mission whose first
- * option pays Mercy at once; and a staff account for admin.
+ * Needs the rows `integration_tests.live_seeds.seed_attested_resonance_spec` writes (the
+ * coordinator writes its result to the JSON file named by ATTESTED_RESONANCE_SEED, default
+ * /tmp/attested-resonance-seed.json), and the seed run again before every run of this spec:
+ * marking an act, undoing a reward and tagging a pose change what the next run starts from, and
+ * the seed is what clears them.
  *
- * One named PNG per screen of the approved demo (.demos/issue-5327-attested-resonance.html),
- * each written to the test's own output folder, which `just shot` lists when the run ends.
- * Run it once per seeded database: marking Intimidated Hale uses that act up, and the seed
- * (which wipes and writes Daven's acts, grants and the scene's poses again) is what resets it.
- * Nothing here submits a journal entry or a tag; the GM undoes one reward, and the witness
- * leaves one pick waiting for the poser.
+ * The main scene (The Lantern) holds Daven (e2e_test_account), Hale, Ilsa (a scene co-owner, not
+ * its GM), Brannoc and Marek (the scene's GM). Each frame that needs another state has a cast of
+ * its own with the same names, so it is taken from an untouched state: a Hale with 3 of
+ * fatigue room (a shrunk gain), a Hale with none (a refused mark), a Daven who already made four
+ * marks this week (the fifth pays 40 percent), Tamsin (a Primal mark that tires her), a Wren in
+ * a road scene that stores nothing, and a Wren whose week of marks is spent.
  *
- * Left out: Screen 9 (telnet, not a screen of the web app), and the frames that need a roll
- * to land on a chosen result (picking the mission option and the private line it prints), a
- * worn target (Screen 4's shrunk and refused lines) or a fifth mark in a week.
+ * One named PNG per frame of the approved demo (.demos/issue-5327-attested-resonance.html), in
+ * the demo's order, each written to the test's own output folder, which `just shot` lists when
+ * the run ends. The tests are independent: one failing does not hide the others.
+ *
+ * Left out: Screen 9 (telnet, not a screen of the web app).
  */
 
 const ACCOUNT = 'e2e_test_account';
 const PASSWORD = 'TestPass123!';
 const VIEWPORT = { width: 1440, height: 900 };
+const SAY_IT_AGAIN = 'leans over Hale. "Say it again."';
 const POSE_TEXT =
   'leans over Hale until the lantern light shakes in his eyes. "Say it again. Slowly this ' +
   'time." He is smiling.';
@@ -61,16 +58,32 @@ interface Seed {
   cruelty_id: number;
   cruelty_description: string;
   mercy_description: string;
+  fury_description: string;
   weekly_row_count: number;
   kindling_config_id: number;
   gain_source_stat_id: number;
   player_password: string;
+  hale_username: string;
   witness_username: string;
   bell_poser_username: string;
   gm_username: string;
   gm_password: string;
   staff_username: string;
   staff_password: string;
+  shrunk_poser_username: string;
+  shrunk_target_username: string;
+  shrunk_act_id: number;
+  refused_poser_username: string;
+  refused_act_id: number;
+  week_poser_username: string;
+  week_act_id: number;
+  tamsin_username: string;
+  tamsin_act_id: number;
+  wren_username: string;
+  wren_tended_act_id: number;
+  wren_fine_act_id: number;
+  wren_refused_username: string;
+  wren_refused_act_id: number;
 }
 
 function readSeed(): Seed {
@@ -115,71 +128,73 @@ function poseWith(page: Page, text: string): Locator {
   return page.getByTestId('pose-unit').filter({ hasText: text });
 }
 
+/** Wait for every finite animation and transition under `target` to end, never a fixed sleep. */
+async function settled(target: Locator) {
+  await target.evaluate((element) =>
+    Promise.all(
+      element
+        .getAnimations({ subtree: true })
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map((animation) => animation.finished)
+    )
+  );
+}
+
+/** The play page, entered as the account's only character (`name`), with the composer ready. */
+async function enterGame(page: Page, name: string) {
+  await page.goto('/game');
+  await page
+    .locator(
+      `button[title="Connect as ${name}"], button[title="Switch to ${name}"], ` +
+        `button[title="${name}"], button:has-text("${name}")`
+    )
+    .first()
+    .click({ timeout: 30000 });
+  await expect(page.getByTestId('reach-row')).toBeVisible({ timeout: 60000 });
+}
+
+/** Point a pose at an act with a resonance and send it from the composer. */
+async function markAndSend(
+  page: Page,
+  options: { text: string; resonance: string; actId: number }
+) {
+  await page.getByRole('textbox').fill(options.text);
+  const reach = page.getByTestId('reach-row');
+  await reach.getByTestId('reach-toggle').click();
+  await reach.getByTestId('reach-select').selectOption({ label: options.resonance });
+  await reach.getByTestId(`reach-act-${options.actId}`).check();
+  await page.getByRole('button', { name: 'Send', exact: true }).click();
+}
+
+/** A toast (a line the player reads once) holding `text`. */
+function toastWith(page: Page, text: string | RegExp): Locator {
+  return page.locator('[data-sonner-toast]').filter({ hasText: text });
+}
+
+/** A private line in the play feed (a stored line is delivered when the player connects). */
+function feedLine(page: Page, text: string | RegExp): Locator {
+  return page.getByText(text).first();
+}
+
 /** The scene page, once its feed has loaded the pose Brannoc wrote. */
 async function openScene(page: Page, seed: Seed) {
   await page.goto(`/scenes/${seed.scene_id}`);
   await expect(poseWith(page, 'cracked bell')).toBeVisible({ timeout: 45000 });
 }
 
-test.describe.configure({ mode: 'serial' });
 test.use({ viewport: VIEWPORT });
 
 test.describe('A character gains resonance from the acts she took (#5327)', () => {
-  test('screen 6: the journal form carries the row, and an act must be chosen', async ({
-    browser,
-  }, testInfo) => {
-    test.setTimeout(120_000);
-    const seed = readSeed();
-    const page = await signedInPage(browser, ACCOUNT, PASSWORD);
-    await page.goto('/journals');
-    await page.getByRole('button', { name: 'Write', exact: true }).click();
-    const desk = page.locator('section[aria-label="Write in your journal"]');
-    await expect(desk).toBeVisible({ timeout: 30000 });
-    await desk.getByLabel('Title', { exact: true }).fill('The stranger at the tollgate');
-    await desk
-      .getByLabel('Entry', { exact: true })
-      .fill('I should have stopped sooner. I did not know his name, only that nobody else would.');
-
-    await desk.getByTestId('reach-toggle').click();
-    await desk.getByTestId('reach-select').selectOption({ label: 'Mercy' });
-    await expect(desk.getByTestId('reach-help')).toHaveText(seed.mercy_description);
-    const acts = desk.getByTestId('reach-acts');
-    await expect(acts.getByText('Pointing at (required)', { exact: true })).toBeVisible();
-    await expect(acts).toContainText('Intimidated Hale');
-    await expect(acts).toContainText('Searched the cellar');
-    await expect(desk.getByTestId(`reach-act-${seed.act_intimidated_id}`)).toBeVisible();
-    await expect(desk.getByTestId(`reach-act-${seed.act_cellar_id}`)).toBeVisible();
-    // A journal entry has no "Nothing" choice: no one can endorse a journal entry.
-    await expect(desk.getByTestId('reach-act-none')).toHaveCount(0);
-    // With no act chosen the entry cannot be posted.
-    await expect(desk.getByRole('button', { name: 'Post entry' })).toBeDisabled();
-    await desk.scrollIntoViewIfNeeded();
-    await shot(testInfo, '06-journal-form-act-required.png', desk);
-
-    await page.context().close();
-  });
-
-  test('screens 1 to 3: the mission beat, the composer with Reaching for open, and the result', async ({
+  test('01 screen 1: the mission beat says what an option pays, and the line she reads after she picks it', async ({
     browser,
   }, testInfo) => {
     test.setTimeout(240_000);
     const seed = readSeed();
     const page = await signedInPage(browser, ACCOUNT, PASSWORD);
-    await page.goto('/game');
-    await page
-      .locator(
-        `button[title="Connect as ${seed.daven_name}"], ` +
-          `button[title="Switch to ${seed.daven_name}"], ` +
-          `button[title="${seed.daven_name}"], button:has-text("${seed.daven_name}")`
-      )
-      .first()
-      .click({ timeout: 30000 });
-    // The scene's feed is loaded once Brannoc's pose is in it.
-    await expect(poseWith(page, 'cracked bell')).toBeVisible({ timeout: 60000 });
+    await enterGame(page, seed.daven_name);
 
-    // Screen 1: the Stories section opens the beat. The option that names Mercy says what it
-    // pays before she picks, with the mission theme's player text as the reason, and shows no
-    // amount; the other option says nothing of the kind.
+    // Before she picks: the option that names Mercy says what it pays, with the mission theme's
+    // player text as the reason, and shows no amount; the other option says nothing of the kind.
     await page.getByTestId('actions-fold').getByRole('button', { name: 'Stories' }).click();
     const row = page.getByTestId(`story-row-${seed.mission_instance_id}`);
     await row.getByRole('button', { name: seed.mission_name }).click();
@@ -195,13 +210,39 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
       'Pays you Mercy at once: This option is about sparing them.'
     );
     await row.scrollIntoViewIfNeeded();
-    await shot(testInfo, '01-mission-beat-option-pays-mercy.png', row);
+    await shot(testInfo, '01a-mission-beat-option-pays-mercy.png', row);
+
+    // She picks it. Her staff roll modifier is +100, so the roll lands on the best result its
+    // chart has, and the authored choice pays.
+    await beat
+      .getByTestId('beat-option')
+      .first()
+      .getByRole('button', { name: /Let the smugglers go/ })
+      .click();
+    await expect(row.getByTestId('beat-result')).toBeVisible({ timeout: 30000 });
+    const earned = feedLine(page, /You earned \d+ Mercy\./);
+    await expect(earned).toBeVisible({ timeout: 30000 });
+    await expect(earned).toContainText('Your Heroism check added 30 percent.');
+    await earned.scrollIntoViewIfNeeded();
+    await shot(testInfo, '01b-earned-line-after-the-pick.png', page);
+
+    await page.context().close();
+  });
+
+  test('02 screens 2 and 3: the composer with Reaching for open, the act chosen, and the result', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, ACCOUNT, PASSWORD);
+    await enterGame(page, seed.daven_name);
+    // The scene's feed is loaded once Brannoc's pose is in it.
+    await expect(poseWith(page, 'cracked bell')).toBeVisible({ timeout: 60000 });
 
     // Screen 2: the composer's Reaching for row, with Cruelty chosen. Its description is the
     // help text; "Pointing at" lists both acts, the one with the suggestion and the reason
     // beside it, and the choice that sends the pose to another player to endorse.
-    const editor = page.getByRole('textbox');
-    await editor.fill(POSE_TEXT);
+    await page.getByRole('textbox').fill(POSE_TEXT);
     const reach = page.getByTestId('reach-row');
     await reach.getByTestId('reach-toggle').click();
     await reach.getByTestId('reach-select').selectOption({ label: 'Cruelty' });
@@ -215,12 +256,15 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     await expect(reach.getByTestId('reach-act-none')).toBeVisible();
     await expect(acts).toContainText('Nothing: another player has to endorse it');
     await reach.scrollIntoViewIfNeeded();
-    await shot(testInfo, '02-composer-reaching-for-open.png', page);
+    await shot(testInfo, '02a-composer-reaching-for-open.png', page);
 
-    // Screen 3: point at Intimidated Hale and post. The room reads the chip, which names the
-    // resonance and the act; Daven alone reads his private line, with the verb, the amount and
-    // the check that grew it.
+    // She chooses Intimidated Hale: the demo draws the act chosen.
     await reach.getByTestId(`reach-act-${seed.act_intimidated_id}`).check();
+    await expect(reach.getByTestId(`reach-act-${seed.act_intimidated_id}`)).toBeChecked();
+    await shot(testInfo, '02b-composer-act-chosen.png', page);
+
+    // Screen 3: post. The room reads the chip, which names the resonance and the act; Daven
+    // alone reads his private line, with the verb, the amount and the check that grew it.
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     const posed = poseWith(page, 'lantern light');
     await expect(posed).toBeVisible({ timeout: 30000 });
@@ -241,10 +285,36 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     await page.context().close();
   });
 
-  test('screens 3 and 7: Ilsa reads the same pose with a chip and no amount, and picks a resonance on Brannoc’s pose', async ({
+  test('02 screen 2: in a scene that stores nothing, the row warns that a mark pays nothing', async ({
     browser,
   }, testInfo) => {
     test.setTimeout(180_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.wren_username, seed.player_password);
+    await enterGame(page, 'Wren');
+    await page
+      .getByRole('textbox')
+      .fill("kneels in the road and presses a cloth to the stranger's side.");
+    const reach = page.getByTestId('reach-row');
+    await reach.getByTestId('reach-toggle').click();
+    await reach.getByTestId('reach-select').selectOption({ label: 'Mercy' });
+    await expect(reach.getByTestId('reach-help')).toHaveText(seed.mercy_description);
+    const warning = reach.getByTestId('reach-ephemeral');
+    await expect(warning).toContainText(
+      'This scene is ephemeral and stores nothing, so a mark here pays nothing.'
+    );
+    // No act list: it gives way to the warning.
+    await expect(reach.getByTestId('reach-acts')).toHaveCount(0);
+    await reach.scrollIntoViewIfNeeded();
+    await shot(testInfo, '02c-ephemeral-scene-warning.png', page);
+
+    await page.context().close();
+  });
+
+  test('03 screen 3: Ilsa reads the same pose with a chip and no amount', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(120_000);
     const seed = readSeed();
     const page = await signedInPage(browser, seed.witness_username, seed.player_password);
     await openScene(page, seed);
@@ -253,30 +323,270 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     // co-owner and not its GM, so she is offered no Undo on the marked poses.
     const posed = poseWith(page, 'lantern light');
     await expect(posed).toBeVisible({ timeout: 30000 });
-    const chips = posed.getByTestId('act-mark-chips');
-    await expect(chips).toHaveText('Cruelty · Intimidated Hale');
+    await expect(posed.getByTestId('act-mark-chips')).toHaveText('Cruelty · Intimidated Hale');
     await expect(posed).not.toContainText(/grows by|percent|\b9\b/);
     await expect(page.getByRole('button', { name: 'Undo reward' })).toHaveCount(0);
     await posed.scrollIntoViewIfNeeded();
     await shot(testInfo, '03d-ilsa-reads-the-chip-no-amount.png', posed);
 
-    // Screen 7: the Endorse menu on a pose that named no resonance lists every resonance under
-    // its affinity, with nothing about Brannoc's aura.
+    await page.context().close();
+  });
+
+  test('04 screen 4: Hale reads that he is wearier', async ({ browser }, testInfo) => {
+    test.setTimeout(180_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.hale_username, seed.player_password);
+    await enterGame(page, 'Hale');
+    const posed = poseWith(page, 'lantern light');
+    await expect(posed.getByTestId('act-mark-chips')).toContainText('Cruelty · Intimidated Hale', {
+      timeout: 60000,
+    });
+    const line = feedLine(page, 'Daven marked Cruelty on what they did to you. You are wearier.');
+    await expect(line).toBeVisible({ timeout: 30000 });
+    await line.scrollIntoViewIfNeeded();
+    await shot(testInfo, '04a-hale-reads-wearier.png', page);
+
+    await page.context().close();
+  });
+
+  test('04 screen 4: a target with little left pays part, and both are told why', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const seed = readSeed();
+    const daven = await signedInPage(browser, seed.shrunk_poser_username, seed.player_password);
+    await enterGame(daven, seed.daven_name);
+    await markAndSend(daven, {
+      text: SAY_IT_AGAIN,
+      resonance: 'Cruelty',
+      actId: seed.shrunk_act_id,
+    });
+    const mark = feedLine(
+      daven,
+      /You gloat\. Your Cruelty grows by \d+ instead of \d+, because Hale had little left to give\./
+    );
+    await expect(mark).toBeVisible({ timeout: 30000 });
+    await expect(mark).toContainText('Marks against Hale stay small until they have recovered.');
+    await expect(poseWith(daven, 'Say it again').getByTestId('act-mark-chips')).toContainText(
+      'Cruelty · Intimidated Hale',
+      { timeout: 30000 }
+    );
+    await mark.scrollIntoViewIfNeeded();
+    await shot(testInfo, '04c-daven-reads-part-paid.png', daven);
+    await daven.context().close();
+
+    // What Hale reads, with the same pose on his page.
+    const hale = await signedInPage(browser, seed.shrunk_target_username, seed.player_password);
+    await enterGame(hale, 'Hale');
+    await expect(poseWith(hale, 'Say it again').getByTestId('act-mark-chips')).toContainText(
+      'Cruelty · Intimidated Hale',
+      { timeout: 60000 }
+    );
+    const line = feedLine(
+      hale,
+      'Daven marked Cruelty on what they did to you. You are wearier. You had little left to give, so it took only part.'
+    );
+    await expect(line).toBeVisible({ timeout: 30000 });
+    await line.scrollIntoViewIfNeeded();
+    await shot(testInfo, '04b-hale-reads-took-only-part.png', hale);
+    await hale.context().close();
+  });
+
+  test('04 screen 4: a target with nothing left refuses the mark, and the act stays on the list', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.refused_poser_username, seed.player_password);
+    await enterGame(page, seed.daven_name);
+    await markAndSend(page, {
+      text: SAY_IT_AGAIN,
+      resonance: 'Cruelty',
+      actId: seed.refused_act_id,
+    });
+    // The refusal is shown as an error, in the words the demo draws.
+    const refusal = toastWith(page, 'Hale is too worn to pay for this');
+    await expect(refusal).toContainText(
+      'Hale is too worn to pay for this, so your Cruelty does not grow. The act stays on your list. Mark it again once Hale has recovered, or mark another act.',
+      { timeout: 30000 }
+    );
+    await settled(refusal);
+    // The pose still posted, with no chip, and nothing was paid.
+    const posed = poseWith(page, 'Say it again');
+    await expect(posed).toBeVisible({ timeout: 30000 });
+    await expect(posed.getByTestId('act-mark-chips')).toHaveCount(0);
+    await shot(testInfo, '04d-daven-reads-refusal.png', page);
+
+    // The act is still on his list.
+    await expect(refusal).toHaveCount(0, { timeout: 30000 });
+    const reach = page.getByTestId('reach-row');
+    await reach.getByTestId('reach-toggle').click();
+    await reach.getByTestId('reach-select').selectOption({ label: 'Cruelty' });
+    await expect(reach.getByTestId(`reach-act-${seed.refused_act_id}`)).toBeVisible();
+    await expect(reach.getByTestId('reach-acts')).toContainText('Intimidated Hale');
+    await reach.scrollIntoViewIfNeeded();
+    await shot(testInfo, '04e-act-still-on-the-list.png', page);
+
+    await page.context().close();
+  });
+
+  test('04 screen 4: a later mark in the week pays the table’s reduced percent', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.week_poser_username, seed.player_password);
+    await enterGame(page, seed.daven_name);
+    await markAndSend(page, {
+      text: SAY_IT_AGAIN,
+      resonance: 'Cruelty',
+      actId: seed.week_act_id,
+    });
+    const mark = feedLine(page, /You gloat\. Your Cruelty grows by \d+\. This is your fifth mark/);
+    await expect(mark).toBeVisible({ timeout: 30000 });
+    await expect(mark).toContainText(
+      'This is your fifth mark this week, so it paid 40 percent. Marks pay in full again next week.'
+    );
+    await mark.scrollIntoViewIfNeeded();
+    await shot(testInfo, '04f-daven-reads-fifth-mark-reduced.png', page);
+
+    await page.context().close();
+  });
+
+  test('05 screen 5: a Primal mark, where she herself is wearier', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.tamsin_username, seed.player_password);
+    await enterGame(page, 'Tamsin');
+    const text =
+      'drives her shoulder into the raider and swings, with three of them closing the gap behind her.';
+    await page.getByRole('textbox').fill(text);
+    const reach = page.getByTestId('reach-row');
+    await reach.getByTestId('reach-toggle').click();
+    await reach.getByTestId('reach-select').selectOption({ label: 'Fury' });
+    await expect(reach.getByTestId('reach-help')).toHaveText(seed.fury_description);
+    const acts = reach.getByTestId('reach-acts');
+    await expect(acts).toContainText('Struck the raider');
+    await expect(acts).toContainText('Suggested: Fury. You are surrounded.');
+    await expect(reach.getByTestId('reach-act-none')).toBeVisible();
+    await reach.scrollIntoViewIfNeeded();
+    await shot(testInfo, '05a-composer-fury-struck-the-raider.png', page);
+
+    await reach.getByTestId(`reach-act-${seed.tamsin_act_id}`).check();
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    const posed = poseWith(page, 'closing the gap behind her');
+    await expect(posed.getByTestId('act-mark-chips')).toContainText('Fury · Struck the raider', {
+      timeout: 30000,
+    });
+    const line = feedLine(page, /You blaze\. Your Fury grows by \d+, and you are wearier\./);
+    await expect(line).toBeVisible({ timeout: 30000 });
+    await expect(line).toContainText('Your Reflection check added 30 percent.');
+    await line.scrollIntoViewIfNeeded();
+    await shot(testInfo, '05b-tamsin-reads-blaze-wearier.png', page);
+
+    await page.context().close();
+  });
+
+  test('06 screen 6: Wren’s journal form, and the line she reads after she posts', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.wren_username, seed.player_password);
+    await page.goto('/journals');
+    await page.getByRole('button', { name: 'Write', exact: true }).click();
+    const desk = page.locator('section[aria-label="Write in your journal"]');
+    await expect(desk).toBeVisible({ timeout: 30000 });
+    await desk.getByLabel('Title', { exact: true }).fill('The stranger at the tollgate');
+    await desk
+      .getByLabel('Entry', { exact: true })
+      .fill(
+        'I should have stopped sooner. I did not know his name, only that he was bleeding on the road and nobody else would kneel.'
+      );
+    await desk.getByTestId('reach-toggle').click();
+    await desk.getByTestId('reach-select').selectOption({ label: 'Mercy' });
+    await expect(desk.getByTestId('reach-help')).toHaveText(seed.mercy_description);
+    const acts = desk.getByTestId('reach-acts');
+    await expect(acts.getByText('Pointing at (required)', { exact: true })).toBeVisible();
+    await expect(acts).toContainText('Tended the stranger');
+    await expect(acts).toContainText('Suggested: Mercy. Someone here is in trouble.');
+    await expect(acts).toContainText('Paid the tollgate fine');
+    await expect(acts).toContainText('No resonance suggested.');
+    // A journal entry has no "Nothing" choice: no one can endorse a journal entry.
+    await expect(desk.getByTestId('reach-act-none')).toHaveCount(0);
+    // With no act chosen the entry cannot be posted.
+    await expect(desk.getByRole('button', { name: 'Post entry' })).toBeDisabled();
+    await desk.scrollIntoViewIfNeeded();
+    await shot(testInfo, '06a-journal-form-act-required.png', desk);
+
+    // She chooses the act and posts: the line she reads.
+    await desk.getByTestId(`reach-act-${seed.wren_tended_act_id}`).check();
+    await desk.getByRole('button', { name: 'Post entry' }).click();
+    const line = toastWith(page, /You inspire\. Your Mercy grows by \d+/);
+    await expect(line).toBeVisible({ timeout: 30000 });
+    await expect(line).toContainText(', and you are wearier. Your Heroism check added 30 percent.');
+    await settled(line);
+    await shot(testInfo, '06b-wren-reads-inspire-wearier.png', page);
+
+    await page.context().close();
+  });
+
+  test('06 screen 6: a refused journal mark leaves the entry posted and shows the refusal as an error', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.wren_refused_username, seed.player_password);
+    await page.goto('/journals');
+    await page.getByRole('button', { name: 'Write', exact: true }).click();
+    const desk = page.locator('section[aria-label="Write in your journal"]');
+    await expect(desk).toBeVisible({ timeout: 30000 });
+    await desk.getByLabel('Title', { exact: true }).fill('The stranger at the tollgate');
+    await desk
+      .getByLabel('Entry', { exact: true })
+      .fill('I should have stopped sooner. I did not know his name, only that nobody else would.');
+    await desk.getByTestId('reach-toggle').click();
+    await desk.getByTestId('reach-select').selectOption({ label: 'Mercy' });
+    await desk.getByTestId(`reach-act-${seed.wren_refused_act_id}`).check();
+    await desk.getByRole('button', { name: 'Post entry' }).click();
+    const refusal = toastWith(page, 'have already paid all they will');
+    await expect(refusal).toContainText(
+      'Your marks this week have already paid all they will, so this one would pay nothing. The act stays on your list: mark it next week, when marks pay in full again.',
+      { timeout: 30000 }
+    );
+    // The entry itself was recorded.
+    await expect(toastWith(page, 'Journal entry recorded.')).toBeVisible();
+    await settled(refusal);
+    await shot(testInfo, '06c-journal-mark-refused-entry-posted.png', page);
+
+    await page.context().close();
+  });
+
+  test('07 screen 7: Ilsa picks a resonance on Brannoc’s pose, and changes it', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(180_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.witness_username, seed.player_password);
+    await openScene(page, seed);
+
+    // The Endorse menu on a pose that named no resonance lists every resonance under its
+    // affinity, with nothing about Brannoc's aura.
     const bell = poseWith(page, 'cracked bell');
     const control = bell.getByTestId('endorsement-control-pose');
     await control.getByRole('button', { name: 'Endorse', exact: true }).click();
     const menu = page.getByRole('menu');
     await expect(menu).toBeVisible();
-    for (const affinity of ['Primal', 'Celestial', 'Abyssal']) {
+    for (const affinity of ['Abyssal', 'Celestial', 'Primal']) {
       await expect(menu.getByText(affinity, { exact: true })).toBeVisible();
     }
-    for (const resonance of ['Fury', 'Grief', 'Mercy', 'Valor', 'Cruelty', 'Dread']) {
+    for (const resonance of ['Cruelty', 'Dread', 'Mercy', 'Valor', 'Fury', 'Grief']) {
       await expect(menu.getByRole('menuitem', { name: resonance, exact: true })).toBeVisible();
     }
     // The menu fades in; wait for that to finish so the feed does not show through it.
-    await menu.evaluate((element) =>
-      Promise.all(element.getAnimations({ subtree: true }).map((animation) => animation.finished))
-    );
+    await settled(menu);
     await expect(menu).toHaveCSS('opacity', '1');
     await shot(testInfo, '07a-endorse-menu-every-resonance.png', page);
 
@@ -298,7 +608,7 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     await page.context().close();
   });
 
-  test('screen 7: Brannoc reads the proposal with Accept and Decline', async ({
+  test('07 screen 7: Brannoc reads the proposal with Accept and Decline', async ({
     browser,
   }, testInfo) => {
     test.setTimeout(120_000);
@@ -320,10 +630,10 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     await page.context().close();
   });
 
-  test('screen 8: the scene’s GM undoes a reward and opens the tag dialog with its resonance picker', async ({
+  test('08 screen 8: the scene’s GM undoes a reward, tags a pose with a resonance, and the tag dialog', async ({
     browser,
   }, testInfo) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     const seed = readSeed();
     const page = await signedInPage(browser, seed.gm_username, seed.gm_password);
     await openScene(page, seed);
@@ -355,20 +665,52 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     const picker = dialog.getByTestId('moment-resonance-select');
     await expect(picker).toBeVisible({ timeout: 30000 });
     await picker.click();
-    for (const resonance of ['Fury', 'Grief', 'Mercy', 'Valor', 'Cruelty', 'Dread']) {
+    for (const resonance of ['Cruelty', 'Dread', 'Mercy', 'Valor', 'Fury', 'Grief']) {
       await expect(page.getByRole('option', { name: resonance, exact: true })).toBeVisible();
     }
     await page.getByRole('option', { name: 'Grief', exact: true }).click();
     await expect(picker).toContainText('Grief');
     await shot(testInfo, '08c-tag-dialog-resonance-picker.png', dialog);
-    // Nothing is tagged: the dialog is closed with Cancel.
-    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
-    await expect(dialog).toHaveCount(0);
+
+    // She tags it: the pose carries the tag.
+    await dialog.getByTestId('tag-moment-submit').click();
+    await expect(dialog).toHaveCount(0, { timeout: 30000 });
+    await expect(marked.getByTestId('dramatic-moment-badges')).toContainText(
+      seed.moment_type_label,
+      { timeout: 30000 }
+    );
+    await marked.scrollIntoViewIfNeeded();
+    await shot(testInfo, '08d-pose-tagged.png', marked);
 
     await page.context().close();
   });
 
-  test('screen 10: the admin pages that set the numbers and text the screens read', async ({
+  test('08 screen 8: Daven reads the lines the GM’s tag and undo sent him', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(240_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, ACCOUNT, PASSWORD);
+    await enterGame(page, seed.daven_name);
+    const tagLine = feedLine(
+      page,
+      `The scene's GM tagged your pose as a ${seed.moment_type_label}. It paid you Grief.`
+    );
+    await expect(tagLine).toBeVisible({ timeout: 60000 });
+    await tagLine.scrollIntoViewIfNeeded();
+    await shot(testInfo, '08e-daven-reads-the-tag-line.png', page);
+    const undoLine = feedLine(
+      page,
+      "The scene's GM undid your Mercy reward for Frightened the child. Your Mercy falls by 8."
+    );
+    await expect(undoLine).toBeVisible({ timeout: 30000 });
+    await undoLine.scrollIntoViewIfNeeded();
+    await shot(testInfo, '08f-daven-reads-the-undo-line.png', page);
+
+    await page.context().close();
+  });
+
+  test('10 screen 10: the admin pages that set the numbers and text the screens read', async ({
     browser,
   }, testInfo) => {
     test.setTimeout(180_000);
@@ -384,7 +726,7 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     await page.locator('.field-claim_verb').scrollIntoViewIfNeeded();
     await shot(testInfo, '10a-affinity-claim-verb-gain-fatigue.png', page, { fullPage: true });
 
-    // The weekly table: one row for each step.
+    // The weekly table: one page of rows edited in place.
     await page.goto('/admin/arxii/weeklymarkreturn/');
     await expect(page.locator('#result_list tbody tr')).toHaveCount(seed.weekly_row_count);
     await shot(testInfo, '10b-weekly-mark-returns.png', page, { fullPage: true });
