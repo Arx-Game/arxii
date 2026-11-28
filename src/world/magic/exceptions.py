@@ -1033,6 +1033,28 @@ class ReachError(MagicError):
             self.user_message = user_message
 
 
+class MarkError(MagicError):
+    """A pose or journal entry cannot mark an act (#5327); the raise site says why."""
+
+    user_message = "You cannot mark that act."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message
+
+
+class ResonanceUndoError(MagicError):
+    """A resonance reward cannot be undone (#5327); the raise site says why."""
+
+    user_message = "That reward cannot be undone."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message
+
+
 class DeedAlreadyReflectedError(ReflectionError):
     """A deed can be reflected on only once (#5124)."""
 
