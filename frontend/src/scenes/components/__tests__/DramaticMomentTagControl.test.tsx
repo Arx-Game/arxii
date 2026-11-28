@@ -29,12 +29,22 @@ const mockFetchDramaticMomentTypes = vi.fn().mockResolvedValue([
 
 const mockPostDramaticMomentTag = vi.fn().mockResolvedValue({ id: 99 });
 
+// The scene detail says whether the viewer may name the resonance a tag pays (#5327): only the
+// scene's GM and staff may.
+const mockFetchScene = vi.fn();
+const sceneFor = (viewerCanNameTagResonance: boolean) => ({
+  id: 5,
+  viewer_can_gm: true,
+  viewer_can_name_tag_resonance: viewerCanNameTagResonance,
+});
+
 vi.mock('../../queries', async (importOriginal) => {
   const original = await importOriginal<typeof import('../../queries')>();
   return {
     ...original,
     fetchDramaticMomentTypes: () => mockFetchDramaticMomentTypes(),
     postDramaticMomentTag: (body: unknown) => mockPostDramaticMomentTag(body),
+    fetchScene: () => mockFetchScene(),
     // Keep postInteractionReaction working for ReactionsFooter
     postInteractionReaction: vi.fn().mockResolvedValue(null),
   };
@@ -108,6 +118,7 @@ function Wrapper({ children }: { children: React.ReactNode }) {
 describe('PoseUnit — GM dramatic-moment tag control', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockFetchScene.mockResolvedValue(sceneFor(false));
   });
 
   it('does NOT render the tag button when canGm is false (default)', () => {
@@ -265,6 +276,7 @@ describe('PoseUnit — GM dramatic-moment tag control', () => {
   });
 
   it("shows the moment type's own resonance, and sends the one the GM picks instead", async () => {
+    mockFetchScene.mockResolvedValue(sceneFor(true));
     const user = userEvent.setup({ pointerEventsCheck: 0 });
     const interaction = makeInteraction({ id: 42 });
 
@@ -294,5 +306,55 @@ describe('PoseUnit — GM dramatic-moment tag control', () => {
         resonance: 30,
       });
     });
+  });
+
+  it('offers no resonance picker to an owner who is not the GM, and sends no resonance', async () => {
+    mockFetchScene.mockResolvedValue(sceneFor(false));
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={makeInteraction({ id: 42 })} sceneId="5" canGm={true} />
+      </Wrapper>
+    );
+
+    await user.click(screen.getByTestId('tag-moment-button'));
+    await user.click(await screen.findByTestId('moment-type-select'));
+    await user.click(await screen.findByRole('option', { name: 'Grand Entrance' }));
+    await waitFor(() => expect(mockFetchScene).toHaveBeenCalled());
+
+    expect(screen.queryByTestId('moment-resonance-select')).toBeNull();
+
+    await user.click(screen.getByTestId('tag-moment-submit'));
+    await waitFor(() => {
+      expect(mockPostDramaticMomentTag).toHaveBeenCalledWith({
+        moment_type: 1,
+        interaction: 42,
+      });
+    });
+  });
+
+  it("shows the server's sentence when a tag is refused, and leaves the dialog open", async () => {
+    mockPostDramaticMomentTag.mockRejectedValueOnce(
+      new Error('You cannot tag a moment for your own character.')
+    );
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+
+    render(
+      <Wrapper>
+        <PoseUnit interaction={makeInteraction({ id: 42 })} sceneId="5" canGm={true} />
+      </Wrapper>
+    );
+
+    await user.click(screen.getByTestId('tag-moment-button'));
+    await user.click(await screen.findByTestId('moment-type-select'));
+    await user.click(await screen.findByRole('option', { name: 'Grand Entrance' }));
+    await user.click(screen.getByTestId('tag-moment-submit'));
+
+    expect(
+      await screen.findByText('You cannot tag a moment for your own character.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('Tag Dramatic Moment')).toBeInTheDocument();
+    expect(screen.queryByText('Failed to tag moment. Please try again.')).toBeNull();
   });
 });

@@ -149,6 +149,11 @@ export interface SceneDetail extends SceneListItem {
   is_owner: boolean;
   /** True when the viewer is the scene GM/owner or has staff privileges. */
   viewer_can_gm: boolean;
+  /**
+   * True when the viewer is the scene's GM or staff (#5327): only they may name the resonance a
+   * dramatic-moment tag pays. A scene owner who is not the GM is not. Absent reads as false.
+   */
+  viewer_can_name_tag_resonance?: boolean;
   /** Personas reachable via the scene's interactions; the delivery-receiver pool. */
   personas?: ScenePersona[];
   /** Room positions defined for this scene's location (#1017). */
