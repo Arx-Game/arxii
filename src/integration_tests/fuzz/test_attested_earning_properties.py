@@ -34,6 +34,7 @@ from integration_tests.fuzz.test_affinity_skill_properties import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterSheet
+from world.checks.factories import CheckTypeFactory
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.covenants.perks.constants import Situation
 from world.magic.constants import GainSource, KindlingActKind
@@ -95,7 +96,9 @@ class _EarningWorld(_World):
         for rank in range(1, max([1, *ranks.values()]) + 1):
             KindledStrengthTierFactory(rank=rank, min_severity=1, earn_percent=earn_percent)
         other = CharacterSheetFactory()
-        option = MissionOptionFactory(option_kind=OptionKind.CHECK)
+        option = MissionOptionFactory(
+            option_kind=OptionKind.CHECK, authored_check_type=CheckTypeFactory()
+        )
         done_to_them = ConditionTemplateFactory(name=f"What {sheet.pk} did")
         felt_by_her = ConditionTemplateFactory(name=f"What {sheet.pk} feels")
         for key in sorted({*chosen, *caused, *felt}):
@@ -353,10 +356,9 @@ class AnActLeavesARecordOfWhatSituationsSuggest(_EarningWorld, HypothesisTestCas
             earlier.marked_grant = _gain(
                 sheet, "primal 1", self, amount=1, source=GainSource.STAFF_GRANT
             )
-            earlier.save()
-        RecordedAct.objects.filter(pk=earlier.pk).update(
-            created_at=timezone.now() - timedelta(days=age)
-        )
+        # ``auto_now_add`` stamps only the first save, so saving again backdates the act.
+        earlier.created_at = timezone.now() - timedelta(days=age)
+        earlier.save()
 
         award_kindled_deeds(
             sheet,
