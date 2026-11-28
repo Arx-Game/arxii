@@ -33,8 +33,10 @@ from world.conditions.services import get_condition_instance
 from world.covenants.perks.constants import Situation
 from world.magic.constants import GainSource
 from world.magic.factories import (
+    KindledDeedAwardFactory,
     KindlingSituationFactory,
     MireHoldingFactory,
+    RecordedActFactory,
     author_compulsion_condition,
 )
 from world.magic.models import MireHolding
@@ -112,7 +114,8 @@ class ImpulseJourneyCase(SineatingJourneyCase):
         return [row["name"] for row in response.json()]
 
     def deed(self, character) -> None:
-        """A deed of Ruin: the kindled-deed grant that a situation's act earns."""
+        """A deed of Ruin: the grant a chosen mission option pays (a situation alone pays
+        nothing, #5327; a marked act is the other way in, in the mark class below)."""
         with self.captureOnCommitCallbacks(execute=True):
             grant_resonance(
                 character.sheet_data,
@@ -236,6 +239,39 @@ class ASinnersOwnCorruptionAtTheSecondStage(ImpulseJourneyCase):
             ("Compulsion: Ruin", "Ruin", True),
         )
         self.assertTrue(impulse["is_compulsion"])
+
+
+class MarkingAnActLiftsTheCompulsionButActingDoesNot(ImpulseJourneyCase):
+    """Ysmay's Compulsion lifts when she marks a gain in Ruin in the scene (#5327), not when she
+    acts: an act pays nothing by itself, so one she has not marked leaves the penalty in place
+    and adds no corruption."""
+
+    def test_acting_alone_keeps_it_and_marking_the_act_lifts_it_and_adds_five(self) -> None:
+        success = self.outcomes["Success"]
+        KindledDeedAwardFactory(outcome_tier=success, amount=10)
+        act = RecordedActFactory(
+            character_sheet=self.ysmay.sheet_data, outcome=success, label="Fed the hunger"
+        )
+        self.hold_dread(self.ysmay)
+
+        told = self.telnet(self.ysmay, "pose clenches her hands.")
+
+        self.assertIn(PULL, told)
+        self.assertEqual(self.penalty(self.ysmay), -3)
+
+        # Posing again, with her act still unmarked, changes nothing: no corruption is added.
+        self.telnet(self.ysmay, "pose paces the floor.")
+        self.assertEqual(self.penalty(self.ysmay), -3)
+        self.assertEqual(corruption(self.ysmay, self.ruin), 260)
+        self.assertNotTold(self.ysmay, GIVE_IN)
+
+        # Marking the act with Ruin is giving in: the penalty lifts and 5 is added.
+        with self.captureOnCommitCallbacks(execute=True):
+            self.telnet(self.ysmay, f"pose/reach Ruin:{act.pk}=gives in to the hunger.")
+        self.assertTold(self.ysmay, GIVE_IN)
+        self.assertIsNone(self.compulsion_instance(self.ysmay))
+        self.assertEqual(self.penalty(self.ysmay), 0)
+        self.assertEqual(corruption(self.ysmay, self.ruin), 265)
 
 
 class ASineatersCapIsTheTopOfTheCompulsionStage(ImpulseJourneyCase):

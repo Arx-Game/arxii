@@ -10,6 +10,8 @@ the bonus check on the result named in the test. Nothing of ours is patched.
 Mirelle (Abyssal, Villainy 30) and Aldric (Celestial, no Villainy) threaten the same prisoner.
 Both earn Cruelty, which neither held. Both bonus checks add Villainy, the stat of the threat's
 own roll replaces the check's stat, and only Mirelle's check carries points for the skill.
+A mark (#5327) is grown by the same check: Mirelle marks an act of hers with Cruelty and her
+Villainy check grows what it pays.
 """
 
 from __future__ import annotations
@@ -33,7 +35,10 @@ from world.magic.constants import GainSource
 from world.magic.factories import (
     CharacterAuraFactory,
     CharacterResonanceFactory,
+    KindledDeedAwardFactory,
+    KindledStrengthTierFactory,
     KindlingConfigFactory,
+    RecordedActFactory,
     ResonanceCheckAwardFactory,
     ResonanceFactory,
     ensure_conversion_pairs,
@@ -256,6 +261,44 @@ def _profile_of(room):
     from evennia_extensions.factories import RoomProfileFactory
 
     return RoomProfileFactory(objectdb=room)
+
+
+class AMarkIsGrownByTheAffinitysCheck(_AScene):
+    """Mirelle marks an act of hers with Cruelty, and her Villainy check grows what it pays.
+
+    The act is worth 10 (the award for a Success, at the lowest strength's full share), and a
+    Critical Success on the bonus check adds 50 percent: 10 + 5 = 15. The room reads her pose
+    and nothing of what it paid.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.cruelty = ResonanceFactory(name="Cruelty", affinity=self.abyssal)
+        success = ensure_canonical_check_outcome("Success")
+        KindledDeedAwardFactory(outcome_tier=success, amount=10)
+        KindledStrengthTierFactory(rank=1, name="Faint", earn_percent=100)
+        self.act = RecordedActFactory(
+            character_sheet=self.mirelle.sheet_data,
+            outcome=success,
+            label="Threatened the prisoner",
+        )
+
+    def test_the_mark_pays_the_acts_worth_grown_by_the_villainy_check(self) -> None:
+        with force_check_outcome(self.crit):
+            told = self.telnet(
+                self.mirelle, f"pose/reach Cruelty:{self.act.pk}=glares at the prisoner."
+            )
+
+        self.assertIn("Your Cruelty grows by 15. Your Villainy check added 50 percent.", told)
+        row = CharacterResonance.objects.get(
+            character_sheet=self.mirelle.sheet_data, resonance=self.cruelty
+        )
+        self.assertEqual(row.balance, 15)
+        grant = ResonanceGrant.objects.get(source=GainSource.MARKED_ACT)
+        self.assertEqual((grant.amount, grant.bonus_percent), (15, 50))
+        self.assertTold(self.aldric, "glares at the prisoner.")
+        self.assertNotTold(self.aldric, "Villainy check")
+        self.assertNotTold(self.aldric, "grows by")
 
 
 class AReachedPoseIsEndorsedAndPaysTheReach(_AScene):

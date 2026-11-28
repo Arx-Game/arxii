@@ -2,6 +2,8 @@
 
 The scene sidebar and the combat rail read it through the API; telnet ``resonances`` prints
 the same list. A condition the character bears that matches a resonance's feeling kindles it.
+Kindling only strengthens her magic and suggests a resonance beside an act she took (#5327):
+the panel lists no amount and nothing here pays.
 """
 
 from __future__ import annotations

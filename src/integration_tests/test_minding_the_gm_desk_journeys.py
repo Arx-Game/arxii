@@ -612,12 +612,16 @@ class SuggestingADramaticMoment(JourneyCase):
         self.assertIn(
             "You tagged Bram with 'A Flourish of Steel'. Renown awarded; no resonance", told
         )
-        # An explicit resonance names what the moment draws on.
-        ember = ResonanceFactory(name="Ember")
-        CharacterResonanceFactory(character_sheet=self.ysmay.sheet_data, resonance=ember)
+        # An explicit resonance names what the moment draws on, and it need not be one in her
+        # aura (#5327): Ysmay has no Ember, the tag pays it anyway, and she is told which.
+        ResonanceFactory(name="Ember")
+        with self.captureOnCommitCallbacks(execute=True):
+            tagged = self.telnet(self.hobb, "moment tag Ysmay=A Flourish of Steel resonance=Ember")
         self.assertIn(
-            "You tagged Ysmay with 'A Flourish of Steel'. 15 Ember and renown awarded.",
-            self.telnet(self.hobb, "moment tag Ysmay=A Flourish of Steel resonance=Ember"),
+            "You tagged Ysmay with 'A Flourish of Steel'. 15 Ember and renown awarded.", tagged
+        )
+        self.assertTold(
+            self.ysmay, "A GM tagged your pose as a A Flourish of Steel. It paid you Ember."
         )
         self.assertIn(
             "No resonance named 'Nothing'.",

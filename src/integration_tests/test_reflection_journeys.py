@@ -5,7 +5,8 @@ and through, and her Domination (Abyssal, 30 against 170 Celestial) has grown pa
 She has one kindled deed on her ledger, "Barred the overseers' door", which earned her
 5 Wonder. A pose or a journal entry can carry a "Reflecting on" row naming that deed or her
 Domination and Embrace or Disown. Posting records the reflection and changes nothing yet; the
-room sees only the pose.
+room sees only the pose. A gain her player marked on an act is a deed too (#5327), unless staff
+or the scene's GM undid it.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ import uuid
 
 from rest_framework import status
 
+from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
 from world.journals.models import JournalEntry
 from world.magic.constants import GainSource, ReflectionChoice
@@ -376,6 +378,49 @@ class AReflectionThatFailsAfterThePoseIsDown(_Reflecting):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
         self.assertEqual(response.json()["detail"], "That deed was taken a moment ago.")
         self.assertFalse(JournalEntry.objects.filter(title="Rolled back").exists())
+
+
+class AMarkedDeed(_Reflecting):
+    """Mira marked an act with Wonder (6 of it); the gain is a deed she can reflect on."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        ledger: list[ResonanceGrant] = []
+        grant_resonance(
+            self.sheet,
+            self.wonder,
+            6,
+            source=GainSource.MARKED_ACT,
+            deed_label="Intimidated Hale",
+            ledger_out=ledger,
+        )
+        self.marked = ledger[-1]
+
+    def test_it_is_listed_by_number_with_what_she_did(self) -> None:
+        told = self.telnet(self.mira, "reflect")
+
+        self.assertIn(f"#{self.marked.pk}", told)
+        self.assertIn("Intimidated Hale", told)
+        self.assertIn(f"#{self.deed.pk}", told)
+
+    def test_once_staff_undo_it_it_is_no_deed_and_she_is_told_who_undid_what(self) -> None:
+        staff = self.api(AccountFactory(is_staff=True))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            undone = staff.post(f"/api/magic/resonance-grants/{self.marked.pk}/undo/")
+
+        self.assertEqual(undone.status_code, status.HTTP_200_OK, undone.content)
+        self.assertTold(
+            self.mira,
+            "Staff undid your Wonder reward for Intimidated Hale. Your Wonder falls by 6.",
+        )
+        listed = self.telnet(self.mira, "reflect")
+        self.assertNotIn("Intimidated Hale", listed)
+        self.assertIn(f"#{self.deed.pk}", listed)
+        refused = self.telnet(self.mira, f"pose/reflect {self.marked.pk}=embrace Too late.")
+        self.assertIn("not a deed you can reflect on", refused)
+        self.assertNotTold(self.tomas, "Too late.")
+        self.assertFalse(Reflection.objects.exists())
 
 
 class AnotherCharactersDeed(_Reflecting):
