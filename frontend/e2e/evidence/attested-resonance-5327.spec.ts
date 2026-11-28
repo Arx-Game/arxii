@@ -734,7 +734,7 @@ test.describe('A character gains resonance from the acts she took (#5327)', () =
     await enterGame(page, seed.daven_name);
     const tagLine = feedLine(
       page,
-      `The scene's GM tagged your pose as a ${seed.moment_type_label}. It paid you Grief.`
+      `The scene's GM tagged your pose: ${seed.moment_type_label}. It paid you Grief.`
     );
     await expect(tagLine).toBeVisible({ timeout: 60000 });
     await shotAround(testInfo, '08e-daven-reads-the-tag-line.png', page, [

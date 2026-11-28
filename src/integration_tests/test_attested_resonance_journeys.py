@@ -818,7 +818,7 @@ class AGMsTagNamesAResonanceOutsideHerAura(_Attested):
             (self.balance(self.daven, self.fury), self.balance(self.daven, self.grief)), (10, 0)
         )
         self.assertIn(
-            "Someone tagged your pose as a Defiant stand. It paid you Fury.",
+            "Someone tagged your pose: Defiant stand. It paid you Fury.",
             self.notices(self.daven),
         )
         self.assertNotIn("Ilsa", self.notices(self.daven))
@@ -883,7 +883,7 @@ class AGMsTagNamesAResonanceOutsideHerAura(_Attested):
         self.assertIn("You tagged Daven with 'Defiant stand'. 10 Grief and renown awarded.", tagged)
         self.assertEqual(self.balance(self.daven, self.grief), 10)
         self.assertIn(
-            "The scene's GM tagged your pose as a Defiant stand. It paid you Grief.",
+            "The scene's GM tagged your pose: Defiant stand. It paid you Grief.",
             self.notices(self.daven),
         )
         self.assertNotIn("Marek", self.notices(self.daven))

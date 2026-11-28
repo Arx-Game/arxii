@@ -629,7 +629,7 @@ class SuggestingADramaticMoment(JourneyCase):
             "You tagged Ysmay with 'A Flourish of Steel'. 15 Ember and renown awarded.", tagged
         )
         self.assertIn(
-            "The scene's GM tagged your pose as a A Flourish of Steel. It paid you Ember.",
+            "The scene's GM tagged your pose: A Flourish of Steel. It paid you Ember.",
             "\n".join(
                 NarrativeMessageDelivery.objects.filter(
                     recipient_character_sheet=self.ysmay.sheet_data

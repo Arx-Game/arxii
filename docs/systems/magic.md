@@ -2698,7 +2698,7 @@ one situation among many: `docs/adr/adr-5124-furys-anchor-person-became-a-kindle
     the endpoint) because the service enforces it. A tag whose payer is too worn is refused before anything
     is written ("Daven is too worn for this tag to pay. Tag another pose, or wait until Daven has
     recovered."). A tag that names a resonance tells the tagged player which one it paid, by the tagger's
-    role ("The scene's GM tagged your pose as a Defiant stand. It paid you Grief."; "Staff" for staff,
+    role ("The scene's GM tagged your pose: Defiant stand. It paid you Grief."; "Staff" for staff,
     "Someone" for an owner). Telnet `moment tag` also refuses a character who is not part of the scene
     (she posed in it or her player joined it; staff may tag any). The tag endpoint checks the requester's
     permission first, takes the scene from the pose (a different `scene` is refused), requires the character
