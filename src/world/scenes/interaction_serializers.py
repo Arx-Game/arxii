@@ -7,10 +7,14 @@ from rest_framework import serializers
 
 from world.conditions.thumbnail_services import persona_face_url
 from world.magic.serializers_reflection import (
-    ClaimFieldsMixin,
     ReachFieldsMixin,
     ReflectionFieldsMixin,
     SineatingFieldsMixin,
+)
+from world.magic.services.pose_marks import (
+    PoseViewer,
+    act_marks_payload,
+    pending_picks_payload,
 )
 from world.scenes.constants import InteractionMode, PoseKind, ScenePrivacyMode
 from world.scenes.interaction_permissions import get_account_personas
@@ -26,7 +30,13 @@ from world.scenes.models import (
 )
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.thread_services import thread_anchor_ids, thread_roots
-from world.scenes.types import NarratedEventPayload, PersonaPayload, ReactionAggregation
+from world.scenes.types import (
+    ActMarkPayload,
+    NarratedEventPayload,
+    PendingPickPayload,
+    PersonaPayload,
+    ReactionAggregation,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -167,6 +177,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
     narrates = serializers.SerializerMethodField()
     endorsee_sheet_id = serializers.SerializerMethodField()
     endorsable_resonances = serializers.SerializerMethodField()
+    act_marks = serializers.SerializerMethodField()
+    pending_picks = serializers.SerializerMethodField()
     reached_resonance = serializers.SerializerMethodField()
     pose_endorsers = serializers.SerializerMethodField()
     my_pose_endorsement = serializers.SerializerMethodField()
@@ -221,6 +233,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "dramatic_moment_tags",
             "narrates",
             "endorsable_resonances",
+            "act_marks",
+            "pending_picks",
             "reached_resonance",
             "pose_endorsers",
             "my_pose_endorsement",
@@ -989,6 +1003,28 @@ class InteractionListSerializer(serializers.ModelSerializer):
             {"id": cr.resonance_id, "name": cr.resonance.name} for cr in sheet.cached_resonances
         ]
 
+    def _pose_viewer(self) -> PoseViewer | None:
+        """Who is reading this feed (#5327), or None without a signed-in requester."""
+        request = self.context.get("request")
+        user = request.user if request is not None else None
+        if user is None or not user.is_authenticated:
+            return None
+        return PoseViewer(
+            account=user,
+            sheet_ids=frozenset(self.context.get("character_sheet_ids", ())),
+            is_staff=bool(self.context.get("is_staff", user.is_staff)),
+            sheet=self.context.get("viewer_sheet"),
+        )
+
+    def get_act_marks(self, obj: Interaction) -> list[ActMarkPayload]:
+        """The marks this pose carries (#5327), from the one builder the live frame shares."""
+        return act_marks_payload(obj, self._pose_viewer())
+
+    def get_pending_picks(self, obj: Interaction) -> list[PendingPickPayload]:
+        """The picks waiting for the poser, shown only to the endorser, the poser, the scene's
+        GM and staff (#5327), from the one builder the live frame shares."""
+        return pending_picks_payload(obj, self._pose_viewer())
+
     def get_reached_resonance(self, obj: Interaction) -> dict | None:
         """The resonance the poser said this pose reaches for (#5308), or None."""
         reached = obj.cached_resonance_reach
@@ -1002,7 +1038,9 @@ class InteractionListSerializer(serializers.ModelSerializer):
     # endorser wore when endorsing (#5290), read through `_endorser_badges`.
     def get_pose_endorsers(self, obj: Interaction) -> list[dict]:
         """List of peers who endorsed this pose, with persona info."""
-        return _endorser_badges(obj.cached_endorsements)
+        return _endorser_badges(
+            row for row in obj.cached_endorsements if not row.awaiting_acceptance
+        )
 
     def get_my_pose_endorsement(self, obj: Interaction) -> dict | None:
         """Return the viewer's own endorsement for this pose, or None.
@@ -1017,6 +1055,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                     "id": e.pk,
                     "resonance_id": e.resonance_id,
                     "settled": e.settled_at is not None,
+                    "awaiting_acceptance": e.awaiting_acceptance,
                 }
         return None
 
@@ -1112,9 +1151,7 @@ class ReplyTargetSerializer(serializers.Serializer):
         return attrs
 
 
-class PoseSubmitSerializer(
-    ReflectionFieldsMixin, SineatingFieldsMixin, ClaimFieldsMixin, ReachFieldsMixin
-):
+class PoseSubmitSerializer(ReflectionFieldsMixin, SineatingFieldsMixin, ReachFieldsMixin):
     """Write serializer for submitting a POSE-mode Interaction from the web frontend.
 
     Validates persona ownership and action_link_ids integrity before the view

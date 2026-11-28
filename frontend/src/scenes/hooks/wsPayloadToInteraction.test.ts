@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { InteractionWsPayload } from '@/hooks/types';
 import { poseCarryingAction } from '@/gm/npcs/pendingNpcResponse';
-import { wsPayloadToInteraction } from './useSceneInteractions';
+import type { Interaction } from '@/scenes/types';
+import { mergeFeedWithLive, wsPayloadToInteraction } from './useSceneInteractions';
 
 const payload: InteractionWsPayload = {
   id: 901,
@@ -34,10 +35,43 @@ describe('wsPayloadToInteraction (#3858)', () => {
     expect(row.endorsable_resonances).toEqual([{ id: 4, name: 'Ember' }]);
   });
 
+  it('carries the marks and waiting picks a frame holds (#5327)', () => {
+    const actMarks = [
+      {
+        grant_id: 4,
+        resonance_id: 2,
+        resonance_name: 'Cruelty',
+        act_label: 'Intimidated Hale',
+        undone: false,
+        undone_by: null,
+        can_undo: false,
+      },
+    ];
+    const pendingPicks = [
+      {
+        endorsement_id: 9,
+        resonance_id: 3,
+        resonance_name: 'Mercy',
+        endorser_name: 'Ilsa',
+        mine: false,
+        can_answer: true,
+      },
+    ];
+    const row = wsPayloadToInteraction({
+      ...payload,
+      act_marks: actMarks,
+      pending_picks: pendingPicks,
+    });
+    expect(row.act_marks).toEqual(actMarks);
+    expect(row.pending_picks).toEqual(pendingPicks);
+  });
+
   it('falls back for a payload without feed fields', () => {
     const row = wsPayloadToInteraction(payload);
     expect(row.pose_kind).toBe('standard');
     expect(row.endorsable_resonances).toEqual([]);
+    expect(row.act_marks).toEqual([]);
+    expect(row.pending_picks).toEqual([]);
     expect(row.entry_endorsed_by_me).toBe(false);
   });
 
@@ -133,5 +167,47 @@ describe('wsPayloadToInteraction action_links (#4418)', () => {
   it('lets the NPC response card find the pose that carried the action', () => {
     const pose = wsPayloadToInteraction(poseFrame);
     expect(poseCarryingAction([actionRow, pose], actionRow)).toBe(pose);
+  });
+});
+
+describe('mergeFeedWithLive (#5327)', () => {
+  it('keeps the refetched row, with its per-viewer picks and undo, over a later live frame', () => {
+    const refetched = {
+      ...wsPayloadToInteraction(payload),
+      pending_picks: [
+        {
+          endorsement_id: 9,
+          resonance_id: 3,
+          resonance_name: 'Mercy',
+          endorser_name: 'Ilsa',
+          mine: true,
+          can_answer: false,
+        },
+      ],
+      act_marks: [
+        {
+          grant_id: 4,
+          resonance_id: 2,
+          resonance_name: 'Cruelty',
+          act_label: 'Intimidated Hale',
+          undone: false,
+          undone_by: null,
+          can_undo: true,
+        },
+      ],
+    } satisfies Interaction;
+
+    // The frame for the same pose carries nothing per-viewer: no picks, no undo.
+    const merged = mergeFeedWithLive([refetched], [{ ...payload, pending_picks: [] }]);
+
+    expect(merged).toHaveLength(1);
+    expect(merged[0].pending_picks).toHaveLength(1);
+    expect(merged[0].act_marks?.[0].can_undo).toBe(true);
+  });
+
+  it('adds a live frame for a pose the feed does not hold yet', () => {
+    const merged = mergeFeedWithLive([], [payload]);
+    expect(merged.map((row) => row.id)).toEqual([901]);
+    expect(merged[0].pending_picks).toEqual([]);
   });
 });

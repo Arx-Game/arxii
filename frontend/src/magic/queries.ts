@@ -9,9 +9,7 @@
  */
 
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useMemo } from 'react';
 import * as api from './api';
-import { waitingClaims } from './claiming';
 import { performRitual } from '@/rituals/api';
 import type { PerformRitualRequest } from '@/rituals/types';
 import { useAppSelector } from '@/store/hooks';
@@ -107,6 +105,9 @@ export const magicKeys = {
     [...magicKeys.all, 'manifest-choices', characterSheetId] as const,
 
   resonanceCatalog: () => [...magicKeys.all, 'resonance-catalog'] as const,
+
+  recordedActs: (characterSheetId: number) =>
+    [...magicKeys.all, 'recorded-acts', characterSheetId] as const,
 
   kindledResonances: (characterSheetId: number) =>
     [...magicKeys.all, 'kindled-resonances', characterSheetId] as const,
@@ -1172,7 +1173,7 @@ export function useSetManifestChoice(characterSheetId: number) {
 // Your resonances (#5124)
 // ---------------------------------------------------------------------------
 
-/** Every resonance in the game, held or not (#5308): a pose reaches for, and a flourish declares, any of them. */
+/** Every resonance in the game, in her aura or not (#5308): a pose reaches for, and a flourish declares, any of them. */
 export function useResonanceCatalog() {
   return useQuery({
     queryKey: magicKeys.resonanceCatalog(),
@@ -1184,23 +1185,32 @@ export function useResonanceCatalog() {
 /** How often the panel re-reads what is kindled; it changes as a scene or a fight moves. */
 const KINDLED_RESONANCES_REFETCH_MS = 30_000;
 
-/** Every character's kindled-resonances reading, re-read (a deed was earned or a claim was made). */
+/** Every character's kindled-resonances reading, re-read (a deed was earned). */
 export function refreshKindledResonances(queryClient: QueryClient): void {
   queryClient
     .invalidateQueries({ queryKey: [...magicKeys.all, 'kindled-resonances'] })
     .catch(() => {});
 }
 
-/** The resonances with something waiting to be claimed (#5181); empty until the reading loads. */
-export function useWaitingClaims(characterSheetId: number | null) {
-  const { data } = useKindledResonances(characterSheetId ?? 0);
-  return useMemo(() => waitingClaims(data?.results), [data]);
+/**
+ * The acts the character has not marked and can still point at (#5327), newest first. Empty
+ * until the reading loads, and while `characterSheetId` is unknown.
+ */
+export function useRecordedActs(characterSheetId: number | null, enabled = true) {
+  return useQuery({
+    queryKey: magicKeys.recordedActs(characterSheetId ?? 0),
+    queryFn: () => api.getRecordedActs(characterSheetId ?? 0),
+    enabled: enabled && characterSheetId != null && characterSheetId > 0,
+  });
 }
 
-/** Re-read what is waiting, once a pose or journal entry has claimed some. */
-export function useRefreshClaims() {
+/** Re-read what a character can point at, once a mark has used an act up. */
+export function useRefreshRecordedActs(characterSheetId: number | null) {
   const queryClient = useQueryClient();
-  return () => refreshKindledResonances(queryClient);
+  return () => {
+    if (characterSheetId == null) return;
+    void queryClient.invalidateQueries({ queryKey: magicKeys.recordedActs(characterSheetId) });
+  };
 }
 
 /**

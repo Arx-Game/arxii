@@ -47,7 +47,12 @@ class PoseEndorseActionTests(TestCase):
         )
 
     def test_preview_returns_pose_text_no_db_row(self):
+        """A pose that named its resonance is previewed first. (A pick on a pose that named none
+        commits at once, waiting for the poser, so there is nothing to preview, #5327.)"""
+        from world.magic.factories import PoseResonanceReachFactory
         from world.magic.models import PoseEndorsement
+
+        PoseResonanceReachFactory(interaction=self.pose, resonance=self.resonance)
 
         result = PoseEndorseAction().run(
             actor=self.endorser_char,

@@ -70,7 +70,7 @@ describe('endorsement API functions', () => {
     it('throws on error response', async () => {
       vi.mocked(apiFetch).mockResolvedValue(mockErrorResponse(403));
 
-      await expect(deletePoseEndorsement(7)).rejects.toThrow('Failed to retract endorsement');
+      await expect(deletePoseEndorsement(7)).rejects.toThrow('Failed to withdraw endorsement');
     });
   });
 

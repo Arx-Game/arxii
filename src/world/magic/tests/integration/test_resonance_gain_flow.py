@@ -58,7 +58,11 @@ class ResonanceGainPipelineTests(TestCase):
         assert ResonanceGrant count + CharacterResonance.balance.
         """
         from world.magic.constants import GainSource
-        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            PoseResonanceReachFactory,
+            ResonanceFactory,
+        )
         from world.magic.models import CharacterResonance, ResonanceGrant
         from world.magic.services.gain import (
             create_pose_endorsement,
@@ -77,6 +81,9 @@ class ResonanceGainPipelineTests(TestCase):
             resonance = ResonanceFactory()
             CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
             interaction = InteractionFactory(scene=scene, persona=endorsee.primary_persona)
+            # The pose named its resonance, so the endorsement is confirmed and settles (a pick
+            # on a pose that named none waits for the poser, #5327).
+            PoseResonanceReachFactory(interaction=interaction, resonance=resonance)
             create_pose_endorsement(endorser, interaction, resonance)
             resonances.append(resonance)
 
@@ -170,7 +177,11 @@ class ResonanceGainPipelineTests(TestCase):
         Pipeline: build endorsement with persona field set to endorsee primary →
         assert endorsement.persona_snapshot == primary → settle → assert balance > 0.
         """
-        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            PoseResonanceReachFactory,
+            ResonanceFactory,
+        )
         from world.magic.models import CharacterResonance
         from world.magic.services.gain import create_pose_endorsement, settle_weekly_pot
         from world.scenes.factories import InteractionFactory, SceneFactory
@@ -184,6 +195,8 @@ class ResonanceGainPipelineTests(TestCase):
         CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
         primary = endorsee.primary_persona
         interaction = InteractionFactory(scene=scene, persona=primary)
+        # The pose named its resonance, so the endorsement settles without the poser's accept.
+        PoseResonanceReachFactory(interaction=interaction, resonance=resonance)
 
         endorsement = create_pose_endorsement(endorser, interaction, resonance)
         # Snapshot is captured at endorsement creation time.
@@ -377,7 +390,11 @@ class ResonanceGainPipelineTests(TestCase):
         Pipeline: create endorsement → bump pot to 100 → settle_weekly_pot →
         assert total_granted == 100 (ceil(100/1) = 100).
         """
-        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            PoseResonanceReachFactory,
+            ResonanceFactory,
+        )
         from world.magic.services.gain import (
             create_pose_endorsement,
             get_resonance_gain_config,
@@ -393,6 +410,8 @@ class ResonanceGainPipelineTests(TestCase):
         resonance = ResonanceFactory()
         CharacterResonanceFactory(character_sheet=endorsee, resonance=resonance)
         interaction = InteractionFactory(scene=scene, persona=endorsee.primary_persona)
+        # The pose named its resonance, so the endorsement settles without the poser's accept.
+        PoseResonanceReachFactory(interaction=interaction, resonance=resonance)
         create_pose_endorsement(endorser, interaction, resonance)
 
         # Bump pot to 100 — settlement should distribute this new value.
@@ -418,7 +437,11 @@ class ResonanceGainAPIPipelineTests(APITestCase):
 
         Returns: (endorsement, endorser_account) so the test can authenticate.
         """
-        from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+        from world.magic.factories import (
+            CharacterResonanceFactory,
+            PoseResonanceReachFactory,
+            ResonanceFactory,
+        )
         from world.magic.services.gain import account_for_sheet, create_pose_endorsement
         from world.roster.factories import RosterTenureFactory
         from world.scenes.factories import (
@@ -440,6 +463,8 @@ class ResonanceGainAPIPipelineTests(APITestCase):
         resonance = ResonanceFactory()
         CharacterResonanceFactory(character_sheet=endorsee_sheet, resonance=resonance)
         interaction = InteractionFactory(scene=scene, persona=endorsee_sheet.primary_persona)
+        # The pose named its resonance, so the endorsement settles without the poser's accept.
+        PoseResonanceReachFactory(interaction=interaction, resonance=resonance)
 
         endorsement = create_pose_endorsement(endorser_sheet, interaction, resonance)
         return endorsement, endorser_account

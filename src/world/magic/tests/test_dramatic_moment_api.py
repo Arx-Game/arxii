@@ -24,6 +24,8 @@ class DramaticMomentTagApiTest(APITestCase):
         self.scene = SceneFactory()
         self.gm = AccountFactory()
         SceneGMParticipationFactory(scene=self.scene, account=self.gm)
+        # A tag names a character who is part of the scene (#5327): she posed in it.
+        InteractionFactory(scene=self.scene, persona=self.sheet.primary_persona)
 
     def _payload(self):
         return {
@@ -66,6 +68,7 @@ class DramaticMomentTagApiTest(APITestCase):
         authored moment type could never be awarded to anyone.
         """
         other_sheet = CharacterSheetFactory()  # no CharacterResonance claimed
+        InteractionFactory(scene=self.scene, persona=other_sheet.primary_persona)
         self.client.force_authenticate(self.gm)
         payload = self._payload()
         payload["character_sheet"] = other_sheet.pk

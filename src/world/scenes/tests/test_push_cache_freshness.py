@@ -10,6 +10,7 @@ from evennia_extensions.factories import AccountFactory
 from world.magic.factories import (
     CharacterResonanceFactory,
     DramaticMomentTypeFactory,
+    PoseResonanceReachFactory,
     ResonanceFactory,
 )
 from world.magic.services.gain import (
@@ -52,6 +53,9 @@ class PushCacheFreshnessTests(PushScene):
     def test_endorsement_after_push(self):
         endorser = sheet_with_tenure()
         SceneParticipationFactory(scene=self.scene, account=account_for_sheet(endorser))
+        # The pose named its resonance, so the endorsement counts at once (a pick on a pose that
+        # named none waits for the poser and is not listed, #5327).
+        PoseResonanceReachFactory(interaction=self.interaction, resonance=self.resonance)
         self.push()
         create_pose_endorsement(endorser, self.interaction, self.resonance)
         self.assert_feed("pose_endorsers", lambda v: len(v) == 1)

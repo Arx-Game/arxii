@@ -308,6 +308,8 @@ class ActionRegistryTests(TestCase):
             "imbue_thread",
             "weave_thread",
             "endorse_pose",
+            "answer_pose_proposal",
+            "withdraw_pose_endorsement",
             "endorse_scene_entry",
             "endorse_style_presentation",
             "cast_technique",

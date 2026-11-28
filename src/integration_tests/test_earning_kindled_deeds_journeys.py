@@ -1,13 +1,18 @@
-"""Journeys for earning a resonance by acting on a kindling situation (#5124).
+"""Journeys for what an act pays and what it only suggests (#5124, #5327).
 
 Mira is a played character on "The Overseers' Gate" mission with Tomas in the room. Her
 Domination is kindled by the mission's theme (people held captive) for any option that
-carries the theme. Staff authored the strength rows (Faint earns half of a deed's award,
-Strong all of it) and what a deed earns at each roll result: a Success earns 10.
+carries the theme, and an option whose theme names a resonance pays it at once, scaled by the
+roll. Staff authored the strength rows (Faint earns half of a deed's award, Strong all of it)
+and what a deed earns at each roll result: a Success earns 10.
 
 Hand-worked numbers: a Success on a Faint-kindled option earns 10 x 50 / 100 = 5; on a
 Strong-kindled option 10 x 100 / 100 = 10; a Partial Success has no award row and earns
 nothing. Only Mira is told "You earned ..."; Tomas is told nothing.
+
+Every other situation (a feeling she carries, someone in trouble, a Rally or a GM's
+kindling) only suggests: the act is written down for her player to mark, with the resonance
+the situation reached, and nothing is paid until a mark is made.
 """
 
 from __future__ import annotations
@@ -47,7 +52,7 @@ from world.magic.models import (
     AffinityInteraction,
     CharacterResonance,
     DriftConversionOffer,
-    KindlingSituation,
+    RecordedAct,
     ResonanceGrant,
 )
 from world.magic.services.kindling import kindled_resonances_now
@@ -265,7 +270,7 @@ class EarningFromAMissionOption(_Gate):
 
 
 class TheTelnetBeat(_Gate):
-    def test_the_telnet_beat_lists_the_resonance_each_option_would_feed(self) -> None:
+    def test_the_telnet_beat_says_what_each_option_pays_at_once_and_never_an_amount(self) -> None:
         self.theme_row(self.captives, strength=2, theme_text="The captives are held here.")
         self.check_option(self.captives, order=0)
         self.check_option(order=1)
@@ -273,8 +278,9 @@ class TheTelnetBeat(_Gate):
 
         told = self.telnet(self.mira, f"mission beat {self.mission.pk}")
 
-        self.assertIn("Your Domination is kindled: The captives are held here.", told)
-        self.assertEqual(told.count("is kindled"), 1)
+        self.assertIn("Pays you Domination at once: The captives are held here.", told)
+        self.assertEqual(told.count("at once"), 1)
+        self.assertNotIn("kindled", told)
 
 
 class ADeedOnTheMainAffinityOpensTheChanceToAtone(_Gate):
@@ -309,39 +315,44 @@ class ADeedOnTheMainAffinityOpensTheChanceToAtone(_Gate):
         self.assertEqual(DriftConversionOffer.objects.get().character_sheet, self.sheet)
 
 
-class EarningFromACombatStrike(_StrikeField):
-    """Hobb's Wrath is kindled by a feeling he carries; a Strike earns it."""
+class AStrikeIsRecordedNotPaid(_StrikeField):
+    """Hobb's Wrath is kindled by a feeling he carries; a Strike writes the act down with Wrath
+    as a suggestion and pays nothing, because a situation only suggests (#5327)."""
 
     def setUp(self) -> None:
         super().setUp()
         self.watch(self.hobb)
         self.connect_telnet(self.hobb)
         KindledDeedAwardFactory(outcome_tier=CheckOutcome.objects.get(name="Success"), amount=10)
-        faint = KindledStrengthTierFactory(rank=1, name="Faint", earn_percent=50)
+        self.faint = KindledStrengthTierFactory(rank=1, name="Faint", earn_percent=50)
         self.wrath = ResonanceFactory(name="Wrath")
         # Wrath is kindled by a feeling he carries; any act feeds a feeling.
-        kindle_resonance(self.sheet, self.wrath, faint)
-        self.row = KindlingSituation.objects.get(resonance=self.wrath)
+        kindle_resonance(self.sheet, self.wrath, self.faint)
 
-    def test_a_strike_earns_the_kindled_resonance_scaled_by_its_hit_roll(self) -> None:
+    def test_a_strike_is_recorded_with_the_suggestion_and_pays_nothing(self) -> None:
         self.equip_sword()
 
         with self.captureOnCommitCallbacks(execute=True):
             self.strike_and_resolve("Success", "Success")
 
-        grant = ResonanceGrant.objects.get(source=GainSource.KINDLED_DEED)
-        self.assertEqual((grant.amount, grant.resonance), (5, self.wrath))
-        self.assertEqual(grant.source_kindling_situation, self.row)
-        # The grant records what he did, naming the opponent he struck.
-        self.assertEqual(grant.deed_label, "Struck Bandit")
-        self.assertTold(self.hobb, "You earned 5 Wrath.")
+        # The act is written down in his own words, naming the opponent he struck.
+        act = RecordedAct.objects.get(character_sheet=self.sheet)
+        self.assertEqual((act.label, act.outcome.name), ("Struck Bandit", "Success"))
+        suggestion = act.suggestions.get()
+        self.assertEqual((suggestion.resonance, suggestion.strength), (self.wrath, self.faint))
+        self.assertFalse(ResonanceGrant.objects.exists())
+        self.assertNotTold(self.hobb, "You earned")
+        # Her player reads the act and what the situation suggested for it.
+        listed = self.telnet(self.hobb, "acts")
+        self.assertIn(f"{act.pk}. Struck Bandit (", listed)
+        self.assertIn("Wrath: You carry ", listed)
 
 
 class AnOutcomeNoActOfHersWasAimedAt(_StrikeField):
     """Hobb's Abyssal Cruelty is kindled, and he stands in the fight while Tomas kills the bandit.
 
     Hobb declares nothing: the bandit's death is an outcome, not an act of his, so it earns him
-    nothing, however kindled his Cruelty is.
+    nothing and leaves no act of his to mark, however kindled his Cruelty is.
     """
 
     def setUp(self) -> None:
@@ -388,6 +399,8 @@ class AnOutcomeNoActOfHersWasAimedAt(_StrikeField):
             CombatOpponent.objects.get(pk=self.bandit.pk).status, OpponentStatus.DEFEATED
         )
         self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
+        # Nor is there an act of his to point a mark at: the death was an outcome, not an act.
+        self.assertFalse(RecordedAct.objects.filter(character_sheet=self.sheet).exists())
         self.assertNotTold(self.hobb, "You earned")
         self.assertEqual(
             CharacterResonance.objects.get(
@@ -470,9 +483,10 @@ class WhatEarnsAndWhatIsPromised(_Gate):
         self.assertEqual(self.deeds().get().amount, SUCCESS_AWARD)  # not the top tier's 99
 
 
-class EarningFromAnAllyInTrouble(_KindledField):
+class AnActForAnAllyInTroubleIsRecordedNotPaid(_KindledField):
     """Mira is badly hurt; Tomas holds Mercy, kindled whenever someone is in trouble, and
-    Fury, kindled by a feeling he carries (any act feeds it)."""
+    Fury, kindled by a feeling he carries (any act feeds it). What Tomas does for her is
+    written down with those resonances as suggestions, and pays nothing (#5327)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -493,24 +507,30 @@ class EarningFromAnAllyInTrouble(_KindledField):
         vitals.health = 10
         vitals.save(update_fields=["health"])
 
-    def tomas_deeds(self):
-        return ResonanceGrant.objects.filter(
-            character_sheet=self.tomas.sheet_data, source=GainSource.KINDLED_DEED
-        )
+    def tomas_act(self) -> RecordedAct:
+        return RecordedAct.objects.get(character_sheet=self.tomas.sheet_data)
 
-    def test_covering_an_ally_in_trouble_earns_at_the_plainest_success(self) -> None:
+    def assert_nothing_paid(self) -> None:
+        self.assertFalse(ResonanceGrant.objects.exists())
+        self.assertNotTold(self.tomas, "You earned")
+        self.assertNotTold(self.mira, "You earned")
+
+    def test_covering_an_ally_in_trouble_is_recorded_at_the_plainest_success(self) -> None:
         self.telnet(self.tomas, "combat cover Mira")
 
         self.resolve(self.success)
 
-        grant = self.tomas_deeds().get()
-        # Cover rolls nothing: it pays the lowest successful tier (10), never the Great's 99.
-        self.assertEqual((grant.resonance, grant.amount), (self.mercy, 10))
-        self.assertEqual(grant.source_kindling_situation, self.trouble)
-        self.assertTold(self.tomas, "You earned 10 Mercy of Tomas.")
-        self.assertNotTold(self.mira, "You earned")
+        act = self.tomas_act()
+        # Cover rolls nothing: it is recorded at the lowest successful tier (so it is worth 10
+        # when marked), never at the Great's 99.
+        self.assertEqual(act.outcome, self.success)
+        self.assertEqual({row.resonance for row in act.suggestions.all()}, {self.mercy})
+        self.assert_nothing_paid()
+        listed = self.telnet(self.tomas, "acts")
+        self.assertIn(f"{act.pk}. Covered Mira (", listed)
+        self.assertIn("Mercy of Tomas", listed)
 
-    def test_a_rally_earns_a_resonance_kindled_by_a_feeling_he_carries(self) -> None:
+    def test_a_rally_is_recorded_with_a_resonance_kindled_by_a_feeling_he_carries(self) -> None:
         SocialManeuverConfigFactory(
             rally_success_condition=ConditionTemplateFactory(name="Heartened")
         )
@@ -520,16 +540,20 @@ class EarningFromAnAllyInTrouble(_KindledField):
 
         self.resolve(self.success)
 
-        grant = self.tomas_deeds().get(resonance=self.fury)
-        self.assertEqual(grant.amount, 10)
-        self.assertTold(self.tomas, "You earned 10 Fury.")
+        act = self.tomas_act()
+        self.assertEqual(act.outcome, self.success)
+        self.assertIn(self.fury, {row.resonance for row in act.suggestions.all()})
+        self.assert_nothing_paid()
+        listed = self.telnet(self.tomas, "acts")
+        self.assertIn(f"{act.pk}. Rallied Mira (", listed)
+        self.assertIn("Fury", listed)
 
-    def test_a_reaction_that_answers_for_an_ally_in_trouble_earns(self) -> None:
+    def test_a_reaction_that_answers_for_an_ally_in_trouble_is_recorded(self) -> None:
         """Through the shared reaction spine (Succor, Interpose, Cover, catching a faller).
 
         The spine's two seams, which pick the reaction and roll the challenge, are the only
         doubles: the capability content that offers a real Succor or Interpose is PostgreSQL
-        only. Deleting the spine's award hook turns this red.
+        only. Deleting the spine's act hook turns this red.
         """
         from world.checks.types import CheckResult
         from world.mechanics.reactions import dispatch_capability_reaction
@@ -580,4 +604,9 @@ class EarningFromAnAllyInTrouble(_KindledField):
                 outcome_fn=lambda _result: None,
             )
 
-        self.assertEqual(self.tomas_deeds().get().resonance, self.mercy)
+        act = self.tomas_act()
+        self.assertEqual({row.resonance for row in act.suggestions.all()}, {self.mercy})
+        self.assert_nothing_paid()
+        listed = self.telnet(self.tomas, "acts")
+        self.assertIn(f"{act.pk}. Interpose Mira (", listed)
+        self.assertIn("Mercy of Tomas", listed)

@@ -25,6 +25,7 @@ if TYPE_CHECKING:
     from world.magic.audere import AudereThreshold
     from world.magic.types.drift import DriftReading
     from world.magic.types.threads import ThreadResonanceOption
+    from world.scenes.models import Interaction, Scene
 from world.conditions.models import (
     CapabilityType,
     ConditionTemplate,
@@ -2056,7 +2057,9 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
 
     Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
     optional when the pose's author reached for one (#5308), which is then the resonance
-    endorsed; the action asks "Which resonance?" for a pose that did not.
+    endorsed; the action asks "Which resonance?" for a pose that did not. On a pose that
+    named none, any resonance is saved waiting for the poser to accept it
+    (``awaiting_acceptance`` is true on the row that comes back, #5327).
     The ``endorser_sheet`` is resolved from the requesting account in the
     view (``PoseEndorsementViewSet.perform_create``) and injected via
     ``serializer.save(endorser_sheet=sheet)``.
@@ -2077,6 +2080,7 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
             "created_at",
             "settled_at",
             "granted_amount",
+            "awaiting_acceptance",
         ]
         read_only_fields = [
             "endorser_sheet",
@@ -2085,6 +2089,7 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
             "created_at",
             "settled_at",
             "granted_amount",
+            "awaiting_acceptance",
         ]
         extra_kwargs: ClassVar[dict[str, dict[str, bool]]] = {"resonance": {"required": False}}
 
@@ -2102,6 +2107,12 @@ class PoseEndorsementSerializer(serializers.ModelSerializer):
         if not result.success:
             raise serializers.ValidationError({"detail": result.message})
         return result.data["endorsement"]
+
+
+class ChangePoseEndorsementSerializer(serializers.Serializer):
+    """Body of ``POST /api/magic/pose-endorsements/<pk>/change/`` (#5327): the new pick."""
+
+    resonance = serializers.PrimaryKeyRelatedField(queryset=Resonance.objects.all())
 
 
 # =============================================================================
@@ -2219,7 +2230,8 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
     """Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
 
     ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
-    no bonus check) say what the bonus check added to ``amount`` (#5308).
+    no bonus check) say what the bonus check added to ``amount`` (#5308). ``nullified_at`` is
+    when staff or the scene's GM undid the gain, null while it stands (#5327).
     """
 
     bonus_outcome = serializers.CharField(
@@ -2237,6 +2249,7 @@ class ResonanceGrantSerializer(serializers.ModelSerializer):
             "bonus_outcome",
             "source",
             "granted_at",
+            "nullified_at",
             "source_room_profile",
             "source_staff_account",
             "source_pose_endorsement",
@@ -4024,6 +4037,11 @@ class TechniqueDesignSerializer(serializers.Serializer):
 # =============================================================================
 
 
+_ERR_TAG_POSE_UNAVAILABLE = "That pose is not available to tag."
+_ERR_TAG_SCENE_MISMATCH = "That pose belongs to a different scene."
+_ERR_TAG_NOT_IN_SCENE = "That character is not part of this scene."
+
+
 class DramaticMomentTypeSerializer(serializers.ModelSerializer):
     """Read-only catalog of authored dramatic-moment types (for the tag picker)."""
 
@@ -4038,7 +4056,27 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
     Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
     ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
     ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+    ``resonance`` (write-only, optional, #5327) names the resonance the tag pays: the scene's GM
+    and staff may name any, anyone else's counts only when the character already has it.
+
+    The view has already checked the requester may tag in the scene before this validates
+    anything, so a refusal here never tells a stranger whether an id exists. A pose fixes the
+    scene (a different ``scene`` is refused), and the character must be the pose's author or
+    take part in the scene. What comes back never names the real character or the account
+    behind a pose, except to staff.
     """
+
+    resonance = serializers.PrimaryKeyRelatedField(
+        queryset=Resonance.objects.all(),
+        required=False,
+        write_only=True,
+        help_text=(
+            "The resonance this tag pays. The scene's GM and staff may name any resonance, "
+            "whether or not it is in the tagged character's aura; for anyone else it counts "
+            "only when she already has it. Omit it to let the moment type and her gifts "
+            "decide. The tagged player is told which resonance it paid."
+        ),
+    )
 
     class Meta:
         model = DramaticMomentTag
@@ -4048,6 +4086,7 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
             "character_sheet",
             "scene",
             "interaction",
+            "resonance",
             "tagged_by",
             "tagged_at",
         ]
@@ -4058,24 +4097,64 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
             "interaction": {"required": False},
         }
 
+    def to_representation(self, instance: DramaticMomentTag) -> dict:
+        """Leave out the real character and the account unless the reader is staff."""
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        if request is None or not request.user.is_staff:
+            data.pop("character_sheet", None)
+            data.pop("tagged_by", None)
+        return data
+
     def validate(self, attrs: dict) -> dict:
         interaction = attrs.get("interaction")
         if interaction is not None:
-            persona = interaction.persona
-            sheet = persona.character_sheet if persona is not None else None
-            if attrs.get("character_sheet") is None:
-                if sheet is None:
-                    raise serializers.ValidationError(
-                        {"character_sheet": "Pose has no character sheet; supply character_sheet."}
-                    )
-                attrs["character_sheet"] = sheet
-            if attrs.get("scene") is None:
-                attrs["scene"] = interaction.scene
+            self._settle_pose_anchor(attrs, interaction)
         if attrs.get("character_sheet") is None:
             raise serializers.ValidationError(
                 {"character_sheet": "Provide interaction or character_sheet."}
             )
+        if interaction is None:
+            self._require_in_scene(attrs["character_sheet"], attrs.get("scene"))
         return attrs
+
+    def _require_readable_pose(self, interaction: "Interaction") -> None:
+        """Refuse a pose the requester cannot read (staff may tag any)."""
+        from world.scenes.models import Interaction  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is None or request.user.is_staff:
+            return
+        if not Interaction.objects.readable_by(request.user).filter(pk=interaction.pk).exists():
+            raise serializers.ValidationError({"interaction": _ERR_TAG_POSE_UNAVAILABLE})
+
+    def _settle_pose_anchor(self, attrs: dict, interaction: "Interaction") -> None:
+        """Take the scene and, when none was named, the poser from the pose being tagged."""
+        self._require_readable_pose(interaction)
+        if attrs.get("scene") is not None and attrs["scene"].pk != interaction.scene_id:
+            raise serializers.ValidationError({"scene": _ERR_TAG_SCENE_MISMATCH})
+        attrs["scene"] = interaction.scene
+        persona = interaction.persona
+        sheet = persona.character_sheet if persona is not None else None
+        if attrs.get("character_sheet") is not None:
+            if sheet is None or attrs["character_sheet"].pk != sheet.pk:
+                self._require_in_scene(attrs["character_sheet"], attrs["scene"])
+            return
+        if sheet is None:
+            raise serializers.ValidationError(
+                {"character_sheet": "Pose has no character sheet; supply character_sheet."}
+            )
+        attrs["character_sheet"] = sheet
+
+    def _require_in_scene(self, sheet: CharacterSheet, scene: "Scene | None") -> None:
+        """Refuse a character who is not part of the scene being tagged in (staff may tag any)."""
+        from world.scenes.services import sheet_is_in_scene  # noqa: PLC0415
+
+        request = self.context.get("request")
+        if request is not None and request.user.is_staff:
+            return
+        if scene is not None and not sheet_is_in_scene(sheet, scene):
+            raise serializers.ValidationError({"character_sheet": _ERR_TAG_NOT_IN_SCENE})
 
     def create(self, validated_data: dict) -> DramaticMomentTag:
         from world.magic.exceptions import (  # noqa: PLC0415
@@ -4091,6 +4170,7 @@ class DramaticMomentTagSerializer(serializers.ModelSerializer):
                 tagged_by=validated_data["tagged_by"],
                 scene=validated_data.get("scene"),
                 interaction=validated_data.get("interaction"),
+                resonance=validated_data.get("resonance"),
             )
         except (EndorsementValidationError, DramaticMomentCapExceeded) as exc:
             raise serializers.ValidationError({"detail": exc.user_message}) from exc

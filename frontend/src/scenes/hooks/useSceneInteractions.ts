@@ -52,10 +52,31 @@ export function wsPayloadToInteraction(
     endorsee_sheet_id: payload.endorsee_sheet_id ?? null,
     endorsable_resonances: payload.endorsable_resonances ?? [],
     pose_endorsers: payload.pose_endorsers ?? [],
+    act_marks: payload.act_marks ?? [],
+    pending_picks: payload.pending_picks ?? [],
     my_pose_endorsement: null,
     entry_endorsers: payload.entry_endorsers ?? [],
     entry_endorsed_by_me: false,
   };
+}
+
+/**
+ * The feed rows the viewer reads: every REST row, then the live frames for poses the REST
+ * pages do not hold yet. A row the REST feed holds always wins over a live frame for the same
+ * pose, because a frame never carries what is per-viewer (`pending_picks`, a mark's `can_undo`,
+ * `my_pose_endorsement`): a later frame must not overwrite what a refetch brought (#5327). The
+ * interaction-changed notice refetches the row into the REST cache, which is what ends a live
+ * frame's reign.
+ *
+ * REST pages are newest-first and live rows arrive chronologically; this order is not display
+ * order. Display order comes from the reader's timestamp sort (game/feedRows.ts).
+ */
+export function mergeFeedWithLive(
+  rest: Interaction[],
+  live: (InteractionWsPayload | InteractionWsMetadata)[]
+): Interaction[] {
+  const restIds = new Set(rest.map((row) => row.id));
+  return [...rest, ...live.filter((frame) => !restIds.has(frame.id)).map(wsPayloadToInteraction)];
 }
 
 // One shared object, so a session with no retention yet selects the same
@@ -123,14 +144,7 @@ export function useSceneInteractions(sceneId: string | undefined, viewerKey?: st
         (page) => (page as { results: Interaction[] }).results
       ) ?? [];
 
-    const restIds = new Set(restInteractions.map((i) => i.id));
-    const newFromWs = wsInteractions
-      .filter((ws) => !restIds.has(ws.id))
-      .map(wsPayloadToInteraction);
-
-    // REST pages are newest-first and WS rows arrive chronologically; this order is not
-    // display order. Display order comes from the reader's timestamp sort (game/feedRows.ts).
-    return [...restInteractions, ...newFromWs];
+    return mergeFeedWithLive(restInteractions, wsInteractions);
   }, [interactionsQuery.data?.pages, wsInteractions]);
 
   const retention = useAppSelector(

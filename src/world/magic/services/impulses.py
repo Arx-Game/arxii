@@ -226,13 +226,15 @@ def earned_in_scene(
     Only a grant whose source is in ``COMPULSION_INDULGING_SOURCES`` counts: a deed the character
     did themselves, never a grant that landed from another player, a GM or a cron. Grants carry
     no scene of their own, so "in this scene" is a grant made since the scene started.
-    ``excluding`` leaves out the grant a caller is in the middle of recording.
+    ``excluding`` leaves out the grant a caller is in the middle of recording. A grant staff or
+    the scene's GM undid (#5327) is no longer something she earned, so it does not count.
     """
     grants = ResonanceGrant.objects.filter(
         character_sheet=sheet,
         resonance=resonance,
         source__in=COMPULSION_INDULGING_SOURCES,
         granted_at__gte=scene.date_started,
+        nullified_at__isnull=True,
     )
     if excluding is not None:
         grants = grants.exclude(pk=excluding.pk)

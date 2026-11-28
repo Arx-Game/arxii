@@ -29,8 +29,8 @@ import {
 import { Button } from '@/components/ui/button';
 
 import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
-import { claimFields } from '@/magic/claiming';
-import { useRefreshClaims, useWaitingClaims } from '@/magic/queries';
+import { useRefreshRecordedActs } from '@/magic/queries';
+import { reachFields } from '@/magic/reach';
 import { reflectionFields } from '@/magic/reflection';
 
 import type { CreateJournalEntryRequest } from '../api';
@@ -38,6 +38,7 @@ import { useCreateJournalEntry } from '../queries';
 import {
   EMPTY_ENTRY_FIELDS,
   isAboutUnresolved,
+  isReachUnfinished,
   isReflectionUnfinished,
   type JournalEntryFieldsValue,
 } from '../entryFields';
@@ -57,8 +58,7 @@ interface JournalComposerDialogProps {
 export function JournalComposerDialog({ open, onClose, initialTags }: JournalComposerDialogProps) {
   const [value, setValue] = useState<JournalEntryFieldsValue>(EMPTY_ENTRY_FIELDS);
   const createEntry = useCreateJournalEntry();
-  const waitingClaims = useWaitingClaims(useActiveCharacterId());
-  const refreshClaims = useRefreshClaims();
+  const refreshRecordedActs = useRefreshRecordedActs(useActiveCharacterId());
 
   // Reset (and re-seed tags) only on the closed->open transition, not on every
   // render while the dialog stays open — otherwise a parent passing a fresh
@@ -80,7 +80,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
       tags: value.tags,
       about: value.about?.id ?? null,
       ...reflectionFields(value.reflection),
-      ...claimFields(value.claim, waitingClaims),
+      ...reachFields(value.reach),
     };
     // Omit the field entirely at the INHERIT default — never send a no-op override.
     if (value.posthumousOverride !== 'inherit') {
@@ -90,8 +90,12 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
       onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
         if (entry.reflection_line) toast.success(entry.reflection_line);
-        for (const line of entry.claim_lines ?? []) toast.success(line);
-        refreshClaims();
+        // A refused mark leaves the entry posted; its line says why and is shown as the error it is.
+        if (entry.mark_line) {
+          if (entry.mark_recorded === false) toast.error(entry.mark_line);
+          else toast.success(entry.mark_line);
+        }
+        refreshRecordedActs();
         onClose();
       },
       onError: (err: Error) => toast.error(err.message),
@@ -105,6 +109,7 @@ export function JournalComposerDialog({ open, onClose, initialTags }: JournalCom
     value.body.trim().length > 0 &&
     !isAboutUnresolved(value) &&
     !isReflectionUnfinished(value) &&
+    !isReachUnfinished(value) &&
     !createEntry.isPending;
   // Inline refusal rendering (#3412 T4) — a gate refusal (4xx `{detail}`, parsed into
   // `ApiError.message` by `readErrorDetail`/`createJournalEntry`) needs to stay readable

@@ -48,9 +48,12 @@ from world.magic.factories import (
     DramaticMomentTypeFactory,
     DriftCorrectionRiteFactory,
     FacetFactory,
+    KindledDeedAwardFactory,
+    KindledStrengthTierFactory,
     KindlingSituationFactory,
     MotifResonanceAssociationFactory,
     MotifResonanceFactory,
+    RecordedActFactory,
     ResonanceFactory,
     ResonanceTierFactory,
     set_aura_split,
@@ -918,6 +921,29 @@ class TheChanceStaysOpenWhenTheSceneEnds(DriftJourneyCase):
 
         self.assertEqual(balance(self.ysmay, self.dawnlight), 20)
         self.assertIsNone(self.offer_of(self.ysmay))
+
+
+class AMarkIsADeedAndOpensTheChance(DriftJourneyCase):
+    """A gain Ysmay marks on an act in the live scene is a deed like a GM's tag (#5327)."""
+
+    def test_marking_an_act_with_dawnlight_grows_it_and_opens_the_chance_to_atone(self) -> None:
+        self.connect_telnet(self.ysmay)
+        success = self.outcomes["Success"]
+        KindledDeedAwardFactory(outcome_tier=success, amount=10)
+        KindledStrengthTierFactory(rank=1, name="Faint", earn_percent=100)
+        act = RecordedActFactory(
+            character_sheet=self.ysmay.sheet_data, outcome=success, label="Held the line"
+        )
+        self.assertIsNone(self.offer_of(self.ysmay))
+
+        with self.captureOnCommitCallbacks(execute=True):
+            told = self.telnet(self.ysmay, f"pose/reach Dawnlight:{act.pk}=holds the line.")
+
+        self.assertIn("Your Dawnlight grows by 10.", told)
+        self.assertEqual(balance(self.ysmay, self.dawnlight), 10)
+        self.assertIn(NOTICE, strip_ansi(self.said(self.ysmay)))
+        # The chance is half the deed: 50 percent of 10.
+        self.assertEqual(self.cap_toward(self.ysmay, self.dawnlight), 5)
 
 
 class WhenNothingOpensAChance(DriftJourneyCase):

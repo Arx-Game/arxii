@@ -5,7 +5,7 @@ check per affinity it pays (the act's stat plus that affinity's skill), a good r
 gain, and every pull rolls a worth check with the same skill. Each class below holds one rule of
 that design, quoted in the maintainer's words from the issue. Every example builds its
 characters fresh with factories and uses our own functions (``grant_resonance``,
-``award_kindled_deeds``, ``claim_kindled``, ``apply_ritual_bond``, ``spend_resonance_for_pull``);
+``award_kindled_deeds``, ``apply_ritual_bond``, ``spend_resonance_for_pull``);
 the shared catalog lives once in ``setUpTestData`` (a Hypothesis test's own ``setUp`` runs
 outside any transaction, so it would leak rows between examples).
 
@@ -27,7 +27,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from decimal import Decimal
 
-from hypothesis import assume, given, settings, strategies as st
+from hypothesis import given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
@@ -42,7 +42,6 @@ from world.checks.test_helpers import (
     make_player_character,
 )
 from world.checks.types import ExtraTraitTerm
-from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.covenants.perks.constants import Situation
 from world.items.constants import BodyRegion, EquipmentLayer
 from world.items.factories import (
@@ -68,7 +67,6 @@ from world.magic.factories import (
     CharacterResonanceFactory,
     KindledDeedAwardFactory,
     KindledStrengthTierFactory,
-    KindlingConfigFactory,
     KindlingSituationFactory,
     ResonanceCheckAwardFactory,
     ResonanceFactory,
@@ -88,7 +86,6 @@ from world.magic.models import (
     TrickleAccrual,
 )
 from world.magic.services import preview_resonance_pull, spend_resonance_for_pull
-from world.magic.services.claiming import claim_kindled
 from world.magic.services.gain import (
     get_resonance_gain_config,
     residence_trickle_tick,
@@ -102,7 +99,6 @@ from world.magic.services.ritual_bond import apply_ritual_bond
 from world.magic.types import PullActionContext
 from world.magic.types.kindling import KindlingAct
 from world.magic.types.resonance_checks import NO_GAIN_BONUS
-from world.mechanics.factories import PropertyFactory
 from world.mechanics.services import ensure_skill_target
 from world.missions.factories import (
     MissionInstanceFactory,
@@ -268,35 +264,42 @@ class _World:
 
     # -- a kindled deed ---------------------------------------------------------------
 
-    def kindle(self, keys: Sequence[str], sheet: CharacterSheet) -> None:
-        """Make an active situation that names each of ``keys`` hold for ``sheet``.
+    def kindle(self, keys: Sequence[str]) -> KindlingAct:
+        """Author a choice that pays each of ``keys`` and return the act that takes it.
 
-        Each resonance gets its own feeling, one condition carries them all, and the sheet
-        bears it, so any act she does feeds them. The one strength tier reaches at severity 1
-        and earns the whole award.
+        The act takes a mission option whose themes each carry a "mission theme" situation on
+        one of ``keys``: an authored choice, the only kind that pays at once (#5327). The one
+        strength tier reaches at once and earns the whole award.
         """
         KindledStrengthTierFactory(rank=1, min_severity=1, earn_percent=100)
-        template = ConditionTemplateFactory(name=f"Feelings of {sheet.pk}")
+        option = MissionOptionFactory()
         for key in keys:
-            feeling = PropertyFactory()
-            resonance = self.resonances[key]
-            resonance.feeling = feeling
-            resonance.save()
-            template.properties.add(feeling)
+            theme = MissionThemeFactory()
+            option.themes.add(theme)
             KindlingSituationFactory(
-                resonance=resonance, situation=Situation.OWN_FEELING, strength=None
+                resonance=self.resonances[key],
+                situation=Situation.MISSION_THEME,
+                mission_theme=theme,
+                strength=1,
             )
-        ConditionInstanceFactory(target=sheet.character, condition=template, severity=1)
+        return KindlingAct(
+            kind=KindlingActKind.MISSION_OPTION,
+            mission_option=option,
+            label="Threatened a prisoner",
+        )
 
     def deed_award(self, amount: int) -> None:
         """What a deed earns at every canonical result: ``amount``."""
         for name in CANONICAL_OUTCOME_LEVELS:
             KindledDeedAwardFactory(outcome_tier=self.outcomes[name], amount=amount)
 
-    def do_deed(self, sheet: CharacterSheet, tier: str = "Success") -> list[ResonanceGrant]:
-        """The sheet does one act, its own roll landing on ``tier``."""
-        act = KindlingAct(kind="social", label="Threatened a prisoner")
-        return award_kindled_deeds(sheet, act=act, outcome=self.outcomes[tier])
+    def do_deed(
+        self, sheet: CharacterSheet, act: KindlingAct, tier: str = "Success"
+    ) -> list[ResonanceGrant]:
+        """The sheet takes ``act`` (from ``kindle``) in a mission, its roll landing on ``tier``."""
+        return award_kindled_deeds(
+            sheet, act=act, outcome=self.outcomes[tier], mission=MissionInstanceFactory()
+        )
 
 
 def _gain(sheet: CharacterSheet, key: str, world: _World, **kwargs: object) -> ResonanceGrant:
@@ -393,19 +396,19 @@ class OneCheckPerAffinity(_World, HypothesisTestCase):
     ) -> None:
         """Maintainer: "Always a check per affinity when doing resonance gain."
 
-        Given an act that feeds N resonances across K affinities (a kindled deed, which pays
-        every resonance a situation feeds), it rolls the bonus check exactly K times. Every
+        Given an act that pays N resonances across K affinities (a chosen deed, which pays every
+        resonance an authored choice names), it rolls the bonus check exactly K times. Every
         grant of one affinity shares the one roll's result and percent, and two affinities
         never share a result (each roll is given a different one here).
         """
         sheet = self.character(holds=sorted(keys))
         self.configure(gain=RANKED_GAINS)
-        self.kindle(sorted(keys), sheet)
+        act = self.kindle(sorted(keys))
         self.deed_award(amount)
         distinct = [self.outcomes[name] for name in ("Failure", "Success", "Critical Success")]
 
         with force_check_outcome(*distinct) as capture:
-            grants = self.do_deed(sheet)
+            grants = self.do_deed(sheet, act)
 
         affinities = {AFFINITY_OF[key] for key in keys}
         self.assertEqual(len(grants), len(keys))
@@ -473,214 +476,6 @@ class MovesNobodyEarnedPayWhatTheyDid(_World, HypothesisTestCase):
         self.assertEqual(self.bonus_calls(capture), [])
 
 
-class UnheldIsEarned(_World, HypothesisTestCase):
-    """A character who does not hold a Celestial or Abyssal resonance earns it from a deed only
-    when she chose that deed; a state she caused, a feeling she bears and any Primal resonance
-    feed only a character who holds the resonance."""
-
-    def stage(
-        self,
-        sheet: CharacterSheet,
-        chosen: Sequence[str],
-        caused: Sequence[str],
-        felt: Sequence[str],
-    ) -> KindlingAct:
-        """Set one mission scene and return the act ``sheet`` makes in it.
-
-        The act takes a mission option and is aimed at one other character. The option carries
-        a theme for each resonance in ``chosen``, each with a "mission theme" situation. Each
-        resonance in ``caused`` gets a "target in a state she caused" situation, and the other
-        character bears a condition ``sheet`` laid that carries its feeling. Each resonance in
-        ``felt`` gets an "own feeling" situation, and ``sheet`` herself bears a condition
-        carrying its feeling. The one strength tier reaches at severity 1 and earns the whole
-        award.
-        """
-        KindledStrengthTierFactory(rank=1, min_severity=1, earn_percent=100)
-        other = CharacterSheetFactory()
-        option = MissionOptionFactory()
-        done_to_them = ConditionTemplateFactory(name=f"What {sheet.pk} did")
-        felt_by_her = ConditionTemplateFactory(name=f"What {sheet.pk} feels")
-        for key in sorted({*chosen, *caused, *felt}):
-            resonance = self.resonances[key]
-            resonance.feeling = PropertyFactory()
-            resonance.save()
-            if key in chosen:
-                theme = MissionThemeFactory()
-                option.themes.add(theme)
-                KindlingSituationFactory(
-                    resonance=resonance,
-                    situation=Situation.MISSION_THEME,
-                    mission_theme=theme,
-                    strength=1,
-                )
-            if key in caused:
-                done_to_them.properties.add(resonance.feeling)
-                KindlingSituationFactory(
-                    resonance=resonance,
-                    situation=Situation.TARGET_IN_STATE_THEY_CAUSED,
-                    strength=None,
-                )
-            if key in felt:
-                felt_by_her.properties.add(resonance.feeling)
-                KindlingSituationFactory(
-                    resonance=resonance, situation=Situation.OWN_FEELING, strength=None
-                )
-        ConditionInstanceFactory(
-            target=other.character,
-            condition=done_to_them,
-            severity=1,
-            source_character=sheet.character,
-        )
-        ConditionInstanceFactory(target=sheet.character, condition=felt_by_her, severity=1)
-        return KindlingAct(
-            kind=KindlingActKind.MISSION_OPTION,
-            target=other,
-            mission_option=option,
-            label="Threatened a prisoner",
-        )
-
-    @settings(max_examples=50, deadline=None)
-    @given(
-        chosen=st.sets(st.sampled_from(RESONANCE_KEYS)),
-        caused=st.sets(st.sampled_from(RESONANCE_KEYS)),
-        felt=st.sets(st.sampled_from(RESONANCE_KEYS)),
-        held=st.sets(st.sampled_from(RESONANCE_KEYS)),
-        amount=st.integers(1, 40),
-    )
-    def test_only_a_deed_she_chose_earns_a_resonance_she_does_not_hold(
-        self, chosen: set[str], caused: set[str], felt: set[str], held: set[str], amount: int
-    ) -> None:
-        """Maintainer: "I *do* think characters should earn resonance they don't have - that's
-        sort of the entire point of an otherwise celestial hero snapping and doing something
-        awful". And, on 2026-11-27: "primal is always a situation you're in, celestial or
-        abyssal is something you're doing to someone else", and "there needs to be a measure
-        of *intent* to gaining that resonance. Like a paladin hunting a vampire to protect
-        people from it would probably make the vampire feel hunted, but unless he's trying to
-        *deliberately* make the vampire feel terrorized, he could not gain abyssal resonance
-        from it".
-
-        Given any resonances named by the mission option she takes (chosen), any whose feeling
-        she caused in the character she acts on (caused), any whose feeling she only bears
-        herself (felt), and any she already holds: she earns every resonance she holds that any
-        of those feeds, and of the ones she does not hold only the Celestial and Abyssal ones
-        she chose. A state she caused never pays a resonance she does not hold (the paladin),
-        a feeling she bears never does, and nothing pays her a Primal resonance she does not
-        hold.
-        """
-        assume(chosen or caused or felt)
-        sheet = self.character(holds=sorted(held))
-        self.configure()
-        act = self.stage(sheet, sorted(chosen), sorted(caused), sorted(felt))
-        self.deed_award(amount)
-        situated = chosen | caused | felt
-        earned = (situated & held) | {key for key in chosen if AFFINITY_OF[key] != "primal"}
-
-        grants = award_kindled_deeds(
-            sheet, act=act, outcome=self.outcomes["Success"], mission=MissionInstanceFactory()
-        )
-
-        self.assertEqual(
-            {grant.resonance for grant in grants}, {self.resonances[k] for k in earned}
-        )
-        for grant in grants:
-            self.assertGreater(grant.amount, 0)
-        for key in situated - earned:
-            self.assertFalse(
-                CharacterResonance.objects.filter(
-                    character_sheet=sheet, resonance=self.resonances[key]
-                ).exists()
-            )
-        for key in earned - held:
-            self.assertGreater(self.balance(sheet, key), 0)
-
-    @settings(max_examples=20, deadline=None)
-    @given(key=st.sampled_from(RESONANCE_KEYS), amount=st.integers(1, 40))
-    def test_a_situation_for_a_whole_affinity_feeds_only_what_she_holds(
-        self, key: str, amount: int
-    ) -> None:
-        """Maintainer: "situations would decide the resonance: every action should point to a
-        specific resonance which implies its affinity."
-
-        An affinity-wide situation names no one resonance, so it feeds resonances she holds and
-        never opens one she does not: with only the affinity row active, a character holding
-        nothing earns nothing.
-        """
-        sheet = self.character()
-        self.configure()
-        feeling = PropertyFactory()
-        resonance = self.resonances[key]
-        resonance.feeling = feeling
-        resonance.save()
-        KindledStrengthTierFactory(rank=1, min_severity=1, earn_percent=100)
-        KindlingSituationFactory(
-            resonance=None,
-            for_affinity=resonance.affinity,
-            situation=Situation.OWN_FEELING,
-            condition_property=feeling,
-            strength=None,
-        )
-        template = ConditionTemplateFactory(name=f"Feeling of {sheet.pk}")
-        template.properties.add(feeling)
-        ConditionInstanceFactory(target=sheet.character, condition=template, severity=1)
-        self.deed_award(amount)
-
-        grants = self.do_deed(sheet)
-
-        self.assertEqual(grants, [])
-        self.assertFalse(CharacterResonance.objects.filter(character_sheet=sheet).exists())
-
-
-class ClaimIsOnlyACollection(_World, HypothesisTestCase):
-    """What a deed set aside grew at the deed, so collecting it rolls nothing."""
-
-    @settings(max_examples=40, deadline=None)
-    @given(
-        key=st.sampled_from(RESONANCE_KEYS),
-        amount=st.integers(1, 60),
-        instant=st.integers(1, 100),
-        aside=st.integers(1, 100),
-        percent=st.integers(0, 200),
-    )
-    def test_the_instant_and_set_aside_shares_grow_alike_and_a_claim_writes_bonus_0(
-        self, key: str, amount: int, instant: int, aside: int, percent: int
-    ) -> None:
-        """Maintainer: "since the deed was already rolled once and got the bonus, the journal is
-        just a collection step".
-
-        Given any award, split of the award between what is paid now and what is set aside,
-        and bonus percent the deed's one check is worth: the grant records that percent; the
-        instant share and the set-aside share are each the plain share plus that same percent
-        of it; and claiming what waits writes a grant with bonus 0 for exactly what was set
-        aside, rolling no check at all.
-        """
-        assume(amount * aside // 100 > 0)
-        self.configure(gain=percent)
-        sheet = self.character(holds=[key])
-        self.kindle([key], sheet)
-        self.deed_award(amount)
-        KindlingConfigFactory(instant_percent=instant, claim_percent=aside)
-
-        with force_every_check_outcome(self.outcomes["Success"]) as capture:
-            (deed,) = self.do_deed(sheet)
-            rolls_at_the_deed = len(self.bonus_calls(capture))
-            waiting = CharacterResonance.objects.get(
-                character_sheet=sheet, resonance=self.resonances[key]
-            ).kindled_unclaimed
-            claimed = claim_kindled(sheet)
-
-        plain_instant = max(1, amount * instant // 100)
-        plain_aside = amount * aside // 100
-        self.assertEqual(rolls_at_the_deed, 1)
-        self.assertEqual(deed.bonus_percent, percent)
-        self.assertEqual(deed.amount, plain_instant + plain_instant * percent // 100)
-        self.assertEqual(waiting, plain_aside + plain_aside * percent // 100)
-        self.assertEqual(len(self.bonus_calls(capture)), rolls_at_the_deed)
-        (claim,) = ResonanceGrant.objects.filter(source=GainSource.KINDLED_CLAIM)
-        self.assertEqual(claim.amount, waiting)
-        self.assertEqual((claim.bonus_outcome, claim.bonus_percent), (None, 0))
-        self.assertEqual([c.amount for c in claimed], [waiting])
-
-
 def _tier_name(outcome: CheckOutcome) -> str:
     return outcome.name
 
@@ -719,7 +514,7 @@ class TricklesWaitForTheRitual(_World, HypothesisTestCase):
         resonance gains. So they're distinct."
 
         Given any resonances a room's residence trickles, any days of ticks and a ritual that
-        succeeds or fails: the ticks change no balance and no ``kindled_unclaimed``, and what
+        succeeds or fails: the ticks change no balance, and what
         waits is exactly the days' trickle; the ritual then writes one ``TRICKLE_HARVEST`` grant
         per trickle resonance, each the pile grown by its affinity's check; it rolls one check
         per affinity across every grant it wrote (a roll's result shared by that affinity's
@@ -728,7 +523,7 @@ class TricklesWaitForTheRitual(_World, HypothesisTestCase):
         self.configure(gain=RANKED_GAINS)
         sheet, daily = self.performer_with_a_residence(sorted(keys))
         before = {
-            row.resonance_id: (row.balance, row.kindled_unclaimed)
+            row.resonance_id: row.balance
             for row in CharacterResonance.objects.filter(character_sheet=sheet)
         }
 
@@ -736,7 +531,7 @@ class TricklesWaitForTheRitual(_World, HypothesisTestCase):
             residence_trickle_tick()
 
         after = {
-            row.resonance_id: (row.balance, row.kindled_unclaimed)
+            row.resonance_id: row.balance
             for row in CharacterResonance.objects.filter(character_sheet=sheet)
         }
         self.assertEqual(after, before)

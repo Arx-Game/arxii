@@ -34,6 +34,20 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   menu of its own, #3294); it keeps its "(via <owner>)" tell after the line. Action chips, the parent chip, reactions, badges,
   nominate and endorsements keep their places after the text. The ACTION, OUTCOME and
   narration branches are unchanged.
+- **`ActMarkChips.tsx`** (#5327): the chips of a marked pose, one per resonance marked, "<Resonance> ·
+  <act label>" from `Interaction.act_marks` (the feed row and the live frame carry them from one builder).
+  Struck through with "Reward undone by the scene's GM" or "by staff" once undone; "Undo reward"
+  (`useUndoResonanceGrant`, `POST /api/magic/resonance-grants/<id>/undo/`) shows only where `can_undo` is
+  true and the line is not read-only. Mounted by `PoseUnit` after the prose.
+- **`EndorsementControl.tsx`** (#5327): for `kind='pose'` the Endorse menu lists every resonance from the
+  resonance catalog under its affinity name (never `endorsable_resonances`, which entry and style
+  endorsements still use). A pick on a pose that named no resonance waits for the poser: the endorser
+  sees a dashed chip "<Resonance> · waiting for <Name>" with Change (the same menu, `useChangePoseEndorsement`)
+  and Withdraw; the poser, the scene's GM and staff see "<Name> proposed <Resonance>" with Accept and
+  Decline (`useAnswerPoseEndorsement`), both from `Interaction.pending_picks` (`mine` / `can_answer`; the
+  server sends them to nobody else). A pose that named its own resonance keeps the one-click "Endorse their X".
+  The menu is withheld once the pose carries any mark, an undone one included (the server refuses it). `DramaticMomentTagDialog` has a second picker
+  naming the resonance the tag pays (any resonance, the moment type's own showing until the GM picks another).
 - **`hooks/useKudos.ts`** (#2031, #4128): the first kudos on a pose, lazily opening its
   kudos window and recording the reaction in one call; was `ReactionStrip`'s standalone
   chip, now the play menu's Kudos item. An opened kudos window still renders as a strip row.

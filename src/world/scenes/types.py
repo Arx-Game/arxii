@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, NotRequired, TypedDict
+from typing import TYPE_CHECKING, Any, Literal, NotRequired, TypedDict
 
 from actions.types import PendingActionResolution
 from world.magic.types import TechniqueUseResult
@@ -54,6 +54,38 @@ class NarratedEventPayload(TypedDict):
     subject_persona_id: NotRequired[int]
 
 
+class ActMarkPayload(TypedDict):
+    """One mark a pose carries (#5327): the resonance it marked and the act it pointed at.
+
+    ``undone`` is true once staff or the scene's GM undid the reward, and ``undone_by`` says
+    which: ``"staff"`` or ``"gm"`` (never an account name), null while the mark stands.
+    ``can_undo`` is true only for staff and the scene's GM, and only while the mark stands.
+    """
+
+    grant_id: int
+    resonance_id: int
+    resonance_name: str
+    act_label: str
+    undone: bool
+    undone_by: Literal["gm", "staff"] | None
+    can_undo: bool
+
+
+class PendingPickPayload(TypedDict):
+    """A resonance a witness picked on a pose that named none, waiting for the poser (#5327).
+
+    Sent only to the endorser (``mine``) and to whoever may answer it (``can_answer``: the
+    poser, the scene's GM and staff). Nobody else gets the row.
+    """
+
+    endorsement_id: int
+    resonance_id: int
+    resonance_name: str
+    endorser_name: str
+    mine: bool
+    can_answer: bool
+
+
 class FeedFieldsPayload(TypedDict):
     """The room-wide REST feed fields a live frame carries (#4508).
 
@@ -74,6 +106,8 @@ class FeedFieldsPayload(TypedDict):
     reactions: list[dict[str, Any]]
     reaction_windows: list[dict[str, Any]]
     dramatic_moment_tags: list[dict[str, Any]]
+    act_marks: list[ActMarkPayload]
+    pending_picks: list[PendingPickPayload]
 
 
 class InteractionPayload(FeedFieldsPayload):

@@ -20,6 +20,9 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
+    from world.character_sheets.models import CharacterSheet
+    from world.journals.models import JournalEntry
+    from world.magic.types.marking import PendingMark
 
 
 _MSG_NO_ACTIVE_CHARACTER = "No active character."
@@ -28,6 +31,9 @@ _MSG_INVALID_DISPOSITION = "disposition must be reveal or seal."
 _MSG_INVALID_OVERRIDE = "override must be inherit, reveal, or seal."
 _MSG_ABOUT_NOT_FOUND = "That character was not found."
 _MSG_INVALID_CONSENT = "consent must be rivals or anyone."
+_MSG_MARK_NEEDS_ACT = (
+    "A journal entry marks an act. Choose the act this entry is about, or leave the resonance out."
+)
 
 
 def _resolve_about(about_id: Any) -> tuple[Any, str | None]:
@@ -56,9 +62,36 @@ class _BaseJournalAction(Action):
         return resolve_actor_sheet(actor)
 
 
+def _record_journal_mark(
+    sheet: CharacterSheet, pending_mark: PendingMark, entry: JournalEntry
+) -> tuple[str, bool]:
+    """Pay the mark a journal entry carries, as ``(line, paid)``.
+
+    A mark refused late (the week's table at 0 percent, a worn payer) is not an error for the
+    entry: its refusal line comes back with ``paid`` false and the act stays pointable.
+    """
+    from world.magic.exceptions import MarkError  # noqa: PLC0415
+    from world.magic.services.marking import record_pending_mark  # noqa: PLC0415
+
+    try:
+        result = record_pending_mark(sheet, pending_mark, journal_entry=entry)
+    except MarkError as exc:
+        return exc.user_message, False
+    return result.line, result.paid
+
+
 @dataclass
 class CreateJournalEntryAction(_BaseJournalAction):
-    """Write a new journal entry (optionally public, with tags)."""
+    """Write a new journal entry (optionally public, with tags).
+
+    A reflection (#5124) rides with it: ``reflect_choice`` and one target. A mark (#5327) rides
+    with it too: ``reach_act_id`` (one of the writer's recorded acts) and ``reach_resonance_id``,
+    both needed, since a journal entry marks an act and has no bare reach. Both are checked
+    before the entry is written and recorded in the same transaction as it. A reflection that
+    fails late takes the entry back with it; a mark that is refused late does not: the entry
+    stays, the act stays pointable and the refusal comes back in ``mark_line`` with
+    ``mark_recorded`` false.
+    """
 
     key: str = "create_journal_entry"
     name: str = "Write Journal Entry"
@@ -73,11 +106,8 @@ class CreateJournalEntryAction(_BaseJournalAction):
     ) -> ActionResult:
         from world.journals.constants import PosthumousOverride  # noqa: PLC0415
         from world.journals.services import create_journal_entry  # noqa: PLC0415
-        from world.magic.exceptions import ClaimError, ReflectionError  # noqa: PLC0415
-        from world.magic.services.claiming import (  # noqa: PLC0415
-            pending_claim_from,
-            record_pending_claim,
-        )
+        from world.magic.exceptions import MarkError, ReflectionError  # noqa: PLC0415
+        from world.magic.services.marking import pending_mark_from  # noqa: PLC0415
         from world.magic.services.reflection import (  # noqa: PLC0415
             pending_reflection_from,
             record_pending_reflection,
@@ -102,15 +132,23 @@ class CreateJournalEntryAction(_BaseJournalAction):
             pending = pending_reflection_from(sheet, kwargs)
         except ReflectionError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        # A claim (#5181) is checked the same way: a named resonance with nothing waiting is
-        # refused before the entry is written.
+
+        # A mark (#5327) is checked the same way. A journal entry marks an act, so a resonance
+        # with no act is refused here.
+        if kwargs.get("reach_act_id") is None and kwargs.get("reach_resonance_id") is not None:
+            return ActionResult(success=False, message=_MSG_MARK_NEEDS_ACT)
         try:
-            claim = pending_claim_from(sheet, kwargs)
-        except ClaimError as exc:
+            pending_mark = pending_mark_from(sheet, kwargs)
+        except MarkError as exc:
             return ActionResult(success=False, message=exc.user_message)
 
-        # Entry and reflection are one transaction: a reflection that fails late (a race on
-        # the same deed) takes the entry back with it, and the writer is told why.
+        # Entry and reflection are one transaction: a reflection that fails late (a race on the
+        # same deed) takes the entry back with it, and the writer is told why. A mark that is
+        # refused late (the week's table at 0 percent, a worn payer) does not: the entry stays,
+        # the act stays pointable and the writer reads the refusal beside the entry. Catching
+        # it inside the block keeps the entry's other writes (counters, cached rows) true.
+        mark_line = ""
+        mark_paid = False
         try:
             with transaction.atomic():
                 entry = create_journal_entry(
@@ -127,7 +165,8 @@ class CreateJournalEntryAction(_BaseJournalAction):
                     if pending is not None
                     else None
                 )
-                claim_lines = record_pending_claim(sheet, claim) if claim is not None else ()
+                if pending_mark is not None:
+                    mark_line, mark_paid = _record_journal_mark(sheet, pending_mark, entry)
         except ReflectionError as exc:
             return ActionResult(success=False, message=exc.user_message)
         return ActionResult(
@@ -135,11 +174,11 @@ class CreateJournalEntryAction(_BaseJournalAction):
             message=(
                 f"You write a new journal entry: {entry.title}."
                 + (f" {recorded_line(reflection)}" if reflection is not None else "")
-                + "".join(f" {line}" for line in claim_lines)
+                + (f" {mark_line}" if mark_line else "")
             ),
             data={"entry_id": entry.pk}
             | ({"reflection_line": recorded_line(reflection)} if reflection is not None else {})
-            | ({"claim_lines": list(claim_lines)} if claim_lines else {}),
+            | ({"mark_line": mark_line, "mark_recorded": mark_paid} if mark_line else {}),
         )
 
 

@@ -70,15 +70,15 @@ describe('BeatCard because reasons', () => {
     expect(screen.queryByTestId('option-reason')).not.toBeInTheDocument();
   });
 
-  it('shows the kindled resonance an option would feed, by name and reason', () => {
+  it('says what an option pays at once, by resonance name and reason', () => {
     useBeatMock.mockReturnValue({
       data: beatWith(
         [],
         [
           {
-            resonance_name: 'Domination',
+            resonance_name: 'Mercy',
             strength_name: 'Strong',
-            reason: 'the overseers are Cowed',
+            reason: 'this option is about sparing them.',
           },
         ]
       ),
@@ -87,7 +87,26 @@ describe('BeatCard because reasons', () => {
     render(withProviders(<BeatCard instanceId={7} roomKey="Gate" />));
 
     expect(screen.getByTestId('option-feeds').textContent).toBe(
-      'Your Domination is kindled: the overseers are Cowed'
+      'Pays you Mercy at once: this option is about sparing them.'
     );
+  });
+
+  it('lists every resonance an option pays, and ends the line without a reason', () => {
+    useBeatMock.mockReturnValue({
+      data: beatWith(
+        [],
+        [
+          { resonance_name: 'Mercy', strength_name: 'Strong', reason: '' },
+          { resonance_name: 'Valor', strength_name: 'Strong', reason: 'you stood alone.' },
+        ]
+      ),
+      isLoading: false,
+    });
+    render(withProviders(<BeatCard instanceId={7} roomKey="Gate" />));
+
+    expect(screen.getAllByTestId('option-feeds').map((line) => line.textContent)).toEqual([
+      'Pays you Mercy at once.',
+      'Pays you Valor at once: you stood alone.',
+    ]);
   });
 });

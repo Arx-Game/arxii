@@ -10,7 +10,7 @@ import type {
   SceneScenarioPayload,
   SceneStakesSummary,
 } from './types';
-import type { ClaimFields } from '@/magic/claiming';
+import type { ReachFields } from '@/magic/reach';
 import type { ReflectionFields } from '@/magic/reflection';
 import type { SineatingFields } from '@/magic/sineating';
 import { sceneFeedSceneKey } from '@/scenes/sceneFeedCache';
@@ -240,7 +240,7 @@ export async function fetchPendingUnlinkedActions(
   return data.results;
 }
 
-export interface SubmitPoseBody extends ReflectionFields, SineatingFields, ClaimFields {
+export interface SubmitPoseBody extends ReflectionFields, SineatingFields, ReachFields {
   persona_id: number;
   scene_id?: number;
   content: string;
@@ -294,8 +294,10 @@ export interface SubmitPoseResult {
   sineating_line?: string;
   /** False when the pose posted but the Sineating was not recorded; the line says why. */
   sineating_recorded?: boolean;
-  /** Told to the writer alone when the pose carried a claim: one line per resonance (#5181). */
-  claim_lines?: string[];
+  /** Told to the writer alone when the pose carried a mark: what it paid, or why it did not (#5327). */
+  mark_line?: string;
+  /** False when the pose posted but its mark paid nothing; the line says why and what to do next. */
+  mark_recorded?: boolean;
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult> {
@@ -368,12 +370,14 @@ export async function postDramaticMomentTag(body: {
   interaction?: number;
   character_sheet?: number;
   scene?: number;
+  /** Any resonance, in her aura or not (#5327); left out, the moment type's own pays. */
+  resonance?: number;
 }): Promise<void> {
   const res = await apiFetch('/api/magic/dramatic-moment-tags/', {
     method: 'POST',
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to tag dramatic moment');
+  if (!res.ok) await throwApiError(res, 'Failed to tag dramatic moment');
 }
 
 // Dramatic-moment GM suggestions moved to the one GM prompt queue (#4101) —
@@ -418,13 +422,45 @@ export async function createPoseEndorsement(body: { interaction: number; resonan
     method: 'POST',
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error('Failed to endorse pose');
+  if (!res.ok) await throwApiError(res, 'Failed to endorse pose');
   return res.json();
 }
 
 export async function deletePoseEndorsement(id: number) {
   const res = await apiFetch(`/api/magic/pose-endorsements/${id}/`, { method: 'DELETE' });
-  if (!res.ok) throw new Error('Failed to retract endorsement');
+  if (!res.ok) await throwApiError(res, 'Failed to withdraw endorsement');
+}
+
+/**
+ * A pick on a pose that named no resonance waits for the poser (#5327). Changing it, accepting
+ * it and declining it each answer with the endorsement, `awaiting_acceptance` included.
+ */
+export async function changePoseEndorsement(body: { id: number; resonance: number }) {
+  const res = await apiFetch(`/api/magic/pose-endorsements/${body.id}/change/`, {
+    method: 'POST',
+    body: JSON.stringify({ resonance: body.resonance }),
+  });
+  if (!res.ok) await throwApiError(res, 'Failed to change your pick');
+  return res.json();
+}
+
+export async function acceptPoseEndorsement(id: number) {
+  const res = await apiFetch(`/api/magic/pose-endorsements/${id}/accept/`, { method: 'POST' });
+  if (!res.ok) await throwApiError(res, 'Failed to accept that pick');
+  return res.json();
+}
+
+export async function declinePoseEndorsement(id: number) {
+  const res = await apiFetch(`/api/magic/pose-endorsements/${id}/decline/`, { method: 'POST' });
+  if (!res.ok) await throwApiError(res, 'Failed to decline that pick');
+  return res.json();
+}
+
+/** Staff and the scene's GM undo a resonance reward (#5327); answers with the grant. */
+export async function undoResonanceGrant(grantId: number) {
+  const res = await apiFetch(`/api/magic/resonance-grants/${grantId}/undo/`, { method: 'POST' });
+  if (!res.ok) await throwApiError(res, 'Failed to undo that reward');
+  return res.json();
 }
 
 export async function createSceneEntryEndorsement(body: {
@@ -452,6 +488,31 @@ export function useDeletePoseEndorsement(sceneId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: deletePoseEndorsement,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
+  });
+}
+
+export function useChangePoseEndorsement(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: changePoseEndorsement,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
+  });
+}
+
+export function useAnswerPoseEndorsement(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, accept }: { id: number; accept: boolean }) =>
+      accept ? acceptPoseEndorsement(id) : declinePoseEndorsement(id),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
+  });
+}
+
+export function useUndoResonanceGrant(sceneId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: undoResonanceGrant,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: sceneFeedSceneKey(sceneId) }),
   });
 }

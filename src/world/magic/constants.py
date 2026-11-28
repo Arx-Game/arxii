@@ -358,14 +358,16 @@ class GainSource(models.TextChoices):
     SUCCUMBED = "SUCCUMBED", "Succumbed to the Mire"
     SUCCUMB_BONUS = "SUCCUMB_BONUS", "Sineater succumbed bonus"
     SINEATER_FALL = "SINEATER_FALL", "Sineater fell"
-    # #5181: the share of a kindled deed set aside to claim, collected by a claiming pose or
-    # journal entry, and the resonance an Anima ritual with a partner earns. Both are deeds
-    # the character did; neither names a typed source row.
-    KINDLED_CLAIM = "KINDLED_CLAIM", "Kindled deed claimed"
+    # #5181: the resonance an Anima ritual with a partner earns, a deed the character did;
+    # it names no typed source row.
     ANIMA_RITUAL = "ANIMA_RITUAL", "Anima ritual"
     # #5308: the trickles a character's days piled up (residence, worn pieces) turned into
     # resonance by an anima ritual. A deed the character did; no typed source row.
     TRICKLE_HARVEST = "TRICKLE_HARVEST", "Trickle harvest"
+    # #5327: the gain a player marks on a pose or journal entry by pointing it at an act her
+    # character took. A deed the character did; no typed source row (the act's own row holds
+    # the link back to the grant).
+    MARKED_ACT = "MARKED_ACT", "Marked act"
 
 
 class TrickleSource(models.TextChoices):
@@ -436,10 +438,12 @@ NON_ACCELERATED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.SUCCUMBED,
         GainSource.SUCCUMB_BONUS,
         GainSource.SINEATER_FALL,
-        # #5181: a claim collects a kindled deed's set-aside share and the ritual pays off its
-        # own roll; neither is witnessed, so neither takes the distinction rate.
-        GainSource.KINDLED_CLAIM,
+        # #5181: the ritual pays off its own roll; it is not witnessed, so it does not take the
+        # distinction rate.
         GainSource.ANIMA_RITUAL,
+        # #5327: a mark pays through the strength's earn share and the player's own word;
+        # nobody perceived it, so the distinction rate does not apply (KINDLED_DEED's reason).
+        GainSource.MARKED_ACT,
     }
 )
 
@@ -464,9 +468,10 @@ DEED_GAIN_SOURCES: frozenset[str] = frozenset(
         GainSource.KINDLED_DEED,
         # #5177: the Sineater chose to succumb, and the player can reflect on it and atone.
         GainSource.SUCCUMBED,
-        # #5181: the claimed share of a kindled deed and an Anima ritual the character performed.
-        GainSource.KINDLED_CLAIM,
+        # #5181: an Anima ritual the character performed.
         GainSource.ANIMA_RITUAL,
+        # #5327: a deed her player marked on a pose or journal entry.
+        GainSource.MARKED_ACT,
     }
 )
 
@@ -515,10 +520,11 @@ AFFINITY_RATE_SCALED_SOURCES: frozenset[str] = frozenset(
         GainSource.MIRE_PURIFIED,
         GainSource.SUCCUMB_BONUS,
         GainSource.SINEATER_FALL,
-        GainSource.KINDLED_CLAIM,
         GainSource.ANIMA_RITUAL,
         # #5308: the harvest of the waiting trickles, earned like any other gain.
         GainSource.TRICKLE_HARVEST,
+        # #5327: newly earned resonance, so the affinity's earn rate applies.
+        GainSource.MARKED_ACT,
     }
 )
 
@@ -542,8 +548,6 @@ GAIN_BONUS_EXEMPT_SOURCES: frozenset[str] = frozenset(
         GainSource.CHARACTER_CREATION,
         GainSource.EMBRACED_DEED,
         GainSource.SUCCUMBED,
-        # Collects a kindled deed's set-aside share, which grew at the deed.
-        GainSource.KINDLED_CLAIM,
     }
 )
 
@@ -575,16 +579,21 @@ GAIN_BONUS_ROLLED_SOURCES: frozenset[str] = frozenset(
         GainSource.MIRE_PURIFIED,
         GainSource.SUCCUMB_BONUS,
         GainSource.SINEATER_FALL,
+        # #5327: one mark pays one resonance, so ``grant_resonance`` rolls it once.
+        GainSource.MARKED_ACT,
     }
 )
 
 # #5177: the grants that count as a character INDULGING a Compulsion. A Compulsion lifts for the
 # scene once the character EARNS the compelled resonance there by a deed they did themselves: a
-# kindled deed. A grant that lands from another player (a pose endorsement settled weekly, a scene
-# entry), a GM, a mission or a cron is not the character giving in, and neither is succumbing to
-# the Mire. The instant share of a kindled deed lifts a Compulsion; a claim (KINDLED_CLAIM) and an
-# Anima ritual (ANIMA_RITUAL) do not, since a Compulsion lifts when the deed is done.
-COMPULSION_INDULGING_SOURCES: frozenset[str] = frozenset({GainSource.KINDLED_DEED})
+# kindled deed she chose from a mission option, or (#5327) a gain her player marked on a pose
+# or journal entry. A grant that lands from another player (a pose endorsement settled weekly, a
+# scene entry), a GM, a mission or a cron is not the character giving in, and neither is
+# succumbing to the Mire. An Anima ritual (ANIMA_RITUAL) does not, since a Compulsion lifts when
+# the deed is done.
+COMPULSION_INDULGING_SOURCES: frozenset[str] = frozenset(
+    {GainSource.KINDLED_DEED, GainSource.MARKED_ACT}
+)
 
 NON_DEED_GAIN_SOURCES: frozenset[str] = frozenset(
     {

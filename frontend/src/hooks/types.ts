@@ -461,6 +461,8 @@ export interface InteractionWsPayload {
   endorsable_resonances?: Interaction['endorsable_resonances'];
   availability?: Interaction['availability'];
   pose_endorsers?: Interaction['pose_endorsers'];
+  act_marks?: Interaction['act_marks'];
+  pending_picks?: Interaction['pending_picks'];
   entry_endorsers?: Interaction['entry_endorsers'];
   reactions?: Interaction['reactions'];
   reaction_windows?: Interaction['reaction_windows'];

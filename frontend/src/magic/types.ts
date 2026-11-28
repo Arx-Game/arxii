@@ -767,6 +767,16 @@ export interface KindledReading {
 }
 
 // ---------------------------------------------------------------------------
+// Recorded acts (#5327): what a pose or a journal entry points at to mark a resonance.
+// ---------------------------------------------------------------------------
+
+/** A resonance the situation suggested for an act, with the reason in player words. */
+export type RecordedActSuggestion = components['schemas']['RecordedActSuggestion'];
+
+/** One act her character took and has not marked yet, newest first (the endpoint orders them). */
+export type RecordedAct = components['schemas']['RecordedAct'];
+
+// ---------------------------------------------------------------------------
 // Reflections (#5124): the "Reflecting on" row on a pose or a journal entry.
 // ---------------------------------------------------------------------------
 

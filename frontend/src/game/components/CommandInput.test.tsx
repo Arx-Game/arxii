@@ -216,18 +216,23 @@ const getReflectionOptionsMock = vi.fn((): Promise<unknown[]> =>
 // #5177 — the pleas a pose can carry; the "Sineating" row reads it. Shaped like the generated
 // `SineatingOption` rows.
 const getSineatingOptionsMock = vi.fn((): Promise<unknown[]> => Promise.resolve([]));
-// #5181 — what the character has waiting to claim; the "Claim" row reads it.
-const getKindledResonancesMock = vi.fn((): Promise<unknown> =>
-  Promise.resolve({ results: [], impulses: [] })
-);
+// #5327 — the acts the character can point at; the "Reaching for" row reads them. Shaped like
+// the recorded-acts endpoint's rows.
+const getRecordedActsMock = vi.fn((): Promise<unknown[]> => Promise.resolve([]));
 vi.mock('@/magic/api', () => ({
   getResonanceCatalog: () =>
     Promise.resolve([
-      { id: 31, name: 'Cruelty', affinity: 1, affinity_name: 'Abyssal', description: '' },
+      {
+        id: 31,
+        name: 'Cruelty',
+        affinity: 1,
+        affinity_name: 'Abyssal',
+        description: "Pleasure taken from another person's fear or pain.",
+      },
     ]),
   getReflectionOptions: () => getReflectionOptionsMock(),
   getSineatingOptions: () => getSineatingOptionsMock(),
-  getKindledResonances: () => getKindledResonancesMock(),
+  getRecordedActs: () => getRecordedActsMock(),
 }));
 
 // A scene pose goes out over REST and the composer clears when it lands. Wait
@@ -235,6 +240,15 @@ vi.mock('@/magic/api', () => ({
 async function poseLands(): Promise<void> {
   await waitFor(() => expect(screen.getByRole('textbox')).toHaveValue(''));
 }
+
+// The composer reads the scene detail (`is_ephemeral` for the "Reaching for" row), so a scene
+// answers with a body by default: a query that resolves to nothing logs an error. No `participants`,
+// so the mention list falls back to the room, as it does with no scene read. A test that needs
+// another scene sets its own body.
+beforeEach(() => {
+  fetchSceneMock.mockReset();
+  fetchSceneMock.mockResolvedValue({ id: 1, is_ephemeral: false });
+});
 
 describe('CommandInput', () => {
   beforeEach(() => {
@@ -2642,32 +2656,55 @@ describe('the "Sineating" row on a pose (#5177)', () => {
   });
 });
 
-describe('the "Claim" row on a pose (#5181)', () => {
+describe('the "Reaching for" row on a pose (#5308, #5327)', () => {
   const pose: ComposerMode = { command: 'pose', targets: [], label: 'Pose \u2192 Room' };
-  const waiting = (id: number, name: string, unclaimed: number) => ({
-    id,
-    name,
-    affinity_name: 'Abyssal',
-    kindled: true,
-    strength_name: 'Blazing',
-    reasons: [],
-    unclaimed,
-    waiting_trickle: 0,
-    claim_verb: 'gloat',
-  });
+  const intimidation = {
+    id: 12,
+    label: 'Intimidated Hale',
+    created_at: new Date(Date.now() - 2 * 60_000).toISOString(),
+    suggestions: [
+      {
+        resonance_id: 31,
+        resonance_name: 'Cruelty',
+        reason: 'You left Hale in the grip of Terror.',
+      },
+    ],
+  };
+  const quietAct = {
+    id: 13,
+    label: 'Searched the cellar',
+    created_at: new Date(Date.now() - 9 * 60_000).toISOString(),
+    suggestions: [],
+  };
 
   beforeEach(() => {
     submitPoseMock.mockClear();
+    executeActionMock.mockClear();
     dispatchMock.mockClear();
+    toastErrorMock.mockClear();
     getSineatingOptionsMock.mockResolvedValue([]);
-    getKindledResonancesMock.mockResolvedValue({
-      results: [waiting(1, 'Ruin', 5), waiting(2, 'Mercy', 3)],
-      impulses: [],
-    });
+    getRecordedActsMock.mockResolvedValue([intimidation, quietAct]);
     mockRoomCharacters = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
     queryClient.clear();
     sessionStorage.clear();
   });
+
+  function renderComposer() {
+    return render(
+      <CommandInput
+        character="Alice"
+        characterSheetId={7}
+        composerMode={pose}
+        sceneId="5"
+        personaId={9}
+      />
+    );
+  }
+
+  async function reachFor31() {
+    fireEvent.click(await screen.findByTestId('reach-toggle'));
+    fireEvent.change(screen.getByTestId('reach-select'), { target: { value: '31' } });
+  }
 
   function write(text: string) {
     const textarea = screen.getByRole('textbox');
@@ -2675,56 +2712,35 @@ describe('the "Claim" row on a pose (#5181)', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' });
   }
 
-  it('sends the ticked resonances with the scene pose and shows the writer each line', async () => {
-    submitPoseMock.mockImplementation(() =>
-      Promise.resolve({ id: 1, claim_lines: ['You gloat. Your Ruin grows by 7.'] })
-    );
-    render(
-      <CommandInput
-        character="Alice"
-        characterSheetId={7}
-        composerMode={pose}
-        sceneId="5"
-        personaId={9}
-      />
-    );
-    fireEvent.click(await screen.findByTestId('claim-toggle'));
-    fireEvent.click(screen.getByTestId('claim-resonance-2'));
-    write('Mara laughs as the captain falters.');
+  it("shows the chosen resonance's description and lists her acts with the suggestions", async () => {
+    renderComposer();
+    await reachFor31();
 
-    expect(submitPoseMock).toHaveBeenCalledWith(
-      expect.objectContaining({ claim: true, claim_resonance_ids: [1] })
+    expect(await screen.findByTestId('reach-help')).toHaveTextContent(
+      "Pleasure taken from another person's fear or pain."
     );
-    await poseLands();
-    expect(dispatchMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        payload: expect.objectContaining({
-          note: expect.objectContaining({ content: 'You gloat. Your Ruin grows by 7.' }),
-        }),
-      })
-    );
-    await waitFor(() =>
-      expect(screen.getByTestId('claim-toggle')).toHaveAttribute('aria-pressed', 'false')
-    );
+    expect(await screen.findByTestId('reach-act-12')).toBeInTheDocument();
+    expect(
+      screen.getByText('Suggested: Cruelty. You left Hale in the grip of Terror.')
+    ).toBeInTheDocument();
+    expect(screen.getByText('No resonance suggested.')).toBeInTheDocument();
+    expect(screen.getByText('2 minutes ago')).toBeInTheDocument();
+    expect(screen.getByTestId('reach-act-none')).toBeChecked();
+    expect(screen.getByText('Nothing: another player has to endorse it')).toBeInTheDocument();
   });
 
-  it('sends the resonance a scene pose reaches for, and clears it when the pose lands', async () => {
+  it('sends the resonance with no act when she points at nothing, and clears when it lands', async () => {
     submitPoseMock.mockImplementation(() => Promise.resolve({ id: 1 }));
-    render(
-      <CommandInput
-        character="Alice"
-        characterSheetId={7}
-        composerMode={pose}
-        sceneId="5"
-        personaId={9}
-      />
-    );
-    fireEvent.click(await screen.findByTestId('reach-toggle'));
-    fireEvent.change(screen.getByTestId('reach-select'), { target: { value: '31' } });
+    renderComposer();
+    await reachFor31();
+    await screen.findByTestId('reach-act-12');
     write('Mara smiles, slowly.');
 
     expect(submitPoseMock).toHaveBeenCalledWith(
       expect.objectContaining({ reach_resonance_id: 31 })
+    );
+    expect(submitPoseMock).toHaveBeenCalledWith(
+      expect.not.objectContaining({ reach_act_id: expect.anything() })
     );
     await poseLands();
     await waitFor(() =>
@@ -2732,23 +2748,104 @@ describe('the "Claim" row on a pose (#5181)', () => {
     );
   });
 
-  it('sends no claim fields while the switch is off', async () => {
-    submitPoseMock.mockImplementation(() => Promise.resolve({ id: 1 }));
-    render(
-      <CommandInput
-        character="Alice"
-        characterSheetId={7}
-        composerMode={pose}
-        sceneId="5"
-        personaId={9}
-      />
+  it('sends the act she points at and shows the writer the mark line', async () => {
+    submitPoseMock.mockImplementation(() =>
+      Promise.resolve({
+        id: 1,
+        mark_line: 'You gloat. Your Cruelty grows by 9.',
+        mark_recorded: true,
+      })
     );
-    await screen.findByTestId('claim-toggle');
-    write('Mara laughs.');
+    renderComposer();
+    await reachFor31();
+    fireEvent.click(await screen.findByTestId('reach-act-12'));
+    write('Daven leans over Hale.');
 
     expect(submitPoseMock).toHaveBeenCalledWith(
-      expect.not.objectContaining({ claim: expect.anything() })
+      expect.objectContaining({ reach_resonance_id: 31, reach_act_id: 12 })
     );
     await poseLands();
+    expect(dispatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          note: expect.objectContaining({ content: 'You gloat. Your Cruelty grows by 9.' }),
+        }),
+      })
+    );
+  });
+
+  it('shows a mark that paid nothing as an error line, with the pose posted', async () => {
+    submitPoseMock.mockImplementation(() =>
+      Promise.resolve({
+        id: 1,
+        mark_line: 'Hale is too worn to pay for this, so your Cruelty does not grow.',
+        mark_recorded: false,
+      })
+    );
+    renderComposer();
+    await reachFor31();
+    fireEvent.click(await screen.findByTestId('reach-act-12'));
+    write('Daven leans over Hale.');
+
+    await poseLands();
+    expect(toastErrorMock).toHaveBeenCalledWith(
+      'Hale is too worn to pay for this, so your Cruelty does not grow.'
+    );
+  });
+
+  it('puts a mark outside a scene through the pose action and tells the writer its line', async () => {
+    // No scene: the pose goes by the action, whose result carries the line.
+    render(<CommandInput character="Alice" characterSheetId={7} composerMode={pose} />);
+    await reachFor31();
+    fireEvent.click(await screen.findByTestId('reach-act-12'));
+    write('Daven leans over Hale.');
+
+    expect(executeActionMock).toHaveBeenCalledWith(
+      'Alice',
+      'pose',
+      expect.objectContaining({ reach_resonance_id: 31, reach_act_id: 12 })
+    );
+    act(() => {
+      emitActionResult({
+        success: true,
+        message: 'You gloat. Your Cruelty grows by 9.',
+        data: { mark_recorded: true, mark_line: 'You gloat. Your Cruelty grows by 9.' },
+        client_request_id: lastDispatchedRequestId(),
+      });
+    });
+    expect(dispatchMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          note: expect.objectContaining({ content: 'You gloat. Your Cruelty grows by 9.' }),
+        }),
+      })
+    );
+  });
+
+  it('warns in an ephemeral scene instead of listing acts', async () => {
+    fetchSceneMock.mockResolvedValue({
+      id: 5,
+      name: 'Roadside',
+      participants: [],
+      is_active: true,
+      is_owner: false,
+      is_ephemeral: true,
+      description: '',
+      date_started: '',
+      location: null,
+    });
+    renderComposer();
+    await reachFor31();
+
+    expect(await screen.findByTestId('reach-ephemeral')).toHaveTextContent(
+      'This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the act later, in a pose in another scene or from a journal entry.'
+    );
+    expect(screen.queryByTestId('reach-acts')).toBeNull();
+  });
+
+  it('shows no claim row', async () => {
+    renderComposer();
+    await screen.findByTestId('reach-toggle');
+    expect(screen.queryByTestId('claim-row')).toBeNull();
   });
 });

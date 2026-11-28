@@ -1,4 +1,4 @@
-"""The Abyssal temptation: reaching for a kindled Abyssal resonance pays and warns (#5231).
+"""The Abyssal temptation: reaching for a kindled Abyssal resonance is stronger and warns (#5231).
 
 Ysmay is mostly Primal (80 Primal, 20 Abyssal; her resonances' lifetime earnings are 80 and 20,
 so any earning keeps her aura under 50 percent Abyssal). Her Gift's thread holds a Primal
@@ -8,8 +8,8 @@ through the web cast endpoint, naming the resonance to work it in. Numbers this 
 
 * Blazing: cast power 6, earn percent 100. Abyssal: kindled boost 150, earn rate 150, corruption
   coefficient 10. Primal: kindled boost 100, earn rate 100, corruption coefficient 0.
-* A Success earns a kindled deed 10. The kindling config pays all of it at once
-  (instant percent 100) and sets half aside to claim.
+* A Success is an act worth 10 when her player marks it. A situation only suggests (#5327), so
+  the cast writes the act down with a suggestion and pays nothing.
 * Corruption config: tier 1 coefficient 10, light part 10 percent below an Abyssal share of 50.
   The technique is tier 1 with intensity 20, and a cast worked in a resonance puts its whole
   intensity on that resonance.
@@ -20,10 +20,10 @@ Hand-worked from the spec:
   rounded down: 6 * 150 // 100 = 9. Worked in Praedari the ledger has a "kindled cast power"
   line of 9. Worked in Warmth, which is not kindled, it has none, and its total is exactly 9
   lower.
-* Earning: the deed is decided by the deed, not by the resonance the cast was worked in
-  (ruling 12), so both casts earn the kindled Praedari: 10 * 100 // 100 = 10, then Abyssal's
-  rate 10 * 150 // 100 = 15. The Primal resonance earns nothing, as no situation of hers
-  is fed. At Primal's rate of 100 the same deed would have been 10.
+* Earning: the act is decided by the act, not by the resonance the cast was worked in
+  (ruling 12), so both casts are written down with the kindled Praedari as their one
+  suggestion, and neither pays a thing: a situation only suggests (#5327), and her player marks
+  the act to be paid. The Primal resonance is not suggested, as no situation of hers is fed.
 * Corruption: ordinary tick 20 * (10 / 10) * (10 / 10) = 20 on Praedari (Abyssal, tier 1). She
   is 20 percent Abyssal, under 50, so she takes the light 10 percent: 20 * 10 / 100 = 2,
   rounded up once to 2. Worked in Warmth (coefficient 0) the cast adds no corruption.
@@ -31,7 +31,7 @@ Hand-worked from the spec:
   benefits stack with a pull the same way, so the kindled cast power always applies. The
   pulled thread is woven on the technique at level 10 (one rung, so a multiplier of 1) with a
   tier 1 intensity bump of 3: the ledger's "thread power" line is 3 and its kindled line is
-  still 9, the pull costs 1 Praedari, and the same cast's deed then earns 15: 10 - 1 + 15 = 24.
+  still 9, and the pull costs 1 Praedari: 10 - 1 = 9, with nothing paid by the cast.
 * The cast list: her Gift's thread holds Warmth (leading, so the default) and Praedari. Warmth
   is not kindled, so its strength is 0 and it has no strength word; Praedari is kindled at
   Blazing, so its strength is the 9 above. The one entry with the highest strength, above the
@@ -67,7 +67,7 @@ from world.combat.models import CombatPull, CombatRoundAction
 from world.combat.services import resolve_round
 from world.conditions.factories import ConditionStageFactory, ConditionTemplateFactory
 from world.fatigue.constants import EffortLevel
-from world.magic.constants import EffectKind, GainSource, PowerStage, TargetKind
+from world.magic.constants import EffectKind, PowerStage, TargetKind
 from world.magic.factories import (
     BinaryEffectTypeFactory,
     CharacterAnimaFactory,
@@ -206,7 +206,7 @@ class _AnAbyssalCasterInAScene(JourneyCase):
         )
         success = CheckOutcome.objects.get(name="Success")
         KindledDeedAward.objects.update_or_create(outcome_tier=success, defaults={"amount": 10})
-        KindlingConfigFactory(instant_percent=100, claim_percent=50)
+        KindlingConfigFactory()
         self.assertEqual(self.technique.tier, 1)
         _corruption_condition(self.praedari)
 
@@ -279,12 +279,17 @@ class _AnAbyssalCasterInAScene(JourneyCase):
         ).corruption_current
 
     def earned(self, resonance) -> int:
-        """What kindled deeds have earned her in ``resonance`` so far, as the ledger holds it."""
+        """What she has been paid in ``resonance`` so far, as the ledger holds it (a cast pays
+        nothing, #5327)."""
         return sum(
             ResonanceGrant.objects.filter(
-                character_sheet=self.sheet, resonance=resonance, source=GainSource.KINDLED_DEED
+                character_sheet=self.sheet, resonance=resonance
             ).values_list("amount", flat=True)
         )
+
+    def acts_listing(self) -> str:
+        """What her player reads when she types ``acts``: each act and what it suggests."""
+        return self.telnet(self.ysmay, "acts")
 
     @staticmethod
     def line(ledger: dict, label: str) -> int:
@@ -295,7 +300,7 @@ class _AnAbyssalCasterInAScene(JourneyCase):
 class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
     """Ysmay casts in Warmth, in Praedari, and in Praedari with a pulled thread."""
 
-    def test_reaching_for_her_kindled_abyssal_resonance_is_stronger_earns_fast_and_warns(
+    def test_reaching_for_her_kindled_abyssal_resonance_is_stronger_and_warns_and_pays_nothing(
         self,
     ) -> None:
         praedari_before = self.corruption(self.praedari)
@@ -305,12 +310,16 @@ class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
 
         # Stronger: the kindled line is 6 * 150 // 100 = 9.
         self.assertEqual(self.line(abyssal_cast, KINDLED_LINE), 9)
-        # Earns at Abyssal's rate: the deed's 10 * 100 // 100 = 10, times 150 percent = 15.
-        self.assertEqual(self.earned(self.praedari), 15)
+        # Pays nothing: the cast is written down for her player to mark, with Praedari
+        # suggested (#5327).
+        self.assertEqual(self.earned(self.praedari), 0)
+        listed = self.acts_listing()
+        self.assertEqual(listed.count(f"{self.technique.name} ("), 1)
+        self.assertIn("Praedari", listed)
+        self.assertNotIn("Warmth", listed)
         # Warns, lightly: ceil(20 * 10 / 100) = 2.
         self.assertEqual(self.corruption(self.praedari) - praedari_before, 2)
 
-        earned_before = self.earned(self.praedari)
         praedari_before = self.corruption(self.praedari)
 
         primal_cast = self.cast(self.warmth)
@@ -321,9 +330,13 @@ class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
         # No corruption on either resonance from a cast worked in Primal.
         self.assertEqual(self.corruption(self.praedari), praedari_before)
         self.assertEqual(self.corruption(self.warmth), warmth_corruption_before)
-        # The deed decides what is earned, not the resonance the cast was worked in: the same
-        # kindled Praedari earns the same 15 again, and the Primal resonance earns nothing.
-        self.assertEqual(self.earned(self.praedari) - earned_before, 15)
+        # The act decides what is suggested, not the resonance the cast was worked in: the same
+        # kindled Praedari is suggested again, and nothing is paid in Praedari or in Warmth.
+        listed = self.acts_listing()
+        self.assertEqual(listed.count(f"{self.technique.name} ("), 2)
+        self.assertEqual(listed.count("Praedari"), 2)
+        self.assertNotIn("Warmth", listed)
+        self.assertEqual(self.earned(self.praedari), 0)
         self.assertEqual(self.earned(self.warmth), 0)
 
     def castable_entry(self) -> dict:
@@ -375,13 +388,13 @@ class TheAbyssalTemptation(_AnAbyssalCasterInAScene):
 
         # Both lines are on the ledger: the pull's intensity bump of 3 is the "thread power"
         # line, and the kindled line stays 6 * 150 // 100 = 9 beside it. The paying resonance
-        # fell by the pull's cost of 1 before the deed's 15 arrived.
+        # fell by the pull's cost of 1, and the cast paid nothing back.
         self.assertEqual(self.line(ledger, "thread power"), 3)
         self.assertEqual(self.line(ledger, KINDLED_LINE), 9)
         balance = CharacterResonance.objects.get(
             character_sheet=self.sheet, resonance=self.praedari
         ).balance
-        self.assertEqual(balance - balance_before, -1 + 15)
+        self.assertEqual(balance - balance_before, -1)
 
 
 class TheKindledPullInAScene(_AnAbyssalCasterInAScene):

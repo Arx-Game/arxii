@@ -154,6 +154,7 @@ from world.magic.constants import AcquisitionOrigin
 from world.magic.models import (
     CharacterGift,
     CharacterTechnique,
+    RecordedAct,
     ResonanceGrant,
     Thread,
     ThreadLevelUnlock,
@@ -338,6 +339,13 @@ SCOPE_TABLE: list[ScopeEntry] = [
     ),
     # --- Already-adequate receipts (#3055 spec's own phrase): wholesale, no CG variant ---
     ScopeEntry(CharacterXPTransaction, None, "XP ledger — inherently play-time."),
+    ScopeEntry(
+        RecordedAct,
+        None,
+        "Acts waiting to be marked or already marked (#5327), with their suggested "
+        "resonances. A marked act holds its grant by a RESTRICT link, so the acts go "
+        "before the resonance-gain ledger below.",
+    ),
     ScopeEntry(ResonanceGrant, None, "Resonance-gain ledger — inherently play-time."),
     ScopeEntry(
         TrickleAccrual,

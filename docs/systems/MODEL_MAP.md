@@ -1842,6 +1842,7 @@
   - prepared_surge_text <- magic.CharacterSurgeText
   - primum_call_ups <- magic.PrimumCallUp
   - primum_sightings <- magic.PrimumSighting
+  - recorded_acts <- magic.RecordedAct
   - settling_rites <- magic.SettlingRite
   - reflections <- magic.Reflection
   - reincarnations <- magic.Reincarnation
@@ -4445,12 +4446,15 @@
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
 
 ### Service Functions
+- `add_fatigue_points(character_sheet: 'CharacterSheet', category: 'str', points: 'int') -> 'None' - Add ``points`` of fatigue to one pool as they stand, with no cost scaling.`
 - `apply_exhaustion_damage(character_sheet: 'CharacterSheet', amount: 'int') -> 'None' - Apply fatigue-collapse strain as actual health damage.`
 - `apply_fatigue(character_sheet: 'CharacterSheet', category: 'str', base_cost: 'int', effort_level: 'str') -> 'int' - Add fatigue to the pool.`
 - `apply_technique_fatigue(character_sheet: 'CharacterSheet', category: 'str', effective_anima_cost: 'int', strain_commitment: 'int', *, immune_to_fatigue_collapse: 'bool' = False) -> 'int' - Accrue fatigue from a technique cast and conditionally check collapse.`
 - `attempt_endurance_check(character_sheet: 'CharacterSheet', category: 'str') -> 'bool' - Endurance check against fatigue via the unified check system.`
 - `attempt_power_through(character_sheet: 'CharacterSheet', category: 'str') -> 'tuple[bool, int]' - Willpower check to power through collapse via the unified check system.`
 - `ensure_stat_trait(name: 'str') -> 'Trait' - Ensure the named STAT Trait exists, creating it from STAT_TRAIT_DEFAULTS if not.`
+- `fatigue_cost_for(character_sheet: 'CharacterSheet', base_cost: 'int', effort_level: 'str') -> 'int' - What ``base_cost`` actually costs this character at ``effort_level``.`
+- `fatigue_room(character_sheet: 'CharacterSheet', category: 'str') -> 'int | None' - How much fatigue a gain can still add to this pool without reaching Exhausted (#5327).`
 - `get_fatigue_capacities(character_sheet: 'CharacterSheet', categories: 'Iterable[str]' = (ActionCategory.PHYSICAL, ActionCategory.SOCIAL, ActionCategory.MENTAL), *, well_rested: 'bool | None' = None) -> 'dict[str, int]' - Max fatigue capacity for each of ``categories``, reading the shared terms once.`
 - `get_fatigue_capacity(character_sheet: 'CharacterSheet', category: 'str', *, well_rested: 'bool | None' = None) -> 'int' - Calculate max fatigue capacity for a category.`
 - `get_fatigue_penalty(character_sheet: 'CharacterSheet', category: 'str') -> 'int' - Return the check penalty for the current fatigue zone.`
@@ -5811,6 +5815,7 @@
   - related_threads -> magic.Thread [M2M]
 **Pointed to by:**
   - legend_honors <- societies.LegendHonor
+  - marked_acts <- magic.RecordedAct
   - reflections <- magic.Reflection
   - responses <- journals.JournalEntry
   - tags <- journals.JournalTag
@@ -6756,6 +6761,24 @@
 **Foreign Keys:**
   - outcome_tier -> traits.CheckOutcome [OneToOne]
 
+### RecordedAct
+**Foreign Keys:**
+  - character_sheet -> character_sheets.CharacterSheet [FK]
+  - outcome -> traits.CheckOutcome [FK]
+  - check_type -> checks.CheckType [FK] (nullable)
+  - target_sheet -> character_sheets.CharacterSheet [FK] (nullable)
+  - marked_grant -> magic.ResonanceGrant [OneToOne] (nullable)
+  - marked_interaction -> scenes.Interaction [FK] (nullable)
+  - marked_journal_entry -> journals.JournalEntry [FK] (nullable)
+**Pointed to by:**
+  - suggestions <- magic.RecordedActSuggestion
+
+### RecordedActSuggestion
+**Foreign Keys:**
+  - act -> magic.RecordedAct [FK]
+  - resonance -> magic.Resonance [FK]
+  - strength -> magic.KindledStrengthTier [FK]
+
 ### Reflection
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [FK]
@@ -6891,8 +6914,10 @@
   - source_settling_rite -> magic.SettlingRite [FK] (nullable)
   - source_reflection -> magic.Reflection [FK] (nullable)
   - bonus_outcome -> traits.CheckOutcome [FK] (nullable)
+  - nullified_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
   - drift_conversion_caps <- magic.DriftConversionCap
+  - marked_act <- magic.RecordedAct
   - reflections <- magic.Reflection
   - pledge_credit <- worship.PledgeCredit
 
@@ -7493,6 +7518,8 @@
   - resonance -> magic.Resonance [FK]
   - room_profile -> evennia_extensions.RoomProfile [FK] (nullable)
   - outfit_item_facet -> items.ItemFacet [FK] (nullable)
+
+### WeeklyMarkReturn
 
 ### Service Functions
 - `accept_thread_weaving_unlock(learner: 'CharacterSheet', offer: 'ThreadWeavingTeachingOffer') -> 'CharacterThreadWeavingUnlock' - Accept a ThreadWeavingTeachingOffer on behalf of a learner (Spec A §6.1).`
@@ -9746,6 +9773,7 @@
   - endorsements <- magic.PoseEndorsement
   - resonance_reaches <- magic.PoseResonanceReach
   - sceneentryendorsement_set <- magic.SceneEntryEndorsement
+  - marked_acts <- magic.RecordedAct
   - reflections <- magic.Reflection
   - combat_round_actions <- combat.CombatRoundAction
   - clash_contributions <- combat.ClashContribution
@@ -10231,6 +10259,7 @@
 - `create_persona(sheet: 'CharacterSheet', *, name: 'str', persona_type: 'str', is_fake_name: 'bool' = False, bypass_cap: 'bool' = False) -> 'Persona' - Create a new ESTABLISHED or TEMPORARY persona for a character (#1127).`
 - `has_unseen_observers(scene: 'Scene') -> 'bool' - Whether any unseen-observation grant is currently active on scene (#1225).`
 - `invalidate_active_scene_cache(location: 'ObjectDB') -> 'None' - Clear the cached active scene for a location.`
+- `is_scene_gm_or_staff(account: 'AccountDB | None', scene: 'Scene | None') -> 'bool' - Whether ``account`` is staff or the GM of ``scene`` (#5327).`
 - `persona_discovery_between(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - The existing ``PersonaDiscovery`` row for this (unordered) persona pair + discoverer, if`
 - `persona_for_character(character: 'Character') -> 'Persona' - Return the PC's PRIMARY persona; raise loud on missing sheet/persona.`
 - `persona_names_for_sheets(sheet_ids: 'Iterable[int]') -> 'dict[int, str]' - Batched ``active_persona_for_sheet`` name lookup, ONE round trip (two queries).`
@@ -10239,6 +10268,7 @@
 - `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' - Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' - Set the character's active face (#981) — the ONLY mutator.`
 - `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, never_do: 'str | None' = None, protect: 'str | None' = None, fear: 'str | None' = None, background: 'str | None' = None, edited_by: 'AccountDB | None' = None) -> 'Profile' - Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
+- `sheet_is_in_scene(sheet: 'CharacterSheet', scene: 'Scene') -> 'bool' - Whether ``sheet`` is part of ``scene``: she posed in it, or her player joined it.`
 
 
 ## world.secrets

@@ -39,30 +39,18 @@ class SineatingFieldsMixin(serializers.Serializer):
     sineating_units = serializers.IntegerField(required=False, allow_null=True, min_value=1)
 
 
-class ClaimFieldsMixin(serializers.Serializer):
-    """The optional claim a pose or journal entry carries (#5181).
-
-    ``claim`` collects the resonance a kindled deed set aside; ``claim_resonance_ids`` limits it
-    to those resonances (omitted or empty means everything waiting). A named resonance the
-    character has nothing waiting in is refused before the pose or entry is written. A claim
-    can ride on the same pose as a reflection or a Sineating.
-    """
-
-    claim = serializers.BooleanField(required=False, default=False)
-    claim_resonance_ids = serializers.ListField(
-        child=serializers.IntegerField(), required=False, allow_empty=True
-    )
-
-
 class ReachFieldsMixin(serializers.Serializer):
-    """The optional reach a pose carries (#5308).
+    """The optional reach or mark a pose or journal entry carries (#5308, #5327).
 
-    ``reach_resonance_id`` is the resonance the pose reaches for, held or not. An endorsement of
-    the pose pays it. Omitted or null means the pose reaches for nothing. Whether the id is a
-    resonance is checked by the service before the pose posts.
+    ``reach_resonance_id`` is the resonance the writing is about, in the writer's aura or not.
+    Alone, on a pose, it is a reach: an endorsement of the pose pays it. With ``reach_act_id``,
+    one of the writer's recorded acts, it is a mark: it pays at once and the act is marked. A
+    journal entry needs both. Omitted or null means nothing is reached or marked. Whether the
+    ids are valid is checked by the service before anything is written.
     """
 
     reach_resonance_id = serializers.IntegerField(required=False, allow_null=True)
+    reach_act_id = serializers.IntegerField(required=False, allow_null=True)
 
 
 class ReflectionOptionSerializer(serializers.Serializer):

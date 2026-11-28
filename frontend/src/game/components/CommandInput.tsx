@@ -29,17 +29,14 @@ import {
 import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { addFeedNote } from '@/store/gameSlice';
-import { ClaimRow } from '@/magic/components/ClaimRow';
 import { ReachRow } from '@/magic/components/ReachRow';
 import { ReflectingOnRow } from '@/magic/components/ReflectingOnRow';
 import { SineatingRow } from '@/magic/components/SineatingRow';
 import {
-  useRefreshClaims,
+  useRefreshRecordedActs,
   useRefreshReflectionOptions,
   useRefreshSineating,
-  useWaitingClaims,
 } from '@/magic/queries';
-import { claimFields, NO_CLAIM, type ClaimDraft } from '@/magic/claiming';
 import { NO_REACH, reachFields, type ReachDraft } from '@/magic/reach';
 import { SettleAuraDialog } from '@/magic/components/SettleAuraDialog';
 import { useSettleAuraRequests } from '@/magic/settleAuraRequest';
@@ -58,7 +55,7 @@ import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { createActionRequest } from '@/scenes/actionQueries';
 import { useUnsavedNavigationGuard } from '../useUnsavedNavigationGuard';
 import { submitPose, fetchScene, sceneKeys, fetchPoseSubmission } from '@/scenes/queries';
-import type { SceneDetail } from '@/scenes/queries';
+import type { SceneDetail, SubmitPoseResult } from '@/scenes/queries';
 import { replyReachability } from '@/scenes/replyReachability';
 import { tagReachability } from '@/scenes/tagReachability';
 import { excerptOf } from '@/lib/formatParser';
@@ -285,6 +282,15 @@ function getComposerBanner(draft: Draft, isStrandedDraft: boolean): ComposerBann
   return null;
 }
 
+/**
+ * The mark's line in a pose action's result (#5327): `data.mark_line`, empty when the pose
+ * carried no mark. The same line also ends the result's message, after any reflection's line.
+ */
+function markLineOf(payload: ActionResultPayload): string {
+  const line = payload.data?.mark_line;
+  return typeof line === 'string' ? line : '';
+}
+
 export function CommandInput({
   character,
   characterSheetId = null,
@@ -334,13 +340,10 @@ export function CommandInput({
   // a Sineating, never both: picking one clears the other. Cleared once the pose lands.
   const [sineating, setSineating] = useState<SineatingDraft>(NO_SINEATING);
   const refreshSineating = useRefreshSineating(characterSheetId);
-  // #5181 — a claim of what kindled deeds set aside. It rides with a reflection or a Sineating,
-  // so picking either leaves it alone. Cleared once the pose lands.
-  const [claim, setClaim] = useState<ClaimDraft>(NO_CLAIM);
-  const waitingClaims = useWaitingClaims(characterSheetId ?? null);
-  const refreshClaims = useRefreshClaims();
-  // #5308 — the resonance this pose reaches for, if any. Cleared once the pose lands.
+  // #5308, #5327 — the resonance this pose reaches for and the act it points at, if any (an act
+  // makes it a mark). Cleared once the pose lands.
   const [reach, setReach] = useState<ReachDraft>(NO_REACH);
+  const refreshRecordedActs = useRefreshRecordedActs(characterSheetId ?? null);
   const changeReflection = useCallback((next: ReflectionDraft) => {
     setReflection(next);
     if (next.option !== null || next.choice !== null) setSineating(NO_SINEATING);
@@ -395,23 +398,24 @@ export function CommandInput({
     },
     [dispatch, character]
   );
-  // The writer's own lines after a claim: what each resonance grew by. Nobody else is told.
-  const showClaimLines = useCallback(
-    (lines: string[]) => {
-      for (const line of lines) {
-        dispatch(
-          addFeedNote({
-            character,
-            note: { kind: 'system', content: line, timestamp: new Date().toISOString() },
-          })
-        );
+  // The writer's own line after a mark (#5327): what it paid, or why it paid nothing and what to
+  // do next. Nobody else is told.
+  const showMarkLine = useCallback(
+    (line: string, paid: boolean) => {
+      if (!paid) {
+        toast.error(line);
+        return;
       }
+      dispatch(
+        addFeedNote({
+          character,
+          note: { kind: 'system', content: line, timestamp: new Date().toISOString() },
+        })
+      );
     },
     [dispatch, character]
   );
-  // The `client_request_id` of a socket-sent pose that carries a claim, until its ack.
-  const claimedSendRef = useRef<string | null>(null);
-  // The `client_request_id` of a socket-sent pose that carries a reach, until its ack.
+  // The `client_request_id` of a socket-sent pose that carries a reach or a mark, until its ack.
   const reachedSendRef = useRef<string | null>(null);
   const submittingRef = useRef(false);
   const { send, sendConsole, executeAction } = useGameSocket();
@@ -596,17 +600,15 @@ export function CommandInput({
       if (payload.client_request_id !== pending.clientRequestId) return;
       pendingSpeechRef.current = null;
       if (payload.success) {
-        // A claim's lines ride in the same message as a reflection's line; they are told apart.
-        const claimLines = Array.isArray(payload.data?.claim_lines)
-          ? (payload.data.claim_lines as string[])
-          : [];
+        // A mark's line rides in the same message as a reflection's line; they are told apart.
+        const markLine = markLineOf(payload);
         if (reflectedSendRef.current === pending.clientRequestId) {
           reflectedSendRef.current = null;
           setReflection(NO_REFLECTION);
           refreshReflectionOptions();
           const reflectionLine = (payload.message ?? '')
             .split('\n')
-            .filter((line) => !claimLines.includes(line))
+            .filter((line) => line !== markLine)
             .join('\n');
           if (reflectionLine) {
             showReflectionLine(reflectionLine, payload.data?.reflection_recorded !== false);
@@ -615,12 +617,8 @@ export function CommandInput({
         if (reachedSendRef.current === pending.clientRequestId) {
           reachedSendRef.current = null;
           setReach(NO_REACH);
-        }
-        if (claimedSendRef.current === pending.clientRequestId) {
-          claimedSendRef.current = null;
-          setClaim(NO_CLAIM);
-          showClaimLines(claimLines);
-          refreshClaims();
+          if (markLine) showMarkLine(markLine, payload.data?.mark_recorded !== false);
+          refreshRecordedActs();
         }
         acknowledge(pending.clientRequestId);
         // Recorded unconditionally: this text demonstrably went out, so
@@ -640,8 +638,8 @@ export function CommandInput({
       rejectDraft,
       refreshReflectionOptions,
       showReflectionLine,
-      showClaimLines,
-      refreshClaims,
+      showMarkLine,
+      refreshRecordedActs,
     ]
   );
   useActionResult(handleActionResult);
@@ -1071,8 +1069,51 @@ export function CommandInput({
       const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
-      const claimRequest = claimFields(claim, waitingClaims);
       const reachRequest = reachFields(reach);
+      // What each structured attachment does once the pose is accepted, each kept out of the
+      // ack callback below so the callback reads as the order of what happens.
+      function settleReach(response: SubmitPoseResult | undefined) {
+        if (reachRequest.reach_resonance_id === undefined) return;
+        setReach(NO_REACH);
+        if (response?.mark_line) {
+          showMarkLine(response.mark_line, response.mark_recorded !== false);
+        }
+        refreshRecordedActs();
+      }
+      function settleSineating(response: SubmitPoseResult | undefined) {
+        if (!isSineating(sineating)) return;
+        if (response?.sineating_line) {
+          showSineatingLine(response.sineating_line, response.sineating_recorded !== false);
+        }
+        setSineating(NO_SINEATING);
+        refreshSineating();
+      }
+      function settleReflection(response: SubmitPoseResult | undefined) {
+        if (!isReflecting(reflection)) return;
+        if (response?.reflection_line) {
+          showReflectionLine(response.reflection_line, response.reflection_recorded !== false);
+        }
+        setReflection(NO_REFLECTION);
+        refreshReflectionOptions();
+      }
+      function dispatchEntranceTechnique(response: SubmitPoseResult | undefined) {
+        // #2183 — an entrance technique was attached: dispatch it now that
+        // the entry pose exists, so EntranceAction can anchor to it. Plain
+        // entrances (no technique attached) send nothing further — byte
+        // identical to pre-#2183 behavior.
+        if (isEntrance && entranceTechnique && sceneId !== undefined) {
+          createActionRequest(sceneId, {
+            action_key: 'entrance',
+            technique_id: entranceTechnique.techniqueId,
+            target_persona_id: entranceTechnique.targetPersonaId,
+            entry_interaction_id: typeof response?.id === 'number' ? response.id : undefined,
+          }).catch((error: unknown) => {
+            const message =
+              error instanceof Error ? error.message : 'Failed to dispatch entrance technique.';
+            toast.error(message);
+          });
+        }
+      }
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
@@ -1096,30 +1137,12 @@ export function CommandInput({
           : {}),
         ...reflectionFields(reflection),
         ...sineatingFields(sineating),
-        ...claimRequest,
         ...reachRequest,
       })
         .then((response) => {
-          if (reachRequest.reach_resonance_id !== undefined) setReach(NO_REACH);
-          if (claimRequest.claim) {
-            showClaimLines(response?.claim_lines ?? []);
-            setClaim(NO_CLAIM);
-            refreshClaims();
-          }
-          if (isSineating(sineating)) {
-            if (response?.sineating_line) {
-              showSineatingLine(response.sineating_line, response.sineating_recorded !== false);
-            }
-            setSineating(NO_SINEATING);
-            refreshSineating();
-          }
-          if (isReflecting(reflection)) {
-            if (response?.reflection_line) {
-              showReflectionLine(response.reflection_line, response.reflection_recorded !== false);
-            }
-            setReflection(NO_REFLECTION);
-            refreshReflectionOptions();
-          }
+          settleReach(response);
+          settleSineating(response);
+          settleReflection(response);
           if (attachedAction && onSubmitAction) {
             onSubmitAction(attachedAction, clientRequestId);
           }
@@ -1138,22 +1161,7 @@ export function CommandInput({
           // ack without a `commandRef` comparison of our own.
           setHistory((prev) => [...prev, trimmed]);
           setHistoryIndex(-1);
-          // #2183 — an entrance technique was attached: dispatch it now that
-          // the entry pose exists, so EntranceAction can anchor to it. Plain
-          // entrances (no technique attached) send nothing further — byte
-          // identical to pre-#2183 behavior.
-          if (isEntrance && entranceTechnique && sceneId !== undefined) {
-            createActionRequest(sceneId, {
-              action_key: 'entrance',
-              technique_id: entranceTechnique.techniqueId,
-              target_persona_id: entranceTechnique.targetPersonaId,
-              entry_interaction_id: typeof response?.id === 'number' ? response.id : undefined,
-            }).catch((error: unknown) => {
-              const message =
-                error instanceof Error ? error.message : 'Failed to dispatch entrance technique.';
-              toast.error(message);
-            });
-          }
+          dispatchEntranceTechnique(response);
           setEntranceTechnique(null);
         })
         .catch((error: unknown) => {
@@ -1178,18 +1186,11 @@ export function CommandInput({
       // A pose that reflects on something outside a scene (#5124) is a structured send like
       // `tt`: the registry `pose` action takes the reflection, and the draft and the pick clear
       // together on the matching ack (`handleActionResult`).
-      const claimRequest = claimFields(claim, waitingClaims);
       const reachRequest = reachFields(reach);
-      if (
-        isPose &&
-        (isReflecting(reflection) ||
-          claimRequest.claim ||
-          reachRequest.reach_resonance_id !== undefined)
-      ) {
+      if (isPose && (isReflecting(reflection) || reachRequest.reach_resonance_id !== undefined)) {
         const clientRequestId = beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
         if (isReflecting(reflection)) reflectedSendRef.current = clientRequestId;
-        if (claimRequest.claim) claimedSendRef.current = clientRequestId;
         if (reachRequest.reach_resonance_id !== undefined) reachedSendRef.current = clientRequestId;
         // The typed "@Name" targets travel by name, as on the scene pose, and stay in the text.
         const composerTargets = uniqueNames([...(composerMode?.targets ?? []), ...typedTargets]);
@@ -1198,7 +1199,6 @@ export function CommandInput({
           client_request_id: clientRequestId,
           ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
           ...reflectionFields(reflection),
-          ...claimRequest,
           ...reachRequest,
         });
         submittingRef.current = false;
@@ -1240,9 +1240,7 @@ export function CommandInput({
     character,
     sendConsole,
     composerMode,
-    draft.content,
-    draft.status,
-    draft.mode,
+    draft,
     send,
     executeAction,
     beginSend,
@@ -1273,11 +1271,9 @@ export function CommandInput({
     sineating,
     refreshSineating,
     showSineatingLine,
-    claim,
-    waitingClaims,
     reach,
-    showClaimLines,
-    refreshClaims,
+    showMarkLine,
+    refreshRecordedActs,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1612,13 +1608,13 @@ export function CommandInput({
                 onChange={changeReflection}
                 className="m-2"
               />
-              <ClaimRow
+              <ReachRow
                 characterSheetId={characterSheetId ?? null}
-                value={claim}
-                onChange={setClaim}
+                value={reach}
+                onChange={setReach}
+                ephemeral={sceneDetail?.is_ephemeral === true}
                 className="m-2"
               />
-              <ReachRow value={reach} onChange={setReach} className="m-2" />
             </>
           )
         }

@@ -122,7 +122,8 @@ class _ImpulseCase(SineatingCase):
         return get_condition_instance(self.bearer.character, self.compulsion)
 
     def deed(self):
-        """A deed of the resonance: the kindled-deed grant a situation's act earns."""
+        """A deed of the resonance: the grant a chosen mission option pays (a situation alone
+        pays nothing, #5327)."""
         with (
             patch.object(self.bearer.character, "msg") as msg,
             self.captureOnCommitCallbacks(execute=True),

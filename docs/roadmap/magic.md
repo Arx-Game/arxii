@@ -1355,10 +1355,11 @@ Built as one PR (spec in the issue body; #5129's settling rite folded in):
   in (Fury for any kindled resonance, replacing the anchor person; Lose yourself only at a blazing
   strength), Dig deep and Rally naming a resonance (a Rally kindles an unkindled one until the
   fight ends), and a GM kindling by hand (`stage kindle`).
-- **Earning.** Acting on a kindling situation earns the resonance as `KINDLED_DEED`, scaled by the
-  roll (since #5181 only part of it arrives at once and the rest waits to be claimed, see below); an
-  outcome with no act aimed at it earns nothing; a mission option shows which kindled
-  resonance it feeds. Taking an action never asks how the character feels.
+- **Earning.** A situation never pays by itself (changed by #5327, see the entry at the end of this
+  file). Only an authored choice, a mission option whose theme names a resonance, pays at once as
+  `KINDLED_DEED`, scaled by the roll; every other situation suggests the resonance beside a recorded act and
+  sets the strength a mark pays at. An outcome with no act aimed at it earns nothing; a mission option shows
+  which resonances its theme pays. Taking an action never asks how the character feels.
 - **Reflecting and settling.** A pose or journal entry carries an optional "Reflecting on" row
   (a deed or the unsettling resonance, then Embrace or Disown; since #5177 also the Mire a Sineater
   carries, then Absolve, Condemn or Succumb). One rite of settling carries every
@@ -1406,22 +1407,16 @@ listed in #5179; earning resonance through poses and the Anima ritual is #5181).
   decision for the maintainer. Staff must author the Sineating check, its outcome tiers' shares (seeded),
   the Compulsion condition, each resonance's impulse words, and tune the sizes (#5179).
 
-## Earning resonance by claiming kindled deeds and through the Anima ritual, with per-affinity rates (#5181, ADR-5181, BUILT 2026-11-17)
+## Earning resonance through the Anima ritual, with per-affinity rates (#5181, ADR-5181, BUILT 2026-11-17; claiming replaced by #5327)
 
 The third of four pieces agreed in the design session for #4751 (after #5176 and #5177; staff
 authoring it leaves is listed in #5179). Built as one PR:
 
-- **A kindled deed pays part at once and sets a share aside.** Every kindled deed, in fights, missions
-  and social scenes, pays `KindlingConfig.instant_percent` at once (at least 1, so a Compulsion still
-  lifts when the deed is done) and adds `claim_percent` to `CharacterResonance.kindled_unclaimed`. The
-  two may sum past 100. The deed line reads "You earned N Ruin. M more is waiting to be claimed."
-- **Claiming.** What is set aside never expires. A claiming pose or a journal entry collects any or all
-  of it across every affinity (`claim_kindled`); the writer alone reads "You gloat. Your Ruin grows by
-  7.", with the verb staff wrote on the Affinity (`claim_verb`). The room sees only the pose. A claim
-  can ride on the same pose as a reflection or a Sineating. Telnet `pose/claim`, `pose/claim
-  <resonance>,...=<text>`; the web pose box and journal form have a claim row, the resonances panel
-  shows what is waiting. The claimed share is a deed for worship favor and the settling offer, is not
-  separately reflectable and does not lift a Compulsion.
+- **A kindled deed paid part at once and set a share aside, and a claim collected it. Replaced by #5327.**
+  The instant and set-aside split, `CharacterResonance.kindled_unclaimed`, `GainSource.KINDLED_CLAIM`, claiming
+  (`pose/claim`, the claim row) and `KindlingConfig.instant_percent` and `claim_percent` are gone. A deed that
+  pays now pays all of it at once, and a mark (a pose or journal entry that points at a recorded act) is the
+  way to write a moment up for resonance. `Affinity.claim_verb` stays as the verb of a mark's private line.
 - **The Anima ritual with a partner.** A player can finally start it (web persona menu, telnet `ritual
   anima <partner>`; the code that resolved it existed but nothing created the request). It earns the
   resonance the ritual names in full at once (`AnimaRitualResonanceAward` by roll, plus the kindled share
@@ -1434,13 +1429,12 @@ authoring it leaves is listed in #5179). Built as one PR:
   main affinity; since #5231 the earn rate is applied by the affinity of the resonance earned, whoever earns it;
   staff grants, character creation and resonance that is only moved or converted are exempt
   (`AFFINITY_RATE_EXEMPT_SOURCES`). This is how Abyssal magic can be faster than Celestial.
-- **Journeys:** `integration_tests/test_claiming_kindled_journeys.py`,
-  `test_anima_ritual_partner_journeys.py`.
+- **Journeys:** `integration_tests/test_anima_ritual_partner_journeys.py`
+  (`test_claiming_kindled_journeys.py` was removed with claiming by #5327).
 - **Not built (by design).** A ritual that takes in a whole scene (`apply_ritual_bond` takes the partner
   as an argument so it can be called per member), perks that change what a ritual takes or gives, and
-  whether an entrance flourish lifts a Compulsion. Staff must author each Affinity's claiming verb,
-  earn rate, learn rate and ritual partner fatigue, the instant and claim percentages and the ritual's
-  award table; none is seeded (#5179).
+  whether an entrance flourish lifts a Compulsion. Staff must author each Affinity's verb,
+  earn rate, learn rate and ritual partner fatigue and the ritual's award table; none is seeded (#5179).
 
 ## Characters draw strength from a feeling and from what they do to others (#5231, ADR-5231, BUILT 2026-11-21)
 
@@ -1558,12 +1552,12 @@ Built as one PR (the numbered parts were the build order):
   once per affinity paid, with the act's own stat (or the stat `ResonanceGainSourceStat` sets for a source
   that rolled nothing) plus the affinity's skill; `ResonanceCheckAward.gain_bonus_percent` grows the gain
   and the grant records `bonus_outcome` and `bonus_percent`. Exempt, rolled and caller-rolled sources are
-  the three `GAIN_BONUS_*_SOURCES` sets. A kindled deed grows its set-aside share by the same percent, and
-  a claim of that share rolls nothing.
+  the three `GAIN_BONUS_*_SOURCES` sets. A kindled deed grows its grant by that percent, once per
+  affinity, and since #5327 a mark rolls once with the stat of its act.
 - **A deed she chose earns a Celestial or Abyssal resonance the character does not hold.** Only a row on
-  `CHOSEN_DEED_SITUATIONS` pays her, which today is a mission option's theme. Every other row, and every row
-  on a Primal resonance, kindles only a character who holds the resonance. The entry flourish accepts any
-  resonance.
+  `CHOSEN_DEED_SITUATIONS` pays her, which today is a mission option's theme. Since #5327 that is true of
+  every resonance, held or not, and of Primal as well: every other row only suggests. The entry flourish
+  accepts any resonance.
 - **A pose can reach.** `PoseResonanceReach` (web `reach_resonance_id`, telnet `pose/reach <resonance>=<text>`,
   composer row on the frontend); an endorsement of a reached pose pays that resonance and the endorser
   only confirms.
@@ -1585,3 +1579,68 @@ Built as one PR (the numbered parts were the build order):
   bonus check type and its difficulty, the per-source stats, the Abyssal floor and any skill accents are
   authored by staff and tracked in an `authoring` issue. Nothing is seeded, so until staff set
   `bonus_check_type` every gain pays its plain amount and every pull is worth 100 percent.
+
+## Resonance is earned by attested acts, and situations only suggest (#5327, ADR-5327, BUILT 2026-11-28)
+
+Intent decides what an act earns, and the game cannot read it, so a player says it and people check it.
+Built as one PR (the numbered steps of the spec were the build order; one schema-only migration):
+
+- **An authored choice pays at once.** A mission option whose theme names a resonance pays the whole amount
+  on the roll, whether or not the resonance is in her aura (never a Primal one she lacks), and the preview
+  names the resonance before she picks. No other situation pays, for any affinity, Primal included: a
+  situation suggests the resonance beside an act and sets the strength a mark pays at. A character's own
+  strength in a situation (a pull, a give-in, Dig deep, Rally, a cast) is unchanged.
+- **Recorded acts.** `award_kindled_deeds` writes a `RecordedAct` (with `RecordedActSuggestion` rows) for
+  each act of a player character that has an award row and paid no chosen deed. An unmarked act stays
+  pointable for `KindlingConfig.recorded_act_days` (90).
+- **Marks.** A pose or journal entry that names a resonance and points at an act (`reach_resonance_id` with
+  `reach_act_id`; `PoseAction`, the REST pose, the journal action and the journal REST create) pays at once as
+  `GainSource.MARKED_ACT`: the act's award times the strength share, cut by the weekly table, shrunk by the
+  payer's fatigue room, grown by the bonus check of the marked resonance's affinity. Any resonance may be
+  marked, Primal included. The writer alone reads one private line in the affinity's `claim_verb`. A mark
+  in an ephemeral scene pays nothing; she marks the act later in a pose in another scene or from a journal
+  entry. A journal entry whose mark is refused stays posted and carries the refusal. The chip on a marked
+  pose names the target as each reader knows them, so a mask stays a mask (`RecordedAct.act_phrase`).
+- **A bare reach still needs another player.** A pose that names a resonance and points at no act pays when
+  another player's endorsement settles weekly (as #5311 built), and the poser's own endorsement is refused.
+- **A witness's pick waits for the poser.** On a pose that named no resonance, a witness picks from one list
+  of every resonance (the menu shows nothing about the poser's aura, though the pose payload still carries
+  `endorsable_resonances` for entrance and outfit endorsements), the row is saved with
+  `PoseEndorsement.awaiting_acceptance`, and settlement skips it until the poser, the scene's GM or staff
+  accept. The endorser may change or withdraw it until settlement.
+- **Fatigue and the week.** `Affinity.gain_fatigue` is charged to the payer of each gain (the gainer for
+  Primal, the character who acted for Celestial, the target for Abyssal, nobody for a game-run opponent),
+  shrinking the gain to the room left and stopping at nothing. `WeeklyMarkReturn` takes a percent of the next
+  mark by what this game week's marks paid. Fatigue is charged for what a person causes (a mark, an
+  endorsement, a tag a GM or staff member writes), never for a standoff's ending; a weekly endorsement a
+  worn payer cannot pay stays unsettled and is tried again next week, and a worn payer's tag is refused
+  before it is written.
+- **Undo.** Staff and the scene's GM undo a reward (`undo_resonance_grant`; `ResonanceGrant.nullified_at` and
+  `nullified_by`); the GM's reach is the six scene-bound rewards, and the endpoint answers `{id,
+  nullified_at}` and 404 for anything the requester may not undo. The totals fall, the ledger row stays, a waiting reflection is withdrawn and the act
+  cannot be marked again; favor, achievements, a conversion offer, a Compulsion given in to and the payer's
+  fatigue stay.
+- **A tag** may name any resonance only when the scene's GM or staff write it; a scene owner's named
+  resonance counts only when the character already has it; nobody tags her own character. The tagged
+  player reads which resonance it paid, by the tagger's role.
+- **Staff authoring checks.** Five Required content rows now show what marks need: `weekly-mark-returns`,
+  `affinity-gain-fatigue`, `affinity-claim-verbs`, `kindled-deed-awards` and `kindled-strength-tier`
+  (`web/admin/tuning/required_content.py`).
+- **A Compulsion** lifts when she marks a gain in that resonance in the scene, not when she merely acts.
+- **Removed.** Claiming, `kindled_unclaimed`, `GainSource.KINDLED_CLAIM`, `KindlingConfig.instant_percent` and
+  `claim_percent`, telnet `pose/claim`, the claim row.
+- **Properties:** `integration_tests/fuzz/test_attested_earning_properties.py`,
+  `test_attested_marking_properties.py` and `test_attested_endorsement_properties.py`. **Journeys:**
+  `integration_tests/test_attested_resonance_journeys.py` (marking by telnet, web and journal entry, who pays the
+  fatigue, the weekly table, a witness's pick, the GM's undo and tag, a mission option that pays at once) and the
+  rewritten rows of `docs/testing/journeys.md`. **Readers:** `GET /api/magic/recorded-acts/`, telnet `acts`,
+  and `act_marks` and `pending_picks` on the pose feed and live frame.
+- **Staff authoring left.** A `ResonanceGainSourceStat` row for `MARKED_ACT`; each affinity's `gain_fatigue`
+  and `claim_verb`; the `WeeklyMarkReturn` rows and `recorded_act_days`; a check of the reason text on each
+  `KindlingSituation` row, because a player now reads it beside an act as a suggestion; mission options whose
+  themes should name a resonance, with a theme row each; a help-text description with good and bad examples
+  for each resonance; and the `KindledDeedAward` and `earn_percent` tuning, which now size a mark. Tracked in
+  an `authoring` issue.
+- **Not built (by design).** Gloat, taunt and mock social actions (their own issue), fatigue pools for
+  game-run monsters, code that detects cruelty or selflessness, any option that makes an action stronger for
+  being cruel, and a claim for leftover shares.

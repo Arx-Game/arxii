@@ -18,7 +18,7 @@
 
 import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
-import type { ClaimFields } from '@/magic/claiming';
+import type { ReachFields } from '@/magic/reach';
 import type { ReflectionFields } from '@/magic/reflection';
 
 const ENTRIES_URL = '/api/journals/entries';
@@ -104,8 +104,10 @@ export interface JournalEntrySummary {
 export interface JournalEntryDetail {
   /** Told to the writer alone when the entry carried a reflection that was recorded (#5124). */
   reflection_line?: string;
-  /** Told to the writer alone when the entry carried a claim: one line per resonance (#5181). */
-  claim_lines?: string[];
+  /** Told to the writer alone when the entry carried a mark: what it paid (#5327). */
+  mark_line?: string;
+  /** False when the entry posted but its mark paid nothing; `mark_line` then says why (#5327). */
+  mark_recorded?: boolean;
   id: number;
   author: number;
   author_name: string;
@@ -189,7 +191,11 @@ export type JournalEntryListFilters = {
   page_size?: number;
 };
 
-export interface CreateJournalEntryRequest extends ReflectionFields, ClaimFields {
+/**
+ * `reach_resonance_id` and `reach_act_id` go together or not at all (#5327): no one can endorse
+ * a journal entry, so a resonance on one is a mark and needs the act it points at.
+ */
+export interface CreateJournalEntryRequest extends ReflectionFields, ReachFields {
   title: string;
   body: string;
   is_public: boolean;

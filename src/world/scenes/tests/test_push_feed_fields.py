@@ -16,6 +16,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
     CharacterResonanceFactory,
     DramaticMomentTypeFactory,
+    PoseResonanceReachFactory,
     SceneEntryEndorsementFactory,
 )
 from world.magic.services.gain import (
@@ -48,9 +49,10 @@ from world.scenes.tests.test_reaction_windows import _binary_kind
 # Measured at 11 for an ordinary pose: receivers, targets, entry endorsers, resonances,
 # pose endorsers, reactions, windows, tags, the alternate self the writer's face wears (one
 # read for the one face a push shows, #4889), action rows, the pose's resonance reach (#5308:
-# a push can land on a pose whose reach is not cached yet, so the one-row lookup is paid).
+# a push can land on a pose whose reach is not cached yet, so the one-row lookup is paid), and
+# the pose's marked acts (#5327: the same, one more lookup for the marks the pose carries).
 # A new query here is a regression.
-QUERY_BOUND = 11
+QUERY_BOUND = 12
 
 FEED_FIELDS = (
     "visibility",
@@ -64,6 +66,8 @@ FEED_FIELDS = (
     "reactions",
     "reaction_windows",
     "dramatic_moment_tags",
+    "act_marks",
+    "pending_picks",
 )
 
 
@@ -118,6 +122,9 @@ class PushFeedFieldsTests(PushScene):
         """One of each room-wide thing a pose can carry, before the push."""
         endorser = sheet_with_tenure()
         SceneParticipationFactory(scene=self.scene, account=account_for_sheet(endorser))
+        # The pose named its resonance, so the endorsement counts at once (a pick on a pose that
+        # named none waits for the poser and is not listed, #5327).
+        PoseResonanceReachFactory(interaction=self.interaction, resonance=self.resonance)
         create_pose_endorsement(endorser, self.interaction, self.resonance)
         toggle_interaction_reaction(
             interaction=self.interaction, account=AccountFactory(), emoji="🔥"

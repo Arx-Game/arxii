@@ -80,6 +80,7 @@ if TYPE_CHECKING:
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
+from actions.constants import ActionCategory
 from evennia_extensions.models import RoomProfile
 from world.areas.services import area_for_scene
 from world.character_sheets.models import CharacterSheet
@@ -91,16 +92,27 @@ from world.magic.exceptions import EndorsementValidationError
 from world.magic.models import (
     CharacterResonance,
     PoseEndorsement,
+    RecordedAct,
     Resonance,
     ResonanceGainConfig,
     ResonanceGrant,
     SceneEntryEndorsement,
+)
+from world.magic.services.gain_fatigue import (
+    charge_gain_fatigue,
+    gain_without_act_refusal_line,
+    gain_without_act_shrunk_line,
+    pose_gain_payer,
+    send_player_line,
+    tell_gainer,
+    tell_player,
 )
 from world.magic.types import (
     ResonanceDailyTickSummary,
     ResonanceWeeklySettlementSummary,
     SettlementResult,
 )
+from world.magic.types.marking import GainFatigueCharge
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
@@ -110,9 +122,15 @@ from world.scenes.constants import (
 from world.scenes.interaction_services import notify_interaction_changed
 from world.scenes.models import Interaction, Persona, Scene, SceneParticipation
 from world.scenes.place_models import InteractionReceiver
-from world.scenes.services import active_persona_for_sheet
+from world.scenes.services import active_persona_for_sheet, is_scene_gm_or_staff
 
 logger = logging.getLogger(__name__)
+
+# What a gain with no act came from, as the private line names it (#5327).
+_WHAT_ENDORSEMENT = "that endorsement"
+_WHAT_TAG = "that tag"
+_ERR_OWN_TAG = "You cannot tag a moment for your own character."
+_RETRY_NEXT_WEEK = "It will be tried again at next week's settlement."
 
 
 def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
@@ -136,6 +154,18 @@ def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
     return player_data.account
 
 
+def player_of_sheet(sheet: CharacterSheet) -> AccountDB | None:
+    """The account that plays ``sheet`` right now, a lent NPC's borrower included (#5327).
+
+    Unlike ``account_for_sheet``, which reads only the current tenure, this follows the loan
+    rule the rest of the game uses (``npc_lending.current_player_of``): the borrower of a lent
+    NPC plays it and its holder does not. The endorsement and tag routes ask this question.
+    """
+    from world.roster.services.npc_lending import current_player_of  # noqa: PLC0415
+
+    return current_player_of(sheet)
+
+
 def get_resonance_gain_config() -> ResonanceGainConfig:
     """Get-or-create the resonance gain config singleton (pk=1)."""
     with transaction.atomic():
@@ -149,6 +179,19 @@ ROOM_RESONANCE_TAG_SOURCE = "tag_room_resonance"
 _ERR_ALT_ENDORSE = "Cannot endorse an alt character"
 _ERR_RESONANCE_UNCLAIMED = "Endorsee has not claimed this resonance"
 _ERR_NO_RESONANCE = "Which resonance? This pose did not reach for one."
+_ERR_MARK_PAID = (
+    "That pose already paid its writer for an act she marked, so it cannot also be endorsed. "
+    "Endorse another pose instead."
+)
+_ERR_ENDORSEMENT_SETTLED = "That endorsement has already been settled and can no longer change."
+_ERR_NOT_YOUR_ENDORSEMENT = "Only the player who made that endorsement can change it."
+_ERR_NOT_YOURS_TO_ANSWER = (
+    "Only the player whose pose it is, the scene's GM or staff can answer a proposed resonance."
+)
+_ERR_NOT_WAITING = "That endorsement is not waiting for an answer."
+_ERR_OWN_RESONANCE = (
+    "That pose named its own resonance, so an endorsement of it cannot pick another."
+)
 
 
 @transaction.atomic
@@ -263,28 +306,97 @@ def resonance_grant_history_for_sheet(
     return list(qs.order_by("-granted_at")[:limit])
 
 
-def _endorsed_resonance(
-    endorsee_sheet: CharacterSheet, interaction: Interaction, chosen: Resonance | None
-) -> Resonance:
-    """The resonance an endorsement of ``interaction`` pays (#5308).
+def pose_number_in_scene(endorser_sheet: CharacterSheet, interaction: Interaction) -> int | None:
+    """The number ``poses <char>`` and ``endorse pose`` give ``interaction`` for ``endorser_sheet``
+    (its position among its author's poses in the scene), or None when it has no scene or the
+    endorser cannot see it."""
+    scene = interaction.scene
+    if scene is None or interaction.persona is None:
+        return None
+    author = interaction.persona.character_sheet
+    if author is None:
+        return None
+    for number, row in get_endorseable_poses_in_scene(endorser_sheet, author, scene):
+        if row.pk == interaction.pk:
+            return number
+    return None
 
-    The one the pose reached for when its author named one; otherwise ``chosen``, which the
-    endorsee must have claimed.
+
+def waiting_picks_from(
+    witness_sheet: CharacterSheet, poser_sheet: CharacterSheet, scene: Scene
+) -> list[tuple[int, PoseEndorsement]]:
+    """The picks ``witness_sheet`` has waiting on ``poser_sheet``'s poses in ``scene``, as
+    ``(pose number, pick)`` pairs in pose order (#5327).
+
+    The pose number is the one ``poses`` gives the witness and the proposal line quotes, so
+    ``endorse accept <witness> #N`` names a pick by who proposed it and on which pose.
+    """
+    numbered = {
+        interaction.pk: number
+        for number, interaction in get_endorseable_poses_in_scene(witness_sheet, poser_sheet, scene)
+    }
+    rows = PoseEndorsement.objects.filter(
+        endorser_sheet=witness_sheet,
+        endorsee_sheet=poser_sheet,
+        interaction_id__in=numbered,
+        awaiting_acceptance=True,
+        settled_at__isnull=True,
+    ).select_related("resonance", "interaction__persona")
+    return sorted(((numbered[row.interaction_id], row) for row in rows), key=lambda pair: pair[0])
+
+
+def _tell_poser_of_proposal(endorsement: PoseEndorsement) -> None:
+    """Tell the poser, once the pick commits, which resonance a witness proposed on her pose
+    and how to answer it (#5327). The line names the witness as she knows them, and the pose by
+    its number, the way ``endorse accept`` and ``endorse decline`` name it."""
+    from world.magic.services.kindling import shown_names  # noqa: PLC0415
+
+    poser = endorsement.endorsee_sheet
+    witness = endorsement.endorser_sheet
+    resonance_name = endorsement.resonance.name
+    interaction = endorsement.interaction
+
+    def _send() -> None:
+        name = shown_names(poser, [witness.pk]).get(witness.pk, "Someone")
+        number = pose_number_in_scene(witness, interaction)
+        if number is None:
+            line = f"{name} proposed {resonance_name} on your pose. Answer it on the web."
+        else:
+            line = (
+                f"{name} proposed {resonance_name} on your pose #{number}. "
+                f"Use endorse accept {name} #{number} or endorse decline {name} #{number}."
+            )
+        send_player_line(poser, line, ooc_note="A resonance proposed on your pose")
+
+    transaction.on_commit(_send)
+
+
+def _announce_endorsement(endorsement: PoseEndorsement) -> None:
+    """Tell a new endorsement's audience: the poser when the pick waits for her, and everyone
+    who reads the pose, who refetch it."""
+    if endorsement.awaiting_acceptance:
+        _tell_poser_of_proposal(endorsement)
+    notify_interaction_changed(endorsement.interaction)
+
+
+def _pose_endorsement_target(
+    interaction: Interaction, chosen: Resonance | None
+) -> tuple[Resonance, bool]:
+    """The resonance an endorsement of ``interaction`` pays, and whether it waits (#5327).
+
+    The one the pose reached for when its author named one: that endorsement is confirmed and
+    does not wait. On a pose that named none, ``chosen`` is any resonance the witness picked,
+    whether or not it is in the poser's aura, and the row waits for the poser to accept it.
 
     Raises:
-        EndorsementValidationError: no resonance was reached for or chosen, or the one chosen
-            is not claimed.
+        EndorsementValidationError: the pose named no resonance and none was chosen.
     """
     reach = interaction.cached_resonance_reach
     if reach is not None:
-        return reach.resonance
+        return reach.resonance, False
     if chosen is None:
         raise EndorsementValidationError(_ERR_NO_RESONANCE)
-    if not CharacterResonance.objects.filter(
-        character_sheet=endorsee_sheet, resonance=chosen
-    ).exists():
-        raise EndorsementValidationError(_ERR_RESONANCE_UNCLAIMED)
-    return chosen
+    return chosen, True
 
 
 @transaction.atomic
@@ -296,8 +408,9 @@ def create_pose_endorsement(  # noqa: C901
     """Validate and persist a pose endorsement (Spec C §2.2 + §7).
 
     A pose whose author reached for a resonance (#5308) is endorsed for that resonance:
-    ``resonance`` is then ignored and precondition 7 does not apply, since the author named
-    it. A pose that reached for nothing needs ``resonance``, claimed by the endorsee.
+    ``resonance`` is then ignored, since the author named it. A pose that reached for nothing
+    needs ``resonance``, any resonance at all (#5327): the row is saved waiting for the poser
+    to accept it (``awaiting_acceptance``), and settlement skips it until she does.
 
     Preconditions (raises EndorsementValidationError on failure):
     1. Interaction author (persona field) has a character sheet
@@ -306,7 +419,7 @@ def create_pose_endorsement(  # noqa: C901
     4. WHISPER: endorser must be the direct recipient (InteractionReceiver row)
     5. VERY_PRIVATE: endorser must have SceneParticipation (allowed by participants)
     6. Endorser was present (scene participation OR interaction receiver)
-    7. Endorsee has claimed this resonance (unless the pose reached for it)
+    7. The pose's mark has not already paid (an act marked on it paid its writer)
     8. No duplicate (endorser × interaction already endorsed)
     """
     if endorser_sheet.is_protagonism_locked:
@@ -330,8 +443,8 @@ def create_pose_endorsement(  # noqa: C901
         msg = "Cannot endorse your own pose"
         raise EndorsementValidationError(msg)
 
-    endorser_account = account_for_sheet(endorser_sheet)
-    endorsee_account = account_for_sheet(endorsee_sheet)
+    endorser_account = player_of_sheet(endorser_sheet)
+    endorsee_account = player_of_sheet(endorsee_sheet)
     if (
         endorser_account is not None
         and endorsee_account is not None
@@ -356,7 +469,12 @@ def create_pose_endorsement(  # noqa: C901
         msg = "Endorser was not present for this interaction"
         raise EndorsementValidationError(msg)
 
-    resonance = _endorsed_resonance(endorsee_sheet, interaction, resonance)
+    resonance, awaiting = _pose_endorsement_target(interaction, resonance)
+
+    if RecordedAct.objects.filter(
+        marked_interaction=interaction, marked_grant__isnull=False
+    ).exists():
+        raise EndorsementValidationError(_ERR_MARK_PAID)
 
     existing = PoseEndorsement.objects.filter(
         endorser_sheet=endorser_sheet, interaction=interaction
@@ -377,6 +495,7 @@ def create_pose_endorsement(  # noqa: C901
         interaction=interaction,
         timestamp=interaction.timestamp,
         resonance=resonance,
+        awaiting_acceptance=awaiting,
         persona_snapshot=endorsee_persona,
         endorser_persona=active_persona_for_sheet(endorser_sheet),
     )
@@ -393,7 +512,7 @@ def create_pose_endorsement(  # noqa: C901
     # mixin alone (ADR-0298).
     if cached is not None:
         interaction.cached_endorsements = [*cached, endorsement]
-    notify_interaction_changed(interaction)
+    _announce_endorsement(endorsement)
     return endorsement
 
 
@@ -402,6 +521,119 @@ def retract_pose_endorsement(endorsement: PoseEndorsement) -> None:
     interaction = endorsement.interaction
     endorsement.delete()
     notify_interaction_changed(interaction)
+
+
+def _open_endorsement(endorsement: PoseEndorsement) -> PoseEndorsement:
+    """Lock ``endorsement`` while it is unsettled, so a change cannot race the weekly tick.
+
+    Raises:
+        EndorsementValidationError: the weekly settlement already took it.
+    """
+    locked = (
+        PoseEndorsement.objects.select_for_update()
+        .filter(pk=endorsement.pk, settled_at__isnull=True)
+        .first()
+    )
+    if locked is None:
+        raise EndorsementValidationError(_ERR_ENDORSEMENT_SETTLED)
+    return locked
+
+
+def _may_answer_proposal(endorsement: PoseEndorsement, by: AccountDB) -> bool:
+    """Whether ``by`` may accept or decline a proposed resonance on this pose (#5327).
+
+    The poser's own player, the scene's GM (``Scene.is_gm``, never an owner) and staff, each
+    only when they can read the pose as the scene log decides. Nobody answers a pick her own
+    account made: a GM who proposed a resonance cannot accept it too.
+    """
+    if player_of_sheet(endorsement.endorser_sheet) == by:
+        return False
+    interaction = endorsement.interaction
+    poser_account = player_of_sheet(endorsement.endorsee_sheet)
+    if not (
+        (poser_account is not None and poser_account == by)
+        or is_scene_gm_or_staff(by, interaction.scene)
+    ):
+        return False
+    return Interaction.objects.readable_by(by).filter(pk=interaction.pk).exists()
+
+
+@transaction.atomic
+def change_pose_endorsement(
+    endorsement: PoseEndorsement, resonance: Resonance, by: AccountDB
+) -> PoseEndorsement:
+    """Swap the resonance a witness picked on a pose, and put it back to waiting (#5327).
+
+    Allowed to the endorser until the weekly settlement pays the row, even after the poser
+    accepted the old pick: the new pick waits for her again. A pick of the resonance already
+    on the row changes nothing. A pose that named its own resonance has nothing to pick.
+
+    Raises:
+        EndorsementValidationError: ``by`` did not make the endorsement, the pose named its own
+            resonance, or the weekly settlement already took the row.
+    """
+    if player_of_sheet(endorsement.endorser_sheet) != by:
+        raise EndorsementValidationError(_ERR_NOT_YOUR_ENDORSEMENT)
+    row = _open_endorsement(endorsement)
+    if row.interaction.cached_resonance_reach is not None:
+        raise EndorsementValidationError(_ERR_OWN_RESONANCE)
+    if row.resonance_id == resonance.pk:
+        return row
+    row.resonance = resonance
+    row.awaiting_acceptance = True
+    row.save(update_fields=["resonance", "awaiting_acceptance"])
+    # The poser is told once, when the pick is made. A change tells her nothing more: she reads
+    # the current pick on the pose, and a witness cannot flood her by changing it.
+    notify_interaction_changed(row.interaction)
+    return row
+
+
+@transaction.atomic
+def withdraw_pose_endorsement(endorsement: PoseEndorsement, by: AccountDB) -> None:
+    """The endorser takes back her own endorsement, until the weekly settlement pays it (#5327).
+
+    Raises:
+        EndorsementValidationError: ``by`` did not make the endorsement, or the weekly
+            settlement already took the row.
+    """
+    if player_of_sheet(endorsement.endorser_sheet) != by:
+        raise EndorsementValidationError(_ERR_NOT_YOUR_ENDORSEMENT)
+    retract_pose_endorsement(_open_endorsement(endorsement))
+
+
+@transaction.atomic
+def accept_pose_proposal(endorsement: PoseEndorsement, by: AccountDB) -> PoseEndorsement:
+    """Accept the resonance a witness proposed, so the weekly settlement pays it (#5327).
+
+    Raises:
+        EndorsementValidationError: ``by`` may not answer it, it is not waiting, or the weekly
+            settlement already took the row.
+    """
+    if not _may_answer_proposal(endorsement, by):
+        raise EndorsementValidationError(_ERR_NOT_YOURS_TO_ANSWER)
+    row = _open_endorsement(endorsement)
+    if not row.awaiting_acceptance:
+        raise EndorsementValidationError(_ERR_NOT_WAITING)
+    row.awaiting_acceptance = False
+    row.save(update_fields=["awaiting_acceptance"])
+    notify_interaction_changed(row.interaction)
+    return row
+
+
+@transaction.atomic
+def decline_pose_proposal(endorsement: PoseEndorsement, by: AccountDB) -> None:
+    """Decline the resonance a witness proposed: the row is deleted and pays nothing (#5327).
+
+    Raises:
+        EndorsementValidationError: ``by`` may not answer it, it is not waiting, or the weekly
+            settlement already took the row.
+    """
+    if not _may_answer_proposal(endorsement, by):
+        raise EndorsementValidationError(_ERR_NOT_YOURS_TO_ANSWER)
+    row = _open_endorsement(endorsement)
+    if not row.awaiting_acceptance:
+        raise EndorsementValidationError(_ERR_NOT_WAITING)
+    retract_pose_endorsement(row)
 
 
 def _endorser_was_present(
@@ -448,7 +680,7 @@ def get_endorseable_poses_in_scene(
     - VERY_PRIVATE: only visible if the endorser has SceneParticipation.
     - All other: visible (endorser is in the scene).
     """
-    endorser_account = account_for_sheet(endorser_sheet)
+    endorser_account = player_of_sheet(endorser_sheet)
 
     is_participant = (
         endorser_account is not None
@@ -496,6 +728,9 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
     using ceiling division, writes grants via grant_resonance (ledger rows
     auto-written), and marks each endorsement settled_at=now.
 
+    A row still waiting for the poser to accept it (#5327) is skipped, in the split and in the
+    count, and stays unsettled until she answers.
+
     Idempotent — a second call with no new unsettled rows is a no-op.
     """
     # Inner import to avoid circular with services/resonance.py
@@ -504,7 +739,9 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
 
     unsettled = list(
         PoseEndorsement.objects.select_for_update().filter(
-            endorser_sheet=endorser_sheet, settled_at__isnull=True
+            endorser_sheet=endorser_sheet,
+            settled_at__isnull=True,
+            awaiting_acceptance=False,
         )
     )
     if not unsettled:
@@ -524,6 +761,7 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
     share = math.ceil(cfg.weekly_pot_per_character / n)
     now = timezone.now()
     total_granted = 0
+    settled = 0
 
     for endorsement in unsettled:
         if endorsement.endorsee_sheet.is_protagonism_locked:
@@ -531,24 +769,69 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
             endorsement.granted_amount = 0
             endorsement.settled_at = now
             endorsement.save(update_fields=["granted_amount", "settled_at"])
+            settled += 1
+            continue
+        # A gain that points at no act tires whoever pays for it (#5327), as a mark does.
+        gainer = endorsement.endorsee_sheet
+        charge = charge_gain_fatigue(
+            gainer,
+            pose_gain_payer(gainer, endorsement.resonance, endorsement.interaction),
+            endorsement.resonance,
+            ActionCategory.SOCIAL,
+            share,
+            from_mark=False,
+        )
+        if charge.refused and not charge.shrunk:
+            # Nothing was asked of anyone (the pot's share is 0): it settles paying nothing.
+            endorsement.granted_amount = 0
+            endorsement.settled_at = now
+            endorsement.save(update_fields=["granted_amount", "settled_at"])
+            settled += 1
+            continue
+        if charge.refused:
+            # Its payer is too worn. Left unsettled: the next weekly settlement tries it again,
+            # once the payer has recovered. Stamping it settled would end it, and the endorser
+            # cannot make the same endorsement twice.
+            tell_gainer(
+                gainer,
+                gain_without_act_refusal_line(
+                    charge,
+                    gainer,
+                    endorsement.resonance,
+                    what=_WHAT_ENDORSEMENT,
+                    next_step=_RETRY_NEXT_WEEK,
+                ),
+            )
             continue
         ledger: list = []
         grant_resonance(
-            endorsement.endorsee_sheet,
+            gainer,
             endorsement.resonance,
-            share,
+            charge.amount,
             source=GainSource.POSE_ENDORSEMENT,
             pose_endorsement=endorsement,
             ledger_out=ledger,
         )
+        if charge.shrunk:
+            tell_gainer(
+                gainer,
+                gain_without_act_shrunk_line(
+                    charge,
+                    gainer,
+                    endorsement.resonance,
+                    what=_WHAT_ENDORSEMENT,
+                    paid=ledger[-1].amount,
+                ),
+            )
         endorsement.granted_amount = ledger[-1].amount
         endorsement.settled_at = now
         endorsement.save(update_fields=["granted_amount", "settled_at"])
         total_granted += ledger[-1].amount
+        settled += 1
 
     return SettlementResult(
         endorser_sheet=endorser_sheet,
-        endorsements_settled=n,
+        endorsements_settled=settled,
         total_granted=total_granted,
     )
 
@@ -587,8 +870,8 @@ def create_scene_entry_endorsement(
         msg = "Cannot endorse your own entry"
         raise EndorsementValidationError(msg)
 
-    endorser_account = account_for_sheet(endorser_sheet)
-    endorsee_account = account_for_sheet(endorsee_sheet)
+    endorser_account = player_of_sheet(endorser_sheet)
+    endorsee_account = player_of_sheet(endorsee_sheet)
     if (
         endorser_account is not None
         and endorsee_account is not None
@@ -765,8 +1048,8 @@ def create_style_presentation_endorsement(
         msg = "Cannot endorse your own style presentation"
         raise EndorsementValidationError(msg)
 
-    endorser_account = account_for_sheet(endorser_sheet)
-    endorsee_account = account_for_sheet(endorsee_sheet)
+    endorser_account = player_of_sheet(endorser_sheet)
+    endorsee_account = player_of_sheet(endorsee_sheet)
     if (
         endorser_account is not None
         and endorsee_account is not None
@@ -921,30 +1204,33 @@ def create_entry_flourish(
     return record
 
 
-@transaction.atomic
 def _resolve_moment_resonance(
     *,
     character_sheet: CharacterSheet,
     moment_type: DramaticMomentType,
     technique: Technique | None,
     resonance: Resonance | None,
+    may_choose: bool,
 ) -> Resonance | None:
     """Resolve which resonance a dramatic moment grants, or None to skip the grant.
 
-    In order, taking the first the character has actually claimed:
+    A *resonance* the tagger named is used as it is, whether or not the character has it, when
+    ``may_choose`` (the scene's GM or staff, #5327). Anyone else keeps what a scene owner could
+    do before: a named resonance counts only when the character already has it, and otherwise
+    the tag pays as if none was named, so the tag never says whether she has it. Then, in
+    order, taking the first the character has actually claimed:
 
-    1. an explicit *resonance* (the manual GM tag names one);
-    2. the resonance woven into the entrance technique's gift, via
+    1. the resonance woven into the entrance technique's gift, via
        ``gift_resonances_for`` (the ADR-0052 derive-on-read seam);
-    3. the moment type's authored override;
-    4. the character's anima-ritual resonance — their "main" one.
+    2. the moment type's authored override;
+    3. the character's anima-ritual resonance — their "main" one.
 
-    Step 4 exists because step 2 can come up empty even for a technique-driven
+    Step 3 exists because step 1 can come up empty even for a technique-driven
     entrance — e.g. a gift-holder whose thread was provisioned at a resonance
     that isn't among the candidates already tried. Their anima ritual is the
     one place a "main" resonance is always recorded, so it is the last resort
     before granting nothing. (As of #2971, ``grant_gift_to_character`` always
-    provisions a GIFT thread, so step 2 is no longer the common failure case
+    provisions a GIFT thread, so step 1 is no longer the common failure case
     it once was — this fallback stays as a defense for sheets whose thread
     predates that guarantee, or whose thread's resonance the character never
     claimed.)
@@ -953,6 +1239,8 @@ def _resolve_moment_resonance(
 
     candidates: list[Resonance] = []
     if resonance is not None:
+        if may_choose:
+            return resonance
         candidates.append(resonance)
     if technique is not None and technique.gift_id:
         # CharacterSheet.character is a primary_key OneToOne, so it is always
@@ -1001,6 +1289,125 @@ def anima_ritual_resonance(character_sheet: CharacterSheet) -> Resonance | None:
     return picks[0] if picks else None
 
 
+def _tell_tagged_player(
+    character_sheet: CharacterSheet,
+    moment_type: DramaticMomentType,
+    grant: ResonanceGrant,
+    tagged_by: AccountDB,
+    scene: Scene | None,
+) -> None:
+    """Tell the tagged player which resonance a tag paid (#5327).
+
+    The tagger may have named the resonance, so the player would otherwise not know which one
+    grew. The line names the moment type and the resonance, not an amount, and the tagger by
+    role, never by account: "Staff", "The scene's GM", else "Someone". It is sent as a private
+    message once the tag commits, so a player who is offline reads it at login.
+    """
+    if tagged_by.is_staff:
+        who = "Staff"
+    elif scene is not None and scene.is_gm(tagged_by):
+        who = "The scene's GM"
+    else:
+        who = "Someone"
+    # The label is staff-written and may open with an article ("A Flourish of Steel"), so the
+    # sentence puts no article in front of it.
+    line = f"{who} tagged your pose: {moment_type.label}. It paid you {grant.resonance.name}."
+    tell_player(character_sheet, line, ooc_note="A dramatic moment tag")
+
+
+def _worn_payer_name(payer: CharacterSheet, interaction: Interaction | None) -> str:
+    """The face ``payer`` shows in the scene, for the line that says she is too worn.
+
+    The pose's own author name when she wrote it, else the face she presents now: never her
+    real name behind a mask.
+    """
+    if (
+        interaction is not None
+        and interaction.persona is not None
+        and interaction.persona.character_sheet_id == payer.pk
+    ):
+        return interaction.persona.name
+    try:
+        return active_persona_for_sheet(payer).name
+    except Persona.DoesNotExist:
+        return "That character"
+
+
+def _charge_tag_fatigue(
+    character_sheet: CharacterSheet,
+    moment_type: DramaticMomentType,
+    granted_resonance: Resonance,
+    interaction: Interaction | None,
+) -> GainFatigueCharge:
+    """Charge the fatigue a person's tag costs its payer, before the tag is written (#5327).
+
+    A tag points at no act, so the gain tires whoever pays for it as a mark would (the tagged
+    character for Primal and Celestial, the pose's one named target for Abyssal, nobody when
+    the pose names none or several). A payer who is running low shrinks the gain.
+
+    Raises:
+        EndorsementValidationError: the payer has nothing left to pay with, so the tag is
+            refused before any row exists and spends none of the scene's per-scene cap.
+    """
+    charge = charge_gain_fatigue(
+        character_sheet,
+        pose_gain_payer(character_sheet, granted_resonance, interaction),
+        granted_resonance,
+        ActionCategory.SOCIAL,
+        moment_type.resonance_amount,
+        from_mark=False,
+    )
+    if charge.refused and charge.shrunk and charge.payer is not None:
+        name = _worn_payer_name(charge.payer, interaction)
+        msg = (
+            f"{name} is too worn for this tag to pay. "
+            f"Tag another pose, or wait until {name} has recovered."
+        )
+        raise EndorsementValidationError(msg)
+    return charge
+
+
+def _pay_dramatic_moment(
+    character_sheet: CharacterSheet,
+    granted_resonance: Resonance,
+    tag: DramaticMomentTag,
+    charge: GainFatigueCharge,
+) -> ResonanceGrant | None:
+    """Pay a tag the amount its payer's fatigue left (#5327); the grant, or None when that
+    amount is 0.
+
+    A payer who ran low shrank the amount, and the tagged player is told so, with what to
+    expect next.
+    """
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    if charge.amount <= 0:
+        return None
+    ledger: list[ResonanceGrant] = []
+    grant_resonance(
+        character_sheet,
+        granted_resonance,
+        charge.amount,
+        source=GainSource.DRAMATIC_MOMENT,
+        dramatic_moment=tag,
+        ledger_out=ledger,
+    )
+    if charge.shrunk:
+        tell_gainer(
+            character_sheet,
+            gain_without_act_shrunk_line(
+                charge,
+                character_sheet,
+                granted_resonance,
+                what=_WHAT_TAG,
+                paid=ledger[-1].amount,
+            ),
+        )
+    return ledger[-1]
+
+
+@transaction.atomic
 def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing one tag event
     *,
     character_sheet: CharacterSheet,
@@ -1011,6 +1418,7 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     technique: Technique | None = None,
     resonance: Resonance | None = None,
     archetypes: Sequence[PhilosophicalArchetype] = (),
+    by_system: bool = False,
 ) -> DramaticMomentTag:
     """Tag a character's dramatic scene moment and fire resonance + renown.
 
@@ -1019,10 +1427,23 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     resonance grant still fires. Fire_renown_award's best-effort notification
     runs outside the transaction by design (see fire_renown_award docstring).
 
+    Who may do what (#5327), enforced here so no path can skip it:
+
+    - nobody tags a character she plays now (``player_of_sheet``, a lent NPC's borrower
+      included);
+    - the scene's GM and staff (``is_scene_gm_or_staff``) may name any resonance, in the
+      character's aura or not; anyone else's named resonance counts only when the character
+      already has it;
+    - the tagger's tag tires its payer (``_charge_tag_fatigue``); a payer with nothing left
+      refuses the tag before it is written.
+
+    ``by_system`` is true for an outcome the game itself pays (a standoff's ending): no person
+    tagged, so none of the three rules above applies and no fatigue is charged.
+
     The resonance granted is resolved, not dictated by the moment type
     (ruled 2026-08-04 — resonance comes from the player). In order:
 
-    1. an explicit *resonance* argument (the manual GM tag names one);
+    1. an explicit *resonance* argument, under the rule above;
     2. the resonance woven into the gift of *technique*, when the entrance was
        cast with one — the expected path, since most dramatic entrances should
        be technique-driven;
@@ -1038,17 +1459,20 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
 
     Raises:
         DramaticMomentCapExceeded: If per_scene_cap for this (moment_type, scene, sheet) is reached.
+        EndorsementValidationError: The tagger plays the character, or the payer is too worn.
     """
-    from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.exceptions import DramaticMomentCapExceeded  # noqa: PLC0415
     from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
-    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    if not by_system and player_of_sheet(character_sheet) == tagged_by:
+        raise EndorsementValidationError(_ERR_OWN_TAG)
 
     granted_resonance = _resolve_moment_resonance(
         character_sheet=character_sheet,
         moment_type=moment_type,
         technique=technique,
         resonance=resonance,
+        may_choose=is_scene_gm_or_staff(tagged_by, scene),
     )
 
     existing = DramaticMomentTag.objects.filter(
@@ -1058,6 +1482,10 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     ).count()
     if existing >= moment_type.per_scene_cap:
         raise DramaticMomentCapExceeded(DramaticMomentCapExceeded.user_message)
+
+    charge = GainFatigueCharge(amount=moment_type.resonance_amount, charged=0, payer=None)
+    if granted_resonance is not None and not by_system:
+        charge = _charge_tag_fatigue(character_sheet, moment_type, granted_resonance, interaction)
 
     # Peek (not read) BEFORE the create below — DramaticMomentTag carries
     # RelatedCacheClearingMixin, so .create() clears every cached_* attribute on
@@ -1078,35 +1506,40 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     if cached_tags is not None:
         interaction.cached_dramatic_moment_tags = [*cached_tags, tag]
     if granted_resonance is not None:
-        grant_resonance(
-            character_sheet,
-            granted_resonance,
-            moment_type.resonance_amount,
-            source=GainSource.DRAMATIC_MOMENT,
-            dramatic_moment=tag,
-        )
+        paid = _pay_dramatic_moment(character_sheet, granted_resonance, tag, charge)
+        if paid is not None and resonance is not None and not by_system:
+            _tell_tagged_player(character_sheet, moment_type, paid, tagged_by, scene)
 
-    try:
-        persona = character_sheet.primary_persona
-    except Persona.DoesNotExist:
-        persona = None
-
-    if persona is not None:
-        from world.societies.renown import fire_renown_award  # noqa: PLC0415
-
-        fire_renown_award(
-            persona=persona,
-            magnitude=moment_type.magnitude,
-            risk=moment_type.risk,
-            reach=moment_type.reach or None,
-            archetypes=list(archetypes) or list(moment_type.archetypes.all()),
-            origin_area=area_for_scene(scene),
-            title=moment_type.label,
-        )
+    _fire_moment_renown(character_sheet, moment_type, scene, archetypes)
 
     if interaction is not None:
         notify_interaction_changed(interaction)
     return tag
+
+
+def _fire_moment_renown(
+    character_sheet: CharacterSheet,
+    moment_type: DramaticMomentType,
+    scene: Scene | None,
+    archetypes: Sequence[PhilosophicalArchetype],
+) -> None:
+    """Fire the moment's renown award for the character's primary persona, if she has one."""
+    try:
+        persona = character_sheet.primary_persona
+    except Persona.DoesNotExist:
+        return
+
+    from world.societies.renown import fire_renown_award  # noqa: PLC0415
+
+    fire_renown_award(
+        persona=persona,
+        magnitude=moment_type.magnitude,
+        risk=moment_type.risk,
+        reach=moment_type.reach or None,
+        archetypes=list(archetypes) or list(moment_type.archetypes.all()),
+        origin_area=area_for_scene(scene),
+        title=moment_type.label,
+    )
 
 
 def maybe_suggest_dramatic_moments(
@@ -1439,12 +1872,12 @@ def resonance_daily_tick() -> ResonanceDailyTickSummary:
 def resonance_weekly_settlement_tick() -> ResonanceWeeklySettlementSummary:
     """Master weekly settlement tick (Spec C §5).
 
-    Finds all endorsers with any unsettled PoseEndorsement rows, calls
+    Finds all endorsers with any unsettled, accepted PoseEndorsement rows, calls
     settle_weekly_pot on each. Per-endorser settlement wrapped in try/except
     so a single failure doesn't poison the whole tick.
     """
     endorser_ids = (
-        PoseEndorsement.objects.filter(settled_at__isnull=True)
+        PoseEndorsement.objects.filter(settled_at__isnull=True, awaiting_acceptance=False)
         .values_list("endorser_sheet_id", flat=True)
         .distinct()
     )

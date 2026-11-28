@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 
     from world.combat.models import CombatRoundAction
     from world.gm.models import GMPromptNarration
-    from world.magic.models import PoseEndorsement, PoseResonanceReach
+    from world.magic.models import PoseEndorsement, PoseResonanceReach, RecordedAct
     from world.magic.models.dramatic_moment import DramaticMomentTag
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
@@ -1309,6 +1309,19 @@ class Interaction(SharedMemoryModel):
         and a live query on first read otherwise. A list so it works as a ``to_attr`` target.
         """
         return list(self.resonance_reaches.select_related("resonance"))
+
+    @PrunedCachedProperty
+    def cached_act_marks(self) -> list[RecordedAct]:
+        """The acts this pose marked (#5327), each with the grant it paid and its resonance.
+
+        A pose carries at most one mark. Fed by the interaction feed's ``Prefetch`` (``to_attr``
+        "cached_act_marks"), and a live query on first read otherwise. A list so it works as a
+        ``to_attr`` target. A mark and an undo clear it (``RecordedAct`` is a
+        ``RelatedCacheClearingMixin`` on its pose; ``undo_resonance_grant`` clears it too).
+        """
+        return list(
+            self.marked_acts.select_related("marked_grant__resonance", "marked_grant__nullified_by")
+        )
 
     @property
     def cached_resonance_reach(self) -> PoseResonanceReach | None:

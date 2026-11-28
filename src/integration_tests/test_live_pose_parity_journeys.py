@@ -1,4 +1,5 @@
-"""Journey for a live pose in an open scene (#4508): what arrives live is what the feed shows."""
+"""Journey for a live pose in an open scene (#4508, #5327): what arrives live is what the feed
+shows, including the marks a pose carries and the picks waiting for its poser."""
 
 from __future__ import annotations
 
@@ -9,10 +10,15 @@ from rest_framework import status
 
 from integration_tests.harness import JourneyCase
 from world.magic.factories import CharacterResonanceFactory, ResonanceFactory
+from world.narrative.models import NarrativeMessageDelivery
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 
 SUBMIT_POSE = "/api/interactions/submit-pose/"
 ENDORSE = "/api/magic/pose-endorsements/"
+PROPOSED = (
+    "Hobb proposed Hearth-warm on your pose #1. "
+    "Use endorse accept Hobb #1 or endorse decline Hobb #1."
+)
 
 
 class ALivePoseIsEndorsedInAnOpenScene(JourneyCase):
@@ -37,6 +43,14 @@ class ALivePoseIsEndorsedInAnOpenScene(JourneyCase):
         return [
             kwargs[name][1] for _args, kwargs in self.mailbox(character).calls if name in kwargs
         ]
+
+    def notices(self, character) -> str:
+        """Every private line the game sent ``character``'s player, from the delivery rows."""
+        return "\n".join(
+            NarrativeMessageDelivery.objects.filter(
+                recipient_character_sheet=character.sheet_data
+            ).values_list("message__body", flat=True)
+        )
 
     def _changed_ids(self, character) -> list[int]:
         return [frame["interaction_id"] for frame in self._frames(character, "interaction_changed")]
@@ -67,33 +81,70 @@ class ALivePoseIsEndorsedInAnOpenScene(JourneyCase):
         )
         self.assertEqual([r["id"] for r in live[0]["endorsable_resonances"]], [self.resonance.pk])
         self.assertEqual(live[0]["endorsable_resonances"], row["endorsable_resonances"])
+        # A new pose carries no mark and no waiting pick, on the frame and on the feed alike.
+        for field in ("act_marks", "pending_picks"):
+            self.assertEqual((live[0][field], row[field]), ([], []), field)
         self.assertEqual(self._changed_ids(self.ysmay), [])
 
-        # Hobb endorses it; both browsers are told the pose changed.
+        # Hobb endorses it. The pose named no resonance, so his pick waits for Ysmay to accept
+        # it; both browsers are told the pose changed, and Ysmay is told what was proposed.
         with self.captureOnCommitCallbacks(execute=True):
             endorsed = self.hobb_web.post(
                 ENDORSE, {"interaction": pose_id, "resonance": self.resonance.pk}, format="json"
             )
         self.assertEqual(endorsed.status_code, status.HTTP_201_CREATED, endorsed.content)
+        self.assertTrue(endorsed.json()["awaiting_acceptance"])
         for character in (self.ysmay, self.hobb):
             self.assertEqual(self._changed_ids(character), [pose_id], character.key)
             self.assertEqual(
                 self._frames(character, "interaction_changed")[0]["scene_id"], self.scene.pk
             )
+        self.assertIn(PROPOSED, self.notices(self.ysmay))
 
-        # Hobb's refetch of the pose shows his own endorsement.
+        # Hobb's refetch of the pose shows his own pick, waiting; the room does not count it.
         refetched = self.hobb_web.get(f"/api/interactions/{pose_id}/")
         self.assertEqual(refetched.status_code, status.HTTP_200_OK, refetched.content)
         mine = refetched.json()["my_pose_endorsement"]
         self.assertEqual(mine["id"], endorsed.json()["id"])
         self.assertEqual(mine["resonance_id"], self.resonance.pk)
+        self.assertTrue(mine["awaiting_acceptance"])
+        self.assertEqual(refetched.json()["pose_endorsers"], [])
+        self.assertEqual(
+            refetched.json()["pending_picks"],
+            [
+                {
+                    "endorsement_id": endorsed.json()["id"],
+                    "resonance_id": self.resonance.pk,
+                    "resonance_name": "Hearth-warm",
+                    "endorser_name": "Hobb",
+                    "mine": True,
+                    "can_answer": False,
+                }
+            ],
+        )
+        # Ysmay, whose pose it is, reads the same pick as hers to answer.
+        hers = self.ysmay_web.get(f"/api/interactions/{pose_id}/").json()
+        (pick,) = hers["pending_picks"]
+        self.assertEqual((pick["mine"], pick["can_answer"]), (False, True))
+        self.assertEqual(hers["pose_endorsers"], [])
+
+        # She accepts it; both browsers are told again, and now the pick counts.
+        with self.captureOnCommitCallbacks(execute=True):
+            accepted = self.ysmay_web.post(f"{ENDORSE}{endorsed.json()['id']}/accept/")
+        self.assertEqual(accepted.status_code, status.HTTP_200_OK, accepted.content)
+        for character in (self.ysmay, self.hobb):
+            self.assertEqual(self._changed_ids(character), [pose_id, pose_id], character.key)
+        after = self.hobb_web.get(f"/api/interactions/{pose_id}/").json()
+        self.assertEqual(after["pending_picks"], [])
+        self.assertEqual([e["resonance_id"] for e in after["pose_endorsers"]], [self.resonance.pk])
+        self.assertFalse(after["my_pose_endorsement"]["awaiting_acceptance"])
 
         # He takes it back; both browsers are told again.
         with self.captureOnCommitCallbacks(execute=True):
             retracted = self.hobb_web.delete(f"{ENDORSE}{endorsed.json()['id']}/")
         self.assertEqual(retracted.status_code, status.HTTP_204_NO_CONTENT)
         for character in (self.ysmay, self.hobb):
-            self.assertEqual(self._changed_ids(character), [pose_id, pose_id], character.key)
+            self.assertEqual(self._changed_ids(character), [pose_id] * 3, character.key)
         again = self.hobb_web.get(f"/api/interactions/{pose_id}/")
         self.assertIsNone(again.json()["my_pose_endorsement"])
 

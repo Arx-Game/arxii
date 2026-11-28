@@ -18,10 +18,28 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 // tests cover it, so these tests stand it aside (#5124).
 vi.mock('@/gm-adjudication/useActiveCharacterId', () => ({ useActiveCharacterId: () => null }));
 vi.mock('@/magic/components/ReflectingOnRow', () => ({ ReflectingOnRow: () => null }));
-vi.mock('@/magic/components/ClaimRow', () => ({ ClaimRow: () => null }));
+// The "Reaching for" row is covered by its own tests; this stand-in only moves its draft: one
+// button chooses a resonance, the other points at an act (#5327).
+vi.mock('@/magic/components/ReachRow', () => ({
+  ReachRow: ({
+    value,
+    onChange,
+  }: {
+    value: { on: boolean; resonanceId: number | null; actId: number | null };
+    onChange: (next: { on: boolean; resonanceId: number | null; actId: number | null }) => void;
+  }) => (
+    <div>
+      <button type="button" onClick={() => onChange({ on: true, resonanceId: 4, actId: null })}>
+        choose resonance
+      </button>
+      <button type="button" onClick={() => onChange({ ...value, actId: 9 })}>
+        point at act
+      </button>
+    </div>
+  ),
+}));
 vi.mock('@/magic/queries', () => ({
-  useWaitingClaims: () => [],
-  useRefreshClaims: () => () => {},
+  useRefreshRecordedActs: () => () => {},
 }));
 
 vi.mock('../queries', () => ({
@@ -122,6 +140,74 @@ describe('JournalComposerDialog', () => {
       },
       expect.objectContaining({ onSuccess: expect.any(Function), onError: expect.any(Function) })
     );
+  });
+
+  it('holds Post entry until a chosen resonance points at an act, then sends both', async () => {
+    const user = userEvent.setup();
+    const mutateMock = makeCreateMock();
+
+    render(<JournalComposerDialog open onClose={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('Title'), 'The stranger at the tollgate');
+    await user.type(screen.getByLabelText('Entry'), 'I should have stopped sooner.');
+    await user.click(screen.getByRole('button', { name: 'choose resonance' }));
+    expect(screen.getByRole('button', { name: /post entry/i })).toBeDisabled();
+
+    await user.click(screen.getByRole('button', { name: 'point at act' }));
+    await user.click(screen.getByRole('button', { name: /post entry/i }));
+
+    expect(mutateMock).toHaveBeenCalledWith(
+      expect.objectContaining({ reach_resonance_id: 4, reach_act_id: 9 }),
+      expect.any(Object)
+    );
+  });
+
+  it('shows a refused mark as an error and still treats the entry as posted', async () => {
+    const user = userEvent.setup();
+    const mutateMock = makeCreateMock();
+    const onClose = vi.fn();
+    mutateMock.mockImplementation((_vars, callbacks) => {
+      callbacks?.onSuccess?.({
+        mark_line: 'Hale is too worn to pay for this. Mark it again once he has recovered.',
+        mark_recorded: false,
+      });
+    });
+
+    render(<JournalComposerDialog open onClose={onClose} />);
+
+    await user.type(screen.getByLabelText('Title'), 'Title');
+    await user.type(screen.getByLabelText('Entry'), 'Body');
+    await user.click(screen.getByRole('button', { name: /post entry/i }));
+
+    await waitFor(() => {
+      expect(toast.error).toHaveBeenCalledWith(
+        'Hale is too worn to pay for this. Mark it again once he has recovered.'
+      );
+    });
+    expect(toast.success).toHaveBeenCalledWith('Journal entry recorded.');
+    expect(toast.success).not.toHaveBeenCalledWith(expect.stringContaining('too worn'));
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('tells the writer what the mark paid', async () => {
+    const user = userEvent.setup();
+    const mutateMock = makeCreateMock();
+    mutateMock.mockImplementation((_vars, callbacks) => {
+      callbacks?.onSuccess?.({
+        mark_line: 'You inspire. Your Mercy grows by 8.',
+        mark_recorded: true,
+      });
+    });
+
+    render(<JournalComposerDialog open onClose={vi.fn()} />);
+
+    await user.type(screen.getByLabelText('Title'), 'Title');
+    await user.type(screen.getByLabelText('Entry'), 'Body');
+    await user.click(screen.getByRole('button', { name: /post entry/i }));
+
+    await waitFor(() => {
+      expect(toast.success).toHaveBeenCalledWith('You inspire. Your Mercy grows by 8.');
+    });
   });
 
   it('choosing the black journal flips is_public in the submitted payload', async () => {

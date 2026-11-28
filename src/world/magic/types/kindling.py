@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
     from world.magic.models import KindledStrengthTier, KindlingSituation, Resonance
     from world.missions.models import MissionOption
 
@@ -24,6 +25,10 @@ class KindlingAct:
     (cover, interpose, succor, a heal, freeing them). ``label`` is the act in the player's
     own words (the mission option's title, the technique's name, "Struck the bandit"); a
     deed grant records it so the character can tell one deed from another later.
+
+    ``category`` is the fatigue pool a gain from this act charges (an ``ActionCategory``
+    value); blank means the one its ``kind`` implies (``act_fatigue_category``). ``check_type``
+    is the act's own roll, whose heaviest stat the bonus resonance check borrows (#5327).
     """
 
     kind: str
@@ -31,6 +36,8 @@ class KindlingAct:
     mission_option: MissionOption | None = None
     aids: bool = False
     label: str = ""
+    category: str = ""
+    check_type: CheckType | None = None
 
 
 @dataclass(frozen=True)
@@ -60,6 +67,11 @@ class KindledResonance:
     strength of the strongest row that held (with the act, when one was given) and the
     reasons of the rows only. A Rally or GM raises ``tier`` but never these, so what an act
     earns and what an option promises read them, never the Rally or GM strength.
+
+    ``chosen_tier``, ``chosen_situation`` and ``chosen_reasons`` are the narrower part that
+    authored choice rows alone reach (``CHOSEN_DEED_SITUATIONS``: a mission option's theme).
+    Only these pay at once; every other row feeds ``fed_*`` and so suggests the resonance and
+    strengthens it, and never pays (#5327).
     """
 
     resonance: Resonance
@@ -68,6 +80,9 @@ class KindledResonance:
     situations: tuple[KindlingSituation, ...]
     fed_tier: KindledStrengthTier | None = None
     fed_reasons: tuple[str, ...] = ()
+    chosen_tier: KindledStrengthTier | None = None
+    chosen_situation: KindlingSituation | None = None
+    chosen_reasons: tuple[str, ...] = ()
 
     @property
     def is_kindled(self) -> bool:
@@ -77,35 +92,6 @@ class KindledResonance:
     def strongest_situation(self) -> KindlingSituation | None:
         """The authored row that kindled it most strongly, or None (a Rally or a GM only)."""
         return self.situations[0] if self.situations else None
-
-
-@dataclass(frozen=True)
-class ClaimedResonance:
-    """One resonance a claim collected (#5181): what the ledger recorded after the earn rate,
-    and the claiming verb of the resonance's affinity (blank when staff wrote none)."""
-
-    resonance: Resonance
-    amount: int
-    verb: str
-
-
-@dataclass(frozen=True)
-class WaitingResonance:
-    """A resonance with something set aside to claim, for the picker and the panel (#5181)."""
-
-    resonance: Resonance
-    unclaimed: int
-    verb: str
-
-
-@dataclass(frozen=True)
-class PendingClaim:
-    """A checked claim a pose or journal entry carries, waiting for the writing to post.
-
-    ``resonance_ids`` empty means everything waiting.
-    """
-
-    resonance_ids: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)

@@ -213,7 +213,10 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
     )
     lifetime_earned = models.PositiveIntegerField(
         default=0,
-        help_text="Monotonic total of resonance earned (never decremented).",
+        help_text=(
+            "Running total of resonance earned. Spending does not lower it; converting "
+            "resonance and undoing a gain do."
+        ),
     )
     claimed_at = models.DateTimeField(
         auto_now_add=True,
@@ -246,16 +249,6 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
         help_text=(
             "Monotonic audit of total corruption ever ticked to this "
             "resonance. Achievement-tracking surface. Never decremented."
-        ),
-    )
-
-    kindled_unclaimed = models.PositiveIntegerField(
-        default=0,
-        db_default=0,
-        help_text=(
-            "Resonance set aside from kindled deeds that the character has not claimed yet "
-            "(#5181). A claiming pose or journal entry collects it into the balance. It "
-            "never expires."
         ),
     )
 

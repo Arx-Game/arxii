@@ -813,6 +813,8 @@ class TestPushInteraction(TestCase):
             "reactions": [],
             "reaction_windows": [],
             "dramatic_moment_tags": [],
+            "act_marks": [],
+            "pending_picks": [],
         }
         mock_a.assert_called_once_with(interaction=((), expected_payload))
         mock_b.assert_called_once_with(interaction=((), expected_payload))

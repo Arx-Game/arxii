@@ -141,6 +141,7 @@ def _social_verb_success_level(
         kind=KindlingActKind.SOCIAL,
         what=_VERB_DEED_WORDS.get(action.maneuver, "Spoke to"),
         outcome=result.outcome,
+        check_type=result.check_type,
     )
     return result.success_level or 0
 

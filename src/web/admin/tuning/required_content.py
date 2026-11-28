@@ -2502,6 +2502,95 @@ def _probe_resonance_gain_source_stats() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_affinity_gain_fatigue() -> ProbeResult:
+    """Every affinity charges something for a gain (#5327).
+
+    Consumer: `world/magic/services/gain_fatigue.py charge_gain_fatigue()`, which prices one
+    gain in an affinity's resonance at `Affinity.gain_fatigue`. At 0 it charges nobody, so a
+    mark, an endorsement or a tag in that affinity tires no one. With no affinity rows at all
+    the probe reports the affinities themselves missing rather than passing on nothing.
+    """
+    from world.magic.models import Affinity  # noqa: PLC0415
+
+    affinities = list(Affinity.objects.order_by("name"))
+    if not affinities:
+        return ProbeResult(
+            present=False,
+            missing=("the affinities",),
+            detail="No affinity rows exist, so no gain fatigue is set anywhere.",
+        )
+    missing = tuple(affinity.name for affinity in affinities if affinity.gain_fatigue <= 0)
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"Gain fatigue is 0 for affinity(ies): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_affinity_claim_verbs() -> ProbeResult:
+    """Every affinity has a claim verb (#5327).
+
+    Consumer: `world/magic/services/marking.py _paid_line()`, which opens a mark's private
+    line with `Affinity.claim_verb` ("You gloat."). A blank (or all-space) verb leaves that
+    sentence out and the line starts at "Your <resonance> grows". With no affinity rows at
+    all the probe reports the affinities themselves missing rather than passing on nothing.
+    """
+    from world.magic.models import Affinity  # noqa: PLC0415
+
+    affinities = list(Affinity.objects.order_by("name"))
+    if not affinities:
+        return ProbeResult(
+            present=False,
+            missing=("the affinities",),
+            detail="No affinity rows exist, so no claim verb is set anywhere.",
+        )
+    missing = tuple(affinity.name for affinity in affinities if not affinity.claim_verb.strip())
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No claim verb is set for affinity(ies): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
+def _probe_kindled_deed_awards() -> ProbeResult:
+    """Every success tier of a roll has a kindled deed award worth something (#5327).
+
+    Consumer: `world/magic/services/kindling.py award_kindled_deeds()`, the one seam every
+    kind of act passes. It looks up `KindledDeedAward` for the act's result tier and records
+    nothing when there is no row, and a row of 0 is worth nothing to mark. A success tier is a
+    `CheckOutcome` with a success level above 0. With no success tier at all the probe reports
+    the tiers themselves missing rather than passing on nothing.
+    """
+    from world.magic.models import KindledDeedAward  # noqa: PLC0415
+    from world.traits.models import CheckOutcome  # noqa: PLC0415
+
+    success_tiers = CheckOutcome.objects.filter(success_level__gt=0)
+    if not success_tiers.exists():
+        return ProbeResult(
+            present=False,
+            missing=("the success tiers",),
+            detail="No check outcome has a success level above 0, so no act can earn a mark.",
+        )
+    missing = tuple(
+        success_tiers.exclude(
+            pk__in=KindledDeedAward.objects.filter(amount__gt=0).values("outcome_tier_id")
+        )
+        .order_by("success_level")
+        .values_list("name", flat=True)
+    )
+    if missing:
+        return ProbeResult(
+            present=False,
+            missing=missing,
+            detail=f"No kindled deed award worth more than 0 for outcome(s): {', '.join(missing)}.",
+        )
+    return ProbeResult(present=True)
+
+
 def _probe_affinity_conversion_pairs() -> ProbeResult:
     """Every ordered pair of distinct affinities has an authored conversion (#4751).
 
@@ -4456,6 +4545,74 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=CustomProbe(fn=_probe_resonance_gain_source_stats),
             admin_model="ResonanceGainSourceStat",
+        ),
+        ContentDependency(
+            key="weekly-mark-returns",
+            label="The weekly table of mark returns",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/marking.py weekly_percent_paid()",
+            consequence=(
+                "With no rows, a character's marks are never reduced within a week: the "
+                "tenth mark of the week pays as much as the first, so marking every act "
+                "is the best way to earn."
+            ),
+            probe=AnyRowProbe(label="WeeklyMarkReturn"),
+        ),
+        ContentDependency(
+            key="affinity-gain-fatigue",
+            label="A gain fatigue above 0 on every affinity",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/gain_fatigue.py charge_gain_fatigue()",
+            consequence=(
+                "A gain in an affinity with no fatigue set costs the person who pays for it "
+                "nothing, so a character can be marked, endorsed or tagged in that "
+                "affinity as often as anyone likes without ever growing weary."
+            ),
+            probe=CustomProbe(fn=_probe_affinity_gain_fatigue),
+            admin_model="Affinity",
+        ),
+        ContentDependency(
+            key="affinity-claim-verbs",
+            label="A claim verb on every affinity",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/marking.py _paid_line()",
+            consequence=(
+                "The private line a player reads after marking an act in an affinity with no "
+                "verb starts at 'Your resonance grows' and leaves out the opening sentence "
+                "such as 'You gloat.'"
+            ),
+            probe=CustomProbe(fn=_probe_affinity_claim_verbs),
+            admin_model="Affinity",
+        ),
+        ContentDependency(
+            key="kindled-deed-awards",
+            label="A kindled deed award for every success tier",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/kindling.py award_kindled_deeds()",
+            consequence=(
+                "An act that lands on a success tier with no award is never recorded, so "
+                "the player's list of acts to mark stays empty for it and nothing it did "
+                "can be marked."
+            ),
+            probe=CustomProbe(fn=_probe_kindled_deed_awards),
+            admin_model="KindlingConfig",
+        ),
+        ContentDependency(
+            key="kindled-strength-tier",
+            label="A kindled strength that earns something",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/kindling.py award_kindled_deeds()",
+            consequence=(
+                "With no strength row that earns a share of the award, every mark pays "
+                "only the 1 point minimum, so a mark cannot reward a good roll, and no "
+                "situation can suggest a resonance for an act."
+            ),
+            probe=FilteredRowProbe(
+                label="KindledStrengthTier",
+                filters=(("earn_percent__gt", 0),),
+                absent_detail="No kindled strength tier earns a share above 0 percent.",
+            ),
+            admin_model="KindlingConfig",
         ),
         ContentDependency(
             key="affinity-conversion-pairs",

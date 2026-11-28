@@ -4,6 +4,8 @@ CmdPoses:  ``poses <char>``                           — list visible poses
 CmdEndorse: ``endorse pose <char> [#N] resonance=<name> [confirm]``
             ``endorse entry <char> resonance=<name>``
             ``endorse style <char> resonance=<name>``
+            ``endorse accept <char> [#N]`` / ``endorse decline <char> [#N]`` (#5327)
+            ``endorse withdraw <char> [#N]`` (#5327)
 
 Both commands derive the active scene from the caller's room
 (``get_active_scene``), exactly like CmdIntimidate / CmdAccept.
@@ -18,6 +20,8 @@ from django.core.exceptions import ObjectDoesNotExist
 
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
+
+_SUBTYPES = ("pose", "entry", "style", "accept", "decline", "withdraw")  # noqa: STRING_LITERAL
 
 
 class CmdPoses(ArxCommand):
@@ -95,20 +99,29 @@ class CmdEndorse(ArxCommand):
 
     Syntax:
         endorse pose <char> [#N] resonance=<name>
-        endorse pose <char> [#N] resonance=<name> confirm
         endorse pose <char> [#N] [confirm]
         endorse entry <char> resonance=<name>
         endorse style <char> resonance=<name>
+        endorse accept <char> [#N]
+        endorse decline <char> [#N]
+        endorse withdraw <char> [#N]
 
-    For pose endorsements, the first invocation shows a preview of the pose.
-    Add ``confirm`` to commit. Use ``poses <char>`` to see position numbers.
+    On a pose whose author named no resonance, the resonance you pick waits for the author to
+    accept it, and pays only if they do. Type the command again with another resonance to
+    change your pick. Use ``poses <char>`` to see the numbers.
     A pose whose author reached for a resonance (``pose/reach``) is endorsed for that
-    resonance, so you leave ``resonance=`` off. Scene-entry and style endorsements are
-    one-shot (no confirmation needed).
+    resonance, so you leave ``resonance=`` off: the first invocation shows a preview of the
+    pose, and ``confirm`` commits. Scene-entry and style endorsements are one-shot.
+    When someone proposes a resonance on your pose, ``endorse accept <char> #N`` lets it pay
+    at the weekly settlement and ``endorse decline <char> #N`` turns it down.
+    ``endorse withdraw <char> #N`` takes back your own endorsement of <char>'s pose before the
+    weekly settlement pays it.
 
     Examples:
         endorse pose Alice resonance=Embers
-        endorse pose Alice #2 resonance=Embers confirm
+        endorse pose Alice #2 resonance=Grief
+        endorse accept Ilsa #1
+        endorse withdraw Brannoc #1
         endorse entry Alice resonance=Embers
         endorse style Alice resonance=Embers
     """
@@ -126,20 +139,31 @@ class CmdEndorse(ArxCommand):
     def _dispatch(self) -> None:
         args = (self.args or "").strip()
         if not args:
-            msg = "Endorse what? Usage: endorse pose/entry/style <char> resonance=<name>"
+            msg = (
+                "Endorse what? Usage: endorse pose/entry/style <char> resonance=<name> | "
+                "endorse accept/decline/withdraw <char> [#N]"
+            )
             raise CommandError(msg)
         raw_tokens = args.split()
         subtype = raw_tokens[0].lower()
-        if subtype not in ("pose", "entry", "style"):  # noqa: STRING_LITERAL
-            msg = "Specify pose, entry, or style: endorse pose/entry/style <char> resonance=<name>"
+        if subtype not in _SUBTYPES:
+            msg = (
+                "Specify pose, entry, style, accept, decline or withdraw: "
+                "endorse pose/entry/style <char> resonance=<name> | "
+                "endorse accept/decline/withdraw <char> [#N]"
+            )
             raise CommandError(msg)
         rest: list[str] = list(raw_tokens[1:])
         if subtype == "pose":  # noqa: STRING_LITERAL
             self._endorse_pose(rest)
         elif subtype == "entry":  # noqa: STRING_LITERAL
             self._endorse_entry(rest)
-        else:
+        elif subtype == "style":  # noqa: STRING_LITERAL
             self._endorse_style(rest)
+        elif subtype == "withdraw":  # noqa: STRING_LITERAL
+            self._withdraw(rest)
+        else:
+            self._answer_proposal(rest, accept=subtype == "accept")  # noqa: STRING_LITERAL
 
     # ------------------------------------------------------------------
     # Shared parsing helpers
@@ -258,6 +282,99 @@ class CmdEndorse(ArxCommand):
             interaction=pose_map[pose_n],
             resonance=resonance,
             confirm=confirm,
+            pose_number=pose_n,
+            change_pick=True,
+        )
+        self._send_result(result)
+
+    def _answer_proposal(self, tokens: list[str], *, accept: bool) -> None:
+        """``endorse accept|decline <char> [#N]``: answer the resonance <char> proposed on one of
+        the caller's poses. The pick is named by who proposed it and on which pose, so two
+        waiting picks are never confused; with no number, a lone pick from <char> is the one."""
+        from actions.definitions.endorsements import AnswerPoseProposalAction  # noqa: PLC0415
+        from world.magic.services.gain import waiting_picks_from  # noqa: PLC0415
+
+        number = None
+        rest = []
+        for token in tokens:
+            if token.startswith("#") and token[1:].isdigit() and number is None:
+                number = int(token[1:])
+            else:
+                rest.append(token)
+        verb = "accept" if accept else "decline"  # noqa: STRING_LITERAL
+        char_name = " ".join(rest).strip()
+        if not char_name:
+            msg = f"Whose proposal? (endorse {verb} <char> [#N])"
+            raise CommandError(msg)
+        witness_sheet = self._resolve_endorsee(char_name)
+        poser_sheet = self.caller.character_sheet
+        if poser_sheet is None:
+            msg = "You have no character sheet."
+            raise CommandError(msg)
+        waiting = waiting_picks_from(witness_sheet, poser_sheet, self._active_scene())
+        if number is not None:
+            waiting = [pair for pair in waiting if pair[0] == number]
+        if not waiting:
+            msg = f"{char_name} has no proposal waiting on that pose of yours."
+            raise CommandError(msg)
+        if len(waiting) > 1:
+            numbers = ", ".join(f"#{n}" for n, _ in waiting)
+            msg = f"{char_name} proposed on more than one pose of yours: {numbers}."
+            raise CommandError(msg)
+        pose_n, pick = waiting[0]
+        result = AnswerPoseProposalAction().run(
+            actor=self.caller, endorsement=pick, accept=accept, pose_number=pose_n
+        )
+        self._send_result(result)
+
+    def _withdraw(self, tokens: list[str]) -> None:
+        """``endorse withdraw <char> [#N]``: take back the caller's own endorsement of one of
+        <char>'s poses (the pose number ``poses <char>`` gives; #1 when none is named), until
+        the weekly settlement pays it."""
+        from actions.definitions.endorsements import WithdrawPoseEndorsementAction  # noqa: PLC0415
+        from world.magic.models import PoseEndorsement  # noqa: PLC0415
+        from world.magic.services.gain import get_endorseable_poses_in_scene  # noqa: PLC0415
+
+        number = None
+        rest = []
+        for token in tokens:
+            if token.startswith("#") and token[1:].isdigit() and number is None:
+                number = int(token[1:])
+            else:
+                rest.append(token)
+        char_name = " ".join(rest).strip()
+        if not char_name:
+            msg = "Withdraw your endorsement of whose pose? (endorse withdraw <char> [#N])"
+            raise CommandError(msg)
+        endorsee_sheet = self._resolve_endorsee(char_name)
+        endorser_sheet = self.caller.character_sheet
+        if endorser_sheet is None:
+            msg = "You have no character sheet."
+            raise CommandError(msg)
+        poses = dict(
+            get_endorseable_poses_in_scene(endorser_sheet, endorsee_sheet, self._active_scene())
+        )
+        mine = {
+            row.interaction_id: row
+            for row in PoseEndorsement.objects.filter(
+                endorser_sheet=endorser_sheet,
+                interaction_id__in=[pose.pk for pose in poses.values()],
+                settled_at__isnull=True,
+            ).select_related("resonance", "interaction__persona")
+        }
+        picks = [(n, mine[pose.pk]) for n, pose in sorted(poses.items()) if pose.pk in mine]
+        if number is not None:
+            picks = [pair for pair in picks if pair[0] == number]
+        if not picks:
+            msg = f"You have no endorsement waiting on that pose of {char_name}."
+            raise CommandError(msg)
+        if len(picks) > 1:
+            numbers = ", ".join(f"#{n}" for n, _ in picks)
+            msg = f"You endorsed more than one pose of {char_name}: {numbers}. Name one."
+            raise CommandError(msg)
+        pose_n, pick = picks[0]
+        result = WithdrawPoseEndorsementAction().run(
+            actor=self.caller, endorsement=pick, pose_number=pose_n
         )
         self._send_result(result)
 

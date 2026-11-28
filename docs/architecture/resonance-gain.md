@@ -33,6 +33,12 @@ longer call `grant_resonance`. They write `TrickleAccrual` rows that wait until 
 harvests them, and every earned gain now meets a bonus resonance check. §13 describes both, with the
 trickle flow diagram. §5.3 and §5.4 below carry the corrected rules.
 
+**Implementation note (changed by #5327):** a character no longer earns resonance by acting on a
+situation, and claiming a set-aside share is gone. An authored choice pays at once, and every other gain
+from play is a pose or journal entry that names a resonance and points at an act her character took (a
+mark). A pose endorsement on a pose that named no resonance takes any resonance and waits for the poser.
+§14 describes both, with diagrams; §2.2, §3.1, §5.2, §7.2 and §13.3 below carry the corrected rules.
+
 ---
 
 ## 1. Context & Design Intent
@@ -162,6 +168,10 @@ class PoseEndorsement(SharedMemoryModel):
     settled_at = DateTimeField(null=True, blank=True, db_index=True)
     granted_amount = PositiveIntegerField(null=True, blank=True,
                                            help_text="Set at weekly settlement.")
+    awaiting_acceptance = BooleanField(default=False, db_default=False,
+                                       help_text="True while a witness's proposed resonance "
+                                                 "waits for the poser or a GM to accept it. "
+                                                 "Settlement skips these rows. (#5327)")
 
     class Meta:
         constraints = [
@@ -182,8 +192,11 @@ Validation at creation (in `create_pose_endorsement` service):
 - Endorser was a scene participant of `interaction.scene` (historical
   `SceneParticipation` row) OR is in `interaction.cached_receivers` for
   organic grid RP.
-- `resonance` exists in `endorsee_sheet.character_resonances` (row exists,
-  balance can be 0 — claim semantics per Spec A §2.2).
+- The pose's author reached for a resonance (#5308): that resonance is paid and the row is
+  confirmed. Otherwise `resonance` is any resonance at all (#5327), in the endorsee's aura or not, and the
+  row is saved with `awaiting_acceptance` set until the poser accepts it (§14.3). The #1138 rule that the
+  endorsee must already have the resonance is gone.
+- The pose's mark has not already paid: a pose that carried a paid mark (§14.1) cannot also be endorsed.
 
 ### 2.3 `SceneEntryEndorsement` (immediate, flat)
 
@@ -540,9 +553,13 @@ def create_pose_endorsement(
 
     Does NOT fire grant_resonance — settlement happens weekly.
 
+    A pose that named its own resonance is endorsed for it and confirmed. On a pose that
+    named none, `resonance` may be any resonance and the row is saved awaiting the poser's
+    acceptance (#5327); the weekly settlement skips it until she answers.
+
     Raises:
-        ValidationError: precondition failure (alt guard, whisper, unclaimed
-            resonance, duplicate, non-participant).
+        EndorsementValidationError: precondition failure (alt guard, whisper, duplicate,
+            non-participant, a pose whose mark already paid, no resonance chosen).
     """
 
 
@@ -757,12 +774,13 @@ one for pose endorsement and one for scene-entry endorsement.
 | Who can endorse | Scene participant of `interaction.scene` OR interaction receiver |
 | Who can be endorsed | Target of any non-whisper, non-very-private interaction |
 | Once per | `(endorser_sheet, interaction)` — unique constraint |
-| Resonance constraint | Must be in endorsee's claimed resonances |
+| Resonance constraint | The resonance the pose reached for; on a pose that named none, any resonance, saved waiting for the poser to accept (#5327) |
+| Waiting pick | The witness may change or withdraw it until settlement; the poser, the scene's GM or staff accept or decline it |
 | Alt guard | Same as above |
 | Masquerade behavior | Same as above |
 | Whispers | Excluded (`mode == WHISPER` blocked at service layer) |
 | Very-private | Excluded (`visibility == VERY_PRIVATE` blocked at service layer) |
-| Settlement cadence | Weekly (`settlement_day_of_week`), fallback: "unsettled rows exist" gate |
+| Settlement cadence | Weekly (`settlement_day_of_week`), fallback: "unsettled rows exist" gate; rows still waiting for the poser are skipped |
 
 ### 5.3 Room residence trickle
 
@@ -844,11 +862,11 @@ investigate separately.
 
 ### 7.2 Resonance fit constraint
 
-Endorser can only tag resonances the endorsee has already claimed
-(`CharacterResonance` row exists, balance ≥ 0). You cannot be
-reinforced for identities you haven't claimed. Character creation
-claims initial resonances; subsequent claims happen via progression or
-staff action (out of scope for Spec C).
+Scene-entry and style-presentation endorsements can only tag resonances the endorsee has already
+claimed (`CharacterResonance` row exists, balance ≥ 0). A pose endorsement no longer carries that
+constraint (#5327): a witness picks from one list of every resonance, and the poser's acceptance is the
+fit check, so the menu shows a witness nothing about her aura (§14.3). Character creation claims initial
+resonances; subsequent claims happen via progression or staff action (out of scope for Spec C).
 
 ### 7.3 Whisper / private-pose exclusion
 
@@ -1221,8 +1239,8 @@ last, after the distinction accelerator and the affinity earn rate, once per aff
 the act's own stat replaces the check's stat (`ResonanceGainSourceStat` supplies one for a source that
 rolled nothing), the affinity's skill is added, and the staff table `ResonanceCheckAward` turns the
 result into `gain_bonus_percent`. The grant records `bonus_outcome` and `bonus_percent`. A source is
-exempt (staff and system grants, conversions, a claim of a share that already grew), rolled
-(`grant_resonance` rolls it) or caller-rolled (a kindled deed, an anima ritual and a trickle harvest pay
+exempt (staff and system grants, conversions, the reflection and succumbing grants), rolled
+(`grant_resonance` rolls it, which is how a mark rolls, §14.1) or caller-rolled (a kindled deed, an anima ritual and a trickle harvest pay
 several resonances from one act, so the caller rolls once per affinity and passes each result in);
 `GAIN_BONUS_*_SOURCES` in `constants.py` partition every `GainSource`, guarded by a total-classification
 test. With no `bonus_check_type`, every gain pays its plain amount.
@@ -1241,18 +1259,183 @@ persisting the declared worth on `CombatPull` would have needed a column the spe
 
 ### 13.3 Reaching, unheld resonances and the ritual's stored result
 
-A pose can name a resonance it reaches for (`PoseResonanceReach`, one per pose). An endorsement of a
-reached pose pays that resonance and the endorsee need not have claimed it, so the endorser only
-confirms. A deed she chose in a Celestial or Abyssal resonance the character does not hold earns it: the
-grant creates her row (`kindled_resonances(include_named_unheld=True)`, set only by `award_kindled_deeds`).
-Only a row on `CHOSEN_DEED_SITUATIONS` counts for her, which today is `MISSION_THEME`: taking a mission option
-that carries the theme is a declared choice. Every other row, a state she caused in her target included,
-kindles the resonance only for a character who holds it, and so does every row on a Primal resonance. The
-owner ruled on 2026-11-27 that gaining a resonance needs a measure of intent: a paladin who makes a vampire
-feel hunted while protecting people earns nothing Abyssal unless he set out to terrorize it. The entry flourish accepts any unheld resonance, Primal included, and so
-does a reach, so a character who wants a new Primal resonance has those two ways to earn her first of it.
+A pose can name a resonance it reaches for and point at no act (`PoseResonanceReach`, one per pose). An
+endorsement of a reached pose pays that resonance and the endorsee need not have claimed it, so the endorser
+only confirms. A deed she chose in a Celestial or Abyssal resonance the character does not hold earns it: the
+grant creates her row (`kindled_resonances(include_named_unheld=True)`). Only a row on
+`CHOSEN_DEED_SITUATIONS` pays, which today is `MISSION_THEME`: taking a mission option that carries the theme
+is a declared choice. Since #5327 that is true of every resonance, held or not, and of Primal as well: every
+other row only suggests (§14.1). The owner ruled on 2026-11-27 that gaining a resonance needs a measure of
+intent: a paladin who makes a vampire feel hunted while protecting people earns nothing Abyssal unless he set
+out to terrorize it. The entry flourish accepts any unheld resonance, Primal included, and so does a reach and
+a mark, so a character who wants a new Primal resonance has those ways to earn her first of it.
 
 The anima ritual's outward part can wait for the partner's answer. It stores the base amount on
 `AnimaRitualPerformance.outward_amount_pending` with the result of the bonus check it rolled
 (`outward_bonus_outcome`, `outward_bonus_percent`), and the answer grants the base amount grown by that
 result with no second roll, so the amount grows exactly once.
+
+---
+
+## 14. Gains from play are marked acts, and situations only suggest (#5327)
+
+**Status:** built, except for the readers and telnet commands named in §14.6. Decision record:
+`docs/adr/adr-5327-resonance-is-earned-by-attested-acts-and-situations-only-suggest.md`. It supersedes
+ADR-5181 (the set-aside share and claiming) and amends ADR-5124 and ADR-5308.
+
+The game cannot read why a character did something, and why decides what an act earns. So intent is said by
+the player and checked by people, never detected by code. Two things pay: an authored choice, and a mark.
+
+### 14.1 One flow from an act to a gain
+
+```mermaid
+flowchart TD
+    A[A player character's roll resolves] --> B[award_kindled_deeds]
+    B --> C{An authored choice names a resonance?<br/>a mission option's theme}
+    C -->|Yes| D[Pays in full at once: KINDLED_DEED<br/>the preview named it before she picked]
+    C -->|No| E[RecordedAct and one suggestion per resonance a situation reached]
+    E --> F[(Waits recorded_act_days, then pruned)]
+    F --> G[Her player marks a pose or journal entry:<br/>a resonance and one of her acts]
+    G --> H[pending_mark_from checks it before the writing posts]
+    H --> I[record_pending_mark, one transaction]
+    I --> J[Base: the act's award x the earn share of the suggested strength]
+    J --> K[Weekly table WeeklyMarkReturn: percent of the base]
+    K --> L[Fatigue: the payer pays, the gain shrinks to the room left]
+    L --> M{Nothing left to pay?}
+    M -->|Yes| N[Refused, act stays pointable, she reads why]
+    M -->|No| O[grant_resonance MARKED_ACT, bonus check once with the act's stat]
+    O --> P[Act carries the grant and the writing; suggestions deleted]
+    P --> Q[One private line to the writer, the room sees only the pose]
+    O -.-> R[Staff or the scene's GM undo_resonance_grant]
+```
+
+A **recorded act** (`RecordedAct`, `world/magic/models/recorded_act.py`) is written by `award_kindled_deeds`
+for an act that has an award row and paid no chosen deed. It keeps a label the game words from the action and
+its target as the actor knows them, an `act_phrase` (the same label without the target's name, filled when the
+target is a person with a sheet, so a reader of the pose can be shown the target under the name THAT reader
+knows), the result tier and check type (references, not copied numbers, so an award retune reaches the
+acts that wait), the target when a person, the fatigue pool, and a `RecordedActSuggestion` for each resonance a
+situation reached with the strength it reached and the situation's reason line. A situation never pays: it
+suggests, and it sets the strength a mark pays at. An act that already paid a chosen deed, a failed roll, an
+area scene action, an extra target of a multi-target action and a hostile cast accepted into combat write no
+record. An unmarked act stays pointable for `KindlingConfig.recorded_act_days` (default 90).
+
+A **mark** is a pose or a journal entry that carries `reach_resonance_id` and `reach_act_id`. It is not a
+table of its own: the act row carries it (`marked_grant`, `marked_interaction` or `marked_journal_entry`),
+because a separate row would repeat the act's identity. A mark may name any resonance, in her aura or not,
+Primal included. She can mark every act, one after another; an act pays once and a writing carries one
+mark (both enforced by database constraints). A journal entry must name an act. In an ephemeral scene a mark
+pays nothing, because no pose is stored to carry it; she can mark the act later in a pose in another scene
+or from a journal entry. A journal entry whose mark is refused late (the weekly row pays 0 percent, or the
+payer has no room) stays posted: the act stays pointable and the response carries the refusal in `mark_line`
+with `mark_recorded` false, as a pose does. (A reflection that fails late still takes its entry back.)
+
+### 14.2 What a mark pays, and what it costs
+
+The base amount is the act's `KindledDeedAward` for its result tier times the earn share of the strength a
+situation reached for that resonance (the lowest strength when none suggested it), rounded down, at least 1.
+The weekly table `WeeklyMarkReturn` then takes a percent of it, by what this game week's marks already paid
+(undone marks do not count; authored choices, endorsements and tags are never counted or reduced). Then
+someone pays fatigue, as `Affinity.gain_fatigue` says:
+
+| Gain in | Payer | Pool |
+|---|---|---|
+| Primal | the character who gains | the act's pool |
+| Celestial | the character who acted | the act's pool |
+| Abyssal | the act's target, when a character with a sheet; nobody when a game-run opponent | the act's pool |
+
+A payer's room is capacity minus current fatigue minus 1, never below 0, so a gain never takes anyone into the
+Exhausted zone and runs no collapse check. When the room is below the cost, the gain shrinks in proportion
+and stops at nothing; at no room the mark is refused and the act stays pointable. A payer whose capacity is
+not set up pays nothing and the gain is not reduced. A gain that points at no act charges the same way
+(`charge_gain_fatigue`): an endorsed pose at its weekly settlement, an accepted proposal and a GM's tag,
+from the social pool, with `pose_gain_payer` naming the payer (the gainer for Primal and Celestial; for
+Abyssal the pose's one named target, or nobody when it names none or several). A gain whose payer has
+nothing left pays 0 and the gainer is told why. At the weekly settlement such an endorsement is left
+unsettled and tried again next week, because the endorser cannot make the same endorsement twice; a tag is
+refused before it is written, so it spends none of the scene's cap. Fatigue is charged for a gain a person
+causes (a mark, an endorsement, a tag a GM or staff member writes or confirms); the game's own outcomes, such
+as a standoff's ending, charge nobody. An authored choice charges nobody. A payer other than the gainer
+reads one private line naming the gainer as that payer knows them. Every private line of this feature is a
+narrative message, so a player who is offline reads it at login. The bonus check of the marked resonance's own affinity rolls
+once, with the stat of the act's own check, and grows what is left.
+
+### 14.3 A witness's pick waits for the poser
+
+```mermaid
+stateDiagram-v2
+    [*] --> Accepted: pose named its own resonance, nothing to pick
+    [*] --> Waiting: pose named none, witness picks from one list of every resonance
+    Waiting --> Waiting: endorser changes the pick
+    Waiting --> Accepted: poser, scene GM or staff accept
+    Waiting --> [*]: poser, scene GM or staff decline, or the endorser withdraws
+    Accepted --> Waiting: endorser changes the pick (not on a pose that named its own)
+    Accepted --> [*]: endorser withdraws, until settlement
+    Accepted --> Settled: weekly settlement pays it
+```
+
+The menu's list shows nothing about the poser's aura, so a witness learns nothing about it from the menu. (The pose payload still carries `endorsable_resonances`, the poser's resonances, because entrance and outfit endorsements use it; the maintainer has not ruled whether an aura is secret.) A pick
+changed after the poser accepted waits for her again. `settle_weekly_pot` and the weekly tick skip a waiting
+row, and a pose whose mark already paid cannot be endorsed. Endorsing a character's entrance or outfit is
+unchanged: it uses the same control, pays at once, is permanent and still lists the resonances in her aura.
+
+### 14.4 Undo
+
+Staff undo any grant. The scene's GM (`Scene.is_gm`, never `is_owner`, since every player present at scene
+start is a co-owner) undoes the six scene-bound rewards in a scene they GM and, when a pose carries the reward,
+can read: a mark, a pose endorsement, a tag, an entrance endorsement, an outfit endorsement and an entry
+flourish. One table (`REWARD_SCENE_PATHS`) names them and builds both the service's check and the endpoint's
+queryset. A mark carried by a journal entry has no scene, so only staff undo it. The endpoint answers
+`{id, nullified_at}` and 404 for anything the requester may not undo.
+`undo_resonance_grant` lowers the balance and the lifetime total by the amount (each stopping at 0), stamps
+the ledger row with `nullified_at` and `nullified_by` instead of deleting it, recomputes the aura and
+withdraws a reflection still waiting on it. Pledge favor, aura thresholds and achievements, a drift
+conversion offer, a Compulsion given in to, the payer's fatigue and the bonus roll stay. The act an undone
+mark paid for cannot be marked again. The player reads which role undid it, never the account. Every reader
+of the ledger that counts what a character earned skips an undone grant.
+
+### 14.5 What a situation still does
+
+A tag follows its own rule (`create_dramatic_moment_tag`): only the scene's GM and staff name a resonance
+outside the character's aura; a scene owner's named resonance counts only when the character already has it,
+else the default pays; nobody tags a character she plays.
+
+A situation still kindles a resonance: the strength sets a pull's uplift, the depth of a give-in, a Dig deep
+or Rally surge, a cast's power, the strength a mark pays at, and the line the player reads beside an act. A
+Compulsion lifts, and its corruption is added, when she marks a gain in that resonance in the scene, not
+when she merely acts on it.
+
+### 14.6 The readers and the surfaces a player reaches
+
+One service, `pointable_acts_queryset` (`services/marking.py`), defines what a mark can still point at: every
+unmarked act inside `KindlingConfig.recorded_act_days`, newest first, each with its suggestions strongest
+first. Every surface below reads it.
+
+- **The recorded-acts list.** `GET /api/magic/recorded-acts/?character_sheet=<id>` (`RecordedActViewSet`,
+  `views_kindling.py`) lists those acts for the characters the requester plays now (the loan rule), or any character for staff; another
+  player's character is an empty page. Each row is `id`, `label`, `created_at` and the suggestions
+  (`resonance_id`, `resonance_name`, `reason`); no strength and no amount leaves the server. The web "Pointing at"
+  row on the pose composer and the journal form (`ReachRow.tsx`) reads it. The journal form requires an act and
+  has no "Nothing" choice, because no one can endorse a journal entry.
+- **Marks and waiting picks on the pose.** The feed serializer and the live frame build `act_marks` and
+  `pending_picks` from one pair of functions (`services/pose_marks.py`), so a refetch and a push read the same
+  fields for the same viewer. A mark carries the resonance, the act's label as that viewer reads it (the actor
+  reads her own label; every other reader gets the phrase and the target under the name THAT reader knows, so a
+  mask they have not seen through stays a mask; a target with no sheet keeps its name for everyone; the live
+  frame carries the phrase alone), `undone`, `undone_by` (`"staff"` or
+  `"gm"`, never an account name) and `can_undo`, which is true only for staff and the scene's GM on a mark nobody
+  has undone. A waiting pick reaches only its endorser (`mine`) and whoever may answer it (`can_answer`: the poser,
+  the scene's GM and staff). The live frame goes to the whole room, so it carries no per-viewer data: its
+  `act_marks` and `pending_picks` are empty and `can_undo` is false there. Every change to a mark or a pick sends
+  an ids-only `interaction_changed` frame, and each client refetches its own view.
+- **Telnet.** `acts` lists the character's pointable acts, newest first, at most 20 with a line saying how many
+  older ones are not shown, each with its own id, its age and what a situation suggested (or "No resonance
+  suggested."). `pose/reach <resonance>:<act id>=<text>` poses and marks
+  that act: the id is the act's own, so it never shifts when a new act lands. `endorse pose <char> #N
+  resonance=<name>` makes a pick that waits for the poser, and typing it again with another resonance changes
+  it; `endorse accept <char> #N` and `endorse decline <char> #N` are the poser's answer, and `endorse withdraw
+  <char> #N` takes a pick back (typing the same pick again changes nothing, and the poser is told "proposed"
+  once, when the pick is made). A pose carries one of these switches and `pose/reach` stands alone.
+- **Not on telnet.** A GM or staff member answers someone else's waiting pick on the web only, undo is web only
+  (`POST /api/magic/resonance-grants/<id>/undo/`), and marking from a journal entry is web only.
+- **History.** `resonance history` ends a reward that was undone with ", undone".

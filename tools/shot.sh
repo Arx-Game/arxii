@@ -144,8 +144,12 @@ fi
 # The browser build this worktree's Playwright expects; a no-op once it is there.
 # The devcontainer firewall can refuse the download; shot.mjs then falls back to the
 # newest Chromium already in the shared cache.
-pnpm --dir frontend exec playwright install chromium >&2 \
-  || log "could not download Playwright's Chromium; using the newest one already cached"
+# A spec run has no fallback of its own, so it is handed the cached build by name.
+browser_fallback=""
+if ! pnpm --dir frontend exec playwright install chromium >&2; then
+  log "could not download Playwright's Chromium; using the newest one already cached"
+  browser_fallback="$(node frontend/scripts/cached-chromium.mjs)"
+fi
 
 started=0
 # shellcheck disable=SC2317  # called by the trap below
@@ -177,7 +181,8 @@ if [[ ${#paths[@]} -gt 0 ]]; then
 fi
 if [[ -n "$spec" ]]; then
   # CI=1 makes the backend config keep a screenshot of every test.
-  (cd frontend && CI=1 E2E_BASE_URL="$BASE_URL" npx playwright test --config e2e.backend.config.ts "$spec" \
+  (cd frontend && CI=1 E2E_BASE_URL="$BASE_URL" E2E_CHROMIUM_EXECUTABLE="$browser_fallback" \
+    npx playwright test --config e2e.backend.config.ts "$spec" \
     --workers=1 --output "$out/spec") >&2 || status=$?
   find "$out/spec" -name '*.png' >&2 || true
 fi

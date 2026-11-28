@@ -488,36 +488,44 @@ to `submit-pose`, an out-of-scene one dispatches the registry `pose` action) and
 (the desk and the composer dialog). A succumbing is a deed in the list, labelled by where it happened.
 `AuraReflections` lists deeds and burdens with no reflection waiting under "Not yet reflected on".
 
-### `components/ClaimRow.tsx`, `claiming.ts` (#5181)
+### `components/ReachRow.tsx`, `reach.ts` (#5308, #5327)
 
-The optional "Claim" row of a pose and of a journal entry, in the `CommandInput` footer beside
-"Reflecting on" and in `JournalEntryFields`. A kindled deed sets some resonance aside; the row's
-"Claim" pill switches the claim on and shows one tick per resonance with something waiting, labelled
-"<amount> <resonance>", all ticked to begin with. It renders nothing while nothing waits. It reads
-`useWaitingClaims(characterSheetId)` (the `unclaimed` count on `GET /api/magic/kindled-resonances/`
-rows, kindled or not). State is a `ClaimDraft` (`{ on, left }`, `left` the unticked ids,
-`NO_CLAIM` while idle); `claimFields(draft, waiting)` gives the request fields: nothing while off
-or with nothing ticked, `claim: true` with an empty `claim_resonance_ids` when all are ticked, the
-ticked ids otherwise. A claim rides with a reflection or a Sineating on the same pose. The pose
-response (REST) and the pose action result `data` (socket) carry `claim_lines`, shown to the
-writer alone as feed notes; the journal's 201 carries the same, shown as toasts. A claim-only pose
-outside a scene goes through the socket `pose` action like a reflection does. `refreshKindledResonances`
-re-reads the panel's amounts after a claim and on the `earned_resonance` frame. The panel shows
-"N waiting" on a row with something set aside, and "N waiting for your anima ritual" for the
-`waiting_trickle` count (#5308), only above zero.
+The optional "Reaching for" row of a pose and of a journal entry: in the `CommandInput` footer (pose
+mode) and in `JournalEntryFields` (the desk and the composer dialog). The "Reaching for" pill opens a
+select of every resonance from `useResonanceCatalog()` (`GET /api/magic/resonances/`, in her aura or not; rows carry `affinity_name` and `description`), and
+the chosen resonance's own `description` shows under it as help text. Once a resonance is chosen,
+"Pointing at" lists her recent acts (`useRecordedActs(characterSheetId)`, `GET
+/api/magic/recorded-acts/?character_sheet=<id>`, rows `{ id, label, created_at, suggestions[] }`,
+newest first, only acts not yet marked) as radios: the act's label, its age (`formatRelativeTime`) and
+"Suggested: <Resonance>. <reason>." (the suggestion for the chosen resonance, else the strongest) or
+"No resonance suggested.". On a pose the last choice is "Nothing: another player has to endorse it",
+chosen to begin with: a resonance alone is a reach, which an endorsement of the pose pays. Pointing at an
+act makes the writing a mark that pays when it is posted. A journal entry passes `actRequired`: the
+legend reads "Pointing at (required)", there is no "Nothing" choice, and `isReachActMissing(draft)`
+(`isReachUnfinished` on the journal's fields value) holds Post entry until an act is chosen, because no
+one can endorse a journal entry. In an ephemeral scene (`SceneDetail.is_ephemeral`, read by
+`CommandInput` from the scene query) the act list is replaced by "This scene is ephemeral and stores nothing, so a mark here pays nothing. Mark the act later, in a pose in another scene or from a journal entry." and no acts are read.
 
-### `components/ReachRow.tsx`, `reach.ts` (#5308)
+State is a `ReachDraft` (`{ on, resonanceId, actId }`, `NO_REACH` while idle); `reachFields(draft)` gives
+`reach_resonance_id`, plus `reach_act_id` when an act is chosen, and nothing while the row is off or
+unchosen. `chooseAct` points the draft at an act (null for nothing). The pose body (`scenes/queries.ts`)
+and the journal request (`journals/api.ts`) extend `ReachFields`. A scene pose sends the fields to
+`submit-pose`; a pose outside a scene goes through the socket `pose` action. The REST pose response
+carries `mark_line` and `mark_recorded`; the action result carries `data.mark_recorded` (and the line in
+`data.mark_line`, else the last line of the message); the journal's 201 carries `mark_line`. A mark that
+paid is a private feed note on the writer's own feed (toast on a journal); one that paid nothing
+(`mark_recorded` false) is an error toast with the reason and what to do next, and the pose still posted.
+`useRefreshRecordedActs(characterSheetId)` re-reads the list once a pose or entry is sent. The row clears
+when the pose lands. An `Interaction` carries `reached_resonance`; `EndorsementControl` then shows one
+"Endorse their X" button and sends no resonance. A live frame goes out before the reach is written and
+lacks the field; the ids-only `interaction_changed` frame refetches the row. The entry-flourish dialog
+lists the whole catalog, the resonances the character holds first.
 
-The optional "Reaching for" row of a pose, in the `CommandInput` footer after "Claim" (pose mode). The
-"Reaching for" pill opens a select of every resonance from `useResonanceCatalog()`
-(`GET /api/magic/resonances/`, held or not). State is a `ReachDraft` (`{ on, resonanceId }`, `NO_REACH`
-while idle); `reachFields(draft)` gives `reach_resonance_id`, or nothing while off or unchosen. A scene
-pose sends it to `submit-pose`; a reach-only pose outside a scene goes through the socket `pose`
-action like a claim does. It clears when the pose lands. An `Interaction` carries
-`reached_resonance`; `EndorsementControl` then shows one "Endorse their X" button and sends no
-resonance. A live frame goes out before the reach is written and lacks the field; the ids-only
-`interaction_changed` frame refetches the row. The entry-flourish dialog lists the whole catalog, the
-resonances the character holds first.
+**Local types standing in for generated ones** (swap for `components['schemas'][...]` after
+`just gen-api-types`): `RecordedAct` and `RecordedActSuggestion` in `types.ts`; `ActMark` and
+`PendingPick` in `scenes/types.ts`; `SceneDetail.is_ephemeral`. Claiming is gone (#5327): no claim row,
+no `claiming.ts`, no "N waiting" line on `KindledResonancesPanel` (the "waiting for your anima ritual"
+line stays).
 
 ### `components/SineatingRow.tsx` (#5177)
 

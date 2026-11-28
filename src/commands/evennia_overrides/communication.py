@@ -400,9 +400,8 @@ class CmdPose(ArxCommand):
         pose/reflect mire:<Sinner>=<absolve|condemn|succumb> <text>
         pose/entreat <sineater>=<units> <text>
         pose/sineat <sinner>=<units> <text>
-        pose/claim <text>
-        pose/claim <resonance>[,<resonance>...]=<text>
         pose/reach <resonance>=<text>
+        pose/reach <resonance>:<act number>=<text>
 
     ``pose/reflect`` poses ``<text>`` and records that it reflects on a deed (the number
     ``reflect`` lists), on the resonance unsettling you (its name), embracing or disowning
@@ -414,14 +413,10 @@ class CmdPose(ArxCommand):
     plea waits (``sineater pleas``), taking on that many of the units offered, and rolls for
     it. A pose carries one of these, and the room sees only the pose.
 
-    ``pose/claim`` poses ``<text>`` and collects the resonance your kindled deeds set aside:
-    everything waiting, or only the resonances named before the ``=``. Only you read what you
-    gained. It combines with the others as ``pose/claim/reflect``, ``pose/claim/entreat`` and
-    ``pose/claim/sineat``, where it claims everything waiting.
-
     ``pose/reach`` poses ``<text>`` and names the resonance the pose reaches for, one you hold
-    or not. When someone endorses the pose, that is the resonance they confirm. It combines
-    only with a bare claim, as ``pose/claim/reach``.
+    or not. When someone endorses the pose, that is the resonance they confirm. With
+    ``:<act number>`` it marks that act from your ``acts`` list instead: the resonance grows at
+    once. It stands alone: it combines with no other switch.
     """
 
     key = "pose"
@@ -448,29 +443,18 @@ class CmdPose(ArxCommand):
         return result
 
     def _attachment_and_rest(self, args: str) -> tuple[dict[str, Any], str]:
-        """What the switches attach (a claim, and a reflection or Sineating), and the rest of
-        the line."""
-        from commands.claim import SWITCH_CLAIM, claim_kwargs_and_rest  # noqa: PLC0415
+        """What the switches attach (a reach, a reflection or Sineating), and the rest of the
+        line."""
         from commands.reach import SWITCH_REACH, reach_kwargs_and_rest  # noqa: PLC0415
 
         switches = list(self.switches)
         if SWITCH_REACH in switches:
-            # ``=`` belongs to the resonance the pose reaches for, so only a bare claim
-            # (everything waiting) rides with it.
-            if [switch for switch in switches if switch != SWITCH_CLAIM] != [SWITCH_REACH]:
-                msg = "pose/reach combines only with pose/claim, as pose/claim/reach."
+            # ``=`` belongs to the resonance the pose reaches for, so nothing rides with it.
+            if switches != [SWITCH_REACH]:
+                msg = "pose/reach combines with no other switch."
                 raise CommandError(msg)
-            reach, rest = reach_kwargs_and_rest(args)
-            claim = {"claim": True} if SWITCH_CLAIM in switches else {}
-            return {**claim, **reach}, rest
-        if SWITCH_CLAIM not in switches:
-            return self._reflection_or_sineating_and_rest(switches, args)
-        others = [switch for switch in switches if switch != SWITCH_CLAIM]
-        claim, rest = claim_kwargs_and_rest(self, args, names_allowed=not others)
-        if not others:
-            return claim, rest
-        other, rest = self._reflection_or_sineating_and_rest(others, rest)
-        return {**claim, **other}, rest
+            return reach_kwargs_and_rest(args, self.caller.character_sheet)
+        return self._reflection_or_sineating_and_rest(switches, args)
 
     def _reflection_or_sineating_and_rest(
         self, switches: list[str], args: str
@@ -502,7 +486,7 @@ class CmdPose(ArxCommand):
         msg = (
             "Usage: pose <text> | pose/reflect <deed, resonance or mire:Sinner>=<choice> <text> | "
             "pose/entreat <sineater>=<units> <text> | pose/sineat <sinner>=<units> <text> | "
-            "pose/claim [<resonance>,...=]<text> | pose/reach <resonance>=<text>"
+            "pose/reach <resonance>[:<act number>]=<text>"
         )
         raise CommandError(msg)
 

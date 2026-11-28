@@ -937,15 +937,22 @@ actions, backends, and service functions.
   forms the bond and `tether dissolve` ends it. `tether entreat` and `sineater consume` are gone. Typed in
   `integration_tests/test_sineating_journeys.py`; formation, brace, rescue and dissolve by hand in
   `commands/tests/test_soul_tether_e2e.py`.
-- **Claiming** (#5181; `claim.py`, `evennia_overrides/communication.py`). `pose/claim <text>` poses and collects
-  what kindled deeds set aside (`CharacterResonance.kindled_unclaimed`): everything waiting, or with
-  `pose/claim ruin,mercy=<text>` only the resonances named (matched without regard to case among the ones
-  with something waiting; a name that is not one is the command's own error and nothing posts). Once `=`
-  is present the text before it is read as names. It combines as `pose/claim/reflect`, `pose/claim/entreat`
-  and `pose/claim/sineat`, where it claims everything (the `=` belongs to the other part). `claim_kwargs_and_rest`
-  builds the pose action's `claim` and `claim_resonance_ids` kwargs; `PoseAction` checks them before the pose
-  posts (`pending_claim_from`) and collects them after (`claim_kindled`), and the claimer alone reads one
-  line per resonance in the affinity's `claim_verb`. Typed in `integration_tests/test_claiming_kindled_journeys.py`.
+- **Reaching** (#5308; `reach.py`, `evennia_overrides/communication.py`). `pose/reach <resonance>=<text>` poses and
+  names the resonance the pose reaches for, in her aura or not (matched without regard to case by
+  `resolve_reach_name`; a name that matches none is the command's own error and nothing posts). It stands
+  alone: `CmdPose._attachment_and_rest` refuses it with any other switch, because `=` belongs to the resonance.
+  `reach_kwargs_and_rest` builds the pose action's `reach_resonance_id` kwarg; `PoseAction` checks it before
+  the pose posts (`pending_reach_from`) and writes it after (`record_pending_reach`), and an endorsement of the
+  pose pays that resonance. Claiming (`pose/claim`, #5181) is gone: a gain from an act is a mark (#5327), which
+  the telnet face names an act for. `acts` (`acts.py`, `CmdActs`) prints the character's pointable acts from
+  `marking.pointable_acts` (newest first, at most 20 with a line for the rest), each as `<act id>. <label> (<age>)`
+  with its suggestions or "No resonance suggested.". `pose/reach <resonance>:<act id>=<text>` (`reach_kwargs_and_rest`
+  resolves the id to the character's own act, so another character's act or a stale id is the command's own error)
+  marks that act through the pose action; with no `:<id>` it is the bare reach. `endorse` answers a pick in
+  `endorse.py`: `endorse pose <char> #N resonance=<name>` commits a pick that waits for the poser (typed again it
+  changes the pick, and it has no preview on a pose that named no resonance), `endorse accept|decline <char> #N` is
+  the poser's answer through `AnswerPoseProposalAction`, and `endorse withdraw <char> #N` takes it back. Not on
+  telnet: a GM answering someone else's pick, undo, and marking from a journal entry.
 - **The Anima ritual with a partner** (#5181; `ritual.py`). `ritual anima <partner>` asks someone in the scene to
   take part in the caller's own anima ritual (`start_partner_ritual`, the same consent request the web
   scene-action create opens), tells the partner what is asked, the sentence about their fatigue and `accept` /
@@ -1755,7 +1762,11 @@ actions, backends, and service functions.
   serializer calls, not via an Action). `moment tag list` browses the authored
   `DramaticMomentType` catalog; a type with no resonance lists as "their own resonance",
   since its grant follows the character's own (#4323: it had raised on that row). Both GM-gated via `_account_can_gm_scene` on the caller's
-  active scene. Its `func` sends a `CommandError` the way `ArxCommand.func` does, typed
+  active scene (#5327 narrows what a tag may do: only the scene's GM and staff name a resonance the
+  character does not already have, nobody tags a character she plays, a character who is not part of the
+  scene is refused ("That character is not part of this scene."), and a worn payer refuses the tag before it
+  is written; the service decides all of it, so `moment confirm` for the GM's own character is refused with
+  the same line). Its `func` sends a `CommandError` the way `ArxCommand.func` does, typed
   `error` with the structured `command_error` frame (#3657 tranche 11: the override had sent a
   bare line the web could not place); the tagged name resolves through a quiet global search
   and an absent name is the command's own line (the loud search had sent Evennia's bare line

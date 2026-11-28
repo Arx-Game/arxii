@@ -184,7 +184,8 @@ def grant_resonance(  # noqa: PLR0913
             grew the deed or took the Mire.
         reflection: Required for EMBRACED_DEED and SUCCUMBED; the reflection the rite applied.
         deed_label: What the character did, in her own words, recorded on a KINDLED_DEED
-            grant (#5124); None for every other source.
+            grant (#5124) or a MARKED_ACT grant (#5327, the recorded act's label); None for
+            every other source.
         ledger_out: When given, the ``ResonanceGrant`` row this call writes is appended to it,
             for a caller that needs the ledger row as well as the updated resonance.
         act_stat: The stat of the roll the act itself made, which replaces the bonus check's
@@ -497,11 +498,12 @@ def _validate_grant_source_shape(  # noqa: PLR0913
         GainSource.MIRE_PURIFIED,
         GainSource.SUCCUMB_BONUS,
         GainSource.SINEATER_FALL,
-        # #5181: a claimed share and an Anima ritual's resonance name no typed row either.
-        GainSource.KINDLED_CLAIM,
+        # #5181: an Anima ritual's resonance names no typed row either.
         GainSource.ANIMA_RITUAL,
         # #5308: the harvest of waiting trickles names no typed row either.
         GainSource.TRICKLE_HARVEST,
+        # #5327: a mark names no typed row; the recorded act holds the link back to the grant.
+        GainSource.MARKED_ACT,
     ):
         # No typed source FK — the grant is attributed by discriminator only.
         return

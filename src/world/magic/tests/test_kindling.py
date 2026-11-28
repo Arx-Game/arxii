@@ -1,7 +1,5 @@
 """Which resonances the situation kindles now, and how strongly (#5124, Task 3)."""
 
-from unittest.mock import patch
-
 from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
@@ -30,7 +28,6 @@ from world.magic.constants import KindlingActKind, TargetKind
 from world.magic.factories import (
     AffinityFactory,
     CharacterResonanceFactory,
-    KindledDeedAwardFactory,
     KindledStrengthTierFactory,
     KindlingConfigFactory,
     KindlingFactory,
@@ -38,8 +35,8 @@ from world.magic.factories import (
     ResonanceFactory,
     ThreadFactory,
 )
-from world.magic.models import CharacterResonance, KindledStrengthTier, KindlingSituation
-from world.magic.services.kindling import award_kindled_deeds, kindled_for, kindled_resonances
+from world.magic.models import KindledStrengthTier, KindlingSituation
+from world.magic.services.kindling import kindled_for, kindled_resonances
 from world.magic.types.kindling import KindlingAct
 from world.mechanics.factories import PropertyFactory
 from world.missions.factories import MissionInstanceFactory, MissionThemeFactory
@@ -47,7 +44,6 @@ from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaFactory
 from world.scenes.services import set_active_persona
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
-from world.traits.factories import CheckOutcomeFactory
 from world.vitals.factories import CharacterVitalsFactory
 
 
@@ -154,57 +150,6 @@ class FeelingTests(_Case):
         self.assertIsNotNone(by_resonance[sibling])
         self.assertIsNone(by_resonance[elsewhere])
         self.assertIsNone(by_resonance[self.resonance])
-
-
-class KindledDeedSplitTests(_Case):
-    """A kindled deed pays part at once and sets a share aside to claim (#5181)."""
-
-    def setUp(self) -> None:
-        super().setUp()
-        feeling = PropertyFactory()
-        self.resonance.feeling = feeling
-        self.resonance.save()
-        KindlingSituationFactory(
-            resonance=self.resonance, situation=Situation.OWN_FEELING, strength=None
-        )
-        grief = ConditionTemplateFactory(name="Grief")
-        grief.properties.add(feeling)
-        ConditionInstanceFactory(target=self.sheet.character, condition=grief, severity=5)
-        self.success = CheckOutcomeFactory(name="Success", success_level=1)
-        KindledDeedAwardFactory(outcome_tier=self.success, amount=10)
-        top = KindledStrengthTier.objects.get(rank=3)
-        top.earn_percent = 100
-        top.save()
-
-    def _deed(self, instant: int, claim: int):
-        KindlingConfigFactory(instant_percent=instant, claim_percent=claim)
-        act = KindlingAct(kind=KindlingActKind.SOCIAL)
-        with (
-            patch("world.roster.services.activity.is_player_character", return_value=True),
-            patch("world.narrative.services.send_narrative_message") as told,
-            self.captureOnCommitCallbacks(execute=True),
-        ):
-            grants = award_kindled_deeds(self.sheet, act=act, outcome=self.success)
-        self.told = [call.kwargs["body"] for call in told.call_args_list]
-        row = CharacterResonance.objects.get(character_sheet=self.sheet, resonance=self.resonance)
-        return grants, row
-
-    def test_instant_100_and_claim_50_pays_all_and_sets_half_aside(self) -> None:
-        grants, row = self._deed(instant=100, claim=50)
-        self.assertEqual([g.amount for g in grants], [10])
-        self.assertEqual((row.balance, row.kindled_unclaimed), (10, 5))
-        name = self.resonance.name
-        self.assertEqual(self.told, [f"You earned 10 {name}. 5 more is waiting to be claimed."])
-
-    def test_a_tiny_instant_share_still_pays_one(self) -> None:
-        grants, row = self._deed(instant=1, claim=100)
-        self.assertEqual([g.amount for g in grants], [1])
-        self.assertEqual((row.balance, row.kindled_unclaimed), (1, 10))
-
-    def test_claim_0_sets_nothing_aside(self) -> None:
-        _grants, row = self._deed(instant=100, claim=0)
-        self.assertEqual(row.kindled_unclaimed, 0)
-        self.assertEqual(self.told, [f"You earned 10 {self.resonance.name}."])
 
 
 class SharedFeelingTests(_Case):

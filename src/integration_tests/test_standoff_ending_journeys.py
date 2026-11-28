@@ -3,7 +3,8 @@
 Only the terms that settle the last group pay, so a long press earns nothing. What they pay
 follows the roll's result tier through the staff-authored ending table; a legend deed is
 written only when another player's character was on the scene list; two characters one
-account plays pay each other nothing; and the existing kindling path feeds the same ending.
+account plays pay each other nothing; and the same ending is written down as an act her
+player can mark, with what the situation suggests (#5327).
 Each line is typed the way a player types it."""
 
 from __future__ import annotations
@@ -32,7 +33,12 @@ from world.magic.factories import (
     RitualCheckConfigFactory,
     teach_ritual,
 )
-from world.magic.models import CharacterResonance, KindledDeedAward, ResonanceGrant
+from world.magic.models import (
+    CharacterResonance,
+    KindledDeedAward,
+    RecordedAct,
+    ResonanceGrant,
+)
 from world.magic.models.dramatic_moment import DramaticMomentTag
 from world.mechanics.factories import PropertyFactory
 from world.roster.models import RosterTenure
@@ -261,32 +267,46 @@ class TwoCharactersOfOneAccountPayNothing(StandoffEndingBase):
         self.assertNoCredit()
 
 
-class TheEndingFeedsTheKindlingPath(StandoffEndingBase):
-    def test_a_resonance_a_negotiation_kindles_earns_from_the_ending_by_the_result(self) -> None:
-        # Staff authored: Mercy kindles in a negotiation and a kindled deed earns by result.
-        KindledStrengthTierFactory(rank=1, earn_percent=100)
+class TheEndingIsRecordedForTheKindlingPath(StandoffEndingBase):
+    def test_a_resonance_a_negotiation_kindles_is_suggested_for_the_ending_and_pays_nothing(
+        self,
+    ) -> None:
+        # Staff authored: Mercy kindles in a negotiation and a kindled deed is worth something by
+        # result. A situation only suggests (#5327), so the ending is written down for her
+        # player to mark with Mercy as the suggestion, and nothing is paid.
+        faint = KindledStrengthTierFactory(rank=1, earn_percent=100)
         KindlingSituationFactory(
             resonance=self.mercy_resonance, situation="during_negotiation", strength=1
         )
         KindledDeedAward.objects.all().delete()
         KindledDeedAwardFactory(outcome_tier=self.critical, amount=40)
-        # No ending table row here: the kindling path pays on its own.
+        # No ending table row here: nothing else pays for the ending.
         StandoffEndingAward.objects.all().delete()
         self.say(self.critical)
-        self.assertEqual(self.earned(), 40)
-        grant = ResonanceGrant.objects.get(
-            character_sheet=self.sheet, source=GainSource.KINDLED_DEED
+        self.assertEqual(self.earned(), 0)
+        self.assertFalse(
+            ResonanceGrant.objects.filter(
+                character_sheet=self.sheet, source=GainSource.KINDLED_DEED
+            ).exists()
         )
-        self.assertEqual(grant.amount, 40)
-        self.assertEqual(grant.deed_label, "Spare Them (journey): Roadside Toughs")
-        self.assertTold(self.ysmay, "You earned 40")
+        act = RecordedAct.objects.get(character_sheet=self.sheet)
+        self.assertEqual(act.label, "Spare Them (journey): Roadside Toughs")
+        self.assertEqual(act.outcome, self.critical)
+        suggestion = act.suggestions.get()
+        self.assertEqual((suggestion.resonance, suggestion.strength), (self.mercy_resonance, faint))
+        self.assertNotTold(self.ysmay, "You earned")
+        # Her player reads the ending as an act, with Mercy suggested beside it.
+        listed = self.telnet(self.ysmay, "acts")
+        self.assertIn(f"{act.pk}. Spare Them (journey): Roadside Toughs (", listed)
+        self.assertIn(f"{self.mercy_resonance.name}: ", listed)
 
 
-class AnotherCharactersPressKindlesTheEndingForHer(StandoffEndingBase):
-    """A parley-holder's press lays a feeling on the band; her ending then earns by it.
+class AnotherCharactersPressIsSuggestedForTheEnding(StandoffEndingBase):
+    """A parley-holder's press lays a feeling on the band; her ending then suggests by it.
 
     Nothing here names a covenant or a role: staff author the kindling row, and what the
     other character does in the standoff (a press that lays a condition) is what makes it hold.
+    It only suggests: the ending is written down for her player to mark (#5327).
     """
 
     def setUp(self) -> None:
@@ -309,17 +329,25 @@ class AnotherCharactersPressKindlesTheEndingForHer(StandoffEndingBase):
         self.corin_sheet = self.corin.sheet_data
         CombatParticipantFactory(encounter=self.encounter, character_sheet=self.corin_sheet)
 
-    def kindled_grants(self):
-        return ResonanceGrant.objects.filter(
-            character_sheet=self.sheet, source=GainSource.KINDLED_DEED
-        )
+    def suggested(self) -> list[str]:
+        """The resonances the ending's act suggests (the one act she took)."""
+        act = RecordedAct.objects.get(character_sheet=self.sheet)
+        return [row.resonance.name for row in act.suggestions.all()]
 
-    def test_an_ending_with_the_band_not_awed_earns_no_kindled_resonance(self) -> None:
+    def listing(self) -> str:
+        """What her player reads when she types ``acts``."""
+        return self.telnet(self.ysmay, "acts")
+
+    def test_an_ending_with_the_band_not_awed_suggests_nothing_and_pays_nothing(self) -> None:
         self.say(self.success)
-        self.assertFalse(self.kindled_grants().exists())
+        self.assertEqual(self.suggested(), [])
+        self.assertIn("No resonance suggested.", self.listing())
+        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
         self.assertNotTold(self.ysmay, "You earned")
 
-    def test_corins_press_awes_the_band_and_her_ending_earns_by_it(self) -> None:
+    def test_corins_press_awes_the_band_and_her_ending_suggests_by_it_and_pays_nothing(
+        self,
+    ) -> None:
         pressed = self.say(
             self.success,
             "standoff press Commanding Presence (journey) Roadside Toughs",
@@ -328,7 +356,8 @@ class AnotherCharactersPressKindlesTheEndingForHer(StandoffEndingBase):
         self.assertIn("Success", pressed)
         self.assertNotTold(self.ysmay, "You earned")
         self.say(self.success)
-        grant = self.kindled_grants().get()
-        self.assertEqual(grant.amount, 25)
-        self.assertEqual(self.earned(), 25)
-        self.assertTold(self.ysmay, "You earned 25")
+        self.assertEqual(self.suggested(), [self.mercy_resonance.name])
+        self.assertIn(f"{self.mercy_resonance.name}: ", self.listing())
+        self.assertFalse(ResonanceGrant.objects.filter(character_sheet=self.sheet).exists())
+        self.assertEqual(self.earned(), 0)
+        self.assertNotTold(self.ysmay, "You earned")

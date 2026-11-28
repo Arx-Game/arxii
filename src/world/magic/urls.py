@@ -41,6 +41,7 @@ from world.magic.views import (
     PreparedCrossingTextViewSet,
     PreparedSurgeTextViewSet,
     PurchaseGiftUnlockView,
+    ResonanceGrantUndoViewSet,
     ResonanceGrantViewSet,
     ResonanceViewSet,
     RestrictionViewSet,
@@ -181,9 +182,13 @@ from world.magic.views_manifestation import ManifestChoiceViewSet  # noqa: E402
 router.register("manifest-choices", ManifestChoiceViewSet, basename="manifest-choice")
 
 # #5124 - the "Your resonances" panel: what is kindled, how strongly and why
-from world.magic.views_kindling import KindledResonanceViewSet  # noqa: E402
+from world.magic.views_kindling import (  # noqa: E402
+    KindledResonanceViewSet,
+    RecordedActViewSet,
+)
 
 router.register("kindled-resonances", KindledResonanceViewSet, basename="kindled-resonance")
+router.register("recorded-acts", RecordedActViewSet, basename="recorded-act")
 
 # #5124 - the "Reflecting on" row: the deeds and the unsettling resonance a writer can name
 from world.magic.views_reflection import ReflectableViewSet  # noqa: E402
@@ -206,6 +211,14 @@ urlpatterns = [
         "progression/",
         MagicProgressionView.as_view(),
         name="magic-progression",
+    ),
+    # #5327 — undo a resonance reward. A literal path rather than a second router
+    # registration of "resonance-grants", which would replace the ledger's entry in the API
+    # root listing.
+    path(
+        "resonance-grants/<int:pk>/undo/",
+        ResonanceGrantUndoViewSet.as_view({"post": "undo"}),
+        name="resonance-grant-undo",
     ),
     path(
         "applicable-pulls/",

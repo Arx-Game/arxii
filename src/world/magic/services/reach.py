@@ -1,7 +1,9 @@
 """A pose's reach for a resonance (#5308).
 
 A poser may name the resonance their pose reaches for, held or not. An endorsement of that pose
-pays the named resonance, so the endorser only confirms it (see ``create_pose_endorsement``).
+pays the named resonance, so the endorser only confirms it (see ``create_pose_endorsement``). A
+pose that also points at an act is a mark instead (``world.magic.services.marking``): it pays at
+once and writes no reach.
 
 ``pending_reach_from`` checks what a pose asked to reach for before anything posts,
 ``record_pending_reach`` writes the ``PoseResonanceReach`` once the pose is down. Only the
@@ -43,13 +45,18 @@ def pending_reach_from(params: Any) -> PendingReach | None:
     """The reach a pose asked for, checked, or None when it asked for none.
 
     ``params`` is the action's kwargs or a serializer's validated data: ``reach_resonance_id``
-    (optional). Any existing resonance is valid, held or not; nothing is written.
+    (optional). Any existing resonance is valid, held or not; nothing is written. A pose that
+    also names an act (``reach_act_id``) is a mark (#5327, ``pending_mark_from``), not a reach,
+    so it asks for none here.
 
     Raises:
         ReachError: the id is not a resonance.
     """
     raw = params.get("reach_resonance_id")
     if raw is None or raw == "":
+        return None
+    act = params.get("reach_act_id")
+    if act is not None and act != "":
         return None
     if isinstance(raw, bool):
         raise ReachError(_UNKNOWN_RESONANCE)

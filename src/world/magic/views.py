@@ -9,6 +9,7 @@ This module provides ViewSets for:
   ThreadWeavingTeachingOffer
 """
 
+from collections.abc import Mapping
 import dataclasses
 from dataclasses import asdict
 from typing import cast
@@ -51,7 +52,9 @@ from world.magic.crossing.handlers import (
 from world.magic.exceptions import (
     AnimaRitualPickError,
     DuplicateTechniqueName,
+    EndorsementValidationError,
     InvalidImbueAmount,
+    ResonanceUndoError,
     TechniqueAuthoringNotPermitted,
     TechniqueBudgetExceeded,
     UnknownResonance,
@@ -63,6 +66,7 @@ from world.magic.filters import (
     CharacterGiftFilter,
     CharacterResonanceFilter,
     ConsequencePoolCatalogFilter,
+    DramaticMomentTagFilter,
     PreparedCrossingTextFilter,
     PreparedSurgeTextFilter,
     ResonanceGrantFilterSet,
@@ -104,6 +108,7 @@ from world.magic.models.dramatic_moment import (
 )
 from world.magic.permissions import (
     CanPrepareCharacterText,
+    CanUndoResonanceGrant,
     IsRitualAuthorOrStaff,
     IsStaffForBaseWrites,
     IsStaffOrReadOnly,
@@ -133,6 +138,7 @@ from world.magic.serializers import (
     AudereRespondSerializer,
     AudereUltimateQuerySerializer,
     AudereUltimateStateSerializer,
+    ChangePoseEndorsementSerializer,
     CharacterAnimaSerializer,
     CharacterAuraSerializer,
     CharacterGiftSerializer,
@@ -208,7 +214,12 @@ from world.magic.services import (
     preview_resonance_pull,
 )
 from world.magic.services.auth import _resolve_actor_sheet, _resolve_endorser_sheet
-from world.magic.services.gain import account_for_sheet, retract_pose_endorsement
+from world.magic.services.gain import (
+    accept_pose_proposal,
+    change_pose_endorsement,
+    decline_pose_proposal,
+    withdraw_pose_endorsement,
+)
 from world.magic.services.pull_applicability import PullActionContext, compute_thread_applicability
 from world.magic.services.pull_payers import resolve_pull_payers
 from world.magic.services.technique_builder import (
@@ -217,7 +228,9 @@ from world.magic.services.technique_builder import (
     author_staff_technique,
     enforce_policy,
 )
+from world.magic.services.undo import undo_resonance_grant, undoable_in_scenes
 from world.roster.models import RosterEntry
+from world.scenes.models import Interaction, Scene, SceneParticipation
 from world.stories.pagination import StandardResultsSetPagination
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
@@ -1823,7 +1836,6 @@ class ThreadWeavingTeachingOfferViewSet(viewsets.ReadOnlyModelViewSet):
 # =============================================================================
 
 # Error messages — module constants keep tests stable and satisfy STRING_LITERAL.
-_ERR_ENDORSEMENT_SETTLED = "Endorsement already settled."
 
 # _resolve_actor_sheet and _resolve_endorser_sheet are imported at the top of this module
 # from world.magic.services.auth — see import section above.
@@ -1834,13 +1846,24 @@ class PoseEndorsementViewSet(
     mixins.DestroyModelMixin,
     GenericViewSet,
 ):
-    """Create + delete-if-unsettled pose endorsements (Spec C Task 23).
+    """Create + delete-if-unsettled pose endorsements (Spec C Task 23), and answer proposals.
 
     Listing is not supported here — use ResonanceGrantViewSet (Task 25) for
     audit queries.
 
-    POST /api/magic/pose-endorsements/ — create an endorsement.
+    POST /api/magic/pose-endorsements/ — create an endorsement. On a pose that named no
+        resonance it is saved waiting for the poser (``awaiting_acceptance`` true).
     DELETE /api/magic/pose-endorsements/<pk>/ — retract an unsettled endorsement.
+    POST /api/magic/pose-endorsements/<pk>/change/ — the endorser picks another resonance,
+        body ``{"resonance": <resonance id>}``; the row waits for the poser again (#5327).
+    POST /api/magic/pose-endorsements/<pk>/accept/ — the poser, the scene's GM or staff accept a
+        waiting pick; no body (#5327).
+    POST /api/magic/pose-endorsements/<pk>/decline/ — the same people decline it, which deletes
+        the row; no body, 204 (#5327).
+
+    Change, accept and decline read only the endorsements the requester made, was endorsed
+    by, or GMs the scene of (staff read all); DELETE reads only the ones she made; anyone else
+    gets a 404.
     """
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
@@ -1854,23 +1877,87 @@ class PoseEndorsementViewSet(
     serializer_class = PoseEndorsementSerializer
     permission_classes = [IsAuthenticated]
 
+    def get_queryset(self):  # type: ignore[override]
+        """Scope what an action may reach to the rows it is about (#5327).
+
+        ``destroy`` reads only the endorsements the requester's own characters made, so
+        another player's pick and a missing one both answer 404. ``change``, ``accept`` and
+        ``decline`` read the ones she made, was endorsed by, or GMs the scene of when she can
+        read the pose. Who plays a character follows the loan rule (``playable_by``): a lent
+        NPC's borrower reads and answers it, and the holder who lent it away does not. Staff
+        read all of them for the three answers.
+        """
+        qs = super().get_queryset()
+        if self.action not in {"change", "accept", "decline", "destroy"}:
+            return qs
+        user = self.request.user
+        played = RosterEntry.objects.playable_by(user).values("character_sheet_id")
+        if self.action == "destroy":
+            return qs.filter(endorser_sheet_id__in=played)
+        if user.is_staff:
+            return qs
+        gm_scenes = SceneParticipation.objects.filter(account=user, is_gm=True).values("scene_id")
+        readable = Interaction.objects.readable_by(user).filter(scene__in=gm_scenes).values("pk")
+        return qs.filter(
+            Q(endorser_sheet_id__in=played)
+            | Q(endorsee_sheet_id__in=played)
+            | Q(interaction__scene__in=gm_scenes, interaction__in=readable)
+        ).distinct()
+
     def perform_create(self, serializer: PoseEndorsementSerializer) -> None:
         """Resolve the endorser sheet from the requesting account and save."""
         serializer.save(endorser_sheet=_resolve_endorser_sheet(self.request))
 
     def destroy(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """Delete an unsettled endorsement.
+        """Delete an unsettled endorsement of one's own.
 
-        Settled endorsements are hidden behind 404 — they are immutable once
-        the weekly tick has run. Only the endorsing account can delete.
+        The queryset holds only the requester's own endorsements, so anyone else's answers
+        404. A settled one is refused: the weekly tick has paid it and it is now a record.
         """
         endorsement = self.get_object()
-        if endorsement.settled_at is not None:
-            raise Http404(_ERR_ENDORSEMENT_SETTLED)
-        # Alt-guard: only the endorsing account can retract.
-        if account_for_sheet(endorsement.endorser_sheet) != request.user:
-            raise PermissionDenied
-        retract_pose_endorsement(endorsement)
+        try:
+            withdraw_pose_endorsement(endorsement, request.user)
+        except EndorsementValidationError as exc:
+            raise Http404(exc.user_message) from exc
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(
+        request=ChangePoseEndorsementSerializer, responses={200: PoseEndorsementSerializer}
+    )
+    @action(detail=True, methods=["post"])
+    def change(self, request: Request, pk: str | None = None) -> Response:
+        """The endorser picks another resonance; the row waits for the poser again."""
+        endorsement = self.get_object()
+        body = ChangePoseEndorsementSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
+        try:
+            changed = change_pose_endorsement(
+                endorsement, body.validated_data["resonance"], request.user
+            )
+        except EndorsementValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        return Response(PoseEndorsementSerializer(changed).data)
+
+    @extend_schema(request=None, responses={200: PoseEndorsementSerializer})
+    @action(detail=True, methods=["post"])
+    def accept(self, request: Request, pk: str | None = None) -> Response:
+        """Accept a waiting pick, so the weekly settlement pays it."""
+        endorsement = self.get_object()
+        try:
+            accepted = accept_pose_proposal(endorsement, request.user)
+        except EndorsementValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        return Response(PoseEndorsementSerializer(accepted).data)
+
+    @extend_schema(request=None, responses={204: None})
+    @action(detail=True, methods=["post"])
+    def decline(self, request: Request, pk: str | None = None) -> Response:
+        """Decline a waiting pick: the row is deleted and pays nothing."""
+        endorsement = self.get_object()
+        try:
+            decline_pose_proposal(endorsement, request.user)
+        except EndorsementValidationError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
@@ -1986,6 +2073,62 @@ class ResonanceGrantViewSet(
             character_sheet__roster_entry__tenures__player_data__account=user,
             character_sheet__roster_entry__tenures__end_date__isnull=True,
         ).distinct()
+
+
+class ResonanceGrantUndoViewSet(viewsets.GenericViewSet):
+    """Undo a resonance reward (#5327): staff, or the GM of the scene it happened in.
+
+    POST /api/magic/resonance-grants/<pk>/undo/ — no body. Returns ``{id, nullified_at}`` and
+    nothing else of the grant: the reader may not know whose character it paid or how much.
+    A refusal is a 400 with ``detail`` (already undone). A grant outside the requester's
+    reach is a 404, and so is one whose pose she cannot read, so a refusal never reveals that
+    a reward exists. This is an action, never a model update: nothing here writes a row
+    directly.
+
+    There is no list or retrieve (``ResonanceGrantViewSet`` is the ledger), so the paginator is
+    off and the filter set is the ledger's own, there for the detail lookup only.
+    """
+
+    queryset = ResonanceGrant.objects.select_related("character_sheet", "resonance")
+    serializer_class = ResonanceGrantSerializer
+    permission_classes = [IsAuthenticated, CanUndoResonanceGrant]
+    filter_backends = [DjangoFilterBackend]
+    filterset_class = ResonanceGrantFilterSet
+    pagination_class = None
+    http_method_names = ["post", "options"]
+
+    def get_queryset(self):  # type: ignore[override]
+        """Staff reach every grant. A GM reaches the scene-bound rewards of her own scenes
+        whose pose she can read (one table, ``REWARD_SCENE_PATHS``, names them all)."""
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        gm_scenes = SceneParticipation.objects.filter(account=user, is_gm=True).values("scene_id")
+        readable = Interaction.objects.readable_by(user).filter(scene__in=gm_scenes).values("pk")
+        return qs.filter(undoable_in_scenes(gm_scenes, readable)).distinct()
+
+    @extend_schema(
+        request=None,
+        responses={
+            200: inline_serializer(
+                name="UndoneResonanceGrant",
+                fields={
+                    "id": serializers.IntegerField(),
+                    "nullified_at": serializers.DateTimeField(),
+                },
+            )
+        },
+    )
+    @action(detail=True, methods=["post"])
+    def undo(self, request: Request, pk: str | None = None) -> Response:
+        """Lower the character's totals by what the grant paid and stamp the ledger row."""
+        grant = self.get_object()
+        try:
+            undone = undo_resonance_grant(grant, request.user)
+        except ResonanceUndoError as exc:
+            raise serializers.ValidationError({"detail": exc.user_message}) from exc
+        return Response({"id": undone.pk, "nullified_at": undone.nullified_at})
 
 
 # =============================================================================
@@ -3429,10 +3572,15 @@ class DramaticMomentTypeViewSet(mixins.ListModelMixin, GenericViewSet):
 
 
 class DramaticMomentTagViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, GenericViewSet):
-    """Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+    """Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139, #5327).
 
-    POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
-    GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+    POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment. The scene's GM
+        and staff may name any resonance; a scene owner who is not its GM tags with the moment
+        type's own resonance or one the character already has. Nobody tags a character she
+        plays. The permission is checked before anything in the body is validated, so a stranger
+        learns nothing about which ids exist, and the answer never names the real character.
+    GET  /api/magic/dramatic-moment-tags/ — the tags of scenes the requester GMs or owns (staff
+        read all), filterable by ``scene``; ``character_sheet`` is staff's alone.
     """
 
     queryset = DramaticMomentTag.objects.select_related(
@@ -3442,19 +3590,48 @@ class DramaticMomentTagViewSet(mixins.CreateModelMixin, mixins.ListModelMixin, G
     permission_classes = [IsAuthenticated]
     pagination_class = StandardResultsSetPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["character_sheet", "scene"]
+    filterset_class = DramaticMomentTagFilter
 
-    def perform_create(self, serializer: DramaticMomentTagSerializer) -> None:
+    def get_queryset(self):  # type: ignore[override]
+        qs = super().get_queryset()
+        user = self.request.user
+        if user.is_staff:
+            return qs
+        own_scenes = SceneParticipation.objects.filter(account=user).filter(
+            Q(is_gm=True) | Q(is_owner=True)
+        )
+        return qs.filter(scene__in=own_scenes.values("scene_id"))
+
+    def _scenes_named_by(self, data: object) -> list[Scene | None]:
+        """The scenes a tag request points at, from its raw ids: the named ``scene`` and the
+        named pose's scene. An id that is not a number or finds nothing counts as no scene, so
+        the permission check below answers the same for it as for a scene the user lacks."""
+        scenes: list[Scene | None] = []
+        if not isinstance(data, Mapping):
+            return [None]
+        scene_id, pose_id = data.get("scene"), data.get("interaction")
+        try:
+            if scene_id not in (None, ""):
+                scenes.append(Scene.objects.filter(pk=int(scene_id)).first())
+            if pose_id not in (None, ""):
+                pose = Interaction.objects.filter(pk=int(pose_id)).select_related("scene").first()
+                scenes.append(pose.scene if pose is not None else None)
+        except (TypeError, ValueError):
+            scenes.append(None)
+        return scenes or [None]
+
+    def create(self, request: Request, *args: object, **kwargs: object) -> Response:
         from world.scenes.permissions import IsSceneGMOrOwnerOrStaff  # noqa: PLC0415
 
-        scene = serializer.validated_data.get("scene")
-        interaction = serializer.validated_data.get("interaction")
-        if scene is None and interaction is not None:
-            scene = interaction.scene
-        if scene is None or not IsSceneGMOrOwnerOrStaff().has_object_permission(
-            self.request, self, scene
-        ):
-            raise PermissionDenied(_ERR_DRAMATIC_MOMENT_PERMISSION)
+        permission = IsSceneGMOrOwnerOrStaff()
+        for scene in self._scenes_named_by(request.data):
+            if scene is None or not permission.has_object_permission(request, self, scene):
+                if request.user.is_staff:
+                    continue
+                raise PermissionDenied(_ERR_DRAMATIC_MOMENT_PERMISSION)
+        return super().create(request, *args, **kwargs)
+
+    def perform_create(self, serializer: DramaticMomentTagSerializer) -> None:
         serializer.save(tagged_by=self.request.user)
 
 

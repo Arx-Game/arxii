@@ -211,3 +211,17 @@ class PlaysTheRitualPartner(BasePermission):
         self, request: Request, view: APIView, obj: AnimaRitualPerformance
     ) -> bool:
         return obj.target_character_id in _active_sheet_ids_for_user(request.user)
+
+
+class CanUndoResonanceGrant(BasePermission):
+    """Undoing a resonance reward (#5327): staff, or the GM of the scene it happened in.
+
+    ``Scene.is_gm`` decides, never ``is_owner``: every player present when a scene starts is a
+    co-owner, and an owner who is not its GM must not undo rewards. The rule itself lives in
+    ``services.undo.may_undo_grant``, which the service checks again.
+    """
+
+    def has_object_permission(self, request: Request, view: APIView, obj: object) -> bool:
+        from world.magic.services.undo import may_undo_grant  # noqa: PLC0415
+
+        return may_undo_grant(cast(AccountDB, request.user), obj)

@@ -220,6 +220,19 @@ class ResonanceGrant(SharedMemoryModel):
             "before it. 0 when none. The amount above already includes it."
         ),
     )
+    nullified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Set when staff or the scene's GM undid this gain.",
+    )
+    nullified_by = models.ForeignKey(
+        "accounts.AccountDB",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="resonance_grants_undone",
+        help_text="The account that undid this gain. Set only when nullified_at is.",
+    )
 
     class Meta:
         indexes = [
@@ -823,6 +836,11 @@ class ResonanceGrant(SharedMemoryModel):
                     & Q(source_kindling_situation__isnull=True)
                 )
                 | ~Q(source="SUCCUMBED"),
+            ),
+            # #5327: an undo names who did it only along with when.
+            models.CheckConstraint(
+                name="res_grant_nullified_by_needs_time",
+                check=Q(nullified_by__isnull=True) | Q(nullified_at__isnull=False),
             ),
         ]
 

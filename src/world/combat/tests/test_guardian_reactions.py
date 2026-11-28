@@ -64,6 +64,13 @@ def _make_vitals(participant, health: int = 100, max_health: int = 100) -> Chara
     return vitals
 
 
+def _clean_block_result(
+    character: object, check_type: object, *args: object, **kwargs: object
+) -> SimpleNamespace:
+    """A roll result as ``perform_check`` returns one: it always names the check it rolled."""
+    return SimpleNamespace(success_level=2, outcome=None, check_type=check_type)
+
+
 @tag("postgres")  # apply_condition (capability grant) uses DISTINCT ON (PG-only)
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_interpose_content gates on #2698
 class InterposeBestOfCheckRealPathTest(TestCase):
@@ -408,7 +415,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
 
         def _fake_perform_check(character, check_type, *args, **kwargs):
             captured_check_types.append(check_type)
-            return SimpleNamespace(success_level=2, outcome=None)
+            return SimpleNamespace(success_level=2, outcome=None, check_type=check_type)
 
         with patch(
             "world.combat.services.perform_check",
@@ -462,7 +469,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
 
         def _fake_perform_check(character, check_type, *args, **kwargs):
             rolls.append({"check_type": check_type, **kwargs})
-            return SimpleNamespace(success_level=2, outcome=None)
+            return SimpleNamespace(success_level=2, outcome=None, check_type=check_type)
 
         with patch("world.combat.services.perform_check", side_effect=_fake_perform_check):
             apply_damage_to_participant(ally_participant, 40)
@@ -530,7 +537,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
 
         with patch(
             "world.combat.services.perform_check",
-            return_value=SimpleNamespace(success_level=2, outcome=None),
+            side_effect=_clean_block_result,
         ) as mock_perform:
             _try_technique_interpose(action, guardian, ally, pre_payload)
 
@@ -607,7 +614,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         with (
             patch(
                 "world.combat.services.perform_check",
-                return_value=SimpleNamespace(success_level=2, outcome=None),
+                side_effect=_clean_block_result,
             ),
             patch("world.combat.services.accumulate_soulfray") as accrue,
             patch("world.combat.services._broadcast_commitment_line") as line,
@@ -629,7 +636,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         with (
             patch(
                 "world.combat.services.perform_check",
-                return_value=SimpleNamespace(success_level=2, outcome=None),
+                side_effect=_clean_block_result,
             ),
             patch("world.combat.services.accumulate_soulfray") as accrue,
             patch("world.combat.services._broadcast_commitment_line") as line,
@@ -655,7 +662,7 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         with (
             patch(
                 "world.combat.services.perform_check",
-                return_value=SimpleNamespace(success_level=2, outcome=None),
+                side_effect=_clean_block_result,
             ),
             patch("world.combat.services.accumulate_soulfray") as accrue,
         ):

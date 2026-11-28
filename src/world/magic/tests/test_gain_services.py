@@ -287,16 +287,6 @@ class CreatePoseEndorsementTests(TestCase):
         with self.assertRaises(EndorsementValidationError):
             create_pose_endorsement(endorser, interaction, resonance)
 
-    def test_blocks_unclaimed_resonance(self) -> None:
-        from world.magic.exceptions import EndorsementValidationError
-        from world.magic.services.gain import create_pose_endorsement
-
-        endorser, _, _, interaction, _ = self._build_scenario()
-        fresh_resonance = self.ResonanceFactory()
-
-        with self.assertRaises(EndorsementValidationError):
-            create_pose_endorsement(endorser, interaction, fresh_resonance)
-
     def test_blocks_duplicate(self) -> None:
         from world.magic.exceptions import EndorsementValidationError
         from world.magic.services.gain import create_pose_endorsement

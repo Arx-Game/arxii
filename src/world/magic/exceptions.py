@@ -1022,10 +1022,10 @@ class ReflectionError(MagicError):
             self.user_message = user_message
 
 
-class ClaimError(MagicError):
-    """A claim of set-aside kindled resonance cannot be made (#5181); the raise site says why."""
+class ReachError(MagicError):
+    """A pose's reach for a resonance cannot be made (#5308); the raise site says why."""
 
-    user_message = "You cannot claim that."
+    user_message = "You cannot reach for that."
 
     def __init__(self, user_message: str | None = None) -> None:
         super().__init__(user_message)
@@ -1033,10 +1033,21 @@ class ClaimError(MagicError):
             self.user_message = user_message
 
 
-class ReachError(MagicError):
-    """A pose's reach for a resonance cannot be made (#5308); the raise site says why."""
+class MarkError(MagicError):
+    """A pose or journal entry cannot mark an act (#5327); the raise site says why."""
 
-    user_message = "You cannot reach for that."
+    user_message = "You cannot mark that act."
+
+    def __init__(self, user_message: str | None = None) -> None:
+        super().__init__(user_message)
+        if user_message:
+            self.user_message = user_message
+
+
+class ResonanceUndoError(MagicError):
+    """A resonance reward cannot be undone (#5327); the raise site says why."""
+
+    user_message = "That reward cannot be undone."
 
     def __init__(self, user_message: str | None = None) -> None:
         super().__init__(user_message)

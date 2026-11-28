@@ -1406,17 +1406,19 @@ Full reference: `docs/systems/magic.md` "A cast is worked in one resonance".
   POSE_ENDORSEMENT → `pose_endorsement=`, SCENE_ENTRY → `scene_entry_endorsement=`,
   STAFF_GRANT → optional `staff_account=`, OUTFIT_ITEM reserved.
 - `create_pose_endorsement(endorser_sheet, interaction, resonance=None)` - 8 preconditions
-  (self, alt, whisper, private, participation, unclaimed resonance, duplicate). Raises
+  (self, alt, whisper, private, participation, a pose whose mark already paid, duplicate). Raises
   `EndorsementValidationError` on failure. A pose whose author reached for a resonance (#5308,
   `Interaction.cached_resonance_reach`) is endorsed for that resonance: `resonance` is ignored and the
-  unclaimed-resonance check is skipped, since the author named it. A pose that reached for nothing needs
-  `resonance`, claimed by the endorsee, and otherwise answers "Which resonance? This pose did not reach for one."
-  The endorse action, `endorse pose <char> [#N] [confirm]` and `PoseEndorsementSerializer` accept a missing
-  resonance for a reached pose only.
+  row is confirmed, since the author named it. A pose that reached for nothing needs `resonance`, any
+  resonance at all (#5327), and the row is saved with `awaiting_acceptance` until the poser, the scene's GM
+  or staff accept it (`accept_pose_proposal`; `decline_pose_proposal` deletes it; the endorser changes the
+  pick with `change_pose_endorsement` until settlement), and otherwise answers "Which resonance? This pose
+  did not reach for one." The endorse action, `endorse pose <char> [#N] [confirm]` and
+  `PoseEndorsementSerializer` accept a missing resonance for a reached pose only.
 - `create_scene_entry_endorsement(endorser_sheet, endorsee_sheet, scene, resonance)` -
   Immediate-grant sibling with participation + alt checks.
-- `settle_weekly_pot(endorser_sheet)` - Settles all unsettled PoseEndorsement rows for one
-  endorser. Distributes `ceil(weekly_pot_per_character / N)` resonance per endorsement.
+- `settle_weekly_pot(endorser_sheet)` - Settles all unsettled, accepted (not `awaiting_acceptance`)
+  PoseEndorsement rows for one endorser. Distributes `ceil(weekly_pot_per_character / N)` resonance per endorsement.
   Idempotent.
 - `residence_trickle_tick()` - Daily pass: for each sheet with residence, write one `TrickleAccrual`
   per matching (aura-tagged ∩ sheet-claimed) resonance. It grants nothing (#5308): an anima ritual
@@ -1528,8 +1530,9 @@ declaring a residence, tagging a room's aura, and reaching both without a manual
   `gain_bonus=` its caller rolled once per affinity; a source in `GAIN_BONUS_EXEMPT_SOURCES` refuses one. A
   new `GainSource` goes in exactly one set (`test_deed_classification.py`). Pass `act_stat=act_stat(check_type)`
   when the act rolled; otherwise the stat comes from `ResonanceGainSourceStat`. Never roll a second time to
-  grow something an earlier roll already grew: a kindled claim, a stored ritual amount and a harvest take the
-  result already rolled.
+  grow something an earlier roll already grew: a stored ritual amount and a harvest take the
+  result already rolled. A mark (`MARKED_ACT`) is in `GAIN_BONUS_ROLLED_SOURCES`: `grant_resonance` rolls it
+  once, with the stat of the act it points at.
 - **Spending rolls `roll_spend_worth`.** A pull scales its resolved effects by the worth of each paying
   affinity (`spend_resonance_for_pull(worth_by_affinity=)` takes a worth already rolled, so one cast never
   rolls an affinity twice); `kindled_cast_power_term` scales by `PowerTermContext.resonance_worth_percent`.
@@ -1540,13 +1543,15 @@ declaring a residence, tagging a room's aura, and reaching both without a manual
   `waiting_trickles(sheet)` sums the rows. Any reader of "what a worn piece fed her" reads accrual rows plus
   legacy `OUTFIT_TRICKLE` grants.
 - **A pose can reach.** `pending_reach_from` before the pose posts, `record_pending_reach` after
-  (`services/reach.py`); an unheld resonance is a valid reach, and an unheld Celestial or Abyssal
-  resonance is a valid kindled deed only when she chose the deed (`kindled_resonances(include_named_unheld=True)`,
-  set only by `award_kindled_deeds`; the panel and casts never set it). "Chose" means a row on
-  `CHOSEN_DEED_SITUATIONS`, today a mission option's theme. Every other row feeds holders only, including a
-  state she caused in her target, and so does every row on a Primal resonance. The owner ruled on 2026-11-27
-  that gaining a resonance needs intent, and the game cannot read intent from a state. Do not add a situation
-  to `CHOSEN_DEED_SITUATIONS` unless the act is itself a declared choice of the deed.
+  (`services/reach.py`); an unheld resonance is a valid reach, and it pays only when another player
+  endorses the pose. Since #5327 only an authored choice pays at once, for every resonance, held or not,
+  and a Primal resonance she lacks is never paid: a Celestial or Abyssal one she has no row for is paid
+  only when she chose the deed (`kindled_resonances(include_named_unheld=True)`, set by
+  `award_kindled_deeds` and the mission preview; the panel and casts never set it). "Chose" means a row on
+  `CHOSEN_DEED_SITUATIONS`, today a mission option's theme. Every other row only suggests, a state she
+  caused in her target included. The owner ruled on 2026-11-27 that gaining a resonance needs intent, and
+  the game cannot read intent from a state. Do not add a situation to `CHOSEN_DEED_SITUATIONS` unless the
+  act is itself a declared choice of the deed.
 - **Authoring left to staff:** the three skills and the affinity link, `ResonanceCheckAward` rows,
   `bonus_check_type` and its difficulty, per-source stats, the Abyssal floor and any skill accents. With no
   `bonus_check_type` nothing changes.
@@ -2597,7 +2602,7 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
   `give_in_bonus_percent`, `give_in_ease_tenths`, `dig_deep_scale_percent`, `earn_percent`,
   `cast_power`, #5231; `Affinity.kindled_boost_percent`, default 100, scales `pull_levels` and
   `cast_power` per affinity so Abyssal's can be larger),
-  `KindlingConfig` (singleton, `harm_property`), `KindledDeedAward` and `RallyKindlingStrength`
+  `KindlingConfig` (singleton, `harm_property`, `recorded_act_days`), `KindledDeedAward` and `RallyKindlingStrength`
   (`OutcomeTierAward` tables), `Kindling` (Rally or GM only, `encounter` XOR `scene`).
   `Resonance.feeling` (Property FK) is what the feeling situations match; `missions.MissionTheme`
   is what `MISSION_THEME` matches. Never match a feeling or theme by name.
@@ -2624,11 +2629,12 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
   Dig deep and Rally name a resonance (`dig_deep(participant, resonance=)`,
   `declare_rally(participant, ally, resonance=)`; a rallier sees whether the ally's resonance is
   kindled, never a strength; a Rally writes one `Kindling` at `RallyKindlingStrength(outcome)`).
-  GM: `kindle_by_gm`, action `stage_kindle`, telnet `stage kindle`. Earning:
-  `award_kindled_deeds` writes one `GainSource.KINDLED_DEED` grant per resonance an authored
-  situation fed, `KindledDeedAward(outcome).amount x earn_percent // 100`, with
-  `grant_resonance(kindling_situation=)`; seams are named in `docs/systems/magic.md`. A rollless act
-  earns at `lowest_success_outcome()`.
+  GM: `kindle_by_gm`, action `stage_kindle`, telnet `stage kindle`. Earning (#5327): a situation never
+  pays by itself. `award_kindled_deeds` writes one `GainSource.KINDLED_DEED` grant per resonance a
+  chosen-deed row reached (`KindledResonance.chosen_tier`), `KindledDeedAward(outcome).amount x
+  earn_percent // 100`, in full at once, with `grant_resonance(kindling_situation=)`; every other
+  situation only suggests (`fed_tier`) and the act is recorded for a mark (next section). Seams are named
+  in `docs/systems/magic.md`. A rollless act earns at `lowest_success_outcome()`.
 - **Surfaces.** `GET /api/magic/kindled-resonances/` (`views_kindling.py`; its response carries an
   `impulses` list beside `results`, see "Corruption impulses"), telnet `resonances`,
   `GET /api/magic/reflectables/` (`views_reflection.py`) and telnet `reflect`, `pose/reflect`,
@@ -2636,6 +2642,87 @@ bond is one situation among many. Full tour: `docs/systems/magic.md` "Kindled re
   above. The model map and `docs/systems/INDEX.md` list the signatures.
 - **Admin.** Situations are authored inline on the Resonance and Affinity pages; the strength tiers,
   Rally strengths, deed amounts and harm property are one page, "Kindling config".
+
+## Recorded acts, marks, gain fatigue, the weekly table and undo (#5327, ADR-5327)
+
+Gains from play are attested by the player and checked by people; code never detects intent. Only an
+authored choice pays at once; every other gain is a mark. Full tour: `docs/systems/magic.md` "Recorded acts
+and marks"; flow and diagrams: `docs/architecture/resonance-gain.md` §14.
+
+- **Recorded acts** (`models/recorded_act.py`). `award_kindled_deeds` writes a `RecordedAct` (and a
+  `RecordedActSuggestion` per resonance a situation reached) for an act with an award row that paid no
+  chosen deed, then prunes her unmarked acts older than `KindlingConfig.recorded_act_days`. The act keeps
+  references (`outcome`, `check_type`), not copied numbers. Unmarked means `marked_grant` is null; a mark
+  is the act's own columns (`marked_grant`, `marked_interaction` or `marked_journal_entry`), not a table.
+  Do not store a second copy of what an act paid.
+- **Marking** (`services/marking.py`). `pending_mark_from(sheet, params)` checks before the writing posts
+  (`reach_act_id` with `reach_resonance_id`; raises `MarkError`), `record_pending_mark(sheet, pending, *,
+  interaction=None, journal_entry=None)` pays after it, in one transaction: the act's award times the
+  strength share, `weekly_percent_paid`, `charge_gain_fatigue`, then `grant_resonance(source=MARKED_ACT,
+  act_stat=, deed_label=)`. A mark that would pay nothing consumes nothing. A journal entry must name an act;
+  one whose mark is refused late STAYS posted (the refusal is caught inside the entry's transaction and
+  returned as `mark_line` with `mark_recorded` false), as a pose that cannot pay its mark still posts. A mark may name any
+  resonance, in her aura or not, Primal included.
+- **Gain fatigue** (`services/gain_fatigue.py`). `Affinity.gain_fatigue` through `fatigue_cost_for` (the
+  one place a cost is priced, shared with `apply_fatigue`); the payer is the gainer for Primal and Celestial
+  and the act's target for Abyssal (`gain_fatigue_payer`), nobody for a game-run opponent. The gain shrinks
+  to `fatigue_room` and stops at nothing; never take a payer to Exhausted for someone else's gain. A gain
+  that points at no act (a settled endorsement, a person's tag) calls `charge_gain_fatigue` too, with
+  `pose_gain_payer` (Abyssal tires the pose's one named target, else nobody); an authored choice charges
+  nobody, and so does a tag the game itself pays (`create_dramatic_moment_tag(by_system=True)`, the
+  standoff ending). A weekly endorsement a worn payer refuses stays UNSETTLED (tried again next week); a
+  worn payer's tag is refused before the row is written. Every gain source that can tire someone goes through `charge_gain_fatigue`, never `apply_fatigue`.
+- **The weekly table** (`WeeklyMarkReturn`, `weekly_percent_paid`) counts only this game week's non-undone
+  `MARKED_ACT` grants. An authored choice, an endorsement and a GM's tag are never counted or reduced.
+- **Undo** (`services/undo.py`, `POST /api/magic/resonance-grants/<id>/undo/`). `undo_resonance_grant`
+  lowers balance and lifetime by the amount (each stopping at 0), stamps `nullified_at` and `nullified_by`,
+  recomputes the aura, withdraws a waiting reflection, and leaves favor, achievements, a conversion offer, a
+  Compulsion given in to and the fatigue. Staff undo any grant; the scene's GM (`Scene.is_gm`, never
+  `is_owner`: every player present at scene start is a co-owner) undoes the six scene-bound rewards named once
+  in `REWARD_SCENE_PATHS` (the endpoint's queryset reads the same table; add a scene-bound source there, not
+  in a second list) in a scene they GM and can read. The endpoint answers `{id, nullified_at}` and 404 for
+  anything the requester may not undo. Do not re-validate a stored grant's source shape in undo (a legacy row would
+  be refused).
+- **Rules a change here must not break:**
+  - **Every reader of a `ResonanceGrant` that counts what a character earned skips a grant with
+    `nullified_at` set.** The reflectable deeds, `validate_reflection`, `weekly_percent_paid` and the
+    Compulsion read `earned_in_scene` (`services/impulses.py`) do, and so must any new reader; the ledger
+    views show the undo instead of hiding the row.
+  - **A player never sees an account name.** An undone line names the role ("Staff", "The scene's GM"),
+    a fatigue line names a character by the name its reader knows (`shown_names`), and a tag line names the
+    moment type, the resonance and the tagger's role ("Staff", "The scene's GM", "Someone"). A pose's chip
+    shows the target through each READER's eyes (`pose_marks._act_text`: the actor reads `label`, everyone
+    else `act_phrase` plus the name they know, the live frame the phrase alone); never put the actor's
+    `label` on a payload another player reads.
+  - **A witness is never shown what is in someone's aura.** The Endorse menu on a pose that named no
+    resonance lists every resonance, the same for every pose, and the pick waits for the poser. Entrance
+    and outfit endorsements still list the aura's resonances (`get_endorsable_resonances`); do not copy
+    that list onto a pose.
+  - **A new gain source goes in exactly one classifying set of each kind** (`constants.py`, guarded by
+    `test_deed_classification.py`): accelerated or not, deed or not, rate-scaled or exempt, and one of the
+    three bonus sets. `MARKED_ACT` is non-accelerated, a deed, rate-scaled, bonus-rolled and
+    Compulsion-indulging; it is not in `PASSIVE_DEED_SOURCES`, so a mark earns pledge favor.
+  - **Private lines are narrative messages.** The payer's, a proposal, a tag, an undo and a shrunk or refused
+    settlement line go through `send_player_line` / `tell_player`, never `character.msg`, so an offline player
+    reads them at login.
+  - **Who may name a tag's resonance is one question.** `is_scene_gm_or_staff` (`world/scenes/services.py`)
+    answers it for the tag, undo and answering a pick; never ask `is_owner` or `is_gm` by hand. Nobody tags a
+    character she plays (`player_of_sheet`), enforced in `create_dramatic_moment_tag` so no path skips it.
+  - **Player copy never says a character "holds" a resonance.** It says the resonance is in her aura.
+  - **A situation never pays.** Do not add a situation to `CHOSEN_DEED_SITUATIONS` unless the act is itself
+    a declared choice, and never pay a resonance from `fed_tier`.
+- **Readers.** `pointable_acts_queryset` in `services/marking.py` is the one definition of what a mark can still
+  point at; the recorded-acts endpoint (`RecordedActViewSet` in `views_kindling.py`), telnet `acts` and the web
+  "Pointing at" row all start from it, so add no second definition. `services/pose_marks.py` builds `act_marks`
+  and `pending_picks` for the pose feed and the live frame from one pair of functions; the live frame has no
+  viewer, so it carries both empty and `interaction_changed` makes each client refetch its own view. A new write
+  that changes a mark or a pick must call `notify_interaction_changed`. Telnet: `acts`, `pose/reach
+  <resonance>:<act id>=<text>` and `endorse accept|decline|withdraw <char> #N`; undo, answering another
+  player's pick as GM, and a journal mark are web only.
+- **Authoring left to staff:** a `ResonanceGainSourceStat` row for `MARKED_ACT`, each affinity's
+  `gain_fatigue` and `claim_verb`, the `WeeklyMarkReturn` rows, `recorded_act_days`, the reason text on each
+  `KindlingSituation` (a player reads it beside an act), mission themes that name a resonance, help text with
+  good and bad examples for each resonance, and `KindledDeedAward` and `earn_percent` tuning (they size a mark).
 
 ## Corruption impulses (#5177, ADR-5177)
 
@@ -2669,9 +2756,10 @@ the tether.
   called explicitly: after a pose posts (web `_refresh_impulses_after_pose`, telnet pose), before a cast's
   modifiers are gathered, and when the kindled panel or telnet `resonances` is shown.
 - **Giving in.** `grant_resonance` calls `give_in_to_compulsion(grant, row)`: for a grant whose source is in
-  `COMPULSION_INDULGING_SOURCES` (`constants.py`; only `KINDLED_DEED`, the instant share of the character's own
-  deed; a claim (`KINDLED_CLAIM`) and an Anima ritual (`ANIMA_RITUAL`) do not join it, since the Compulsion
-  lifts when the deed is done; a grant from another player, a GM or a cron, and `SUCCUMBED`, never counts) of a resonance the character is compelled by, in a live scene
+  `COMPULSION_INDULGING_SOURCES` (`constants.py`; `KINDLED_DEED`, an authored choice she took, and
+  `MARKED_ACT`, a gain her player marked (#5327), so she lifts it by marking, not by merely acting; an Anima
+  ritual (`ANIMA_RITUAL`) does not join it; a grant from another player, a GM or a cron, and `SUCCUMBED`,
+  never counts) of a resonance the character is compelled by, in a live scene
   and the first such deed there, it lifts the Compulsion for the scene, accrues
   `compulsion_indulge_corruption` (`CorruptionSource.INDULGED`: exact, no resistance, the Hollow absorbs none)
   and, for a Sineater, assigns it to their largest holding (`add_to_largest_holding`). The line goes out in

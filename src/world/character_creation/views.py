@@ -1724,6 +1724,10 @@ class ClaimableTitleViewSet(viewsets.ReadOnlyModelViewSet):
     """Vacant set-aside titles open to CG house definition (#1884 Phase D)."""
 
     permission_classes = [IsAuthenticated]
+    # Declared so the API schema does not depend on the database it is generated against:
+    # without it the generator runs ``get_queryset`` to learn the id's type, which answers
+    # integer where the query works (CI) and string where it does not (a dev database).
+    lookup_value_regex = r"\d+"
     pagination_class = None
     filter_backends: list = []
     serializer_class = ClaimableTitleSerializer

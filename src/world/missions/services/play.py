@@ -314,14 +314,17 @@ def _beat_options(
 def _kindled_feeds(
     instance: MissionInstance, presented: list[PresentedOption], viewer: ObjectDB | None
 ) -> list[tuple[KindledFeed, ...]]:
-    """What each of the viewer's own options would feed (#5124), aligned with ``presented``.
+    """What each of the viewer's own options pays at once (#5124, #5327), aligned with
+    ``presented``.
 
     The read ``award_kindled_deeds`` makes after the roll, evaluated for every option in one
     pass (the strengths, rows and Rally and GM kindlings are read once, then each option's
-    act is checked), so an option never promises what the act would not earn. Only the
-    authored situations an act fed are shown, with their reasons. An option that earns
-    nothing (a branch, an encounter, an external act) and another participant's option show
-    none.
+    act is checked), so an option never promises what the act would not pay. Only the
+    authored choices an option's theme names are shown (``chosen_*``), each with its reason,
+    for every resonance the theme pays, in her aura or not, and never an amount. A situation
+    that only suggests a resonance is not shown, because it pays nothing. An option that
+    earns nothing (a branch, an encounter, an external act) and another participant's option
+    show none.
     """
     from world.magic.constants import KindlingActKind  # noqa: PLC0415
     from world.magic.services.kindling import kindled_resonances_for_acts  # noqa: PLC0415
@@ -347,16 +350,18 @@ def _kindled_feeds(
         for i in earning
     ]
     for index, entries in zip(
-        earning, kindled_resonances_for_acts(sheet, acts, mission=instance), strict=True
+        earning,
+        kindled_resonances_for_acts(sheet, acts, mission=instance, include_named_unheld=True),
+        strict=True,
     ):
         feeds[index] = tuple(
             KindledFeed(
                 resonance_name=entry.resonance.name,
-                strength_name=entry.fed_tier.name,
-                reason=entry.fed_reasons[0] if entry.fed_reasons else "",
+                strength_name=entry.chosen_tier.name,
+                reason=entry.chosen_reasons[0] if entry.chosen_reasons else "",
             )
             for entry in entries
-            if entry.fed_tier is not None and entry.strongest_situation is not None
+            if entry.chosen_tier is not None and entry.chosen_situation is not None
         )
     return feeds
 

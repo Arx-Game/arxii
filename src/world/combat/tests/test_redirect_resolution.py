@@ -54,7 +54,8 @@ def _make_vitals(participant, health: int = 100, max_health: int = 100) -> Chara
 
 def _fake_perform_check(success_level: int):
     def _inner(character, check_type, *args, **kwargs):
-        return SimpleNamespace(success_level=success_level, outcome=None)
+        # perform_check's result always names the check it rolled
+        return SimpleNamespace(success_level=success_level, outcome=None, check_type=check_type)
 
     return _inner
 

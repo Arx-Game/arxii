@@ -6398,8 +6398,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
+          pattern: ^\d+$
         required: true
       tags:
       - character-creation
@@ -23111,10 +23111,15 @@ paths:
     get:
       operationId: magic_dramatic_moment_tags_list
       description: |-
-        Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+        Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139, #5327).
 
-        POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
-        GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+        POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment. The scene's GM
+            and staff may name any resonance; a scene owner who is not its GM tags with the moment
+            type's own resonance or one the character already has. Nobody tags a character she
+            plays. The permission is checked before anything in the body is validated, so a stranger
+            learns nothing about which ids exist, and the answer never names the real character.
+        GET  /api/magic/dramatic-moment-tags/ — the tags of scenes the requester GMs or owns (staff
+            read all), filterable by ``scene``; ``character_sheet`` is staff's alone.
       parameters:
       - in: query
         name: character_sheet
@@ -23150,10 +23155,15 @@ paths:
     post:
       operationId: magic_dramatic_moment_tags_create
       description: |-
-        Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139).
+        Create + list dramatic-moment tags, gated to scene GM/owner/staff (#1139, #5327).
 
-        POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment.
-        GET  /api/magic/dramatic-moment-tags/?character_sheet=<id> — a character's history.
+        POST /api/magic/dramatic-moment-tags/ — tag a character's dramatic moment. The scene's GM
+            and staff may name any resonance; a scene owner who is not its GM tags with the moment
+            type's own resonance or one the character already has. Nobody tags a character she
+            plays. The permission is checked before anything in the body is validated, so a stranger
+            learns nothing about which ids exist, and the answer never names the real character.
+        GET  /api/magic/dramatic-moment-tags/ — the tags of scenes the requester GMs or owns (staff
+            read all), filterable by ``scene``; ``character_sheet`` is staff's alone.
       tags:
       - magic
       requestBody:
@@ -23974,13 +23984,24 @@ paths:
     post:
       operationId: magic_pose_endorsements_create
       description: |-
-        Create + delete-if-unsettled pose endorsements (Spec C Task 23).
+        Create + delete-if-unsettled pose endorsements (Spec C Task 23), and answer proposals.
 
         Listing is not supported here — use ResonanceGrantViewSet (Task 25) for
         audit queries.
 
-        POST /api/magic/pose-endorsements/ — create an endorsement.
+        POST /api/magic/pose-endorsements/ — create an endorsement. On a pose that named no
+            resonance it is saved waiting for the poser (``awaiting_acceptance`` true).
         DELETE /api/magic/pose-endorsements/<pk>/ — retract an unsettled endorsement.
+        POST /api/magic/pose-endorsements/<pk>/change/ — the endorser picks another resonance,
+            body ``{"resonance": <resonance id>}``; the row waits for the poser again (#5327).
+        POST /api/magic/pose-endorsements/<pk>/accept/ — the poser, the scene's GM or staff accept a
+            waiting pick; no body (#5327).
+        POST /api/magic/pose-endorsements/<pk>/decline/ — the same people decline it, which deletes
+            the row; no body, 204 (#5327).
+
+        Change, accept and decline read only the endorsements the requester made, was endorsed
+        by, or GMs the scene of (staff read all); DELETE reads only the ones she made; anyone else
+        gets a 404.
       tags:
       - magic
       requestBody:
@@ -24002,10 +24023,79 @@ paths:
     delete:
       operationId: magic_pose_endorsements_destroy
       description: |-
-        Delete an unsettled endorsement.
+        Delete an unsettled endorsement of one's own.
 
-        Settled endorsements are hidden behind 404 — they are immutable once
-        the weekly tick has run. Only the endorsing account can delete.
+        The queryset holds only the requester's own endorsements, so anyone else's answers
+        404. A settled one is refused: the weekly tick has paid it and it is now a record.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this pose endorsement.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/magic/pose-endorsements/{id}/accept/:
+    post:
+      operationId: magic_pose_endorsements_accept_create
+      description: Accept a waiting pick, so the weekly settlement pays it.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this pose endorsement.
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoseEndorsement'
+          description: ''
+  /api/magic/pose-endorsements/{id}/change/:
+    post:
+      operationId: magic_pose_endorsements_change_create
+      description: The endorser picks another resonance; the row waits for the poser
+        again.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this pose endorsement.
+        required: true
+      tags:
+      - magic
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePoseEndorsementRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PoseEndorsement'
+          description: ''
+  /api/magic/pose-endorsements/{id}/decline/:
+    post:
+      operationId: magic_pose_endorsements_decline_create
+      description: 'Decline a waiting pick: the row is deleted and pays nothing.'
       parameters:
       - in: path
         name: id
@@ -24302,6 +24392,42 @@ paths:
                 items:
                   $ref: '#/components/schemas/ProgressionStage'
           description: ''
+  /api/magic/recorded-acts/:
+    get:
+      operationId: magic_recorded_acts_list
+      description: |-
+        The acts a character can point a mark at (#5327), newest first.
+
+        ``GET /api/magic/recorded-acts/?character_sheet=<id>`` lists only unmarked acts inside the
+        pointable window (``KindlingConfig.recorded_act_days``), each with the resonances situations
+        suggested for it, strongest first. A player reads the acts of the characters they play now
+        (a borrower of a lent NPC, never the holder who lent it away), staff anyone's; another
+        player's character is an empty page. Nothing here writes: an act is written by
+        ``award_kindled_deeds`` and marked by a pose or journal entry.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRecordedActList'
+          description: ''
   /api/magic/reflectables/:
     get:
       operationId: magic_reflectables_list
@@ -24355,6 +24481,20 @@ paths:
         schema:
           type: string
           format: date-time
+      - in: query
+        name: nullified
+        schema:
+          type: boolean
+      - in: query
+        name: nullified_after
+        schema:
+          type: string
+          format: date-time
+      - in: query
+        name: nullified_before
+        schema:
+          type: string
+          format: date-time
       - name: page
         required: false
         in: query
@@ -24387,8 +24527,8 @@ paths:
           - EMBRACED_DEED
           - ENTRY_FLOURISH
           - FALL_CONVERSION
-          - KINDLED_CLAIM
           - KINDLED_DEED
+          - MARKED_ACT
           - MIRE_PURIFIED
           - MISSION_REPORT
           - MISSION_REWARD
@@ -24442,9 +24582,9 @@ paths:
           * `SUCCUMBED` - Succumbed to the Mire
           * `SUCCUMB_BONUS` - Sineater succumbed bonus
           * `SINEATER_FALL` - Sineater fell
-          * `KINDLED_CLAIM` - Kindled deed claimed
           * `ANIMA_RITUAL` - Anima ritual
           * `TRICKLE_HARVEST` - Trickle harvest
+          * `MARKED_ACT` - Marked act
       tags:
       - magic
       security:
@@ -24486,6 +24626,28 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResonanceGrant'
+          description: ''
+  /api/magic/resonance-grants/{id}/undo/:
+    post:
+      operationId: magic_resonance_grants_undo_create
+      description: Lower the character's totals by what the grant paid and stamp the
+        ledger row.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - magic
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UndoneResonanceGrant'
           description: ''
   /api/magic/resonances/:
     get:
@@ -52431,6 +52593,15 @@ components:
         * `cause` - Set cause
         * `drive` - Set drive
         * `drop_drive` - Drop drive
+    ChangePoseEndorsementRequest:
+      type: object
+      description: 'Body of ``POST /api/magic/pose-endorsements/<pk>/change/`` (#5327):
+        the new pick.'
+      properties:
+        resonance:
+          type: integer
+      required:
+      - resonance
     Channel:
       type: object
       description: A channel the requester can reach, with their own subscription
@@ -53916,7 +54087,8 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-          description: Monotonic total of resonance earned (never decremented).
+          description: Running total of resonance earned. Spending does not lower
+            it; converting resonance and undoing a gain do.
         claimed_at:
           type: string
           format: date-time
@@ -53951,7 +54123,8 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-          description: Monotonic total of resonance earned (never decremented).
+          description: Running total of resonance earned. Spending does not lower
+            it; converting resonance and undoing a gain do.
         flavor_text:
           type: string
           description: Optional player-defined description of how this resonance manifests.
@@ -58890,6 +59063,14 @@ components:
         Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
         ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
         ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+        ``resonance`` (write-only, optional, #5327) names the resonance the tag pays: the scene's GM
+        and staff may name any, anyone else's counts only when the character already has it.
+
+        The view has already checked the requester may tag in the scene before this validates
+        anything, so a refusal here never tells a stranger whether an id exists. A pose fixes the
+        scene (a different ``scene`` is refused), and the character must be the pose's author or
+        take part in the scene. What comes back never names the real character or the account
+        behind a pose, except to staff.
       properties:
         id:
           type: integer
@@ -58929,6 +59110,14 @@ components:
         Write: accepts ``moment_type`` plus EITHER ``interaction`` (pose) — from which
         ``character_sheet`` and ``scene`` are derived — OR explicit ``character_sheet`` + ``scene``.
         ``tagged_by`` is injected from the requesting account in the view; never client-supplied.
+        ``resonance`` (write-only, optional, #5327) names the resonance the tag pays: the scene's GM
+        and staff may name any, anyone else's counts only when the character already has it.
+
+        The view has already checked the requester may tag in the scene before this validates
+        anything, so a refusal here never tells a stranger whether an id exists. A pose fixes the
+        scene (a different ``scene`` is refused), and the character must be the pose's author or
+        take part in the scene. What comes back never names the real character or the account
+        behind a pose, except to staff.
       properties:
         moment_type:
           type: integer
@@ -58943,6 +59132,14 @@ components:
           type: integer
           nullable: true
           description: The pose that earned this moment; nullable for non-pose tags.
+        resonance:
+          type: integer
+          writeOnly: true
+          description: The resonance this tag pays. The scene's GM and staff may name
+            any resonance, whether or not it is in the tagged character's aura; for
+            anyone else it counts only when she already has it. Omit it to let the
+            moment type and her gifts decide. The tagged player is told which resonance
+            it paid.
       required:
       - moment_type
     DramaticMomentType:
@@ -66431,6 +66628,79 @@ components:
             A pose that reached for a resonance (#5308) is endorsed for that one alone. Otherwise
             the endorser picks from the resonances claimed by the endorsee (pose author).
           readOnly: true
+        act_marks:
+          type: array
+          items:
+            type: object
+            description: |-
+              One mark a pose carries (#5327): the resonance it marked and the act it pointed at.
+
+              ``undone`` is true once staff or the scene's GM undid the reward, and ``undone_by`` says
+              which: ``"staff"`` or ``"gm"`` (never an account name), null while the mark stands.
+              ``can_undo`` is true only for staff and the scene's GM, and only while the mark stands.
+            properties:
+              grant_id:
+                type: integer
+              resonance_id:
+                type: integer
+              resonance_name:
+                type: string
+              act_label:
+                type: string
+              undone:
+                type: boolean
+              undone_by:
+                enum:
+                - gm
+                - staff
+                type: string
+                nullable: true
+              can_undo:
+                type: boolean
+            required:
+            - act_label
+            - can_undo
+            - grant_id
+            - resonance_id
+            - resonance_name
+            - undone
+            - undone_by
+          description: The marks this pose carries (#5327), from the one builder the
+            live frame shares.
+          readOnly: true
+        pending_picks:
+          type: array
+          items:
+            type: object
+            description: |-
+              A resonance a witness picked on a pose that named none, waiting for the poser (#5327).
+
+              Sent only to the endorser (``mine``) and to whoever may answer it (``can_answer``: the
+              poser, the scene's GM and staff). Nobody else gets the row.
+            properties:
+              endorsement_id:
+                type: integer
+              resonance_id:
+                type: integer
+              resonance_name:
+                type: string
+              endorser_name:
+                type: string
+              mine:
+                type: boolean
+              can_answer:
+                type: boolean
+            required:
+            - can_answer
+            - endorsement_id
+            - endorser_name
+            - mine
+            - resonance_id
+            - resonance_name
+          description: |-
+            The picks waiting for the poser, shown only to the endorser, the poser, the scene's
+            GM and staff (#5327), from the one builder the live frame shares.
+          readOnly: true
         reached_resonance:
           type: object
           additionalProperties: {}
@@ -66477,6 +66747,7 @@ components:
             $ref: '#/components/schemas/InteractionReceiver'
           readOnly: true
       required:
+      - act_marks
       - action_links
       - attributed_companion
       - availability
@@ -66496,6 +66767,7 @@ components:
       - line
       - my_pose_endorsement
       - narrates
+      - pending_picks
       - persona
       - place_name
       - pose_endorsers
@@ -66837,6 +67109,79 @@ components:
             A pose that reached for a resonance (#5308) is endorsed for that one alone. Otherwise
             the endorser picks from the resonances claimed by the endorsee (pose author).
           readOnly: true
+        act_marks:
+          type: array
+          items:
+            type: object
+            description: |-
+              One mark a pose carries (#5327): the resonance it marked and the act it pointed at.
+
+              ``undone`` is true once staff or the scene's GM undid the reward, and ``undone_by`` says
+              which: ``"staff"`` or ``"gm"`` (never an account name), null while the mark stands.
+              ``can_undo`` is true only for staff and the scene's GM, and only while the mark stands.
+            properties:
+              grant_id:
+                type: integer
+              resonance_id:
+                type: integer
+              resonance_name:
+                type: string
+              act_label:
+                type: string
+              undone:
+                type: boolean
+              undone_by:
+                enum:
+                - gm
+                - staff
+                type: string
+                nullable: true
+              can_undo:
+                type: boolean
+            required:
+            - act_label
+            - can_undo
+            - grant_id
+            - resonance_id
+            - resonance_name
+            - undone
+            - undone_by
+          description: The marks this pose carries (#5327), from the one builder the
+            live frame shares.
+          readOnly: true
+        pending_picks:
+          type: array
+          items:
+            type: object
+            description: |-
+              A resonance a witness picked on a pose that named none, waiting for the poser (#5327).
+
+              Sent only to the endorser (``mine``) and to whoever may answer it (``can_answer``: the
+              poser, the scene's GM and staff). Nobody else gets the row.
+            properties:
+              endorsement_id:
+                type: integer
+              resonance_id:
+                type: integer
+              resonance_name:
+                type: string
+              endorser_name:
+                type: string
+              mine:
+                type: boolean
+              can_answer:
+                type: boolean
+            required:
+            - can_answer
+            - endorsement_id
+            - endorser_name
+            - mine
+            - resonance_id
+            - resonance_name
+          description: |-
+            The picks waiting for the poser, shown only to the endorser, the poser, the scene's
+            GM and staff (#5327), from the one builder the live frame shares.
+          readOnly: true
         reached_resonance:
           type: object
           additionalProperties: {}
@@ -66878,6 +67223,7 @@ components:
             endorsement.
           readOnly: true
       required:
+      - act_marks
       - action_links
       - attributed_companion
       - availability
@@ -66897,6 +67243,7 @@ components:
       - line
       - my_pose_endorsement
       - narrates
+      - pending_picks
       - persona
       - place_name
       - pose_endorsers
@@ -68167,15 +68514,6 @@ components:
           type: array
           items:
             type: string
-        claim_verb:
-          type: string
-        unclaimed:
-          type: integer
-          description: |-
-            What a kindled deed set aside for the character in this resonance and they have not
-            claimed (#5181). Kindled or not: it waits however long it takes. The view puts the
-            character's amounts in ``context["unclaimed"]`` (resonance id to amount).
-          readOnly: true
         waiting_trickle:
           type: integer
           description: |-
@@ -68185,13 +68523,11 @@ components:
           readOnly: true
       required:
       - affinity_name
-      - claim_verb
       - id
       - kindled
       - name
       - reasons
       - strength_name
-      - unclaimed
       - waiting_trickle
     KinspersonNode:
       type: object
@@ -79867,6 +80203,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ReactionEmoji'
+    PaginatedRecordedActList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordedAct'
     PaginatedRecordedProfileList:
       type: object
       required:
@@ -82538,7 +82897,8 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
-          description: Monotonic total of resonance earned (never decremented).
+          description: Running total of resonance earned. Spending does not lower
+            it; converting resonance and undoing a gain do.
         flavor_text:
           type: string
           description: Optional player-defined description of how this resonance manifests.
@@ -87814,7 +88174,9 @@ components:
 
         Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
         optional when the pose's author reached for one (#5308), which is then the resonance
-        endorsed; the action asks "Which resonance?" for a pose that did not.
+        endorsed; the action asks "Which resonance?" for a pose that did not. On a pose that
+        named none, any resonance is saved waiting for the poser to accept it
+        (``awaiting_acceptance`` is true on the row that comes back, #5327).
         The ``endorser_sheet`` is resolved from the requesting account in the
         view (``PoseEndorsementViewSet.perform_create``) and injected via
         ``serializer.save(endorser_sheet=sheet)``.
@@ -87857,7 +88219,13 @@ components:
           readOnly: true
           nullable: true
           description: Set at weekly settlement.
+        awaiting_acceptance:
+          type: boolean
+          readOnly: true
+          description: True while a witness's proposed resonance waits for the poser
+            or a GM to accept it. Settlement skips these rows.
       required:
+      - awaiting_acceptance
       - created_at
       - endorsee_sheet
       - endorser_sheet
@@ -87873,7 +88241,9 @@ components:
 
         Write: accepts ``interaction`` + ``resonance`` PKs from the request body. ``resonance`` is
         optional when the pose's author reached for one (#5308), which is then the resonance
-        endorsed; the action asks "Which resonance?" for a pose that did not.
+        endorsed; the action asks "Which resonance?" for a pose that did not. On a pose that
+        named none, any resonance is saved waiting for the poser to accept it
+        (``awaiting_acceptance`` is true on the row that comes back, #5327).
         The ``endorser_sheet`` is resolved from the requesting account in the
         view (``PoseEndorsementViewSet.perform_create``) and injected via
         ``serializer.save(endorser_sheet=sheet)``.
@@ -89592,6 +89962,52 @@ components:
       - body
       - motto
       - sort_order
+    RecordedAct:
+      type: object
+      description: |-
+        An act a player can point a mark at (#5327): what she did and what situations suggested.
+
+        ``suggestions`` is strongest first. The view prefetches them in that order.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        label:
+          type: string
+          readOnly: true
+          description: 'What she did, as the game words it from the action and its
+            target, with the target named as she knows them. Only she reads it: her
+            own list, her private lines and the deed label of the grant a mark pays.'
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordedActSuggestion'
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - label
+      - suggestions
+    RecordedActSuggestion:
+      type: object
+      description: |-
+        One resonance a situation suggested for an act (#5327): its id, its name and the line the
+        player reads beside the act. No strength or amount leaves the server.
+      properties:
+        resonance_id:
+          type: integer
+        resonance_name:
+          type: string
+        reason:
+          type: string
+      required:
+      - reason
+      - resonance_id
+      - resonance_name
     RecordedProfile:
       type: object
       description: A character's Archive profile sittings + recorded history (#2632).
@@ -90540,7 +90956,8 @@ components:
         description:
           type: string
           readOnly: true
-          description: Description of this resonance.
+          description: Players read this under the picker when they choose this resonance.
+            Write good and bad examples of acts.
         codex_entry_id:
           type: integer
           readOnly: true
@@ -90564,7 +90981,8 @@ components:
         Read-only serializer for ResonanceGrant audit ledger rows (Spec C Task 25).
 
         ``bonus_percent`` and ``bonus_outcome`` (the outcome tier's name, null when the gain rolled
-        no bonus check) say what the bonus check added to ``amount`` (#5308).
+        no bonus check) say what the bonus check added to ``amount`` (#5308). ``nullified_at`` is
+        when staff or the scene's GM undid the gain, null while it stands (#5327).
       properties:
         id:
           type: integer
@@ -90626,13 +91044,19 @@ components:
             * `SUCCUMBED` - Succumbed to the Mire
             * `SUCCUMB_BONUS` - Sineater succumbed bonus
             * `SINEATER_FALL` - Sineater fell
-            * `KINDLED_CLAIM` - Kindled deed claimed
             * `ANIMA_RITUAL` - Anima ritual
             * `TRICKLE_HARVEST` - Trickle harvest
+            * `MARKED_ACT` - Marked act
         granted_at:
           type: string
           format: date-time
           readOnly: true
+        nullified_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Set when staff or the scene's GM undid this gain.
         source_room_profile:
           type: integer
           readOnly: true
@@ -90656,6 +91080,7 @@ components:
       - character_sheet
       - granted_at
       - id
+      - nullified_at
       - resonance
       - source
       - source_pose_endorsement
@@ -90694,9 +91119,9 @@ components:
       - SUCCUMBED
       - SUCCUMB_BONUS
       - SINEATER_FALL
-      - KINDLED_CLAIM
       - ANIMA_RITUAL
       - TRICKLE_HARVEST
+      - MARKED_ACT
       type: string
       description: |-
         * `POSE_ENDORSEMENT` - Pose endorsement
@@ -90729,9 +91154,9 @@ components:
         * `SUCCUMBED` - Succumbed to the Mire
         * `SUCCUMB_BONUS` - Sineater succumbed bonus
         * `SINEATER_FALL` - Sineater fell
-        * `KINDLED_CLAIM` - Kindled deed claimed
         * `ANIMA_RITUAL` - Anima ritual
         * `TRICKLE_HARVEST` - Trickle harvest
+        * `MARKED_ACT` - Marked act
     ResonanceLine:
       type: object
       properties:
@@ -92452,6 +92877,15 @@ components:
         viewer_can_gm:
           type: boolean
           readOnly: true
+        viewer_can_name_tag_resonance:
+          type: boolean
+          description: |-
+            Whether the viewer may choose the resonance a dramatic-moment tag pays (#5327).
+
+            The scene's GM and staff only, by ``is_scene_gm_or_staff``: a scene owner who is not
+            the GM still sees ``viewer_can_gm`` and may tag, but with the moment type's resonance
+            or one the character already has, so the tag dialog offers her no picker.
+          readOnly: true
         running_beat:
           type: string
           readOnly: true
@@ -92470,6 +92904,9 @@ components:
             * `public` - Public
             * `private` - Private
             * `ephemeral` - Ephemeral
+        is_ephemeral:
+          type: boolean
+          readOnly: true
         personas:
           type: array
           items:
@@ -92538,6 +92975,7 @@ components:
       - date_started
       - declared_risk
       - id
+      - is_ephemeral
       - is_owner
       - location
       - participants
@@ -92549,6 +92987,7 @@ components:
       - positions
       - running_beat
       - viewer_can_gm
+      - viewer_can_name_tag_resonance
     SceneDetailRequest:
       type: object
       description: Full scene representation with personas
@@ -92689,6 +93128,15 @@ components:
         viewer_can_gm:
           type: boolean
           readOnly: true
+        viewer_can_name_tag_resonance:
+          type: boolean
+          description: |-
+            Whether the viewer may choose the resonance a dramatic-moment tag pays (#5327).
+
+            The scene's GM and staff only, by ``is_scene_gm_or_staff``: a scene owner who is not
+            the GM still sees ``viewer_can_gm`` and may tag, but with the moment type's resonance
+            or one the character already has, so the tag dialog offers her no picker.
+          readOnly: true
         running_beat:
           type: string
           readOnly: true
@@ -92701,6 +93149,7 @@ components:
       - participants
       - running_beat
       - viewer_can_gm
+      - viewer_can_name_tag_resonance
     SceneRound:
       type: object
       description: Read-only view of a scene's active round, for the round-settings
@@ -102348,6 +102797,17 @@ components:
       - gift_name
       - path_name
       - source
+    UndoneResonanceGrant:
+      type: object
+      properties:
+        id:
+          type: integer
+        nullified_at:
+          type: string
+          format: date-time
+      required:
+      - id
+      - nullified_at
     UnionEdge:
       type: object
       description: One visible union in a family tree payload.

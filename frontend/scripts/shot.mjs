@@ -9,12 +9,13 @@
  *
  * With --account it signs in through the login page first, the way a player does.
  */
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
-import os from 'node:os';
+import { mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 import { chromium } from '@playwright/test';
+
+import { cachedHeadlessShell } from './cached-chromium.mjs';
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -51,30 +52,6 @@ async function settle(page) {
   } catch {
     // A live socket or a poll keeps the network busy; the cap is the settle point.
   }
-}
-
-/**
- * The newest headless Chromium in the shared Playwright cache. The devcontainer
- * firewall can block the download a newer Playwright asks for, while an older build
- * is already there and renders the same pages.
- */
-function cachedHeadlessShell() {
-  const cache =
-    process.env.PLAYWRIGHT_BROWSERS_PATH || path.join(os.homedir(), '.cache', 'ms-playwright');
-  if (!existsSync(cache)) return undefined;
-  const builds = readdirSync(cache)
-    .filter((name) => name.startsWith('chromium_headless_shell-'))
-    .sort((a, b) => Number(b.split('-')[1]) - Number(a.split('-')[1]));
-  for (const build of builds) {
-    const binary = path.join(
-      cache,
-      build,
-      'chrome-headless-shell-linux64',
-      'chrome-headless-shell'
-    );
-    if (existsSync(binary)) return binary;
-  }
-  return undefined;
 }
 
 async function launch() {

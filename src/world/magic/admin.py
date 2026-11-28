@@ -108,6 +108,8 @@ from world.magic.models import (
     PriceComponentRequirement,
     PrimumStep,
     RallyKindlingStrength,
+    RecordedAct,
+    RecordedActSuggestion,
     Reflection,
     Reincarnation,
     RelationshipBondPullTuning,
@@ -172,6 +174,7 @@ from world.magic.models import (
     TraditionRitualGrant,
     TraditionTeachingConfig,
     TrickleAccrual,
+    WeeklyMarkReturn,
     aura_shares_prefetch,
 )
 from world.magic.models.appetites import (
@@ -303,6 +306,7 @@ class AffinityAdmin(admin.ModelAdmin):
         "kindled_boost_percent",
         "learn_rate_percent",
         "ritual_partner_fatigue",
+        "gain_fatigue",
         "skill",
         "spend_worth_floor_percent",
         "description_start",
@@ -1119,7 +1123,6 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
         "resonance",
         "balance",
         "lifetime_earned",
-        "kindled_unclaimed",
         "claimed_at",
     ]
     search_fields = ["character_sheet__character__db_key", "resonance__name"]
@@ -2027,6 +2030,22 @@ class StandingCapBandAdmin(admin.ModelAdmin):
     ordering = ("min_level",)
 
 
+@admin.register(WeeklyMarkReturn)
+class WeeklyMarkReturnAdmin(admin.ModelAdmin):
+    """Staff-set diminishing returns on marks within one game week (#5327).
+
+    The table is one page: every step is a row of two fields edited in place and saved
+    together, and the changelist template adds the heading and help line the approved demo
+    draws. A row has no link of its own, because there is nothing on it to open.
+    """
+
+    change_list_template = "admin/magic/weeklymarkreturn/change_list.html"
+    list_display = ("gained_at_least", "percent_paid")
+    list_display_links = None
+    list_editable = ("gained_at_least", "percent_paid")
+    ordering = ("gained_at_least",)
+
+
 @admin.register(ResonanceGainConfig)
 class ResonanceGainConfigAdmin(admin.ModelAdmin):
     """Singleton tuning config — one row per environment."""
@@ -2370,7 +2389,7 @@ class ThreadWeavingTeachingOfferAdmin(admin.ModelAdmin):
 
 @admin.register(ResonanceGrant)
 class ResonanceGrantAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["character_sheet", "source_staff_account"]
+    autocomplete_fields = ["character_sheet", "source_staff_account", "nullified_by"]
     list_display = (
         "id",
         "character_sheet",
@@ -2379,6 +2398,7 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
         "bonus_percent",
         "source",
         "granted_at",
+        "nullified_at",
     )
     list_filter = ("source", "resonance")
     search_fields = ("character_sheet__id",)
@@ -2390,6 +2410,8 @@ class ResonanceGrantAdmin(admin.ModelAdmin):
         "bonus_outcome",
         "source",
         "granted_at",
+        "nullified_at",
+        "nullified_by",
         "source_room_profile",
         "source_staff_account",
         "source_pose_endorsement",
@@ -2420,10 +2442,11 @@ class PoseEndorsementAdmin(admin.ModelAdmin):
         "endorser_sheet",
         "endorsee_sheet",
         "resonance",
+        "awaiting_acceptance",
         "created_at",
         "settled_at",
     )
-    list_filter = ("settled_at",)
+    list_filter = ("awaiting_acceptance", "settled_at")
     readonly_fields = tuple(f.name for f in PoseEndorsement._meta.fields)  # noqa: SLF001
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
@@ -3835,7 +3858,7 @@ class KindlingConfigAdmin(admin.ModelAdmin):
     """
 
     change_form_template = "admin/magic/kindlingconfig/change_form.html"
-    fields = ["harm_property", "instant_percent", "claim_percent"]
+    fields = ["harm_property", "recorded_act_days"]
     autocomplete_fields = ["harm_property"]
     inlines = [
         KindledStrengthTierInline,
@@ -4059,6 +4082,56 @@ class ReflectionAdmin(PlayRowAdmin):
     list_select_related = ["character_sheet", "resonance", "grant", "tether", "rite"]
     raw_id_fields = ["character_sheet", "grant", "tether", "interaction", "journal_entry", "rite"]
     date_hierarchy = "created_at"
+
+
+class RecordedActSuggestionInline(admin.TabularInline):
+    """What situations suggested for one recorded act, read-only (#5327)."""
+
+    model = RecordedActSuggestion
+    formset = OneRowPerFormSet
+    extra = 0
+    can_delete = False
+    fields = ["resonance", "strength", "reason"]
+    readonly_fields = ["resonance", "strength", "reason"]
+
+    def has_add_permission(self, request: HttpRequest, obj: object = None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(RecordedAct)
+class RecordedActAdmin(PlayRowAdmin):
+    """An act a player character took, waiting to be marked or already marked (#5327)."""
+
+    list_display = [
+        "id",
+        "character_sheet",
+        "label",
+        "outcome",
+        "fatigue_category",
+        "marked_grant",
+        "created_at",
+    ]
+    list_filter = ["fatigue_category", "outcome"]
+    list_select_related = ["character_sheet", "outcome", "marked_grant"]
+    raw_id_fields = [
+        "character_sheet",
+        "target_sheet",
+        "check_type",
+        "marked_grant",
+        "marked_interaction",
+        "marked_journal_entry",
+    ]
+    inlines = [RecordedActSuggestionInline]
+    date_hierarchy = "created_at"
+
+
+@admin.register(RecordedActSuggestion)
+class RecordedActSuggestionAdmin(PlayRowAdmin):
+    """A resonance a situation suggested for a recorded act (#5327)."""
+
+    list_display = ["id", "act", "resonance", "strength"]
+    list_select_related = ["act", "resonance", "strength"]
+    raw_id_fields = ["act"]
 
 
 @admin.register(SettlingRite)

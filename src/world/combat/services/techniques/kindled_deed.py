@@ -24,6 +24,7 @@ from world.magic.types.kindling import KindlingAct
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
+    from world.checks.models import CheckType
     from world.checks.types import CheckResult
     from world.combat.models import CombatOpponent, CombatParticipant, CombatRoundAction
     from world.traits.models import CheckOutcome
@@ -73,13 +74,17 @@ def award_rolled(  # noqa: PLR0913 - the act's kind, name, who it was aimed at a
     target_name: str | None = None,
     joiner: str = " ",
     aids: bool = False,
+    check_type: CheckType | None = None,
+    category: str = "",
 ) -> None:
     """Earn what a PC's act feeds, scaled by the ``outcome`` of the roll it made.
 
     ``what`` names the act in player words ("Struck", "Covered", a technique's name); the
     deed is labelled with it and the target's name, which ``target_name`` overrides.
     ``target`` defaults to the person ``action`` is aimed at. A failed roll earns by its own
-    outcome row (normally none).
+    outcome row (normally none). ``check_type`` is the roll's check, whose stat the bonus
+    resonance check borrows, and ``category`` the fatigue pool a gain from the act charges
+    (blank: the one the kind implies); both are passed when the caller holds them (#5327).
     """
     award_kindled_deeds(
         participant.character_sheet,
@@ -94,6 +99,8 @@ def award_rolled(  # noqa: PLR0913 - the act's kind, name, who it was aimed at a
                 else _target_name(participant, action, target),
                 joiner,
             ),
+            category=category,
+            check_type=check_type,
         ),
         outcome=outcome,
         resolution=CombatRoundContext(participant),
@@ -156,11 +163,18 @@ def award_for_technique_cast(
         joiner=" on ",
         outcome=check.outcome,
         aids=action.focused_ally_target is not None,
+        check_type=check.check_type,
+        category=(
+            action.focused_action.action_category if action.focused_action is not None else ""
+        ),
     )
 
 
 def award_defense_deed(
-    participant: CombatParticipant, attacker: CombatOpponent, outcome: CheckOutcome | None
+    participant: CombatParticipant,
+    attacker: CombatOpponent,
+    outcome: CheckOutcome | None,
+    check_type: CheckType | None = None,
 ) -> None:
     """Earn what defending against ``attacker`` feeds (#5124), scaled by the defense roll.
 
@@ -175,6 +189,7 @@ def award_defense_deed(
         target_name=attacker.name,
         outcome=outcome,
         target=persona.character_sheet if persona is not None else None,
+        check_type=check_type,
     )
 
 
@@ -183,5 +198,10 @@ def award_for_strike(
 ) -> None:
     """Earn the resonances a Strike feeds, scaled by its hit roll."""
     award_rolled(
-        participant, action, kind=KindlingActKind.ATTACK, what="Struck", outcome=hit.outcome
+        participant,
+        action,
+        kind=KindlingActKind.ATTACK,
+        what="Struck",
+        outcome=hit.outcome,
+        check_type=hit.check_type,
     )

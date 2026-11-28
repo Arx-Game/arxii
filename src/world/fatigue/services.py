@@ -225,6 +225,46 @@ def get_fatigue_penalty(character_sheet: CharacterSheet, category: str) -> int:
     return ZONE_PENALTIES[zone]
 
 
+def fatigue_cost_for(character_sheet: CharacterSheet, base_cost: int, effort_level: str) -> int:
+    """What ``base_cost`` actually costs this character at ``effort_level``.
+
+    ``base_cost`` times the effort multiplier, at least ``MIN_FATIGUE_COST``, then scaled by
+    the character's fatigue-cost lever (#4394: a Tireless row's ``-10 fatigue_cost`` pays 9 of
+    10; the floor holds, an action is never free). ``apply_fatigue`` charges exactly this, and
+    a caller that must know the cost before charging it (a gain that shrinks to what its payer
+    can still pay, #5327) reads it here so the lever applies once.
+    """
+    multiplier = EFFORT_COST_MULTIPLIER[effort_level]
+    actual_cost = max(MIN_FATIGUE_COST, int(base_cost * multiplier))
+    return scale_by_percent(
+        actual_cost,
+        lever_total(character_sheet, FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME),
+        floor=MIN_FATIGUE_COST,
+    )
+
+
+def fatigue_room(character_sheet: CharacterSheet, category: str) -> int | None:
+    """How much fatigue a gain can still add to this pool without reaching Exhausted (#5327).
+
+    Capacity minus current fatigue minus 1, never below 0: the Exhausted zone starts at 100
+    percent of capacity, and a gain someone else causes must never push them into it. None
+    when the character's capacity is 0 (stats not set up): there is no ceiling to keep under,
+    as ``apply_technique_fatigue`` skips its collapse check then.
+    """
+    capacity = get_fatigue_capacity(character_sheet, category)
+    if capacity <= 0:
+        return None
+    current = get_or_create_fatigue_pool(character_sheet).get_current(category)
+    return max(0, capacity - current - 1)
+
+
+def add_fatigue_points(character_sheet: CharacterSheet, category: str, points: int) -> None:
+    """Add ``points`` of fatigue to one pool as they stand, with no cost scaling."""
+    pool = get_or_create_fatigue_pool(character_sheet)
+    pool.set_current(category, pool.get_current(category) + points)
+    pool.save()
+
+
 def apply_fatigue(
     character_sheet: CharacterSheet,
     category: str,
@@ -233,8 +273,8 @@ def apply_fatigue(
 ) -> int:
     """Add fatigue to the pool.
 
-    Calculates actual cost from base_cost * effort multiplier. Fatigue can
-    exceed capacity (no cap).
+    Calculates actual cost from base_cost * effort multiplier (``fatigue_cost_for``). Fatigue
+    can exceed capacity (no cap).
 
     Args:
         character_sheet: The character's sheet.
@@ -245,21 +285,8 @@ def apply_fatigue(
     Returns:
         The actual fatigue cost applied.
     """
-    multiplier = EFFORT_COST_MULTIPLIER[effort_level]
-    actual_cost = max(MIN_FATIGUE_COST, int(base_cost * multiplier))
-    # #4394: the fatigue-cost lever scales the charged cost (a Tireless row's ``-10
-    # fatigue_cost`` pays 9 of 10); the floor holds, an action is never free.
-    actual_cost = scale_by_percent(
-        actual_cost,
-        lever_total(character_sheet, FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME),
-        floor=MIN_FATIGUE_COST,
-    )
-
-    pool = get_or_create_fatigue_pool(character_sheet)
-    current = pool.get_current(category)
-    pool.set_current(category, current + actual_cost)
-    pool.save()
-
+    actual_cost = fatigue_cost_for(character_sheet, base_cost, effort_level)
+    add_fatigue_points(character_sheet, category, actual_cost)
     return actual_cost
 
 

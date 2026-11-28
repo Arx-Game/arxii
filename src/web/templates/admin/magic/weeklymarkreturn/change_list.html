@@ -1,0 +1,11 @@
+{% extends "admin/change_list.html" %}
+{% comment %}
+Weekly mark returns (#5327, screen 10): one page holding every step of the week as a row.
+The rows are the changelist's own editable formset; this template adds the group heading
+above them and the help line below them, as the approved demo draws.
+{% endcomment %}
+{% block result_list %}
+<h2>One row for each step in the game week</h2>
+{{ block.super }}
+<p class="help">A row applies once she has gained at least this much from marks this game week, before this mark. With no rows, nothing is reduced. Authored choices are never reduced.</p>
+{% endblock %}

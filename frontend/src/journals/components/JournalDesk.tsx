@@ -12,8 +12,8 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 
 import { useActiveCharacterId } from '@/gm-adjudication/useActiveCharacterId';
-import { claimFields } from '@/magic/claiming';
-import { useRefreshClaims, useWaitingClaims } from '@/magic/queries';
+import { useRefreshRecordedActs } from '@/magic/queries';
+import { reachFields } from '@/magic/reach';
 import { reflectionFields } from '@/magic/reflection';
 
 import type { CreateJournalEntryRequest } from '../api';
@@ -22,6 +22,7 @@ import { useCreateJournalEntry, useJournalSettings } from '../queries';
 import {
   EMPTY_ENTRY_FIELDS,
   isAboutUnresolved,
+  isReachUnfinished,
   isReflectionUnfinished,
   type JournalEntryFieldsValue,
 } from '../entryFields';
@@ -35,8 +36,7 @@ export interface JournalDeskProps {
 export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
   const [value, setValue] = useState<JournalEntryFieldsValue>(EMPTY_ENTRY_FIELDS);
   const createEntry = useCreateJournalEntry();
-  const waitingClaims = useWaitingClaims(useActiveCharacterId());
-  const refreshClaims = useRefreshClaims();
+  const refreshRecordedActs = useRefreshRecordedActs(useActiveCharacterId());
   const { data: settings } = useJournalSettings();
 
   // A name typed into About that has not resolved to anybody holds the button:
@@ -46,6 +46,7 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
     value.body.trim().length > 0 &&
     !isAboutUnresolved(value) &&
     !isReflectionUnfinished(value) &&
+    !isReachUnfinished(value) &&
     !createEntry.isPending;
   const errorMessage =
     createEntry.isError && createEntry.error instanceof Error ? createEntry.error.message : null;
@@ -62,7 +63,7 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
       tags: value.tags,
       about: value.about?.id ?? null,
       ...reflectionFields(value.reflection),
-      ...claimFields(value.claim, waitingClaims),
+      ...reachFields(value.reach),
     };
     // Never send a no-op override: INHERIT is what the backend already does.
     if (value.posthumousOverride !== 'inherit') {
@@ -72,8 +73,12 @@ export function JournalDesk({ onPosted, onDiscard }: JournalDeskProps) {
       onSuccess: (entry) => {
         toast.success('Journal entry recorded.');
         if (entry.reflection_line) toast.success(entry.reflection_line);
-        for (const line of entry.claim_lines ?? []) toast.success(line);
-        refreshClaims();
+        // A refused mark leaves the entry posted; its line says why and is shown as the error it is.
+        if (entry.mark_line) {
+          if (entry.mark_recorded === false) toast.error(entry.mark_line);
+          else toast.success(entry.mark_line);
+        }
+        refreshRecordedActs();
         setValue(EMPTY_ENTRY_FIELDS);
         onPosted();
       },

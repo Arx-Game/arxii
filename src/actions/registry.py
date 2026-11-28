@@ -235,9 +235,11 @@ from actions.definitions.duels import (
     YieldAction,
 )
 from actions.definitions.endorsements import (
+    AnswerPoseProposalAction,
     PoseEndorseAction,
     SceneEntryEndorseAction,
     StylePresentationEndorseAction,
+    WithdrawPoseEndorsementAction,
 )
 from actions.definitions.estates import WillReadingAction
 from actions.definitions.events import (
@@ -872,6 +874,8 @@ _ALL_ACTIONS: list[Action] = [
     RevealAction(),
     CoverUpAction(),
     PoseEndorseAction(),
+    AnswerPoseProposalAction(),
+    WithdrawPoseEndorsementAction(),
     SceneEntryEndorseAction(),
     StylePresentationEndorseAction(),
     TraverseExitAction(),

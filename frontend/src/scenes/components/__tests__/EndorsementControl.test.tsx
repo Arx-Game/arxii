@@ -1,6 +1,7 @@
 /**
- * Tests for EndorsementControl (#1138) — resonance-picker + endorsement badge strip
- * for both pose and scene-entry endorsements.
+ * Tests for EndorsementControl (#1138, #5327) — resonance-picker + endorsement badge strip
+ * for pose, scene-entry and style endorsements. A pose's menu lists every resonance under its
+ * affinity, a pick waits for the poser, and the poser accepts or declines.
  */
 
 import { render, screen, waitFor } from '@testing-library/react';
@@ -16,6 +17,8 @@ import type { Interaction } from '../../types';
 
 const mockCreatePoseEndorsement = vi.fn();
 const mockDeletePoseEndorsement = vi.fn();
+const mockChangePoseEndorsement = vi.fn();
+const mockAnswerPoseEndorsement = vi.fn();
 const mockCreateSceneEntryEndorsement = vi.fn();
 const mockCreateStyleEndorsement = vi.fn();
 
@@ -36,6 +39,17 @@ let styleMutationState: {
   error: null,
 };
 
+// The resonance catalog the pose menu lists (#5327): every resonance, under its affinity.
+const CATALOG = [
+  { id: 41, name: 'Fury', affinity: 1, affinity_name: 'Primal' },
+  { id: 42, name: 'Grief', affinity: 1, affinity_name: 'Primal' },
+  { id: 43, name: 'Mercy', affinity: 2, affinity_name: 'Celestial' },
+  { id: 44, name: 'Cruelty', affinity: 3, affinity_name: 'Abyssal' },
+];
+vi.mock('@/magic/queries', () => ({
+  useResonanceCatalog: () => ({ data: CATALOG }),
+}));
+
 vi.mock('../../queries', () => ({
   useCreatePoseEndorsement: (_sceneId: string) => ({
     mutate: mockCreatePoseEndorsement,
@@ -43,6 +57,14 @@ vi.mock('../../queries', () => ({
   }),
   useDeletePoseEndorsement: (_sceneId: string) => ({
     mutate: mockDeletePoseEndorsement,
+    isPending: false,
+  }),
+  useChangePoseEndorsement: (_sceneId: string) => ({
+    mutate: mockChangePoseEndorsement,
+    isPending: false,
+  }),
+  useAnswerPoseEndorsement: (_sceneId: string) => ({
+    mutate: mockAnswerPoseEndorsement,
     isPending: false,
   }),
   useCreateSceneEntryEndorsement: (_sceneId: string) => ({
@@ -137,16 +159,19 @@ describe('EndorsementControl — kind="pose"', () => {
     expect(screen.getByRole('button', { name: /endorse/i })).toBeInTheDocument();
   });
 
-  it('clicking Endorse opens a picker listing endorsable_resonances', async () => {
+  it('clicking Endorse lists every resonance under its affinity, not just endorsable_resonances', async () => {
     const user = userEvent.setup();
     render(<EndorsementControl interaction={makeInteraction()} sceneId="1" kind="pose" />, {
       wrapper: createWrapper(),
     });
     await user.click(screen.getByRole('button', { name: /endorse/i }));
     await waitFor(() => {
-      expect(screen.getByText('Courage')).toBeInTheDocument();
-      expect(screen.getByText('Wisdom')).toBeInTheDocument();
+      expect(screen.getByText('Primal')).toBeInTheDocument();
     });
+    for (const name of ['Celestial', 'Abyssal', 'Fury', 'Grief', 'Mercy', 'Cruelty']) {
+      expect(screen.getByText(name)).toBeInTheDocument();
+    }
+    expect(screen.queryByText('Courage')).toBeNull();
   });
 
   it('selecting a resonance calls pose mutation with { interaction, resonance }', async () => {
@@ -155,9 +180,167 @@ describe('EndorsementControl — kind="pose"', () => {
       wrapper: createWrapper(),
     });
     await user.click(screen.getByRole('button', { name: /endorse/i }));
-    await waitFor(() => screen.getByText('Courage'));
-    await user.click(screen.getByText('Courage'));
-    expect(mockCreatePoseEndorsement).toHaveBeenCalledWith({ interaction: 1, resonance: 5 });
+    await waitFor(() => screen.getByText('Grief'));
+    await user.click(screen.getByText('Grief'));
+    expect(mockCreatePoseEndorsement).toHaveBeenCalledWith({ interaction: 1, resonance: 42 });
+  });
+
+  it('still offers the menu when the poser holds nothing endorsable', () => {
+    render(
+      <EndorsementControl
+        interaction={makeInteraction({ endorsable_resonances: [] })}
+        sceneId="1"
+        kind="pose"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByRole('button', { name: /endorse/i })).toBeInTheDocument();
+  });
+
+  it('shows the endorser a dashed waiting chip with Change and Withdraw, and no Endorse menu', async () => {
+    const user = userEvent.setup();
+    render(
+      <EndorsementControl
+        interaction={makeInteraction({
+          my_pose_endorsement: { id: 7, resonance_id: 42, settled: false },
+          pending_picks: [
+            {
+              endorsement_id: 7,
+              resonance_id: 42,
+              resonance_name: 'Grief',
+              endorser_name: 'ViewerChar',
+              mine: true,
+              can_answer: false,
+            },
+          ],
+        })}
+        sceneId="1"
+        kind="pose"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('pose-pick-waiting')).toHaveTextContent('Grief · waiting for Alice');
+    expect(screen.getByTestId('pose-pick-waiting')).toHaveClass('border-dashed');
+    expect(screen.queryByRole('button', { name: /^endorse/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /retract/i })).toBeNull();
+
+    await user.click(screen.getByTestId('pose-pick-withdraw'));
+    expect(mockDeletePoseEndorsement).toHaveBeenCalledWith(7);
+
+    await user.click(screen.getByRole('button', { name: 'Change' }));
+    await waitFor(() => screen.getByText('Mercy'));
+    await user.click(screen.getByText('Mercy'));
+    expect(mockChangePoseEndorsement).toHaveBeenCalledWith({ id: 7, resonance: 43 });
+  });
+
+  it('treats an endorsement row that waits as a waiting pick even before the picks arrive', () => {
+    render(
+      <EndorsementControl
+        interaction={makeInteraction({
+          my_pose_endorsement: {
+            id: 7,
+            resonance_id: 43,
+            settled: false,
+            awaiting_acceptance: true,
+          },
+        })}
+        sceneId="1"
+        kind="pose"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('pose-pick-waiting')).toHaveTextContent('Mercy · waiting for Alice');
+    expect(screen.getByTestId('pose-pick-withdraw')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /retract/i })).toBeNull();
+  });
+
+  it('shows the poser who proposed what, with Accept and Decline and no Endorse menu', async () => {
+    const user = userEvent.setup();
+    // persona.id === 7 is the viewer's own persona: the poser reading her own pose.
+    render(
+      <EndorsementControl
+        interaction={makeInteraction({
+          persona: { id: 7, name: 'ViewerChar' },
+          pending_picks: [
+            {
+              endorsement_id: 8,
+              resonance_id: 43,
+              resonance_name: 'Mercy',
+              endorser_name: 'Ilsa',
+              mine: false,
+              can_answer: true,
+            },
+          ],
+        })}
+        sceneId="1"
+        kind="pose"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('pose-pick-proposal-8')).toHaveTextContent('Ilsa proposed Mercy');
+    expect(screen.queryByRole('button', { name: /^endorse/i })).toBeNull();
+
+    await user.click(screen.getByTestId('pose-pick-accept-8'));
+    expect(mockAnswerPoseEndorsement).toHaveBeenCalledWith({ id: 8, accept: true });
+    await user.click(screen.getByTestId('pose-pick-decline-8'));
+    expect(mockAnswerPoseEndorsement).toHaveBeenCalledWith({ id: 8, accept: false });
+  });
+
+  it('shows a pick the viewer may not answer as nothing at all', () => {
+    const { container } = render(
+      <EndorsementControl
+        interaction={makeInteraction({
+          persona: { id: 7, name: 'ViewerChar' },
+          pending_picks: [
+            {
+              endorsement_id: 8,
+              resonance_id: 43,
+              resonance_name: 'Mercy',
+              endorser_name: 'Ilsa',
+              mine: false,
+              can_answer: false,
+            },
+          ],
+        })}
+        sceneId="1"
+        kind="pose"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('withholds the menu once the pose carries a mark, undone or not', () => {
+    const mark = {
+      grant_id: 4,
+      resonance_id: 44,
+      resonance_name: 'Cruelty',
+      act_label: 'Intimidated Hale',
+      undone: false,
+      undone_by: null,
+      can_undo: false,
+    };
+    const { rerender } = render(
+      <EndorsementControl
+        interaction={makeInteraction({ act_marks: [mark] })}
+        sceneId="1"
+        kind="pose"
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.queryByRole('button', { name: /endorse/i })).toBeNull();
+
+    rerender(
+      <EndorsementControl
+        interaction={makeInteraction({
+          act_marks: [{ ...mark, undone: true, undone_by: 'gm' as const }],
+        })}
+        sceneId="1"
+        kind="pose"
+      />
+    );
+    // A GM's undo does not give the pose back: the server still refuses to endorse it.
+    expect(screen.queryByRole('button', { name: /endorse/i })).toBeNull();
   });
 
   it('a reached pose offers its one resonance and sends no resonance', async () => {
@@ -235,18 +418,6 @@ describe('EndorsementControl — kind="pose"', () => {
       { wrapper: createWrapper() }
     );
     expect(screen.getByTitle('Bob endorsed with Courage')).toBeInTheDocument();
-  });
-
-  it('hides entirely when endorsable_resonances is empty', () => {
-    const { container } = render(
-      <EndorsementControl
-        interaction={makeInteraction({ endorsable_resonances: [] })}
-        sceneId="1"
-        kind="pose"
-      />,
-      { wrapper: createWrapper() }
-    );
-    expect(container.firstChild).toBeNull();
   });
 
   it('hides when the pose belongs to the viewer (self-pose)', () => {

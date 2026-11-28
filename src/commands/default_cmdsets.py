@@ -22,6 +22,7 @@ from commands.account.prompt_reply import CmdPromptReply
 from commands.account.reboot import CmdReboot
 from commands.account.sheet import CmdSheet
 from commands.account.staff_contact import CmdPetition
+from commands.acts import CmdActs
 from commands.agriculture import CmdHarvest
 from commands.allegiance import CmdRetain, CmdSendAway, CmdSettle
 from commands.alterations import CmdMageScar
@@ -349,6 +350,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             # #4733, #5124 - the aura, its waiting reflections and the rite of settling.
             CmdAura,
             CmdThreads,
+            CmdActs,
             CmdEndorse,
             CmdPoses,
             CmdReact,

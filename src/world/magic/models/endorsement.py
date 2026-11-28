@@ -76,8 +76,10 @@ class PoseEndorsement(RelatedCacheClearingMixin, EndorsementBase):
     #: interaction is required (no null=True) and never reassigned after
     #: creation, and Interaction.cached_endorsements filters solely via the
     #: interaction FK (self.endorsements) -- safe to skip the clear on a
-    #: field-only settled_at/granted_amount update (#3816 final review; see
-    #: the flag's docstring on the mixin).
+    #: field-only settled_at/granted_amount/awaiting_acceptance/resonance update:
+    #: the cached list holds these same idmapper instances, so a changed field
+    #: reads through, and only a row joining or leaving the list needs the clear
+    #: (#3816 final review, #5327; see the flag's docstring on the mixin).
     skip_related_cache_clear_when_fk_unchanged: ClassVar[bool] = True
 
     interaction = models.ForeignKey(
@@ -100,6 +102,14 @@ class PoseEndorsement(RelatedCacheClearingMixin, EndorsementBase):
         null=True,
         blank=True,
         help_text="Set at weekly settlement.",
+    )
+    awaiting_acceptance = models.BooleanField(
+        default=False,
+        db_default=False,
+        help_text=(
+            "True while a witness's proposed resonance waits for the poser or a GM to accept "
+            "it. Settlement skips these rows."
+        ),
     )
 
     class Meta:

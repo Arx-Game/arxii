@@ -28,6 +28,7 @@ from typing import TYPE_CHECKING
 from django.db.models import F, FloatField
 from django.db.models.expressions import ExpressionWrapper
 
+from actions.constants import ActionCategory
 from world.covenants.perks.constants import Situation
 from world.covenants.perks.context import SituationContext, SituationParams
 from world.covenants.perks.services import SituationCheck
@@ -39,13 +40,14 @@ from world.magic.constants import (
     TargetKind,
 )
 from world.magic.models import (
-    CharacterResonance,
     KindledDeedAward,
     KindledStrengthTier,
     Kindling,
     KindlingConfig,
     KindlingSituation,
     RallyKindlingStrength,
+    RecordedAct,
+    RecordedActSuggestion,
     Resonance,
     ResonanceGrant,
     Thread,
@@ -154,12 +156,15 @@ def _allies_present(ctx: SituationContext, presence: _Presence | None) -> frozen
     return presence.everyone - presence.opponents - {ctx.holder.pk}
 
 
-def shown_names(viewer: CharacterSheet, sheet_ids: Iterable[int]) -> dict[int, str]:
+def shown_names(
+    viewer: CharacterSheet | None, sheet_ids: Iterable[int], *, is_staff: bool = False
+) -> dict[int, str]:
     """The name ``viewer`` knows each sheet's character by, keyed by sheet id.
 
     The face each sheet presents (its active persona, else its primary) read through the
-    viewer's eyes, so a mask the viewer has not seen through keeps its mask. A sheet with no
-    persona is absent from the map.
+    viewer's eyes, so a mask the viewer has not seen through keeps its mask. A viewer of None
+    plays nobody, and staff see through every mask. A sheet with no persona is absent from
+    the map.
     """
     from world.scenes.persona_display import build_persona_display_map  # noqa: PLC0415
     from world.scenes.services import personas_for_sheets  # noqa: PLC0415
@@ -167,7 +172,7 @@ def shown_names(viewer: CharacterSheet, sheet_ids: Iterable[int]) -> dict[int, s
     personas = personas_for_sheets(sheet_ids)
     if not personas:
         return {}
-    display = build_persona_display_map(personas.values(), viewer_sheet=viewer)
+    display = build_persona_display_map(personas.values(), viewer_sheet=viewer, is_staff=is_staff)
     return {sheet_id: display[persona.pk][0] for sheet_id, persona in personas.items()}
 
 
@@ -493,6 +498,7 @@ class _Contribution:
     rank: int
     reasons: tuple[str, ...]
     situation: KindlingSituation | None
+    chosen: bool = False
 
 
 def _row_contribution(
@@ -516,7 +522,12 @@ def _row_contribution(
         return None
     scored.sort(key=lambda pair: -pair[0])
     reasons = (row.reason_text,) if row.reason_text else tuple(item.reason for _, item in scored)
-    return _Contribution(rank=scored[0][0], reasons=reasons, situation=row)
+    return _Contribution(
+        rank=scored[0][0],
+        reasons=reasons,
+        situation=row,
+        chosen=row.situation in CHOSEN_DEED_SITUATIONS,
+    )
 
 
 def situation_reason(row: KindlingSituation) -> str:
@@ -607,6 +618,20 @@ def _live_reason(kindling: Kindling, viewer: CharacterSheet) -> str:
 # --- Public API -----------------------------------------------------------------------
 
 
+def _named_unheld_resonances(held_ids: set[int]) -> list[Resonance]:
+    """Each Celestial or Abyssal resonance an active row names directly that she does not hold.
+
+    Never a Primal one: Primal is what she feels, so it kindles only for its holder (#5327).
+    """
+    return list(
+        Resonance.objects.filter(kindling_situations__is_active=True)
+        .exclude(pk__in=held_ids)
+        .exclude(affinity__name=AFFINITY_PRIMAL)
+        .select_related("affinity", "feeling")
+        .distinct()
+    )
+
+
 def kindled_resonances(
     sheet: CharacterSheet,
     *,
@@ -628,16 +653,13 @@ def kindled_resonances(
     strength whatever the act.
 
     ``include_named_unheld`` adds, after the held ones, each Celestial or Abyssal resonance
-    that an active chosen-deed row (``CHOSEN_DEED_SITUATIONS``) names directly and the
-    character does not hold (#5308): a deed she chose, in a resonance she has never held,
-    earns it. The owner's rules (2026-11-27): "primal is always a situation you're in,
-    celestial or abyssal is something you're doing to someone else", and "there needs to be a
-    measure of *intent* to gaining that resonance". So a Primal resonance is never added, and
-    a Celestial or Abyssal one is fed, for a character who does not hold it, only by the
-    chosen-deed rows that name it. A row on any other situation kindles the resonance for a
-    character who holds it and pays nobody else. Only the earn path asks for this; the panel
-    and the casts read held resonances only. A situation for a whole affinity names no single
-    resonance, so it feeds held resonances only.
+    that an active row names directly and the character does not hold (#5327). Such an entry
+    carries ``fed_*`` from every row that names it, so it can be suggested beside an act, and
+    ``chosen_*`` from the chosen-deed rows (``CHOSEN_DEED_SITUATIONS``) alone, which are the
+    only rows that pay. A Primal resonance is never added: it is what she feels, so it
+    kindles only for its holder. A situation for a whole affinity names no single resonance,
+    so it feeds held resonances only. Only the earn path and the mission preview ask for
+    this; the panel and the casts read held resonances only.
     """
     resonances = list(
         Resonance.objects.filter(character_resonances__character_sheet=sheet).select_related(
@@ -646,20 +668,7 @@ def kindled_resonances(
     )
     unheld_ids: frozenset[int] = frozenset()
     if include_named_unheld:
-        held_ids = {resonance.pk for resonance in resonances}
-        named = list(
-            # One filter call, so both conditions are met by the same row: an active row on
-            # a deed she chose.
-            Resonance.objects.filter(
-                kindling_situations__is_active=True,
-                kindling_situations__situation__in=CHOSEN_DEED_SITUATIONS,
-            )
-            .exclude(pk__in=held_ids)
-            # A Primal resonance is a situation she is in: it kindles only for its holder.
-            .exclude(affinity__name=AFFINITY_PRIMAL)
-            .select_related("affinity", "feeling")
-            .distinct()
-        )
+        named = _named_unheld_resonances({resonance.pk for resonance in resonances})
         unheld_ids = frozenset(resonance.pk for resonance in named)
         resonances.extend(named)
     return _evaluate_acts(
@@ -809,6 +818,7 @@ def kindled_resonances_for_acts(
     *,
     resolution: object | None = None,
     mission: MissionInstance | None = None,
+    include_named_unheld: bool = False,
 ) -> list[list[KindledResonance]]:
     """``kindled_resonances`` once per act, reading the strengths, rows and Rally and GM
     kindlings once for all of them (a beat with many options asks this once)."""
@@ -817,7 +827,14 @@ def kindled_resonances_for_acts(
             "affinity", "feeling"
         )
     )
-    return _evaluate_acts(sheet, resonances, acts, resolution=resolution, mission=mission)
+    unheld_ids: frozenset[int] = frozenset()
+    if include_named_unheld:
+        named = _named_unheld_resonances({resonance.pk for resonance in resonances})
+        unheld_ids = frozenset(resonance.pk for resonance in named)
+        resonances.extend(named)
+    return _evaluate_acts(
+        sheet, resonances, acts, resolution=resolution, mission=mission, direct_only=unheld_ids
+    )
 
 
 def _evaluate_acts(  # noqa: PLR0913 - the shared reads plus which resonances are direct-only
@@ -884,7 +901,7 @@ def _resonance_contributions(  # noqa: PLR0913 - one resonance's share of the ac
 ) -> list[_Contribution]:
     """What feeds one resonance in one act: the rows that name it or cover its affinity, then
     the live kindlings on it. A resonance id in ``direct_only`` is one the character does not
-    hold: it is fed only by the chosen-deed rows (``CHOSEN_DEED_SITUATIONS``) that name it."""
+    hold: it is fed only by the rows that name it, never by a row for its whole affinity."""
     held = resonance.pk not in direct_only
     contributions: list[_Contribution] = []
     for row in rows:
@@ -892,7 +909,7 @@ def _resonance_contributions(  # noqa: PLR0913 - one resonance's share of the ac
         covers_it = row.for_affinity_id == resonance.affinity_id
         if held and not (names_it or covers_it):
             continue
-        if not held and not (names_it and row.situation in CHOSEN_DEED_SITUATIONS):
+        if not held and not names_it:
             continue
         evidence = evaluation.evidence(row.situation, _effective_params(row, resonance))
         contribution = _row_contribution(row, evidence, tiers, by_rank) if evidence else None
@@ -921,7 +938,7 @@ def _evaluate_act(  # noqa: PLR0913 - the shared reads and the one act's context
     direct_only: frozenset[int] = frozenset(),
 ) -> list[KindledResonance]:
     """One act's answer per resonance. A resonance id in ``direct_only`` is fed only by the
-    chosen-deed rows that name it, never by another row or a row for its whole affinity."""
+    rows that name it, never by a row for its whole affinity."""
     target = act.target if act is not None else None
     ctx = SituationContext(
         holder=sheet,
@@ -967,6 +984,7 @@ def _result(
     ordered = sorted(contributions, key=lambda c: -c.rank)  # stable: row order breaks ties
     reasons = tuple(dict.fromkeys(reason for c in ordered for reason in c.reasons))
     fed = [c for c in ordered if c.situation is not None]
+    chosen = [c for c in fed if c.chosen]
     return KindledResonance(
         resonance=resonance,
         tier=by_rank[ordered[0].rank],
@@ -974,6 +992,9 @@ def _result(
         situations=tuple(c.situation for c in fed),
         fed_tier=by_rank[fed[0].rank] if fed else None,
         fed_reasons=tuple(dict.fromkeys(reason for c in fed for reason in c.reasons)),
+        chosen_tier=by_rank[chosen[0].rank] if chosen else None,
+        chosen_situation=chosen[0].situation if chosen else None,
+        chosen_reasons=tuple(dict.fromkeys(reason for c in chosen for reason in c.reasons)),
     )
 
 
@@ -1140,6 +1161,8 @@ def award_scene_act(  # noqa: PLR0913 - the act, its roll's outcome and check ty
             and target != initiator
             and not is_technique_hostile(technique),
             label=act_label(what, sheet_name(initiator, target), " on " if technique else " "),
+            category=technique.action_category if technique is not None else "",
+            check_type=check_type,
         ),
         outcome=outcome,
         act_check_type=check_type,
@@ -1154,19 +1177,26 @@ def get_kindling_config() -> KindlingConfig:
     return config
 
 
-def _set_aside_for_claim(row: CharacterResonance, amount: int) -> None:
-    """Add ``amount`` to what the character has waiting to claim on ``row`` (#5181).
+# The fatigue pool a gain from an act of each kind charges, when the call site names none. A
+# technique act names its own ``action_category`` at the site; this is only the fallback.
+_KIND_FATIGUE_CATEGORY: dict[str, str] = {
+    KindlingActKind.ATTACK: ActionCategory.PHYSICAL,
+    KindlingActKind.DEFEND: ActionCategory.PHYSICAL,
+    KindlingActKind.AID: ActionCategory.PHYSICAL,
+    KindlingActKind.TECHNIQUE: ActionCategory.PHYSICAL,
+    KindlingActKind.SOCIAL: ActionCategory.SOCIAL,
+    KindlingActKind.MISSION_OPTION: ActionCategory.SOCIAL,
+    KindlingActKind.OTHER: ActionCategory.PHYSICAL,
+}
 
-    An ``F()`` increment, so two deeds landing together both count. The idmapper hands back this
-    same instance on any fetch, so ``refresh_from_db`` would copy the ``F()`` onto itself; the
-    stored total is read with ``values_list`` (which builds no model) and put back on the
-    instance for the next reader.
+
+def act_fatigue_category(act: KindlingAct) -> str:
+    """The fatigue pool (an ``ActionCategory`` value) a gain from ``act`` charges.
+
+    The category the call site passed, else the one the act's kind implies: attacks, defenses
+    and aid are physical, social acts and mission options are social (#5327).
     """
-    row.kindled_unclaimed = F("kindled_unclaimed") + amount
-    row.save(update_fields=["kindled_unclaimed"])
-    row.kindled_unclaimed = CharacterResonance.objects.filter(pk=row.pk).values_list(
-        "kindled_unclaimed", flat=True
-    )[0]
+    return act.category or _KIND_FATIGUE_CATEGORY.get(act.kind, ActionCategory.PHYSICAL)
 
 
 def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and its surroundings
@@ -1179,34 +1209,35 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
     context: KindlingContext | None = None,
     act_check_type: CheckType | None = None,
 ) -> list[ResonanceGrant]:
-    """Earn each resonance ``act`` feeds, scaled by the roll's ``outcome`` (#5124).
+    """Pay each resonance an authored choice names, and record the act so it can be marked.
 
     Called once after a player character's roll resolves, with the roll's result tier (an act
-    with no roll of its own passes ``lowest_success_outcome()``). A resonance an authored
-    situation fed with this act in context earns ``KindledDeedAward(outcome).amount x
-    earn_percent / 100`` of the strongest FED row's strength, rounded down. That amount is split
-    by ``KindlingConfig`` (#5181): ``max(1, amount x instant_percent / 100)`` arrives at once as
-    one ``KINDLED_DEED`` grant naming the row, and ``amount x claim_percent / 100`` is set aside
-    in ``CharacterResonance.kindled_unclaimed`` for the character to claim. A Rally or a GM
-    raises a resonance's panel strength but does not earn by itself and does not raise the
-    share. No award row for the tier, no strength tier or a share of 0 earns nothing.
-    Non-player characters earn nothing.
+    with no roll of its own passes ``lowest_success_outcome()``). Only a deed she chose pays
+    (#5327): a resonance a chosen-deed row (``CHOSEN_DEED_SITUATIONS``: a mission option's
+    theme) fed with this act in context earns ``KindledDeedAward(outcome).amount x
+    earn_percent / 100`` of that row's strength, rounded down, at once and in full as one
+    ``KINDLED_DEED`` grant naming the row, whether or not she holds the resonance and whatever
+    its affinity, except a Primal one she lacks. Every other situation only suggests: it
+    never pays, whether the resonance is Primal, Celestial or Abyssal and in her aura or not.
+    No award row for the tier, no strength tier or a share of 0 pays nothing. Non-player
+    characters earn and record nothing.
+
+    When no chosen deed paid, the act is written down as one ``RecordedAct`` with a
+    ``RecordedActSuggestion`` for each resonance a situation reached (its strength and first
+    reason), for her player to point a mark at, and her unmarked acts older than
+    ``KindlingConfig.recorded_act_days`` are pruned.
 
     The bonus resonance check (#5308) rolls once per affinity the act pays, with the stat of
-    the act's own roll (``act_check_type``, passed by the callers that hold one) or, when none
-    is passed, the stat staff set for kindled deeds; its percent grows both the instant grant
-    and the share set aside. A Celestial or Abyssal resonance that a deed she chose names
-    (``CHOSEN_DEED_SITUATIONS``: a mission option's theme) and the character does not hold yet
-    is earned too: the grant creates her row for it. Every other row, and any row on a Primal
-    resonance, pays only a character who already holds the resonance.
+    the act's own roll (``act_check_type``, else ``act.check_type``, passed by the callers that
+    hold one) or, when none is passed, the stat staff set for kindled deeds; its percent grows
+    the grant.
 
     With neither ``resolution`` nor ``mission`` given the sheet's own live fight and mission
     are read. A caller that knows its surroundings and has no round (a standoff is a
     negotiation, round zero) passes ``context``, which is used as it stands, a ``None``
     resolution included. Each grant is told to the actor alone ("You earned ...") once the
     surrounding transaction commits, through a private narrative message that reports the
-    amount the ledger recorded after the earn rate and how much was set aside. Returns the
-    grants written.
+    amount the ledger recorded after the earn rate. Returns the grants written.
     """
     from world.roster.services.activity import is_player_character  # noqa: PLC0415
 
@@ -1220,79 +1251,143 @@ def award_kindled_deeds(  # noqa: PLR0913 - keyword-only: the act, its roll and 
         context = kindling_context_for(sheet)
     if context is not None:
         resolution, mission = context.resolution, context.mission
-    config = get_kindling_config()
-    fed = [
+    entries = kindled_resonances(
+        sheet,
+        resolution=resolution,
+        mission=mission,
+        act=act,
+        include_named_unheld=True,
+    )
+    check_type = act_check_type if act_check_type is not None else act.check_type
+    chosen = [
         entry
-        for entry in kindled_resonances(
-            sheet,
-            resolution=resolution,
-            mission=mission,
-            act=act,
-            include_named_unheld=True,
-        )
-        if entry.fed_tier is not None
-        and entry.strongest_situation is not None
-        and award.amount * entry.fed_tier.earn_percent // 100 > 0
+        for entry in entries
+        if entry.chosen_tier is not None
+        and entry.chosen_situation is not None
+        and award.amount * entry.chosen_tier.earn_percent // 100 > 0
     ]
-    stat = act_stat(act_check_type) if act_check_type is not None and fed else None
+    stat = act_stat(check_type) if check_type is not None and chosen else None
     bonuses: dict[int, GainBonus] = {}
     grants: list[ResonanceGrant] = []
-    for entry in fed:
+    for entry in chosen:
         affinity = entry.resonance.affinity
         if affinity.pk not in bonuses:
             bonuses[affinity.pk] = roll_gain_bonus(
                 sheet, affinity, source=GainSource.KINDLED_DEED, stat=stat
             )
-        _earn_kindled_entry(sheet, entry, award.amount, config, act, grants, bonuses[affinity.pk])
+        _earn_kindled_entry(sheet, entry, award.amount, act, grants, bonuses[affinity.pk])
+    if not grants:
+        _record_act(sheet, act, outcome, check_type, entries)
     return grants
+
+
+def _act_phrase(
+    sheet: CharacterSheet, target: CharacterSheet | None, label: str, fallback: str
+) -> str:
+    """``label`` without the name of ``target``, or "" when it names no such person.
+
+    The label was built with the target's name as ``sheet`` knows them (``act_label``), so it
+    ends in that name. A reader of the pose shows the phrase and the target named as that
+    reader knows them (``pose_marks``). An act aimed at no one, or at a target with no sheet (a
+    game-run monster, whose name is no secret), has no phrase and shows its label as it is.
+    """
+    name = sheet_name(sheet, target)
+    if not name or not label.endswith(name):
+        return ""
+    # A label that was only the name (an act with no action name) falls back to the act's kind,
+    # so the phrase is never empty for a targeted act and the name never leaks through the label.
+    return label[: -len(name)].strip() or fallback
+
+
+def _record_act(
+    sheet: CharacterSheet,
+    act: KindlingAct,
+    outcome: CheckOutcome,
+    check_type: CheckType | None,
+    entries: list[KindledResonance],
+) -> None:
+    """Write ``act`` down for her player to mark, then prune her acts that waited too long.
+
+    One ``RecordedAct`` and one suggestion per resonance a situation reached (``fed_tier``),
+    written strongest first so the oldest suggestion row is the strongest. The act's label is
+    the one a deed grant records. Her unmarked acts older than ``recorded_act_days`` go in one
+    delete; a marked act is never pruned, because its grant keeps it.
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from django.db import transaction  # noqa: PLC0415
+    from django.utils import timezone  # noqa: PLC0415
+
+    suggested = sorted(
+        (entry for entry in entries if entry.fed_tier is not None),
+        key=lambda entry: -entry.fed_tier.rank,
+    )
+    kind_label = KindlingActKind(act.kind).label if act.kind in KindlingActKind.values else act.kind
+    label = act.label or kind_label
+    with transaction.atomic():
+        recorded = RecordedAct.objects.create(
+            character_sheet=sheet,
+            label=label[:200],
+            act_phrase=_act_phrase(sheet, act.target, label, kind_label)[:200],
+            outcome=outcome,
+            check_type=check_type,
+            target_sheet=act.target,
+            fatigue_category=act_fatigue_category(act),
+        )
+        RecordedActSuggestion.objects.bulk_create(
+            RecordedActSuggestion(
+                act=recorded,
+                resonance=entry.resonance,
+                strength=entry.fed_tier,
+                reason=(entry.fed_reasons[0] if entry.fed_reasons else "")[:300],
+            )
+            for entry in suggested
+        )
+        cutoff = timezone.now() - timedelta(days=get_kindling_config().recorded_act_days)
+        RecordedAct.objects.filter(
+            character_sheet=sheet, marked_grant__isnull=True, created_at__lt=cutoff
+        ).delete()
 
 
 def _earn_kindled_entry(  # noqa: PLR0913 - the sheet, the entry and the shared earn inputs
     sheet: CharacterSheet,
     entry: KindledResonance,
     award_amount: int,
-    config: KindlingConfig,
     act: KindlingAct,
     grants: list[ResonanceGrant],
     gain_bonus: GainBonus,
 ) -> None:
-    """Earn one kindled resonance's share of a deed and tell the actor once it commits.
+    """Earn one chosen resonance's share of a deed and tell the actor once it commits.
 
-    Appends the grant ``grant_resonance`` writes to ``grants``. A resonance no situation fed,
-    or one whose earn rate rounds the award to 0, earns nothing. ``gain_bonus`` is the bonus
-    check result rolled for this resonance's affinity; it grows the instant grant (inside
-    ``grant_resonance``) and the set-aside share alike.
+    Appends the grant ``grant_resonance`` writes to ``grants``. A resonance no authored
+    choice named, or one whose earn rate rounds the award to 0, earns nothing. ``gain_bonus``
+    is the bonus check result rolled for this resonance's affinity; it grows the grant inside
+    ``grant_resonance``.
     """
     from django.db import transaction  # noqa: PLC0415
 
     from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
-    situation = entry.strongest_situation
-    if entry.fed_tier is None or situation is None:
+    situation = entry.chosen_situation
+    if entry.chosen_tier is None or situation is None:
         return
-    amount = award_amount * entry.fed_tier.earn_percent // 100
+    amount = award_amount * entry.chosen_tier.earn_percent // 100
     if amount <= 0:
         return
-    row = grant_resonance(
+    grant_resonance(
         sheet,
         entry.resonance,
-        max(1, amount * config.instant_percent // 100),
+        amount,
         source=GainSource.KINDLED_DEED,
         kindling_situation=situation,
         deed_label=act.label or None,
         ledger_out=grants,
         gain_bonus=gain_bonus,
     )
-    set_aside = amount * config.claim_percent // 100
-    set_aside += set_aside * gain_bonus.percent // 100
-    if set_aside > 0:
-        _set_aside_for_claim(row, set_aside)
     line = f"You earned {grants[-1].amount} {entry.resonance.name}."
     clause = gain_bonus_clause(entry.resonance.affinity, gain_bonus.percent)
     if clause:
         line += f" {clause}"
-    if set_aside > 0:
-        line += f" {set_aside} more is waiting to be claimed."
     transaction.on_commit(_told_of_deed(sheet, line))
 
 
@@ -1315,6 +1410,7 @@ def _told_of_deed(sheet: CharacterSheet, line: str) -> Callable[[], None]:
 
 __all__ = [
     "KINDLING_EVIDENCE_FINDERS",
+    "act_fatigue_category",
     "act_label",
     "award_kindled_deeds",
     "award_scene_act",

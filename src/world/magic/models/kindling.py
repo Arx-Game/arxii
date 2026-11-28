@@ -195,22 +195,12 @@ class KindlingConfig(SharedMemoryModel):
         ),
     )
 
-    instant_percent = models.PositiveSmallIntegerField(
-        default=100,
-        db_default=100,
-        validators=[MinValueValidator(1)],
+    recorded_act_days = models.PositiveSmallIntegerField(
+        default=90,
+        db_default=90,
         help_text=(
-            "The share of a kindled deed's resonance that arrives at once, as a percentage. "
-            "At least 1 always arrives, so the deed always leaves a record."
-        ),
-    )
-    claim_percent = models.PositiveSmallIntegerField(
-        default=50,
-        db_default=50,
-        help_text=(
-            "The share of a kindled deed's resonance set aside for the character to claim "
-            "with a pose or a journal entry, as a percentage. It may be added to the instant "
-            "share, so 100 and 100 pays a deed twice. 0 sets nothing aside."
+            "How many days an act she took stays on her list to point at. After that it is "
+            "removed, and a journal entry can no longer point at it."
         ),
     )
 
