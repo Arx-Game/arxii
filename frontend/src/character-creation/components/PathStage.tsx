@@ -39,7 +39,7 @@ import {
 import { useCGExplanations, usePaths, useUpdateDraft } from '../queries';
 import type { CharacterDraft, Path } from '../types';
 import { NOT_YET_IMPLEMENTED } from '../constants';
-import { Stage } from '../types';
+import { Stage, STAGE_LABELS } from '../types';
 import { cgRecord } from '../cgRecord';
 
 interface PathStageProps {
@@ -94,8 +94,11 @@ export function PathStage({ draft }: PathStageProps) {
       />
       <Marginalia id="note-path">
         {/* PLACEHOLDER: Apostate rewrite */}
+        {/* The stage is named, not "the stage that follows": the magic stage follows Path,
+            and skills are two stages on (#5331). */}
         <Note lead="Paths">
-          set starting skill suggestions; you freely allocate skills in the stage that follows.
+          set starting skill suggestions; you freely allocate skills on{' '}
+          {STAGE_LABELS[Stage.ATTRIBUTES]}.
         </Note>
       </Marginalia>
     </>

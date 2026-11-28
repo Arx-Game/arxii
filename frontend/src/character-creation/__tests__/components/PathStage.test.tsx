@@ -82,6 +82,14 @@ describe('PathStage (folio)', () => {
     );
   });
 
+  it('names the stage skills are allocated on, which is not the one after Path (#5331)', () => {
+    renderWithCharacterCreationProviders(<PathStage draft={createMockDraft()} />);
+    const note = screen.getByText('Paths').closest('.note') as HTMLElement;
+    expect(note).toHaveTextContent(
+      'Paths set starting skill suggestions; you freely allocate skills on Attributes & Skills.'
+    );
+  });
+
   it("asks for the paths under the draft's beginning, whose traditions decide the mark", () => {
     const draft = createMockDraft();
     renderWithCharacterCreationProviders(<PathStage draft={draft} />);

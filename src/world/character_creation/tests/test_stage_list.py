@@ -12,7 +12,13 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
-from world.character_creation.constants import OPTIONAL_STAGES, FamilyPath, Stage
+from world.character_creation.constants import (
+    OPTIONAL_STAGES,
+    REQUIRED_STATS,
+    STAT_DEFAULT_VALUE,
+    FamilyPath,
+    Stage,
+)
 from world.character_creation.factories import CharacterDraftFactory, OriginTemplateFactory
 from world.character_creation.models import DraftStageVisit
 from world.character_creation.validators import (
@@ -20,6 +26,7 @@ from world.character_creation.validators import (
     get_attributes_errors,
     get_heritage_errors,
     get_lineage_errors,
+    get_origin_errors,
 )
 from world.roster.factories import FamilyFactory
 from world.tarot.factories import TarotCardFactory
@@ -144,6 +151,36 @@ class StageAsksOnlyItsOwnTests(TestCase):
         errors = get_attributes_errors(draft)
         assert "Set your statistics" in errors
         assert not any("strength" in error for error in errors)
+
+
+class StageListWordingTests(TestCase):
+    """The stage list prints a stage's first error as written, so each is a plain line (#5331)."""
+
+    def test_origin_asks_for_a_starting_realm_as_the_page_does(self):
+        draft = CharacterDraftFactory(selected_area=None)
+        assert get_origin_errors(draft)[0] == "Select a starting realm"
+
+    def test_points_left_to_place_agree_with_their_number(self):
+        draft = CharacterDraftFactory()
+        draft.draft_data = {"stats": dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)}
+        draft.save()
+        assert get_attributes_errors(draft) == ["110 points remaining to allocate"]
+
+    def test_points_over_the_budget_agree_with_their_number(self):
+        draft = CharacterDraftFactory()
+        draft.draft_data = {"stats": dict.fromkeys(REQUIRED_STATS, 30)}
+        draft.save()
+        assert get_attributes_errors(draft) == ["10 points over budget"]
+
+    def test_one_point_is_a_point(self):
+        # The page places statistics in tens, so one point left over takes a spread the
+        # page cannot send: eleven at 30 and one at 19 is 349 of 350.
+        stats = dict.fromkeys(REQUIRED_STATS, 30)
+        stats[next(iter(stats))] = 19
+        draft = CharacterDraftFactory()
+        draft.draft_data = {"stats": stats}
+        draft.save()
+        assert "1 point remaining to allocate" in get_attributes_errors(draft)
 
 
 class SurnameTests(TestCase):

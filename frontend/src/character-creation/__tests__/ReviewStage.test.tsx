@@ -7,7 +7,7 @@
  * written. Post-submission renders the second night plate (design law §1).
  */
 
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
@@ -270,15 +270,26 @@ describe('ReviewStage', () => {
     expect(screen.getByRole('button', { name: 'Unknown' })).toBeInTheDocument();
   });
 
-  it('shows the chosen Upbringing as a door back to the Lineage chapter', async () => {
+  it('prints no Upbringing row: the route comes with the beginning and is not a pick (#5331)', async () => {
+    renderReview(mockCompleteDraft);
+    await screen.findByText('Beginning');
+    expect(screen.queryByText('Upbringing')).toBeNull();
+    expect(
+      screen.queryByRole('button', { name: mockCompleteDraft.selected_origin_template!.name })
+    ).toBeNull();
+  });
+
+  it('opens Appearance from the Age and Birthday rows, where both are asked (#5331)', async () => {
     const onStageSelect = vi.fn();
-    renderReview(mockCompleteDraft, { onStageSelect });
-    await userEvent.click(
-      await screen.findByRole('button', {
-        name: mockCompleteDraft.selected_origin_template!.name,
-      })
-    );
-    expect(onStageSelect).toHaveBeenCalledWith(Stage.LINEAGE);
+    renderReview(createMockDraft({ ...mockCompleteDraft, birthday_month: 3, birthday_day: 14 }), {
+      onStageSelect,
+    });
+    await userEvent.click(await screen.findByRole('button', { name: '25' }));
+    expect(onStageSelect).toHaveBeenLastCalledWith(Stage.APPEARANCE);
+    const birthday = screen.getByText('Birthday').closest('.row') as HTMLElement;
+    await userEvent.click(within(birthday).getByRole('button'));
+    expect(onStageSelect).toHaveBeenLastCalledWith(Stage.APPEARANCE);
+    expect(onStageSelect).not.toHaveBeenCalledWith(Stage.HERITAGE);
   });
 
   describe('unspent points ledger line', () => {

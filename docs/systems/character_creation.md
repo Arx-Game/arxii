@@ -1001,7 +1001,9 @@ that fits (`youngest_age_for_points`): "Sailor at rank 4 and Soldier at rank 3 n
 career points; the youngest age with 7 is 49. Unpick a career or a rank first." On the
 leaf a ranked card in a career-point grid shows its ranks as pips in its top right
 (`ChapterOffers` `pointsPicks`; a pip sets the rank, the pips past the points left are
-dimmed) and the pick line reads copy key `beats_pick_points`. Finalize writes the entry's
+dimmed). The section prints no pick line of its own: the beat's authored prompt says the
+allowance, and a second line said it twice (#5331; the copy key `beats_pick_points` is not
+read). Finalize writes the entry's
 rank (`_create_distinctions`), so a rank-four career lands as rank four. Journeys:
 `integration_tests/test_career_points_journeys.py`. `Beginnings.beat_mode`
 has one value, `POOL`, since #4830: the one-kept mode (the Sleeper's one unexcluded beat
