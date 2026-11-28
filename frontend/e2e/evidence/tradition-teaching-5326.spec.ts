@@ -76,6 +76,9 @@ interface Seed {
   cinder_username: string;
   cinder_password: string;
   cinder_character_name: string;
+  veil_username: string;
+  veil_password: string;
+  veil_character_name: string;
   wren_allocation_id: number;
   aldric_allocation_id: number;
   taught_allocation_id: number;
@@ -639,6 +642,42 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
       await expect(staff.locator('.messagelist .success')).toBeVisible();
       await staff.context().close();
     }
+
+    await page.keyboard.press('Escape');
+    await page.context().close();
+  });
+
+  test('screen 8, a Lantern Concord student whose Gift fits: the menu says both that it fits and that sessions are harder', async ({
+    browser,
+  }, testInfo) => {
+    test.setTimeout(120_000);
+    const seed = readSeed();
+    const page = await signedInPage(browser, seed.veil_username, seed.veil_password);
+    await page.goto('/game');
+    await page
+      .locator(
+        `button[title="Connect as ${seed.veil_character_name}"], ` +
+          `button[title="Switch to ${seed.veil_character_name}"], ` +
+          `button[title="${seed.veil_character_name}"]`
+      )
+      .first()
+      .click();
+    const people = page.getByTestId('npc-givers-block');
+    await expect(people).toContainText(seed.trainer_name, { timeout: 45000 });
+    await people.getByTestId(`talk-${seed.trainer_role_id}`).click();
+
+    const dialog = page.getByRole('dialog');
+    await expect(dialog.getByRole('heading', { name: seed.trainer_name })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /Villainy course/ })).toBeVisible();
+    await expect(
+      dialog.getByText(
+        'Fits your Ashen Veil and its Abyssal affinity. Sessions are easier for you.'
+      )
+    ).toBeVisible();
+    await expect(
+      dialog.getByText('Your Tradition does not teach this. Sessions are harder for you.')
+    ).toBeVisible();
+    await shot(testInfo, '08d-trainer-menu-lantern-student-gift-fits.png', dialog);
 
     await page.keyboard.press('Escape');
     await page.context().close();

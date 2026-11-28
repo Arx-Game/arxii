@@ -1973,6 +1973,10 @@ class TraditionTeachingSeed:
     cinder_username: str
     cinder_password: str
     cinder_character_name: str
+    #: A student of the Good Tradition whose Gift and aura fit the Cinder Court.
+    veil_username: str
+    veil_password: str
+    veil_character_name: str
     wren_allocation_id: int
     aldric_allocation_id: int
     taught_allocation_id: int
@@ -1995,6 +1999,9 @@ TEACHING_ACADEMY = "The Cinder Academy"
 TEACHING_OWN_ALT = "Mira Alder"
 TEACHING_MENTOR_ACCOUNT = "teaching_mentor"
 TEACHING_CINDER_ACCOUNT = "teaching_cinder"
+TEACHING_VEIL_ACCOUNT = "teaching_veil"
+TEACHING_VEIL_STUDENT = "Nerys Vane"
+TEACHING_VEIL_GIFT = "Ashen Veil"
 TEACHING_GM_ACCOUNT = "teaching_gm"
 TEACHING_GM_CHARACTER = "Nessa Pryor"
 #: Two NPCs the game master account holds: one has no Occult rating, one is declined.
@@ -2668,6 +2675,52 @@ def _teaching_draft(  # noqa: PLR0915 - the whole Gift stage world, one row afte
     return draft.pk
 
 
+def _teaching_gift_student(
+    account: AccountDB,
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM - a factory character's location; no RoomProfile
+    good: object,
+    evil: object,
+) -> object:
+    """Nerys Vane: of the Good Tradition, holding the Major Gift Ashen Veil and an Abyssal aura.
+
+    The Cinder Court favors Ashen Veil (a Gift grant) and the Abyssal affinity, and her aura is
+    90% Abyssal, so the Cinder Court trainer's menu reads that the course fits her Gift and its
+    affinity. Her own Tradition (the Good one) does not teach Villainy, so the menu also tells
+    her the sessions are harder. *account* plays her in *room* and she is its selected
+    character. Returns her roster entry. Safe to run twice.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        CharacterAuraFactory,
+        CharacterGiftFactory,
+        GiftFactory,
+        ensure_canonical_affinities,
+    )
+    from world.magic.models import CharacterAura, CharacterTradition  # noqa: PLC0415
+    from world.magic.models.grants import TraditionGiftGrant  # noqa: PLC0415
+    from world.roster.services.selection import set_selected_entry  # noqa: PLC0415
+
+    _celestial, _primal, abyssal = ensure_canonical_affinities()
+    gift = GiftFactory(name=TEACHING_VEIL_GIFT, description="A veil of ash that hides a caster.")
+    TraditionGiftGrant.objects.get_or_create(tradition=evil, gift=gift)
+    evil.favored_affinities.add(abyssal)
+    entry = _teaching_character(TEACHING_VEIL_STUDENT, pronoun="her", player=account, room=room)
+    sheet = entry.character_sheet
+    CharacterTradition.objects.get_or_create(character=sheet, tradition=good, left_at=None)
+    CharacterGiftFactory(character=sheet, gift=gift)
+    if not CharacterAura.objects.filter(character=sheet).exists():
+        CharacterAuraFactory(
+            character=sheet,
+            celestial=Decimal("0.00"),
+            primal=Decimal("10.00"),
+            abyssal=Decimal("90.00"),
+        )
+    set_selected_entry(PlayerData.objects.get(account=account), entry)
+    return entry
+
+
 def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
     """The rows `tradition-teaching-5326.spec.ts` photographs, in an `rt_` database only (#5326).
 
@@ -2748,6 +2801,8 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
         )
         _teaching_mentor(TEACHING_STUDENT_TAUGHT, evil, None)
         set_selected_entry(PlayerData.objects.get(account=cinder_account), marek)
+        veil_account, veil_password = _teaching_player_account(TEACHING_VEIL_ACCOUNT)
+        _teaching_gift_student(veil_account, trainer["room"], good, evil)
         students = {
             name: _teaching_character(name, pronoun=pronoun).character_sheet
             for name, pronoun in (
@@ -2816,6 +2871,9 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
         cinder_username=cinder_account.username,
         cinder_password=cinder_password,
         cinder_character_name=TEACHING_STUDENT_TAUGHT,
+        veil_username=veil_account.username,
+        veil_password=veil_password,
+        veil_character_name=TEACHING_VEIL_STUDENT,
         wren_allocation_id=wren_allocation,
         aldric_allocation_id=aldric_allocation,
         taught_allocation_id=taught_allocation,
