@@ -46,6 +46,7 @@ interface Seed {
   distinction_id: number;
   evil_role_id: number;
   evil_course_id: number;
+  trainer_role_id: number;
   lantern_course_id: number;
   bare_course_id: number;
   trainer_name: string;
@@ -565,7 +566,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
       .click();
     const people = page.getByTestId('npc-givers-block');
     await expect(people).toContainText(seed.trainer_name, { timeout: 45000 });
-    await people.getByTestId(`talk-${seed.evil_role_id}`).click();
+    await people.getByTestId(`talk-${seed.trainer_role_id}`).click();
 
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: seed.trainer_name })).toBeVisible();
@@ -600,7 +601,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
       .click();
     const people = page.getByTestId('npc-givers-block');
     await expect(people).toContainText(seed.trainer_name, { timeout: 45000 });
-    await people.getByTestId(`talk-${seed.evil_role_id}`).click();
+    await people.getByTestId(`talk-${seed.trainer_role_id}`).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog.getByRole('heading', { name: seed.trainer_name })).toBeVisible();
     const offer = dialog.getByRole('button', { name: /Villainy course/ });
@@ -623,8 +624,13 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
       await expect(staff.locator('.messagelist .success')).toBeVisible();
 
       await offer.click();
-      await toastShown(page, 'no longer teaches Villainy');
-      await shot(testInfo, '08c-trainer-menu-course-closed.png', page);
+      await expect(
+        dialog.getByText(
+          `${seed.trainer_name}'s Tradition no longer teaches Villainy, so this course is closed. ` +
+            'Look for a trainer whose Tradition teaches it. Nothing was charged.'
+        )
+      ).toBeVisible();
+      await shot(testInfo, '08c-trainer-menu-course-closed.png', dialog);
     } finally {
       await staff.goto(tradition);
       await staff.locator('#id_taught_skills_from').selectOption({ label: 'Villainy' });

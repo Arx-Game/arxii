@@ -1935,6 +1935,8 @@ class TraditionTeachingSeed:
     distinction_id: int
     evil_role_id: int
     evil_course_id: int
+    #: The role the trainer players talk to: it fronts a house, so a course can be taken.
+    trainer_role_id: int
     #: A Villainy course on a role whose Tradition does not teach it (authored before the rule).
     lantern_course_id: int
     #: A Villainy course on a role that names no Tradition (authored before the rule).
@@ -1989,6 +1991,7 @@ TEACHING_MENTOR_RATED = "Drusa Kell"
 TEACHING_ROOM = "The Cinder Hall"
 TEACHING_STAFF = "teaching_staff"
 TEACHING_COURSE = "Villainy course"
+TEACHING_ACADEMY = "The Cinder Academy"
 TEACHING_OWN_ALT = "Mira Alder"
 TEACHING_MENTOR_ACCOUNT = "teaching_mentor"
 TEACHING_CINDER_ACCOUNT = "teaching_cinder"
@@ -2214,6 +2217,8 @@ def _teaching_trainer(skills: dict[str, object], good: object, evil: object) -> 
         NPCServiceOffer,
         SkillCourseOfferDetails,
     )
+    from world.societies.factories import OrganizationFactory  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
 
     check_category, _ = CheckCategory.objects.get_or_create(name="Magic")
     check_type = CheckType.objects.filter(name="Study a magical skill").first()
@@ -2255,11 +2260,44 @@ def _teaching_trainer(skills: dict[str, object], good: object, evil: object) -> 
         )
         courses[key] = course
         courses[f"{key}_role"] = role
+    # The trainer players meet is a fourth role, named for her and fronting a house, because
+    # enrolling charges coin to the role's house and refuses a role with none. The three
+    # roles above stay house-less, as the admin screens draw them.
+    academy = Organization.objects.filter(name=TEACHING_ACADEMY).first() or OrganizationFactory(
+        name=TEACHING_ACADEMY, description="The house the Cinder Court's trainers teach for."
+    )
+    trainer_role, _ = NPCRole.objects.update_or_create(
+        name=TEACHING_TRAINER,
+        defaults={
+            "description": f"A master who teaches in the manner of {evil.name}.",
+            "teaches_tradition": evil,
+            "faction_affiliation": academy,
+        },
+    )
+    trainer_offer, _ = NPCServiceOffer.objects.update_or_create(
+        role=trainer_role,
+        label=TEACHING_COURSE,
+        defaults={"kind": OfferKind.SKILL_COURSE, "is_final": True, "ap_cost": 0},
+    )
+    SkillCourseOfferDetails.objects.update_or_create(
+        offer=trainer_offer,
+        defaults={
+            "skill": skills["Villainy"],
+            "total_development": 60,
+            "session_development": 10,
+            "session_ap_cost": 2,
+            "coin_cost": 100,
+            "check_type": check_type,
+            "check_difficulty_level": 2,
+        },
+    )
+    Functionary.objects.filter(role=courses["evil_role"]).delete()
     Functionary.objects.update_or_create(
-        role=courses["evil_role"],
+        role=trainer_role,
         room=get_room_profile(room),
         defaults={"name_override": TEACHING_TRAINER},
     )
+    courses["trainer_role"] = trainer_role
     courses["room"] = room
     return courses
 
@@ -2748,6 +2786,7 @@ def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
         distinction_id=prodigy.pk,
         evil_role_id=trainer["evil_role"].pk,
         evil_course_id=trainer["evil"].pk,
+        trainer_role_id=trainer["trainer_role"].pk,
         lantern_course_id=trainer["lantern"].pk,
         bare_course_id=trainer["bare"].pk,
         trainer_name=TEACHING_TRAINER,
