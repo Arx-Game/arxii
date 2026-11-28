@@ -80,6 +80,7 @@ if TYPE_CHECKING:
 from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
+from actions.constants import ActionCategory
 from evennia_extensions.models import RoomProfile
 from world.areas.services import area_for_scene
 from world.character_sheets.models import CharacterSheet
@@ -96,6 +97,13 @@ from world.magic.models import (
     ResonanceGainConfig,
     ResonanceGrant,
     SceneEntryEndorsement,
+)
+from world.magic.services.gain_fatigue import (
+    charge_gain_fatigue,
+    gain_without_act_refusal_line,
+    gain_without_act_shrunk_line,
+    pose_gain_payer,
+    tell_gainer,
 )
 from world.magic.types import (
     ResonanceDailyTickSummary,
@@ -114,6 +122,10 @@ from world.scenes.place_models import InteractionReceiver
 from world.scenes.services import active_persona_for_sheet
 
 logger = logging.getLogger(__name__)
+
+# What a gain with no act came from, as the private line names it (#5327).
+_WHAT_ENDORSEMENT = "that endorsement"
+_WHAT_TAG = "that tag"
 
 
 def account_for_sheet(sheet: CharacterSheet) -> AccountDB | None:
@@ -647,15 +659,47 @@ def settle_weekly_pot(endorser_sheet: CharacterSheet) -> SettlementResult:
             endorsement.settled_at = now
             endorsement.save(update_fields=["granted_amount", "settled_at"])
             continue
+        # A gain that points at no act tires whoever pays for it (#5327), as a mark does.
+        gainer = endorsement.endorsee_sheet
+        charge = charge_gain_fatigue(
+            gainer,
+            pose_gain_payer(gainer, endorsement.resonance, endorsement.interaction),
+            endorsement.resonance,
+            ActionCategory.SOCIAL,
+            share,
+            from_mark=False,
+        )
+        if charge.refused:
+            endorsement.granted_amount = 0
+            endorsement.settled_at = now
+            endorsement.save(update_fields=["granted_amount", "settled_at"])
+            tell_gainer(
+                gainer,
+                gain_without_act_refusal_line(
+                    charge, gainer, endorsement.resonance, what=_WHAT_ENDORSEMENT
+                ),
+            )
+            continue
         ledger: list = []
         grant_resonance(
-            endorsement.endorsee_sheet,
+            gainer,
             endorsement.resonance,
-            share,
+            charge.amount,
             source=GainSource.POSE_ENDORSEMENT,
             pose_endorsement=endorsement,
             ledger_out=ledger,
         )
+        if charge.shrunk:
+            tell_gainer(
+                gainer,
+                gain_without_act_shrunk_line(
+                    charge,
+                    gainer,
+                    endorsement.resonance,
+                    what=_WHAT_ENDORSEMENT,
+                    paid=ledger[-1].amount,
+                ),
+            )
         endorsement.granted_amount = ledger[-1].amount
         endorsement.settled_at = now
         endorsement.save(update_fields=["granted_amount", "settled_at"])
@@ -1131,6 +1175,65 @@ def _tell_tagged_player(
     transaction.on_commit(lambda: character.msg(line))
 
 
+def _pay_dramatic_moment(
+    character_sheet: CharacterSheet,
+    moment_type: DramaticMomentType,
+    granted_resonance: Resonance,
+    tag: DramaticMomentTag,
+    *,
+    interaction: Interaction | None,
+) -> ResonanceGrant | None:
+    """Pay a GM's tag, after the fatigue its payer owes (#5327); the grant, or None when the
+    payer had nothing left to pay with.
+
+    A tag points at no act, so the gain tires whoever pays for it as a mark would (the tagged
+    character for Primal and Celestial, the pose's one named target for Abyssal, nobody when
+    the pose names none or several). A payer who is running low shrinks the gain; one with
+    nothing left pays nothing, and the tagged player is told why and what to do next. The tag
+    itself, and the renown it gives, stand either way.
+    """
+    from world.magic.constants import GainSource  # noqa: PLC0415
+    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
+
+    charge = charge_gain_fatigue(
+        character_sheet,
+        pose_gain_payer(character_sheet, granted_resonance, interaction),
+        granted_resonance,
+        ActionCategory.SOCIAL,
+        moment_type.resonance_amount,
+        from_mark=False,
+    )
+    if charge.refused:
+        tell_gainer(
+            character_sheet,
+            gain_without_act_refusal_line(
+                charge, character_sheet, granted_resonance, what=_WHAT_TAG
+            ),
+        )
+        return None
+    ledger: list[ResonanceGrant] = []
+    grant_resonance(
+        character_sheet,
+        granted_resonance,
+        charge.amount,
+        source=GainSource.DRAMATIC_MOMENT,
+        dramatic_moment=tag,
+        ledger_out=ledger,
+    )
+    if charge.shrunk:
+        tell_gainer(
+            character_sheet,
+            gain_without_act_shrunk_line(
+                charge,
+                character_sheet,
+                granted_resonance,
+                what=_WHAT_TAG,
+                paid=ledger[-1].amount,
+            ),
+        )
+    return ledger[-1]
+
+
 def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing one tag event
     *,
     character_sheet: CharacterSheet,
@@ -1170,10 +1273,8 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     Raises:
         DramaticMomentCapExceeded: If per_scene_cap for this (moment_type, scene, sheet) is reached.
     """
-    from world.magic.constants import GainSource  # noqa: PLC0415
     from world.magic.exceptions import DramaticMomentCapExceeded  # noqa: PLC0415
     from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
-    from world.magic.services.resonance import grant_resonance  # noqa: PLC0415
 
     granted_resonance = _resolve_moment_resonance(
         character_sheet=character_sheet,
@@ -1209,17 +1310,11 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     if cached_tags is not None:
         interaction.cached_dramatic_moment_tags = [*cached_tags, tag]
     if granted_resonance is not None:
-        ledger: list[ResonanceGrant] = []
-        grant_resonance(
-            character_sheet,
-            granted_resonance,
-            moment_type.resonance_amount,
-            source=GainSource.DRAMATIC_MOMENT,
-            dramatic_moment=tag,
-            ledger_out=ledger,
+        paid = _pay_dramatic_moment(
+            character_sheet, moment_type, granted_resonance, tag, interaction=interaction
         )
-        if resonance is not None:
-            _tell_tagged_player(character_sheet, moment_type, ledger[-1])
+        if paid is not None and resonance is not None:
+            _tell_tagged_player(character_sheet, moment_type, paid)
 
     try:
         persona = character_sheet.primary_persona

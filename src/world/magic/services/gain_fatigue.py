@@ -31,6 +31,7 @@ from world.magic.types.marking import GainFatigueCharge
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
     from world.magic.models import Resonance
+    from world.scenes.models import Interaction
 
 _SOMEONE = "Someone"
 _YOU = "you"
@@ -50,12 +51,47 @@ def gain_fatigue_payer(
     return gainer
 
 
-def charge_gain_fatigue(
+def pose_gain_target(interaction: Interaction) -> CharacterSheet | None:
+    """The one character a pose is aimed at, for a gain that points at no act (#5327).
+
+    An Abyssal gain tires the character it was taken from. A pose that names none or several
+    has no single victim, so the answer is None and nobody pays.
+    """
+    personas = interaction.cached_target_personas
+    if len(personas) != 1:
+        return None
+    return personas[0].character_sheet
+
+
+def pose_gain_payer(
+    gainer: CharacterSheet, resonance: Resonance, interaction: Interaction | None
+) -> CharacterSheet | None:
+    """Who pays for ``gainer`` gaining ``resonance`` from a pose that points at no act (#5327).
+
+    An endorsed pose, an accepted proposal and a GM's tag follow ``gain_fatigue_payer``: the
+    gainer for Primal and Celestial, and for Abyssal the pose's one named target, or nobody
+    when ``interaction`` is None or names none or several.
+    """
+    target = None
+    if interaction is not None and resonance.affinity.name == AFFINITY_ABYSSAL:
+        target = pose_gain_target(interaction)
+    return gain_fatigue_payer(gainer, resonance, target)
+
+
+def tell_gainer(gainer: CharacterSheet, line: str) -> None:
+    """Send ``gainer``'s character one private line once the surrounding transaction commits."""
+    character = gainer.character
+    transaction.on_commit(lambda: character.msg(line))
+
+
+def charge_gain_fatigue(  # noqa: PLR0913 - one gain's payer, pool, size and who is told
     gainer: CharacterSheet,
     payer: CharacterSheet | None,
     resonance: Resonance,
     category: str,
     amount: int,
+    *,
+    from_mark: bool = True,
 ) -> GainFatigueCharge:
     """Charge ``payer`` the fatigue of a gain of ``amount`` in ``resonance``, from ``category``.
 
@@ -69,7 +105,9 @@ def charge_gain_fatigue(
     0, so the caller refuses the gain and consumes nothing.
 
     When someone other than ``gainer`` is charged, they are told in one private line once the
-    surrounding transaction commits.
+    surrounding transaction commits. ``from_mark`` is true for a mark (the line says it was
+    marked) and false for a gain from an endorsement or a GM's tag (it says the resonance grew
+    from a pose aimed at them).
     """
     unchanged = GainFatigueCharge(amount=amount, charged=0, payer=payer)
     base_cost = resonance.affinity.gain_fatigue
@@ -87,8 +125,40 @@ def charge_gain_fatigue(
             return GainFatigueCharge(amount=0, charged=0, payer=payer, shrunk=True)
     add_fatigue_points(payer, category, charged)
     if payer.pk != gainer.pk:
-        transaction.on_commit(_told_payer(payer, gainer, resonance, shrunk=shrunk))
+        transaction.on_commit(
+            _told_payer(payer, gainer, resonance, shrunk=shrunk, from_mark=from_mark)
+        )
     return GainFatigueCharge(amount=paid, charged=charged, payer=payer, shrunk=shrunk)
+
+
+def gain_without_act_refusal_line(
+    charge: GainFatigueCharge, gainer: CharacterSheet, resonance: Resonance, *, what: str
+) -> str:
+    """What ``gainer`` reads when a gain from ``what`` (an endorsement, a GM's tag) was not paid
+    because its payer is worn, and what to do next: "Hale is too worn to pay for this, so your
+    Cruelty does not grow from that endorsement. Try again once Hale has recovered, or mark an
+    act." """
+    who = payer_name(charge, gainer)
+    if _payer_is_gainer(charge, gainer):
+        lead, again = "You were too worn to pay for this", "you have"
+    else:
+        lead, again = f"{who} is too worn to pay for this", f"{who} has"
+    return (
+        f"{lead}, so your {resonance.name} does not grow from {what}. "
+        f"Try again once {again} recovered, or mark an act."
+    )
+
+
+def gain_without_act_shrunk_line(
+    charge: GainFatigueCharge, gainer: CharacterSheet, resonance: Resonance, *, what: str, paid: int
+) -> str:
+    """What ``gainer`` reads when a gain from ``what`` paid ``paid`` but less than the full
+    amount: "That endorsement paid you 4 Cruelty instead of the full amount, because Hale had
+    little left to give. Marks against Hale stay small until they have recovered." """
+    return (
+        f"{what.capitalize()} paid you {paid} {resonance.name} instead of the full amount, "
+        f"{shrink_reason(charge, gainer)}. {stay_small_sentence(charge, gainer)}"
+    )
 
 
 def _payer_is_gainer(charge: GainFatigueCharge, gainer: CharacterSheet) -> bool:
@@ -140,7 +210,12 @@ def _name_for(viewer: CharacterSheet, sheet: CharacterSheet) -> str:
 
 
 def _told_payer(
-    payer: CharacterSheet, gainer: CharacterSheet, resonance: Resonance, *, shrunk: bool
+    payer: CharacterSheet,
+    gainer: CharacterSheet,
+    resonance: Resonance,
+    *,
+    shrunk: bool,
+    from_mark: bool,
 ) -> Callable[[], None]:
     """The after-commit send of the one private line a payer other than the gainer reads;
     when the charge took only part of the cost it says so."""
@@ -149,7 +224,10 @@ def _told_payer(
 
     def _send() -> None:
         name = _name_for(payer, gainer)
-        body = f"{name} marked {resonance.name} on what they did to you. You are wearier."
+        if from_mark:
+            body = f"{name} marked {resonance.name} on what they did to you. You are wearier."
+        else:
+            body = f"{name}'s {resonance.name} grew from a pose aimed at you. You are wearier."
         if shrunk:
             body += " You had little left to give, so it took only part."
         send_narrative_message(
@@ -165,8 +243,13 @@ def _told_payer(
 __all__ = [
     "charge_gain_fatigue",
     "gain_fatigue_payer",
+    "gain_without_act_refusal_line",
+    "gain_without_act_shrunk_line",
     "payer_name",
+    "pose_gain_payer",
+    "pose_gain_target",
     "refusal_line",
     "shrink_reason",
     "stay_small_sentence",
+    "tell_gainer",
 ]
