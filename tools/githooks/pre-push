@@ -14,6 +14,14 @@ fi
 
 # git names each pushed ref on stdin: "<local ref> <local sha> <remote ref> <remote sha>".
 pushed="$(cat)"
+# A push with nothing new names no ref, so there is nothing to check. Passing the
+# empty string on would hand pre-commit one blank line (a here-string always ends
+# in a newline), which it cannot parse: it died with "ValueError: not enough values
+# to unpack" and refused the push, breaking open-pr.sh on a branch already pushed
+# (#5329).
+if [[ -z "$pushed" ]]; then
+  exit 0
+fi
 # A push of screenshots only (`just shot-post`, #5310) carries image blobs on an
 # orphan commit under refs/evidence/. It has no code to check, and with no common
 # ancestor pre-commit would run every hook over the whole repository.
@@ -22,7 +30,7 @@ while read -r _ _ remote_ref _; do
   [[ -z "$remote_ref" ]] && continue
   [[ "$remote_ref" == refs/evidence/* ]] || evidence_only=0
 done <<<"$pushed"
-if [[ -n "$pushed" && "$evidence_only" == 1 ]]; then
+if [[ "$evidence_only" == 1 ]]; then
   exit 0
 fi
 
