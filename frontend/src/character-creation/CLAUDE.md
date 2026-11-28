@@ -107,7 +107,9 @@ character-creation/
     │                        #   Task 6) — claim-path house founding is
     │                        #   `almanach/founder/FounderAlmanach.tsx`, mounted from
     │                        #   `FamilyPathSection.tsx`.
-    ├── PathStage.tsx        # Stage 5: Path selection
+    ├── PathStage.tsx        # Stage 5: Path selection. Its side note names the stage
+    │                        #   skills are allocated on by `STAGE_LABELS`, never "the
+    │                        #   stage that follows" (#5331: the magic stage follows Path)
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection). A draft
     │                        #   with no saved statistics has the spread on screen saved when
@@ -221,7 +223,12 @@ character-creation/
     │                        #   Presumed Dead's card), and a second door of the same shape,
     │                        #   "A second face", when they include alter_ego (saved as
     │                        #   draft_data.alter_ego, null when skipped); both share FaceForm.
-    ├── ReviewStage.tsx      # Stage 11: Review and submit
+    ├── ReviewStage.tsx      # Stage 11: Review and submit. Each row of the record opens
+    │                        #   the stage that asks for its value: Age and Birthday open
+    │                        #   Appearance (#5331; they opened Heritage, which asks
+    │                        #   neither). There is no row for the route
+    │                        #   (`selected_origin_template`): it comes with the beginning
+    │                        #   since #4395 and its name is staff's, not a player's pick
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep
     ├── PerspectivesPanel.tsx # "On {subject}" shop-window opinions; renders as margin
@@ -337,9 +344,12 @@ character-creation/
         │                         #   stage is absent), each beat a `ChapterOffers`
         │                         #   `layout="grid"` of its `backgrounds` offers picked
         │                         #   straight from the cards, the pick line from the
-        │                         #   entry's `allowance` (one, N career points on a beat
-        │                         #   whose `allowance_is_points` is on (#4829: a ranked
-        │                         #   card shows pips, `ChapterOffers` `pointsPicks`), any),
+        │                         #   entry's `allowance` ("pick any", "pick up to N"; none
+        │                         #   on a one-of row, and none on a beat whose
+        │                         #   `allowance_is_points` is on, where the beat's own
+        │                         #   prompt says the career-point allowance and a second
+        │                         #   line said it twice, #5331; #4829: a ranked
+        │                         #   card shows pips, `ChapterOffers` `pointsPicks`),
         │                         #   a line of the player's own once a card
         │                         #   is picked. A beginning that
         │                         #   strikes every stage shows its struck_stages_text
@@ -386,7 +396,10 @@ character-creation/
         │                         #   (claim path). Reads the Upbringing's `parentage`
         │                         #   (#4024): `unknown` renders only the tarot ritual
         │                         #   (under copy `tarot_no_parents_intro`) and Service,
-        │                         #   no family heading or parents card; `adoptive`
+        │                         #   no family heading or parents card; a route whose
+        │                         #   only path is "no family" prints no family heading
+        │                         #   either (#5331: production words it "Select a
+        │                         #   Family:", which stood over the ritual alone); `adoptive`
         │                         #   heads the section `adoptive_family_heading` and
         │                         #   titles the parents card "Your adoptive parents".
         │                         #   Path labels are "An established family" / "Your

@@ -468,6 +468,8 @@ describe('LineageStage', () => {
       });
 
       expect(screen.getByText('Naming Ritual')).toBeInTheDocument();
+      // A route that offers no family has nothing to choose under a family heading (#5331).
+      expect(screen.queryByText('Your Family')).not.toBeInTheDocument();
     });
 
     it('shows a path picker for a multi-path upbringing and PATCHes family_path on pick', async () => {

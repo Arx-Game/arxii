@@ -106,7 +106,6 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const familyName =
     path === 'named' ? (draftData.new_family_name ?? '') : (draft.family?.name ?? '');
   const familyDisplay = path === 'none' ? 'Unknown' : familyName;
-  const upbringingDisplay = draft.selected_origin_template?.name ?? '';
   const fullName = composeFullName(draftData.first_name, familyName, 'Unnamed Character');
 
   const appStatus = application.data?.status ?? null;
@@ -168,9 +167,11 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
     { label: 'Beginning', value: draft.selected_beginnings?.name, stage: Stage.HERITAGE },
     { label: 'Species', value: draft.selected_species?.name, stage: Stage.HERITAGE },
     { label: 'Gender', value: draft.selected_gender?.display_name, stage: Stage.HERITAGE },
-    { label: 'Age', value: draft.age?.toString(), stage: Stage.HERITAGE },
-    { label: 'Birthday', value: birthday, stage: Stage.HERITAGE },
-    { label: 'Upbringing', value: upbringingDisplay, stage: Stage.LINEAGE },
+    // Age and birthday are asked on Appearance; each row opens the stage that asks it (#5331).
+    { label: 'Age', value: draft.age?.toString(), stage: Stage.APPEARANCE },
+    { label: 'Birthday', value: birthday, stage: Stage.APPEARANCE },
+    // No row for the route (`selected_origin_template`): it comes with the beginning since
+    // #4395, the player never picks it, and its name is staff's (#5331).
     { label: 'Family', value: familyDisplay, stage: Stage.LINEAGE },
     { label: 'Path', value: draft.selected_path?.name, stage: Stage.PATH },
     { label: 'Tradition', value: draft.selected_tradition?.name, stage: Stage.GIFT },

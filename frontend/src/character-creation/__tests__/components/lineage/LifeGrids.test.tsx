@@ -191,7 +191,11 @@ describe('LifeGrids', () => {
     );
     // The life's own heading; the list of choices carries the same words as its label.
     expect(screen.getAllByRole('heading', { name: 'Life So Far' })[0]).toHaveClass('section-h');
-    expect(screen.getByText(/best describes Marisol’s life up to now/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /^In this stage, distinctions can be selected that best describe Marisol’s life up to now\./
+      )
+    ).toBeInTheDocument();
     for (const name of ['Childhood', 'Youth', 'Before the Glimpse']) {
       expect(stage(name)).toHaveAttribute('data-open', 'true');
       expect(
@@ -297,6 +301,27 @@ describe('LifeGrids', () => {
     const known = section('Known for');
     expect(within(known).getByRole('button', { name: /^Kept a shop/ })).toBeDisabled();
     expect(within(known).getByRole('button', { name: /^Spied for a house/ })).toBeEnabled();
+  });
+
+  it('a section that spends career points says its allowance once, in its own prompt (#5331)', () => {
+    pool = [
+      beat({
+        beat_id: 5,
+        name: 'Past Careers',
+        prompt: '1 point for careers at age 19 and every 5 years after that.',
+        life_stage: 'adulthood',
+        selection: 'any',
+        allowance: 1,
+        allowance_is_points: true,
+        answer_offer_ids: [30],
+      }),
+    ];
+    renderWithCharacterCreationProviders(<LifeGrids draft={createMockDraft()} copy={{}} />);
+    const careers = section('Past Careers');
+    expect(
+      within(careers).getByText('1 point for careers at age 19 and every 5 years after that.')
+    ).toBeInTheDocument();
+    expect(within(careers).queryByText(/career points/)).toBeNull();
   });
 
   it('answers with a group read under headings with counts, the ungrouped last', async () => {

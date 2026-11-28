@@ -78,17 +78,14 @@ interface Pick {
   cost: number;
 }
 
-/** The pick line beside a beat's name: the allowance the years lived give, or any; a
- * one-of row says nothing (ruled 2026-10-25: no "pick one"). */
+/** The pick line beside a beat's name: the cap an age-scaled beat gives, or any; a
+ * one-of row says nothing (ruled 2026-10-25: no "pick one"), and so does a beat that
+ * spends career points (#4829), whose own prompt says the allowance. Printing it here
+ * too said it twice (owner ruling 2026-10-29: the prompt is "the only thing we say
+ * there"; #5331). The copy key `beats_pick_points` is not read. */
 function pickLine(beat: BeatPoolEntry, copy: CGExplanations | undefined): string {
   if (beat.allowance === null) return copy?.beats_pick_any ?? 'pick any';
-  if (beat.allowance_is_points) {
-    // Career points (#4829): one at nineteen, one more every five years to fifty-nine;
-    // a point buys a card or a rank on one.
-    return (
-      copy?.beats_pick_points ?? '{n} career points: one at 19 and one more every five years, to 59'
-    ).replace('{n}', String(beat.allowance));
-  }
+  if (beat.allowance_is_points) return '';
   if (beat.allowance === 1) return '';
   return (copy?.beats_pick_up_to ?? 'pick up to {n}; an older character takes more').replace(
     '{n}',
@@ -544,7 +541,7 @@ export function LifeGrids({ draft, copy }: Props) {
         <p className="helper">
           {named(
             copy?.life_so_far_help ??
-              'In this stage, distinctions that can be selected that best describes {name}’s life up to now. Advantageous distinctions grant bonuses and cost CG points, disadvantages have penalties but grant CG points.'
+              'In this stage, distinctions can be selected that best describe {name}’s life up to now. Advantageous distinctions grant bonuses and cost CG points, disadvantages have penalties but grant CG points.'
           )}
         </p>
         {stages.map(renderStage)}

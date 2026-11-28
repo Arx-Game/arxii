@@ -73,7 +73,8 @@ def get_origin_errors(draft: CharacterDraft) -> list[str]:
     """
     errors: list[str] = []
     if not draft.selected_area:
-        errors.append("Select a starting area")
+        # The Origin page asks for a "starting realm"; the stage list says the same (#5331).
+        errors.append("Select a starting realm")
     if not draft.draft_data.get("first_name"):
         errors.append("Enter a first name")
     return errors
@@ -454,11 +455,13 @@ def get_attributes_errors(draft: CharacterDraft) -> list[str]:
         elif error := stat_value_error(stat_name, value):
             errors.append(error)
 
+    # The stage list prints this line as written, so the noun agrees with its number (#5331).
     remaining = draft.calculate_points_remaining()
+    points = "point" if abs(remaining) == 1 else "points"
     if remaining > 0:
-        errors.append(f"{remaining} point(s) remaining to allocate")
+        errors.append(f"{remaining} {points} remaining to allocate")
     elif remaining < 0:
-        errors.append(f"{abs(remaining)} point(s) over budget")
+        errors.append(f"{abs(remaining)} {points} over budget")
 
     return errors
 

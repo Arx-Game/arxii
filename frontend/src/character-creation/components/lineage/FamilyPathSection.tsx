@@ -105,15 +105,21 @@ export function FamilyPathSection({
     );
   }
 
+  // A route whose only path is "no family" has no family to choose: the heading (which
+  // staff may word "Select a Family:") would stand over the naming ritual alone (#5331).
+  const hasFamilyToChoose = showPathPicker || path !== 'none';
+
   return (
     <section className="space-y-6">
-      <div>
-        <h3 className="theme-heading text-lg font-semibold">
-          {adoptive
-            ? (copy?.adoptive_family_heading ?? 'Your adoptive family')
-            : (copy?.family_path_heading ?? 'Your Family')}
-        </h3>
-      </div>
+      {hasFamilyToChoose && (
+        <div>
+          <h3 className="theme-heading text-lg font-semibold">
+            {adoptive
+              ? (copy?.adoptive_family_heading ?? 'Your adoptive family')
+              : (copy?.family_path_heading ?? 'Your Family')}
+          </h3>
+        </div>
+      )}
 
       {showPathPicker && (
         <RadioGroup
