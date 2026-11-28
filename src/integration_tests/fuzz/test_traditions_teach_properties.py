@@ -32,6 +32,7 @@ from django.utils import timezone
 from hypothesis import given, settings, strategies as st
 from hypothesis.extra.django import TestCase as HypothesisTestCase
 
+from actions.definitions.progression import ManageTrainingAction
 from evennia_extensions.models import PlayerData
 from web.admin.tuning import required_content as rc
 from world.action_points.models import ActionPointPool
@@ -117,11 +118,19 @@ from world.skills.factories import (
     SkillPointBudgetFactory,
     SpecializationFactory,
 )
+from world.skills.mentoring import (
+    MentoringError,
+    accept_mentoring,
+    decline_mentoring,
+    mentoring_for_account,
+    stop_mentoring,
+)
 from world.skills.models import Skill, SkillPointBudget, TrainingAllocation
 from world.skills.services import (
     calculate_training_development,
     create_training_allocation,
     process_weekly_training,
+    update_training_allocation,
 )
 from world.societies.factories import OrganizationFactory
 from world.traits.factories import CheckSystemSetupFactory, ensure_level_ladder
@@ -465,6 +474,38 @@ class _TrainingWorld(_World):
     def stored(self, student: CharacterSheet) -> int:
         return TrainingAllocation.objects.filter(character=student).count()
 
+    def played(self, sheet: CharacterSheet, player_data: PlayerData) -> CharacterSheet:
+        """Seat ``player_data``'s account as the current player of ``sheet``."""
+        RosterTenureFactory(
+            roster_entry=RosterEntryFactory(character_sheet=sheet), player_data=player_data
+        )
+        return sheet
+
+    def told(self, sheet: CharacterSheet) -> list[str]:
+        """Every narrative line sent to ``sheet``, oldest first."""
+        return [
+            row.message.body
+            for row in NarrativeMessageDelivery.objects.filter(
+                recipient_character_sheet=sheet
+            ).order_by("pk")
+        ]
+
+    def standing(
+        self, student: CharacterSheet, skill, mentor: CharacterSheet | None, *, agreed: bool
+    ) -> TrainingAllocation:
+        """A standing 3 AP allocation as it stood before a rule changed: nothing refused it.
+
+        ``agreed`` stamps the mentor's agreement, as ``accept_mentoring`` would.
+        """
+        return TrainingAllocation.objects.create(
+            character=student,
+            skill=skill if isinstance(skill, Skill) else None,
+            specialization=None if isinstance(skill, Skill) else skill,
+            mentor=None if mentor is None else mentor.primary_persona,
+            mentor_accepted_at=timezone.now() if agreed and mentor is not None else None,
+            ap_amount=3,
+        )
+
     def course(
         self,
         trainer_tradition: Tradition | None,
@@ -551,7 +592,7 @@ class AMentorMustTeachAndHoldARating(_TrainingWorld, HypothesisTestCase):
         rating=st.integers(0, 3),
         student_in_tradition=flags,
     )
-    def test_a_mentor_is_accepted_exactly_when_they_teach_the_skill_and_hold_a_rating(  # noqa: PLR0913 - one Hypothesis draw per argument
+    def test_a_mentor_can_agree_exactly_when_they_teach_the_skill_and_hold_a_rating(  # noqa: PLR0913 - one Hypothesis draw per argument
         self,
         ticked: set[str],
         style_taught: bool,
@@ -562,38 +603,48 @@ class AMentorMustTeachAndHoldARating(_TrainingWorld, HypothesisTestCase):
     ) -> None:
         """Maintainer: "she could probably learn it from a teacher of another tradition";
         accepted default: a mentor belongs to a Tradition that teaches the skill and holds a
-        rating in it.
+        rating in it. Maintainer (2026-11-28): "The mentor must agree".
 
         Given any mentor (with or without a Tradition, whatever it ticks, with a rating from
-        0 to 3 in the skill) and any student (in a Tradition that teaches nothing the mentor's
-        does not, or in none): the allocation is saved exactly when the mentor's active
-        Tradition teaches the skill and the rating is above 0. Otherwise it raises, saves
-        nothing, and the refusal is the one line that names the persona asked for and a next
-        step, whichever of the three reasons applied. The student's own Tradition changes
-        nothing.
+        0 to 3 in the skill) asked by any student (in a Tradition that teaches nothing the
+        mentor's does not, or in none): the mentor's player agrees exactly when the mentor's
+        active Tradition teaches the skill and the rating is above 0. The student is told she
+        agreed. Otherwise the mentor reads the one fact that applies, in the second person
+        ("You belong to no Tradition.", "Your Tradition does not teach <skill>.", "You have no
+        rating in <skill>."), the agreement stays empty and the student is told nothing. The
+        student's own Tradition changes nothing.
         """
         skill = self.skill(key)
         mentor_tradition = (
             self.teaching_tradition(ticked, style_taught) if mentor_has_tradition else None
         )
-        mentor = self.character(mentor_tradition, rating=rating, skill=skill)
+        player = PlayerDataFactory()
+        mentor = self.played(self.character(mentor_tradition, rating=rating, skill=skill), player)
         student = self.character(self.tradition(set()) if student_in_tradition else None)
-        accepted = (
-            mentor_has_tradition and expected_teaches(key, ticked, style_taught) and rating > 0
-        )
-
-        if accepted:
-            self.allocate(student, skill, mentor)
-            self.assertEqual(self.stored(student), 1)
+        self.allocate(student, skill, mentor)
+        allocation = TrainingAllocation.objects.get(character=student)
+        if not mentor_has_tradition:
+            refusal = "You belong to no Tradition."
+        elif not expected_teaches(key, ticked, style_taught):
+            refusal = f"Your Tradition does not teach {skill.name}."
+        elif rating <= 0:
+            refusal = f"You have no rating in {skill.name}."
         else:
-            with self.assertRaises(ValueError) as caught:
-                self.allocate(student, skill, mentor)
+            refusal = None
+
+        if refusal is None:
+            accept_mentoring(allocation, player.account)
+            self.assertIsNotNone(allocation.mentor_accepted_at)
             self.assertEqual(
-                str(caught.exception),
-                f"{mentor.primary_persona.name} cannot teach you {skill.name}. Choose a mentor "
-                "whose Tradition teaches it and who has trained in it.",
+                self.told(student),
+                [f"{mentor.primary_persona.name} agreed to teach you {skill.name}."],
             )
-            self.assertEqual(self.stored(student), 0)
+        else:
+            with self.assertRaises(MentoringError) as caught:
+                accept_mentoring(allocation, player.account)
+            self.assertEqual(caught.exception.user_message, refusal)
+            self.assertIsNone(allocation.mentor_accepted_at)
+            self.assertEqual(self.told(student), [])
 
     @settings(max_examples=25, deadline=None)
     @given(ticked=ticks, style_taught=flags, key=governed_keys, student_tradition=flags)
@@ -760,9 +811,9 @@ class AnOutsiderPaysTheExtraDifficultyOnly(_TrainingWorld, HypothesisTestCase):
     ) -> None:
         """Accepted default: weekly mentoring from another Tradition carries no penalty.
 
-        Given two mentors of different Traditions, both teaching the skill and holding the
-        same rating, and a student of any Tradition (or none) training it with each: the
-        development each week pays is the same.
+        Given two mentors of different Traditions, both teaching the skill, holding the same
+        rating and having agreed to teach, and a student of any Tradition (or none) training it
+        with each: the development each week pays is the same.
         """
         skill = self.skill(key)
         paid = []
@@ -770,8 +821,7 @@ class AnOutsiderPaysTheExtraDifficultyOnly(_TrainingWorld, HypothesisTestCase):
             tradition = self.teaching_tradition(ticked & set(TICKABLE), key == "style")
             mentor = self.character(tradition, rating=rating, skill=skill)
             student = self.character(self.tradition(set()) if student_in_tradition else None)
-            self.allocate(student, skill, mentor)
-            allocation = TrainingAllocation.objects.get(character=student)
+            allocation = self.standing(student, skill, mentor, agreed=True)
             paid.append(calculate_training_development(allocation))
 
         self.assertEqual(paid[0], paid[1])
@@ -983,7 +1033,8 @@ class TheWeeklyRunSkipsWhatIsNoLongerAllowed(_TrainingWorld, HypothesisTestCase)
         spends no action points and tells the character in one line.
 
         Given a standing allocation of 3 AP (saved before the rule changed, so no check
-        refused it) on any Magic skill, with or without a mentor of any Tradition and rating,
+        refused it) on any Magic skill, with or without a mentor of any Tradition and rating
+        who agreed to teach,
         and a student with or without the self-teaching lever: after the weekly run the
         allocation is paid (the skill rises and 3 AP are spent) exactly when the rule allows
         it, with a mentor who teaches it and holds a rating, or no mentor and the lever. When
@@ -1005,12 +1056,7 @@ class TheWeeklyRunSkipsWhatIsNoLongerAllowed(_TrainingWorld, HypothesisTestCase)
             mentor = self.character(tradition, rating=rating, skill=skill)
         if lever:
             grant_lever(student, SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME, 1)
-        TrainingAllocation.objects.create(
-            character=student,
-            skill=skill,
-            mentor=None if mentor is None else mentor.primary_persona,
-            ap_amount=3,
-        )
+        self.standing(student, skill, mentor, agreed=True)
         pool = ActionPointPool.get_or_create_for_character(student.character)
         pool.current = 100
         pool.save()
@@ -1373,31 +1419,35 @@ class ASpecializationIsJudgedOnItsParentSkill(_TrainingWorld, HypothesisTestCase
 
         Given a specialization of any Magic skill (Heroism, Villainy, Reflection, a fighting
         style's skill or an ordinary one) and any mentor with a rating in the parent skill
-        from 0 to 3: the allocation is saved exactly when the mentor's Tradition teaches the
-        parent skill and the rating is above 0. Otherwise it raises the one mentor line
-        naming the parent skill and saves nothing.
+        from 0 to 3, asked to teach it: her player can agree exactly when the mentor's
+        Tradition teaches the parent skill and the rating is above 0. Otherwise the refusal
+        she reads names the parent skill and the agreement stays empty.
         """
         parent = self.skill(key)
         specialization = SpecializationFactory(parent_skill=parent)
         tradition = self.teaching_tradition(ticked, style_taught) if mentor_has_tradition else None
-        mentor = self.character(tradition, rating=rating, skill=parent)
+        player = PlayerDataFactory()
+        mentor = self.played(self.character(tradition, rating=rating, skill=parent), player)
         student = self.character()
-        accepted = (
-            mentor_has_tradition and expected_teaches(key, ticked, style_taught) and rating > 0
-        )
+        self.allocate(student, specialization, mentor)
+        allocation = TrainingAllocation.objects.get(character=student)
+        agrees = mentor_has_tradition and expected_teaches(key, ticked, style_taught) and rating > 0
 
-        if accepted:
-            self.allocate(student, specialization, mentor)
-            self.assertEqual(self.stored(student), 1)
+        if agrees:
+            accept_mentoring(allocation, player.account)
+            self.assertIsNotNone(allocation.mentor_accepted_at)
         else:
-            with self.assertRaises(ValueError) as caught:
-                self.allocate(student, specialization, mentor)
-            self.assertEqual(
-                str(caught.exception),
-                f"{mentor.primary_persona.name} cannot teach you {parent.name}. Choose a mentor "
-                "whose Tradition teaches it and who has trained in it.",
+            with self.assertRaises(MentoringError) as caught:
+                accept_mentoring(allocation, player.account)
+            self.assertIn(
+                caught.exception.user_message,
+                (
+                    "You belong to no Tradition.",
+                    f"Your Tradition does not teach {parent.name}.",
+                    f"You have no rating in {parent.name}.",
+                ),
             )
-            self.assertEqual(self.stored(student), 0)
+            self.assertIsNone(allocation.mentor_accepted_at)
 
 
 class TheWeeklyRunJudgesASpecializationOnItsParent(_TrainingWorld, HypothesisTestCase):
@@ -1444,12 +1494,7 @@ class TheWeeklyRunJudgesASpecializationOnItsParent(_TrainingWorld, HypothesisTes
             mentor = self.character(tradition, rating=rating, skill=parent)
         if lever:
             grant_lever(student, SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME, 1)
-        TrainingAllocation.objects.create(
-            character=student,
-            specialization=specialization,
-            mentor=None if mentor is None else mentor.primary_persona,
-            ap_amount=3,
-        )
+        self.standing(student, specialization, mentor, agreed=True)
         pool = ActionPointPool.get_or_create_for_character(student.character)
         pool.current = 100
         pool.save()
@@ -1474,13 +1519,6 @@ class TheWeeklyRunJudgesASpecializationOnItsParent(_TrainingWorld, HypothesisTes
 
 
 class ACharacterIsNeverHerOwnMentor(_TrainingWorld, HypothesisTestCase):
-    def played(self, sheet: CharacterSheet, player_data: PlayerData) -> CharacterSheet:
-        """Seat ``player_data``'s account as the current player of ``sheet``."""
-        RosterTenureFactory(
-            roster_entry=RosterEntryFactory(character_sheet=sheet), player_data=player_data
-        )
-        return sheet
-
     @settings(max_examples=30, deadline=None)
     @given(
         key=skill_keys,
@@ -1539,9 +1577,9 @@ class ACharacterIsNeverHerOwnMentor(_TrainingWorld, HypothesisTestCase):
         standing allocation.
 
         Given a standing allocation of 3 AP naming a mentor who teaches the skill with a
-        rating of 2, saved before the rule: after the weekly run it is paid when the mentor
-        is another player's character, and when the mentor is another of her own it is
-        skipped, no AP are spent, and she is sent the one own-character line.
+        rating of 2 and agreed to teach, saved before the rule: after the weekly run it is
+        paid when the mentor is another player's character, and when the mentor is another
+        of her own it is skipped, no AP are spent, and she is sent the one own-character line.
         """
         skill = self.skill(key)
         teaching = self.teaching_tradition(set(TICKABLE), True)
@@ -1551,9 +1589,7 @@ class ACharacterIsNeverHerOwnMentor(_TrainingWorld, HypothesisTestCase):
         CharacterTraitValue.objects.create(character=student, trait=skill, value=10)
         other = player if who == "her own alt" else PlayerDataFactory()
         mentor = self.played(self.character(teaching, rating=2, skill=skill), other)
-        TrainingAllocation.objects.create(
-            character=student, skill=skill, mentor=mentor.primary_persona, ap_amount=3
-        )
+        self.standing(student, skill, mentor, agreed=True)
         pool = ActionPointPool.get_or_create_for_character(student.character)
         pool.current = 100
         pool.save()
@@ -1581,7 +1617,7 @@ class ARefusedMentorRevealsNothingAboutThePersona(_TrainingWorld, HypothesisTest
         key=st.sampled_from(("heroism", "villainy", "style")),
         reason=st.sampled_from(("no tradition", "tradition does not teach", "no rating")),
     )
-    def test_every_reason_a_mentor_cannot_teach_gets_the_same_line_naming_only_the_persona(
+    def test_naming_a_persona_reveals_nothing_and_the_weekly_line_names_only_it(
         self, key: str, reason: str
     ) -> None:
         """Implementer call (privacy): naming a persona must not tell the asker about the
@@ -1589,9 +1625,11 @@ class ARefusedMentorRevealsNothingAboutThePersona(_TrainingWorld, HypothesisTest
 
         Given a mentor behind a second persona (a mask) who cannot teach the skill for any
         one of three reasons (no active Tradition, a Tradition that does not teach it, no
-        rating in it), and the student naming the mask: the refusal is the one line
-        "{mask} cannot teach you {skill}. Choose a mentor whose Tradition teaches it and who
-        has trained in it." for each reason, and the name behind the mask is not in it.
+        rating in it): the student naming the mask is told only that she asked, and the
+        name behind the mask is nowhere in it. When that mentor had agreed before she stopped
+        qualifying, the weekly run sends the one line "{mask} cannot teach you {skill}. Choose
+        a mentor whose Tradition teaches it and who has trained in it." for each reason, and
+        the name behind the mask is not in it.
         """
         skill = self.skill(key)
         if reason == "no tradition":
@@ -1603,17 +1641,40 @@ class ARefusedMentorRevealsNothingAboutThePersona(_TrainingWorld, HypothesisTest
         mentor = self.character(tradition, rating=0 if reason == "no rating" else 2, skill=skill)
         mask = PersonaFactory(character_sheet=mentor, name="The Veiled Widow")
         student = self.character()
+        RosterEntryFactory(character_sheet=student)
+        CharacterClassLevelFactory(character=student, level=1)
+        CharacterTraitValue.objects.create(character=student, trait=skill, value=10)
 
-        with self.assertRaises(ValueError) as caught:
-            create_training_allocation(student.character, 1, skill=skill, mentor=mask)
+        asked = ManageTrainingAction().run(
+            actor=student.character,
+            operation="add",
+            skill_id=skill.pk,
+            ap_amount=1,
+            mentor_persona_id=mask.pk,
+        )
 
         self.assertEqual(
-            str(caught.exception),
+            asked.message,
+            "You ask The Veiled Widow to teach you "
+            f"{skill.name}. Your training waits until The Veiled Widow agrees.",
+        )
+        self.assertNotIn(mentor.primary_persona.name, asked.message)
+        allocation = TrainingAllocation.objects.get(character=student)
+        allocation.mentor_accepted_at = timezone.now()
+        allocation.save()
+        pool = ActionPointPool.get_or_create_for_character(student.character)
+        pool.current = 100
+        pool.save()
+
+        process_weekly_training()
+
+        (line,) = self.told(student)
+        self.assertIn(
             f"The Veiled Widow cannot teach you {skill.name}. Choose a mentor whose Tradition "
             "teaches it and who has trained in it.",
+            line,
         )
-        self.assertNotIn(mentor.primary_persona.name, str(caught.exception))
-        self.assertEqual(self.stored(student), 0)
+        self.assertNotIn(mentor.primary_persona.name, line)
 
 
 class AnEditToASavedCourseIsRefusedOnceItsTraditionStoppedTeaching(
@@ -1701,3 +1762,359 @@ class ThePlayersOfManyCharactersAreTheOnesTheRuleNames(HypothesisTestCase):
         for sheet in sheets:
             account = current_player_of(sheet)
             self.assertEqual(None if account is None else account.pk, expected[sheet.pk])
+
+
+# ---------------------------------------------------------------------------------------
+# The mentor must agree (maintainer, 2026-11-28)
+# ---------------------------------------------------------------------------------------
+
+
+class _MentoringWorld(_TrainingWorld):
+    """Builders for a student, qualified mentors who are played, and one request between them."""
+
+    def mentor(self, key: str, player: PlayerData | None = None) -> CharacterSheet:
+        """A character who teaches the skill with a rating of 2, played by ``player``."""
+        skill = self.skill(key)
+        sheet = self.character(self.teaching_tradition(set(TICKABLE), True), rating=2, skill=skill)
+        return sheet if player is None else self.played(sheet, player)
+
+    def asked(self, key: str, mentor: CharacterSheet) -> tuple[CharacterSheet, TrainingAllocation]:
+        """A student who asked ``mentor`` to teach the skill: her row, not yet answered."""
+        student = self.character()
+        self.allocate(student, self.skill(key), mentor)
+        return student, TrainingAllocation.objects.get(character=student)
+
+    def staff_account(self):
+        account = PlayerDataFactory().account
+        account.is_staff = True
+        account.save()
+        return account
+
+
+class AMentorWhoHasNotAgreedIsNoMentor(_MentoringWorld, HypothesisTestCase):
+    @settings(max_examples=30, deadline=None)
+    @given(
+        key=st.sampled_from((*SKILL_KEYS, "mundane")),
+        lever=flags,
+        mentor_qualifies=flags,
+        rating=st.integers(1, 3),
+    )
+    def test_a_waiting_mentor_counts_as_none_in_the_week_and_in_the_formula(
+        self, key: str, lever: bool, mentor_qualifies: bool, rating: int
+    ) -> None:
+        """Maintainer (2026-11-28): "The mentor must agree".
+        Implementer call (one rule everywhere): an allocation whose mentor has not agreed
+        counts as having no mentor.
+
+        Given a standing allocation of 3 AP naming a mentor who has not agreed, whoever she is
+        (a qualified teacher or not), on any Magic skill or on a skill outside the Magic
+        category, and a student with or without the self-teaching lever: the weekly run pays a
+        Magic skill exactly when the student holds the lever, otherwise it skips it, spends no
+        action points and sends one line "<mentor> has not agreed to teach you yet."; a skill
+        outside the Magic category is paid as self-study, and its development is the base gain
+        with no mentor bonus (15 for 3 AP at level 1). Once the mentor agrees, that same
+        mundane allocation pays more than the base gain.
+        """
+        skill = self.mundane if key == "mundane" else self.skill(key)
+        tradition = self.teaching_tradition(set(TICKABLE), True) if mentor_qualifies else None
+        # A rating well above the student's 10, so an agreed mentor's bonus is not truncated away.
+        mentor = self.character(tradition, rating=rating * 40, skill=skill)
+        student = self.character()
+        RosterEntryFactory(character_sheet=student)
+        CharacterClassLevelFactory(character=student, level=1)
+        CharacterTraitValue.objects.create(character=student, trait=skill, value=10)
+        if lever:
+            grant_lever(student, SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME, 1)
+        allocation = self.standing(student, skill, mentor, agreed=False)
+        pool = ActionPointPool.get_or_create_for_character(student.character)
+        pool.current = 100
+        pool.save()
+        magic = key != "mundane"
+        paid = lever or not magic
+
+        process_weekly_training()
+
+        pool.refresh_from_db()
+        self.assertEqual(self.stored(student), 1)
+        if paid:
+            self.assertEqual(pool.current, 97)
+            self.assertEqual(self.told(student), [])
+        else:
+            self.assertEqual(pool.current, 100)
+            (line,) = self.told(student)
+            self.assertIn(
+                f"Your weekly training in {skill.name} did not run, and no action points were "
+                f"spent. {mentor.primary_persona.name} has not agreed to teach you yet.",
+                line,
+            )
+        if not magic:
+            self.assertEqual(calculate_training_development(allocation), 15)
+            allocation.mentor_accepted_at = timezone.now()
+            allocation.save()
+            self.assertGreater(calculate_training_development(allocation), 15)
+
+
+class AskingChecksNothingAboutTheMentor(_MentoringWorld, HypothesisTestCase):
+    @settings(max_examples=30, deadline=None)
+    @given(
+        key=st.sampled_from(SKILL_KEYS),
+        mentor_has_tradition=flags,
+        ticked=ticks,
+        rating=st.integers(0, 3),
+        student_in_tradition=flags,
+    )
+    def test_the_student_reads_the_same_whoever_she_asked(
+        self,
+        key: str,
+        mentor_has_tradition: bool,
+        ticked: set[str],
+        rating: int,
+        student_in_tradition: bool,
+    ) -> None:
+        """Maintainer (2026-11-28): "The mentor must agree".
+        Implementer call: naming a mentor checks nothing about her, so the student learns
+        nothing about the character she named.
+
+        Given any mentor (with or without a Tradition, whatever it ticks, a rating from 0 to
+        3) named by any student on any Magic skill: the allocation is saved with the agreement
+        empty, the student reads exactly "You ask <mentor> to teach you <skill>. Your
+        training waits until <mentor> agrees." and nothing else, and the mentor's character is
+        sent exactly one line, "<student> asks you to teach <her> <skill>."
+        """
+        skill = self.skill(key)
+        tradition = self.teaching_tradition(ticked, False) if mentor_has_tradition else None
+        mentor = self.character(tradition, rating=rating, skill=skill)
+        student = self.character(self.tradition(set()) if student_in_tradition else None)
+        name = mentor.primary_persona.name
+
+        result = ManageTrainingAction().run(
+            actor=student.character,
+            operation="add",
+            skill_id=skill.pk,
+            ap_amount=1,
+            mentor_persona_id=mentor.primary_persona.pk,
+        )
+
+        self.assertTrue(result.success, result.message)
+        self.assertEqual(
+            result.message,
+            f"You ask {name} to teach you {skill.name}. Your training waits until {name} agrees.",
+        )
+        row = TrainingAllocation.objects.get(character=student)
+        self.assertIsNone(row.mentor_accepted_at)
+        self.assertEqual(self.told(student), [])
+        self.assertEqual(
+            self.told(mentor),
+            [
+                f"{student.primary_persona.name} asks you to teach "
+                f"{student.pronoun_object} {skill.name}."
+            ],
+        )
+
+
+class WhoMayAnswerForAMentor(_MentoringWorld, HypothesisTestCase):
+    @settings(max_examples=40, deadline=None)
+    @given(
+        key=st.sampled_from(SKILL_KEYS),
+        who=st.sampled_from(
+            (
+                "the mentor's player",
+                "the creator, when nobody plays her",
+                "the creator, when someone else plays her",
+                "staff",
+                "the student's player",
+                "staff who plays the student",
+                "the borrower of a lent NPC",
+                "the holder of a lent NPC",
+                "a stranger",
+            )
+        ),
+        answer=st.sampled_from(("accept", "decline", "stop")),
+    )
+    def test_only_the_account_that_plays_or_created_the_mentor_or_staff_may_answer(
+        self, key: str, who: str, answer: str
+    ) -> None:
+        """Maintainer (2026-11-28): "The mentor must agree", and "The mentor is also not
+        unlikely to be a GM'd NPC, so we need to accomodate that as well".
+
+        The account that plays the mentor's character now answers for her, which is the
+        borrower of a lent NPC and not its holder; when nobody plays her, the
+        account that created her roster entry answers; staff always may; the account that plays
+        the student never may, staff included.
+
+        Given a request to a qualified mentor and each of those accounts (and a stranger)
+        answering it by accepting, declining or stopping: the answer lands exactly for the
+        accounts the rule names. For any other account it is refused with "That request is not
+        addressed to a character you can answer for." and the row is unchanged. The account's
+        mentoring list names the request exactly when the account may answer, so a game
+        master who holds an NPC mentor reads her requests there.
+        """
+        creator = PlayerDataFactory()
+        holder = PlayerDataFactory()
+        borrower = PlayerDataFactory()
+        mentor = self.mentor(key)
+        if who in ("the creator, when nobody plays her", "staff"):
+            RosterEntryFactory(character_sheet=mentor, created_by_account=creator.account)
+        elif who == "the creator, when someone else plays her":
+            entry = RosterEntryFactory(character_sheet=mentor, created_by_account=creator.account)
+            RosterTenureFactory(roster_entry=entry, player_data=holder)
+        elif who in ("the borrower of a lent NPC", "the holder of a lent NPC"):
+            entry = RosterEntryFactory(character_sheet=mentor)
+            RosterTenureFactory(roster_entry=entry, player_data=holder)
+            NPCLoanFactory(
+                roster_entry=entry, borrower=borrower.account, status=NPCLoanStatus.ACTIVE
+            )
+        else:
+            self.played(mentor, holder)
+        student_player = PlayerDataFactory()
+        student, allocation = self.asked(key, mentor)
+        self.played(student, student_player)
+        if answer == "stop":
+            allocation.mentor_accepted_at = timezone.now()
+            allocation.save()
+        accounts = {
+            "the mentor's player": holder.account,
+            "the creator, when nobody plays her": creator.account,
+            "the creator, when someone else plays her": creator.account,
+            "staff": self.staff_account(),
+            "the student's player": student_player.account,
+            "staff who plays the student": student_player.account,
+            "the borrower of a lent NPC": borrower.account,
+            "the holder of a lent NPC": holder.account,
+            "a stranger": PlayerDataFactory().account,
+        }
+        account = accounts[who]
+        if who == "staff who plays the student":
+            account.is_staff = True
+            account.save()
+        allowed = who in (
+            "the mentor's player",
+            "the creator, when nobody plays her",
+            "staff",
+            "the borrower of a lent NPC",
+        )
+        service = {
+            "accept": accept_mentoring,
+            "decline": decline_mentoring,
+            "stop": stop_mentoring,
+        }[answer]
+        before = mentoring_for_account(account)
+        listed = [row.allocation_id for row in (*before.requests, *before.students)]
+
+        self.assertEqual(allocation.pk in listed, allowed)
+        if allowed:
+            service(allocation, account)
+            self.assertEqual(allocation.mentor_accepted_at is not None, answer == "accept")
+            self.assertEqual(allocation.mentor_id is None, answer != "accept")
+        else:
+            with self.assertRaises(MentoringError) as caught:
+                service(allocation, account)
+            self.assertEqual(
+                caught.exception.user_message,
+                "That request is not addressed to a character you can answer for.",
+            )
+            self.assertIsNotNone(allocation.mentor_id)
+            self.assertEqual(allocation.mentor_accepted_at is not None, answer == "stop")
+
+
+class ChangingTheMentorAsksAgain(_MentoringWorld, HypothesisTestCase):
+    @settings(max_examples=25, deadline=None)
+    @given(key=st.sampled_from(SKILL_KEYS), change=st.sampled_from(("ap", "same", "other")))
+    def test_a_new_mentor_asks_again_and_the_same_mentor_keeps_the_agreement(
+        self, key: str, change: str
+    ) -> None:
+        """Maintainer (2026-11-28): "The mentor must agree".
+        Implementer call: changing the mentor asks again; changing only the action points
+        keeps the agreement.
+
+        Given a student whose mentor agreed, and then an update that changes only the action
+        points, names the same mentor again, or names another mentor: the agreement and the
+        mentor stay for the first two and no message is sent. For another mentor the
+        agreement is cleared, the new mentor is sent the one request line, and the first
+        mentor is told the student no longer trains with her.
+        """
+        skill = self.skill(key)
+        first_player, second_player = PlayerDataFactory(), PlayerDataFactory()
+        first = self.mentor(key, first_player)
+        second = self.mentor(key, second_player)
+        student, allocation = self.asked(key, first)
+        accept_mentoring(allocation, first_player.account)
+        first_told = len(self.told(first))
+        agreed_at = allocation.mentor_accepted_at
+
+        if change == "ap":
+            update_training_allocation(allocation, ap_amount=2)
+        elif change == "same":
+            update_training_allocation(allocation, mentor=first.primary_persona)
+        else:
+            update_training_allocation(allocation, mentor=second.primary_persona)
+
+        if change == "other":
+            self.assertIsNone(allocation.mentor_accepted_at)
+            self.assertEqual(allocation.mentor_id, second.primary_persona.pk)
+            self.assertEqual(
+                self.told(second),
+                [
+                    f"{student.primary_persona.name} asks you to teach "
+                    f"{student.pronoun_object} {skill.name}."
+                ],
+            )
+            self.assertEqual(
+                self.told(first)[first_told:],
+                [f"{student.primary_persona.name} no longer trains {skill.name} with you."],
+            )
+        else:
+            self.assertEqual(allocation.mentor_accepted_at, agreed_at)
+            self.assertEqual(allocation.mentor_id, first.primary_persona.pk)
+            self.assertEqual(self.told(second), [])
+            self.assertEqual(len(self.told(first)), first_told)
+
+
+class DecliningAndStoppingClearTheMentor(_MentoringWorld, HypothesisTestCase):
+    @settings(max_examples=20, deadline=None)
+    @given(key=st.sampled_from(SKILL_KEYS), agreed_first=flags)
+    def test_declining_or_stopping_clears_the_mentor_and_tells_the_student(
+        self, key: str, agreed_first: bool
+    ) -> None:
+        """Maintainer (2026-11-28): "The mentor must agree".
+        Implementer call: declining a request, or stopping teaching a student, clears the
+        mentor and the agreement and tells the student; the student keeps her allocation.
+
+        Given a request, answered by declining before the mentor agreed or by stopping after:
+        the allocation row stays with its action points and no mentor, and the student reads
+        "<mentor> declined to teach you <skill>." or "<mentor> stopped teaching you <skill>."
+        A mentor cannot decline what she already agreed to, and cannot stop teaching a student
+        she has not agreed to teach; each is refused and changes nothing.
+        """
+        skill = self.skill(key)
+        player = PlayerDataFactory()
+        mentor = self.mentor(key, player)
+        student, allocation = self.asked(key, mentor)
+        name = mentor.primary_persona.name
+        student_name = student.primary_persona.name
+        if agreed_first:
+            accept_mentoring(allocation, player.account)
+            stranded = [f"{name} agreed to teach you {skill.name}."]
+            with self.assertRaises(MentoringError) as caught:
+                decline_mentoring(allocation, player.account)
+            self.assertEqual(
+                caught.exception.user_message,
+                f"You already agreed to teach {student_name} {skill.name}.",
+            )
+            stop_mentoring(allocation, player.account)
+            ending = f"{name} stopped teaching you {skill.name}."
+        else:
+            stranded = []
+            with self.assertRaises(MentoringError) as caught:
+                stop_mentoring(allocation, player.account)
+            self.assertEqual(
+                caught.exception.user_message,
+                f"You are not teaching {student_name} {skill.name}.",
+            )
+            decline_mentoring(allocation, player.account)
+            ending = f"{name} declined to teach you {skill.name}."
+
+        self.assertEqual(self.told(student), [*stranded, ending])
+        self.assertEqual(self.stored(student), 1)
+        self.assertIsNone(allocation.mentor_id)
+        self.assertIsNone(allocation.mentor_accepted_at)
