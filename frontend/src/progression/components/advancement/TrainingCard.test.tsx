@@ -39,6 +39,8 @@ const allocation: TrainingAllocation = {
   skill: { id: 1, name: 'Swordplay', category: 'combat', category_display: 'Combat' },
   specialization: null as unknown as TrainingAllocation['specialization'],
   mentor: null as unknown as TrainingAllocation['mentor'],
+  mentor_accepted_at: null,
+  mentor_waiting: false,
   ap_amount: 2,
   remaining_weekly_budget: 3,
 };
@@ -112,6 +114,51 @@ describe('TrainingCard', () => {
     });
     renderWithProviders(<TrainingCard />);
     expect(screen.getByTestId('training-allocation-row')).toHaveTextContent('Mentor: Elenna');
+  });
+
+  it('says a named mentor has not agreed yet while the allocation is waiting', () => {
+    setupMocks({
+      allocations: [{ ...allocation, mentor: { id: 3, name: 'Drusa Kell' }, mentor_waiting: true }],
+    });
+    renderWithProviders(<TrainingCard />);
+    expect(screen.getByTestId('training-mentor-line')).toHaveTextContent(
+      'Mentor: Drusa Kell · waiting for Drusa Kell to agree'
+    );
+  });
+
+  it('shows an agreed mentor with no waiting note', () => {
+    setupMocks({
+      allocations: [
+        {
+          ...allocation,
+          mentor: { id: 3, name: 'Drusa Kell' },
+          mentor_accepted_at: '2026-11-28T10:00:00Z',
+          mentor_waiting: false,
+        },
+      ],
+    });
+    renderWithProviders(<TrainingCard />);
+    const line = screen.getByTestId('training-mentor-line');
+    expect(line).toHaveTextContent('Mentor: Drusa Kell');
+    expect(line).not.toHaveTextContent('waiting');
+  });
+
+  it('tells the student the mentor has been asked once a waiting allocation is saved', async () => {
+    const { create } = setupMocks();
+    create.mockImplementation(
+      (_body: unknown, opts: { onSuccess: (created: TrainingAllocation) => void }) =>
+        opts.onSuccess({
+          ...allocation,
+          mentor: { id: 3, name: 'Drusa Kell' },
+          mentor_waiting: true,
+        })
+    );
+    renderWithProviders(<TrainingCard />);
+
+    await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '1');
+    await userEvent.click(screen.getByTestId('training-add-submit'));
+
+    expect(toast.success).toHaveBeenCalledWith('Training allocated. Drusa Kell has been asked.');
   });
 
   it('shows the empty state when nothing is allocated', () => {

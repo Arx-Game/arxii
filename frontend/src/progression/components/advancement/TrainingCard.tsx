@@ -8,6 +8,12 @@
  * exactly what `mentor_persona_id` already accepts server-side; no eligible-
  * mentor filtering exists (or is invented here), so the picker is the same
  * generic persona search other invite/mentor pickers use.
+ *
+ * Naming a mentor only asks her (#5326). The server saves the allocation with
+ * `mentor_waiting` true, and the row then reads "Mentor: <Name> · waiting for <Name> to
+ * agree" until she accepts: the training counts as having no mentor in the meantime. A row
+ * whose mentor has agreed reads "Mentor: <Name>". The mentor answers from `MentoringCard`,
+ * which sits beside this card.
  */
 
 import { useState } from 'react';
@@ -103,8 +109,12 @@ function AddAllocationForm() {
         mentor_persona_id: mentorId ?? undefined,
       },
       {
-        onSuccess: () => {
-          toast.success('Training allocated.');
+        onSuccess: (created) => {
+          toast.success(
+            created.mentor_waiting && created.mentor
+              ? `Training allocated. ${created.mentor.name} has been asked.`
+              : 'Training allocated.'
+          );
           setSkillId(null);
           setApAmount('1');
           setMentorId(null);
@@ -227,7 +237,11 @@ export function TrainingCard() {
               </div>
               <div className="text-sm text-muted-foreground">
                 {allocation.mentor ? (
-                  <span>Mentor: {allocation.mentor.name}</span>
+                  <span data-testid="training-mentor-line">
+                    Mentor: {allocation.mentor.name}
+                    {allocation.mentor_waiting &&
+                      ` · waiting for ${allocation.mentor.name} to agree`}
+                  </span>
                 ) : (
                   <Badge variant="outline">Self-study</Badge>
                 )}

@@ -14,3 +14,10 @@ export type TrainingAllocationList = components['schemas']['TrainingAllocationLi
 export type ManageTrainingAddRequest = components['schemas']['ManageTrainingAddRequest'];
 export type PatchedManageTrainingUpdateRequest =
   components['schemas']['PatchedManageTrainingUpdateRequest'];
+export type MentoringList = components['schemas']['MentoringList'];
+export type MentoringRow = components['schemas']['MentoringRow'];
+
+/** The sentence the server returns when a mentor answers a request (#5326). */
+export interface MentoringAnswerResult {
+  detail: string;
+}

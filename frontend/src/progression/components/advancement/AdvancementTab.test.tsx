@@ -21,6 +21,9 @@ vi.mock('./ClassUnlocksCard', () => ({
 vi.mock('./TrainingCard', () => ({
   TrainingCard: () => <div data-testid="mock-training-card" />,
 }));
+vi.mock('./MentoringCard', () => ({
+  MentoringCard: () => <div data-testid="mock-mentoring-card" />,
+}));
 vi.mock('./DuranceCard', () => ({
   DuranceCard: () => <div data-testid="mock-durance-card" />,
 }));
@@ -33,6 +36,7 @@ describe('AdvancementTab', () => {
     expect(screen.getByTestId('mock-breakthroughs-card')).toBeInTheDocument();
     expect(screen.getByTestId('mock-class-unlocks-card')).toBeInTheDocument();
     expect(screen.getByTestId('mock-training-card')).toBeInTheDocument();
+    expect(screen.getByTestId('mock-mentoring-card')).toBeInTheDocument();
     expect(screen.getByTestId('mock-durance-card')).toBeInTheDocument();
   });
 
@@ -42,5 +46,7 @@ describe('AdvancementTab', () => {
     expect(screen.getByTestId('advancement-inactive-character-notice')).toBeInTheDocument();
     expect(screen.queryByTestId('advancement-tab')).not.toBeInTheDocument();
     expect(screen.queryByTestId('mock-breakthroughs-card')).not.toBeInTheDocument();
+    // The mentoring list belongs to the account, so it stays.
+    expect(screen.getByTestId('mock-mentoring-card')).toBeInTheDocument();
   });
 });
