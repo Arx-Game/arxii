@@ -63,7 +63,8 @@ class ResonanceContext:
 
 def resonance_context(being: WorshippedBeing) -> dict[int, ResonanceContext]:
     """For each of the being's resonance rows (by pk): its deed favor and where
-    grants of it to the being's worshippers came from in the last 30 days."""
+    grants of it to the being's worshippers came from in the last 30 days. A grant staff or a
+    scene's GM undid (#5327) was taken back and is not counted."""
     from world.magic.models import ResonanceGrant  # noqa: PLC0415
     from world.worship.invocation_services import get_devotion_config  # noqa: PLC0415
 
@@ -76,6 +77,7 @@ def resonance_context(being: WorshippedBeing) -> dict[int, ResonanceContext]:
             character_sheet_id__in=worshipper_ids,
             resonance_id__in=[row.resonance_id for row in rows],
             granted_at__gte=since,
+            nullified_at__isnull=True,
         )
         .values("resonance_id", "source")
         .annotate(count=Count("id"))
