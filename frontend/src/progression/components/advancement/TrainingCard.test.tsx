@@ -33,6 +33,7 @@ vi.mock('@/roster/usePersonaSearch', () => ({
 }));
 
 import * as skillsQueries from '@/skills/queries';
+import { usePersonaSearch } from '@/roster/usePersonaSearch';
 
 const allocation: TrainingAllocation = {
   id: 7,
@@ -208,6 +209,57 @@ describe('TrainingCard', () => {
     setupMocks();
     renderWithProviders(<TrainingCard />);
     expect(screen.getByTestId('training-add-submit')).toBeDisabled();
+  });
+
+  describe('the add form after a save', () => {
+    const noResults = { results: [], isFetching: false };
+
+    async function nameMentorAndSubmit(create: ReturnType<typeof vi.fn>) {
+      vi.mocked(usePersonaSearch).mockImplementation(((query: string) =>
+        query
+          ? { results: [{ id: 3, name: 'Ysolde Marsh' }], isFetching: false }
+          : noResults) as unknown as typeof usePersonaSearch);
+      renderWithProviders(<TrainingCard />);
+      await userEvent.selectOptions(screen.getByTestId('training-skill-select'), '1');
+      await userEvent.type(screen.getByTestId('training-mentor-search'), 'Ysolde');
+      await userEvent.click(screen.getByRole('button', { name: 'Ysolde Marsh' }));
+      await userEvent.click(screen.getByTestId('training-add-submit'));
+      expect(create).toHaveBeenCalledWith(
+        { skill_id: 1, ap_amount: 1, mentor_persona_id: 3 },
+        expect.anything()
+      );
+    }
+
+    afterEach(() => {
+      vi.mocked(usePersonaSearch).mockImplementation((() => noResults) as never);
+    });
+
+    it('empties the mentor box and closes its result list after a successful allocation', async () => {
+      const { create } = setupMocks();
+      create.mockImplementation((_body: unknown, opts: { onSuccess: (a: unknown) => void }) =>
+        opts.onSuccess({
+          ...allocation,
+          mentor: { id: 3, name: 'Ysolde Marsh' },
+          mentor_waiting: true,
+        })
+      );
+      await nameMentorAndSubmit(create);
+
+      expect(screen.getByTestId('training-mentor-search')).toHaveValue('');
+      expect(screen.queryByRole('button', { name: 'Ysolde Marsh' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('training-skill-select')).toHaveValue('');
+    });
+
+    it('keeps the typed mentor after a refused allocation so she can correct it', async () => {
+      const { create } = setupMocks();
+      create.mockImplementation((_body: unknown, opts: { onError: (e: unknown) => void }) =>
+        opts.onError(new Error('You cannot name yourself as your mentor.'))
+      );
+      await nameMentorAndSubmit(create);
+
+      expect(screen.getByTestId('training-mentor-search')).toHaveValue('Ysolde Marsh');
+      expect(screen.getByTestId('training-skill-select')).toHaveValue('1');
+    });
   });
 
   describe('a magical skill needs a mentor (#5326)', () => {

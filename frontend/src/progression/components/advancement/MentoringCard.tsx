@@ -54,7 +54,7 @@ export function MentoringCard() {
         {requests.map((row) => (
           <div
             key={row.allocation_id}
-            className="flex items-center justify-between gap-3 rounded-lg border p-3"
+            className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
             data-testid="mentoring-request-row"
           >
             <div className="min-w-0 font-medium">
@@ -88,7 +88,7 @@ export function MentoringCard() {
             {students.map((row) => (
               <div
                 key={row.allocation_id}
-                className="flex items-center justify-between gap-3 rounded-lg border p-3"
+                className="flex flex-col gap-2 rounded-lg border p-3 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                 data-testid="mentoring-student-row"
               >
                 <div className="min-w-0 font-medium">

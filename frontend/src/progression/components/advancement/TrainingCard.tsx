@@ -93,6 +93,8 @@ function AddAllocationForm() {
   const [apAmount, setApAmount] = useState('1');
   const [mentorId, setMentorId] = useState<number | null>(null);
   const [mentorName, setMentorName] = useState('');
+  // The picker owns its typed text and result list; a new key after a save empties both.
+  const [pickerKey, setPickerKey] = useState(0);
   const create = useCreateTrainingAllocationMutation();
 
   // A magical skill is taught only by a mentor whose Tradition teaches it (#5326).
@@ -119,6 +121,7 @@ function AddAllocationForm() {
           setApAmount('1');
           setMentorId(null);
           setMentorName('');
+          setPickerKey((key) => key + 1);
         },
         onError: (err: unknown) =>
           toast.error(err instanceof Error ? err.message : 'Could not allocate training.'),
@@ -161,6 +164,7 @@ function AddAllocationForm() {
             {mentorRequired ? 'Mentor (required)' : 'Mentor'}
           </Label>
           <MentorPicker
+            key={pickerKey}
             onSelect={(id, name) => {
               setMentorId(id);
               setMentorName(name);
