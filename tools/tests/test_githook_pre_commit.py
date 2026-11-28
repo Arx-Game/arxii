@@ -322,6 +322,22 @@ class NoClearingHookTests(unittest.TestCase):
 
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
+    def test_a_push_with_nothing_new_passes_the_pre_push_hook(self) -> None:
+        """git names no ref on stdin when the remote is already up to date. The hook
+        then has nothing to check; handing pre-commit a blank line made it crash and
+        refused the push, which broke open-pr.sh on a branch pushed earlier (#5329)."""
+        result = subprocess.run(
+            ["bash", "tools/githooks/pre-push", "origin", "https://example.invalid/repo.git"],
+            cwd=self.repo,
+            env=self.commit_env(),
+            input="",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("ValueError", result.stdout + result.stderr)
+
     def test_installer_is_idempotent_and_bakes_no_worktree_path(self) -> None:
         """Both shims resolve tooling when they run, so no path is written at install (#4428)."""
         hooks_dir = self.repo / ".git/hooks"

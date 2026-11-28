@@ -104,18 +104,25 @@ fi
 # ref: refs/pull/N/merge returns nothing, and filtering on state=open misses
 # alerts whose state is null on a PR ref - both of which read as "clean" and
 # are how this was missed the first time.
+#
+# "Could not read the alerts" is decided from gh's exit status, never from the
+# text it printed (#5329). On an HTTP error gh api writes the response body to
+# stdout and then exits non-zero, so the old `$(gh api ... || echo MARKER)`
+# held the 403 body followed by the marker, never equalled the marker, skipped
+# the fallback and printed the permission error below as a finding. The agents'
+# token gets that 403 on every PR.
 PR_HEAD_REF="refs/pull/$PR/head"
-OPEN_ALERTS=$(gh api "repos/$REPO_FULL/code-scanning/alerts?ref=$PR_HEAD_REF&per_page=100" \
+if ! OPEN_ALERTS=$(gh api "repos/$REPO_FULL/code-scanning/alerts?ref=$PR_HEAD_REF&per_page=100" \
   --jq '.[] | select(.state != "fixed" and .state != "dismissed")
         | "  [\(.rule.security_severity_level // .rule.severity)] \(.rule.id) at \(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line)"' \
-  2>/dev/null || echo "__UNREADABLE__")
-
-if [[ "$OPEN_ALERTS" == "__UNREADABLE__" ]]; then
+  2>/dev/null); then
   # The token cannot read code-scanning for this repo. Fall back to the bot's
-  # own review threads, which need no security permission at all.
+  # own review threads, which need no security permission at all. If those
+  # cannot be read either, refuse: an unread gate is not a clean one.
+  echo "NOTE: cannot read code-scanning alerts for $REPO_FULL (a token without that permission gets HTTP 403); checking the security bot's review threads on PR #$PR instead." >&2
   # shellcheck disable=SC2016  # $owner/$repo/$pr are GraphQL variables bound by
   # the -f flags below, not shell expansions; single quotes are required.
-  OPEN_ALERTS=$(gh api graphql -f query='
+  if ! OPEN_ALERTS=$(gh api graphql -f query='
   query($owner:String!,$repo:String!,$pr:Int!){
     repository(owner:$owner,name:$repo){
       pullRequest(number:$pr){
@@ -127,8 +134,11 @@ if [[ "$OPEN_ALERTS" == "__UNREADABLE__" ]]; then
   }' -f owner="$REPO_OWNER" -f repo="$REPO_NAME" -F pr="$PR" \
      --jq '.data.repository.pullRequest.reviewThreads.nodes[]
            | select(.isResolved == false and .isOutdated == false)
-           | select(.comments.nodes[0].author.login | test("advanced-security|security-bot"; "i"))
-           | "  \(.path):\(.line // "?")  \(.comments.nodes[0].body | split("\n")[0])"' 2>/dev/null || true)
+           | select((.comments.nodes[0].author.login // "") | test("advanced-security|security-bot"; "i"))
+           | "  \(.path):\(.line // "?")  \(.comments.nodes[0].body | split("\n")[0])"' 2>/dev/null); then
+    echo "ERROR: could not read PR #$PR's code-scanning alerts or its review threads, so its security findings are unknown. Re-run when GitHub answers." >&2
+    exit 1
+  fi
 fi
 
 if [[ -n "$OPEN_ALERTS" ]]; then

@@ -639,7 +639,9 @@ Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
 - `OK` (exit 0): first settle the evidence challenge (Step 6a), then run
   `scripts/enqueue-pr.sh <pr-N>`. It revalidates the committed
   report against the reviewed code revision, refuses while an open code-scanning
-  alert or unresolved review thread sits on the PR head ref, refuses while SonarCloud
+  alert or unresolved review thread sits on the PR head ref (a token that cannot read
+  the alerts makes it read the security bot's review threads instead, and it says so;
+  #5329), refuses while SonarCloud
   holds an open issue on the PR's new code or has not analyzed its head yet (#4850),
   and only then arms squash auto-merge. **Every SonarCloud issue is fixed before
   merge, always**: SonarCloud's quality gate passes with issues open and its comment
