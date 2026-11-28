@@ -108,6 +108,20 @@ async function openGrowth(page: Page, entryId: number) {
     .click();
 }
 
+/**
+ * The toast carrying `line`, once it is on screen and has finished sliding and fading in, so a
+ * picture of it is not a frame from the middle of the animation.
+ */
+async function toastShown(page: Page, line: string): Promise<Locator> {
+  const toast = page.locator('[data-sonner-toast]', { hasText: line });
+  await expect(toast).toBeVisible();
+  await toast.evaluate(async (el) => {
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    await Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished));
+  });
+  return toast;
+}
+
 /** One PNG of `target` (the page when none is given), named for the demo screen it matches. */
 async function shot(
   testInfo: TestInfo,
@@ -253,7 +267,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
       `Mentor: ${seed.mentor_rated} · waiting for ${seed.mentor_rated} to agree`
     );
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07a-training-card-waiting-for-mentor.png', page);
+    await shot(testInfo, '07a-training-card-waiting-for-mentor.png', card);
 
     const skill = card.getByTestId('training-skill-select');
     await expect(skill.locator('option', { hasText: 'Villainy' })).toHaveCount(1);
@@ -270,7 +284,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
       await card.getByTestId('training-add-submit').click();
     };
     const settle = async (line: string, name: string) => {
-      await expect(page.getByText(line, { exact: true })).toBeVisible();
+      await toastShown(page, line);
       await card.scrollIntoViewIfNeeded();
       await shot(testInfo, name, page);
       await expect(toasts).toHaveCount(0, { timeout: 20000 });
@@ -294,12 +308,9 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     // Occult with a mentor nobody plays: saved at once, and the mentor is asked. Nothing about
     // her is checked, so the card learns nothing about her.
     await skill.selectOption({ label: 'Occult' });
+    await card.locator('#training-add-ap').fill('1');
     await attempt(seed.mentor_unrated);
-    await expect(
-      page.getByText(`Training allocated. ${seed.mentor_unrated} has been asked.`, {
-        exact: true,
-      })
-    ).toBeVisible();
+    await toastShown(page, `Training allocated. ${seed.mentor_unrated} has been asked.`);
     const occultRow = card.getByTestId('training-allocation-row').filter({ hasText: 'Occult' });
     await expect(occultRow.getByTestId('training-mentor-line')).toHaveText(
       `Mentor: ${seed.mentor_unrated} · waiting for ${seed.mentor_unrated} to agree`
@@ -343,14 +354,12 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await expect(taughtRow).toBeVisible();
     await expect(taughtRow.getByRole('button', { name: 'Stop' })).toBeVisible();
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07e-mentor-card-requests-and-teaching.png', page);
+    await shot(testInfo, '07e-mentor-card-requests-and-teaching.png', card);
 
     // Aldric Voss's Tradition does not teach Villainy: Accept is refused to him, in his own
     // terms, and the request stays with Decline beside it.
     await aldricRequest.getByRole('button', { name: 'Accept' }).click();
-    await expect(
-      page.getByText('Your Tradition does not teach Villainy.', { exact: true })
-    ).toBeVisible();
+    await toastShown(page, 'Your Tradition does not teach Villainy.');
     await expect(aldricRequest).toBeVisible();
     await expect(aldricRequest.getByRole('button', { name: 'Decline' })).toBeEnabled();
     await card.scrollIntoViewIfNeeded();
@@ -359,9 +368,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
 
     // Drusa Kell qualifies: the answer is the success sentence and the row moves to Teaching.
     await wrenRequest.getByRole('button', { name: 'Accept' }).click();
-    await expect(
-      page.getByText(`You agree to teach ${seed.character_name} Villainy.`, { exact: true })
-    ).toBeVisible();
+    await toastShown(page, `You agree to teach ${seed.character_name} Villainy.`);
     await expect(wrenRequest).toHaveCount(0);
     await expect(
       card.getByTestId('mentoring-student-row').filter({
@@ -396,13 +403,11 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     await expect(ilsaRequest).toBeVisible();
     await expect(card.getByTestId('mentoring-request-row')).toHaveCount(2);
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07h-gm-card-two-npcs.png', page);
+    await shot(testInfo, '07h-gm-card-two-npcs.png', card);
 
     // Magister Vey holds no Occult rating: refused by her name, the row stays.
     await veyRequest.getByRole('button', { name: 'Accept' }).click();
-    await expect(
-      page.getByText(`${seed.npc_cannot_teach} has no rating in Occult.`, { exact: true })
-    ).toBeVisible();
+    await toastShown(page, `${seed.npc_cannot_teach} has no rating in Occult.`);
     await expect(veyRequest).toBeVisible();
     await card.scrollIntoViewIfNeeded();
     await shot(testInfo, '07i-gm-npc-accept-refused.png', page);
@@ -410,9 +415,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
 
     // Warden Ilsa Tarn's request is declined: the row is gone.
     await ilsaRequest.getByRole('button', { name: 'Decline' }).click();
-    await expect(
-      page.getByText(`You decline to teach ${seed.student_of_ilsa} Heroism.`, { exact: true })
-    ).toBeVisible();
+    await toastShown(page, `You decline to teach ${seed.student_of_ilsa} Heroism.`);
     await expect(ilsaRequest).toHaveCount(0);
     await expect(veyRequest).toBeVisible();
     await card.scrollIntoViewIfNeeded();
@@ -436,7 +439,7 @@ test.describe('Traditions decide what their teachers teach (#5326)', () => {
     );
     await expect(card.getByText('waiting for')).toHaveCount(0);
     await card.scrollIntoViewIfNeeded();
-    await shot(testInfo, '07k-training-card-mentor-agreed.png', page);
+    await shot(testInfo, '07k-training-card-mentor-agreed.png', card);
 
     await page.context().close();
   });
