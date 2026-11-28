@@ -48,10 +48,9 @@ const useMyJournalEntriesMock = vi.fn();
 // tests cover it, so these tests stand it aside (#5124).
 vi.mock('@/gm-adjudication/useActiveCharacterId', () => ({ useActiveCharacterId: () => null }));
 vi.mock('@/magic/components/ReflectingOnRow', () => ({ ReflectingOnRow: () => null }));
-vi.mock('@/magic/components/ClaimRow', () => ({ ClaimRow: () => null }));
+vi.mock('@/magic/components/ReachRow', () => ({ ReachRow: () => null }));
 vi.mock('@/magic/queries', () => ({
-  useWaitingClaims: () => [],
-  useRefreshClaims: () => () => {},
+  useRefreshRecordedActs: () => () => {},
 }));
 
 vi.mock('../queries', () => ({

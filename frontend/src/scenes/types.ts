@@ -140,6 +140,12 @@ export interface SceneRoundState {
 }
 
 export interface SceneDetail extends SceneListItem {
+  /**
+   * True when the scene stores nothing (#5327), so a mark made there pays nothing. LOCAL
+   * TYPE until the scene detail serializer's `is_ephemeral` reaches the generated schema;
+   * absent reads as stored.
+   */
+  is_ephemeral?: boolean;
   is_active: boolean;
   is_owner: boolean;
   /** True when the viewer is the scene GM/owner or has staff privileges. */

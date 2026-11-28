@@ -59,11 +59,6 @@ function ResonanceRow({ row }: { row: KindledResonance }) {
           {stateLabel(row)}
         </span>
       </div>
-      {row.unclaimed > 0 && (
-        <p className="text-xs font-medium" data-testid={`kindled-resonance-waiting-${row.id}`}>
-          {row.unclaimed} waiting
-        </p>
-      )}
       {row.waiting_trickle > 0 && (
         <p className="text-xs font-medium" data-testid={`kindled-resonance-trickle-${row.id}`}>
           {row.waiting_trickle} waiting for your anima ritual

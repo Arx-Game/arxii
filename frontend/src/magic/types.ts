@@ -767,6 +767,30 @@ export interface KindledReading {
 }
 
 // ---------------------------------------------------------------------------
+// Recorded acts (#5327): what a pose or a journal entry points at to mark a resonance.
+//
+// LOCAL TYPES standing in for generated ones: `GET /api/magic/recorded-acts/` is built in the
+// same PR as these screens, so the schema does not carry it yet. Swap these two for
+// `components['schemas']['RecordedAct']` once `just gen-api-types` has run.
+// ---------------------------------------------------------------------------
+
+/** A resonance the situation suggested for an act, with the reason in player words. */
+export interface RecordedActSuggestion {
+  resonance_id: number;
+  resonance_name: string;
+  reason: string;
+}
+
+/** One act her character took and has not marked yet, newest first (the endpoint orders them). */
+export interface RecordedAct {
+  id: number;
+  label: string;
+  created_at: string;
+  /** Strongest first; empty when the situation suggested nothing. */
+  suggestions: RecordedActSuggestion[];
+}
+
+// ---------------------------------------------------------------------------
 // Reflections (#5124): the "Reflecting on" row on a pose or a journal entry.
 // ---------------------------------------------------------------------------
 

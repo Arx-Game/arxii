@@ -19,6 +19,7 @@ import type { components } from '@/generated/api';
 import type { SineatingOption } from '@/magic/sineating';
 import type {
   CatalogResonance,
+  RecordedAct,
   KindledReading,
   ManifestChoice,
   ReflectionOption,
@@ -1393,6 +1394,24 @@ export async function getKindledResonances(characterSheetId: number): Promise<Ki
   if (!res.ok) await readErrorDetail(res, 'Failed to load your resonances');
   const page = (await res.json()) as KindledReading;
   return { results: page.results, impulses: page.impulses };
+}
+
+// ---------------------------------------------------------------------------
+// Recorded acts (#5327)
+// ---------------------------------------------------------------------------
+
+const RECORDED_ACTS_URL = '/api/magic/recorded-acts/';
+
+/**
+ * GET /api/magic/recorded-acts/?character_sheet=<id> (#5327): the acts the character has not
+ * marked yet and can still point at, newest first, each with the resonances the situation
+ * suggested. Owner or staff only.
+ */
+export async function getRecordedActs(characterSheetId: number): Promise<RecordedAct[]> {
+  const res = await apiFetch(`${RECORDED_ACTS_URL}?character_sheet=${characterSheetId}`);
+  if (!res.ok) await readErrorDetail(res, 'Failed to load your acts');
+  const page = (await res.json()) as { results: RecordedAct[] };
+  return page.results;
 }
 
 // ---------------------------------------------------------------------------
