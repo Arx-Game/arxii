@@ -67,9 +67,10 @@ _ERR_CHOOSE_NUMBER = "Choose an option by its number, e.g. 'mission resolve <id>
 
 
 def _feeds_lines(option: BeatOption) -> list[str]:
-    """The kindled resonances an option would feed, one line each (#5124), as the web shows."""
+    """What an option pays at once, one line per resonance (#5124, #5327), as the web shows it:
+    "Pays you Mercy at once: this option is about sparing them." Never an amount."""
     return [
-        f"     Your {feed.resonance_name} is kindled" + (f": {feed.reason}" if feed.reason else "")
+        f"     Pays you {feed.resonance_name} at once{f': {feed.reason}' if feed.reason else '.'}"
         for feed in option.feeds
     ]
 

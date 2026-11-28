@@ -401,6 +401,7 @@ class CmdPose(ArxCommand):
         pose/entreat <sineater>=<units> <text>
         pose/sineat <sinner>=<units> <text>
         pose/reach <resonance>=<text>
+        pose/reach <resonance>:<act number>=<text>
 
     ``pose/reflect`` poses ``<text>`` and records that it reflects on a deed (the number
     ``reflect`` lists), on the resonance unsettling you (its name), embracing or disowning
@@ -413,8 +414,9 @@ class CmdPose(ArxCommand):
     it. A pose carries one of these, and the room sees only the pose.
 
     ``pose/reach`` poses ``<text>`` and names the resonance the pose reaches for, one you hold
-    or not. When someone endorses the pose, that is the resonance they confirm. It stands
-    alone: it combines with no other switch.
+    or not. When someone endorses the pose, that is the resonance they confirm. With
+    ``:<act number>`` it marks that act from your ``acts`` list instead: the resonance grows at
+    once. It stands alone: it combines with no other switch.
     """
 
     key = "pose"
@@ -451,7 +453,7 @@ class CmdPose(ArxCommand):
             if switches != [SWITCH_REACH]:
                 msg = "pose/reach combines with no other switch."
                 raise CommandError(msg)
-            return reach_kwargs_and_rest(args)
+            return reach_kwargs_and_rest(args, self.caller.character_sheet)
         return self._reflection_or_sineating_and_rest(switches, args)
 
     def _reflection_or_sineating_and_rest(
@@ -484,7 +486,7 @@ class CmdPose(ArxCommand):
         msg = (
             "Usage: pose <text> | pose/reflect <deed, resonance or mire:Sinner>=<choice> <text> | "
             "pose/entreat <sineater>=<units> <text> | pose/sineat <sinner>=<units> <text> | "
-            "pose/reach <resonance>=<text>"
+            "pose/reach <resonance>[:<act number>]=<text>"
         )
         raise CommandError(msg)
 

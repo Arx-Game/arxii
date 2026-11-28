@@ -34,18 +34,23 @@ _NO_IDENTITY = "You have no active character to check resonance with."
 def _grant_note(grant: ResonanceGrant) -> str:
     """The parenthesis after a history line: the source, and what the bonus check added (#5308).
 
-    "Kindled deed, +50% from Villainy" when the bonus check grew the gain, naming the
-    affinity's skill while it is active and leaving the name off otherwise. A grant with no
-    bonus reads as its source alone.
+    "Marked act: Intimidated Hale, +30% from Villainy" when the bonus check grew the gain,
+    naming the affinity's skill while it is active and leaving the name off otherwise. A grant
+    with no bonus reads as its source alone, and a deed names the act (``deed_label``). A
+    reward staff or the scene's GM undid ends with ", undone" (#5327).
     """
     from world.magic.services.resonance_checks import active_affinity_skill  # noqa: PLC0415
 
-    source = grant.get_source_display()
-    if grant.bonus_percent <= 0:
-        return source
-    skill = active_affinity_skill(grant.resonance.affinity)
-    named = f" from {skill.name}" if skill is not None else ""
-    return f"{source}, +{grant.bonus_percent}%{named}"
+    note = grant.get_source_display()
+    if grant.deed_label:
+        note = f"{note}: {grant.deed_label}"
+    if grant.bonus_percent > 0:
+        skill = active_affinity_skill(grant.resonance.affinity)
+        named = f" from {skill.name}" if skill is not None else ""
+        note = f"{note}, +{grant.bonus_percent}%{named}"
+    if grant.nullified_at is not None:
+        note = f"{note}, undone"
+    return note
 
 
 class CmdResonance(ArxCommand):

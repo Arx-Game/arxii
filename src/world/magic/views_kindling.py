@@ -8,17 +8,13 @@ is computed once per request, never per row.
 
 from __future__ import annotations
 
-from datetime import timedelta
-
-from django.db.models import Prefetch
-from django.utils import timezone
 from django_filters import rest_framework as filters
 from rest_framework import mixins, viewsets
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from world.character_sheets.models import CharacterSheet
-from world.magic.models import RecordedAct, RecordedActSuggestion
+from world.magic.models import RecordedAct
 from world.magic.serializers_kindling import (
     ImpulseSerializer,
     KindledResonanceSerializer,
@@ -26,7 +22,8 @@ from world.magic.serializers_kindling import (
 )
 from world.magic.services.gain import waiting_trickles
 from world.magic.services.impulses import impulses_now, safe_refresh_impulses_for_character
-from world.magic.services.kindling import get_kindling_config, kindled_resonances_now
+from world.magic.services.kindling import kindled_resonances_now
+from world.magic.services.marking import pointable_acts_queryset
 from world.roster.models import RosterEntry
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -162,21 +159,10 @@ class RecordedActViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):
     serializer_class = RecordedActSerializer
 
     def get_queryset(self):
-        window_start = timezone.now() - timedelta(days=get_kindling_config().recorded_act_days)
-        qs = RecordedAct.objects.filter(
-            marked_grant__isnull=True, created_at__gte=window_start
-        ).prefetch_related(
-            Prefetch(
-                "suggestions",
-                queryset=RecordedActSuggestion.objects.select_related("resonance").order_by(
-                    "-strength__rank", "resonance__name"
-                ),
-                to_attr="cached_suggestions",
-            )
-        )
+        qs = pointable_acts_queryset()
         if not self.request.user.is_staff:
             own = RosterEntry.objects.for_account(self.request.user).values_list(
                 "character_sheet_id", flat=True
             )
             qs = qs.filter(character_sheet_id__in=list(own))
-        return qs.order_by("-created_at", "-pk")
+        return qs

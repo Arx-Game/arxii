@@ -18,7 +18,7 @@ from datetime import timedelta
 from typing import TYPE_CHECKING, Any
 
 from django.db import transaction
-from django.db.models import Count, Sum
+from django.db.models import Count, Prefetch, QuerySet, Sum
 from django.utils import timezone
 
 from world.magic.constants import GainSource
@@ -149,6 +149,38 @@ def _recorded_act_days() -> int:
     from world.magic.services.kindling import get_kindling_config  # noqa: PLC0415
 
     return get_kindling_config().recorded_act_days
+
+
+def pointable_acts_queryset() -> QuerySet[RecordedAct]:
+    """Every unmarked act inside ``KindlingConfig.recorded_act_days``, newest first, each with
+    its suggestions (``cached_suggestions``, strongest first) fetched with it.
+
+    The one definition of what a mark can still point at: the recorded-acts endpoint and
+    telnet ``acts`` both start from it, then narrow to a character.
+    """
+    window_start = timezone.now() - timedelta(days=_recorded_act_days())
+    return (
+        RecordedAct.objects.filter(marked_grant__isnull=True, created_at__gte=window_start)
+        .prefetch_related(
+            Prefetch(
+                "suggestions",
+                queryset=RecordedActSuggestion.objects.select_related("resonance").order_by(
+                    "-strength__rank", "resonance__name"
+                ),
+                to_attr="cached_suggestions",
+            )
+        )
+        .order_by("-created_at", "-pk")
+    )
+
+
+def pointable_acts(sheet: CharacterSheet) -> list[RecordedAct]:
+    """``sheet``'s pointable acts, newest first.
+
+    The list a mark points into: telnet ``acts`` numbers it from 1, and ``pose/reach
+    <resonance>:<number>=`` names an act by that number.
+    """
+    return list(pointable_acts_queryset().filter(character_sheet=sheet))
 
 
 def weekly_percent_paid(sheet: CharacterSheet) -> WeeklyStanding:
@@ -342,6 +374,8 @@ def _paid_line(  # noqa: PLR0913 - the sheet, what was marked, what it paid and 
 __all__ = [
     "mark_base_amount",
     "pending_mark_from",
+    "pointable_acts",
+    "pointable_acts_queryset",
     "record_pending_mark",
     "weekly_percent_paid",
 ]

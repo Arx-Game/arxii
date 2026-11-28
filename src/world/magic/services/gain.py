@@ -289,6 +289,79 @@ def resonance_grant_history_for_sheet(
     return list(qs.order_by("-granted_at")[:limit])
 
 
+def pose_number_in_scene(endorser_sheet: CharacterSheet, interaction: Interaction) -> int | None:
+    """The number ``poses <char>`` and ``endorse pose`` give ``interaction`` for ``endorser_sheet``
+    (its position among its author's poses in the scene), or None when it has no scene or the
+    endorser cannot see it."""
+    scene = interaction.scene
+    if scene is None or interaction.persona is None:
+        return None
+    author = interaction.persona.character_sheet
+    if author is None:
+        return None
+    for number, row in get_endorseable_poses_in_scene(endorser_sheet, author, scene):
+        if row.pk == interaction.pk:
+            return number
+    return None
+
+
+def waiting_picks_from(
+    witness_sheet: CharacterSheet, poser_sheet: CharacterSheet, scene: Scene
+) -> list[tuple[int, PoseEndorsement]]:
+    """The picks ``witness_sheet`` has waiting on ``poser_sheet``'s poses in ``scene``, as
+    ``(pose number, pick)`` pairs in pose order (#5327).
+
+    The pose number is the one ``poses`` gives the witness and the proposal line quotes, so
+    ``endorse accept <witness> #N`` names a pick by who proposed it and on which pose.
+    """
+    numbered = {
+        interaction.pk: number
+        for number, interaction in get_endorseable_poses_in_scene(witness_sheet, poser_sheet, scene)
+    }
+    rows = PoseEndorsement.objects.filter(
+        endorser_sheet=witness_sheet,
+        endorsee_sheet=poser_sheet,
+        interaction_id__in=numbered,
+        awaiting_acceptance=True,
+        settled_at__isnull=True,
+    ).select_related("resonance", "interaction__persona")
+    return sorted(((numbered[row.interaction_id], row) for row in rows), key=lambda pair: pair[0])
+
+
+def _tell_poser_of_proposal(endorsement: PoseEndorsement) -> None:
+    """Tell the poser, once the pick commits, which resonance a witness proposed on her pose
+    and how to answer it (#5327). The line names the witness as she knows them, and the pose by
+    its number, the way ``endorse accept`` and ``endorse decline`` name it."""
+    from world.magic.services.kindling import shown_names  # noqa: PLC0415
+
+    poser = endorsement.endorsee_sheet
+    witness = endorsement.endorser_sheet
+    resonance_name = endorsement.resonance.name
+    interaction = endorsement.interaction
+
+    def _send() -> None:
+        name = shown_names(poser, [witness.pk]).get(witness.pk, "Someone")
+        number = pose_number_in_scene(witness, interaction)
+        if number is None:
+            line = f"{name} proposed {resonance_name} on your pose. Answer it on the web."
+        else:
+            line = (
+                f"{name} proposed {resonance_name} on your pose #{number}. "
+                f"Use endorse accept {name} #{number} or endorse decline {name} #{number}."
+            )
+        poser.character.msg(line)
+
+    transaction.on_commit(_send)
+
+
+def _announce_endorsement(endorsement: PoseEndorsement) -> None:
+    """Tell a new endorsement's audience: the poser when the pick waits for her, and everyone
+    who reads the pose, who refetch it."""
+    if endorsement.awaiting_acceptance:
+        _tell_poser_of_proposal(endorsement)
+    notify_interaction_changed(endorsement.interaction)
+
+
 def _pose_endorsement_target(
     interaction: Interaction, chosen: Resonance | None
 ) -> tuple[Resonance, bool]:
@@ -422,7 +495,7 @@ def create_pose_endorsement(  # noqa: C901
     # mixin alone (ADR-0298).
     if cached is not None:
         interaction.cached_endorsements = [*cached, endorsement]
-    notify_interaction_changed(interaction)
+    _announce_endorsement(endorsement)
     return endorsement
 
 
@@ -487,6 +560,7 @@ def change_pose_endorsement(
     row.resonance = resonance
     row.awaiting_acceptance = True
     row.save(update_fields=["resonance", "awaiting_acceptance"])
+    _tell_poser_of_proposal(row)
     notify_interaction_changed(row.interaction)
     return row
 

@@ -4,6 +4,7 @@ CmdPoses:  ``poses <char>``                           — list visible poses
 CmdEndorse: ``endorse pose <char> [#N] resonance=<name> [confirm]``
             ``endorse entry <char> resonance=<name>``
             ``endorse style <char> resonance=<name>``
+            ``endorse accept <char> [#N]`` / ``endorse decline <char> [#N]`` (#5327)
 
 Both commands derive the active scene from the caller's room
 (``get_active_scene``), exactly like CmdIntimidate / CmdAccept.
@@ -95,20 +96,25 @@ class CmdEndorse(ArxCommand):
 
     Syntax:
         endorse pose <char> [#N] resonance=<name>
-        endorse pose <char> [#N] resonance=<name> confirm
         endorse pose <char> [#N] [confirm]
         endorse entry <char> resonance=<name>
         endorse style <char> resonance=<name>
+        endorse accept <char> [#N]
+        endorse decline <char> [#N]
 
-    For pose endorsements, the first invocation shows a preview of the pose.
-    Add ``confirm`` to commit. Use ``poses <char>`` to see position numbers.
+    On a pose whose author named no resonance, the resonance you pick waits for the author to
+    accept it, and pays only if they do. Type the command again with another resonance to
+    change your pick. Use ``poses <char>`` to see the numbers.
     A pose whose author reached for a resonance (``pose/reach``) is endorsed for that
-    resonance, so you leave ``resonance=`` off. Scene-entry and style endorsements are
-    one-shot (no confirmation needed).
+    resonance, so you leave ``resonance=`` off: the first invocation shows a preview of the
+    pose, and ``confirm`` commits. Scene-entry and style endorsements are one-shot.
+    When someone proposes a resonance on your pose, ``endorse accept <char> #N`` lets it pay
+    at the weekly settlement and ``endorse decline <char> #N`` turns it down.
 
     Examples:
         endorse pose Alice resonance=Embers
-        endorse pose Alice #2 resonance=Embers confirm
+        endorse pose Alice #2 resonance=Grief
+        endorse accept Ilsa #1
         endorse entry Alice resonance=Embers
         endorse style Alice resonance=Embers
     """
@@ -126,20 +132,29 @@ class CmdEndorse(ArxCommand):
     def _dispatch(self) -> None:
         args = (self.args or "").strip()
         if not args:
-            msg = "Endorse what? Usage: endorse pose/entry/style <char> resonance=<name>"
+            msg = (
+                "Endorse what? Usage: endorse pose/entry/style <char> resonance=<name> | "
+                "endorse accept/decline <char> [#N]"
+            )
             raise CommandError(msg)
         raw_tokens = args.split()
         subtype = raw_tokens[0].lower()
-        if subtype not in ("pose", "entry", "style"):  # noqa: STRING_LITERAL
-            msg = "Specify pose, entry, or style: endorse pose/entry/style <char> resonance=<name>"
+        if subtype not in ("pose", "entry", "style", "accept", "decline"):  # noqa: STRING_LITERAL
+            msg = (
+                "Specify pose, entry, style, accept or decline: "
+                "endorse pose/entry/style <char> resonance=<name> | "
+                "endorse accept/decline <char> [#N]"
+            )
             raise CommandError(msg)
         rest: list[str] = list(raw_tokens[1:])
         if subtype == "pose":  # noqa: STRING_LITERAL
             self._endorse_pose(rest)
         elif subtype == "entry":  # noqa: STRING_LITERAL
             self._endorse_entry(rest)
-        else:
+        elif subtype == "style":  # noqa: STRING_LITERAL
             self._endorse_style(rest)
+        else:
+            self._answer_proposal(rest, accept=subtype == "accept")  # noqa: STRING_LITERAL
 
     # ------------------------------------------------------------------
     # Shared parsing helpers
@@ -258,6 +273,48 @@ class CmdEndorse(ArxCommand):
             interaction=pose_map[pose_n],
             resonance=resonance,
             confirm=confirm,
+            pose_number=pose_n,
+            change_pick=True,
+        )
+        self._send_result(result)
+
+    def _answer_proposal(self, tokens: list[str], *, accept: bool) -> None:
+        """``endorse accept|decline <char> [#N]``: answer the resonance <char> proposed on one of
+        the caller's poses. The pick is named by who proposed it and on which pose, so two
+        waiting picks are never confused; with no number, a lone pick from <char> is the one."""
+        from actions.definitions.endorsements import AnswerPoseProposalAction  # noqa: PLC0415
+        from world.magic.services.gain import waiting_picks_from  # noqa: PLC0415
+
+        number = None
+        rest = []
+        for token in tokens:
+            if token.startswith("#") and token[1:].isdigit() and number is None:
+                number = int(token[1:])
+            else:
+                rest.append(token)
+        verb = "accept" if accept else "decline"  # noqa: STRING_LITERAL
+        char_name = " ".join(rest).strip()
+        if not char_name:
+            msg = f"Whose proposal? (endorse {verb} <char> [#N])"
+            raise CommandError(msg)
+        witness_sheet = self._resolve_endorsee(char_name)
+        poser_sheet = self.caller.character_sheet
+        if poser_sheet is None:
+            msg = "You have no character sheet."
+            raise CommandError(msg)
+        waiting = waiting_picks_from(witness_sheet, poser_sheet, self._active_scene())
+        if number is not None:
+            waiting = [pair for pair in waiting if pair[0] == number]
+        if not waiting:
+            msg = f"{char_name} has no proposal waiting on that pose of yours."
+            raise CommandError(msg)
+        if len(waiting) > 1:
+            numbers = ", ".join(f"#{n}" for n, _ in waiting)
+            msg = f"{char_name} proposed on more than one pose of yours: {numbers}."
+            raise CommandError(msg)
+        pose_n, pick = waiting[0]
+        result = AnswerPoseProposalAction().run(
+            actor=self.caller, endorsement=pick, accept=accept, pose_number=pose_n
         )
         self._send_result(result)
 
