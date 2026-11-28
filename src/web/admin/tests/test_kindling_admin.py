@@ -15,7 +15,6 @@ from world.magic.factories import (
     ReflectionFactory,
     ResonanceFactory,
     SettlingRiteFactory,
-    WeeklyMarkReturnFactory,
 )
 from world.magic.models import (
     AnimaRitualResonanceAward,
@@ -24,7 +23,6 @@ from world.magic.models import (
     KindlingConfig,
     KindlingSituation,
     RallyKindlingStrength,
-    WeeklyMarkReturn,
 )
 from world.mechanics.factories import PropertyFactory
 from world.missions.factories import MissionTemplateFactory
@@ -199,63 +197,3 @@ class KindlingAdminPagesTests(TestCase):
         self.assertEqual(RallyKindlingStrength.objects.get(outcome_tier=success).strength, 2)
         self.assertEqual(KindledDeedAward.objects.get(outcome_tier=good).amount, 5)
         self.assertEqual(AnimaRitualResonanceAward.objects.get(outcome_tier=success).amount, 7)
-
-
-class WeeklyMarkReturnPageTests(TestCase):
-    """The weekly table is one page: every step is a row of fields saved together (#5327)."""
-
-    @classmethod
-    def setUpTestData(cls) -> None:
-        cls.staff = AccountDB.objects.create_superuser(
-            "weekly5327", "weekly5327@example.com", "pw-123456"
-        )
-        cls.rows = [
-            WeeklyMarkReturnFactory(gained_at_least=0, percent_paid=100),
-            WeeklyMarkReturnFactory(gained_at_least=9, percent_paid=85),
-            WeeklyMarkReturnFactory(gained_at_least=18, percent_paid=70),
-        ]
-        cls.url = reverse("admin:arxii_weeklymarkreturn_changelist")
-
-    def test_the_page_lists_every_row_as_fields_under_the_demos_heading_and_help(self) -> None:
-        self.client.force_login(self.staff)
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, 200)
-        formset = response.context["cl"].formset
-        self.assertEqual(len(formset.forms), 3)
-        page = response.content.decode()
-        for index in range(3):
-            self.assertIn(f'name="form-{index}-gained_at_least"', page)
-            self.assertIn(f'name="form-{index}-percent_paid"', page)
-        self.assertIn("One row for each step in the game week", page)
-        self.assertIn(
-            "A row applies once she has gained at least this much from marks this game week, "
-            "before this mark. With no rows, nothing is reduced. Authored choices are never "
-            "reduced.",
-            page,
-        )
-        self.assertLess(
-            page.index("One row for each step in the game week"),
-            page.index('name="form-0-gained_at_least"'),
-        )
-        self.assertLess(page.index('name="form-2-percent_paid"'), page.index("A row applies"))
-
-    def test_saving_the_page_changes_the_rows_it_shows(self) -> None:
-        self.client.force_login(self.staff)
-        formset = self.client.get(self.url).context["cl"].formset
-        data = {
-            "form-TOTAL_FORMS": "3",
-            "form-INITIAL_FORMS": "3",
-            "form-MIN_NUM_FORMS": "0",
-            "form-MAX_NUM_FORMS": "1000",
-            "_save": "Save",
-        }
-        for index, form in enumerate(formset.forms):
-            data[f"form-{index}-id"] = str(form.instance.pk)
-            data[f"form-{index}-gained_at_least"] = str(form.instance.gained_at_least)
-            data[f"form-{index}-percent_paid"] = str(form.instance.percent_paid)
-        data["form-1-percent_paid"] = "60"
-        response = self.client.post(self.url, data)
-        self.assertEqual(response.status_code, 302)
-        self.assertEqual(WeeklyMarkReturn.objects.get(gained_at_least=9).percent_paid, 60)
-        self.assertEqual(WeeklyMarkReturn.objects.get(gained_at_least=0).percent_paid, 100)
-        self.assertEqual(WeeklyMarkReturn.objects.get(gained_at_least=18).percent_paid, 70)

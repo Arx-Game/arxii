@@ -26,9 +26,12 @@ other than social is needed, which is built directly.
 
 from __future__ import annotations
 
+import html
 import json
 import uuid
 
+from django.contrib.auth import get_user_model
+from django.urls import reverse
 from rest_framework import status
 
 from actions.constants import ActionCategory
@@ -42,6 +45,7 @@ from world.gm.factories import GMProfileFactory, GMPromptFactory
 from world.journals.models import JournalEntry
 from world.magic.constants import GainSource
 from world.magic.factories import (
+    AffinityFactory,
     CharacterResonanceFactory,
     DramaticMomentTypeFactory,
     KindledDeedAwardFactory,
@@ -933,3 +937,45 @@ class AMissionOptionThatNamesItsResonancePaysItAtOnce(_Gate):
         self.assertNotIn("Pays you Fury", beat)
         self.assertFalse(ResonanceGrant.objects.exists())
         self.assertNotTold(self.mira, "You earned")
+
+
+class StaffSeeWhatMarksNeedBeforeTheyWork(JourneyCase):
+    """The Required content page tells staff what to author for marks, in words, until they do."""
+
+    WEEKLY_CONSEQUENCE = (
+        "With no rows, a character's marks are never reduced within a week: the tenth mark "
+        "of the week pays as much as the first, so marking every act is the best way to earn."
+    )
+
+    def setUp(self) -> None:
+        super().setUp()
+        staff = get_user_model().objects.create_user(
+            username="warden5327", password="pw", is_staff=True, is_superuser=True
+        )
+        self.client.force_login(staff)
+
+    def page(self) -> str:
+        response = self.client.get(reverse("admin_ops_required_content"))
+        self.assertEqual(response.status_code, 200)
+        return html.unescape(response.content.decode())
+
+    def test_an_empty_weekly_table_reads_as_missing_with_its_consequence_until_a_row_is_added(
+        self,
+    ) -> None:
+        self.assertIn("The weekly table of mark returns", self.page())
+        self.assertIn(self.WEEKLY_CONSEQUENCE, self.page())
+
+        WeeklyMarkReturnFactory(gained_at_least=9, percent_paid=85)
+
+        self.assertNotIn(self.WEEKLY_CONSEQUENCE, self.page())
+
+    def test_an_affinity_with_no_gain_fatigue_is_named_until_it_is_set(self) -> None:
+        weightless = AffinityFactory(name="Weightless", gain_fatigue=0, claim_verb="relish")
+
+        self.assertIn("A gain fatigue above 0 on every affinity", self.page())
+        self.assertIn("Weightless", self.page())
+
+        weightless.gain_fatigue = 4
+        weightless.save()
+
+        self.assertNotIn("Weightless", self.page())

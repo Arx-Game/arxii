@@ -26,6 +26,7 @@ from rest_framework.test import APIClient
 
 from actions.constants import ActionCategory
 from evennia_extensions.factories import AccountFactory
+from web.admin.being_service.live import resonance_context
 from world.character_sheets.models import CharacterSheet
 from world.fatigue.services import get_fatigue_capacity, get_or_create_fatigue_pool
 from world.fatigue.tests import setup_stat
@@ -84,6 +85,11 @@ from world.scenes.factories import (
 from world.scenes.models import Interaction, Scene
 from world.traits.factories import StatTraitFactory
 from world.traits.models import TraitCategory
+from world.worship.factories import (
+    BeingResonanceFactory,
+    DevotionStandingFactory,
+    WorshippedBeingFactory,
+)
 
 # Two resonances per affinity. The key is what a strategy draws.
 RESONANCE_KEYS = ("heroic 1", "heroic 2", "primal 1", "primal 2", "villain 1", "villain 2")
@@ -356,6 +362,12 @@ class UndoTakesBackWhatTheRewardPaid(_Table, HypothesisTestCase):
         self.assertIn(waiting.pk, [d.grant.pk for d in reflectable_for(sheet).deeds])
         standing = weekly_percent_paid(sheet)
         self.assertEqual((standing.gained, standing.marks), (2 * undone_amount, 2))
+        # The staff page that counts a being's recent grants to its worshippers is a reader too.
+        being_row = BeingResonanceFactory(
+            being=WorshippedBeingFactory(), resonance=self.resonances[key]
+        )
+        DevotionStandingFactory(being=being_row.being, character_sheet=sheet)
+        self.assertTrue(resonance_context(being_row.being)[being_row.pk].grants.startswith("2 "))
 
         undo_resonance_grant(reflected, self.staff)
         undo_resonance_grant(waiting, self.staff)
@@ -378,6 +390,7 @@ class UndoTakesBackWhatTheRewardPaid(_Table, HypothesisTestCase):
         self.assertEqual(reflectable_for(sheet).deeds, ())
         standing = weekly_percent_paid(sheet)
         self.assertEqual((standing.gained, standing.marks), (0, 0))
+        self.assertEqual(resonance_context(being_row.being)[being_row.pk].grants, "none yet")
 
     @settings(max_examples=15, deadline=None)
     @given(key=st.sampled_from(RESONANCE_KEYS), amount=st.integers(1, 80))

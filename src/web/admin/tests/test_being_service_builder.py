@@ -3,7 +3,7 @@ facets and pledge types, written together with their context."""
 
 from pathlib import Path
 
-from django.test import TestCase, tag
+from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
@@ -14,12 +14,11 @@ from web.admin.tests.test_distinction_builder import (
     reachable_css,
     stylesheet_hrefs,
 )
-from world.character_sheets.factories import CharacterSheetFactory
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionEffectFactory
 from world.items.factories import ItemTemplateFactory
 from world.items.market.models import CraftingServiceOffer
-from world.magic.factories import FacetFactory, ResonanceGrantFactory
+from world.magic.factories import FacetFactory
 from world.mechanics.constants import FAVOR_INVOCATION_CATEGORY_NAME
 from world.mechanics.models import ModifierTarget
 from world.pacts.constants import CharacterPactCommitmentKind
@@ -36,7 +35,6 @@ from world.worship.constants import BeingResonanceTier, RiteTier
 from world.worship.factories import (
     BeingFacetFactory,
     BeingResonanceFactory,
-    DevotionStandingFactory,
     PledgeFactory,
     RequestedItemFactory,
     RiteKindFactory,
@@ -159,27 +157,6 @@ class ServiceBuilderPageTests(ServiceBuilderTestCase):
         self.assertIn("Your patron favor earning", body)
         self.assertIn("Distinction effect: Chosen", body)
         self.assertIn("Every pledge type has an active closing rite.", body)
-
-    @tag("regression")
-    def test_regression_the_recent_grants_count_skips_a_grant_that_was_undone(self) -> None:
-        """Regression for #5327. A grant staff or a scene's GM undid was taken back, so the
-        page's count of recent grants to the being's worshippers does not include it."""
-        from django.utils import timezone
-
-        from web.admin.being_service.live import resonance_context
-
-        worshipper = CharacterSheetFactory()
-        DevotionStandingFactory(being=self.being, character_sheet=worshipper)
-        ResonanceGrantFactory(character_sheet=worshipper, resonance=self.favored.resonance)
-        ResonanceGrantFactory(
-            character_sheet=worshipper,
-            resonance=self.favored.resonance,
-            nullified_at=timezone.now(),
-        )
-
-        context = resonance_context(self.being)
-
-        self.assertTrue(context[self.favored.pk].grants.startswith("1 grants:"))
 
     def test_the_favored_facets_table_shows_the_worn_rates_and_the_side_panel_who_supplies_them(
         self,
