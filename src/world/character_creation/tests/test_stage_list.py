@@ -172,6 +172,16 @@ class StageListWordingTests(TestCase):
         draft.save()
         assert get_attributes_errors(draft) == ["10 points over budget"]
 
+    def test_one_point_is_a_point(self):
+        # The page places statistics in tens, so one point left over takes a spread the
+        # page cannot send: eleven at 30 and one at 19 is 349 of 350.
+        stats = dict.fromkeys(REQUIRED_STATS, 30)
+        stats[next(iter(stats))] = 19
+        draft = CharacterDraftFactory()
+        draft.draft_data = {"stats": stats}
+        draft.save()
+        assert "1 point remaining to allocate" in get_attributes_errors(draft)
+
 
 class SurnameTests(TestCase):
     """The surname the side panel shows on every stage, by family path."""
