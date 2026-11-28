@@ -135,6 +135,7 @@ from world.magic.services.cg_catalog import (
     get_species_technique_options,
     get_technique_options,
 )
+from world.magic.services.tradition_teaching import traditions_offered_in_creation
 from world.magic.types.cg_catalog import TechniqueOptions
 from world.roster.models import FamilyKind
 from world.societies.models import Vacancy
@@ -510,7 +511,8 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             output_field=IntegerField(),
         )
         return (
-            Tradition.objects.filter(id__in=ordered_ids, is_active=True)
+            traditions_offered_in_creation()
+            .filter(id__in=ordered_ids)
             .annotate(_bt_order=order_case)
             .order_by("_bt_order", "name")
         )

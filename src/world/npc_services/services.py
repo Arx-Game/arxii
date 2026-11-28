@@ -970,13 +970,13 @@ def _menu_teaching_context(
     difficulty (nothing is harder, so no line is drawn). The self-teaching lever is not read.
     """
     from world.magic.services.teaching_fit import get_teaching_config  # noqa: PLC0415
-    from world.magic.services.tradition_teaching import build_teaching_context  # noqa: PLC0415
+    from world.magic.services.tradition_teaching import build_outsider_context  # noqa: PLC0415
 
     if not any(o.kind == OfferKind.SKILL_COURSE for o in offers):
         return None
     if get_teaching_config().other_tradition_course_difficulty <= 0:
         return None
-    return build_teaching_context([sheet.pk], lever_sheet_ids=[])
+    return build_outsider_context([sheet.pk])
 
 
 def _outsider_line(
@@ -985,18 +985,22 @@ def _outsider_line(
     """The menu's caution line for a student whose own Tradition does not teach the skill.
 
     None unless the course's skill is one a Tradition's list governs, her own Tradition does
-    not teach it, and staff set an extra course difficulty above 0. ``teaching`` is the
-    menu's context (``_menu_teaching_context``); None builds one for ``sheet`` here.
+    not teach it, and staff set an extra course difficulty above 0. None too for a course
+    enrollment would refuse as closed (the trainer's own Tradition does not teach the skill):
+    the harder line is for a course she can take. ``teaching`` is the menu's context
+    (``_menu_teaching_context``); None builds one for ``sheet`` here.
     """
     from world.magic.services.teaching_fit import get_teaching_config  # noqa: PLC0415
     from world.magic.services.tradition_teaching import (  # noqa: PLC0415
-        build_teaching_context,
+        build_outsider_context,
         is_outsider,
     )
 
     if get_teaching_config().other_tradition_course_difficulty <= 0:
         return None
-    context = teaching or build_teaching_context([sheet.pk], lever_sheet_ids=[])
+    context = teaching or build_outsider_context([sheet.pk])
+    if not context.teaches(course.offer.role.teaches_tradition_id, course.skill_id):
+        return None
     return OUTSIDER_LINE if is_outsider(context, sheet, course.skill) else None
 
 

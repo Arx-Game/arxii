@@ -25,14 +25,22 @@ class TeachingContext:
     - ``active_tradition_by_sheet``: the active Tradition id of each sheet the context was
       built for, ``None`` for a sheet with no active Tradition. A sheet missing from the
       mapping was not built for; asking about it raises (see ``tradition_of``).
+    - ``player_by_sheet``: the account id that plays each sheet the context read players for
+      (``None`` for a sheet nobody plays). Asking whether two sheets share a player raises for
+      a sheet outside it (see ``played_by_one_account``).
+    - ``lever_read_sheet_ids``: the sheets the context read the self-teaching lever for (one
+      modifier walk each). Asking whether a sheet outside it may teach herself raises (see
+      ``may_teach_herself``).
     - ``self_teaching_sheet_ids``: the sheets whose self-teaching lever is positive. Only
-      the sheets the context was told to read the lever for can appear.
+      the sheets in ``lever_read_sheet_ids`` can appear.
     """
 
     governed_skill_ids: frozenset[int]
     universal_skill_ids: frozenset[int]
     taught_skill_ids_by_tradition: Mapping[int, frozenset[int]]
     active_tradition_by_sheet: Mapping[int, int | None]
+    player_by_sheet: Mapping[int, int | None]
+    lever_read_sheet_ids: frozenset[int]
     self_teaching_sheet_ids: frozenset[int]
 
     def tradition_of(self, sheet_id: int) -> int | None:
@@ -50,6 +58,40 @@ class TeachingContext:
                 "student and mentor sheet id to build_teaching_context."
             )
             raise KeyError(msg) from None
+
+    def played_by_one_account(self, first_sheet_id: int, second_sheet_id: int) -> bool:
+        """Whether one account plays both sheets now (a sheet nobody plays shares none).
+
+        Raises ``KeyError`` for a sheet whose player was not read into the context. Name every
+        student and mentor in ``player_sheet_ids`` of ``build_teaching_context``.
+        """
+        try:
+            first = self.player_by_sheet[first_sheet_id]
+            second = self.player_by_sheet[second_sheet_id]
+        except KeyError as missing:
+            msg = (
+                f"The player of character sheet {missing.args[0]} was not read into this "
+                "TeachingContext. Pass the sheet id in player_sheet_ids to "
+                "build_teaching_context."
+            )
+            raise KeyError(msg) from None
+        return first is not None and first == second
+
+    def may_teach_herself(self, sheet_id: int) -> bool:
+        """Whether the sheet's self-teaching lever is positive.
+
+        Raises ``KeyError`` for a sheet whose lever was not read into the context: reading it
+        as "no lever" would quietly refuse a prodigy. Name every student who may train with
+        no mentor in ``lever_sheet_ids`` of ``build_teaching_context``.
+        """
+        if sheet_id not in self.lever_read_sheet_ids:
+            msg = (
+                f"The self-teaching lever of character sheet {sheet_id} was not read into this "
+                "TeachingContext. Pass the sheet id in lever_sheet_ids to "
+                "build_teaching_context."
+            )
+            raise KeyError(msg)
+        return sheet_id in self.self_teaching_sheet_ids
 
     def teaches(self, tradition_id: int | None, skill_id: int) -> bool:
         """Whether the Tradition teaches the skill; a skill no list governs, any Tradition does.

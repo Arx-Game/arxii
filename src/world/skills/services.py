@@ -272,6 +272,11 @@ def total_allocated_training_ap(character_id: int, exclude_pk: int | None = None
     return qs.aggregate(total=Sum("ap_amount"))["total"] or 0
 
 
+def _trains_without_a_mentor(student_sheet_id: int, mentor: Persona | None) -> bool:
+    """Whether the allocation has no mentor, her own persona counting as none (#5326)."""
+    return mentor is None or mentor.character_sheet_id == student_sheet_id
+
+
 def _training_refusal(
     sheet: CharacterSheet,
     skill: Skill | Specialization,
@@ -279,28 +284,28 @@ def _training_refusal(
 ) -> str | None:
     """The line that refuses this training, or None when the Tradition rule allows it (#5326).
 
-    Builds a one-character teaching context (the student and the mentor), so a caller
-    allocating one row asks once. The weekly run builds its own context for every row.
+    A skill outside the Magic category is never refused, so no context is built for it.
+    Otherwise builds a one-character teaching context (the student and the mentor), so a
+    caller allocating one row asks once. The weekly run builds its own context for every row.
     """
     from world.magic.services.tradition_teaching import (  # noqa: PLC0415
         build_teaching_context,
         training_verdict,
     )
 
+    parent = skill.parent_skill if isinstance(skill, Specialization) else skill
+    if parent.category != TraitCategory.MAGIC:
+        return None
     sheet_ids = {sheet.pk}
-    mentor_sheet = None
     if mentor is not None:
-        mentor_sheet = mentor.character_sheet
-        sheet_ids.add(mentor_sheet.pk)
-    context = build_teaching_context(sheet_ids)
-    verdict = training_verdict(
-        context,
-        sheet,
-        skill,
-        mentor_sheet,
-        mentor_name=None if mentor is None else mentor.name,
+        sheet_ids.add(mentor.character_sheet_id)
+    alone = _trains_without_a_mentor(sheet.pk, mentor)
+    context = build_teaching_context(
+        sheet_ids,
+        lever_sheet_ids=[sheet.pk] if alone else [],
+        player_sheet_ids=[] if alone else sheet_ids,
     )
-    return verdict.refusal
+    return training_verdict(context, sheet, skill, mentor).refusal
 
 
 def create_training_allocation(
@@ -841,31 +846,36 @@ def _weekly_teaching_context(allocations: list[TrainingAllocation]) -> TeachingC
 
     It holds every student and every mentor. The self-teaching lever is read only for a
     student with an allocation that has no mentor on a Magic skill, so a run after the first
-    reads it for prodigies only.
+    reads it for prodigies only. The players are read once, in bulk, for the student and the
+    mentor of each mentored allocation.
     """
     from world.magic.services.tradition_teaching import build_teaching_context  # noqa: PLC0415
 
     sheet_ids = {a.character_id for a in allocations}
     sheet_ids.update(a.mentor.character_sheet_id for a in allocations if a.mentor is not None)
-    lever_sheet_ids = {
-        a.character_id
-        for a in allocations
-        if a.mentor is None and _allocation_parent_skill(a).category == TraitCategory.MAGIC
-    }
-    return build_teaching_context(sheet_ids, lever_sheet_ids=lever_sheet_ids)
+    lever_sheet_ids = set()
+    player_sheet_ids = set()
+    for allocation in allocations:
+        if _allocation_parent_skill(allocation).category != TraitCategory.MAGIC:
+            continue
+        if _trains_without_a_mentor(allocation.character_id, allocation.mentor):
+            lever_sheet_ids.add(allocation.character_id)
+        else:
+            player_sheet_ids.update({allocation.character_id, allocation.mentor.character_sheet_id})
+    return build_teaching_context(
+        sheet_ids, lever_sheet_ids=lever_sheet_ids, player_sheet_ids=player_sheet_ids
+    )
 
 
 def _weekly_refusal(teaching: TeachingContext, allocation: TrainingAllocation) -> str | None:
     """The line that refuses this standing allocation this week, or None when it is allowed."""
     from world.magic.services.tradition_teaching import training_verdict  # noqa: PLC0415
 
-    mentor = allocation.mentor
     verdict = training_verdict(
         teaching,
         allocation.character,
         _allocation_skill(allocation),
-        None if mentor is None else mentor.character_sheet,
-        mentor_name=None if mentor is None else mentor.name,
+        allocation.mentor,
     )
     return verdict.refusal
 

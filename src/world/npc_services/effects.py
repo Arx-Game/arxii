@@ -1068,7 +1068,7 @@ def _course_terms(
         student_traits,
     )
     from world.magic.services.tradition_teaching import (  # noqa: PLC0415
-        build_teaching_context,
+        build_outsider_context,
         is_outsider,
     )
 
@@ -1076,7 +1076,7 @@ def _course_terms(
     fit = student_fit(offer.role.teaches_tradition, student_traits(sheet))
     added = 0
     if config.other_tradition_course_difficulty > 0:
-        context = build_teaching_context([sheet.pk], lever_sheet_ids=[])
+        context = build_outsider_context([sheet.pk])
         if is_outsider(context, sheet, course.skill):
             added = config.other_tradition_course_difficulty
     return CourseTerms(ease=fit.course_ease(config), added_difficulty=added)

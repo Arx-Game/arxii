@@ -36,28 +36,37 @@ from world.skills.models import Skill, Specialization
 from world.traits.models import TraitCategory
 
 if TYPE_CHECKING:
+    from django.db.models import QuerySet
+
     from world.character_sheets.models import CharacterSheet
+    from world.scenes.models import Persona
 
 __all__ = [
     "TeachingContext",
     "TrainingVerdict",
+    "build_outsider_context",
     "build_teaching_context",
     "is_outsider",
     "is_tradition_governed",
     "taught_affinity_skill_filter",
     "taught_affinity_skill_names_by_tradition",
     "tradition_teaches",
+    "traditions_offered_in_creation",
     "training_verdict",
 ]
 
 NEEDS_A_TEACHER = "{skill} needs a teacher. Choose a mentor whose Tradition teaches it."
-MENTOR_TRADITION_DOES_NOT_TEACH = (
-    "{mentor}'s Tradition does not teach {skill}. Choose a mentor whose Tradition does."
+# One line for every reason a named mentor cannot teach: no Tradition, a Tradition that does not
+# teach the skill, no rating. Which of them it is would tell the asker about the character behind
+# the name she typed, so the line never says (#5326).
+MENTOR_CANNOT_TEACH = (
+    "{mentor} cannot teach you {skill}. Choose a mentor whose Tradition teaches it and who has "
+    "trained in it."
 )
-MENTOR_HAS_NO_TRADITION = (
-    "{mentor} belongs to no Tradition. Choose a mentor whose Tradition teaches {skill}."
+MENTOR_IS_ANOTHER_OF_YOUR_CHARACTERS = (
+    "You cannot name another of your own characters as your mentor. "
+    "Choose a mentor another player plays."
 )
-MENTOR_HAS_NO_RATING = "{mentor} has no rating in {skill}. Choose a mentor who has one."
 
 
 def _governing_skill(skill: Skill | Specialization) -> Skill:
@@ -69,37 +78,36 @@ def is_tradition_governed(skill: Skill | Specialization) -> bool:
     """Whether a Tradition's list decides who teaches the skill.
 
     True for an affinity's own skill and a fighting style's own skill; false for every
-    other skill, which any Tradition teaches. No skill is named.
+    other skill, which any Tradition teaches. No skill is named. Reads the same catalog
+    ``build_teaching_context`` does.
     """
-    from world.covenants.models import CombatStyle  # noqa: PLC0415
-
-    parent = _governing_skill(skill)
-    return (
-        Affinity.objects.filter(skill=parent).exists()
-        or CombatStyle.objects.filter(skill=parent).exists()
-    )
+    context = build_teaching_context([], lever_sheet_ids=[], player_sheet_ids=[])
+    return _governing_skill(skill).pk in context.governed_skill_ids
 
 
 def tradition_teaches(tradition: Tradition, skill: Skill | Specialization) -> bool:
     """Whether the Tradition's teachers teach the skill. Never reads the Tradition's state.
 
-    A skill no list governs is taught by every Tradition. Reflection (the Primal affinity's
-    skill) is taught by every Tradition with no tick. Another affinity's skill needs a
-    ``taught_skills`` row. A fighting style's skill needs the Tradition in the style's
-    ``taught_by``.
+    The one-question form of ``TeachingContext.teaches``: it builds the catalog context and
+    asks it, so it cannot differ from the batch answer. A skill no list governs is taught by
+    every Tradition. Reflection (the Primal affinity's skill) is taught by every Tradition with
+    no tick. Another affinity's skill needs a ``taught_skills`` row. A fighting style's skill
+    needs the Tradition in the style's ``taught_by``.
     """
-    from world.covenants.models import CombatStyle  # noqa: PLC0415
+    context = build_teaching_context([], lever_sheet_ids=[], player_sheet_ids=[])
+    return context.teaches(tradition.pk, _governing_skill(skill).pk)
 
-    parent = _governing_skill(skill)
-    affinity = Affinity.objects.filter(skill=parent).first()
-    if affinity is not None:
-        if affinity.name == AFFINITY_PRIMAL:
-            return True
-        return tradition.taught_skills.filter(pk=parent.pk).exists()
-    style = CombatStyle.objects.filter(skill=parent).first()
-    if style is not None:
-        return style.taught_by.filter(pk=tradition.pk).exists()
-    return True
+
+def traditions_offered_in_creation() -> QuerySet[Tradition]:
+    """The active Traditions some Beginning lists: the ones a new character can pick.
+
+    The Tradition endpoint and the Required content row for Heroism and Villainy both read it,
+    so what the row counts is what the endpoint can serve.
+    """
+    from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+
+    listed = BeginningTradition.objects.values("tradition_id")
+    return Tradition.objects.filter(is_active=True, pk__in=listed)
 
 
 def taught_affinity_skill_filter(tradition_id: int | None) -> Q:
@@ -123,15 +131,22 @@ def taught_affinity_skill_names_by_tradition(
 ) -> dict[int, list[str]]:
     """The affinity skills each Tradition teaches, by name: Reflection first, then its ticks.
 
-    The creation screen shows it as one line ("Teaches Reflection and Heroism"). Two queries
-    for the whole list. A game with no Primal affinity skill linked lists no Reflection.
+    The creation screen shows it as one line ("Teaches Reflection and Heroism"). Only skills
+    creation can offer count: active Magic skills that are still an affinity's skill, the same
+    set ``taught_affinity_skill_filter`` lets through. Two queries for the whole list. A game
+    with no Primal affinity skill linked lists no Reflection.
     """
+    from world.magic.services.magic_skills import magic_category_skills  # noqa: PLC0415
+
     ids = list(tradition_ids)
+    offerable = magic_category_skills().filter(affinity__isnull=False)
     reflection = list(
-        Skill.objects.filter(affinity__name=AFFINITY_PRIMAL).values_list("name", flat=True)
+        offerable.filter(affinity__name=AFFINITY_PRIMAL).values_list("name", flat=True)
     )
     names: dict[int, list[str]] = {tradition_id: list(reflection) for tradition_id in ids}
-    ticks = Tradition.taught_skills.through.objects.filter(tradition_id__in=ids)
+    ticks = Tradition.taught_skills.through.objects.filter(
+        tradition_id__in=ids, skill__in=offerable
+    )
     for tradition_id, skill_name in ticks.order_by("skill__name").values_list(
         "tradition_id", "skill__name"
     ):
@@ -144,6 +159,7 @@ def build_teaching_context(
     sheet_ids: Iterable[int],
     *,
     lever_sheet_ids: Iterable[int] | None = None,
+    player_sheet_ids: Iterable[int] | None = None,
 ) -> TeachingContext:
     """Gather what the rule reads for a batch of characters.
 
@@ -153,12 +169,16 @@ def build_teaching_context(
 
     ``lever_sheet_ids`` names the sheets whose self-teaching lever is read (one modifier walk
     each, ADR-0278). Only a student with no mentor on a Magic skill needs it, so the weekly
-    run passes just those. ``None`` (the default) reads it for every sheet in ``sheet_ids``,
-    which is right for one allocation. Each id read must also be in ``sheet_ids``.
+    run passes just those. ``player_sheet_ids`` names the sheets whose current player is read
+    (two queries in all): the student and the mentor of every mentored allocation. ``None``
+    (the default) reads either for every sheet in ``sheet_ids``, which is right for one
+    allocation. Each id read must also be in ``sheet_ids``. A caller that never asks
+    ``training_verdict`` passes ``[]`` for both, or calls ``build_outsider_context``.
     """
     from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
     from world.covenants.models import CombatStyle  # noqa: PLC0415
     from world.mechanics.levers import self_teaching_granted  # noqa: PLC0415
+    from world.roster.services.npc_lending import current_player_ids  # noqa: PLC0415
 
     sheets = set(sheet_ids)
 
@@ -170,6 +190,7 @@ def build_teaching_context(
         governed.add(skill_id)
         if affinity_name == AFFINITY_PRIMAL:
             universal.add(skill_id)
+    affinity_skill_ids = set(governed)
     governed.update(
         CombatStyle.objects.filter(skill__isnull=False).values_list("skill_id", flat=True)
     )
@@ -182,7 +203,8 @@ def build_teaching_context(
     for tradition_id, skill_id in CombatStyle.taught_by.through.objects.filter(
         combatstyle__skill__isnull=False
     ).values_list("tradition_id", "combatstyle__skill_id"):
-        taught.setdefault(tradition_id, set()).add(skill_id)
+        if skill_id not in affinity_skill_ids:  # an affinity's own list decides its skill
+            taught.setdefault(tradition_id, set()).add(skill_id)
 
     active: dict[int, int | None] = dict.fromkeys(sheets)
     active.update(
@@ -191,20 +213,32 @@ def build_teaching_context(
         ).values_list("character_id", "tradition_id")
     )
 
-    to_read = sheets if lever_sheet_ids is None else set(lever_sheet_ids)
+    lever_read = frozenset(sheets if lever_sheet_ids is None else lever_sheet_ids)
     self_teaching = frozenset(
         sheet.pk
-        for sheet in CharacterSheet.objects.filter(pk__in=to_read)
+        for sheet in CharacterSheet.objects.filter(pk__in=lever_read)
         if self_teaching_granted(sheet)
     )
+    players = current_player_ids(sheets if player_sheet_ids is None else player_sheet_ids)
 
     return TeachingContext(
         governed_skill_ids=frozenset(governed),
         universal_skill_ids=frozenset(universal),
         taught_skill_ids_by_tradition={tid: frozenset(ids) for tid, ids in taught.items()},
         active_tradition_by_sheet=active,
+        player_by_sheet=players,
+        lever_read_sheet_ids=lever_read,
         self_teaching_sheet_ids=self_teaching,
     )
+
+
+def build_outsider_context(sheet_ids: Iterable[int]) -> TeachingContext:
+    """A context for questions about who teaches what and who is an outsider, never training.
+
+    Reads neither the self-teaching lever nor any player, so ``training_verdict`` raises on it.
+    Academy menus and courses use it.
+    """
+    return build_teaching_context(sheet_ids, lever_sheet_ids=[], player_sheet_ids=[])
 
 
 def is_outsider(
@@ -230,25 +264,24 @@ def training_verdict(
     context: TeachingContext,
     sheet: CharacterSheet,
     skill: Skill | Specialization,
-    mentor_sheet: CharacterSheet | None,
-    *,
-    mentor_name: str | None = None,
+    mentor: Persona | None,
 ) -> TrainingVerdict:
-    """Whether ``sheet`` may allocate weekly training on ``skill`` with this mentor.
+    """Whether ``sheet`` may allocate weekly training on ``skill`` with this mentor persona.
 
     ``skill`` is the allocation's skill, or its specialization, which is judged on its parent
-    skill. ``mentor_sheet`` is the mentor persona's character, or ``None`` for no mentor.
-    ``mentor_name`` is how the refusal names the mentor; it defaults to the mentor's primary
-    persona's name, so pass the persona the player chose when it is not the primary one.
-    ``context`` must hold the student and the mentor (see ``build_teaching_context``).
+    skill. ``mentor`` is the persona the player named, or ``None`` for no mentor; the refusal
+    names that persona and never the character behind it. ``context`` must hold the student and
+    the mentor, their players, and the student's lever when she has no mentor (see
+    ``build_teaching_context``).
 
     A skill outside the Magic category is never refused here. For a Magic skill, with no
-    mentor the training is refused unless the student's self-teaching lever is positive.
-    With a mentor it is refused, naming the next step, when the mentor has no active
-    Tradition, when the mentor's Tradition does not teach the skill, or when the mentor holds
-    no rating (a stored value above 0) in it. It never reads whether the student is an
-    outsider: mentoring from another Tradition carries no penalty. A mentor's own lever is
-    never read.
+    mentor the training is refused unless the student's self-teaching lever is positive; her
+    own persona counts as no mentor. A mentor another of her own characters (one account plays
+    both) is refused. Any other mentor is refused with one line, whatever the reason, when
+    they have no active Tradition, their Tradition does not teach the skill, or they hold no
+    rating (a stored value above 0) in it: the line never says which, so naming a persona
+    reveals nothing about who they are. It never reads whether the student is an outsider:
+    mentoring from another Tradition carries no penalty. A mentor's own lever is never read.
 
     The refusal is ``TrainingVerdict.refusal``, the full line the player reads, to be raised
     or sent as it stands.
@@ -258,18 +291,18 @@ def training_verdict(
     parent = _governing_skill(skill)
     if not _is_magic_skill(parent):
         return TrainingVerdict()
-    if mentor_sheet is None:
-        if sheet.pk in context.self_teaching_sheet_ids:
+    mentor_sheet = None if mentor is None else mentor.character_sheet
+    if mentor_sheet is None or mentor_sheet.pk == sheet.pk:
+        if context.may_teach_herself(sheet.pk):
             return TrainingVerdict()
         return TrainingVerdict(NEEDS_A_TEACHER.format(skill=parent.name))
-    name = mentor_name if mentor_name is not None else mentor_sheet.primary_persona.name
+    if context.played_by_one_account(sheet.pk, mentor_sheet.pk):
+        return TrainingVerdict(MENTOR_IS_ANOTHER_OF_YOUR_CHARACTERS)
     mentor_tradition = context.tradition_of(mentor_sheet.pk)
-    if mentor_tradition is None:
-        return TrainingVerdict(MENTOR_HAS_NO_TRADITION.format(mentor=name, skill=parent.name))
-    if not context.teaches(mentor_tradition, parent.pk):
-        return TrainingVerdict(
-            MENTOR_TRADITION_DOES_NOT_TEACH.format(mentor=name, skill=parent.name)
-        )
-    if skill_rating(mentor_sheet, parent) <= 0:
-        return TrainingVerdict(MENTOR_HAS_NO_RATING.format(mentor=name, skill=parent.name))
+    if (
+        mentor_tradition is None
+        or not context.teaches(mentor_tradition, parent.pk)
+        or skill_rating(mentor_sheet, parent) <= 0
+    ):
+        return TrainingVerdict(MENTOR_CANNOT_TEACH.format(mentor=mentor.name, skill=parent.name))
     return TrainingVerdict()
