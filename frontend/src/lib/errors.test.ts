@@ -37,4 +37,13 @@ describe('readErrorDetail', () => {
     const res = new Response(JSON.stringify({ detail: '   ' }), { status: 400 });
     await expect(readErrorDetail(res, 'fallback')).rejects.toThrow('fallback');
   });
+  it('throws the sentence of a bare list body', async () => {
+    const refusal = 'Villainy needs a teacher. Choose a mentor whose Tradition teaches it.';
+    const res = new Response(JSON.stringify([refusal]), { status: 400 });
+    await expect(readErrorDetail(res, 'fallback')).rejects.toThrow(refusal);
+  });
+  it('throws the fallback for an empty list body', async () => {
+    const res = new Response(JSON.stringify([]), { status: 400 });
+    await expect(readErrorDetail(res, 'fallback')).rejects.toThrow('fallback');
+  });
 });

@@ -3,6 +3,7 @@ Skills API views.
 """
 
 from django.db.models import Prefetch
+from django.http import Http404
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
 from rest_framework import serializers, status, viewsets
@@ -15,6 +16,7 @@ from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
 from world.action_points.models import ActionPointConfig
 from world.skills.filters import SkillFilter, SpecializationFilter
+from world.skills.mentoring import answerable_allocation_ids, mentoring_for_account
 from world.skills.models import (
     PathSkillSuggestion,
     Skill,
@@ -32,8 +34,10 @@ from world.skills.serializers import (
 from world.skills.serializers.training import (
     ManageTrainingAddSerializer,
     ManageTrainingUpdateSerializer,
+    MentoringListSerializer,
     TrainingAllocationSerializer,
 )
+from world.skills.services import training_teaching_context
 
 _NO_PUPPET_MESSAGE = "You must be playing a character to manage training."
 
@@ -204,9 +208,10 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
     def list(self, request, *args, **kwargs):
         """Return all allocations for the active character plus remaining budget."""
         puppet = self._active_puppet(request)
-        allocations = (
+        allocations = list(
             TrainingAllocation.objects.filter(character_id=puppet.pk)
             .select_related(
+                "character",
                 "skill",
                 "specialization__parent_skill",
                 "mentor__character_sheet__character",
@@ -224,7 +229,11 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         serializer = TrainingAllocationSerializer(
             allocations,
             many=True,
-            context={"request": request, "remaining_weekly_budget": remaining},
+            context={
+                "request": request,
+                "remaining_weekly_budget": remaining,
+                "teaching_context": training_teaching_context(allocations),
+            },
         )
         return Response({"allocations": serializer.data, "remaining_weekly_budget": remaining})
 
@@ -246,7 +255,10 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         allocation = TrainingAllocation.objects.get(pk=result.detail.data["allocation_id"])
         read_serializer = TrainingAllocationSerializer(
             allocation,
-            context={"request": request},
+            context={
+                "request": request,
+                "teaching_context": training_teaching_context([allocation]),
+            },
         )
         return Response(read_serializer.data, status=status.HTTP_201_CREATED)
 
@@ -276,7 +288,10 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         allocation = TrainingAllocation.objects.get(pk=pk)
         read_serializer = TrainingAllocationSerializer(
             allocation,
-            context={"request": request},
+            context={
+                "request": request,
+                "teaching_context": training_teaching_context([allocation]),
+            },
         )
         return Response(read_serializer.data)
 
@@ -292,3 +307,58 @@ class TrainingAllocationViewSet(viewsets.ViewSet):
         if not result.detail.success:
             raise serializers.ValidationError(result.detail.message)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @extend_schema(responses={200: MentoringListSerializer})
+    @action(detail=False, methods=["get"], url_path="mentoring")  # type: ignore[arg-type]
+    def mentoring(self, request):
+        """Every request waiting on the requester's answer and every student she teaches.
+
+        The list belongs to the account: it holds the allocations of every character the
+        account may answer for, a game master's held NPC included (#5326). It is scoped by the
+        requester, never by a selected character.
+        """
+        return Response(MentoringListSerializer(mentoring_for_account(request.user)).data)
+
+    def _answer_mentoring(self, request, pk, answer):
+        """Answer one mentoring request through ``AnswerMentoringAction`` (#5326).
+
+        An id the requester may not answer for is a 404, so nothing says whether the row
+        exists. A refusal is a 400 whose body is the sentence the action returns.
+        """
+        from actions.definitions.progression import AnswerMentoringAction  # noqa: PLC0415
+
+        if pk is None or not str(pk).isdigit():
+            raise Http404
+        allocation = (
+            TrainingAllocation.objects.filter(pk=int(pk), mentor__isnull=False)
+            .select_related("character", "mentor")
+            .first()
+        )
+        if allocation is None or allocation.pk not in answerable_allocation_ids(
+            request.user, [allocation]
+        ):
+            raise Http404
+        result = AnswerMentoringAction().run(
+            actor=None, account=request.user, answer=answer, allocation_id=allocation.pk
+        )
+        if not result.success:
+            return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detail": result.message})
+
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=["post"], url_path="accept-mentoring")  # type: ignore[arg-type]
+    def accept_mentoring(self, request, pk=None):
+        """The mentor agrees to teach: the training counts as mentored from now."""
+        return self._answer_mentoring(request, pk, "accept")
+
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=["post"], url_path="decline-mentoring")  # type: ignore[arg-type]
+    def decline_mentoring(self, request, pk=None):
+        """The mentor declines: the mentor is cleared from the allocation."""
+        return self._answer_mentoring(request, pk, "decline")
+
+    @extend_schema(request=None, responses={200: None})
+    @action(detail=True, methods=["post"], url_path="stop-mentoring")  # type: ignore[arg-type]
+    def stop_mentoring(self, request, pk=None):
+        """The mentor stops teaching: the mentor and the agreement are cleared."""
+        return self._answer_mentoring(request, pk, "stop")

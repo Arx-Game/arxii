@@ -1293,11 +1293,36 @@ Proven end-to-end by
   `favored_affinities` (by pk, through foreign keys only); the numbers live in the
   `TraditionTeachingConfig` singleton (`get_teaching_config()`). Character creation
   (`CharacterDraft.magic_training_pool`) passes the picked Gift resonance's `affinity`; the Academy
-  goes through `student_fit(tradition, student_traits(sheet))` (`npc_services.effects._course_ease`,
+  goes through `student_fit(tradition, student_traits(sheet))` (`npc_services.effects._course_terms`,
   `services._teaching_lines`), where `student_traits` reads the Major Gift (`major_gift_for`) and the
   affinity of the resonance on the student's active GIFT thread for it (`gift_affinity_for`, via
   `specialization.services.gift_threads_for`; None without one). Fit by the character's aura is
-  deferred to #4672. Fit is a bonus or an ease, never a gate.
+  deferred to #4672. Fit is a bonus or an ease, never a rule about who may teach.
+- **Which Traditions teach which skills (#5326, ADR-5326).** No Magic-category skill is learned by
+  self-study. `Tradition.taught_skills` (M2M `Skill`, `limit_choices_to` the Celestial and Abyssal affinities'
+  skills) says which of Heroism and Villainy a Tradition's teachers teach; Reflection (the Primal affinity's
+  skill, found by `AFFINITY_PRIMAL`) is taught by every Tradition with no tick; a fighting style's skill by the
+  Traditions in `CombatStyle.taught_by`; every other Magic skill by every Tradition. It is not
+  `favored_affinities`, which is a fit bonus and never decides who may teach. One rule module answers
+  for creation, weekly training and courses: `services/tradition_teaching.py` (`tradition_teaches`,
+  `is_tradition_governed`, `is_outsider`, `build_teaching_context` -> `TeachingContext`, `training_verdict` ->
+  `TrainingVerdict.refusal`; value types in `types/tradition_teaching.py`). Build a `TeachingContext` once per
+  call chain and pass it down, never store it; it must hold every student and mentor sheet asked about,
+  their players and the student's lever when each is asked (`KeyError` otherwise, never "no Tradition" or
+  "no lever"); `build_outsider_context` is the one for callers that never ask `training_verdict`. A skill that
+  is both an affinity's and a style's follows the affinity's list. `tradition_teaches` and `is_tradition_governed`
+  read the same context, so the one-question and batch answers cannot differ. Her own character is never her
+  mentor, nor another character her player plays; a mentor who agreed and no longer qualifies gets one weekly line that names only the
+  persona she typed (`MENTOR_CANNOT_TEACH`), whatever the reason. A mentor must agree (#5326, ruled 2026-11-28):
+  naming a mentor only asks her (`training_asking_refusal` reads nothing about her), a mentor who has not agreed
+  counts as no mentor in `training_verdict(..., mentor_agreed=)`, and she reads which of her own facts fails when she
+  accepts (`mentor_acceptance_refusal`, `world/skills/mentoring.py`). The Tradition's state (self-taught, teachers gone, living) is
+  never read. A student whose own Tradition does not teach a governed skill is an outsider: her Academy
+  course sessions add `TraditionTeachingConfig.other_tradition_course_difficulty` (default 0), weekly mentoring
+  carries no penalty. The exception is the `self_teaching` lever (`world.mechanics.levers.self_teaching_granted`),
+  a staff-authored distinction effect. Do not read the rule anywhere else; call the module. See
+  `docs/systems/magic.md`, "Which Traditions teach which skills"; Required content rows
+  `affinity-skills-taught`, `governed-skills-taught` and `courses-taught-by-their-tradition`.
 - `grant_path_magic(sheet, path)` (`services/path_magic.py`, returns `PathMagicGrantResult`)
   mints, idempotently, `CharacterGift` + the latent GIFT thread (reusing
   `provision_latent_gift_thread`) + `CharacterTechnique` rows for the path's `PathGiftGrant`

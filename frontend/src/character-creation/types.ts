@@ -717,6 +717,8 @@ export interface Tradition {
   favored_gift_names: string[];
   /** The affinities this Tradition teaches well (#4659). */
   favored_affinity_names: string[];
+  /** The affinity skills this Tradition's teachers teach: Reflection and the skills staff chose (#5326). */
+  taught_skill_names: string[];
   /** No content behind this choice yet (#5197): listed and selectable, marked on the page. */
   not_yet_implemented: boolean;
 }

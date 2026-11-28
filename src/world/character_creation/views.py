@@ -42,7 +42,7 @@ from world.character_creation.filters import (
     SpeciesFilter,
     TraditionFilter,
 )
-from world.character_creation.magic_training import reconcile_combat_style, taught_styles
+from world.character_creation.magic_training import reconcile_magic_training, taught_styles
 from world.character_creation.models import (
     Beginnings,
     BeginningTradition,
@@ -96,6 +96,7 @@ from world.character_creation.serializers import (
     favored_affinity_names_by_tradition,
     favored_gift_names_by_tradition,
     schooling_rows,
+    taught_skill_names_by_tradition,
 )
 from world.character_creation.services import (
     CharacterCreationError,
@@ -134,6 +135,7 @@ from world.magic.services.cg_catalog import (
     get_species_technique_options,
     get_technique_options,
 )
+from world.magic.services.tradition_teaching import traditions_offered_in_creation
 from world.magic.types.cg_catalog import TechniqueOptions
 from world.roster.models import FamilyKind
 from world.societies.models import Vacancy
@@ -509,7 +511,8 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             output_field=IntegerField(),
         )
         return (
-            Tradition.objects.filter(id__in=ordered_ids, is_active=True)
+            traditions_offered_in_creation()
+            .filter(id__in=ordered_ids)
             .annotate(_bt_order=order_case)
             .order_by("_bt_order", "name")
         )
@@ -540,6 +543,7 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
         )
         context["favored_gift_names"] = favored_gift_names_by_tradition(tradition_ids)
         context["favored_affinity_names"] = favored_affinity_names_by_tradition(tradition_ids)
+        context["taught_skill_names"] = taught_skill_names_by_tradition(tradition_ids)
         # Which of these Traditions has no gift behind it yet (#5197): on the Path the
         # caller names with ``?path_id=``, or on any Path when none is named.
         offerings = cg_gift_offerings()
@@ -1251,7 +1255,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
         to that state may name a drawback distinction the pick carries for free,
         applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
-        removes whatever it carried the same way. ``reconcile_combat_style`` then clears
+        removes whatever it carried the same way. ``reconcile_magic_training`` then clears
         a combat style the new tradition does not teach (#4921).
         """
         draft = self.get_object()
@@ -1261,7 +1265,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             draft.selected_tradition = None
             draft.save(update_fields=["selected_tradition"])
             reconcile_offer_picks(draft)
-            reconcile_combat_style(draft)
+            reconcile_magic_training(draft)
             return Response({"status": "tradition cleared"})
 
         if not draft.selected_beginnings:
@@ -1280,7 +1284,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         draft.save(update_fields=["selected_tradition"])
         reconcile_offer_picks(draft)
         # A style the new Tradition does not teach is cleared with its skill points (#4921).
-        reconcile_combat_style(draft)
+        reconcile_magic_training(draft)
 
         serializer = self.get_serializer(draft)
         return Response(serializer.data)
@@ -1724,6 +1728,10 @@ class ClaimableTitleViewSet(viewsets.ReadOnlyModelViewSet):
     """Vacant set-aside titles open to CG house definition (#1884 Phase D)."""
 
     permission_classes = [IsAuthenticated]
+    # Declared so the API schema does not depend on the database it is generated against:
+    # without it the generator runs ``get_queryset`` to learn the id's type, which answers
+    # integer where the query works (CI) and string where it does not (a dev database).
+    lookup_value_regex = r"\d+"
     pagination_class = None
     filter_backends: list = []
     serializer_class = ClaimableTitleSerializer

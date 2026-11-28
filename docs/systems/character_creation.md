@@ -378,7 +378,17 @@ Gift resonance's affinity), only when `base > 0`, and rounds the total down to a
 given the picked resonance's `affinity` (the `Resonance.affinity` foreign key; the fit compares
 `Affinity` rows, never names). A Magic skill value costs its own value in points,
 the ordinary 10 per step. `required_spend` is `min(total, active Magic skill count x
-max_skill_value)`, counting the Magic skills `magic_training.training_skills(draft)` returns.
+max_skill_value)`, counting the Magic skills `magic_training.training_skills(draft)` returns, so a Tradition that
+teaches fewer affinity skills offers a shorter list and a lower required spend, and a draft can always be
+finished (#5326).
+
+**Which affinity skills a Tradition offers (#5326, ADR-5326).** Every Tradition teaches Reflection (the Primal
+affinity's skill); Heroism and Villainy are offered only when staff ticked them on `Tradition.taught_skills`; a
+draft with no Tradition picked is offered none of the three. The Tradition's state is never read, so a
+self-taught draft is offered the same list (with a pool of zero, because a self-taught state opens no stance).
+`TraditionSerializer.taught_skill_names` carries the names for the Tradition entry's one line ("Teaches
+Reflection and Heroism"). The rule module is `world/magic/services/tradition_teaching.py`; see
+[magic.md](magic.md), "Which Traditions teach which skills".
 
 **Combat style (#4921, slice 5 of #4844).** A Tradition teaches the styles whose
 `CombatStyle.taught_by` holds it. The Gift stage has a fighting style step after the Resonance,
@@ -391,11 +401,13 @@ Tradition does not teach. `compute_magic_errors` says "Choose a combat style" af
 resonance check when the Tradition teaches one, and skips it when it teaches none.
 `world/character_creation/magic_training.py` holds the rules: `taught_styles(draft)`,
 `training_skills(draft)` (the active Magic skills less every style's skill but the chosen
-style's: the training list, the allocation check and `required_spend` read it, while the
+style's, and less every affinity skill the draft's own Tradition does not teach (#5326): the
+training list, the allocation check and `required_spend` read it, while the
 skills-stage no-points rule and the Anima Check exclusion keep `magic_category_skills()`), and
-`reconcile_combat_style(draft)`, run by `select-tradition` and by the draft PATCH when the
+`reconcile_magic_training(draft)` (renamed from `reconcile_combat_style`), run by `select-tradition` and by the draft PATCH when the
 Tradition or style changes: it clears a style the Tradition does not teach and drops
-`magic_skills` points on any other style's skill. Finalize (`_finalize_combat_style`, after
+`magic_skills` points on any skill the draft is no longer offered (another style's skill, or an affinity
+skill the new Tradition does not teach). Finalize (`_finalize_combat_style`, after
 `provision_magic`) writes `CharacterSheet.combat_style`; the style skill's value rides
 `magic_skills` through `_create_skill_values` into both skill stores. Switching style after
 creation is not built (#4844 non-goal).

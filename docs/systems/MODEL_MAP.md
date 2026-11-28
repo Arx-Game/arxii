@@ -7458,6 +7458,7 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - favored_affinities -> magic.Affinity [M2M]
+  - taught_skills -> skills.Skill [M2M]
 **Pointed to by:**
   - available_beginnings <- character_creation.Beginnings
   - beginning_traditions <- character_creation.BeginningTradition
@@ -10420,6 +10421,7 @@
   - classes_requiring_trait <- classes.CharacterClass
   - legend_spreads <- societies.LegendSpread
   - affinity <- magic.Affinity
+  - teaching_traditions <- magic.Tradition
   - technique_styles <- magic.TechniqueStyle
   - override_techniques <- magic.Technique
   - maturation_spends <- progression.MaturationSpend
@@ -10461,6 +10463,7 @@
   - mentor -> scenes.Persona [FK] (nullable)
 
 ### Service Functions
+- `ask_mentor(allocation: 'TrainingAllocation') -> 'None' - Tell the named mentor's character that the student asks her to teach (#5326).`
 - `boundary_message(name: 'str', next_rating: 'int') -> 'str' - The XP-boundary plateau message for a skill named ``name`` (#2115, #5010).`
 - `calculate_training_development(allocation: 'TrainingAllocation', *, _teaching_skill: 'Skill | None' = <object object>, _path_levels: 'dict[int, int] | None' = None) -> 'int' - Calculate development points earned from a training allocation.`
 - `create_training_allocation(character: 'ObjectDB', ap_amount: 'int', *, skill: 'Skill | None' = None, specialization: 'Specialization | None' = None, mentor: 'Persona | None' = None) -> 'TrainingAllocation' - Create a new training allocation for a character.`
@@ -10470,6 +10473,8 @@
 - `get_specialization_value(character: 'ObjectDB', specialization: 'Specialization') -> 'int' - A character's raw value for a specialization, 0 if unowned (#1688).`
 - `has_specialization(character: 'ObjectDB', specialization: 'Specialization', *, minimum_value: 'int' = 10) -> 'bool' - Whether a character owns a specialization at ``minimum_value`` or better (#1688).`
 - `is_skill_at_xp_boundary(value: 'int') -> 'bool' - Public wrapper for :func:`_is_at_xp_boundary` (#2115).`
+- `mentor_has_agreed(allocation: 'TrainingAllocation') -> 'bool' - Whether a named mentor agreed to teach: the only state that counts as a mentor.`
+- `mentor_is_waiting(allocation: 'TrainingAllocation') -> 'bool' - Whether a mentor was named and has not agreed, so the training counts as unmentored.`
 - `next_xp_boundary(value: 'int') -> 'int | None' - The first XP boundary at or above *value* (19, 29, 39, 49), ``None`` above 49.`
 - `points_to_next_boundary(tracker: 'DevelopmentPoints') -> 'int | None' - Development the skill can take before it parks at its next XP boundary.`
 - `process_weekly_training() -> 'None' - Process all training allocations for the weekly tick.`
@@ -10482,6 +10487,7 @@
 - `skills_at_boundary(character: 'ObjectDB') -> 'list[SkillBreakthroughProspect]' - Return the character's skills currently parked at an XP boundary (#2115).`
 - `standing_tie_ap(sheet_id: 'int', *, exclude_side_id: 'int | None' = None) -> 'int' - AP this character has standing across their tie allocations (#3957).`
 - `stored_skill_cap(sheet: 'CharacterSheet') -> 'int | None' - The highest stored value the sheet's level band lets a skill reach (#4585).`
+- `tell_mentor_student_left(allocation: 'TrainingAllocation') -> 'None' - Tell an agreed mentor that the student no longer trains with her (#5326).`
 - `total_allocated_training_ap(character_id: 'int', exclude_pk: 'int | None' = None) -> 'int' - Get total AP currently allocated across all training for a character.`
 - `train_skill(sheet: 'CharacterSheet', skill: 'Skill', dev_points: 'int', *, description: 'str', stop_at_boundary: 'bool' = False) -> 'SkillTrainingResult' - Develop a skill from training and record the audit transaction.`
 - `update_training_allocation(allocation: 'TrainingAllocation', *, ap_amount: 'int | None' = None, mentor: 'Persona | None' = <object object>) -> 'TrainingAllocation' - Update an existing training allocation.`
@@ -12154,6 +12160,7 @@
   - classes_requiring_trait <- classes.CharacterClass
   - legend_spreads <- societies.LegendSpread
   - affinity <- magic.Affinity
+  - teaching_traditions <- magic.Tradition
   - technique_styles <- magic.TechniqueStyle
   - override_techniques <- magic.Technique
   - maturation_spends <- progression.MaturationSpend

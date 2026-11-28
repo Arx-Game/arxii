@@ -1510,7 +1510,7 @@ class TraditionAdmin(GrantReachOnSaveMixin, admin.ModelAdmin):
     list_filter = ["is_active"]
     search_fields = ["name", "description"]
     list_editable = ["sort_order", "is_active"]
-    filter_horizontal = ["favored_affinities"]
+    filter_horizontal = ["favored_affinities", "taught_skills"]
     inlines = [TraditionCodexGrantInline, TraditionGiftGrantInline]
 
     @admin.display(description="Current members")
@@ -2723,6 +2723,7 @@ class TraditionTeachingConfigAdmin(admin.ModelAdmin):
         "affinity_fit_training_bonus",
         "course_ease_gift_fit",
         "course_ease_affinity_fit",
+        "other_tradition_course_difficulty",
     ]
 
     def has_add_permission(self, request: HttpRequest) -> bool:  # noqa: ARG002

@@ -25,7 +25,8 @@ const ENROLL_LINE = 'Enroll: 2s · 1 Golden Hare · 6 AP a session, the first on
 const price = (
   display: string,
   teaching_line: string | null = null,
-  fit_line: string | null = null
+  fit_line: string | null = null,
+  outsider_line: string | null = null
 ) => ({
   ap: 6,
   coppers: 200,
@@ -36,6 +37,7 @@ const price = (
   training_points: null,
   teaching_line,
   fit_line,
+  outsider_line,
   display,
 });
 
@@ -106,6 +108,7 @@ describe('NPCInteractionDialog price line (#4457)', () => {
 
     const course = await screen.findByRole('button', { name: /Course: Occult/ });
     expect(course).toHaveTextContent(`Course: Occult${ENROLL_LINE}${TAUGHT}${FIT}`);
+    // The muted colour is the only rendered difference between the Tradition line and the fit line, so the class is what is asserted.
     expect(screen.getByText(TAUGHT)).toHaveClass('text-muted-foreground');
     expect(screen.getByText(FIT)).not.toHaveClass('text-muted-foreground');
   });
@@ -137,5 +140,80 @@ describe('NPCInteractionDialog price line (#4457)', () => {
       `Course: Theology${ENROLL_LINE}Taught in the manner of The Vigil`
     );
     expect(course).not.toHaveTextContent(/Sessions are easier/);
+  });
+
+  it('prints the outsider caution line under the fit line, in the warning color (#5326)', async () => {
+    const FIT = 'Fits your Shadowcraft and its Abyssal affinity. Sessions are easier for you.';
+    const OUTSIDER = 'Your Tradition does not teach this. Sessions are harder for you.';
+    startInteraction.mockResolvedValue({
+      closed: false,
+      last_result_message: null,
+      available_offers: [
+        {
+          id: 1,
+          label: 'Villainy course',
+          kind: 'skill_course',
+          price: price(ENROLL_LINE, 'Taught in the manner of The Cinder Court', FIT, OUTSIDER),
+        },
+      ],
+    });
+    render(
+      <NPCInteractionDialog
+        roleId={12}
+        title="Academy Trainer"
+        open
+        onOpenChange={() => undefined}
+      />
+    );
+
+    const course = await screen.findByRole('button', { name: /Villainy course/ });
+    expect(course).toHaveTextContent(
+      `Villainy course${ENROLL_LINE}Taught in the manner of The Cinder Court${FIT}${OUTSIDER}`
+    );
+    // The caution colour is the only rendered difference between this line and the fit line, so the class is what is asserted.
+    expect(screen.getByText(OUTSIDER)).toHaveClass('text-amber-700');
+    expect(screen.getByText(FIT)).not.toHaveClass('text-amber-700');
+  });
+
+  it('prints the outsider line alone when nothing fits', async () => {
+    startInteraction.mockResolvedValue({
+      closed: false,
+      last_result_message: null,
+      available_offers: [
+        {
+          id: 1,
+          label: 'Villainy course',
+          kind: 'skill_course',
+          price: price(ENROLL_LINE, null, null, 'Your Tradition does not teach this.'),
+        },
+      ],
+    });
+    render(
+      <NPCInteractionDialog
+        roleId={12}
+        title="Academy Trainer"
+        open
+        onOpenChange={() => undefined}
+      />
+    );
+
+    const course = await screen.findByRole('button', { name: /Villainy course/ });
+    expect(course).toHaveTextContent(
+      `Villainy course${ENROLL_LINE}Your Tradition does not teach this.`
+    );
+  });
+
+  it('draws no caution line when outsider_line is null', async () => {
+    render(
+      <NPCInteractionDialog
+        roleId={12}
+        title="Academy Trainer"
+        open
+        onOpenChange={() => undefined}
+      />
+    );
+
+    const course = await screen.findByRole('button', { name: /Course: Occult/ });
+    expect(course).not.toHaveTextContent(/does not teach this/);
   });
 });

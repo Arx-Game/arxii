@@ -204,6 +204,7 @@ class OfferPriceSerializer(serializers.Serializer):
     training_points = serializers.IntegerField(allow_null=True)
     teaching_line = serializers.CharField(allow_null=True)
     fit_line = serializers.CharField(allow_null=True)
+    outsider_line = serializers.CharField(allow_null=True)
     display = serializers.CharField()
 
 

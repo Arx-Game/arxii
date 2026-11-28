@@ -54,7 +54,8 @@ if TYPE_CHECKING:
     from typeclasses.characters import Character
     from world.character_sheets.models import CharacterSheet
     from world.magic.types.teaching_fit import StudentTraits, TeachingFit
-    from world.npc_services.models import RecordedProfile
+    from world.magic.types.tradition_teaching import TeachingContext
+    from world.npc_services.models import RecordedProfile, SkillCourseOfferDetails
     from world.scenes.models import Persona
 
 logger = logging.getLogger(__name__)
@@ -956,12 +957,60 @@ def _teaching_lines(
     return teaching_line, f"Fits {fits}. Sessions are easier for you."
 
 
-def _offer_price(
+OUTSIDER_LINE = "Your Tradition does not teach this. Sessions are harder for you."
+
+
+def _menu_teaching_context(
+    offers: list[NPCServiceOffer], sheet: CharacterSheet
+) -> TeachingContext | None:
+    """What the menu reads to tell an outsider her sessions are harder, read once (#5326).
+
+    One context for the student, built once per menu the way ``_menu_teaching_fits`` reads
+    the Gift once. None when the menu lists no skill course, or when staff set no extra
+    difficulty (nothing is harder, so no line is drawn). The self-teaching lever is not read.
+    """
+    from world.magic.services.teaching_fit import get_teaching_config  # noqa: PLC0415
+    from world.magic.services.tradition_teaching import build_outsider_context  # noqa: PLC0415
+
+    if not any(o.kind == OfferKind.SKILL_COURSE for o in offers):
+        return None
+    if get_teaching_config().other_tradition_course_difficulty <= 0:
+        return None
+    return build_outsider_context([sheet.pk])
+
+
+def _outsider_line(
+    course: SkillCourseOfferDetails, sheet: CharacterSheet, teaching: TeachingContext | None
+) -> str | None:
+    """The menu's caution line for a student whose own Tradition does not teach the skill.
+
+    None unless the course's skill is one a Tradition's list governs, her own Tradition does
+    not teach it, and staff set an extra course difficulty above 0. None too for a course
+    enrollment would refuse as closed (the trainer's own Tradition does not teach the skill):
+    the harder line is for a course she can take. ``teaching`` is the menu's context
+    (``_menu_teaching_context``); None builds one for ``sheet`` here.
+    """
+    from world.magic.services.teaching_fit import get_teaching_config  # noqa: PLC0415
+    from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+        build_outsider_context,
+        is_outsider,
+    )
+
+    if get_teaching_config().other_tradition_course_difficulty <= 0:
+        return None
+    context = teaching or build_outsider_context([sheet.pk])
+    if not context.teaches(course.offer.role.teaches_tradition_id, course.skill_id):
+        return None
+    return OUTSIDER_LINE if is_outsider(context, sheet, course.skill) else None
+
+
+def _offer_price(  # noqa: PLR0913 - one menu row's inputs, all resolved once per menu
     offer: NPCServiceOffer,
     sheet: CharacterSheet,
     open_enrollments: dict[int, SkillCourseEnrollment],
     current_week_pk: int | None,
     fits: dict[int, TeachingFit] | None = None,
+    teaching: TeachingContext | None = None,
 ) -> OfferPrice | None:
     """What accepting ``offer`` charges ``sheet``, or None for an offer that names no price.
 
@@ -975,7 +1024,9 @@ def _offer_price(
     whose role teaches a Tradition also carries the ``teaching_line`` and, when ``sheet``
     fits it, the ``fit_line``; the price itself is the same for everyone. ``fits`` is the
     menu's fit per teaching Tradition, resolved once per menu (``_menu_teaching_fits``);
-    None resolves the fit here.
+    None resolves the fit here. The course also carries the ``outsider_line`` when ``sheet``'s
+    own Tradition does not teach its skill; ``teaching`` is the menu's teaching context
+    (``_menu_teaching_context``), None builds one here.
     """
     from django.core.exceptions import ObjectDoesNotExist  # noqa: PLC0415
 
@@ -984,6 +1035,7 @@ def _offer_price(
             course = offer.skill_course_offer_details
             enrollment = open_enrollments.get(offer.pk)
             teaching_line, fit_line = _teaching_lines(offer, sheet, fits)
+            outsider_line = _outsider_line(course, sheet, teaching)
             if enrollment is not None:
                 return OfferPrice(
                     ap=course.session_ap_cost,
@@ -998,6 +1050,7 @@ def _offer_price(
                     ),
                     teaching_line=teaching_line,
                     fit_line=fit_line,
+                    outsider_line=outsider_line,
                 )
             return OfferPrice(
                 ap=course.session_ap_cost,
@@ -1008,6 +1061,7 @@ def _offer_price(
                 development_total=None,
                 teaching_line=teaching_line,
                 fit_line=fit_line,
+                outsider_line=outsider_line,
             )
         if offer.kind == OfferKind.TRAIN:
             train = offer.train_offer_details
@@ -1048,15 +1102,16 @@ def format_offer_price(price: OfferPrice) -> str:
     return "Enroll: " + " \u00b7 ".join(paid_now)
 
 
-def _offer_price_payload(
+def _offer_price_payload(  # noqa: PLR0913 - one menu row's inputs, all resolved once per menu
     offer: NPCServiceOffer,
     sheet: CharacterSheet,
     open_enrollments: dict[int, SkillCourseEnrollment],
     current_week_pk: int | None,
     fits: dict[int, TeachingFit] | None = None,
+    teaching: TeachingContext | None = None,
 ) -> dict | None:
     """The offer's price as the wire shape, with its menu line; None when it names none."""
-    price = _offer_price(offer, sheet, open_enrollments, current_week_pk, fits)
+    price = _offer_price(offer, sheet, open_enrollments, current_week_pk, fits, teaching)
     if price is None:
         return None
     return {**asdict(price), "display": format_offer_price(price)}
@@ -1102,6 +1157,8 @@ def serialize_npc_session_state(
         o.kind == OfferKind.SKILL_COURSE and o.role.teaches_tradition_id is not None for o in offers
     )
     fits = _menu_teaching_fits(offers, student_traits(sheet)) if teaches else {}
+    # The student's own Tradition, read once per menu for the outsider line (#5326).
+    teaching = _menu_teaching_context(offers, sheet)
     serialized_offers = InteractionOfferSerializer(
         [
             {
@@ -1111,7 +1168,9 @@ def serialize_npc_session_state(
                 "is_final": o.is_final,
                 "rapport_requirement": o.rapport_requirement,
                 "risk_tier": _offer_risk_tier(o),
-                "price": _offer_price_payload(o, sheet, open_enrollments, current_week_pk, fits),
+                "price": _offer_price_payload(
+                    o, sheet, open_enrollments, current_week_pk, fits, teaching
+                ),
             }
             for o in offers
         ],

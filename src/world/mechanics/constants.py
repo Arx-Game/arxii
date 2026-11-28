@@ -63,6 +63,12 @@ DISGUISE_SIGHT_TARGET_NAMES: tuple[str, ...] = ("mundane", "magical")
 # (``ModifierTarget.target_check_category``). A positive total on it, from any modifier
 # source, means the character cannot botch at checks of that type or category.
 BOTCH_IMMUNITY_CATEGORY_NAME = "botch_immunity"
+# Teaching herself magic (#5326): a positive total on this target, from any modifier source,
+# lets the character allocate weekly training on a Magic skill with no mentor. It is yes or
+# no, so a larger value, a higher rank or a second source adds nothing. Read by
+# ``world.mechanics.levers.self_teaching_granted``.
+SELF_TEACHING_CATEGORY_NAME = "self_teaching"
+SELF_TEACHING_TARGET_NAME = "self_teaching"
 LEVER_TARGETS: tuple[tuple[str, str], ...] = (
     (INCOME_CATEGORY_NAME, INCOME_TARGET_NAME),
     (REPUTATION_GAIN_CATEGORY_NAME, REPUTATION_GAIN_TARGET_NAME),
@@ -72,6 +78,7 @@ LEVER_TARGETS: tuple[tuple[str, str], ...] = (
     (COMFORT_CATEGORY_NAME, COMFORT_TARGET_NAME),
     (FATIGUE_COST_CATEGORY_NAME, FATIGUE_COST_TARGET_NAME),
     *((DISGUISE_SIGHT_CATEGORY_NAME, name) for name in DISGUISE_SIGHT_TARGET_NAMES),
+    (SELF_TEACHING_CATEGORY_NAME, SELF_TEACHING_TARGET_NAME),
 )
 
 # ModifierSource.source_type return values

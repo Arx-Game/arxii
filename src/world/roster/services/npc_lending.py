@@ -120,6 +120,33 @@ def current_player_of(sheet: CharacterSheet) -> AccountDB | None:
     return _holder_account(entry)
 
 
+def current_player_ids(sheet_ids: Iterable[int]) -> dict[int, int | None]:
+    """``current_player_of`` for many characters at once, as account ids (two queries).
+
+    The same rule read in bulk, for a caller that would otherwise ask once per character in
+    a loop (the weekly training run, #5326): the borrower of a sheet's ACTIVE loan, else the
+    account holding its newest tenure with no end date, else None. Every id asked about is
+    a key of the result.
+    """
+    from world.roster.models import RosterTenure  # noqa: PLC0415
+
+    ids = set(sheet_ids)
+    players: dict[int, int | None] = dict.fromkeys(ids)
+    held = (
+        RosterTenure.objects.filter(roster_entry__character_sheet_id__in=ids, end_date__isnull=True)
+        .order_by("-start_date")
+        .values_list("roster_entry__character_sheet_id", "player_data__account_id")
+    )
+    for sheet_id, account_id in held:
+        if players[sheet_id] is None:
+            players[sheet_id] = account_id
+    lent = NPCLoan.objects.filter(
+        status=NPCLoanStatus.ACTIVE, roster_entry__character_sheet_id__in=ids
+    ).values_list("roster_entry__character_sheet_id", "borrower_id")
+    players.update(dict(lent))
+    return players
+
+
 def played_by_one_account(first: CharacterSheet, second: CharacterSheet) -> bool:
     """Whether one account plays both characters now (a sheet nobody plays shares none).
 

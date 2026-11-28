@@ -147,8 +147,21 @@ class ManageTrainingAction(Action):
         )
         return ActionResult(
             success=True,
-            message=f"Training allocation set for {target_name}.",
+            message=self._asked_line(allocation) or f"Training allocation set for {target_name}.",
             data={"allocation_id": allocation.pk},
+        )
+
+    @staticmethod
+    def _asked_line(allocation: Any) -> str:
+        """The line telling the student her mentor was asked, or "" when none was (#5326)."""
+        from world.skills.mentoring import mentor_is_waiting  # noqa: PLC0415
+
+        if not mentor_is_waiting(allocation):
+            return ""
+        name = allocation.mentor.name
+        target = allocation.skill or allocation.specialization
+        return (
+            f"You ask {name} to teach you {target.name}. Your training waits until {name} agrees."
         )
 
     def _update(
@@ -182,10 +195,12 @@ class ManageTrainingAction(Action):
                     pk=mentor_persona_id,
                 )
 
+        asked_before = allocation.mentor_id
         allocation = update_training_allocation(allocation, **update_kwargs)
+        asked_line = self._asked_line(allocation) if allocation.mentor_id != asked_before else ""
         return ActionResult(
             success=True,
-            message="Training allocation updated.",
+            message=asked_line or "Training allocation updated.",
             data={"allocation_id": allocation.pk},
         )
 
@@ -220,6 +235,84 @@ class ManageTrainingAction(Action):
         if isinstance(mentor_persona_id, Persona):
             return mentor_persona_id
         return Persona.objects.get(pk=mentor_persona_id)
+
+
+_KWARG_ANSWER = "answer"
+_ANSWER_ACCEPT = "accept"
+_ANSWER_DECLINE = "decline"
+_ANSWER_STOP = "stop"
+
+
+@dataclass
+class AnswerMentoringAction(Action):
+    """Answer a student's request to be taught, or stop teaching a student (#5326).
+
+    The mentor answers as an account, not as one character: the account that plays the
+    mentor's character now (a game master who holds an NPC answers for it), the account that
+    created her roster entry when nobody plays her, or staff. ``world.skills.mentoring`` holds
+    that one rule and the three answers. Telnet and the web both reach it here.
+
+    Kwargs: ``answer`` (``accept``, ``decline`` or ``stop``), ``allocation_id``, and
+    ``account``, which only server code supplies (the web view passes the requester; telnet
+    leaves it out and the actor's own account answers).
+    """
+
+    key: str = "answer_mentoring"
+    name: str = "Answer Mentoring"
+    icon: str = "graduation-cap"
+    category: str = "progression"
+    target_type: TargetType = TargetType.SELF
+    ap_cost: int = 0
+
+    def execute(
+        self,
+        actor: ObjectDB | None,
+        context: ActionContext | None = None,
+        **kwargs: Any,
+    ) -> ActionResult:
+        from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+        from world.skills.mentoring import (  # noqa: PLC0415
+            MentoringError,
+            accept_mentoring,
+            decline_mentoring,
+            stop_mentoring,
+        )
+        from world.skills.models import TrainingAllocation  # noqa: PLC0415
+
+        account = kwargs.get("account")
+        if account is None and actor is not None:
+            account = resolve_account_or_none(actor)
+        if account is None:
+            return ActionResult(success=False, message="You must be logged in to answer.")
+        answers = {
+            _ANSWER_ACCEPT: (accept_mentoring, "You agree to teach {student} {skill}."),
+            _ANSWER_DECLINE: (decline_mentoring, "You decline to teach {student} {skill}."),
+            _ANSWER_STOP: (stop_mentoring, "You stop teaching {student} {skill}."),
+        }
+        answer = answers.get(kwargs.get(_KWARG_ANSWER))
+        if answer is None:
+            return ActionResult(
+                success=False,
+                message=(
+                    f"Invalid or missing answer. Expected '{_ANSWER_ACCEPT}', "
+                    f"'{_ANSWER_DECLINE}', or '{_ANSWER_STOP}'."
+                ),
+            )
+        allocation = TrainingAllocation.objects.filter(
+            pk=kwargs.get(_KWARG_ALLOCATION_ID), mentor__isnull=False
+        ).first()
+        if allocation is None:
+            return ActionResult(success=False, message="No such mentoring request.")
+        service, line = answer
+        try:
+            outcome = service(allocation, account)
+        except MentoringError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=line.format(student=outcome.student_name, skill=outcome.skill_name),
+            data={"allocation_id": allocation.pk},
+        )
 
 
 @dataclass

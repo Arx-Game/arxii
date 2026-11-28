@@ -1,1 +1,1 @@
-0484_affinity_skill_affinity_spend_worth_floor_percent_and_more
+0485_tradition_taught_skills_and_more

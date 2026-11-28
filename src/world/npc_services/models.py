@@ -204,8 +204,9 @@ class NPCRole(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "shared (Path × Gift) pool techniques, no tradition signatures. "
             "A skill course this role offers is taught in this Tradition's manner, so a "
             "student whose Major Gift, or whose Gift resonance's affinity, it favors "
-            "finds the course sessions easier. Blank: this role's courses are neutral "
-            "for every student."
+            "finds the course sessions easier. A role with no Tradition cannot offer a "
+            "course in Reflection, Heroism, Villainy or a fighting style's skill, and its "
+            "other courses are neutral for every student."
         ),
     )
     is_active = models.BooleanField(
@@ -1133,14 +1134,43 @@ class SkillCourseOfferDetails(SharedMemoryModel):
         ]
 
     def clean(self) -> None:
-        """Reject a nonzero ``offer.ap_cost`` - see the class docstring."""
-        if self.offer_id is not None and self.offer.ap_cost != 0:
+        """Reject a nonzero ``offer.ap_cost`` (see the class docstring), and a course in a
+        skill a Tradition governs on a trainer role whose Tradition does not teach it (#5326).
+        """
+        if self.offer_id is None:
+            return
+        if self.offer.ap_cost != 0:
             msg = (
                 "SKILL_COURSE offers must author NPCServiceOffer.ap_cost=0 - the AP "
                 "charge flows entirely through session_ap_cost in the session handler; "
                 "a nonzero ap_cost would double-charge the learner."
             )
             raise ValidationError({"offer": msg})
+        if self.skill_id is not None:
+            self._clean_skill_is_taught()
+
+    def _clean_skill_is_taught(self) -> None:
+        """Refuse a governed skill the offer's role cannot teach, on the Skill field."""
+        from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+            is_tradition_governed,
+            tradition_teaches,
+        )
+
+        if not is_tradition_governed(self.skill):
+            return
+        tradition = self.offer.role.teaches_tradition
+        if tradition is None:
+            msg = (
+                f"This role names no Tradition, so it cannot offer a course in "
+                f"{self.skill.name}. Set Teaches tradition on the role first."
+            )
+            raise ValidationError({"skill": msg})
+        if not tradition_teaches(tradition, self.skill):
+            msg = (
+                f"{tradition.name} does not teach {self.skill.name}. Choose a skill it "
+                "teaches, or give this role a Tradition that teaches it."
+            )
+            raise ValidationError({"skill": msg})
 
     def __str__(self) -> str:
         return f"SkillCourse: {self.offer.label} develops {self.skill}"

@@ -1214,6 +1214,7 @@ export const mockTradition: Tradition = {
   schooling: mockSchoolingRows,
   favored_gift_names: ['Whispers of Shadow'],
   favored_affinity_names: ['Abyssal'],
+  taught_skill_names: ['Reflection', 'Villainy'],
 };
 
 /** A self-taught tradition (#3675): no schooling set, a refund on the entry. */
@@ -1232,6 +1233,7 @@ export const mockSelfTaughtTradition: Tradition = {
   schooling: [],
   favored_gift_names: [],
   favored_affinity_names: [],
+  taught_skill_names: [],
 };
 
 export const mockCGGiftOption: CGGiftOption = {

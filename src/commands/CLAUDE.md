@@ -1424,7 +1424,13 @@ actions, backends, and service functions.
   telnet faces of `ManageTrainingAction` and `PurchaseUnlockAction`. `training [list]` shows
   weekly AP budget and allocations; `training add skill=<id>|spec=<id> ap=<n> [mentor=<id>]`,
   `training update id=<id> [ap=<n>] [mentor=<id>]`, and `training remove id=<id>` dispatch through
-  `dispatch_player_action` to the REGISTRY `manage_training` action. `progression unlocks` lists
+  `dispatch_player_action` to the REGISTRY `manage_training` action. Naming a mentor only asks her
+  ("You ask Hobb to teach you Villainy. Your training waits until Hobb agrees.", #5326). The mentor's side:
+  `training requests` lists, for the whole account (a game master sees the requests addressed to an NPC she
+  holds), "Asked to teach:" numbered rows ("1. Wren Alder asks Drusa Kell to teach her Villainy") and "Teaching:"
+  rows; `training accept <n>` and `training decline <n>` take the number from that list and `training stop
+  <name>[/<skill>]` names a student, each dispatching the REGISTRY `answer_mentoring` action. The command resolves
+  the number or name from `mentoring_for_account`; who may answer is not decided here. `progression unlocks` lists
   class-level and thread XP-lock unlocks from the same read services the web unlock shop uses;
   `progression unlock class=<id>` and `progression unlock thread=<id> level=<n>` dispatch to the
   REGISTRY `purchase_unlock` action. Both commands are namespaced subverb commands to avoid bare

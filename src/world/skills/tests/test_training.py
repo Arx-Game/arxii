@@ -2,6 +2,7 @@
 
 from django.db import IntegrityError
 from django.test import TestCase
+from django.utils import timezone
 
 from world.action_points.models import ActionPointConfig, ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
@@ -193,6 +194,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
             character=self.student_identity,
             skill=self.skill,
             mentor=self.mentor_identity.primary_persona,
+            mentor_accepted_at=timezone.now(),
             ap_amount=20,
         )
         result = calculate_training_development(alloc)
@@ -225,6 +227,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
             character=self.student_identity,
             skill=self.skill,
             mentor=self.mentor_identity.primary_persona,
+            mentor_accepted_at=timezone.now(),
             ap_amount=7,
         )
         result = calculate_training_development(alloc)
@@ -239,6 +242,7 @@ class CalculateTrainingDevelopmentTests(TestCase):
             character=student_identity,
             skill=self.skill,
             mentor=self.mentor_identity.primary_persona,
+            mentor_accepted_at=timezone.now(),
             ap_amount=10,
         )
         result = calculate_training_development(alloc)
@@ -299,6 +303,7 @@ class CalculateSpecializationTrainingTests(TestCase):
             character=self.student_identity,
             specialization=self.spec,
             mentor=self.mentor_identity.primary_persona,
+            mentor_accepted_at=timezone.now(),
             ap_amount=20,
         )
         result = calculate_training_development(alloc)

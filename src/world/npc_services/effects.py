@@ -22,6 +22,7 @@ from django.db import transaction
 
 from world.checks.services import difficulty_points
 from world.npc_services.constants import OfferKind
+from world.npc_services.types import CourseTerms
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -937,6 +938,9 @@ def _take_course_session(
         msg = "You have already trained in this course this week."
         raise _CourseRefusedError(msg, enrollment)
 
+    if enrollment is None:
+        _refuse_closed_course(offer, course)
+
     rating = skill_rating(sheet, skill)
     if is_skill_at_xp_boundary(rating):
         until = "a course can raise it" if enrollment is None else "the course can continue"
@@ -955,6 +959,37 @@ def _take_course_session(
         msg = f"AP pool {pool.pk} came up short under its own row lock."
         raise RuntimeError(msg)
     return _run_course_session(offer, course, sheet, enrollment, rating=rating, week_pk=week.pk)
+
+
+def _refuse_closed_course(offer: NPCServiceOffer, course: SkillCourseOfferDetails) -> None:
+    """Refuse enrolling in a course the trainer's Tradition does not teach (#5326).
+
+    Checked once, at enrollment and before anything is charged, because a Tradition's ticks
+    can change after staff authored the course. A course already paid for keeps running:
+    later sessions make no Tradition check. A skill no list governs is taught by any
+    Tradition, a trainer with no Tradition included.
+    """
+    from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+        is_tradition_governed,
+        tradition_teaches,
+    )
+
+    skill = course.skill
+    if not is_tradition_governed(skill):
+        return
+    tradition = offer.role.teaches_tradition
+    if tradition is None:
+        msg = (
+            f"{offer.role.name} teaches no Tradition, so this course is closed. "
+            f"Look for a trainer whose Tradition teaches {skill.name}."
+        )
+        raise _CourseRefusedError(msg)
+    if not tradition_teaches(tradition, skill):
+        msg = (
+            f"{offer.role.name}'s Tradition no longer teaches {skill.name}, so this course "
+            "is closed. Look for a trainer whose Tradition teaches it."
+        )
+        raise _CourseRefusedError(msg)
 
 
 def _enroll_in_course(
@@ -1014,20 +1049,37 @@ def _enroll_in_course(
     )
 
 
-def _course_ease(offer: NPCServiceOffer, sheet: CharacterSheet) -> int:
-    """How many difficulty steps off a session a student who fits the Tradition gets.
+def _course_terms(
+    offer: NPCServiceOffer, course: SkillCourseOfferDetails, sheet: CharacterSheet
+) -> CourseTerms:
+    """What this session's check is adjusted by for this student (#4659, #5326).
 
-    Zero when the offer's role teaches no Tradition. Otherwise the student's Major Gift
-    and its Gift thread's affinity are weighed against it (slice 2 of #4659).
+    ``ease`` is how many difficulty steps off a session a student who fits the Tradition
+    gets: zero when the offer's role teaches no Tradition, otherwise the student's Major
+    Gift and its Gift thread's affinity are weighed against it. ``added_difficulty`` is
+    ``other_tradition_course_difficulty`` when the course's skill is one a Tradition's list
+    governs and the student's own Tradition does not teach it, else zero. A student of
+    another Tradition keeps any fit ease. Both are read now, so a change of Tradition changes
+    only the added difficulty.
     """
     from world.magic.services.teaching_fit import (  # noqa: PLC0415
         get_teaching_config,
         student_fit,
         student_traits,
     )
+    from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+        build_outsider_context,
+        is_outsider,
+    )
 
+    config = get_teaching_config()
     fit = student_fit(offer.role.teaches_tradition, student_traits(sheet))
-    return fit.course_ease(get_teaching_config())
+    added = 0
+    if config.other_tradition_course_difficulty > 0:
+        context = build_outsider_context([sheet.pk])
+        if is_outsider(context, sheet, course.skill):
+            added = config.other_tradition_course_difficulty
+    return CourseTerms(ease=fit.course_ease(config), added_difficulty=added)
 
 
 def _run_course_session(  # noqa: PLR0913 - one session's inputs, all already resolved
@@ -1054,11 +1106,13 @@ def _run_course_session(  # noqa: PLR0913 - one session's inputs, all already re
     from world.skills.services import is_skill_at_xp_boundary, train_skill  # noqa: PLC0415
 
     skill = course.skill
+    terms = _course_terms(offer, course, sheet)
     check_result = perform_check_with_modifiers(
         sheet.character,
         course.check_type,
         target_difficulty=difficulty_points(course.check_difficulty_level)
-        - _course_ease(offer, sheet),
+        + terms.added_difficulty
+        - terms.ease,
     )
     award = (
         TrainingOutcomeAward.objects.filter(outcome_tier=check_result.outcome).first()

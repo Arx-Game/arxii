@@ -1920,3 +1920,1018 @@ def seed_strength_fight_spec(*, username: str) -> StrengthFightSeed:  # noqa: PL
         staff_username=STRENGTH_FIGHT_STAFF,
         staff_password=staff_password,
     )
+
+
+@dataclass(frozen=True)
+class TraditionTeachingSeed:
+    """What `frontend/e2e/evidence/tradition-teaching-5326.spec.ts` reads back (#5326)."""
+
+    good_tradition_id: int
+    good_tradition_name: str
+    evil_tradition_id: int
+    evil_tradition_name: str
+    config_id: int
+    modifier_target_id: int
+    distinction_id: int
+    unbound_distinction_id: int
+    evil_role_id: int
+    evil_course_id: int
+    #: The role the trainer players talk to: it fronts a house, so a course can be taken.
+    trainer_role_id: int
+    #: A Villainy course on a role whose Tradition does not teach it (authored before the rule).
+    lantern_course_id: int
+    #: A Villainy course on a role that names no Tradition (authored before the rule).
+    bare_course_id: int
+    trainer_name: str
+    entry_id: int
+    character_id: int
+    character_name: str
+    draft_id: int
+    mentor_good: str
+    mentor_unrated: str
+    mentor_rated: str
+    staff_username: str
+    staff_password: str
+    #: Wren's own other character, played by the same account (a refused mentor).
+    own_alt_name: str
+    #: The account that plays Drusa Kell and Aldric Voss, who answers their requests.
+    mentor_username: str
+    mentor_password: str
+    mentor_entry_id: int
+    #: The game master account: it plays gm_character_name and holds two NPCs.
+    gm_username: str
+    gm_password: str
+    gm_entry_id: int
+    gm_character_name: str
+    npc_cannot_teach: str
+    npc_declined: str
+    #: Students of the mentors and the game master, and the allocation each one's row answers.
+    student_of_aldric: str
+    student_taught: str
+    student_of_vey: str
+    student_of_ilsa: str
+    #: A student of the Cinder Court, played by its own account in the Cinder Hall.
+    cinder_username: str
+    cinder_password: str
+    cinder_character_name: str
+    #: A student of the Good Tradition whose Gift and aura fit the Cinder Court.
+    veil_username: str
+    veil_password: str
+    veil_character_name: str
+    wren_allocation_id: int
+    aldric_allocation_id: int
+    taught_allocation_id: int
+    vey_allocation_id: int
+    ilsa_allocation_id: int
+
+
+#: Invented names for the #5326 evidence run. No game character, Tradition or trainer.
+TEACHING_GOOD = "The Lantern Concord"
+TEACHING_EVIL = "The Cinder Court"
+TEACHING_CHARACTER = "Wren Alder"
+TEACHING_TRAINER = "Magister Corvin Hale"
+TEACHING_MENTOR_GOOD = "Aldric Voss"
+TEACHING_MENTOR_UNRATED = "Ysolde Marsh"
+TEACHING_MENTOR_RATED = "Drusa Kell"
+TEACHING_ROOM = "The Cinder Hall"
+TEACHING_STAFF = "teaching_staff"
+TEACHING_COURSE = "Villainy course"
+TEACHING_STYLE = "Thornwall Guard"
+TEACHING_ACADEMY = "The Cinder Academy"
+TEACHING_OWN_ALT = "Mira Alder"
+TEACHING_MENTOR_ACCOUNT = "teaching_mentor"
+TEACHING_CINDER_ACCOUNT = "teaching_cinder"
+TEACHING_VEIL_ACCOUNT = "teaching_veil"
+TEACHING_VEIL_STUDENT = "Nerys Vane"
+TEACHING_VEIL_GIFT = "Ashen Veil"
+TEACHING_GM_ACCOUNT = "teaching_gm"
+TEACHING_GM_CHARACTER = "Nessa Pryor"
+#: Two NPCs the game master account holds: one has no Occult rating, one is declined.
+TEACHING_NPC_CANNOT_TEACH = "Magister Vey"
+TEACHING_NPC_DECLINED = "Warden Ilsa Tarn"
+TEACHING_STUDENT_OF_ALDRIC = "Tamsin Reeve"
+TEACHING_STUDENT_TAUGHT = "Marek Tolle"
+TEACHING_STUDENT_OF_VEY = "Odalys Fenn"
+TEACHING_STUDENT_OF_ILSA = "Bram Sorrel"
+#: The rating a mentor holds in the skill, and the AP the weekly purse holds.
+TEACHING_MENTOR_RATING = 11
+TEACHING_WEEKLY_AP = 6
+
+
+def _require_throwaway_database() -> None:
+    """Refuse unless both ``DATABASE_URL`` and the live connection name an ``rt_`` database."""
+    import os  # noqa: PLC0415
+    from urllib.parse import urlparse  # noqa: PLC0415
+
+    from django.db import connection  # noqa: PLC0415
+
+    named = {
+        "DATABASE_URL": urlparse(os.environ.get("DATABASE_URL", "")).path.lstrip("/"),
+        "the connected database": str(connection.settings_dict["NAME"]),
+    }
+    for source, name in named.items():
+        if not name.startswith("rt_"):
+            msg = f"Refusing to seed: {source} names {name!r}, not a throwaway rt_ database."
+            raise RuntimeError(msg)
+
+
+def _teaching_staff_account() -> tuple[AccountDB, str]:
+    """The staff superuser for the admin screens, with a fresh password, linked to a contributor.
+
+    The Distinction Builder shows setup guidance, not its form, to an account with no
+    linked contributor, so the account gets one.
+    """
+    from allauth.account.models import EmailAddress  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+    from evennia.utils import create  # noqa: PLC0415
+
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.contributors.models import ContentContributor  # noqa: PLC0415
+
+    staff_password = secrets.token_urlsafe(18)
+    staff = AccountDB.objects.filter(username=TEACHING_STAFF).first()
+    if staff is None:
+        staff = create.create_account(TEACHING_STAFF, "teaching_staff@example.com", staff_password)
+    staff.set_password(staff_password)
+    staff.is_staff = True
+    staff.is_superuser = True
+    staff.save()
+    EmailAddress.objects.update_or_create(
+        user=staff,
+        email="teaching_staff@example.com",
+        defaults={"primary": True, "verified": True},
+    )
+    contributor, _ = ContentContributor.objects.get_or_create(name="Teaching Staff")
+    player_data, _ = PlayerData.objects.get_or_create(account=staff)
+    if player_data.contributor_id != contributor.pk:
+        player_data.contributor = contributor
+        player_data.save(update_fields=["contributor"])
+    return staff, staff_password
+
+
+def _teaching_skills() -> dict[str, object]:
+    """Heroism, Reflection and Villainy as Magic skills linked to their affinities, and Occult.
+
+    Explicit rows: Heroism to Celestial, Reflection to Primal, Villainy to Abyssal; Occult is
+    an ordinary Magic skill every Tradition offers. Observation is a General skill for the
+    Anima Check, which never takes a Magic skill.
+    """
+    from world.magic.models import Affinity  # noqa: PLC0415
+    from world.skills.models import Skill  # noqa: PLC0415
+    from world.traits.models import TraitCategory  # noqa: PLC0415
+
+    celestial, primal, abyssal = _canonical_affinities()
+    skills: dict[str, object] = {}
+    rows = (
+        ("Heroism", TraitCategory.MAGIC, celestial, "Magic worked for those who cannot repay it."),
+        ("Reflection", TraitCategory.MAGIC, primal, "Magic worked from what the caster feels."),
+        ("Villainy", TraitCategory.MAGIC, abyssal, "Magic worked at another's cost."),
+        ("Occult", TraitCategory.MAGIC, None, "The ordinary study of hidden things."),
+        ("Observation", TraitCategory.GENERAL, None, "Noticing what is in front of you."),
+        (
+            TEACHING_STYLE,
+            TraitCategory.MAGIC,
+            None,
+            "The fighting style's own skill: a shield-bearer's patience in the brambles.",
+        ),
+    )
+    for name, category, affinity, tooltip in rows:
+        skill = Skill.objects.filter(name=name).first()
+        if skill is None:
+            skill = Skill.objects.create(name=name, category=category, tooltip=tooltip)
+        skills[name] = skill
+        if affinity is not None and affinity.skill_id != skill.pk:
+            affinity.skill = skill
+            affinity.save()
+    Affinity.objects.clear_cache()
+    return skills
+
+
+def _teaching_traditions(skills: dict[str, object]) -> tuple[object, object]:
+    """The Good Tradition (teaches Heroism) and the Evil one (teaches Villainy)."""
+    from world.magic.models import Tradition  # noqa: PLC0415
+
+    rows = (
+        (
+            TEACHING_GOOD,
+            "Lantern-keepers hold that a flame is lit to be carried to someone else. "
+            "Their teachers insist the student carry it first.",
+            0,
+            skills["Heroism"],
+        ),
+        (
+            TEACHING_EVIL,
+            "The Cinder Court teaches that a fire is only worth what it burns. "
+            "Its masters take no student who flinches.",
+            1,
+            skills["Villainy"],
+        ),
+    )
+    made = []
+    for name, description, sort_order, taught in rows:
+        tradition = Tradition.objects.filter(name=name).first()
+        if tradition is None:
+            tradition = Tradition.objects.create(
+                name=name, description=description, sort_order=sort_order
+            )
+        tradition.taught_skills.set([taught])
+        made.append(tradition)
+    return made[0], made[1]
+
+
+def _teaching_levers_and_training() -> tuple[object, object]:
+    """The self-teaching target and its distinction, and the Tradition Training distinction.
+
+    Returns (target, prodigy distinction). The Tradition Training distinction carries the
+    Magic training points the creation step spends (30 a rank).
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        CG_MODIFIER_CATEGORY,
+        MAGIC_TRAINING_POINTS_TARGET,
+    )
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionEffect,
+    )
+    from world.mechanics.constants import (  # noqa: PLC0415
+        SELF_TEACHING_CATEGORY_NAME,
+        SELF_TEACHING_TARGET_NAME,
+    )
+    from world.mechanics.models import ModifierCategory, ModifierTarget  # noqa: PLC0415
+
+    teaching = (
+        "Teaching herself magic: a positive total lets the character allocate weekly "
+        "training on a Magic skill with no mentor. Yes or no; a larger value adds nothing."
+    )
+    lever_category, _ = ModifierCategory.objects.get_or_create(
+        name=SELF_TEACHING_CATEGORY_NAME, defaults={"description": teaching}
+    )
+    target, _ = ModifierTarget.objects.get_or_create(
+        category=lever_category,
+        name=SELF_TEACHING_TARGET_NAME,
+        defaults={"description": teaching},
+    )
+    training_category, _ = ModifierCategory.objects.get_or_create(
+        name=CG_MODIFIER_CATEGORY,
+        defaults={"description": "Numbers a character-creation pick adds to a stage."},
+    )
+    training_target, _ = ModifierTarget.objects.get_or_create(
+        category=training_category,
+        name=MAGIC_TRAINING_POINTS_TARGET,
+        defaults={"description": "Magic skill points a stance adds to the Gift stage."},
+    )
+    category, _ = DistinctionCategory.objects.get_or_create(
+        name="Magical Gifts", defaults={"slug": "magical-gifts", "description": "Gifts."}
+    )
+    prodigy, _ = Distinction.objects.get_or_create(
+        name="Hedge-born Prodigy",
+        defaults={
+            "slug": "hedge-born-prodigy",
+            "category": category,
+            "description": "She taught herself magic before anyone could tell her not to.",
+            "cost_per_rank": 5,
+            "max_rank": 1,
+        },
+    )
+    DistinctionEffect.objects.get_or_create(
+        distinction=prodigy, target=target, defaults={"value_per_rank": 1}
+    )
+    training, _ = Distinction.objects.get_or_create(
+        name="Tradition Training",
+        defaults={
+            "slug": "tradition-training",
+            "category": category,
+            "description": "Years of schooling under a Tradition's masters.",
+            "cost_per_rank": 1,
+            "max_rank": 2,
+        },
+    )
+    DistinctionEffect.objects.get_or_create(
+        distinction=training, target=training_target, defaults={"value_per_rank": 30}
+    )
+    return target, prodigy
+
+
+def _teaching_unbound(target: object) -> object:
+    """The Unbound drawback: a distinction carrying one effect on the self-teaching target.
+
+    Returns the distinction. It reimburses points (a drawback), sits in its own category, and
+    carries the same value-1 effect as Hedge-born Prodigy, so a character who holds it may
+    allocate a magical skill with no mentor. Safe to run twice.
+    """
+    from world.distinctions.models import (  # noqa: PLC0415
+        Distinction,
+        DistinctionCategory,
+        DistinctionEffect,
+    )
+
+    category, _ = DistinctionCategory.objects.get_or_create(
+        name="Drawbacks", defaults={"slug": "drawbacks", "description": "Costs a character bears."}
+    )
+    unbound, _ = Distinction.objects.get_or_create(
+        name="Unbound",
+        defaults={
+            "slug": "unbound",
+            "category": category,
+            "description": "She belongs to no school and answers to no master.",
+            "cost_per_rank": -5,
+            "max_rank": 1,
+        },
+    )
+    DistinctionEffect.objects.get_or_create(
+        distinction=unbound, target=target, defaults={"value_per_rank": 1}
+    )
+    return unbound
+
+
+def _teaching_trainer(skills: dict[str, object], good: object, evil: object) -> dict[str, object]:
+    """Two Academy master roles, a Villainy course on each, and the Cinder one placed in a room.
+
+    The Cinder Court master teaches in the Cinder Hall. The Lantern Concord master carries a
+    Villainy course written before the Tradition rule (made past the form's check, as a row
+    authored earlier is): its admin page is refused on save.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+    from evennia.utils import create  # noqa: PLC0415
+
+    from world.areas.services import get_room_profile  # noqa: PLC0415
+    from world.checks.models import CheckCategory, CheckType  # noqa: PLC0415
+    from world.npc_services.constants import OfferKind  # noqa: PLC0415
+    from world.npc_services.models import (  # noqa: PLC0415
+        Functionary,
+        NPCRole,
+        NPCServiceOffer,
+        SkillCourseOfferDetails,
+    )
+    from world.societies.factories import OrganizationFactory  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    check_category, _ = CheckCategory.objects.get_or_create(name="Magic")
+    check_type = CheckType.objects.filter(name="Study a magical skill").first()
+    if check_type is None:
+        check_type = CheckType.objects.create(name="Study a magical skill", category=check_category)
+    room = ObjectDB.objects.filter(
+        db_key=TEACHING_ROOM, db_typeclass_path="typeclasses.rooms.Room"
+    ).first() or create.create_object("typeclasses.rooms.Room", key=TEACHING_ROOM)
+
+    courses: dict[str, object] = {}
+    for key, tradition in (("evil", evil), ("lantern", good), ("bare", None)):
+        role, _ = NPCRole.objects.update_or_create(
+            name="Academy master" if tradition is None else f"Academy master of {tradition.name}",
+            defaults={
+                "description": (
+                    "A master who teaches no Tradition's manner."
+                    if tradition is None
+                    else f"A master who teaches in the manner of {tradition.name}."
+                ),
+                "teaches_tradition": tradition,
+            },
+        )
+        offer, _ = NPCServiceOffer.objects.update_or_create(
+            role=role,
+            label=TEACHING_COURSE,
+            defaults={"kind": OfferKind.SKILL_COURSE, "is_final": True, "ap_cost": 0},
+        )
+        course, _ = SkillCourseOfferDetails.objects.update_or_create(
+            offer=offer,
+            defaults={
+                "skill": skills["Villainy"],
+                "total_development": 60,
+                "session_development": 10,
+                "session_ap_cost": 2,
+                "coin_cost": 100,
+                "check_type": check_type,
+                "check_difficulty_level": 2,
+            },
+        )
+        courses[key] = course
+        courses[f"{key}_role"] = role
+    # The trainer players meet is a fourth role, named for her and fronting a house, because
+    # enrolling charges coin to the role's house and refuses a role with none. The three
+    # roles above stay house-less, as the admin screens draw them.
+    academy = Organization.objects.filter(name=TEACHING_ACADEMY).first() or OrganizationFactory(
+        name=TEACHING_ACADEMY, description="The house the Cinder Court's trainers teach for."
+    )
+    trainer_role, _ = NPCRole.objects.update_or_create(
+        name=TEACHING_TRAINER,
+        defaults={
+            "description": f"A master who teaches in the manner of {evil.name}.",
+            "teaches_tradition": evil,
+            "faction_affiliation": academy,
+        },
+    )
+    trainer_offer, _ = NPCServiceOffer.objects.update_or_create(
+        role=trainer_role,
+        label=TEACHING_COURSE,
+        defaults={"kind": OfferKind.SKILL_COURSE, "is_final": True, "ap_cost": 0},
+    )
+    SkillCourseOfferDetails.objects.update_or_create(
+        offer=trainer_offer,
+        defaults={
+            "skill": skills["Villainy"],
+            "total_development": 60,
+            "session_development": 10,
+            "session_ap_cost": 2,
+            "coin_cost": 100,
+            "check_type": check_type,
+            "check_difficulty_level": 2,
+        },
+    )
+    Functionary.objects.filter(role=courses["evil_role"]).delete()
+    Functionary.objects.update_or_create(
+        role=trainer_role,
+        room=get_room_profile(room),
+        defaults={"name_override": TEACHING_TRAINER},
+    )
+    courses["trainer_role"] = trainer_role
+    courses["room"] = room
+    return courses
+
+
+def _teaching_character(
+    name: str,
+    *,
+    pronoun: str = "them",
+    player: AccountDB | None = None,
+    npc: bool = False,
+    room: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - a factory character's location
+) -> object:
+    """The roster entry of the character *name*, made once, with her object pronoun set.
+
+    With *player* the account holds her open tenure (and, unless *npc*, plays her: the
+    account is her puppeting account and she carries the playable lock). With *npc* she
+    stands on the NPC shelf, as a character a game master holds does. With *room* a character
+    a player plays stands in it. Safe to run twice: an entry found by name is kept (one held
+    by a player is preferred over a plain one of the same name), a tenure held by another
+    account is handed to *player*, and the account is set again on a character it plays.
+    """
+    from django.db.models import Exists, OuterRef  # noqa: PLC0415
+
+    from evennia_extensions.factories import CharacterFactory  # noqa: PLC0415
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.character_sheets.factories import CharacterSheetFactory  # noqa: PLC0415
+    from world.roster.factories import (  # noqa: PLC0415
+        RosterEntryFactory,
+        RosterTenureFactory,
+    )
+    from world.roster.models import RosterEntry, RosterTenure  # noqa: PLC0415
+    from world.roster.models.choices import RosterType  # noqa: PLC0415
+    from world.roster.seeds import ensure_rosters  # noqa: PLC0415
+
+    held = RosterTenure.objects.filter(roster_entry=OuterRef("pk"), end_date__isnull=True)
+    entry = (
+        RosterEntry.objects.filter(character_sheet__character__db_key=name)
+        .annotate(is_held=Exists(held))
+        .order_by("-is_held", "pk")
+        .first()
+    )
+    if entry is None:
+        character = CharacterFactory(db_key=name)
+        entry = RosterEntryFactory(character_sheet=CharacterSheetFactory(character=character))
+    sheet = entry.character_sheet
+    sheet.pronoun_object = pronoun
+    sheet.save(update_fields=["pronoun_object"])
+    if npc and entry.roster.roster_type != RosterType.NPC:
+        entry.roster = ensure_rosters()[RosterType.NPC]
+        entry.save(update_fields=["roster"])
+    if player is not None:
+        player_data, _ = PlayerData.objects.get_or_create(account=player)
+        tenure = RosterTenure.objects.filter(roster_entry=entry, end_date__isnull=True).first()
+        if tenure is None:
+            RosterTenureFactory(
+                roster_entry=entry, player_data=player_data, player_number=1, end_date=None
+            )
+            if not npc:
+                player.at_post_create_character(sheet.character)
+        elif tenure.player_data_id != player_data.pk:
+            tenure.player_data = player_data
+            tenure.save(update_fields=["player_data"])
+        if not npc:
+            # A character that was played in the game has its account cleared when the
+            # player disconnects; the Messages list reads that column, so it is set again.
+            character = sheet.character
+            character.db_account = player
+            if room is not None:
+                character.location = room
+            character.save()
+    return entry
+
+
+def _teaching_mentor(
+    name: str,
+    tradition: object,
+    rating: tuple[object, int] | None,
+    *,
+    player: AccountDB | None = None,
+    npc: bool = False,
+) -> object:
+    """A character called *name* in *tradition*, holding *rating* (a skill and a value) or none.
+
+    Returns her roster entry. *player* and *npc* are as in ``_teaching_character``.
+    """
+    from world.magic.models import CharacterTradition  # noqa: PLC0415
+    from world.traits.models import CharacterTraitValue  # noqa: PLC0415
+
+    entry = _teaching_character(name, player=player, npc=npc)
+    sheet = entry.character_sheet
+    CharacterTradition.objects.get_or_create(character=sheet, tradition=tradition, left_at=None)
+    if rating is not None:
+        skill, value = rating
+        CharacterTraitValue.objects.update_or_create(
+            character=sheet, trait=skill, defaults={"value": value}
+        )
+    return entry
+
+
+def _teaching_player_account(username: str) -> tuple[AccountDB, str]:
+    """A player account with a verified email and a fresh password, made once.
+
+    The password is reset on every run and returned, so the spec reads it from the seed's
+    result. The account is not staff: what it may answer for comes from the characters it plays.
+    """
+    from allauth.account.models import EmailAddress  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+    from evennia.utils import create  # noqa: PLC0415
+
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+
+    password = secrets.token_urlsafe(18)
+    email = f"{username}@example.com"
+    account = AccountDB.objects.filter(username=username).first()
+    if account is None:
+        account = create.create_account(username, email, password)
+    account.set_password(password)
+    account.save()
+    PlayerData.objects.get_or_create(account=account)
+    EmailAddress.objects.update_or_create(
+        user=account, email=email, defaults={"primary": True, "verified": True}
+    )
+    return account, password
+
+
+def _teaching_request(
+    student: object, skill: object, mentor_entry: object, ap: int, *, agreed: bool
+) -> int:
+    """One training allocation of *student* naming *mentor_entry*'s character; returns its id.
+
+    Reset to the asked state (or, with *agreed*, the agreed one) on every run, so a mentor's
+    answer in an earlier spec run does not leave the row decided.
+    """
+    from django.utils import timezone  # noqa: PLC0415
+
+    from world.skills.models import TrainingAllocation  # noqa: PLC0415
+
+    allocation, _ = TrainingAllocation.objects.update_or_create(
+        character=student,
+        skill=skill,
+        defaults={
+            "mentor": mentor_entry.character_sheet.primary_persona,
+            "ap_amount": ap,
+            "mentor_accepted_at": timezone.now() if agreed else None,
+        },
+    )
+    # A same-named character an earlier run of this seed left behind asks nobody now.
+    TrainingAllocation.objects.filter(
+        character__character__db_key=student.character.db_key, skill=skill
+    ).exclude(character=student).delete()
+    return allocation.pk
+
+
+def _teaching_trainee(account: AccountDB, room: object, good: object) -> object:
+    """Wren Alder: played by *account* in the Cinder Hall, of the Good Tradition, 6 AP to spend.
+
+    *account* also plays Mira Alder, whom Wren may not name as a mentor, and Tamsin Reeve.
+    Returns Wren's roster entry, her selected character. Her weekly training starts empty on
+    every run.
+    """
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.action_points.models import ActionPointConfig, ActionPointPool  # noqa: PLC0415
+    from world.magic.models import CharacterTradition  # noqa: PLC0415
+    from world.roster.services.selection import set_selected_entry  # noqa: PLC0415
+    from world.skills.models import TrainingAllocation  # noqa: PLC0415
+
+    tenure = _played_character(account, TEACHING_CHARACTER, room)
+    entry = tenure.roster_entry
+    sheet = entry.character_sheet
+    sheet.pronoun_subject = "she"
+    sheet.pronoun_object = "her"
+    sheet.pronoun_possessive = "her"
+    sheet.save(update_fields=["pronoun_subject", "pronoun_object", "pronoun_possessive"])
+    # Her player's other character, for the mentor she may not name.
+    alt = _played_character(account, TEACHING_OWN_ALT, room)
+    # And Tamsin Reeve, who asked Aldric Voss: the narrative lines she is sent (a mentor's
+    # answer) land in this account's Messages, so the page shows them.
+    _teaching_character(TEACHING_STUDENT_OF_ALDRIC, pronoun="her", player=account, room=room)
+    # The Messages list reads each character's account, which the game clears when the player
+    # disconnects, so a second run sets it again on the characters this account plays.
+    for played in (sheet.character, alt.roster_entry.character_sheet.character):
+        played.db_account = account
+        played.save()
+    set_selected_entry(PlayerData.objects.get(account=account), entry)
+    CharacterTradition.objects.get_or_create(character=sheet, tradition=good, left_at=None)
+    ActionPointConfig.objects.update_or_create(
+        name="Default", defaults={"is_active": True, "weekly_regen": TEACHING_WEEKLY_AP}
+    )
+    pool = ActionPointPool.get_or_create_for_character(sheet.character)
+    pool.current = TEACHING_WEEKLY_AP
+    pool.save()
+    TrainingAllocation.objects.filter(character=sheet).delete()
+    return entry
+
+
+def _teaching_draft(  # noqa: PLR0915 - the whole Gift stage world, one row after another
+    account: AccountDB,
+    skills: dict[str, object],
+    good: object,
+    evil: object,
+) -> int:
+    """The account's creation draft at the Gift stage, the Good Tradition chosen and offered.
+
+    Both Traditions are offered by the draft's Beginning. The draft holds a gift, a technique,
+    one Primal feeling and the Tradition Training distinction, with 10 points each on
+    Reflection and Heroism, so the training step is open with points left to spend. Reset on
+    every run.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from world.character_creation.constants import Stage, TraditionState  # noqa: PLC0415
+    from world.character_creation.factories import (  # noqa: PLC0415
+        make_unknown_upbringing,
+        single_resonance_weights,
+    )
+    from world.character_creation.models import (  # noqa: PLC0415
+        Beginnings,
+        BeginningTradition,
+        CharacterDraft,
+        OriginTemplate,
+        StartingArea,
+        TraditionStateLine,
+    )
+    from world.character_creation.tests.finalization_fixtures import DEFAULT_STATS  # noqa: PLC0415
+    from world.character_sheets.models import Gender  # noqa: PLC0415
+    from world.classes.factories import PathFactory  # noqa: PLC0415
+    from world.classes.models import Path, PathStage  # noqa: PLC0415
+    from world.covenants.constants import DefenseStyle  # noqa: PLC0415
+    from world.covenants.models import CombatStyle  # noqa: PLC0415
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
+    from world.forms.models import Build, HeightBand  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        EffectTypeFactory,
+        GiftFactory,
+        PathGiftGrantFactory,
+        TechniqueFactory,
+        TraditionGiftGrantFactory,
+        primal_resonance,
+    )
+    from world.magic.models import Gift, Resonance, Technique  # noqa: PLC0415
+    from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
+    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+    from world.realms.models import Realm  # noqa: PLC0415
+    from world.roster.seeds import ensure_rosters  # noqa: PLC0415
+    from world.seeds.modifier_values import seed_pool_and_cap_lanes  # noqa: PLC0415
+    from world.species.models import Species  # noqa: PLC0415
+    from world.tarot.constants import ArcanaType  # noqa: PLC0415
+    from world.tarot.models import TarotCard  # noqa: PLC0415
+    from world.traits.models import Trait, TraitType  # noqa: PLC0415
+
+    ensure_rosters()
+    seed_pool_and_cap_lanes()
+    realm, _ = Realm.objects.get_or_create(
+        name="Lantern Marches", defaults={"description": "A place to begin."}
+    )
+    area, _ = StartingArea.objects.get_or_create(
+        name="Lantern Marches Area",
+        defaults={
+            "description": "A place to begin.",
+            "realm": realm,
+            "access_level": StartingArea.AccessLevel.ALL,
+        },
+    )
+    species, _ = Species.objects.get_or_create(
+        name="Marchfolk", defaults={"description": "People."}
+    )
+    gender, _ = Gender.objects.get_or_create(
+        key="teaching_gender", defaults={"display_name": "Teaching Gender"}
+    )
+    tarot, _ = TarotCard.objects.get_or_create(
+        name="Lantern Fool",
+        defaults={"arcana_type": ArcanaType.MAJOR, "rank": 0, "latin_name": "Fatui"},
+    )
+    beginnings, _ = Beginnings.objects.get_or_create(
+        name="Marchborn",
+        starting_area=area,
+        defaults={"description": "A start.", "is_active": True},
+    )
+    beginnings.allowed_species.add(species)
+    upbringing = OriginTemplate.objects.filter(
+        beginning=beginnings, name="Unknown"
+    ).first() or make_unknown_upbringing(beginnings)
+    band, _ = HeightBand.objects.get_or_create(
+        name="teaching_band",
+        defaults={
+            "display_name": "Teaching Band",
+            "min_inches": 700,
+            "max_inches": 800,
+            "weight_min": None,
+            "weight_max": None,
+            "is_cg_selectable": True,
+        },
+    )
+    build, _ = Build.objects.get_or_create(
+        name="teaching_build",
+        defaults={
+            "display_name": "Teaching Build",
+            "weight_factor": Decimal("1.0"),
+            "is_cg_selectable": True,
+        },
+    )
+    stats = dict(DEFAULT_STATS)
+    for stat_name in stats:
+        Trait.objects.get_or_create(
+            name=stat_name, defaults={"trait_type": TraitType.STAT, "description": stat_name}
+        )
+    path = Path.objects.filter(name="Lantern Path").first() or PathFactory(
+        name="Lantern Path", stage=PathStage.PROSPECT, minimum_level=1
+    )
+    gift = Gift.objects.filter(name="Lantern Gift").first() or GiftFactory(name="Lantern Gift")
+    path_grant = PathGiftGrant.objects.filter(path=path, gift=gift).first() or PathGiftGrantFactory(
+        path=path, gift=gift
+    )
+    technique = Technique.objects.filter(name="Lantern Pool Technique").first() or TechniqueFactory(
+        name="Lantern Pool Technique",
+        gift=gift,
+        effect_type=EffectTypeFactory(name="Lantern Effect Type"),
+        action_template=get_standalone_cast_template(),
+    )
+    path_grant.starter_techniques.set([technique])
+    TraditionStateLine.objects.get_or_create(
+        state=TraditionState.LIVING_MASTERS, defaults={"entry_line": "Living masters"}
+    )
+    for order, tradition in enumerate((good, evil)):
+        if not TraditionGiftGrant.objects.filter(tradition=tradition, gift=gift).exists():
+            TraditionGiftGrantFactory(tradition=tradition, gift=gift)
+        BeginningTradition.objects.get_or_create(
+            beginning=beginnings,
+            tradition=tradition,
+            defaults={"sort_order": order, "state": TraditionState.LIVING_MASTERS},
+        )
+    resonance = Resonance.objects.filter(name="Hearthlight").first() or primal_resonance(
+        name="Hearthlight"
+    )
+    training = Distinction.objects.get(name="Tradition Training")
+    # A fighting style whose own skill the Lantern Concord teaches: the draft chose it, so the
+    # training list offers its skill beside Reflection, Heroism and Occult.
+    style = CombatStyle.objects.filter(name=TEACHING_STYLE).first() or CombatStyle.objects.create(
+        name=TEACHING_STYLE,
+        description="A shield held steady while the thorns do the arguing.",
+        defense_style=DefenseStyle.GEAR_SOAK,
+        armor_share_tenths=10,
+        skill=skills[TEACHING_STYLE],
+    )
+    style.taught_by.add(good)
+
+    draft = CharacterDraft.objects.filter(account=account).first()
+    if draft is None:
+        draft = CharacterDraft(account=account)
+    draft.selected_area = area
+    draft.selected_beginnings = beginnings
+    draft.selected_origin_template = upbringing
+    draft.selected_species = species
+    draft.selected_gender = gender
+    draft.selected_path = path
+    draft.selected_tradition = good
+    draft.selected_combat_style = style
+    draft.age = 25
+    draft.birthday_month = 6
+    draft.birthday_day = 12
+    draft.height_band = band
+    draft.height_inches = 750
+    draft.build = build
+    draft.current_stage = Stage.GIFT
+    draft.draft_data = {
+        "first_name": "Wren",
+        "description": "A character whose Tradition names its skills.",
+        "stats": stats,
+        "tarot_card_name": tarot.name,
+        "tarot_reversed": False,
+        "selected_gift_id": gift.pk,
+        "selected_technique_ids": [technique.pk],
+        "anima_check_stat_id": Trait.objects.get(name="strength").pk,
+        "anima_check_skill_id": skills["Observation"].pk,
+        "gift_resonance_weights": single_resonance_weights(resonance),
+        "distinctions": [build_distinction_entry(training, 1)],
+        "magic_skills": {str(skills["Reflection"].pk): 10, str(skills["Heroism"].pk): 10},
+    }
+    draft.save()
+    return draft.pk
+
+
+def _teaching_gift_student(
+    account: AccountDB,
+    room: ObjectDB,  # noqa: OBJECTDB_PARAM - a factory character's location; no RoomProfile
+    good: object,
+    evil: object,
+) -> object:
+    """Nerys Vane: of the Good Tradition, holding the Major Gift Ashen Veil and an Abyssal aura.
+
+    The Cinder Court favors Ashen Veil (a Gift grant) and the Abyssal affinity, and her aura is
+    90% Abyssal, so the Cinder Court trainer's menu reads that the course fits her Gift and its
+    affinity. Her own Tradition (the Good one) does not teach Villainy, so the menu also tells
+    her the sessions are harder. *account* plays her in *room* and she is its selected
+    character. Returns her roster entry. Safe to run twice.
+    """
+    from decimal import Decimal  # noqa: PLC0415
+
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.magic.factories import (  # noqa: PLC0415
+        CharacterAuraFactory,
+        CharacterGiftFactory,
+        GiftFactory,
+        ensure_canonical_affinities,
+    )
+    from world.magic.models import CharacterAura, CharacterTradition  # noqa: PLC0415
+    from world.magic.models.grants import TraditionGiftGrant  # noqa: PLC0415
+    from world.roster.services.selection import set_selected_entry  # noqa: PLC0415
+
+    _celestial, _primal, abyssal = ensure_canonical_affinities()
+    gift = GiftFactory(name=TEACHING_VEIL_GIFT, description="A veil of ash that hides a caster.")
+    TraditionGiftGrant.objects.get_or_create(tradition=evil, gift=gift)
+    evil.favored_affinities.add(abyssal)
+    entry = _teaching_character(TEACHING_VEIL_STUDENT, pronoun="her", player=account, room=room)
+    sheet = entry.character_sheet
+    CharacterTradition.objects.get_or_create(character=sheet, tradition=good, left_at=None)
+    CharacterGiftFactory(character=sheet, gift=gift)
+    if not CharacterAura.objects.filter(character=sheet).exists():
+        CharacterAuraFactory(
+            character=sheet,
+            celestial=Decimal("0.00"),
+            primal=Decimal("10.00"),
+            abyssal=Decimal("90.00"),
+        )
+    set_selected_entry(PlayerData.objects.get(account=account), entry)
+    return entry
+
+
+def seed_tradition_teaching_spec(*, username: str) -> TraditionTeachingSeed:
+    """The rows `tradition-teaching-5326.spec.ts` photographs, in an `rt_` database only (#5326).
+
+    Written from explicit values, in the shape the demo draws. Heroism, Reflection and
+    Villainy are Magic skills linked to the Celestial, Primal and Abyssal affinities. The
+    Lantern Concord (Good) teaches Heroism and the Cinder Court (Evil) teaches Villainy. Staff
+    set an other-Tradition course difficulty of 3, the self-teaching target exists with a
+    distinction carrying one effect on it, and the Cinder Court's Academy master teaches a
+    Villainy course in the Cinder Hall. *username*'s account plays Wren Alder (of the
+    Lantern Concord, 6 action points to spend) in that hall, and holds a creation draft at
+    the Gift stage with the Lantern Concord chosen, and also plays Mira Alder.
+
+    Mentoring (the mentor's agreement): Wren has asked Drusa Kell (Cinder Court, Villainy at
+    11) to teach her Villainy and waits. A mentor account plays Drusa Kell and Aldric Voss
+    (Lantern Concord, which does not teach Villainy), so its Mentoring card holds Wren's
+    request, Tamsin Reeve's request to Aldric Voss, and Marek Tolle, whom Drusa already
+    teaches. A game master account plays Nessa Pryor and holds two NPCs: Magister Vey (no
+    Occult rating, asked by Odalys Fenn) and Warden Ilsa Tarn (asked by Bram Sorrel).
+    Ysolde Marsh (Cinder Court, no Villainy rating) has no player. Tamsin Reeve is played by
+    the test account, so a mentor's answer to her lands in the account's Messages. Marek Tolle
+    has his own account and stands in the Cinder Hall, a student of the teaching Tradition. A
+    third Villainy course sits on an Academy master whose role names no Tradition. Safe to
+    run twice: rows are found by name, the accounts' passwords are reset, and every request
+    above is put back to the state it is described in.
+    """
+    from django.db import transaction  # noqa: PLC0415
+    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+    from world.magic.services.teaching_fit import get_teaching_config  # noqa: PLC0415
+    from world.roster.services.selection import set_selected_entry  # noqa: PLC0415
+
+    _require_throwaway_database()
+    staff, staff_password = _teaching_staff_account()
+    account = AccountDB.objects.get(username=username)
+    with transaction.atomic():
+        skills = _teaching_skills()
+        good, evil = _teaching_traditions(skills)
+        target, prodigy = _teaching_levers_and_training()
+        unbound = _teaching_unbound(target)
+        config = get_teaching_config()
+        config.other_tradition_course_difficulty = 3
+        config.save(update_fields=["other_tradition_course_difficulty"])
+        trainer = _teaching_trainer(skills, good, evil)
+        mentor_account, mentor_password = _teaching_player_account(TEACHING_MENTOR_ACCOUNT)
+        gm_account, gm_password = _teaching_player_account(TEACHING_GM_ACCOUNT)
+        villainy, heroism, occult = skills["Villainy"], skills["Heroism"], skills["Occult"]
+        # Aldric Voss (his Tradition does not teach Villainy) and Drusa Kell (it does, and she
+        # is rated) are both played by the mentor account. Ysolde Marsh has no player.
+        aldric = _teaching_mentor(TEACHING_MENTOR_GOOD, good, None, player=mentor_account)
+        _teaching_mentor(TEACHING_MENTOR_UNRATED, evil, None)
+        drusa = _teaching_mentor(
+            TEACHING_MENTOR_RATED,
+            evil,
+            (villainy, TEACHING_MENTOR_RATING),
+            player=mentor_account,
+        )
+        # The game master plays one ordinary character and holds two NPCs. Magister Vey has no
+        # Occult rating, so she cannot agree. Warden Ilsa Tarn is rated in Heroism.
+        gm_entry = _teaching_character(TEACHING_GM_CHARACTER, pronoun="her", player=gm_account)
+        vey = _teaching_mentor(TEACHING_NPC_CANNOT_TEACH, good, None, player=gm_account, npc=True)
+        ilsa = _teaching_mentor(
+            TEACHING_NPC_DECLINED,
+            good,
+            (heroism, TEACHING_MENTOR_RATING),
+            player=gm_account,
+            npc=True,
+        )
+        entry = _teaching_trainee(account, trainer["room"], good)
+        wren = entry.character_sheet
+        # Marek Tolle (Cinder Court) is played by his own account in the Cinder Hall, so the
+        # trainer's menu can be read as a student of the teaching Tradition.
+        cinder_account, cinder_password = _teaching_player_account(TEACHING_CINDER_ACCOUNT)
+        marek = _teaching_character(
+            TEACHING_STUDENT_TAUGHT,
+            pronoun="him",
+            player=cinder_account,
+            room=trainer["room"],
+        )
+        _teaching_mentor(TEACHING_STUDENT_TAUGHT, evil, None)
+        set_selected_entry(PlayerData.objects.get(account=cinder_account), marek)
+        veil_account, veil_password = _teaching_player_account(TEACHING_VEIL_ACCOUNT)
+        _teaching_gift_student(veil_account, trainer["room"], good, evil)
+        students = {
+            name: _teaching_character(name, pronoun=pronoun).character_sheet
+            for name, pronoun in (
+                (TEACHING_STUDENT_OF_ALDRIC, "her"),
+                (TEACHING_STUDENT_TAUGHT, "him"),
+                (TEACHING_STUDENT_OF_VEY, "her"),
+                (TEACHING_STUDENT_OF_ILSA, "him"),
+            )
+        }
+        # Wren asked Drusa Kell and waits. The other rows are the requests the mentor
+        # and the game master read: all asked, except one student Drusa already teaches.
+        wren_allocation = _teaching_request(wren, villainy, drusa, 3, agreed=False)
+        aldric_allocation = _teaching_request(
+            students[TEACHING_STUDENT_OF_ALDRIC], villainy, aldric, 2, agreed=False
+        )
+        taught_allocation = _teaching_request(
+            students[TEACHING_STUDENT_TAUGHT], villainy, drusa, 2, agreed=True
+        )
+        vey_allocation = _teaching_request(
+            students[TEACHING_STUDENT_OF_VEY], occult, vey, 2, agreed=False
+        )
+        ilsa_allocation = _teaching_request(
+            students[TEACHING_STUDENT_OF_ILSA], heroism, ilsa, 2, agreed=False
+        )
+        # Each answering account opens on one ordinary character of its own.
+        for player, chosen in ((mentor_account, drusa), (gm_account, gm_entry)):
+            set_selected_entry(PlayerData.objects.get(account=player), chosen)
+        draft_id = _teaching_draft(account, skills, good, evil)
+    return TraditionTeachingSeed(
+        good_tradition_id=good.pk,
+        good_tradition_name=good.name,
+        evil_tradition_id=evil.pk,
+        evil_tradition_name=evil.name,
+        config_id=config.pk,
+        modifier_target_id=target.pk,
+        distinction_id=prodigy.pk,
+        unbound_distinction_id=unbound.pk,
+        evil_role_id=trainer["evil_role"].pk,
+        evil_course_id=trainer["evil"].pk,
+        trainer_role_id=trainer["trainer_role"].pk,
+        lantern_course_id=trainer["lantern"].pk,
+        bare_course_id=trainer["bare"].pk,
+        trainer_name=TEACHING_TRAINER,
+        entry_id=entry.pk,
+        character_id=entry.character_sheet.character_id,
+        character_name=TEACHING_CHARACTER,
+        draft_id=draft_id,
+        mentor_good=TEACHING_MENTOR_GOOD,
+        mentor_unrated=TEACHING_MENTOR_UNRATED,
+        mentor_rated=TEACHING_MENTOR_RATED,
+        staff_username=staff.username,
+        staff_password=staff_password,
+        own_alt_name=TEACHING_OWN_ALT,
+        mentor_username=mentor_account.username,
+        mentor_password=mentor_password,
+        mentor_entry_id=drusa.pk,
+        gm_username=gm_account.username,
+        gm_password=gm_password,
+        gm_entry_id=gm_entry.pk,
+        gm_character_name=TEACHING_GM_CHARACTER,
+        npc_cannot_teach=TEACHING_NPC_CANNOT_TEACH,
+        npc_declined=TEACHING_NPC_DECLINED,
+        student_of_aldric=TEACHING_STUDENT_OF_ALDRIC,
+        student_taught=TEACHING_STUDENT_TAUGHT,
+        student_of_vey=TEACHING_STUDENT_OF_VEY,
+        student_of_ilsa=TEACHING_STUDENT_OF_ILSA,
+        cinder_username=cinder_account.username,
+        cinder_password=cinder_password,
+        cinder_character_name=TEACHING_STUDENT_TAUGHT,
+        veil_username=veil_account.username,
+        veil_password=veil_password,
+        veil_character_name=TEACHING_VEIL_STUDENT,
+        wren_allocation_id=wren_allocation,
+        aldric_allocation_id=aldric_allocation,
+        taught_allocation_id=taught_allocation,
+        vey_allocation_id=vey_allocation,
+        ilsa_allocation_id=ilsa_allocation,
+    )

@@ -5955,7 +5955,7 @@ paths:
         state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
         to that state may name a drawback distinction the pick carries for free,
         applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
-        removes whatever it carried the same way. ``reconcile_combat_style`` then clears
+        removes whatever it carried the same way. ``reconcile_magic_training`` then clears
         a combat style the new tradition does not teach (#4921).
       parameters:
       - in: path
@@ -6398,8 +6398,8 @@ paths:
       - in: path
         name: id
         schema:
-          type: integer
-        description: A unique integer value identifying this title.
+          type: string
+          pattern: ^\d+$
         required: true
       tags:
       - character-creation
@@ -38581,6 +38581,78 @@ paths:
       responses:
         '204':
           description: No response body
+  /api/skills/training-allocations/{id}/accept-mentoring/:
+    post:
+      operationId: skills_training_allocations_accept_mentoring_create
+      description: 'The mentor agrees to teach: the training counts as mentored from
+        now.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/skills/training-allocations/{id}/decline-mentoring/:
+    post:
+      operationId: skills_training_allocations_decline_mentoring_create
+      description: 'The mentor declines: the mentor is cleared from the allocation.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/skills/training-allocations/{id}/stop-mentoring/:
+    post:
+      operationId: skills_training_allocations_stop_mentoring_create
+      description: 'The mentor stops teaching: the mentor and the agreement are cleared.'
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/skills/training-allocations/mentoring/:
+    get:
+      operationId: skills_training_allocations_mentoring_retrieve
+      description: |-
+        Every request waiting on the requester's answer and every student she teaches.
+
+        The list belongs to the account: it holds the allocations of every character the
+        account may answer for, a game master's held NPC included (#5326). It is scoped by the
+        requester, never by a selected character.
+      tags:
+      - skills
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MentoringList'
+          description: ''
   /api/social-providers/:
     get:
       operationId: social_providers_retrieve
@@ -69422,6 +69494,50 @@ components:
       required:
       - id
       - name
+    MentoringList:
+      type: object
+      description: Every request waiting on the account's answer and every student
+        it teaches (#5326).
+      properties:
+        requests:
+          type: array
+          items:
+            $ref: '#/components/schemas/MentoringRow'
+          readOnly: true
+        students:
+          type: array
+          items:
+            $ref: '#/components/schemas/MentoringRow'
+          readOnly: true
+      required:
+      - requests
+      - students
+    MentoringRow:
+      type: object
+      description: One request waiting on the account's answer, or one student it
+        teaches (#5326).
+      properties:
+        allocation_id:
+          type: integer
+          readOnly: true
+        student_name:
+          type: string
+          readOnly: true
+        student_pronoun:
+          type: string
+          readOnly: true
+        mentor_name:
+          type: string
+          readOnly: true
+        skill_name:
+          type: string
+          readOnly: true
+      required:
+      - allocation_id
+      - mentor_name
+      - skill_name
+      - student_name
+      - student_pronoun
     MenuEntry:
       type: object
       properties:
@@ -73467,6 +73583,9 @@ components:
         fit_line:
           type: string
           nullable: true
+        outsider_line:
+          type: string
+          nullable: true
         display:
           type: string
       required:
@@ -73477,6 +73596,7 @@ components:
       - display
       - fit_line
       - golden_hares
+      - outsider_line
       - per_session_ap
       - teaching_line
       - training_points
@@ -100996,6 +101116,13 @@ components:
           description: 'The affinities this Tradition teaches well (``favored_affinities``,
             #4659).'
           readOnly: true
+        taught_skill_names:
+          type: array
+          items:
+            type: string
+          description: 'The affinity skills this Tradition''s teachers teach (#5326):
+            Reflection and its ticks.'
+          readOnly: true
         not_yet_implemented:
           type: boolean
           description: Whether this Tradition offers a new character no gift yet on
@@ -101016,6 +101143,7 @@ components:
       - sort_order
       - state
       - state_line
+      - taught_skill_names
     TrainingAllocation:
       type: object
       description: Read-only serializer for a character's training allocation.
@@ -101035,6 +101163,28 @@ components:
           allOf:
           - $ref: '#/components/schemas/MentorPersona'
           readOnly: true
+        mentor_accepted_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: When the named mentor agreed to teach. Empty while a named
+            mentor has not agreed, and the training counts as having no mentor until
+            she does (#5326).
+        mentor_waiting:
+          type: boolean
+          description: Whether a mentor was named and has not agreed, so the training
+            counts as unmentored.
+          readOnly: true
+        mentor_needed_line:
+          type: string
+          nullable: true
+          description: |-
+            The teacher line when the weekly run would skip this row for want of a mentor.
+
+            Reads the ``teaching_context`` the view built once for the page of allocations
+            (``training_teaching_context``), so no row costs a query of its own.
+          readOnly: true
         ap_amount:
           type: integer
           maximum: 2147483647
@@ -101048,6 +101198,9 @@ components:
       - ap_amount
       - id
       - mentor
+      - mentor_accepted_at
+      - mentor_needed_line
+      - mentor_waiting
       - remaining_weekly_budget
       - skill
       - specialization

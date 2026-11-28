@@ -21,6 +21,10 @@ from evennia.objects.models import ObjectDB
 from actions.factories import ActionTemplateFactory
 from evennia_extensions.factories import AccountFactory
 from integration_tests.harness import JourneyCase
+from integration_tests.tradition_teaching_helpers import (
+    author_the_three_skills,
+    tradition_teaching,
+)
 from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     MAGIC_SKILL_POINTS_REFUSAL,
@@ -57,6 +61,7 @@ from world.magic.factories import (
 )
 from world.magic.models import CharacterAnima, Resonance
 from world.magic.seeds_cast import get_standalone_cast_template
+from world.magic.services.teaching_fit import get_teaching_config
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.scenes.factories import SceneFactory
 from world.scenes.tests.cast_test_helpers import grant_technique
@@ -82,27 +87,16 @@ from world.vitals.models import CharacterVitals
 POINTS_PER_RANK = 20
 
 
-class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
-    """A Beginning with a living Tradition, an orphaned one and a self-taught one."""
+class _StanceDrafts:
+    """The Tradition Training stances and the REST calls that drive a draft through them.
+
+    A mixin ahead of ``FinalizationTestMixin`` and ``JourneyCase``. ``_author_the_stances``
+    runs in ``setUpTestData``: one Tradition Training distinction, and for each stance a
+    line that grants it and an offer that opens it at the Tradition step.
+    """
 
     @classmethod
-    def setUpTestData(cls) -> None:
-        cls._setup_finalization_base(
-            cls, prefix="Tradition Training", height_min=1600, height_max=1700
-        )
-        cls.living = TraditionFactory()
-        cls.orphaned = TraditionFactory()
-        cls.self_taught = TraditionFactory()
-        for tradition, state in (
-            (cls.living, TraditionState.LIVING_MASTERS),
-            (cls.orphaned, TraditionState.TEACHERS_GONE),
-            (cls.self_taught, TraditionState.SELF_TAUGHT),
-        ):
-            BeginningTraditionFactory(beginning=cls.beginnings, tradition=tradition, state=state)
-            TraditionGiftGrantFactory(tradition=tradition, gift=cls.gift)
-
-        # One Tradition Training distinction; each stance is a line that grants it and an
-        # offer that opens it at the Tradition step.
+    def _author_the_stances(cls) -> None:
         cls.training = DistinctionFactory(name="Tradition Training", cost_per_rank=1, max_rank=2)
         # Each rank of Tradition Training also adds Magic training points to spend (#4659).
         pool_target = ModifierTargetFactory(
@@ -126,15 +120,6 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
                 chapter=OfferChapter.TRADITION_STEP,
                 schooling_line=line,
             )
-
-        cls.thaumaturgy = SkillFactory(name="Thaumaturgy", category=TraitCategory.MAGIC)
-        cls.geomancy = SkillFactory(name="Geomancy", category=TraitCategory.MAGIC)
-        cls.hermetics = SkillFactory(name="Hermetics", category=TraitCategory.MAGIC)
-        cls.lapsed = SkillFactory(name="Lapsed Lore", category=TraitCategory.MAGIC, is_active=False)
-        cls.active_magic = (cls.thaumaturgy, cls.geomancy, cls.hermetics)
-        cls.swordplay = SkillFactory(name="Swordplay", category=TraitCategory.COMBAT)
-        cls.parrying = SpecializationFactory(name="Parrying", parent_skill=cls.swordplay)
-        cls.wards = SpecializationFactory(name="Wards", parent_skill=cls.thaumaturgy)
 
     def setUp(self) -> None:
         super().setUp()
@@ -164,6 +149,37 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
             },
             format="json",
         )
+
+
+class TraditionTrainingCGJourney(_StanceDrafts, FinalizationTestMixin, JourneyCase):
+    """A Beginning with a living Tradition, an orphaned one and a self-taught one."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls._setup_finalization_base(
+            cls, prefix="Tradition Training", height_min=1600, height_max=1700
+        )
+        cls.living = TraditionFactory()
+        cls.orphaned = TraditionFactory()
+        cls.self_taught = TraditionFactory()
+        for tradition, state in (
+            (cls.living, TraditionState.LIVING_MASTERS),
+            (cls.orphaned, TraditionState.TEACHERS_GONE),
+            (cls.self_taught, TraditionState.SELF_TAUGHT),
+        ):
+            BeginningTraditionFactory(beginning=cls.beginnings, tradition=tradition, state=state)
+            TraditionGiftGrantFactory(tradition=tradition, gift=cls.gift)
+
+        cls._author_the_stances()
+
+        cls.thaumaturgy = SkillFactory(name="Thaumaturgy", category=TraitCategory.MAGIC)
+        cls.geomancy = SkillFactory(name="Geomancy", category=TraitCategory.MAGIC)
+        cls.hermetics = SkillFactory(name="Hermetics", category=TraitCategory.MAGIC)
+        cls.lapsed = SkillFactory(name="Lapsed Lore", category=TraitCategory.MAGIC, is_active=False)
+        cls.active_magic = (cls.thaumaturgy, cls.geomancy, cls.hermetics)
+        cls.swordplay = SkillFactory(name="Swordplay", category=TraitCategory.COMBAT)
+        cls.parrying = SpecializationFactory(name="Parrying", parent_skill=cls.swordplay)
+        cls.wards = SpecializationFactory(name="Wards", parent_skill=cls.thaumaturgy)
 
     def _training_base(self, draft) -> int:
         """The draft's Magic training points from its distinctions, before fit bonuses."""
@@ -429,6 +445,156 @@ class TraditionTrainingCGJourney(FinalizationTestMixin, JourneyCase):
         ]
         draft.save(update_fields=["draft_data"])
         self.assertEqual(self._training_base(draft), 0)
+
+
+class TraditionsTeachCGJourney(_StanceDrafts, FinalizationTestMixin, JourneyCase):
+    """The Gift stage offers a draft only the affinity skills its own Tradition teaches (#5326).
+
+    The only Magic skills in this world are the three the affinities own, so the list a draft
+    sees is exactly what its Tradition teaches: every Tradition teaches Reflection, and
+    Heroism or Villainy only when staff ticked it. Rank 2 of Tradition Training gives a living
+    Tradition's draft 40 points to spend, and one skill holds at most 30.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls._setup_finalization_base(
+            cls, prefix="Traditions Teach", height_min=1700, height_max=1800
+        )
+        skills = author_the_three_skills()
+        cls.evil = tradition_teaching("Ashen Court", skills["Villainy"])
+        cls.good = tradition_teaching("Dawn Vigil", skills["Heroism"])
+        cls.both = tradition_teaching("Twin Lamps", skills["Heroism"], skills["Villainy"])
+        cls.plain = tradition_teaching("Grey Hall")
+        cls.self_taught = tradition_teaching("Lone Road")
+        for tradition, state in (
+            (cls.evil, TraditionState.LIVING_MASTERS),
+            (cls.good, TraditionState.LIVING_MASTERS),
+            (cls.both, TraditionState.LIVING_MASTERS),
+            (cls.plain, TraditionState.LIVING_MASTERS),
+            (cls.self_taught, TraditionState.SELF_TAUGHT),
+        ):
+            BeginningTraditionFactory(beginning=cls.beginnings, tradition=tradition, state=state)
+            TraditionGiftGrantFactory(tradition=tradition, gift=cls.gift)
+        cls._author_the_stances()
+
+    def setUp(self) -> None:
+        super().setUp()
+        # No fit bonus, so rank 2 is exactly the 40 points the stance gives.
+        config = get_teaching_config()
+        config.gift_fit_training_bonus = 0
+        config.affinity_fit_training_bonus = 0
+        config.save()
+
+    def _payload(self, draft) -> dict:
+        response = self.client.get(self._draft_url(draft))
+        self.assertEqual(response.status_code, 200, response.content)
+        return response.json()
+
+    def _offered(self, draft) -> list[str]:
+        return [skill["name"] for skill in self._payload(draft)["magic_training"]["skills"]]
+
+    def _gift_errors(self, draft) -> list[str]:
+        return self._payload(draft)["stage_errors"][str(draft.Stage.GIFT)]
+
+    def _spend(self, draft, allocation: dict[str, int]) -> None:
+        response = self.client.patch(
+            self._draft_url(draft), {"draft_data": {"magic_skills": allocation}}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+    def test_the_tradition_list_names_the_skills_each_one_teaches(self) -> None:
+        """The server sends the names; the web card composes "Teaches Reflection and Heroism".
+
+        The sentence itself is joined in `TraditionPicker.tsx` and asserted by the component
+        test `GiftStage.test.tsx` ("Teaches Reflection", "Teaches Reflection and Heroism",
+        "Teaches Reflection, Heroism and Villainy"); this journey asserts the exact names it
+        is composed from, in order, for a Tradition that teaches Heroism, one that teaches
+        both, one that teaches neither, and the self-taught one.
+        """
+        response = self.client.get(
+            f"/api/character-creation/traditions/?beginning_id={self.beginnings.pk}"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        rows = {row["id"]: row for row in response.json()}
+        self.assertEqual(rows[self.evil.pk]["taught_skill_names"], ["Reflection", "Villainy"])
+        self.assertEqual(rows[self.good.pk]["taught_skill_names"], ["Reflection", "Heroism"])
+        self.assertEqual(
+            rows[self.both.pk]["taught_skill_names"], ["Reflection", "Heroism", "Villainy"]
+        )
+        self.assertEqual(rows[self.plain.pk]["taught_skill_names"], ["Reflection"])
+        self.assertEqual(rows[self.self_taught.pk]["taught_skill_names"], ["Reflection"])
+
+    def test_an_evil_traditions_draft_is_offered_reflection_and_villainy_not_heroism(self) -> None:
+        draft = self._create_base_draft()
+        self._select(draft, self.evil)
+
+        self.assertEqual(self._offered(draft), ["Reflection", "Villainy"])
+
+        self._select(draft, self.good)
+        self.assertEqual(self._offered(draft), ["Heroism", "Reflection"])
+
+    def test_a_narrowed_list_still_lets_the_draft_be_finished(self) -> None:
+        draft = self._create_base_draft()
+        self._select(draft, self.plain)
+        self.assertEqual(self._sync(draft, 2).status_code, 200)
+
+        magic = self._payload(draft)["magic_training"]
+        self.assertEqual([skill["name"] for skill in magic["skills"]], ["Reflection"])
+        # 40 points to spend, but one skill holds 30, so 30 is all she is asked to spend.
+        self.assertEqual((magic["total"], magic["required_spend"]), (40, 30))
+        self.assertIn("Spend all of your magical training: 30 left", self._gift_errors(draft))
+
+        reflection = str(magic["skills"][0]["id"])
+        self._spend(draft, {reflection: 30})
+
+        self.assertFalse(
+            [e for e in self._gift_errors(draft) if e.startswith("Spend all of your magical")]
+        )
+
+    def test_switching_tradition_drops_the_points_the_new_one_does_not_teach(self) -> None:
+        draft = self._create_base_draft()
+        self._select(draft, self.evil)
+        self.assertEqual(self._sync(draft, 2).status_code, 200)
+        by_name = {
+            skill["name"]: str(skill["id"])
+            for skill in self._payload(draft)["magic_training"]["skills"]
+        }
+        self._spend(draft, {by_name["Reflection"]: 20, by_name["Villainy"]: 20})
+        self.assertEqual(self._payload(draft)["magic_training"]["allocated"], 40)
+
+        self._select(draft, self.good)
+
+        magic = self._payload(draft)["magic_training"]
+        held = {skill["name"]: skill["value"] for skill in magic["skills"]}
+        self.assertEqual(held, {"Heroism": 0, "Reflection": 20})
+        self.assertEqual(magic["allocated"], 20)
+        draft.refresh_from_db()
+        self.assertEqual(draft.draft_data["magic_skills"], {by_name["Reflection"]: 20})
+        # She now has 20 left to spend on what her new Tradition teaches.
+        self.assertIn("Spend all of your magical training: 20 left", self._gift_errors(draft))
+
+    def test_the_self_taught_draft_is_offered_reflection_with_a_pool_of_zero(self) -> None:
+        draft = self._create_base_draft()
+        self._select(draft, self.self_taught)
+
+        magic = self._payload(draft)["magic_training"]
+
+        self.assertEqual([skill["name"] for skill in magic["skills"]], ["Reflection"])
+        self.assertEqual((magic["total"], magic["required_spend"]), (0, 0))
+        # A self-taught Tradition opens no schooling stance, so nothing adds to the pool.
+        refused = self._sync(draft, 2)
+        self.assertEqual(refused.status_code, 400, refused.content)
+        self.assertIn("is not offered to you here", refused.json()["detail"])
+
+    def test_a_draft_with_no_tradition_is_offered_none_of_the_affinity_skills(self) -> None:
+        draft = self._create_base_draft()
+        response = self.client.post(
+            f"{self._draft_url(draft)}select-tradition/", {"tradition_id": None}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+
+        self.assertEqual(self._offered(draft), [])
 
 
 class MagicTrainingAllocationJourney(JourneyCase):

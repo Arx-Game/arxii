@@ -18,11 +18,16 @@
  * gated on `isActiveCharacter`, with an explicit message otherwise, rather
  * than silently showing (or worse, letting the player spend against) a
  * different character's advancement state.
+ *
+ * The Mentoring card (#5326) is the exception: its list belongs to the ACCOUNT (every
+ * character she may answer for, a game master's held NPCs included), so it shows beside the
+ * Training card and also under the switch-character notice.
  */
 
 import { AlertCircle } from 'lucide-react';
 import { BreakthroughsCard } from './BreakthroughsCard';
 import { ClassUnlocksCard } from './ClassUnlocksCard';
+import { MentoringCard } from './MentoringCard';
 import { TrainingCard } from './TrainingCard';
 import { DuranceCard } from './DuranceCard';
 
@@ -34,12 +39,15 @@ interface AdvancementTabProps {
 export function AdvancementTab({ characterId, isActiveCharacter }: AdvancementTabProps) {
   if (!isActiveCharacter) {
     return (
-      <div
-        className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-950/20 p-4 text-sm"
-        data-testid="advancement-inactive-character-notice"
-      >
-        <AlertCircle className="h-4 w-4 shrink-0" />
-        <p>Switch to this character to manage their advancement.</p>
+      <div className="space-y-4">
+        <div
+          className="flex items-center gap-2 rounded-md border border-amber-500/40 bg-amber-950/20 p-4 text-sm"
+          data-testid="advancement-inactive-character-notice"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <p>Switch to this character to manage their advancement.</p>
+        </div>
+        <MentoringCard />
       </div>
     );
   }
@@ -49,6 +57,7 @@ export function AdvancementTab({ characterId, isActiveCharacter }: AdvancementTa
       <BreakthroughsCard />
       <ClassUnlocksCard />
       <TrainingCard />
+      <MentoringCard />
       <DuranceCard characterId={characterId} />
     </div>
   );

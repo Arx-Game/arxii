@@ -9,6 +9,8 @@ import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
 import type {
   ManageTrainingAddRequest,
+  MentoringAnswerResult,
+  MentoringList,
   PatchedManageTrainingUpdateRequest,
   SkillListItem,
   TrainingAllocation,
@@ -55,4 +57,25 @@ export async function deleteTrainingAllocation(id: number): Promise<void> {
     method: 'DELETE',
   });
   if (!res.ok) await readErrorDetail(res, 'Failed to remove training allocation');
+}
+
+export async function fetchMentoring(): Promise<MentoringList> {
+  const res = await apiFetch('/api/skills/training-allocations/mentoring/');
+  if (!res.ok) await readErrorDetail(res, 'Failed to load mentoring requests');
+  return res.json() as Promise<MentoringList>;
+}
+
+export type MentoringAnswer = 'accept' | 'decline' | 'stop';
+
+/** A mentor answers one request, or ends one she teaches: the sentence comes back as `detail`. */
+export async function answerMentoring(
+  allocationId: number,
+  answer: MentoringAnswer
+): Promise<MentoringAnswerResult> {
+  const res = await apiFetch(
+    `/api/skills/training-allocations/${allocationId}/${answer}-mentoring/`,
+    { method: 'POST' }
+  );
+  if (!res.ok) await readErrorDetail(res, 'Could not answer the mentoring request');
+  return res.json() as Promise<MentoringAnswerResult>;
 }

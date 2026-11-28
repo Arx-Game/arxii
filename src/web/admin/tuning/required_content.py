@@ -1477,6 +1477,111 @@ def _probe_magic_skill_courses() -> ProbeResult:
     return ProbeResult(present=False, missing=missing, detail=detail)
 
 
+def _probe_affinity_skills_are_taught() -> ProbeResult:
+    """Heroism and Villainy are each taught by a Tradition a new character can pick (#5326).
+
+    Consumer: `world/magic/services/tradition_teaching.py tradition_teaches()`, read by
+    character creation's `training_skills()`, weekly training's `training_verdict()` and the
+    Academy course handler. Heroism and Villainy are the skills linked to the Celestial and
+    Abyssal affinities; a Tradition teaches one only when staff ticked it on
+    `Tradition.taught_skills`. A tick counts only when creation can reach it: the Tradition is
+    active and some Beginning lists it (`traditions_offered_in_creation()`, the set the
+    Tradition endpoint serves), and the skill is active. Otherwise creation offers the skill
+    to nobody. Reflection (the Primal affinity's skill) is taught by every Tradition with no
+    tick and is not checked. An affinity with no skill linked is `_probe_affinity_skills`' to
+    report, so it is not listed here.
+    """
+    from world.magic.constants import AFFINITY_ABYSSAL, AFFINITY_CELESTIAL  # noqa: PLC0415
+    from world.magic.models import Affinity, Tradition  # noqa: PLC0415
+    from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+        traditions_offered_in_creation,
+    )
+
+    ticked = Tradition.taught_skills.through.objects.filter(
+        tradition_id__in=traditions_offered_in_creation().values("pk"),
+        skill__is_active=True,
+    ).values("skill_id")
+    missing = tuple(
+        Affinity.objects.filter(
+            name__in=(AFFINITY_CELESTIAL, AFFINITY_ABYSSAL), skill__isnull=False
+        )
+        .exclude(skill_id__in=ticked)
+        .order_by("skill__name")
+        .values_list("skill__name", flat=True)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"No Tradition a new character can pick teaches {', '.join(missing)}."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_governed_skills_are_taught() -> ProbeResult:
+    """Every skill a Tradition's list governs is taught by at least one active Tradition (#5326).
+
+    Consumer: `world/magic/services/tradition_teaching.py TeachingContext.teaches()`, read by
+    weekly training, Academy courses and character creation. A governed skill is an affinity's
+    skill (Reflection, Heroism, Villainy) or a fighting style's skill. A fighting style whose
+    `taught_by` names no active Tradition, and an affinity skill whose affinity is not one of
+    the three canonical names (so the Tradition form cannot offer it to tick), is taught by
+    nobody: no mentor can train it and no course can be authored for it. Reflection is taught
+    by every Tradition, so it counts while any Tradition is active. Only active skills are
+    judged. Rows are the skill names.
+    """
+    from world.magic.models import Tradition  # noqa: PLC0415
+    from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+        build_outsider_context,
+    )
+    from world.skills.models import Skill  # noqa: PLC0415
+
+    context = build_outsider_context([])
+    active = tuple(Tradition.objects.filter(is_active=True).values_list("pk", flat=True))
+    governed = Skill.objects.filter(pk__in=context.governed_skill_ids, is_active=True)
+    missing = tuple(
+        name
+        for pk, name in governed.order_by("name").values_list("pk", "name")
+        if not any(context.teaches(tradition_id, pk) for tradition_id in active)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"No active Tradition teaches {', '.join(missing)}."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
+def _probe_courses_taught_by_their_tradition() -> ProbeResult:
+    """No Academy course sits on a trainer role whose Tradition does not teach its skill (#5326).
+
+    Consumer: `world/npc_services/effects.py _refuse_closed_course()`, which closes enrolling
+    in such a course, and `SkillCourseOfferDetails.clean()`, which refuses to author one. A
+    course counts when it is a `SKILL_COURSE` offer on an active `NPCRole`, the same rows
+    `_probe_magic_skill_courses` counts (an inactive role's offers are never shown). The
+    skill is judged by the rule module's own context: a skill no list governs is taught by
+    every Tradition, and a governed skill (Reflection, Heroism, Villainy, a fighting style's
+    skill) needs a role whose Tradition teaches it. This also finds a course that was fine
+    when authored and whose Tradition's ticks staff later removed. Each row is
+    `offer: role, skill`.
+    """
+    from world.magic.services.tradition_teaching import (  # noqa: PLC0415
+        build_outsider_context,
+    )
+    from world.npc_services.constants import OfferKind  # noqa: PLC0415
+    from world.npc_services.models import SkillCourseOfferDetails  # noqa: PLC0415
+
+    context = build_outsider_context([])
+    courses = SkillCourseOfferDetails.objects.filter(
+        offer__kind=OfferKind.SKILL_COURSE, offer__role__is_active=True
+    ).select_related("offer", "offer__role", "skill")
+    missing = tuple(
+        f"{course.offer.label}: {course.offer.role.name}, {course.skill.name}"
+        for course in courses.order_by("offer__label", "pk")
+        if course.skill_id in context.governed_skill_ids
+        and not context.teaches(course.offer.role.teaches_tradition_id, course.skill_id)
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = f"{len(missing)} course(s) sit on a role whose Tradition does not teach the skill."
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_path_suggestions_name_magic_skills() -> ProbeResult:
     """No `PathSkillSuggestion` names a Magic skill (#4457).
 
@@ -4782,9 +4887,47 @@ def _declarations() -> tuple[ContentDependency, ...]:
             tier=DependencyTier.TUNING,
             consumer="world/npc_services/effects.py:846 run_skill_course_offer()",
             consequence=(
-                "Self-taught characters catch up in those skills only by use and weekly training."
+                "Without a course, characters raise those skills only through a mentor who "
+                "belongs to a Tradition that teaches them and holds a rating in them, unless "
+                "a distinction lets them teach themselves."
             ),
             probe=CustomProbe(fn=_probe_magic_skill_courses),
+            admin_model="SkillCourseOfferDetails",
+        ),
+        ContentDependency(
+            key="affinity-skills-taught",
+            label="Heroism and Villainy are each taught by a Tradition",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/tradition_teaching.py tradition_teaches()",
+            consequence=(
+                "A skill that no Tradition teaches is offered to nobody in character creation, "
+                "and no mentor or Academy trainer can teach it."
+            ),
+            probe=CustomProbe(fn=_probe_affinity_skills_are_taught),
+            admin_model="Tradition",
+        ),
+        ContentDependency(
+            key="governed-skills-taught",
+            label="Every governed skill is taught by an active Tradition",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/tradition_teaching.py TeachingContext.teaches()",
+            consequence=(
+                "Nobody can train that skill with a mentor or take a course in it: no active "
+                "Tradition teaches it, so every mentor is refused and no course can be authored."
+            ),
+            probe=CustomProbe(fn=_probe_governed_skills_are_taught),
+            admin_model="Tradition",
+        ),
+        ContentDependency(
+            key="courses-taught-by-their-tradition",
+            label="Every Academy course is on a role whose Tradition teaches its skill",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/effects.py _refuse_closed_course()",
+            consequence=(
+                "Nobody can enroll in that course: the trainer refuses with a line saying the "
+                "course is closed, and nothing is charged."
+            ),
+            probe=CustomProbe(fn=_probe_courses_taught_by_their_tradition),
             admin_model="SkillCourseOfferDetails",
         ),
         ContentDependency(

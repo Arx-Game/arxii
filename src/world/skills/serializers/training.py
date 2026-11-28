@@ -9,8 +9,10 @@ from rest_framework import serializers
 
 from world.action_points.models import ActionPointConfig
 from world.scenes.models import Persona
+from world.skills.mentoring import mentor_is_waiting
 from world.skills.models import TrainingAllocation
 from world.skills.serializers import SkillListSerializer, SpecializationSerializer
+from world.skills.services import mentor_needed_line
 
 _XOR_TARGET_MESSAGE = "Provide exactly one of skill_id or specialization_id."
 
@@ -30,6 +32,8 @@ class TrainingAllocationSerializer(serializers.ModelSerializer):
     specialization = SpecializationSerializer(read_only=True)
     mentor = MentorPersonaSerializer(read_only=True)
     remaining_weekly_budget = serializers.SerializerMethodField()
+    mentor_waiting = serializers.SerializerMethodField()
+    mentor_needed_line = serializers.SerializerMethodField()
 
     class Meta:
         model = TrainingAllocation
@@ -38,9 +42,25 @@ class TrainingAllocationSerializer(serializers.ModelSerializer):
             "skill",
             "specialization",
             "mentor",
+            "mentor_accepted_at",
+            "mentor_waiting",
+            "mentor_needed_line",
             "ap_amount",
             "remaining_weekly_budget",
         ]
+        read_only_fields = ["mentor_accepted_at"]
+
+    def get_mentor_waiting(self, obj: TrainingAllocation) -> bool:
+        """Whether a mentor was named and has not agreed, so the training counts as unmentored."""
+        return mentor_is_waiting(obj)
+
+    def get_mentor_needed_line(self, obj: TrainingAllocation) -> str | None:
+        """The teacher line when the weekly run would skip this row for want of a mentor.
+
+        Reads the ``teaching_context`` the view built once for the page of allocations
+        (``training_teaching_context``), so no row costs a query of its own.
+        """
+        return mentor_needed_line(self.context["teaching_context"], obj)
 
     def get_remaining_weekly_budget(self, obj: TrainingAllocation) -> int:
         """Return AP left in the character's weekly training budget."""
@@ -83,3 +103,21 @@ class ManageTrainingUpdateSerializer(serializers.Serializer):
 
     ap_amount = serializers.IntegerField(required=False, min_value=1)
     mentor_persona_id = serializers.IntegerField(required=False, allow_null=True)
+
+
+class MentoringRowSerializer(serializers.Serializer):
+    """One request waiting on the account's answer, or one student it teaches (#5326)."""
+
+    allocation_id = serializers.IntegerField(read_only=True)
+    student_name = serializers.CharField(read_only=True)
+    # The object pronoun the request row reads: "asks Drusa Kell to teach her Villainy".
+    student_pronoun = serializers.CharField(read_only=True)
+    mentor_name = serializers.CharField(read_only=True)
+    skill_name = serializers.CharField(read_only=True)
+
+
+class MentoringListSerializer(serializers.Serializer):
+    """Every request waiting on the account's answer and every student it teaches (#5326)."""
+
+    requests = MentoringRowSerializer(many=True, read_only=True)
+    students = MentoringRowSerializer(many=True, read_only=True)

@@ -325,6 +325,14 @@ class TrainingAllocation(SharedMemoryModel):
     ap_amount = models.PositiveIntegerField(
         help_text="Action points allocated per week (minimum 1)",
     )
+    mentor_accepted_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "When the named mentor agreed to teach. Empty while a named mentor has not "
+            "agreed, and the training counts as having no mentor until she does (#5326)."
+        ),
+    )
 
     class Meta:
         unique_together: ClassVar[list[list[str]]] = [

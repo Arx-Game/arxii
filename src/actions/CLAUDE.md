@@ -270,7 +270,7 @@ They do not use the command system, dispatchers, or handlers.
   views / `RandomSceneViewSet` / `PathIntentViewSet`; closes the ADR-0001 "web bypasses
   actions" gap for these reward capabilities. Every one is typed through the handler in
   `integration_tests/test_earning_your_keep_journeys.py` (#3657 tranche 12), as are
-  `progression.py`'s `ManageTrainingAction` / `PurchaseUnlockAction`, whose unknown-id
+  `progression.py`'s `ManageTrainingAction` / `PurchaseUnlockAction` (and, #5326, `AnswerMentoringAction`, key `answer_mentoring`: a mentor's accept, decline or stop, answering as an account, with `account` a server-supplied kwarg the REST view passes and telnet leaves to the actor's own account), whose unknown-id
   refusals are now sentences of their own rather than the ORM's "matching query does not
   exist";
   `scene_reactions.py` (#1341) — the three "upvote an interaction" REGISTRY actions, all

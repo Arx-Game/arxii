@@ -8,6 +8,17 @@
  * exactly what `mentor_persona_id` already accepts server-side; no eligible-
  * mentor filtering exists (or is invented here), so the picker is the same
  * generic persona search other invite/mentor pickers use.
+ *
+ * Naming a mentor only asks her (#5326). The server saves the allocation with
+ * `mentor_waiting` true, and the row then reads "Mentor: <Name> · waiting for <Name> to
+ * agree" until she accepts: the training counts as having no mentor in the meantime. A row
+ * whose mentor has agreed reads "Mentor: <Name>". The mentor answers from `MentoringCard`,
+ * which sits beside this card.
+ *
+ * A row with no mentor reads "Self-study" unless the server sent `mentor_needed_line`: that
+ * sentence means the weekly run would skip the row for want of a teacher, so the row shows it
+ * in amber and no "Self-study" badge. Only the server knows whether she may teach herself, so
+ * the frontend never works this out from the skill's category.
  */
 
 import { useState } from 'react';
@@ -25,6 +36,10 @@ import {
   useTrainingAllocationsQuery,
   useUpdateTrainingAllocationMutation,
 } from '@/skills/queries';
+import type { TrainingAllocation } from '@/skills/types';
+
+/** `SkillCategory.MAGIC` on the wire: the category whose training needs a mentor (#5326). */
+const MAGIC_CATEGORY = 'magic';
 
 const SELECT_CLASS =
   'flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring disabled:cursor-not-allowed disabled:opacity-50';
@@ -32,9 +47,11 @@ const SELECT_CLASS =
 function MentorPicker({
   onSelect,
   selectedName,
+  placeholder,
 }: {
   onSelect: (personaId: number | null, name: string) => void;
   selectedName: string;
+  placeholder: string;
 }) {
   const [query, setQuery] = useState(selectedName);
   const { results, isFetching } = usePersonaSearch(query);
@@ -43,7 +60,7 @@ function MentorPicker({
   return (
     <div className="relative">
       <Input
-        placeholder="Mentor (optional)…"
+        placeholder={placeholder}
         value={query}
         onChange={(e) => {
           setQuery(e.target.value);
@@ -82,8 +99,12 @@ function AddAllocationForm() {
   const [apAmount, setApAmount] = useState('1');
   const [mentorId, setMentorId] = useState<number | null>(null);
   const [mentorName, setMentorName] = useState('');
+  // The picker owns its typed text and result list; a new key after a save empties both.
+  const [pickerKey, setPickerKey] = useState(0);
   const create = useCreateTrainingAllocationMutation();
 
+  // A magical skill is taught only by a mentor whose Tradition teaches it (#5326).
+  const mentorRequired = skills.find((s) => s.id === skillId)?.category === MAGIC_CATEGORY;
   const parsedAp = parseInt(apAmount, 10);
   const canSubmit = skillId !== null && !isNaN(parsedAp) && parsedAp >= 1 && !create.isPending;
 
@@ -96,12 +117,17 @@ function AddAllocationForm() {
         mentor_persona_id: mentorId ?? undefined,
       },
       {
-        onSuccess: () => {
-          toast.success('Training allocated.');
+        onSuccess: (created) => {
+          toast.success(
+            created.mentor_waiting && created.mentor
+              ? `Training allocated. ${created.mentor.name} has been asked.`
+              : 'Training allocated.'
+          );
           setSkillId(null);
           setApAmount('1');
           setMentorId(null);
           setMentorName('');
+          setPickerKey((key) => key + 1);
         },
         onError: (err: unknown) =>
           toast.error(err instanceof Error ? err.message : 'Could not allocate training.'),
@@ -111,7 +137,7 @@ function AddAllocationForm() {
 
   return (
     <div className="space-y-2 rounded-lg border border-dashed p-3" data-testid="training-add-form">
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_4.5rem_minmax(0,1.4fr)]">
         <div className="space-y-1">
           <Label htmlFor="training-add-skill">Skill</Label>
           <select
@@ -140,13 +166,17 @@ function AddAllocationForm() {
           />
         </div>
         <div className="space-y-1">
-          <Label htmlFor="training-add-mentor">Mentor</Label>
+          <Label htmlFor="training-add-mentor" className="whitespace-nowrap">
+            {mentorRequired ? 'Mentor (required)' : 'Mentor'}
+          </Label>
           <MentorPicker
+            key={pickerKey}
             onSelect={(id, name) => {
               setMentorId(id);
               setMentorName(name);
             }}
             selectedName={mentorName}
+            placeholder="Name…"
           />
         </div>
       </div>
@@ -160,6 +190,28 @@ function AddAllocationForm() {
       </Button>
     </div>
   );
+}
+
+function MentorLine({ allocation }: { allocation: TrainingAllocation }) {
+  if (allocation.mentor_needed_line) {
+    return (
+      <span
+        className="text-amber-600 dark:text-amber-400"
+        data-testid="training-mentor-needed-line"
+      >
+        {allocation.mentor_needed_line}
+      </span>
+    );
+  }
+  if (allocation.mentor) {
+    return (
+      <span data-testid="training-mentor-line">
+        Mentor: {allocation.mentor.name}
+        {allocation.mentor_waiting && ` · waiting for ${allocation.mentor.name} to agree`}
+      </span>
+    );
+  }
+  return <Badge variant="outline">Self-study</Badge>;
 }
 
 export function TrainingCard() {
@@ -216,11 +268,7 @@ export function TrainingCard() {
                 {allocation.skill?.name ?? allocation.specialization?.name}
               </div>
               <div className="text-sm text-muted-foreground">
-                {allocation.mentor ? (
-                  <span>Mentor: {allocation.mentor.name}</span>
-                ) : (
-                  <Badge variant="outline">Self-study</Badge>
-                )}
+                <MentorLine allocation={allocation} />
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-2">

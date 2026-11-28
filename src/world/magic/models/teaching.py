@@ -41,6 +41,15 @@ class TraditionTeachingConfig(SharedMemoryModel):
         verbose_name="Course ease, affinity fit",
         help_text="Lowers the session check's difficulty.",
     )
+    other_tradition_course_difficulty = models.PositiveSmallIntegerField(
+        default=0,
+        db_default=0,
+        verbose_name="Course difficulty, other Tradition",
+        help_text=(
+            "Points added to a course session check's difficulty when the student's own "
+            "Tradition does not teach the course's skill. 0 adds none."
+        ),
+    )
 
     class Meta:
         verbose_name = "Tradition teaching config"

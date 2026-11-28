@@ -87,6 +87,12 @@ function parseErrorBody(data: unknown): {
   fieldErrors: Record<string, string[]> | null;
 } {
   if (!data || typeof data !== 'object') return { detail: null, fieldErrors: null };
+  // A serializer `ValidationError("...")` raised with a plain string arrives as a bare list
+  // of sentences, with no key at all (#5326: a refused training allocation).
+  if (Array.isArray(data)) {
+    const sentences = data.filter((v): v is string => typeof v === 'string' && v.trim() !== '');
+    return { detail: sentences.length > 0 ? sentences.join(' ') : null, fieldErrors: null };
+  }
   const body = data as Record<string, unknown>;
   if (typeof body.detail === 'string' && body.detail.trim()) {
     return { detail: body.detail, fieldErrors: null };

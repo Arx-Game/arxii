@@ -951,7 +951,15 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   each `schooling_rows` tuple. Rank 0 reads "Rank 0 trains none.". Three TUNING Required content
   rows (`schooling-magic-skill-floors`, now listing each rank 1+ stance whose distinction has no
   `magic_training_points` effect, the key kept so the dashboard row is stable;
-  `magic-skill-courses`; `path-suggestions-name-magic-skills`) list what is unset. Tests:
+  `magic-skill-courses`; `path-suggestions-name-magic-skills`) list what is unset. Since #5326 two
+  more TUNING rows sit beside them: `affinity-skills-taught` (`_probe_affinity_skills_are_taught`: Heroism
+  and Villainy that no active Tradition on some Beginning's slate ticks on `Tradition.taught_skills`, or
+  whose skill is inactive), `governed-skills-taught` (`_probe_governed_skills_are_taught`: an affinity's
+  or fighting style's skill no active Tradition teaches) and `courses-taught-by-their-tradition`
+  (`_probe_courses_taught_by_their_tradition`: a `SKILL_COURSE` offer on an active role whose Tradition does
+  not teach its skill, each row `offer: role, skill`), and the consequence of `magic-skill-courses` now says
+  that without a course characters raise those skills only through a mentor whose Tradition teaches them,
+  unless a distinction lets them teach themselves. Tests:
   `web/admin/tests/test_tradition_slate.py`, `test_magic_skill_probes.py`.
 - **Credit** - `web/admin/authoring/credit.py:stamp_written`/`stamp_reviewed`
   take a single `CreditedContent` row rather than a whole route; the

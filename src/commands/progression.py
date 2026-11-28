@@ -38,6 +38,10 @@ _SUBVERB_LIST = "list"
 _SUBVERB_ADD = "add"
 _SUBVERB_UPDATE = "update"
 _SUBVERB_REMOVE = "remove"
+_SUBVERB_REQUESTS = "requests"
+_SUBVERB_ACCEPT = "accept"
+_SUBVERB_DECLINE = "decline"
+_SUBVERB_STOP = "stop"
 _SUBVERB_UNLOCKS = "unlocks"
 _SUBVERB_UNLOCK = "unlock"
 
@@ -97,15 +101,30 @@ class CmdTraining(DispatchCommand):
         training add spec=<id> ap=<n> [mentor=<id>]
         training update id=<id> ap=<n> [mentor=<id>]
         training remove id=<id>
+        training requests              - who asked you to teach, and who you teach
+        training accept <n>            - agree to teach request number <n>
+        training decline <n>           - decline request number <n>
+        training stop <name>[/<skill>] - stop teaching a student
 
     ``spec`` is an alias for ``specialization``. Omitting ``mentor`` on update
-    leaves the mentor unchanged; ``mentor=`` (empty) clears it.
+    leaves the mentor unchanged; ``mentor=`` (empty) clears it. Naming a mentor only
+    asks her: the training counts as unmentored until she agrees.
     """
 
     key = "training"
     locks = "cmd:all()"
 
-    _VALID_SUBVERBS = {_SUBVERB_LIST, _SUBVERB_ADD, _SUBVERB_UPDATE, _SUBVERB_REMOVE}
+    _VALID_SUBVERBS = {
+        _SUBVERB_LIST,
+        _SUBVERB_ADD,
+        _SUBVERB_UPDATE,
+        _SUBVERB_REMOVE,
+        _SUBVERB_REQUESTS,
+        _SUBVERB_ACCEPT,
+        _SUBVERB_DECLINE,
+        _SUBVERB_STOP,
+    }
+    _ANSWER_SUBVERBS = {_SUBVERB_ACCEPT, _SUBVERB_DECLINE, _SUBVERB_STOP}
 
     _subverb: str = ""
     _rest: str = ""
@@ -126,24 +145,31 @@ class CmdTraining(DispatchCommand):
             self.msg(f"Unknown training command '{self._subverb}'. Try: {options}.")
             return
 
+        if self._subverb == _SUBVERB_REQUESTS:
+            self._show_requests()
+            return
+
         super().func()  # resolve_action_ref + resolve_action_args + dispatch
 
     def resolve_action_ref(self) -> ActionRef:
         """Build a REGISTRY ActionRef for ``manage_training``."""
         from actions.types import ActionRef  # noqa: PLC0415
 
-        return ActionRef(backend=ActionBackend.REGISTRY, registry_key="manage_training")
+        key = "answer_mentoring" if self._subverb in self._ANSWER_SUBVERBS else "manage_training"
+        return ActionRef(backend=ActionBackend.REGISTRY, registry_key=key)
 
     def resolve_action_args(self) -> dict[str, Any]:
         """Translate parsed telnet tokens into ``ManageTrainingAction`` kwargs."""
+        if self._subverb in self._ANSWER_SUBVERBS:
+            return self._resolve_answer_args()
         parsed = _parse_assignment_args(self._rest)
-        if self._subverb == _SUBVERB_ADD:
-            return self._resolve_add_args(parsed)
-        if self._subverb == _SUBVERB_UPDATE:
-            return self._resolve_update_args(parsed)
-        if self._subverb == _SUBVERB_REMOVE:
-            return self._resolve_remove_args(parsed)
-        return {}
+        resolvers = {
+            _SUBVERB_ADD: self._resolve_add_args,
+            _SUBVERB_UPDATE: self._resolve_update_args,
+            _SUBVERB_REMOVE: self._resolve_remove_args,
+        }
+        resolver = resolvers.get(self._subverb)
+        return resolver(parsed) if resolver is not None else {}
 
     # -- helpers ------------------------------------------------------------------
 
@@ -201,6 +227,75 @@ class CmdTraining(DispatchCommand):
             "allocation_id": _require_positive_int(allocation_id, _KEY_ID),
         }
 
+    def _mentoring_rows(self) -> Any:
+        """The caller's account's mentoring lists, or a command error with no account."""
+        from commands.utils.gm_resolution import resolve_account_or_none  # noqa: PLC0415
+        from world.skills.mentoring import mentoring_for_account  # noqa: PLC0415
+
+        account = resolve_account_or_none(self.caller)
+        if account is None:
+            msg = "You must be logged in to answer mentoring requests."
+            raise CommandError(msg)
+        return mentoring_for_account(account)
+
+    def _show_requests(self) -> None:
+        """List who asked the caller's account to teach, and who it teaches."""
+        rows = self._mentoring_rows()
+        lines: list[str] = []
+        if rows.requests:
+            lines.append("Asked to teach:")
+            lines.extend(
+                f"  {number}. {row.student_name} asks {row.mentor_name} to teach "
+                f"{row.student_pronoun} {row.skill_name}"
+                for number, row in enumerate(rows.requests, start=1)
+            )
+        if rows.students:
+            lines.append("Teaching:")
+            lines.extend(
+                f"  {row.mentor_name} teaches {row.student_name} {row.skill_name}"
+                for row in rows.students
+            )
+        if not lines:
+            lines.append("Nobody has asked you to teach, and you teach nobody.")
+        self.msg("\n".join(lines))
+
+    def _resolve_answer_args(self) -> dict[str, Any]:
+        """Build kwargs for accept, decline and stop: the allocation the line names."""
+        rows = self._mentoring_rows()
+        if self._subverb == _SUBVERB_STOP:
+            row = self._student_row(rows.students)
+        else:
+            number = _require_positive_int(self._rest.strip() or None, "request number")
+            if number > len(rows.requests):
+                msg = f"No request number {number}. Type training requests to see them."
+                raise CommandError(msg)
+            row = rows.requests[number - 1]
+        return {"answer": self._subverb, "allocation_id": row.allocation_id}
+
+    def _student_row(self, students: list[Any]) -> Any:
+        """The one student a ``training stop <name>[/<skill>]`` line names."""
+        name, _, skill = self._rest.partition("/")
+        name, skill = name.strip().lower(), skill.strip().lower()
+        if not name:
+            msg = "Usage: training stop <name>[/<skill>]"
+            raise CommandError(msg)
+        matches = [
+            row
+            for row in students
+            if row.student_name.lower() == name and (not skill or row.skill_name.lower() == skill)
+        ]
+        if not matches:
+            msg = f"You are not teaching anyone called {self._rest.strip()}."
+            raise CommandError(msg)
+        if len(matches) > 1:
+            skills = ", ".join(row.skill_name for row in matches)
+            msg = (
+                f"You teach {matches[0].student_name} more than one skill ({skills}). "
+                f"Type training stop {matches[0].student_name}/<skill>."
+            )
+            raise CommandError(msg)
+        return matches[0]
+
     def _show_listing(self) -> None:
         """Render the caller's training allocations and weekly AP budget."""
         from world.action_points.models import ActionPointConfig  # noqa: PLC0415
@@ -222,20 +317,36 @@ class CmdTraining(DispatchCommand):
         if not allocations:
             lines.append("No training allocations set.")
         else:
-            for allocation in allocations:
-                plateau = ""
-                if allocation.skill is not None:
-                    target = allocation.skill.name
-                    if allocation.skill.pk in gated_skill_ids:
-                        plateau = " [at threshold: breakthrough required]"
-                else:
-                    target = allocation.specialization.name
-                mentor = f" (mentor: {allocation.mentor.name})" if allocation.mentor else ""
-                lines.append(
-                    f"[{allocation.pk}] {target}: {allocation.ap_amount} AP{mentor}{plateau}"
-                )
+            lines.extend(
+                self._allocation_line(allocation, gated_skill_ids) for allocation in allocations
+            )
 
         self.msg("\n".join(lines))
+
+    @staticmethod
+    def _allocation_line(allocation: Any, gated_skill_ids: set[int]) -> str:
+        """One allocation's listing line: target, AP, mentor, and a plateau note."""
+        plateau = ""
+        if allocation.skill is not None:
+            target = allocation.skill.name
+            if allocation.skill.pk in gated_skill_ids:
+                plateau = " [at threshold: breakthrough required]"
+        else:
+            target = allocation.specialization.name
+        mentor = CmdTraining._mentor_phrase(allocation)
+        return f"[{allocation.pk}] {target}: {allocation.ap_amount} AP{mentor}{plateau}"
+
+    @staticmethod
+    def _mentor_phrase(allocation: Any) -> str:
+        """The listing's mentor note: empty, the mentor's name, or that she has not agreed."""
+        from world.skills.mentoring import mentor_is_waiting  # noqa: PLC0415
+
+        if allocation.mentor is None:
+            return ""
+        name = allocation.mentor.name
+        if mentor_is_waiting(allocation):
+            return f" (mentor: {name}, waiting for {name} to agree)"
+        return f" (mentor: {name})"
 
     def _parse_optional_id(self, value: str | None, name: str) -> int | None:
         """Return an int id, None for empty, or raise CommandError for bad input."""

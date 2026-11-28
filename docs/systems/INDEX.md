@@ -81,20 +81,45 @@
   `Affinity` row by foreign key: the picked Gift resonance's in character creation, the resonance on
   the student's Major Gift thread in the Academy), tuned by the `TraditionTeachingConfig`
   singleton. Fit adds a flat bonus to the pool only when the draft has some training, and eases
-  Academy course checks; it never gates. The Gift stage validates `draft_data["magic_skills"]`
+  Academy course checks; it never decides who may teach (that is the teacher rule below, #5326). The Gift stage validates `draft_data["magic_skills"]`
   against the pool and finalize writes it. Aura-based fit is #4672; the starting aura comes from the weighted resonance picks (#5123).
   `SCHOOLING_MAX_RANK_BY_STATE`
   (`character_creation/constants.py`) sets which states open which stances: LIVING_MASTERS up to
   rank 2, TEACHERS_GONE up to rank 1, SELF_TAUGHT none. CG skill points never buy a Magic skill or
-  one of its specializations. A character catches up by use, weekly training, or an Academy
+  one of its specializations. A character catches up by use, weekly training with a mentor whose
+  Tradition teaches the skill (no magical skill is learned by self-study, #5326), or an Academy
   `SKILL_COURSE` offer: `SkillCourseOfferDetails` and `SkillCourseEnrollment` in `npc_services`,
   the handler `run_skill_course_offer` (enroll once for coin and a Golden Hare, then rolled
   sessions at AP each, one per course per game week, development scaled by `TrainingOutcomeAward`,
   every refusal charging nothing). Trainer-menu price line: `OfferPrice`, `format_offer_price`,
-  `InteractionOfferSerializer.price` (a course under a Tradition adds `teaching_line` and `fit_line`; `_course_ease` in `npc_services/effects.py` lowers the check difficulty). `train_skill` and `points_to_next_boundary` in
+  `InteractionOfferSerializer.price` (a course under a Tradition adds `teaching_line` and `fit_line`, and `outsider_line` for a student whose own Tradition does not teach its governed skill; `_course_terms` in `npc_services/effects.py` returns the fit ease that lowers the check difficulty and the outsider's added difficulty). `train_skill` and `points_to_next_boundary` in
   `world.skills.services`. `AcademyOfferApCostError` replaced `TrainOfferMisconfiguredError`;
   `_academy_for` is shared by TRAIN, the course and settle-obligation. Three Required content
   TUNING rows. Details: [magic.md](magic.md) "Tradition training and Academy skill courses".
+- **Which Traditions teach which skills (#5326, ADR-5326):** no Magic-category skill is learned by
+  self-study. `Tradition.taught_skills` (M2M `Skill`, reverse `teaching_traditions`, limited to the Celestial and
+  Abyssal affinities' skills: Heroism and Villainy; Reflection is taught by every Tradition with no tick; a
+  fighting style's skill is taught by the Traditions in `CombatStyle.taught_by`) and the rule module
+  `world/magic/services/tradition_teaching.py` (`tradition_teaches`, `is_tradition_governed`, `is_outsider`,
+  `TeachingContext`, `build_teaching_context`, `build_outsider_context`, `traditions_offered_in_creation`,
+  `training_verdict` -> `TrainingVerdict.refusal`, `training_asking_refusal`, `mentor_acceptance_refusal`,
+  `taught_affinity_skill_filter`, `taught_affinity_skill_names_by_tradition`; value types in
+  `world/magic/types/tradition_teaching.py`) answer every question for creation, weekly training and
+  courses. `create_training_allocation` / `update_training_allocation` refuse a Magic skill with no teacher and another of
+  her own characters as mentor, and naming a mentor only asks her (nothing about her is checked). A mentor must
+  agree (ruled 2026-11-28): `TrainingAllocation.mentor_accepted_at`, `world/skills/mentoring.py`
+  (`accept_mentoring`, `decline_mentoring`, `stop_mentoring`, `mentoring_for_account`, `answerable_allocation_ids`),
+  `AnswerMentoringAction`, telnet `training requests|accept|decline|stop` and the training viewset's `mentoring/`,
+  `accept-mentoring/`, `decline-mentoring/` and `stop-mentoring/` routes; a mentor who has not agreed counts as no
+  mentor. `process_weekly_training` asks again for every standing allocation and skips a stale one with one
+  narrative line and no AP spent. A course in a governed skill is refused at authoring (`SkillCourseOfferDetails.clean`) and at
+  enrollment (`_refuse_closed_course`); an outsider's session adds
+  `TraditionTeachingConfig.other_tradition_course_difficulty` (`CourseTerms`). Creation offers a draft only the
+  affinity skills its Tradition teaches (`training_skills`, `reconcile_magic_training`,
+  `TraditionSerializer.taught_skill_names`). The one exception is the `self_teaching` lever a staff-authored
+  distinction effect can grant (`world.mechanics.levers.self_teaching_granted`). Three Required content TUNING
+  rows (`affinity-skills-taught`, `governed-skills-taught`, `courses-taught-by-their-tradition`). Details: [magic.md](magic.md) "Which
+  Traditions teach which skills".
 
 - **Drift correction (#4733, slice 4 of #4672):** a deed (`DEED_GAIN_SOURCES` /
   `NON_DEED_GAIN_SOURCES` in `constants.py`, a total classification of `GainSource`) that grows
@@ -8383,7 +8408,7 @@ weights, speed_rank, Thread pulls). `CovenantRank` = administrative authority
     vow are on the style [BUILT & WIRED]. Since #4921 a player chooses the style in
     creation (`CharacterDraft.selected_combat_style`, `GET
     /api/character-creation/combat-styles/`, `world.character_creation.magic_training`:
-    `taught_styles`, `training_skills`, `reconcile_combat_style`) and the Sphinx's
+    `taught_styles`, `training_skills`, `reconcile_magic_training`) and the Sphinx's
     `SphinxVerdict.style` (`SphinxStyleLine`, `style_fit.style_lists_vow`) says whether it
     suits a vow [BUILT & WIRED].
     Nullable `focus_pick` on `VowAddedEffect` / `VowSituationalPerk` /

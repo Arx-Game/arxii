@@ -25,7 +25,7 @@ Trait" (ADR-5008).
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CharacterSpecializationValue` | Character's specialization value (no rust) | `character` (FK ObjectDB), `specialization` (FK Specialization), `value`, `development_points` |
-| `TrainingAllocation` | Weekly training plan entry for a skill/specialization | `character` (FK ObjectDB), `skill` (FK Skill, XOR), `specialization` (FK Specialization, XOR), `mentor` (FK Persona, optional), `ap_amount` |
+| `TrainingAllocation` | Weekly training plan entry for a skill/specialization | `character` (FK ObjectDB), `skill` (FK Skill, XOR), `specialization` (FK Specialization, XOR), `mentor` (FK Persona, optional), `mentor_accepted_at` (nullable; empty while a named mentor has not agreed, #5326), `ap_amount` |
 
 ---
 
@@ -290,7 +290,7 @@ the web API and the telnet `training` command.
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `TrainingAllocation` | One weekly plan entry | `character`, `skill` (XOR), `specialization` (XOR), `mentor` (optional Persona), `ap_amount` |
+| `TrainingAllocation` | One weekly plan entry | `character`, `skill` (XOR), `specialization` (XOR), `mentor` (optional Persona), `mentor_accepted_at` (nullable), `ap_amount` |
 
 Constraints enforce exactly one of `skill`/`specialization`, `ap_amount >= 1`, and uniqueness
 per `(character, skill)` and `(character, specialization)`.
@@ -299,11 +299,12 @@ per `(character, skill)` and `(character, specialization)`.
 
 | Function | Purpose |
 |----------|---------|
-| `create_training_allocation(character, ap_amount, *, skill, specialization, mentor)` | Creates an allocation, validating the weekly AP budget |
-| `update_training_allocation(allocation, *, ap_amount, mentor)` | Updates an existing allocation |
-| `remove_training_allocation(allocation)` | Deletes an allocation |
+| `create_training_allocation(character, ap_amount, *, skill, specialization, mentor)` | Creates an allocation, validating the Tradition rule for a Magic skill (#5326, below) and the weekly AP budget. Naming a mentor only asks her: the row is saved with `mentor_accepted_at` empty and her character is told |
+| `update_training_allocation(allocation, *, ap_amount, mentor)` | Updates an existing allocation; the rule is re-checked on every call, judging the allocation as it would stand afterward (clearing the mentor on a Magic skill is refused). A different mentor clears the agreement and asks the new one; the same mentor, or only the action points, keeps it |
+| `remove_training_allocation(allocation)` | Deletes an allocation; an agreed mentor is told the student no longer trains with her |
+| `accept_mentoring` / `decline_mentoring` / `stop_mentoring(allocation, by)`, `mentoring_for_account(account)`, `answerable_allocation_ids(account, allocations)` | `world/skills/mentoring.py` (#5326, "The mentor must agree" below) |
 | `calculate_training_development(allocation)` | Computes development points from the training formula |
-| `process_weekly_training()` | Processes all allocations, awards dev points, consumes AP |
+| `process_weekly_training()` | Processes all allocations, awards dev points, consumes AP; skips an allocation the Tradition rule no longer allows (#5326, below) |
 | `train_skill(sheet, skill, dev_points, *, description, stop_at_boundary=False) -> SkillTrainingResult` | The one writer for development from training (#4457): a skill the character has no rating in starts at `DP_BASE_LEVEL` (10); the points go into the skill trait's `DevelopmentPoints` ledger through `award_points` (#5010), and one `DevelopmentTransaction` records the points applied, stamped with the current `game_week`. The skill branch of `process_weekly_training()` and Academy skill courses both call it. With `stop_at_boundary=True` the points are clamped to `points_to_next_boundary`, so nothing dissipates; the caller keeps the excess. `SkillTrainingResult` (`world/skills/types.py`) carries `old_value`, `new_value`, `points_applied`, `plateau_message` |
 | `points_to_next_boundary(tracker: DevelopmentPoints) -> int or None` | Development the skill can take before it parks at the next XP boundary (19, 29, 39, 49) or the band's skill cap, whichever comes first (#4585), read from its ledger (#5010): unpaid rust, then each level's cost up to the stop, less progress banked toward it. A skill already at a boundary or its cap can take only its rust; `None` above 49 with no cap (#4457) |
 | `stored_skill_cap(sheet) -> int or None` / `skill_cap_message(name, stored_cap) -> str` | The band's skill cap as a stored value (`skill_cap_for(sheet) * 10`, `None` for no cap), and the message every raise path shows when development stops at it (#4585) |
@@ -319,6 +320,8 @@ mentor_bonus  = (AP + teaching) × (mentor_skill / student_skill) × (relationsh
 dev_points    = base_gain + mentor_bonus
 ```
 
+The mentor bonus counts only for a mentor who agreed (`mentor_has_agreed`); a waiting mentor counts as none.
+
 ### API Endpoints
 
 - `GET /api/skills/training-allocations/` — List the played character's allocations plus remaining weekly AP budget
@@ -326,9 +329,48 @@ dev_points    = base_gain + mentor_bonus
 - `POST /api/skills/training-allocations/` — Create an allocation; body `{ skill_id | specialization_id, ap_amount, mentor_persona_id? }`
 - `PATCH /api/skills/training-allocations/{id}/` — Update `ap_amount` and/or `mentor_persona_id`
 - `DELETE /api/skills/training-allocations/{id}/` — Remove the allocation
+- Each allocation row also carries read-only `mentor_accepted_at`, `mentor_waiting` (a mentor was named and has not agreed) and `mentor_needed_line`. No body can write `mentor_accepted_at`.
+- `mentor_needed_line` is the sentence "{Skill} needs a teacher. Choose a mentor whose Tradition teaches it." when the weekly run would skip the row for want of a mentor, and null otherwise. It is set exactly when the allocation has no mentor (her own persona counts as none), the skill, or a specialization's parent, is a Magic skill, and she does not hold the self-teaching lever. A waiting or agreed mentor never sets it, and a skill outside the Magic category never does. It is the weekly run's own verdict (`mentor_needed_line` in `world/skills/services.py`), so the row never promises training the week will skip. The view builds one `TeachingContext` for the page (`training_teaching_context`) and passes it as `context["teaching_context"]`, so the list costs the same number of queries for any number of rows.
+- `GET /api/skills/training-allocations/mentoring/` — The requester's account's mentoring lists: `{ requests: [...], students: [...] }`, each row `{ allocation_id, student_name, mentor_name, skill_name }`
+- `POST /api/skills/training-allocations/{id}/accept-mentoring/`, `.../decline-mentoring/`, `.../stop-mentoring/` — The mentor answers; 200 `{ detail: <the line the mentor reads> }`, a refusal is 400 `{ detail: <sentence> }`, and an id the requester may not answer for is 404
 
 All writes dispatch through `ManageTrainingAction` (`registry_key="manage_training"`) so the
-web and telnet paths share the same validation and mutation logic.
+web and telnet paths share the same validation and mutation logic. A mentor's answer dispatches
+`AnswerMentoringAction` (`registry_key="answer_mentoring"`), which answers as an account.
+
+### Who may train a Magic skill (#5326, ADR-5326)
+
+No Magic-category skill is learned by self-study. Allocating weekly training on one (or on a specialization of
+one) needs a mentor whose active Tradition teaches the skill and who holds a rating above 0 in it, unless a
+distinction effect on the `self_teaching` lever lets the character teach herself
+(`world.mechanics.levers.self_teaching_granted`). Every Tradition teaches Reflection and the ordinary Magic
+skills; Heroism and Villainy only when staff ticked them on `Tradition.taught_skills`; a fighting style's skill
+only the Traditions in `CombatStyle.taught_by`. `world.magic.services.tradition_teaching.training_verdict` holds
+the rule and each refusal names the next step ("Villainy needs a teacher. Choose a mentor whose Tradition
+teaches it."; another of her own characters is refused as a mentor). Asking a mentor checks nothing about her
+(`training_asking_refusal`, through `skills.services._training_refusal`), so the student learns nothing about the
+character she named. The mentor's Tradition and rating are read when the mentor answers and when the week runs,
+where a mentor who agreed and no longer qualifies gets the one line "{Mentor} cannot teach you Villainy. Choose
+a mentor whose Tradition teaches it and who has trained in it.". A skill outside the Magic category is never
+refused. A mentor of another Tradition costs nothing extra: `calculate_training_development`
+is unchanged. Full account: [magic.md](magic.md), "Which Traditions teach which skills".
+
+### The mentor must agree (#5326, ADR-5326)
+
+Naming a mentor only asks her ("You ask {Mentor} to teach you {Skill}. Your training waits until {Mentor}
+agrees."; the mentor's character is sent "{Student} asks you to teach {her} {Skill}."). One rule applies
+everywhere: a mentor who has not agreed counts as no mentor. A Magic skill with a waiting mentor does not
+train unless the student holds the self-teaching lever, and any other skill trains as self-study with no mentor
+bonus. The mentor answers as an account, never as one character: the account that plays her character now (a
+lent NPC's borrower, else the holder of the tenure, so a game master who holds an NPC answers for it), the
+account that created her roster entry when nobody plays her, or staff, and never the account that plays the
+student (`answerable_allocation_ids`). Accepting checks the mentor's own facts and refuses to her with the
+fact that applies ("You belong to no Tradition.", "Your Tradition does not teach {Skill}.", "You have no
+rating in {Skill}."; for an NPC, the same sentences with its name). Declining clears the mentor and tells the
+student "{Mentor} declined to teach you {Skill}."; accepting tells her "{Mentor} agreed to teach you {Skill}.";
+stopping clears the mentor and the agreement and tells her "{Mentor} stopped teaching you {Skill}.". Changing the
+mentor asks again; changing only the action points keeps the agreement. `{Mentor}` is always the persona the
+student named.
 
 ### Telnet Command
 
@@ -340,10 +382,14 @@ training add skill=<id> ap=<n> [mentor=<id>]
 training add spec=<id> ap=<n> [mentor=<id>]
 training update id=<id> [ap=<n>] [mentor=<id>]
 training remove id=<id>
+training requests                  — who asked you to teach (numbered) and who you teach
+training accept <n> | decline <n>  — answer request number <n>
+training stop <name>[/<skill>]     — stop teaching a student
 ```
 
 `spec` is an alias for `specialization`. Omitting `mentor` on update leaves it unchanged;
-`mentor=` (empty) clears the mentor.
+`mentor=` (empty) clears the mentor. `training requests` lists the account's whole list: every request
+addressed to any character the account may answer for, each naming which character was asked.
 
 ### Cron
 
@@ -353,6 +399,14 @@ same cadence as `weekly_rollover`). It processes every character's allocations, 
 `DevelopmentTransaction` rows with `source=TRAINING`, `reason=SYSTEM_AWARD` and the current
 `game_week`. It applies no rust: the weekly rollover's skill development pass does, once,
 and that game week stamp exempts a trained skill from it (#5010).
+
+The run asks the Tradition rule again for every standing allocation, with one teaching context built for the
+whole run (`_weekly_teaching_context`). An allocation the rule no longer allows (the mentor left the Tradition,
+staff took the tick off, a row saved with no mentor before the rule) is skipped: no development, no action
+points spent, the row left in place so the character can fix it, and one `SYSTEM` narrative line to her: "Your
+weekly training in {Skill} did not run, and no action points were spent. {refusal}". A waiting mentor counts as
+none, so a Magic allocation whose mentor has not agreed (and whose student lacks the lever) is skipped with
+"{Mentor} has not agreed to teach you yet.".
 
 ---
 

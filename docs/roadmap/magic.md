@@ -1080,7 +1080,8 @@ skill, and a character who starts behind catches up in play, fastest through an 
   `integration_tests/test_academy_skill_course_journeys.py`.
 
 **Deferred (not a gap in this build):** a per-Tradition skill list (needs a design call: does a
-Tradition train different skills, and does that replace or add to the uniform floor); a floor
+Tradition train different skills, and does that replace or add to the uniform floor; the affinity skills
+and the fighting styles' skills got one in #5326, below); a floor
 weighted toward the Path's technique skill (rejected here, it would make one Tradition train
 differently by Path rather than by stance); separating training level from Academy sponsorship and
 retiring the "Unbound" name (#4536). Authoring the floors, the courses and their check types is staff
@@ -1106,15 +1107,70 @@ students better than others.
   spend all of it at the ordinary 10 points per step, validated at the Gift stage and written at
   finalize.
 - Academy: a course taught under a Tradition lowers the session check's difficulty for a fitting
-  student (`_course_ease`), and the offer shows `teaching_line` and `fit_line` on the web and in telnet.
+  student (`_course_ease`, since #5326 `_course_terms`), and the offer shows `teaching_line` and `fit_line` on the web and in telnet.
 - Frontend: a training step on the Gift stage (after the Resonance step, stepping by the payload's
   `step`), "Teaches well" tags on Tradition and Gift cards, the
   stance training-points line, the Skills stage Magic group, and the two offer lines.
 - Admin: the tradition slate shows a stance's points read-only; the `schooling-magic-skill-floors`
   Required content row now lists stances whose distinction has no training effect.
 
-**Not built:** a per-Tradition skill list and fit by the character's aura (#4672). The starting
+**Not built:** a per-Tradition skill list (built for the affinity skills and styles' skills in #5326,
+below) and fit by the character's aura (#4672). The starting
 aura now follows the picked resonances (#5123).
+
+## Magical skills, slice 5: Traditions decide who teaches (#5326, ADR-5326, BUILT 2026-11-28)
+
+Weekly training in a Magic skill needed no mentor, so a character could raise Villainy, Heroism, a
+fighting style's skill or Occult alone, and no Tradition said what it taught. The maintainer ruled that
+no magical skill is self-study: the Traditions' teachers decide.
+
+**Built:**
+- `Tradition.taught_skills` (M2M `Skill`, limited to the Celestial and Abyssal affinities' skills), ticked on
+  `TraditionAdmin`: Heroism for a clearly Good Tradition, Villainy for a clearly Evil one, both for a neutral
+  one. Reflection is taught by every Tradition with no tick; a fighting style's skill by the Traditions in
+  `CombatStyle.taught_by`; every other Magic skill by every Tradition. The state of a Tradition is never read.
+- One rule module, `world/magic/services/tradition_teaching.py` (`tradition_teaches`, `is_tradition_governed`,
+  `is_outsider`, `TeachingContext`, `build_teaching_context`, `training_verdict`), read by creation, weekly
+  training and courses.
+- Weekly training: a Magic skill needs a mentor whose active Tradition teaches it and who holds a rating above
+  0, refused with a line naming the next step; the weekly run asks again for every standing allocation and
+  skips a stale one with one narrative line, no development and no AP spent. A mentored week pays as before:
+  no penalty for a mentor of another Tradition.
+- The exception: a distinction effect staff author on the `self_teaching` lever (`self_teaching_granted`), yes or
+  no, read through `get_modifier_total`.
+- Creation: a draft is offered only the affinity skills its own Tradition teaches (`training_skills`,
+  `reconcile_magic_training`), `required_spend` follows the shorter list, and the Tradition list names what each
+  teaches (`taught_skill_names`).
+- Academy: a course in a governed skill is refused when staff author it on a role whose Tradition does not teach
+  it and again at enrollment; an outsider's session adds `TraditionTeachingConfig.other_tradition_course_difficulty`
+  and the trainer menu says so in `outsider_line`; a course already paid for keeps running.
+- Three Required content TUNING rows (`affinity-skills-taught`, counting only Traditions creation can reach;
+  `governed-skills-taught`; `courses-taught-by-their-tradition`) and a corrected consequence on
+  `magic-skill-courses`.
+- Review fixes: one rule source (`tradition_teaches` reads the same `TeachingContext` the batch does), a character
+  is never her own mentor nor another character her player plays (`current_player_ids`), and a refused mentor
+  gets one line that reveals nothing about the persona.
+- The mentor must agree (ruled 2026-11-28, "The mentor must agree"): naming a mentor only asks her,
+  `TrainingAllocation.mentor_accepted_at` records her agreement, and a mentor who has not agreed counts as no
+  mentor everywhere. She answers from her own account's list (the player of her character now, the creator of
+  her roster entry when nobody plays her, or staff; never the student's player), so a game master who holds an
+  NPC answers for it: telnet `training requests|accept|decline|stop` and the training viewset's `mentoring/`,
+  `accept-mentoring/`, `decline-mentoring/` and `stop-mentoring/` routes. The web screens for it are the next
+  task in this PR.
+- Journeys: `integration_tests/test_traditions_teach_journeys.py`, plus rows in
+  `test_earning_your_keep_journeys.py`, `test_tradition_training_journeys.py` and
+  `test_academy_skill_course_journeys.py`; one property per rule in
+  `integration_tests/fuzz/test_traditions_teach_properties.py`.
+
+**Staff must author before this helps anyone:** tick Heroism and Villainy on each Tradition; author the
+self-teaching lever's category and target, a prodigy distinction with one effect on it, and the same effect on the
+`unbound` distinction; set the extra course difficulty; give trainer roles a Tradition (all three seeded Academy
+trainer roles have none) and author a course in Heroism, Villainy and each fighting style's skill on a role whose
+Tradition teaches it. Until then those skills rise only through a mentor who holds a rating, or by use.
+
+**Not built, on purpose:** teaching ordinary Magic skills such as Occult by Tradition (no list governs them), a
+good-or-evil rating on a Tradition, any use of `favored_affinities` for teaching, a penalty for mentoring, and any
+change to learning by use or by an XP breakthrough.
 
 ## Magical skills: Magic skills only (#4547, BUILT 2026-10-21)
 
